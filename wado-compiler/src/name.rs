@@ -869,9 +869,16 @@ pub fn cm_name_key(cm_name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
-/// The WIR struct an affine resource is: the object holding its handle. Not a
+/// The WIR struct an affine resource is: the object holding the host's handle,
+/// or the guest value backing it (WEP: Guest-Backed Resources). One struct
+/// holds either, so a store through `&mut R` replaces one with the other. Not a
 /// cell, which the optimizer scalarizes as a value with no identity.
 pub const RESOURCE_OBJECT_STRUCT: &str = "$Resource";
+/// The host's handle, 0 where there is none: index 0 of a handle table is
+/// reserved.
+pub const RESOURCE_HANDLE_FIELD: &str = "value";
+/// The guest value backing the resource, null for the host's object.
+pub const RESOURCE_BACKING_FIELD: &str = "backing";
 
 /// The WIR struct behind an extern handle a guest value backs: the handle's
 /// class and the value. A host object is never one, which is how the two are

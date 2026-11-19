@@ -1,0 +1,32 @@
+// An operation of a resource declared without `#[cm(...)]` binds no host
+// import, so an installed handler is the only thing that answers it (issue
+// #2533).
+use { println, Stdout } from "core:cli";
+
+resource Tally {
+    fn add(value: i32);
+}
+
+struct Ctx {
+    seen: i32 = 0,
+}
+
+impl Tally for Ctx {
+    fn add(&mut self, value: i32) {
+        self.seen += value;
+        resume ();
+    }
+
+    ..trap
+}
+
+export fn run() with Stdout {
+    let mut c = Ctx {};
+    with Tally => &mut c do {
+        Tally::add(7);
+    }
+    println(`${c.seen}`);
+}
+
+__DATA__
+{"stdout": "7\n"}

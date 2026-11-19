@@ -348,11 +348,12 @@ Marker of an extern handle: a resource declared `repr = "externref"`.
 Sealed and compiler-stated; user impls are rejected. See WEP: Extern
 Handles.
 
-### `pub trait Backing with ()`
+### `pub affine trait Backing with ()`
 
-What every extern handle offers: it is the host's object, or backed by a
-value of the guest. Only a `RefMut` type backs one: a reference to any
-other is a cell, which carries neither the value's identity nor its type.
+What every resource offers: a handle is the host's object, or backed by a
+value of the guest. Only a `RefMut` type backs one: a reference to any other
+is a cell, which carries neither the value's identity nor its type. See WEP:
+Guest-Backed Resources.
 
 #### `fn backed_by<T: RefMut>(value: T) -> Self`
 

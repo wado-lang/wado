@@ -1,0 +1,15 @@
+// A resource with no host implementation has no WIT name, so it cannot cross a
+// component boundary: an export's signature may not mention one.
+
+pub resource Counter {
+    fn get(&self) -> i32;
+}
+
+export fn make() -> Option<Counter> {
+    return null;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "has no host implementation"}

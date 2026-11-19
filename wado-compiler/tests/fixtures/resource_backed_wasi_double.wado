@@ -1,0 +1,45 @@
+// A handler doubles a WASI resource with handles a guest value backs: it makes
+// them with `backed_by`, answers each operation from the value with `backing`,
+// and the host is never called. A backed handle no handler drops ends with
+// nothing more, since no host handle stands behind it.
+
+use { println, Stdout } from "core:cli";
+use { Fields, FieldName } from "wasi:http";
+
+struct Names {
+    names: List<String>,
+}
+
+struct FakeFields {
+    made: i32,
+}
+
+impl Fields for FakeFields {
+    fn new(&mut self) -> Fields {
+        self.made += 1;
+        resume Fields::backed_by(Names { names: ["host"] })
+    }
+    fn has(&mut self, this: &Fields, name: FieldName) -> bool {
+        let Some(held) = this.backing::<Names>() else { unreachable(); };
+        resume held.names.contains_str(name as String);
+    }
+    fn drop(&mut self, this: Fields) {
+        let _ = this.backing::<Names>();
+        resume ()
+    }
+    ..trap
+}
+
+export fn run() with Stdout {
+    let mut fake = FakeFields { made: 0 };
+    with Fields => &mut fake do {
+        let f = Fields::new();
+        println(`${f.has("host")} ${f.has("cookie")}`);
+    }
+    let outside = Fields::backed_by(Names { names: [] });
+    let _ = outside;
+    println(`made=${fake.made}`);
+}
+
+__DATA__
+{"stdout": "true false\nmade=1\n"}

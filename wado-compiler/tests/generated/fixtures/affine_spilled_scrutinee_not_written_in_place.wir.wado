@@ -4,6 +4,7 @@
 
 struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
+    mut backing: ref null eq,
 }
 
 struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>] {  // TypeId(1)
@@ -47,16 +48,29 @@ fn "affine_spilled_scrutinee_not_written_in_place.wado/$test_0_a_destructuring_l
     let pair: ref null "tuple//[core:prelude/types.wado/Stream<u8>, i32]";
     let $temp_7: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     let $cm_pair_11: i64;
-    let $sroa_$pattern_temp_1_1_18: i32;
-    rx = local.tee $temp_7(struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_11("wasi/stream-new"())) }, 1: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_11 >> 32_i64) } }).0;
+    rx = local.tee $temp_7(struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_11("wasi/stream-new"())), backing: ref.null eq }, 1: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_11 >> 32_i64), backing: ref.null eq } }).0;
     if ref.is_null(local.tee $load_1($temp_7.1)) == 0 {
-        "wasi/stream-drop-writable"($load_1.value);
+        if ref.is_null($load_1.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $load_1.value;
+            $load_1.value = 0;
+            $load_1.backing = ref.null eq;
+            "wasi/stream-drop-writable"($cm_handle_2);
+        }
     }
-    $load_1 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_11("wasi/stream-new"())) };
-    $sroa_$pattern_temp_1_1_18 = builtin::i32_wrap_i64($cm_pair_11 >> 32_i64);
+    $load_1 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_11("wasi/stream-new"())), backing: ref.null eq };
+    $cm_handle_2 = builtin::i32_wrap_i64($cm_pair_11 >> 32_i64);
     if ref.is_null(local.tee pair(struct.new "tuple//[core:prelude/types.wado/Stream<u8>, i32]" { 0: rx, 1: 1 })) == 0 {
         if ref.is_null(rx) == 0 {
-            "wasi/stream-drop-readable"(rx.value);
+            if ref.is_null(rx.backing) == 0 {
+            } else {
+                let $cm_handle_4: i32;
+                $cm_handle_4 = rx.value;
+                rx.value = 0;
+                rx.backing = ref.null eq;
+                "wasi/stream-drop-readable"($cm_handle_4);
+            }
         }
         pair.0 = ref.null none;
     }
@@ -64,12 +78,21 @@ fn "affine_spilled_scrutinee_not_written_in_place.wado/$test_0_a_destructuring_l
     pair.1 = 2;
     if ref.is_null(pair) == 0 {
         if ref.is_null($load_1) == 0 {
-            "wasi/stream-drop-readable"($load_1.value);
+            if ref.is_null($load_1.backing) == 0 {
+            } else {
+                $cm_handle_4 = $load_1.value;
+                $load_1.value = 0;
+                $load_1.backing = ref.null eq;
+                "wasi/stream-drop-readable"($cm_handle_4);
+            }
         }
         pair.0 = ref.null none;
     }
-    if ($sroa_$pattern_temp_1_1_18 == 0) == 0 {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_1_1_18);
+    if ($cm_handle_2 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($cm_handle_2);
+        }
     }
 }
 
@@ -79,27 +102,49 @@ fn "affine_spilled_scrutinee_not_written_in_place.wado/$test_1_a_match"() {
     let pair: ref null "tuple//[core:prelude/types.wado/Stream<u8>, i32]";
     let $temp_7: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     let $cm_pair_12: i64;
-    let $sroa_$pattern_temp_0_1_18: i32;
-    rx = local.tee $temp_7(struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_12("wasi/stream-new"())) }, 1: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_12 >> 32_i64) } }).0;
+    rx = local.tee $temp_7(struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_12("wasi/stream-new"())), backing: ref.null eq }, 1: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_12 >> 32_i64), backing: ref.null eq } }).0;
     pair = if ref.is_null(local.tee $load_1($temp_7.1)) == 0 {
-        "wasi/stream-drop-writable"($load_1.value);
+        if ref.is_null($load_1.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $load_1.value;
+            $load_1.value = 0;
+            $load_1.backing = ref.null eq;
+            "wasi/stream-drop-writable"($cm_handle_2);
+        }
     }; struct.new "tuple//[core:prelude/types.wado/Stream<u8>, i32]" { 0: rx, 1: 1 };
-    rx = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_12("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_18 = builtin::i32_wrap_i64($cm_pair_12 >> 32_i64);
+    rx = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_12("wasi/stream-new"())), backing: ref.null eq };
+    $cm_handle_2 = builtin::i32_wrap_i64($cm_pair_12 >> 32_i64);
     if ref.is_null(pair) == 0 {
         if ref.is_null(local.tee $load_1(pair.0)) == 0 {
-            "wasi/stream-drop-readable"($load_1.value);
+            if ref.is_null($load_1.backing) == 0 {
+            } else {
+                let $cm_handle_4: i32;
+                $cm_handle_4 = $load_1.value;
+                $load_1.value = 0;
+                $load_1.backing = ref.null eq;
+                "wasi/stream-drop-readable"($cm_handle_4);
+            }
         }
         pair.0 = ref.null none;
     }
     pair.0 = rx;
     pair.1 = 2;
-    if ($sroa_$pattern_temp_0_1_18 == 0) == 0 {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_18);
+    if ($cm_handle_2 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($cm_handle_2);
+        }
     }
     if ref.is_null(pair) == 0 {
         if ref.is_null(local.tee rx(pair.0)) == 0 {
-            "wasi/stream-drop-readable"(rx.value);
+            if ref.is_null(rx.backing) == 0 {
+            } else {
+                $cm_handle_2 = rx.value;
+                rx.value = 0;
+                rx.backing = ref.null eq;
+                "wasi/stream-drop-readable"($cm_handle_2);
+            }
         }
         pair.0 = ref.null none;
     }

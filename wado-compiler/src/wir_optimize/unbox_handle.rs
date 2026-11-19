@@ -5,9 +5,11 @@
 //! joined into classes by the copies and calls between them. A class keeps its
 //! box when any of its places escapes: into a field, an element, a global, an
 //! indirect or pinned call, or a store of a handle other than 0, which every
-//! reference to the box must see. Otherwise each place becomes an `i32`, with 0
-//! for `null`: a box is created only to be read, tested for `null`, zeroed, and
-//! moved between places of its class.
+//! reference to the box must see. A box a guest value backs keeps its class
+//! boxed too, since no handle stands for it (WEP: Guest-Backed Resources).
+//! Otherwise each place becomes an `i32`, with 0 for `null`: a box is created
+//! only to be read, tested for `null`, zeroed, and moved between places of its
+//! class, and its backing reads as null.
 //!
 //! Zeroing a box only keeps a reference that outlives a move or drop from
 //! reaching the slot the host reuses. No such reference reaches a class that
@@ -16,8 +18,13 @@
 use crate::graph::DisjointSets;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{RESOURCE_OBJECT_STRUCT, wir_type_key};
-use crate::wir::{WirFuncId, WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
+use crate::name::{
+    RESOURCE_BACKING_FIELD, RESOURCE_HANDLE_FIELD, RESOURCE_OBJECT_STRUCT, wir_type_key,
+};
+use crate::wir::{
+    WirAbstractHeapType, WirFuncId, WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef,
+    WirTypeId,
+};
 
 use super::util::{collect_pinned_func_ids, may_exit_enclosing_block};
 
@@ -260,6 +267,9 @@ impl Scan<'_> {
                 for field in fields {
                     self.consume(field, Sink::Escape);
                 }
+                if !is_unbacked(fields) {
+                    self.opaque_to(sink);
+                }
             }
             WirInstr::RefNull { .. } => {}
             WirInstr::StructGet { type_id, expr, .. } if self.places.is_box(type_id) => {
@@ -267,11 +277,11 @@ impl Scan<'_> {
             }
             WirInstr::StructSet {
                 type_id,
+                field_name,
                 expr,
                 value,
-                ..
             } if self.places.is_box(type_id) => {
-                let zeroes_place = matches!(**value, WirInstr::I32Const(0))
+                let zeroes_place = is_empty_field(field_name, value)
                     && matches!(**expr, WirInstr::LocalGet { .. });
                 self.consume(
                     expr,
@@ -358,6 +368,25 @@ impl Scan<'_> {
     }
 }
 
+/// Whether a new box's `fields` hold no guest value: one that does stands for
+/// no handle, so its class keeps the box (WEP: Guest-Backed Resources).
+fn is_unbacked(fields: &[WirInstr]) -> bool {
+    let [_, backing] = fields else {
+        unreachable!("`$Resource` holds a handle and a backing");
+    };
+    matches!(backing, WirInstr::RefNull { .. })
+}
+
+/// Whether storing `value` into the box field `field_name` empties it: 0 for
+/// the handle, null for the backing.
+fn is_empty_field(field_name: &str, value: &WirInstr) -> bool {
+    match value {
+        WirInstr::I32Const(0) => field_name == RESOURCE_HANDLE_FIELD,
+        WirInstr::RefNull { .. } => field_name == RESOURCE_BACKING_FIELD,
+        _ => false,
+    }
+}
+
 /// Whether a branch leaves `body`, a labeled body, carrying a value its tail
 /// does not.
 fn exits(body: &[WirInstr]) -> bool {
@@ -438,27 +467,48 @@ impl Rewrite<'_> {
             {
                 self.lower(value);
             }
-            WirInstr::StructGet { type_id, expr, .. }
-                if self.places.is_box(type_id) && self.yields_handle(expr) =>
-            {
+            WirInstr::StructGet {
+                type_id,
+                field_name,
+                expr,
+                ..
+            } if self.places.is_box(type_id) && self.yields_handle(expr) => {
                 self.rewrite(expr);
                 let handle = std::mem::replace(&mut **expr, WirInstr::Nop);
-                *instr = handle;
+                *instr = if field_name == RESOURCE_HANDLE_FIELD {
+                    handle
+                } else {
+                    WirInstr::Seq(vec![
+                        WirInstr::Drop(Box::new(handle)),
+                        WirInstr::RefNull {
+                            heap_type: WirAbstractHeapType::Eq,
+                        },
+                    ])
+                };
             }
             WirInstr::RefIsNull(expr) if self.yields_handle(expr) => {
                 self.rewrite(expr);
                 let handle = std::mem::replace(&mut **expr, WirInstr::Nop);
                 *instr = WirInstr::I32Eqz(Box::new(handle));
             }
-            WirInstr::StructSet { type_id, expr, .. }
-                if self.places.is_box(type_id) && self.yields_handle(expr) =>
-            {
+            WirInstr::StructSet {
+                type_id,
+                field_name,
+                expr,
+                ..
+            } if self.places.is_box(type_id) && self.yields_handle(expr) => {
                 let WirInstr::LocalGet { name, .. } = &**expr else {
                     unreachable!("an unboxed class zeroes only a place");
                 };
-                *instr = WirInstr::LocalSet {
-                    name: name.clone(),
-                    value: Box::new(WirInstr::I32Const(0)),
+                // An unboxed class holds no guest value, so nulling one is
+                // already done.
+                *instr = if field_name == RESOURCE_HANDLE_FIELD {
+                    WirInstr::LocalSet {
+                        name: name.clone(),
+                        value: Box::new(WirInstr::I32Const(0)),
+                    }
+                } else {
+                    WirInstr::Nop
                 };
             }
             WirInstr::Call { func_id, args } => {
@@ -484,9 +534,9 @@ impl Rewrite<'_> {
     fn lower(&mut self, value: &mut WirInstr) {
         match value {
             WirInstr::StructNew { type_id, fields } if self.places.is_box(type_id) => {
-                let [handle] = std::mem::take(fields)
+                let [handle, _null_backing] = std::mem::take(fields)
                     .try_into()
-                    .unwrap_or_else(|_| unreachable!("`$Resource` has one field"));
+                    .unwrap_or_else(|_| unreachable!("`$Resource` holds a handle and a backing"));
                 *value = handle;
                 self.rewrite(value);
             }

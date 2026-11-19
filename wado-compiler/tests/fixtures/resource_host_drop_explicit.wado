@@ -1,0 +1,13 @@
+// An explicit drop of a host handle reads its operand once: the backing test
+// and the canonical `resource.drop` share the one evaluation, which moves it.
+use { println, Stdout } from "core:cli";
+use { Fields } from "wasi:http";
+
+export fn run() with (Stdout, Fields) {
+    let f = Fields::new();
+    f.drop();
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

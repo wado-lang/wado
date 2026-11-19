@@ -34,10 +34,16 @@ fn "cm_shared_operation_resource_interface.wado/run"() with Gfx, GfxAgain, Devic
     b = "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"();
     drop("cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(a) + "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(b));
     if (b == 0) == 0 {
-        "wasi/resource-drop:cm_shared_operation_resource_interface.wado#Device"(b);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/resource-drop:cm_shared_operation_resource_interface.wado#Device"(b);
+        }
     }
     if (a == 0) == 0 {
-        "wasi/resource-drop:cm_shared_operation_resource_interface.wado#Device"(a);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/resource-drop:cm_shared_operation_resource_interface.wado#Device"(a);
+        }
     }
 }
 
@@ -46,7 +52,9 @@ fn "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0
 }
 
 fn "cm_shared_operation_resource_interface.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(self) with Device {
-    return "wasi/$wasi:demo/gfx@0.1.0#[method]device.id"(self);
+    return "wasi/$wasi:demo/gfx@0.1.0#[method]device.id"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }; self);
 }
 
 fn "cm_shared_operation_resource_interface.wado/$cm_export__run"() {

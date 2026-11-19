@@ -17,6 +17,7 @@ use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
 use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
+use super::types::ResourceField;
 use crate::lower::plan::value_copy;
 use crate::lower::wide_int_literal::{WideIntCtor, classify_ctor};
 use crate::nir;
@@ -867,14 +868,17 @@ impl FunctionTranslator<'_, '_> {
                     "`AffineResource` bounds `resource_handle` to an affine resource"
                 );
                 let resource = self.translate_operand(args[0].expr);
-                Some(self.handle_of(resource))
+                Some(self.host_handle_of(resource))
             }
-            "extern_handle_backed_by" => {
+            "resource_backed_by" => {
+                let value = self.translate_operand(args[0].expr);
+                if !self.type_table.is_extern_handle(type_args[0]) {
+                    return Some(self.backed_box_of(value));
+                }
                 let class = self
                     .type_table
                     .narrowing_classes(type_args[0])
                     .map_or(0, |classes| i32::from(classes.lo));
-                let value = self.translate_operand(args[0].expr);
                 Some(WirInstr::ExternExternalize(Box::new(self.struct_new(
                     self.ctx.backed_handle().clone(),
                     vec![WirInstr::I32Const(class), value],
@@ -884,10 +888,18 @@ impl FunctionTranslator<'_, '_> {
                 let handle = self.translate_operand(args[0].expr);
                 Some(self.is_backed_handle(handle))
             }
-            "extern_handle_is_backed_by" => {
+            "resource_is_backed_by" => {
                 let backing = self.backing_struct(type_args[1]);
-                let handle_ty = self.wir_type(self.operand_type_id(args[0].expr));
-                let (mut seq, [handle]) = self.spill_operands(args, [handle_ty]);
+                if !self.type_table.is_extern_handle(type_args[0]) {
+                    let object = self.translate_operand(args[0].expr);
+                    return Some(WirInstr::RefTest {
+                        type_id: backing,
+                        nullable: false,
+                        expr: Box::new(self.resource_field(object, ResourceField::Backing)),
+                    });
+                }
+                let handle = self.extern_handle_behind(args[0].expr);
+                let (mut seq, handle) = self.spill(handle, WirType::EXTERN, "backed_handle");
                 seq.push(WirInstr::If {
                     condition: Box::new(self.is_backed_handle(handle.clone())),
                     result: Some(WirType::Bool),
@@ -900,12 +912,18 @@ impl FunctionTranslator<'_, '_> {
                 });
                 Some(WirInstr::Seq(seq))
             }
-            "extern_handle_backing" => {
-                let handle = self.translate_operand(args[0].expr);
+            "resource_backing" => {
+                let held = if self.type_table.is_extern_handle(type_args[0]) {
+                    let handle = self.extern_handle_behind(args[0].expr);
+                    self.backing_of(handle)
+                } else {
+                    let object = self.translate_operand(args[0].expr);
+                    self.resource_field(object, ResourceField::Backing)
+                };
                 Some(WirInstr::RefCast {
                     type_id: self.backing_struct(type_args[1]),
                     nullable: false,
-                    expr: Box::new(self.backing_of(handle)),
+                    expr: Box::new(held),
                 })
             }
             "extern_handle_backed_class" => {
@@ -940,14 +958,24 @@ impl FunctionTranslator<'_, '_> {
             "swap_handles" => {
                 let box_ty = self.wir_type(self.operand_type_id(args[0].expr));
                 let (mut seq, [a, b]) = self.spill_operands(args, [box_ty.clone(), box_ty]);
-                let held = self.fresh_local("held");
-                seq.extend(declare_and_set_local(
-                    held.clone(),
-                    WirType::I32,
-                    self.handle_of(a.clone()),
-                ));
-                seq.push(self.set_handle(a, self.handle_of(b.clone())));
-                seq.push(self.set_handle(b, local_get(&held, &WirType::I32)));
+                for field in ResourceField::ALL {
+                    let held = self.fresh_local("held");
+                    seq.extend(declare_and_set_local(
+                        held.clone(),
+                        field.ty(),
+                        self.resource_field(a.clone(), field),
+                    ));
+                    seq.push(self.set_resource_field(
+                        a.clone(),
+                        field,
+                        self.resource_field(b.clone(), field),
+                    ));
+                    seq.push(self.set_resource_field(
+                        b.clone(),
+                        field,
+                        local_get(&held, &field.ty()),
+                    ));
+                }
                 Some(WirInstr::Seq(seq))
             }
             "zero_handle" => {
@@ -964,7 +992,7 @@ impl FunctionTranslator<'_, '_> {
                 let rx = self.translate_operand(args[0].expr);
                 let call = WirInstr::Call {
                     func_id,
-                    args: vec![self.handle_of(rx)],
+                    args: vec![self.host_handle_of(rx)],
                 };
                 Some(self.handle_box_of(call))
             }

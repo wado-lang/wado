@@ -4,6 +4,7 @@
 
 struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
+    mut backing: ref null eq,
 }
 
 struct core:prelude/format.wado//Formatter {  // TypeId(1)
@@ -764,11 +765,13 @@ fn "resource_temp_referenced_dropped.wado/$hole_fmt$resource_temp_referenced_dro
 }
 
 fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"(), backing: ref.null eq };
 }
 
 fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-headers"(self) with Request {
-    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[method]request.get-headers"(self.value) };
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[method]request.get-headers"(if @unlikely(ref.is_null(self.backing) == 0) {
+        unreachable;
+    }; self.value), backing: ref.null eq };
 }
 
 fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[static]fields.from-list"(entries) with Fields {
@@ -798,9 +801,9 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[st
     $entries_base = "mem/realloc"(0, 0, 4, self_42 * 16);
     $entries_i = 0;
     $licm_repr_86 = entries.repr;
-    b32: block {
-        l33: loop {
-            break_if b32 $entries_i >= self_42;
+    b33: block {
+        l34: loop {
+            break_if b33 $entries_i >= self_42;
             $entries_addr = $entries_base + ($entries_i * 16);
             v_53 = local.tee v_45(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_repr_86, $entries_i)).0;
             let $array_clone_src_3: ref Array<u8>;
@@ -824,9 +827,9 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[st
             }
             $load_4 = "mem/realloc"(0, 0, 1, $load_7);
             ptr_58 = 0;
-            b35: block {
-                l36: loop {
-                    break_if b35 (builtin::i64_extend_i32_s(ptr_58) + 3_i64) >= builtin::i64_extend_i32_s($load_7);
+            b36: block {
+                l37: loop {
+                    break_if b36 (builtin::i64_extend_i32_s(ptr_58) + 3_i64) >= builtin::i64_extend_i32_s($load_7);
                     $list_addr = $load_4 + ptr_58;
                     $list_elem = builtin::array_get_value<u8>($array_clone_dst_7, ptr_58);
                     builtin::store_u8($list_addr, $list_elem);
@@ -843,31 +846,31 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[st
                     $list_elem = builtin::array_get_value<u8>($array_clone_dst_7, ptr_58);
                     builtin::store_u8($list_addr, $list_elem);
                     ptr_58 = ptr_58 + 1;
-                    continue l36;
+                    continue l37;
                 };
             };
-            b37: block {
-                l38: loop {
-                    break_if b37 ptr_58 >= $load_7;
+            b38: block {
+                l39: loop {
+                    break_if b38 ptr_58 >= $load_7;
                     $list_addr = $load_4 + ptr_58;
                     $list_elem = builtin::array_get_value<u8>($array_clone_dst_7, ptr_58);
                     builtin::store_u8($list_addr, $list_elem);
                     ptr_58 = ptr_58 + 1;
-                    continue l38;
+                    continue l39;
                 };
             };
             builtin::store_i32($entries_addr + 8, $load_4);
             builtin::store_i32(($entries_addr + 8) + 4, $load_7);
             $entries_i = $entries_i + 1;
-            continue l33;
+            continue l34;
         };
     };
     $entries_i = "mem/realloc"(0, 0, 4, 20);
     "wasi/$wasi:http/types@0.3.0#[static]fields.from-list"($entries_base, self_42, $entries_i);
     $entries_addr = 0;
-    b39: block {
-        l40: loop {
-            break_if b39 $entries_addr >= self_42;
+    b40: block {
+        l41: loop {
+            break_if b40 $entries_addr >= self_42;
             $load_7 = builtin::load_i32(local.tee $load_4($entries_base + ($entries_addr * 16)));
             if local.tee ptr_58(builtin::load_i32($load_4 + 4)) > 0 {
                 drop("mem/realloc"($load_7, ptr_58, 1, 0));
@@ -877,14 +880,14 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[st
                 drop("mem/realloc"($load_7, $load_4, 1, 0));
             }
             $entries_addr = $entries_addr + 1;
-            continue l40;
+            continue l41;
         };
     };
     if self_42 > 0 {
         drop("mem/realloc"($entries_base, self_42 * 16, 4, 0));
     }
     $result_val = (if builtin::load_u8($entries_i) == 0 -> ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>" {
-        struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($entries_i + 4) } };
+        struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($entries_i + 4), backing: ref.null eq } };
     } else {
         $local_28 = (if local.tee self_42(builtin::load_u8($entries_i + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
             global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$0;
@@ -917,27 +920,37 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[st
 fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
     let $contents_inner_0: i32;
+    let $local_6: ref null "core:prelude//$Resource";
     let $outptr: i32;
-    let $lifted_result_9: ref null "core:prelude//$Resource";
     $contents_disc = ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents);
     $contents_inner_0 = 0;
     if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents) {
-        $contents_inner_0 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents).payload_0.value;
+        if @unlikely(ref.is_null(local.tee $local_6(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents).payload_0).backing) == 0) {
+            unreachable;
+        }
+        $contents_inner_0 = $local_6.value;
     } else {
     }
     $outptr = "mem/realloc"(0, 0, 4, 8);
     let $cm_handle_2: i32;
+    if @unlikely(ref.is_null(headers.backing) == 0) {
+        unreachable;
+    }
     $cm_handle_2 = headers.value;
     headers.value = 0;
+    headers.backing = ref.null eq;
+    if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }
     "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner_0, trailers, $outptr);
-    headers = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
-    $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
+    headers = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr), backing: ref.null eq };
+    $local_6 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4), backing: ref.null eq };
     drop("mem/realloc"($outptr, 8, 4, 0));
-    return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: headers, 1: $lifted_result_9 };
+    return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: headers, 1: $local_6 };
 }
 
 fn "resource_temp_referenced_dropped.wado/$cm_export__handle"($p_0) {
-    "resource_temp_referenced_dropped.wado/$cm_task_entry__handle"(struct.new "core:prelude//$Resource" { value: $p_0 });
+    "resource_temp_referenced_dropped.wado/$cm_task_entry__handle"(struct.new "core:prelude//$Resource" { value: $p_0, backing: ref.null eq });
 }
 
 fn "resource_temp_referenced_dropped.wado/$cm_task_entry__handle"(request) with Request, Response {
@@ -949,10 +962,14 @@ fn "resource_temp_referenced_dropped.wado/$cm_task_entry__handle"(request) with 
     let self_223: i32;
     self_223 = "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.get$spec0"(local.tee $temp_29("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-headers"(request)), global:resource_temp_referenced_dropped.wado::$const_obj_5).used;
     if ref.is_null($temp_29) == 0 {
-        let $cm_handle_2: i32;
-        $cm_handle_2 = $temp_29.value;
-        $temp_29.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        if ref.is_null($temp_29.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $temp_29.value;
+            $temp_29.value = 0;
+            $temp_29.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        }
     }
     if @unlikely(self_223 != 1) {
         cold_path;
@@ -968,11 +985,17 @@ n: "), used: 92 }, s1: struct.new "core:prelude/string.wado//String" { repr: arr
     if ref.is_null($v_3) {
         $v_3 = $temp_29;
     } else {
-        self_223 = $v_3.value;
-        $v_3.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        if ref.is_null($v_3.backing) == 0 {
+        } else {
+            self_223 = $v_3.value;
+            $v_3.value = 0;
+            $v_3.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        }
         $v_3.value = $temp_29.value;
+        $v_3.backing = $temp_29.backing;
         $temp_29.value = 0;
+        $temp_29.backing = ref.null eq;
     }
     if @unlikely((local.tee self_223("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0"($v_3, global:resource_temp_referenced_dropped.wado::$const_obj_5)) == 0) == 0) {
         cold_path;
@@ -988,14 +1011,22 @@ has_greeting(&Fields::new()): "), used: 31 }, s3: struct.new "core:prelude/strin
         unreachable;
     }
     if ref.is_null($v_3) == 0 {
-        self_223 = $v_3.value;
-        $v_3.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        if ref.is_null($v_3.backing) == 0 {
+        } else {
+            self_223 = $v_3.value;
+            $v_3.value = 0;
+            $v_3.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        }
     }
     if ref.is_null(local.tee $temp_29(local.tee $temp_33(struct.new "resource_temp_referenced_dropped.wado//Holder" { headers: "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), n: 7 }).headers)) == 0 {
-        self_223 = $temp_29.value;
-        $temp_29.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        if ref.is_null($temp_29.backing) == 0 {
+        } else {
+            self_223 = $temp_29.value;
+            $temp_29.value = 0;
+            $temp_29.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        }
     }
     $temp_33.headers = ref.null none;
     if @unlikely("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec0"(local.tee $temp_29("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-headers"(request)), global:resource_temp_referenced_dropped.wado::$const_obj_5) == 0) {
@@ -1004,15 +1035,23 @@ has_greeting(&Fields::new()): "), used: 31 }, s3: struct.new "core:prelude/strin
         unreachable;
     }
     if ref.is_null($temp_29) == 0 {
-        self_223 = $temp_29.value;
-        $temp_29.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        if ref.is_null($temp_29.backing) == 0 {
+        } else {
+            self_223 = $temp_29.value;
+            $temp_29.value = 0;
+            $temp_29.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        }
     }
     self_223 = "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.get$spec0"(local.tee $temp_29("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-headers"(request)), global:resource_temp_referenced_dropped.wado::$const_obj_5).used;
     if ref.is_null($temp_29) == 0 {
-        $cm_handle_2 = $temp_29.value;
-        $temp_29.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        if ref.is_null($temp_29.backing) == 0 {
+        } else {
+            $cm_handle_2 = $temp_29.value;
+            $temp_29.value = 0;
+            $temp_29.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        }
     }
     if @unlikely(self_223 != 1) {
         cold_path;
@@ -1036,9 +1075,13 @@ greeting_count(&request): "), used: 27 }, s2: struct.new "core:prelude/string.wa
         0;
     });
     if ref.is_null($temp_29) == 0 {
-        $cm_handle_2 = $temp_29.value;
-        $temp_29.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        if ref.is_null($temp_29.backing) == 0 {
+        } else {
+            $cm_handle_2 = $temp_29.value;
+            $temp_29.value = 0;
+            $temp_29.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        }
     }
     if @unlikely(self_223 == 0) {
         cold_path;
@@ -1050,9 +1093,13 @@ condition: flag
     if @unlikely(local.tee self_223((if self_223 -> i32 {
         self_223 = "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.get$spec0"(local.tee $temp_29("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-headers"(request)), global:resource_temp_referenced_dropped.wado::$const_obj_5).used;
         if ref.is_null($temp_29) == 0 {
-            $cm_handle_2 = $temp_29.value;
-            $temp_29.value = 0;
-            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+            if ref.is_null($temp_29.backing) == 0 {
+            } else {
+                $cm_handle_2 = $temp_29.value;
+                $temp_29.value = 0;
+                $temp_29.backing = ref.null eq;
+                "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+            }
         }
         self_223;
     } else {
@@ -1073,9 +1120,13 @@ m: "), used: 92 }, s1: struct.new "core:prelude/string.wado//String" { repr: arr
         -1;
     });
     if ref.is_null($temp_29) == 0 {
-        $cm_handle_2 = $temp_29.value;
-        $temp_29.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        if ref.is_null($temp_29.backing) == 0 {
+        } else {
+            $cm_handle_2 = $temp_29.value;
+            $temp_29.value = 0;
+            $temp_29.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        }
     }
     if @unlikely((self_223 == 0) == 0) {
         cold_path;
@@ -1087,53 +1138,73 @@ k: "), used: 92 }, s1: struct.new "core:prelude/string.wado//String" { repr: arr
         unreachable;
     }
     self_223 = 0;
-    b72: block {
-        l73: loop {
-            break_if b72 self_223 >= 3;
+    b85: block {
+        l86: loop {
+            break_if b85 self_223 >= 3;
             self_223 = self_223 + 1;
             drop("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec1"(local.tee $temp_29("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:resource_temp_referenced_dropped.wado::$const_obj_1));
             if ref.is_null($temp_29) == 0 {
-                $cm_handle_2 = $temp_29.value;
-                $temp_29.value = 0;
-                "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+                if ref.is_null($temp_29.backing) == 0 {
+                } else {
+                    $cm_handle_2 = $temp_29.value;
+                    $temp_29.value = 0;
+                    $temp_29.backing = ref.null eq;
+                    "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+                }
             }
-            continue l73;
+            continue l86;
         };
     };
     self_223 = 0;
-    b75: block {
-        l76: loop {
+    b89: block {
+        l90: loop {
             if ("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.get$spec1"(local.tee $temp_29("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:resource_temp_referenced_dropped.wado::$const_obj_1).used == 0) == 0 {
                 if ref.is_null($temp_29) == 0 {
-                    self_223 = $temp_29.value;
-                    $temp_29.value = 0;
-                    "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+                    if ref.is_null($temp_29.backing) == 0 {
+                    } else {
+                        self_223 = $temp_29.value;
+                        $temp_29.value = 0;
+                        $temp_29.backing = ref.null eq;
+                        "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+                    }
                 }
-                break b75;
+                break b89;
             }
             if local.tee self_223(self_223 + 1) == 3 {
                 if ref.is_null($temp_29) == 0 {
-                    self_223 = $temp_29.value;
-                    $temp_29.value = 0;
-                    "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+                    if ref.is_null($temp_29.backing) == 0 {
+                    } else {
+                        self_223 = $temp_29.value;
+                        $temp_29.value = 0;
+                        $temp_29.backing = ref.null eq;
+                        "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+                    }
                 }
-                break b75;
+                break b89;
             }
             if ref.is_null($temp_29) == 0 {
-                $cm_handle_2 = $temp_29.value;
-                $temp_29.value = 0;
-                "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+                if ref.is_null($temp_29.backing) == 0 {
+                } else {
+                    $cm_handle_2 = $temp_29.value;
+                    $temp_29.value = 0;
+                    $temp_29.backing = ref.null eq;
+                    "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+                }
             }
-            continue l76;
+            continue l90;
         };
     };
     let $match_scrut_1: ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>";
     if @unlikely((local.tee self_223((if ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok"(local.tee $match_scrut_1("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[static]fields.from-list"(struct.new "core:prelude/list.wado//List<[wasi:http/types.wado/FieldName,wasi:http/types.wado/FieldValue]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(), used: 0 }))) -> bool {
         self_223 = "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.has$spec1"(local.tee $temp_29(ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok"($match_scrut_1).payload_0), global:resource_temp_referenced_dropped.wado::$const_obj_1);
         if ref.is_null($temp_29) == 0 {
-            $cm_handle_2 = $temp_29.value;
-            $temp_29.value = 0;
-            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+            if ref.is_null($temp_29.backing) == 0 {
+            } else {
+                $cm_handle_2 = $temp_29.value;
+                $temp_29.value = 0;
+                $temp_29.backing = ref.null eq;
+                "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+            }
         }
         self_223;
     } else {
@@ -1150,20 +1221,32 @@ has: "), used: 92 }, s1: struct.new "core:prelude/string.wado//String" { repr: a
     $temp_29 = "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
     $v_3 = "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"();
     if ref.is_null($temp_29) == 0 {
-        self_223 = $temp_29.value;
-        $temp_29.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        if ref.is_null($temp_29.backing) == 0 {
+        } else {
+            self_223 = $temp_29.value;
+            $temp_29.value = 0;
+            $temp_29.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        }
     }
     if ref.is_null($v_3) == 0 {
-        self_223 = $v_3.value;
-        $v_3.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        if ref.is_null($v_3.backing) == 0 {
+        } else {
+            self_223 = $v_3.value;
+            $v_3.value = 0;
+            $v_3.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"(self_223);
+        }
     }
     self_223 = 1 + local.tee $temp_33(struct.new "resource_temp_referenced_dropped.wado//Holder" { headers: "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), n: 7 }).n;
     if ref.is_null(local.tee $temp_29($temp_33.headers)) == 0 {
-        $cm_handle_2 = $temp_29.value;
-        $temp_29.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        if ref.is_null($temp_29.backing) == 0 {
+        } else {
+            $cm_handle_2 = $temp_29.value;
+            $temp_29.value = 0;
+            $temp_29.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        }
     }
     $temp_33.headers = ref.null none;
     if @unlikely(self_223 != 8) {
@@ -1179,21 +1262,36 @@ b: "), used: 92 }, s1: struct.new "core:prelude/string.wado//String" { repr: arr
     $cm_handle_2 = builtin::i32_wrap_i64($cm_pair_219 >> 32_i64);
     $temp_29 = local.tee $local_222("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, self_223)).0;
     $v_3 = $local_222.1;
-    self_223 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $temp_29 }).payload_0.value;
+    if @unlikely(ref.is_null(local.tee $temp_29(ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $temp_29 }).payload_0).backing) == 0) {
+        unreachable;
+    }
+    self_223 = $temp_29.value;
     "wasi/task-return:handle"(0, self_223, 0, 0_i64, 0, 0, 0, 0);
-    drop("resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($cm_handle_2, global:resource_temp_referenced_dropped.wado::$const_obj_0));
+    drop("resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }; $cm_handle_2, global:resource_temp_referenced_dropped.wado::$const_obj_0));
     if ref.is_null($v_3) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"($v_3.value);
+        if ref.is_null($v_3.backing) == 0 {
+        } else {
+            self_223 = $v_3.value;
+            $v_3.value = 0;
+            $v_3.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(self_223);
+        }
     }
     if ref.is_null(request) == 0 {
-        self_223 = request.value;
-        request.value = 0;
-        "wasi/resource-drop:wasi:http/types.wado#Request"(self_223);
+        if ref.is_null(request.backing) == 0 {
+        } else {
+            self_223 = request.value;
+            request.value = 0;
+            request.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Request"(self_223);
+        }
     }
 }
 
 fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(handle, value) {
-    let $load_2: i32;
+    let $load_3: i32;
     let ptr_2: i32;
     let $local_4: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
     let $local_6: ref null "core:prelude//$Resource";
@@ -1221,21 +1319,23 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
         builtin::store_u8(ptr_2 + 8, ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"($local_4));
         if ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"($local_4) {
             $local_6 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"($local_4).payload_0;
-            builtin::store_i32((ptr_2 + 8) + 4, $local_6.value);
+            builtin::store_i32((ptr_2 + 8) + 4, if @unlikely(ref.is_null($local_6.backing) == 0) {
+                unreachable;
+            }; $local_6.value);
         } else {
         }
     } else {
         $local_7 = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Err"(value).payload_0;
-        builtin::store_u8(ptr_2 + 8, local.tee $load_2($local_7.discriminant));
-        if $load_2 == 0 {
+        builtin::store_u8(ptr_2 + 8, local.tee $load_3($local_7.discriminant));
+        if $load_3 == 0 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::DnsError"($local_7) {
             $local_11 = local.tee $local_9(ref.cast "wasi:http/types.wado//ErrorCode::DnsError"($local_7).payload_0).rcode;
             builtin::store_u8((ptr_2 + 8) + 8, ref.is_null($local_11) == 0);
             if ref.is_null($local_11) == 0 {
-                $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                 builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64($local_13));
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
             } else {
@@ -1243,43 +1343,43 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
             $local_14 = $local_9.info_code;
             builtin::store_u8(((ptr_2 + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u16>::Some"($local_14));
             if ref.test "core:prelude/types.wado//Option<u16>::Some"($local_14) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u16>::Some"($local_14).payload_0;
-                builtin::store_u16((((ptr_2 + 8) + 8) + 12) + 2, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u16>::Some"($local_14).payload_0;
+                builtin::store_u16((((ptr_2 + 8) + 8) + 12) + 2, $load_3);
             } else {
             }
-        } else if $load_2 == 2 {
-        } else if $load_2 == 3 {
-        } else if $load_2 == 4 {
-        } else if $load_2 == 5 {
-        } else if $load_2 == 6 {
-        } else if $load_2 == 7 {
-        } else if $load_2 == 8 {
-        } else if $load_2 == 9 {
-        } else if $load_2 == 10 {
-        } else if $load_2 == 11 {
-        } else if $load_2 == 12 {
-        } else if $load_2 == 13 {
+        } else if $load_3 == 2 {
+        } else if $load_3 == 3 {
+        } else if $load_3 == 4 {
+        } else if $load_3 == 5 {
+        } else if $load_3 == 6 {
+        } else if $load_3 == 7 {
+        } else if $load_3 == 8 {
+        } else if $load_3 == 9 {
+        } else if $load_3 == 10 {
+        } else if $load_3 == 11 {
+        } else if $load_3 == 12 {
+        } else if $load_3 == 13 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::TlsAlertReceived"($local_7) {
             $local_18 = local.tee $local_16(ref.cast "wasi:http/types.wado//ErrorCode::TlsAlertReceived"($local_7).payload_0).alert_id;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u8>::Some"($local_18));
             if ref.test "core:prelude/types.wado//Option<u8>::Some"($local_18) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u8>::Some"($local_18).payload_0;
-                builtin::store_u8(((ptr_2 + 8) + 8) + 1, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u8>::Some"($local_18).payload_0;
+                builtin::store_u8(((ptr_2 + 8) + 8) + 1, $load_3);
             } else {
             }
             $local_11 = $local_16.alert_message;
             builtin::store_u8(((ptr_2 + 8) + 8) + 4, ref.is_null($local_11) == 0);
             if ref.is_null($local_11) == 0 {
-                $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13));
                 builtin::store_i32(((((ptr_2 + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
             } else {
             }
-        } else if $load_2 == 15 {
-        } else if $load_2 == 16 {
+        } else if $load_3 == 15 {
+        } else if $load_3 == 16 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"($local_7) {
             $local_23 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestBodySize"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u64>::Some"($local_23));
@@ -1288,15 +1388,15 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
                 builtin::store_i64(((ptr_2 + 8) + 8) + 8, $local_13);
             } else {
             }
-        } else if $load_2 == 18 {
-        } else if $load_2 == 19 {
-        } else if $load_2 == 20 {
+        } else if $load_3 == 18 {
+        } else if $load_3 == 19 {
+        } else if $load_3 == 20 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"($local_7) {
             $local_26 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSectionSize"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
-                builtin::store_i32(((ptr_2 + 8) + 8) + 4, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, $load_3);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestHeaderSize"($local_7) {
@@ -1306,10 +1406,10 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
                 $local_11 = local.tee $local_31(ref.as_non_null($local_29)).field_name;
                 builtin::store_u8(((ptr_2 + 8) + 8) + 4, ref.is_null($local_11) == 0);
                 if ref.is_null($local_11) == 0 {
-                    $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                    ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                    "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                    $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                    $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                    ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                    "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                    $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                     builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13));
                     builtin::store_i32(((((ptr_2 + 8) + 8) + 4) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
                 } else {
@@ -1317,8 +1417,8 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
                 $local_26 = $local_31.field_size;
                 builtin::store_u8((((ptr_2 + 8) + 8) + 4) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
                 if ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26) {
-                    $load_2 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
-                    builtin::store_i32(((((ptr_2 + 8) + 8) + 4) + 12) + 4, $load_2);
+                    $load_3 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
+                    builtin::store_i32(((((ptr_2 + 8) + 8) + 4) + 12) + 4, $load_3);
                 } else {
                 }
             } else {
@@ -1327,18 +1427,18 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
             $local_26 = ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSectionSize"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
-                builtin::store_i32(((ptr_2 + 8) + 8) + 4, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, $load_3);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"($local_7) {
             $local_11 = local.tee $local_31(ref.cast "wasi:http/types.wado//ErrorCode::HttpRequestTrailerSize"($local_7).payload_0).field_name;
             builtin::store_u8((ptr_2 + 8) + 8, ref.is_null($local_11) == 0);
             if ref.is_null($local_11) == 0 {
-                $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                 builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64($local_13));
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
             } else {
@@ -1346,27 +1446,27 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
             $local_26 = $local_31.field_size;
             builtin::store_u8(((ptr_2 + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
-                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
+                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, $load_3);
             } else {
             }
-        } else if $load_2 == 25 {
+        } else if $load_3 == 25 {
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"($local_7) {
             $local_26 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSectionSize"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
-                builtin::store_i32(((ptr_2 + 8) + 8) + 4, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, $load_3);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"($local_7) {
             $local_11 = local.tee $local_31(ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseHeaderSize"($local_7).payload_0).field_name;
             builtin::store_u8((ptr_2 + 8) + 8, ref.is_null($local_11) == 0);
             if ref.is_null($local_11) == 0 {
-                $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                 builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64($local_13));
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
             } else {
@@ -1374,8 +1474,8 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
             $local_26 = $local_31.field_size;
             builtin::store_u8(((ptr_2 + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
-                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
+                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, $load_3);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseBodySize"($local_7) {
@@ -1390,18 +1490,18 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
             $local_26 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSectionSize"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
-                builtin::store_i32(((ptr_2 + 8) + 8) + 4, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
+                builtin::store_i32(((ptr_2 + 8) + 8) + 4, $load_3);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"($local_7) {
             $local_11 = local.tee $local_31(ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTrailerSize"($local_7).payload_0).field_name;
             builtin::store_u8((ptr_2 + 8) + 8, ref.is_null($local_11) == 0);
             if ref.is_null($local_11) == 0 {
-                $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                 builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64($local_13));
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
             } else {
@@ -1409,18 +1509,18 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
             $local_26 = $local_31.field_size;
             builtin::store_u8(((ptr_2 + 8) + 8) + 12, ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26));
             if ref.test "core:prelude/types.wado//Option<u32>::Some"($local_26) {
-                $load_2 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
-                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, $load_2);
+                $load_3 = ref.cast "core:prelude/types.wado//Option<u32>::Some"($local_26).payload_0;
+                builtin::store_i32((((ptr_2 + 8) + 8) + 12) + 4, $load_3);
             } else {
             }
         } else if ref.test "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"($local_7) {
             $local_11 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseTransferCoding"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.is_null($local_11) == 0);
             if ref.is_null($local_11) == 0 {
-                $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                 builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64($local_13));
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
             } else {
@@ -1429,41 +1529,41 @@ fn "resource_temp_referenced_dropped.wado/$cm_future_write_core:prelude/types.wa
             $local_11 = ref.cast "wasi:http/types.wado//ErrorCode::HttpResponseContentCoding"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.is_null($local_11) == 0);
             if ref.is_null($local_11) == 0 {
-                $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                 builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64($local_13));
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
             } else {
             }
-        } else if $load_2 == 33 {
-        } else if $load_2 == 34 {
-        } else if $load_2 == 35 {
-        } else if $load_2 == 36 {
-        } else if $load_2 == 37 {
+        } else if $load_3 == 33 {
+        } else if $load_3 == 34 {
+        } else if $load_3 == 35 {
+        } else if $load_3 == 36 {
+        } else if $load_3 == 37 {
         } else {
             $local_11 = ref.cast "wasi:http/types.wado//ErrorCode::InternalError"($local_7).payload_0;
             builtin::store_u8((ptr_2 + 8) + 8, ref.is_null($local_11) == 0);
             if ref.is_null($local_11) == 0 {
-                $load_2 = local.tee $local_12(ref.as_non_null($local_11)).used;
-                ptr_88 = "mem/realloc"(0, 0, 1, $load_2);
-                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_2);
-                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_2) << 32_i64);
+                $load_3 = local.tee $local_12(ref.as_non_null($local_11)).used;
+                ptr_88 = "mem/realloc"(0, 0, 1, $load_3);
+                "core:rt/gc_array_to_memory$spec0$dae[src_start]"($local_12.repr, ptr_88, $load_3);
+                $local_13 = builtin::i64_extend_i32_u(ptr_88) | (builtin::i64_extend_i32_s($load_3) << 32_i64);
                 builtin::store_i32(((ptr_2 + 8) + 8) + 4, builtin::i32_wrap_i64($local_13));
                 builtin::store_i32((((ptr_2 + 8) + 8) + 4) + 4, builtin::i32_wrap_i64($local_13 >> 32_i64));
             } else {
             }
         }
     }
-    if local.tee $load_2("wasi/future-write:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"(handle, ptr_2)) == -1 {
+    if local.tee $load_3("wasi/future-write:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"(handle, ptr_2)) == -1 {
     } else {
         drop("mem/realloc"(ptr_2, 40, 8, 0));
         "wasi/future-drop-writable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"(handle);
     }
     $inline_cm_future_write_result_36: block {
-        break_if $inline_cm_future_write_result_36 $load_2 == -1;
-        drop((if local.tee handle((if local.tee handle($load_2 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+        break_if $inline_cm_future_write_result_36 $load_3 == -1;
+        drop((if local.tee handle((if local.tee handle($load_3 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
             0;
         } else if handle == 1 -> "core:prelude/types.wado//enum:CopyResult" {
             1;
@@ -1518,7 +1618,9 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(name.repr, ptr_11);
     ptr_11 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_11) | 42949672960_i64));
     $name_owned_1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
-    $raw_result = "wasi/$wasi:http/types@0.3.0#[method]fields.has"(self.value, ptr_11, $name_owned_1);
+    $raw_result = "wasi/$wasi:http/types@0.3.0#[method]fields.has"(if @unlikely(ref.is_null(self.backing) == 0) {
+        unreachable;
+    }; self.value, ptr_11, $name_owned_1);
     if $name_owned_1 > 0 {
         drop("mem/realloc"(ptr_11, $name_owned_1, 1, 0));
     }
@@ -1543,7 +1645,9 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     ptr_19 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_19) | 42949672960_i64));
     $name_owned_1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/$wasi:http/types@0.3.0#[method]fields.get"(self.value, ptr_19, $name_owned_1, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]fields.get"(if @unlikely(ref.is_null(self.backing) == 0) {
+        unreachable;
+    }; self.value, ptr_19, $name_owned_1, $outptr);
     if $name_owned_1 > 0 {
         drop("mem/realloc"(ptr_19, $name_owned_1, 1, 0));
     }
@@ -1551,9 +1655,9 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     $sroa_$result_repr_40 = builtin::array_new<ref "core:prelude/list.wado//List<u8>">(local.tee $name_owned_1(builtin::load_i32($outptr + 4)));
     $sroa_$result_used_41 = 0;
     $i = 0;
-    b165: block {
-        l166: loop {
-            break_if b165 $i >= $name_owned_1;
+    b193: block {
+        l194: loop {
+            break_if b193 $i >= $name_owned_1;
             $base_13 = builtin::load_i32(local.tee $elem_addr(ptr_19 + ($i * 8)));
             "core:rt/memory_into_gc_array$dae[at]"(local.tee arr(builtin::array_new<u8>(local.tee $elem_addr(builtin::load_i32($elem_addr + 4)))), $base_13, $elem_addr);
             $result = struct.new "core:prelude/list.wado//List<u8>" { repr: arr, used: $elem_addr };
@@ -1568,7 +1672,7 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
             builtin::array_set<ref "core:prelude/list.wado//List<u8>">($sroa_$result_repr_40, $sroa_$result_used_41, $result);
             $sroa_$result_used_41 = $sroa_$result_used_41 + 1;
             $i = $i + 1;
-            continue l166;
+            continue l194;
         };
     };
     if $name_owned_1 > 0 {
@@ -1596,7 +1700,9 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     ptr_19 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_19) | 4294967296_i64));
     $name_owned_1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/$wasi:http/types@0.3.0#[method]fields.get"(self.value, ptr_19, $name_owned_1, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[method]fields.get"(if @unlikely(ref.is_null(self.backing) == 0) {
+        unreachable;
+    }; self.value, ptr_19, $name_owned_1, $outptr);
     if $name_owned_1 > 0 {
         drop("mem/realloc"(ptr_19, $name_owned_1, 1, 0));
     }
@@ -1604,9 +1710,9 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     $sroa_$result_repr_40 = builtin::array_new<ref "core:prelude/list.wado//List<u8>">(local.tee $name_owned_1(builtin::load_i32($outptr + 4)));
     $sroa_$result_used_41 = 0;
     $i = 0;
-    b171: block {
-        l172: loop {
-            break_if b171 $i >= $name_owned_1;
+    b200: block {
+        l201: loop {
+            break_if b200 $i >= $name_owned_1;
             $base_13 = builtin::load_i32(local.tee $elem_addr(ptr_19 + ($i * 8)));
             "core:rt/memory_into_gc_array$dae[at]"(local.tee arr(builtin::array_new<u8>(local.tee $elem_addr(builtin::load_i32($elem_addr + 4)))), $base_13, $elem_addr);
             $result = struct.new "core:prelude/list.wado//List<u8>" { repr: arr, used: $elem_addr };
@@ -1621,7 +1727,7 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
             builtin::array_set<ref "core:prelude/list.wado//List<u8>">($sroa_$result_repr_40, $sroa_$result_used_41, $result);
             $sroa_$result_used_41 = $sroa_$result_used_41 + 1;
             $i = $i + 1;
-            continue l172;
+            continue l201;
         };
     };
     if $name_owned_1 > 0 {
@@ -1640,7 +1746,9 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[me
     "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(name.repr, ptr_11);
     ptr_11 = builtin::i32_wrap_i64(local.tee $name_packed(builtin::i64_extend_i32_u(ptr_11) | 4294967296_i64));
     $name_owned_1 = builtin::i32_wrap_i64($name_packed >> 32_i64);
-    $raw_result = "wasi/$wasi:http/types@0.3.0#[method]fields.has"(self.value, ptr_11, $name_owned_1);
+    $raw_result = "wasi/$wasi:http/types@0.3.0#[method]fields.has"(if @unlikely(ref.is_null(self.backing) == 0) {
+        unreachable;
+    }; self.value, ptr_11, $name_owned_1);
     if $name_owned_1 > 0 {
         drop("mem/realloc"(ptr_11, $name_owned_1, 1, 0));
     }
@@ -1656,16 +1764,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b177: block {
-        l178: loop {
-            break_if b177 (digit_count - offset) < 2;
+    b207: block {
+        l208: loop {
+            break_if b207 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l178;
+            continue l208;
         };
     };
     if digit_count > offset {
@@ -1750,9 +1858,9 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
         builtin::array_set_u8(arr, offset, 48);
     } else {
         $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
-        b201: block {
-            l202: loop {
-                break_if b201 val_i64 == 0_i64;
+        b231: block {
+            l232: loop {
+                break_if b231 val_i64 == 0_i64;
                 digit_count = digit_count - 1;
                 offset = builtin::i32_wrap_i64(val_i64 & mask64);
                 builtin::array_set_u8(arr, digit_count, (if offset < 10 -> i32 {
@@ -1761,7 +1869,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                     select i32(upper, (65 + offset) - 10, (97 + offset) - 10);
                 }));
                 val_i64 = val_i64 >>u $licm_arith_13;
-                continue l202;
+                continue l232;
             };
         };
     }
@@ -1830,12 +1938,12 @@ fn "core:prelude/string.wado/utf8_prefix_end"(repr, start, len, char_count) {
     let seen: i32;
     end = 0;
     seen = 0;
-    b213: block {
-        l214: loop {
-            break_if b213 ((end < len) & (seen < char_count)) == 0;
+    b243: block {
+        l244: loop {
+            break_if b243 ((end < len) & (seen < char_count)) == 0;
             end = end + "core:prelude/string.wado/utf8_seq_len"(builtin::array_get_value<u8>(repr, start + end));
             seen = seen + 1;
-            continue l214;
+            continue l244;
         };
     };
     if end > len {
@@ -1878,9 +1986,9 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
-    b219: block {
-        l220: loop {
-            break_if b219 i > $licm_arith_7;
+    b249: block {
+        l250: loop {
+            break_if b249 i > $licm_arith_7;
             w = builtin::load_i64(ptr + i);
             builtin::array_set_u8(arr, i, builtin::i32_wrap_i64(w));
             builtin::array_set_u8(arr, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
@@ -1891,15 +1999,15 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
             builtin::array_set_u8(arr, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
             builtin::array_set_u8(arr, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
             i = i + 8;
-            continue l220;
+            continue l250;
         };
     };
-    b221: block {
-        l222: loop {
-            break_if b221 i >= len;
+    b251: block {
+        l252: loop {
+            break_if b251 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l222;
+            continue l252;
         };
     };
 }
@@ -1911,9 +2019,9 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
-    b223: block {
-        l224: loop {
-            break_if b223 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
+    b253: block {
+        l254: loop {
+            break_if b253 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -1922,22 +2030,22 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l224;
+            continue l254;
         };
     };
-    b225: block {
-        l226: loop {
-            break_if b225 i > $licm_arith_7;
+    b255: block {
+        l256: loop {
+            break_if b255 i > $licm_arith_7;
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l226;
+            continue l256;
         };
     };
-    b227: block {
-        l228: loop {
-            break_if b227 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
+    b257: block {
+        l258: loop {
+            break_if b257 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -1946,15 +2054,15 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l228;
+            continue l258;
         };
     };
-    b229: block {
-        l230: loop {
-            break_if b229 i >= len;
+    b259: block {
+        l260: loop {
+            break_if b259 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l230;
+            continue l260;
         };
     };
 }
@@ -1964,10 +2072,16 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        if @unlikely(ref.is_null(ref.null eq) == 0) {
+            unreachable;
+        }
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -1976,9 +2090,14 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -2020,7 +2139,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l235: loop {
+        l269: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -2028,7 +2147,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return written;
             }
-            continue l235;
+            continue l269;
         };
     };
 }
@@ -2070,30 +2189,30 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]"(arr, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
-    b241: block {
-        l242: loop {
-            break_if b241 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
+    b275: block {
+        l276: loop {
+            break_if b275 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l242;
+            continue l276;
         };
     };
-    b243: block {
-        l244: loop {
-            break_if b243 i > $licm_arith_7;
+    b277: block {
+        l278: loop {
+            break_if b277 i > $licm_arith_7;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l244;
+            continue l278;
         };
     };
-    b245: block {
-        l246: loop {
-            break_if b245 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
+    b279: block {
+        l280: loop {
+            break_if b279 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
@@ -2102,15 +2221,15 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]"(arr, ptr, len) {
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
-            continue l246;
+            continue l280;
         };
     };
-    b247: block {
-        l248: loop {
-            break_if b247 i >= len;
+    b281: block {
+        l282: loop {
+            break_if b281 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
-            continue l248;
+            continue l282;
         };
     };
 }
@@ -2119,18 +2238,18 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(arr, ptr) {
     let i: i32;
     let w: i64;
     i = 0;
-    b249: block {
-        l250: loop {
-            break_if b249 i > 2;
+    b283: block {
+        l284: loop {
+            break_if b283 i > 2;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l250;
+            continue l284;
         };
     };
-    b251: block {
-        l252: loop {
-            break_if b251 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(10);
+    b285: block {
+        l286: loop {
+            break_if b285 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(10);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
@@ -2139,15 +2258,15 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec0$dae[len]"(arr, ptr) {
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
-            continue l252;
+            continue l286;
         };
     };
-    b253: block {
-        l254: loop {
-            break_if b253 i >= 10;
+    b287: block {
+        l288: loop {
+            break_if b287 i >= 10;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
-            continue l254;
+            continue l288;
         };
     };
 }
@@ -2156,18 +2275,18 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(arr, ptr) {
     let i: i32;
     let w: i64;
     i = 0;
-    b255: block {
-        l256: loop {
-            break_if b255 i > -7;
+    b289: block {
+        l290: loop {
+            break_if b289 i > -7;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, i + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l256;
+            continue l290;
         };
     };
-    b257: block {
-        l258: loop {
-            break_if b257 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(1);
+    b291: block {
+        l292: loop {
+            break_if b291 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(1);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
@@ -2176,15 +2295,15 @@ fn "core:rt/gc_array_to_memory$spec0$dae[src_start]$spec1$dae[len]"(arr, ptr) {
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
-            continue l258;
+            continue l292;
         };
     };
-    b259: block {
-        l260: loop {
-            break_if b259 i >= 1;
+    b293: block {
+        l294: loop {
+            break_if b293 i >= 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, i));
             i = i + 1;
-            continue l260;
+            continue l294;
         };
     };
 }
@@ -2220,17 +2339,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(self) {
     let n: i32;
     n = 0;
-    b264: block {
-        l265: loop {
+    b298: block {
+        l299: loop {
             let $mv$$match_2$0: i32;
             let $mv$$match_2$1: char;
             multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(self);
             if $mv$$match_2$0 == 1 {
                 n = n + 1;
             } else {
-                break b264;
+                break b298;
             }
-            continue l265;
+            continue l299;
         };
     };
     return n;
@@ -2357,7 +2476,9 @@ fn "wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/traits.wado/In
     self_2 = f.buf;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Fields#0x"), used: 9 };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self_2, s);
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(self.value, f);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(if @unlikely(ref.is_null(self.backing) == 0) {
+        unreachable;
+    }; self.value, f);
 }
 
 fn "wasi:http/types.wado/wasi:http/types.wado/Request^core:prelude/traits.wado/Inspect::inspect"(self, f) {
@@ -2366,7 +2487,9 @@ fn "wasi:http/types.wado/wasi:http/types.wado/Request^core:prelude/traits.wado/I
     self_2 = f.buf;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Request#0x"), used: 10 };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(self_2, s);
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(self.value, f);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(if @unlikely(ref.is_null(self.backing) == 0) {
+        unreachable;
+    }; self.value, f);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<resource_temp_referenced_dropped.wado/$tmpl$ce9bda9252f81986,[bool]>"(t) {
@@ -2635,12 +2758,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b297: block {
-        l298: loop {
-            break_if b297 i >= n;
+    b333: block {
+        l334: loop {
+            break_if b333 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l298;
+            continue l334;
         };
     };
 }

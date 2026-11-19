@@ -1207,10 +1207,16 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        if @unlikely(ref.is_null(ref.null eq) == 0) {
+            unreachable;
+        }
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -1219,9 +1225,14 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -1270,7 +1281,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l164: loop {
+        l168: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -1278,7 +1289,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return written;
             }
-            continue l164;
+            continue l168;
         };
     };
 }
@@ -1306,14 +1317,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
     self_12 = struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv_repr_1, used: $mv_used_2, byte_index: $mv_byte_index_3 };
     text = f.buf;
     $mv_used_2 = self_9 >= 0;
-    b167: block {
-        l168: loop {
+    b171: block {
+        l172: loop {
             let $mv$$match_8$1: char;
             multivalue_bind [$mv_byte_index_3, $mv$$match_8$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_12);
             if $mv_byte_index_3 == 1 {
                 if select i32($mv_used_2, start_61 >= self_9, 0) {
                     truncated = 1;
-                    break b167;
+                    break b171;
                 }
                 if $mv$$match_8$1 == 34 {
                     $mv_byte_index_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(text, 1);
@@ -1351,9 +1362,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
                 }
                 start_61 = start_61 + 1;
             } else {
-                break b167;
+                break b171;
             }
-            continue l168;
+            continue l172;
         };
     };
     self_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee text(f.buf), 1);
@@ -1535,168 +1546,168 @@ fn "core:prelude/string.wado/$hole_fmt$core:prelude/string.wado/$tmpl$ce9bda9252
 }
 
 fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b145b32c9a586330$spec0$dae[index]"(v) {
-    return b192: block -> ref "core:prelude/string.wado//String" {
-        b193: block {
-            b194: block {
-                b195: block {
-                    b196: block {
-                        b197: block {
-                            b198: block {
-                                b199: block {
-                                    b200: block {
-                                        b201: block {
-                                            b202: block {
-                                                b203: block {
-                                                    b204: block {
-                                                        b205: block {
+    return b196: block -> ref "core:prelude/string.wado//String" {
+        b197: block {
+            b198: block {
+                b199: block {
+                    b200: block {
+                        b201: block {
+                            b202: block {
+                                b203: block {
+                                    b204: block {
+                                        b205: block {
+                                            b206: block {
+                                                b207: block {
+                                                    b208: block {
+                                                        b209: block {
                                                             br_table 0 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
                                                         };
                                                         unreachable;
                                                     };
                                                     v.s0;
-                                                    break b192;
+                                                    break b196;
                                                 };
                                                 v.r0;
-                                                break b192;
+                                                break b196;
                                             };
                                             v.s1;
-                                            break b192;
+                                            break b196;
                                         };
                                         v.r1;
-                                        break b192;
+                                        break b196;
                                     };
                                     v.s2;
-                                    break b192;
+                                    break b196;
                                 };
                                 v.r2;
-                                break b192;
+                                break b196;
                             };
                             v.s3;
-                            break b192;
+                            break b196;
                         };
                         v.r3;
-                        break b192;
+                        break b196;
                     };
                     v.s4;
-                    break b192;
+                    break b196;
                 };
                 v.r4;
-                break b192;
+                break b196;
             };
             v.s5;
-            break b192;
+            break b196;
         };
         v.r5;
     };
 }
 
 fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b145b32c9a586330$spec1$dae[index]"(v) {
-    return b206: block -> ref "core:prelude/string.wado//String" {
-        b207: block {
-            b208: block {
-                b209: block {
-                    b210: block {
-                        b211: block {
-                            b212: block {
-                                b213: block {
-                                    b214: block {
-                                        b215: block {
-                                            b216: block {
-                                                b217: block {
-                                                    b218: block {
-                                                        b219: block {
+    return b210: block -> ref "core:prelude/string.wado//String" {
+        b211: block {
+            b212: block {
+                b213: block {
+                    b214: block {
+                        b215: block {
+                            b216: block {
+                                b217: block {
+                                    b218: block {
+                                        b219: block {
+                                            b220: block {
+                                                b221: block {
+                                                    b222: block {
+                                                        b223: block {
                                                             br_table 6 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
                                                         };
                                                         unreachable;
                                                     };
                                                     v.s0;
-                                                    break b206;
+                                                    break b210;
                                                 };
                                                 v.r0;
-                                                break b206;
+                                                break b210;
                                             };
                                             v.s1;
-                                            break b206;
+                                            break b210;
                                         };
                                         v.r1;
-                                        break b206;
+                                        break b210;
                                     };
                                     v.s2;
-                                    break b206;
+                                    break b210;
                                 };
                                 v.r2;
-                                break b206;
+                                break b210;
                             };
                             v.s3;
-                            break b206;
+                            break b210;
                         };
                         v.r3;
-                        break b206;
+                        break b210;
                     };
                     v.s4;
-                    break b206;
+                    break b210;
                 };
                 v.r4;
-                break b206;
+                break b210;
             };
             v.s5;
-            break b206;
+            break b210;
         };
         v.r5;
     };
 }
 
 fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b145b32c9a586330$spec2$dae[index]"(v) {
-    return b220: block -> ref "core:prelude/string.wado//String" {
-        b221: block {
-            b222: block {
-                b223: block {
-                    b224: block {
-                        b225: block {
-                            b226: block {
-                                b227: block {
-                                    b228: block {
-                                        b229: block {
-                                            b230: block {
-                                                b231: block {
-                                                    b232: block {
-                                                        b233: block {
+    return b224: block -> ref "core:prelude/string.wado//String" {
+        b225: block {
+            b226: block {
+                b227: block {
+                    b228: block {
+                        b229: block {
+                            b230: block {
+                                b231: block {
+                                    b232: block {
+                                        b233: block {
+                                            b234: block {
+                                                b235: block {
+                                                    b236: block {
+                                                        b237: block {
                                                             br_table 8 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] default=0;
                                                         };
                                                         unreachable;
                                                     };
                                                     v.s0;
-                                                    break b220;
+                                                    break b224;
                                                 };
                                                 v.r0;
-                                                break b220;
+                                                break b224;
                                             };
                                             v.s1;
-                                            break b220;
+                                            break b224;
                                         };
                                         v.r1;
-                                        break b220;
+                                        break b224;
                                     };
                                     v.s2;
-                                    break b220;
+                                    break b224;
                                 };
                                 v.r2;
-                                break b220;
+                                break b224;
                             };
                             v.s3;
-                            break b220;
+                            break b224;
                         };
                         v.r3;
-                        break b220;
+                        break b224;
                     };
                     v.s4;
-                    break b220;
+                    break b224;
                 };
                 v.r4;
-                break b220;
+                break b224;
             };
             v.s5;
-            break b220;
+            break b224;
         };
         v.r5;
     };
@@ -1762,17 +1773,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(self) {
     let n: i32;
     n = 0;
-    b241: block {
-        l242: loop {
+    b245: block {
+        l246: loop {
             let $mv$$match_2$0: i32;
             let $mv$$match_2$1: char;
             multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(self);
             if $mv$$match_2$0 == 1 {
                 n = n + 1;
             } else {
-                break b241;
+                break b245;
             }
-            continue l242;
+            continue l246;
         };
     };
     return n;
@@ -2370,12 +2381,12 @@ fn "spec_effects_narrowing_captured.wado/spec_effects_narrowing_captured.wado/$C
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b308: block {
-        l309: loop {
-            break_if b308 i >= n;
+    b312: block {
+        l313: loop {
+            break_if b312 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l309;
+            continue l313;
         };
     };
 }

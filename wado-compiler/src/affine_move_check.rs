@@ -355,8 +355,9 @@ impl<'a> Checker<'a> {
                     self.check_function(method, false);
                 }
             }
-            Item::Interface(i) => {
-                for method in &i.methods {
+            Item::Interface(ast::InterfaceDecl { methods, .. })
+            | Item::Resource(ast::ResourceDecl { methods, .. }) => {
+                for method in methods {
                     self.check_function(method, false);
                 }
             }
