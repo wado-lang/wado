@@ -973,19 +973,22 @@ pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
             },
         ];
     }
+    let arguments = recorded.parameters - weights;
     let mut splitting = Splitting {
         recorded,
         segments: [],
         home: List::<i32>::filled(recorded.nodes.len(), -1),
         stepped,
         hosted: recorded.body.results,
+        of_weights: weights_only(recorded, arguments),
+        again: [],
     };
-    let stages = splitting.staged(&recorded.body);
-    let mut Splitting { segments, home, hosted, .. } = splitting;
-    let arguments = recorded.parameters - weights;
+    let mut stages = splitting.staged(&recorded.body);
+    splitting.fresh_for_host(&mut stages, &recorded.body.results);
+    let mut Splitting { segments, home, hosted, of_weights, again: for_host, .. } = splitting;
     // A value of the weights alone is computed again in each program that
-    // reads it, since a host step before that program may write the weights.
-    let of_weights = weights_only(recorded, arguments);
+    // reads it, or that the host reads it after, since a host step before
+    // that program may write the weights.
     let mut takes: List<List<i32>> = [];
     for let s of 0..<segments.len() {
         let mut again: List<i32> = [];
@@ -994,6 +997,7 @@ pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
                 again.push(id);
             }
         }
+        again.extend(&for_host[s].into_iter().filter(|id| home[id] != s).collect());
         let mut redone = closed_over_weights(recorded, &again, &of_weights, &parameters);
         redone.extend(&segments[s]);
         segments[s] = redone;
@@ -1053,16 +1057,46 @@ fn holding_steps(recorded: &Recorded) -> List<bool> {
 
 /// A pass being cut at its host steps: each program's nodes, each node's
 /// program or `-1` where the host sets it, whether each node holds a host step,
-/// and every node the host reads.
+/// every node the host reads, whether each node reads the weights alone, and
+/// the values of the weights alone each program computes again for the host.
 struct Splitting {
     recorded: &Recorded,
     segments: List<List<i32>>,
     home: List<i32>,
     stepped: List<bool>,
     hosted: List<i32>,
+    of_weights: List<bool>,
+    again: List<List<i32>>,
 }
 
 impl Splitting {
+    /// Has the program just before the host reads `reads` compute again what
+    /// of them reads the weights alone, since a host step before it may have
+    /// written the weights. Where the host's own stage comes last, a program of
+    /// those values alone runs first.
+    fn fresh_for_host(&mut self, stages: &mut List<Stage>, reads: &List<i32>) {
+        let fresh: List<i32> = (*reads)
+            .into_iter()
+            .filter(|id| self.of_weights[id] && !self.recorded.nodes[id].op matches { Parameter(_) })
+            .collect();
+        if fresh.is_empty() {
+            return;
+        }
+        let s = self.program_last(stages);
+        self.again[s].extend(&fresh);
+    }
+
+    /// The program `stages` end in, a new one where they end otherwise.
+    fn program_last(&mut self, stages: &mut List<Stage>) -> i32 {
+        if !stages.is_empty() && let Program(s) = &stages[stages.len() - 1] {
+            return *s;
+        }
+        stages.push(Stage::Program(self.segments.len()));
+        self.segments.push([]);
+        self.again.push([]);
+        return self.segments.len() - 1;
+    }
+
     /// The stages of `region`: a program for each run of its nodes that holds
     /// no host step, and the host's own stage for each other node.
     fn staged(&mut self, region: &Region) -> List<Stage> {
@@ -1075,6 +1109,7 @@ impl Splitting {
                 },
                 Fetched([step, k]) => {
                     if *k == 0 {
+                        self.fresh_for_host(&mut stages, &node.operands);
                         self.hosted.extend(&node.operands);
                         stages.push(Stage::Step(HostStep { step: *step, reads: node.operands, fetched: [] }));
                     }
@@ -1085,8 +1120,10 @@ impl Splitting {
                 },
                 Repeat(repeat) && self.stepped[id] => {
                     let starts = carried_starts(node);
-                    self.hosted.push(node.operands[0]);
-                    self.hosted.extend(&starts);
+                    let mut read = starts;
+                    read.push(node.operands[0]);
+                    self.fresh_for_host(&mut stages, &read);
+                    self.hosted.extend(&read);
                     stages.push(Stage::Loop(HostLoop {
                         count: node.operands[0],
                         starts,
@@ -1097,6 +1134,7 @@ impl Splitting {
                     }));
                 },
                 Case([first, second]) && self.stepped[id] => {
+                    self.fresh_for_host(&mut stages, &[node.operands[0]]);
                     self.hosted.push(node.operands[0]);
                     stages.push(Stage::Branch(HostBranch {
                         pred: node.operands[0],
@@ -1106,11 +1144,7 @@ impl Splitting {
                     }));
                 },
                 _ => {
-                    if stages.is_empty() || !stages[stages.len() - 1] matches { Program(_) } {
-                        stages.push(Stage::Program(self.segments.len()));
-                        self.segments.push([]);
-                    }
-                    let s = self.segments.len() - 1;
+                    let s = self.program_last(&mut stages);
                     self.segments[s].push(id);
                     homed(self.recorded, id, s, &mut self.home);
                 },
@@ -1122,7 +1156,9 @@ impl Splitting {
     fn hosted_region(&mut self, region: &Region) -> HostRegion {
         let yielded: List<i32> = region.results.into_iter().map(|id| self.recorded.nodes[id].operands[0]).collect();
         self.hosted.extend(&yielded);
-        return HostRegion { stages: self.staged(region), yielded };
+        let mut stages = self.staged(region);
+        self.fresh_for_host(&mut stages, &yielded);
+        return HostRegion { stages, yielded };
     }
 }
 

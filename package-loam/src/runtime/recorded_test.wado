@@ -597,6 +597,82 @@ test "a branch holding a host step runs on the host, the step only where it is t
     }
 }
 
+/// The weight doubled, read by the host at step 8 and returned, after a step
+/// at 7 that writes the weight.
+fn rewritten_pass(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
+    let x = r.parameter::<f32, [A]>(extents[0]);
+    let weight = r.parameter::<f32, [A]>(extents[1]);
+    let w = r.binary(Binary::Add, &weight, &weight);
+    let kinds: List<[ElementKind, List<i32>]> = [
+        [
+            ElementKind::F32,
+            [3],
+        ],
+    ];
+    r.fetched(7, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&x))], &kinds);
+    let read = r.fetched(8, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&w))], &kinds);
+    return r.finished([w.id, typed::<Recorder, f32, [A]>(r, &read[0]).id]);
+}
+
+/// The weight doubled, yielded by a branch after a step at 5 there writes the
+/// weight.
+fn rewritten_branch(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
+    let x = r.parameter::<f32, [A]>(extents[0]);
+    let pred = r.parameter::<bool, []>(extents[1]);
+    let weight = r.parameter::<f32, [A]>(extents[2]);
+    let w = r.binary(Binary::Add, &weight, &weight);
+    let chosen = r.conditional(&pred, || {
+        r.fetched(5, &[Any::F32(r.relabeled::<f32, [A], Untyped>(&x))], &[
+            [
+                ElementKind::F32,
+                [3],
+            ],
+        ]);
+        return r.yielded(&w);
+    }, || r.yielded(&w));
+    return r.finished([chosen.id]);
+}
+
+/// A host step that writes 1s in the weight and gives back what it reads.
+fn ones_written(read: &List<Any<Cpu>>, weights: &mut List<Any<Cpu>>) -> List<Any<Cpu>> {
+    weights[0] = host_of(&Tensor::<f32, [A]> {
+        data: [1.0, 1.0, 1.0],
+        extents: [3],
+    });
+    return [read[0]];
+}
+
+test "the host reads a value of the weights alone as the last host step left the weights" {
+    let x = Tensor::<f32, [A]> {
+        data: [1.0, 2.0, 3.0],
+        extents: [3],
+    };
+    let w = Tensor::<f32, [A]> {
+        data: [10.0, 20.0, 30.0],
+        extents: [3],
+    };
+    let twos = host_of(&Tensor::<f32, [A]> {
+        data: [2.0, 2.0, 2.0],
+        extents: [3],
+    });
+    let mut cpu = Cpu {};
+    let got = Programs::<Cpu>::new().run(&mut cpu, [
+        [3],
+    ], rewritten_pass, || [host_of(&x)], || [host_of(&w)], |_, read, weights| ones_written(read, weights));
+    assert got == [twos, twos] as List<Any<Cpu>>;
+    let pred = Tensor::<bool, []> {
+        data: [true],
+        extents: [],
+    };
+    let yielded = Programs::<Cpu>::new().run(&mut cpu, [
+        [3],
+    ], rewritten_branch, || [
+        host_of(&x),
+        host_of(&pred),
+    ], || [host_of(&w)], |_, read, weights| ones_written(read, weights));
+    assert yielded == [twos] as List<Any<Cpu>>;
+}
+
 test "a pass whose parameters alone sit outside its host branch runs no program for them" {
     let recorded = stepped_branch(&mut Recorder::new(), &[
         [3],
