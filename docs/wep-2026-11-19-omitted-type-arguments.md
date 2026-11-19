@@ -67,8 +67,7 @@ type still holds a variable.
 Trait resolution answers "does this type satisfy this trait" with one of three
 values, and the type of the answer says which:
 
-- holds, with the derivations the answer owes and the bindings of variables it
-  implies;
+- holds, with the derivations the answer owes;
 - does not hold, at any instance the variables may become;
 - not yet known: some instance would make it hold and another would not.
 
@@ -83,9 +82,8 @@ Two occurrences of one variable are one type: matching `Pair<?1, ?1>` against
 `impl<T> Tr for Pair<T, T>` binds `T` once.
 
 Matching an impl's target against a type holding variables unifies the two
-under a substitution local to the question, with an occurs check. Where every
-answer that holds implies the same binding for a variable, the answer reports
-it. Asking a question never changes the elaborator's variables.
+under a substitution local to the question, with an occurs check. Asking a
+question never changes the elaborator's variables.
 
 ### Selection, commitment and the deferred check
 
@@ -93,12 +91,18 @@ Selection runs the order of
 [WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md) over the
 candidates that hold or are not yet known, and drops those that do not hold.
 
-- One candidate is left: the call commits to it. The bindings the answer implies
-  are unified into the elaborator's variables, so the impl chosen settles what
-  it determines of the receiver. A bound that was not yet known is recorded
-  against the variables it reads, the same way the elaborator already records a
-  bound on a variable, and checked when the module's inference finishes.
+- One candidate is left: the call commits to it. A bound that was not yet known
+  is recorded against the variables it reads, the same way the elaborator
+  already records a bound on a variable, and checked when the module's
+  inference finishes.
 - Several are left: the call asks for a turbofish or an annotation.
+
+The impl committed to settles nothing of the variables. Where only one impl may
+apply, a variable the call does not otherwise settle is still reported as one
+that cannot be inferred. Inferring it from the one impl would let an impl
+written anywhere else later turn the call into an error, the action at a
+distance this WEP removes from statics.
+
 - None is left: the method does not exist at any instance, and the call says
   so.
 
@@ -119,8 +123,9 @@ included, by the same order as for a spelling with every argument:
 - Every candidate is a static: the expected type or the arguments answer the
   variables. Where neither does, the call reports that the type's arguments
   cannot be inferred.
-- Candidates of both kinds: the call asks for a turbofish, an annotation, or
-  the trait-qualified form.
+- Candidates of both kinds: the call cannot tell whether its first argument is
+  a receiver, and says so, offering the trait-qualified form and the type's
+  arguments as the two remedies.
 
 The type's own declaration at the nearest link still answers before any trait,
 and it decides the kind alone.
@@ -143,9 +148,9 @@ inference broke as soon as a second impl was written elsewhere.
 - [ ] The solver's inference variable, its unification under a local
   substitution, and the bindings an answer implies. The lowering hands it the
   elaborator's variables instead of refusing them.
-- [ ] Selection keeps the candidates not yet known, the elaborator commits and
-  unifies the implied bindings, and a bound not yet known is checked when the
-  module's inference finishes, through the elaborator's existing bound records.
+- [ ] Selection keeps the candidates not yet known, the elaborator commits to
+  the one left, and a bound not yet known is checked when the module's
+  inference finishes, through the elaborator's existing bound records.
 - [ ] Every commitment made with variables unsettled is resolved again at the
   settled instance, and a difference is an internal compiler error.
 - [ ] The kind of a qualified call is read from selection at the spelled type,

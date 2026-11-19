@@ -394,16 +394,32 @@ Where a method answers,
 the spelling does not reach is reached as `Trait::method(recv, …)`.
 
 A type argument the spelling omits is an inference variable, so
-`Pair::method(…)` means `Pair::<_, _>::method(…)`. Such a spelling names no
-instance yet, so the trait impls that may answer it at some instance decide
-the kind of the call: those written for the nearest link of the type's chain,
-by value or by reference, and where none is, every blanket, whether or not its
-bounds will hold. The type's own declaration answers before a blanket. Where every one takes a
-receiver, the call selects what `recv.method(…)` selects, and the receiver's
-type settles the variables. Where every one is a static, the expected type or
-an argument settles them, as a generic function's parameters are settled;
-where neither does, the call reports that the type's arguments cannot be
-inferred. Impls of both kinds are ambiguous, as two traits at one link are.
+`Pair::method(…)` means `Pair::<_, _>::method(…)`. A call holding an inference
+variable, this one or a method call on a receiver whose type holds one,
+resolves exactly as the spelling with every argument would at the instance
+inference settles. The order runs at the type as it stands, and an impl takes
+part while some instance of the variables could let it apply.
+
+Where every impl left takes a receiver, the call selects what `recv.method(…)`
+selects, and the receiver's type settles the variables. Where every one is a
+static, the expected type or an argument settles them, as a generic function's
+parameters are settled. Where impls of both kinds are left, the call cannot
+tell whether its first argument is a receiver, and names the trait or the
+type's arguments to say. Where several impls are left and the call must be
+resolved before inference settles them, it asks for a turbofish or an
+annotation; where none is, the method does not exist at any instance.
+
+The impl a call resolves to settles none of its variables. A variable nothing
+else settles is reported as one that cannot be inferred, even where only one
+impl could apply: inferring it from that impl would let an impl written
+elsewhere later make the call fail.
+
+> Not yet implemented: the order does not run at a type holding a variable. A
+> qualified call omitting arguments reads its kind from the impls written for
+> the type's chain, by value or by reference, and where none is, from every
+> blanket, the type's own declaration answering first; a method call on a
+> receiver holding a variable finds no method. See
+> [WEP: Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md).
 
 An associated function with no `self` has no receiver argument to bind `Self`
 from, so the trait's turbofish binds it: `Trait::<Self = T>::method(…)`. The
