@@ -2043,6 +2043,11 @@ struct PackedRow<E, R, Blocks, Z> {
     mask: i32,
     row: i32,
     at: i32,
+    /// Whether `E` is f32, whose rounding changes nothing, so a value is
+    /// computed where it is read rather than looked up.
+    exact: bool,
+    zero: i32,
+    scale: f32,
     rounded: List<f32>,
 }
 
@@ -2071,6 +2076,9 @@ impl<E: Float, R, Blocks, Z> PackedRow<E, R, Blocks, Z> {
             mask: (1 << bits) - 1,
             row,
             at,
+            exact: E::kind() matches { F32 },
+            zero: 0,
+            scale: 0.0,
             rounded: List::<f32>::filled(1 << bits, 0.0),
         };
     }
@@ -2083,20 +2091,27 @@ impl<E: Float, R, Blocks, Z> PackedRow<E, R, Blocks, Z> {
     /// Rounds the values block `b` takes.
     fn enter(&mut self, b: i32) {
         let per = 8 / self.bits;
-        let zero = match self.zero_points {
+        self.zero = match self.zero_points {
             Some(z) => z.data[self.row * z.extents[1] + b / per] as i32 >> b % per * self.bits & self.mask,
             None => 1 << self.bits - 1,
         };
-        let scale = self.scales.data[self.row * self.scales.extents[1] + b].cast_to::<f32>();
+        self.scale = self.scales.data[self.row * self.scales.extents[1] + b].cast_to::<f32>();
+        if self.exact {
+            return;
+        }
         for let q of 0..<self.rounded.len() {
-            self.rounded[q] = E::from_f32((q - zero) as f32 * scale).cast_to::<f32>();
+            self.rounded[q] = E::from_f32((q - self.zero) as f32 * self.scale).cast_to::<f32>();
         }
     }
 
     /// Value `i` of the row, which must be in the block last entered.
     fn at(&self, i: i32) -> f32 {
         let byte = unchecked self.packed[self.at + (i >> self.places)] as i32;
-        return unchecked self.rounded[byte >> (i & (1 << self.places) - 1) * self.bits & self.mask];
+        let q = byte >> (i & (1 << self.places) - 1) * self.bits & self.mask;
+        if self.exact {
+            return (q - self.zero) as f32 * self.scale;
+        }
+        return unchecked self.rounded[q];
     }
 }
 
