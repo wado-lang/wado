@@ -5,11 +5,13 @@
 // `writeGenerated` writes an example's generate.json: the tokens onnxruntime
 // picks after each prompt, from the prompt ids tokenize.json records, and how
 // long a token after the prompt's first took on the CPU and on WebGPU. Both
-// providers must pick the same tokens. `../benchmark/onnxruntime_webgpu.mjs`
+// providers must pick the same tokens, each running the model as `exact.mjs`
+// writes it. `../benchmark/onnxruntime_webgpu.mjs`
 // times the same decoding.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as ort from 'onnxruntime-node';
+import { exact } from './exact.mjs';
 
 export const STEPS = 32;
 
@@ -55,7 +57,7 @@ export async function writeGenerated({ dir, prompts, ends = [], decoder, name = 
 
   /** Each prompt's tokens on `provider`, the time a token after the first, and the smallest lead. */
   async function generate(provider) {
-    const session = await opened(decoder, provider);
+    const session = await opened({ ...decoder, model: exact(decoder.model) }, provider);
     let lead = Infinity;
     const timed = [];
     const firsts = [];

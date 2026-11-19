@@ -272,6 +272,11 @@ onnxruntime packs them. A block without a zero point is centered on
 `2^(bits-1)`. A gathered index past either end of the table, after one wrap
 from the end, gives a row of zeros, which onnxruntime gives as well.
 
+A product is as exact as its input's float, whatever `MatMulNBits`'s
+`accuracy_level` permits. At level 4 onnxruntime's CPU quantizes the input to
+int8, so the oracle runs a model without the attribute, as `tools/exact.mjs`
+writes it.
+
 No device unpacks a weight when it loads.
 
 - `Cpu` dequantizes one row of the weight at a time, rounded as the
