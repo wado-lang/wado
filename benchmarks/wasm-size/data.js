@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795064902796,
+  "lastUpdate": 1795089070546,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79785,6 +79785,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/43441c48636d515459422cbb05fd910e417ec6fa"
         },
         "date": 1795064901903,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434000,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b4a0bd57c4179ea8253cfb769fa2b5f59885f449",
+          "message": "Merge pull request #2691 from wado-lang/loam/gpt-oss-20b\n\nfeat(loam): gpt-oss-20b on Cpu, its experts held within a budget",
+          "timestamp": "2026-11-19T20:31:44+09:00",
+          "tree_id": "2c599f1051416eeb5799cc7154ff9cf9062bad44",
+          "url": "https://github.com/wado-lang/wado/commit/b4a0bd57c4179ea8253cfb769fa2b5f59885f449"
+        },
+        "date": 1795089069641,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
