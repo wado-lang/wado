@@ -103,6 +103,12 @@ that cannot be inferred. Inferring it from the one impl would let an impl
 written anywhere else later turn the call into an error, the action at a
 distance this WEP removes from statics.
 
+A numeric literal's variable is the exception, as it is in Rust: where one impl
+alone could answer a method on a receiver holding it, that impl settles it
+(`wrap(1).tag()` under `impl Tag for Box<u64>` takes `1` as `u64`). The
+literal's type is a default left to settle last, and the impl only chooses it
+earlier.
+
 - None is left: the method does not exist at any instance, and the call says
   so.
 
