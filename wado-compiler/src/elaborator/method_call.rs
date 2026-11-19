@@ -1312,14 +1312,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let blanket = trait_env
                         .blanket_of_block(block)
                         .expect("a match through a blanket names its block");
-                    blanket_impl_args(
+                    let args = blanket_impl_args(
                         &trait_env,
                         blanket,
                         base_type_id,
                         &trait_args,
                         &mut self.tysys.type_table.borrow_mut(),
-                    )
-                    .expect("the receiver and the trait arguments settle every blanket slot")
+                    );
+                    match args {
+                        Some(args) => args,
+                        None => {
+                            self.close_open_trait_args(&trait_args);
+                            Vec::new()
+                        }
+                    }
                 }
                 _ => vec![base_type_id],
             };

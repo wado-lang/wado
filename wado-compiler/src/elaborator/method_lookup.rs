@@ -1505,6 +1505,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.defer_impl_bounds(block, &space, inferred, span, OwedBounds::All);
     }
 
+    /// Close the trait arguments of a call through a blanket whose receiver
+    /// cannot key it while they are variables the call left unsettled. Each
+    /// reports itself as uninferred, and pinning it to the error keeps
+    /// anything later from settling the instance the call was keyed without.
+    pub(super) fn close_open_trait_args(&mut self, trait_args: &[TypeId]) {
+        let open: Vec<TypeId> = trait_args
+            .iter()
+            .copied()
+            .filter(|&arg| self.type_has_infer_hole(arg))
+            .collect();
+        assert!(
+            !open.is_empty(),
+            "the receiver and the trait arguments settle every blanket slot"
+        );
+        for arg in open {
+            assert!(
+                self.tysys.type_table.borrow().is_infer_var(arg),
+                "an unsettled trait argument is the variable minted for it"
+            );
+            self.solve_infer_var(arg, TypeTable::ERROR);
+        }
+    }
+
     /// The key of `block`'s instance at a call whose receiver fills `given`
     /// and whose `args` settle the slots only its trait arguments name,
     /// [`Self::mint_trait_arg_slots`] read into the call's `params` and
