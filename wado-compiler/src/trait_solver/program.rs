@@ -53,6 +53,23 @@ pub enum SolverType {
     /// A function type's row holding an effect parameter: it stands for
     /// whatever row meets it.
     AnyRow,
+    /// A type inference has yet to settle. Two occurrences of one variable are
+    /// one type.
+    Var(Var),
+}
+
+/// An inference variable: the elaborator's, or one a question mints for an
+/// impl parameter while it unifies the impl's target with the type asked.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum Var {
+    Infer(u32),
+    /// The parameter `param` of the impl matched at the question `depth`
+    /// deep. Nothing minted there outlives that match, so no other variable
+    /// alive shares the name.
+    Local {
+        depth: u32,
+        param: u32,
+    },
 }
 
 /// An associated type of a trait: `Mul::Output`.
@@ -75,13 +92,33 @@ impl SolverType {
     pub fn mentions(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
-            Self::AnyRow => false,
+            Self::AnyRow | Self::Var(_) => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
             Self::Ref { inner, .. } => inner.mentions(pred),
             Self::Projection { base, args, .. } => {
                 base.mentions(pred) || args.iter().any(|t| t.mentions(pred))
             }
         }
+    }
+
+    /// Whether an inference variable in `self` satisfies `pred`.
+    #[must_use]
+    pub fn mentions_var(&self, pred: &dyn Fn(Var) -> bool) -> bool {
+        match self {
+            Self::Var(var) => pred(*var),
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions_var(pred)),
+            Self::Ref { inner, .. } => inner.mentions_var(pred),
+            Self::Projection { base, args, .. } => {
+                base.mentions_var(pred) || args.iter().any(|t| t.mentions_var(pred))
+            }
+        }
+    }
+
+    /// Whether `self` holds an inference variable.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.mentions_var(&|_| true)
     }
 
     /// Whether matching `self` against a type binds a parameter or pack
@@ -91,7 +128,7 @@ impl SolverType {
     pub fn binds(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
-            Self::AnyRow | Self::Projection { .. } => false,
+            Self::AnyRow | Self::Var(_) | Self::Projection { .. } => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.binds(pred)),
             Self::Ref { inner, .. } => inner.binds(pred),
         }
@@ -102,7 +139,7 @@ impl SolverType {
     #[must_use]
     pub fn mentions_decl(&self, pred: &dyn Fn(TypeDeclId) -> bool) -> bool {
         match self {
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow | Self::Var(_) => false,
             Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Ref { inner, .. } => inner.mentions_decl(pred),
@@ -133,7 +170,7 @@ impl SolverType {
             }
             Self::Tuple(inner) => inner.iter().any(|t| t.projects_param(projecting)),
             Self::Ref { inner, .. } => inner.projects_param(projecting),
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow | Self::Var(_) => false,
         }
     }
 
@@ -157,7 +194,7 @@ impl SolverType {
         };
         Some(match self {
             Self::Param(index) | Self::Pack(index) => arg(*index)?,
-            Self::AnyRow => Self::AnyRow,
+            Self::AnyRow | Self::Var(_) => self.clone(),
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
             // A pack spread in a tuple splices its elements in: `[..T]` at
             // `T = [i32, bool]` is `[i32, bool]`, not `[[i32, bool]]`.
@@ -187,6 +224,34 @@ impl SolverType {
                 args: each(args)?,
             },
         })
+    }
+
+    /// `self` with each inference variable replaced by `var`'s answer for it.
+    #[must_use]
+    pub fn map_vars(&self, var: &dyn Fn(Var) -> Self) -> Self {
+        let each =
+            |inner: &[Self]| -> Vec<Self> { inner.iter().map(|t| t.map_vars(var)).collect() };
+        match self {
+            Self::Var(v) => var(*v),
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => self.clone(),
+            Self::Decl(head, inner) => Self::Decl(*head, each(inner)),
+            Self::Tuple(inner) => Self::Tuple(each(inner)),
+            Self::Ref { is_mut, inner } => Self::Ref {
+                is_mut: *is_mut,
+                inner: Box::new(inner.map_vars(var)),
+            },
+            Self::Projection {
+                base,
+                trait_,
+                assoc,
+                args,
+            } => Self::Projection {
+                base: Box::new(base.map_vars(var)),
+                trait_: *trait_,
+                assoc: *assoc,
+                args: each(args),
+            },
+        }
     }
 }
 
@@ -545,7 +610,7 @@ fn matching<'p, A: Iterator<Item = ImplId>>(
     all: impl FnOnce() -> A,
     by_head: impl Fn(Option<TypeDeclId>) -> Option<&'p Vec<ImplId>>,
 ) -> Matching<'p, A> {
-    if matches!(ty, SolverType::AnyRow) {
+    if matches!(ty, SolverType::AnyRow | SolverType::Var(_)) {
         return Matching::All(all());
     }
     let ids = |head| by_head(head).map_or(&[][..], Vec::as_slice);
@@ -648,7 +713,8 @@ impl Program {
             | SolverType::Tuple(_)
             | SolverType::Ref { .. }
             | SolverType::Projection { .. }
-            | SolverType::AnyRow => true,
+            | SolverType::AnyRow
+            | SolverType::Var(_) => true,
         };
         let undeclared = |ty: &SolverType| ty.mentions(&|p| !declared(p));
         assert!(

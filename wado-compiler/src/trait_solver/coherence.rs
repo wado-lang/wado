@@ -107,6 +107,7 @@ fn is_unbounded_value_blanket(def: &ImplDef) -> bool {
         | SolverType::Tuple(_)
         | SolverType::Projection { .. }
         | SolverType::AnyRow => false,
+        SolverType::Var(_) => unreachable!("an impl target holds no inference variable"),
     }
 }
 

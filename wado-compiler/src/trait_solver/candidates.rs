@@ -101,6 +101,8 @@ pub fn bound_candidates(
                 &c.trait_args,
                 args,
             )
+            .settled()
+            .is_some()
         })
         .collect()
 }
@@ -279,7 +281,8 @@ fn linked_chain(program: &Program, receiver: &SolverType) -> Vec<(SolverType, u3
         | SolverType::Pack(_)
         | SolverType::Tuple(_)
         | SolverType::Projection { .. }
-        | SolverType::AnyRow => (None, Some(receiver.clone())),
+        | SolverType::AnyRow
+        | SolverType::Var(_) => (None, Some(receiver.clone())),
     };
     let mut chain: Vec<(SolverType, u32)> = Vec::new();
     let mut wrapped = false;
@@ -330,6 +333,7 @@ fn generality(target: &SolverType) -> Generality {
                 Generality::Exact
             }
         }
+        SolverType::Var(_) => unreachable!("an impl target holds no inference variable"),
     }
 }
 

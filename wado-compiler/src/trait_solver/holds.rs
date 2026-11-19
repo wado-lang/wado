@@ -3,7 +3,7 @@
 
 use super::program::{
     AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ParamBound, Pin, Program,
-    RefRule, SolverType, Source, TraitDeclId, TypeDeclId,
+    RefRule, SolverType, Source, TraitDeclId, TypeDeclId, Var,
 };
 use crate::hashmap::IndexSet;
 use std::mem;
@@ -178,18 +178,27 @@ fn bound_answers(
     bound: &ParamBound,
     trait_: TraitDeclId,
     wanted: &[SolverType],
-) -> bool {
+) -> Verdict<()> {
     let wanted = program.per_param(Some(trait_), wanted);
-    program
-        .args_reaching(bound, trait_, subject)
-        .iter()
-        .any(|args| {
-            let args = program.args_at(trait_, args, subject);
-            wanted.iter().enumerate().all(|(i, want)| {
-                want.as_ref()
-                    .is_none_or(|want| args.get(i).and_then(Option::as_ref) == Some(want))
-            })
-        })
+    any_of(
+        program
+            .args_reaching(bound, trait_, subject)
+            .iter()
+            .map(|args| {
+                let args = program.args_at(trait_, args, subject);
+                let mut pairs = Vec::new();
+                for (i, want) in wanted.iter().enumerate() {
+                    let Some(want) = want else {
+                        continue;
+                    };
+                    let Some(arg) = args.get(i).and_then(Option::as_ref) else {
+                        return Verdict::Fails;
+                    };
+                    pairs.push((arg.clone(), want.clone()));
+                }
+                same(&pairs)
+            }),
+    )
 }
 
 /// A question open on the stack.
@@ -275,9 +284,35 @@ impl Query<'_> {
         if trait_def.is_some_and(|def| def.holds_for_all) {
             return Verdict::Holds(Holds::default());
         }
-        if withholds(program, trait_, ty) {
-            return Verdict::Fails;
+        // Where a rule holds at some instance of the variables, no answer
+        // fails; where one fails at some instance, none holds.
+        let mut may_hold = ty.is_open() && is_opaque(ty);
+        let mut may_fail = false;
+        match withholds(program, trait_, ty) {
+            Verdict::Holds(()) => return Verdict::Fails,
+            Verdict::Unknown => may_fail = true,
+            Verdict::Fails => {}
         }
+        let answer = self.decide_by_rules(ty, trait_, args, subject, &mut may_hold, &mut may_fail);
+        match answer {
+            Verdict::Holds(_) if may_fail => Verdict::Unknown,
+            Verdict::Fails if may_hold => Verdict::Unknown,
+            Verdict::Holds(_) | Verdict::Fails | Verdict::Unknown => answer,
+        }
+    }
+
+    /// [`Self::decide`]'s rules in order, the first to answer deciding.
+    fn decide_by_rules(
+        &mut self,
+        ty: &SolverType,
+        trait_: TraitDeclId,
+        args: &[SolverType],
+        subject: Option<&SolverType>,
+        may_hold: &mut bool,
+        may_fail: &mut bool,
+    ) -> Verdict {
+        let program = self.program;
+        let trait_def = program.traits.get(&trait_);
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
         if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
             return Verdict::Holds(Holds::default());
@@ -292,15 +327,24 @@ impl Query<'_> {
         let env = self.env;
         if let SolverType::Param(index) | SolverType::Pack(index) = ty
             && let Some(bounds) = env.param_bounds.get(*index as usize)
-            && bounds.iter().any(|bound| {
-                let bound = ParamBound {
+        {
+            let bounds: Vec<ParamBound> = bounds
+                .iter()
+                .map(|bound| ParamBound {
                     trait_: bound.trait_,
                     args: bound.args.iter().map(|arg| self.normalized(arg)).collect(),
-                };
-                bound_answers(program, ty, &bound, trait_, args)
-            })
-        {
-            return Verdict::Holds(Holds::default());
+                })
+                .collect();
+            let answered = any_of(
+                bounds
+                    .iter()
+                    .map(|bound| bound_answers(program, ty, bound, trait_, args)),
+            );
+            match answered {
+                Verdict::Holds(()) => return Verdict::Holds(Holds::default()),
+                Verdict::Unknown => *may_hold = true,
+                Verdict::Fails => {}
+            }
         }
         // A projection satisfies what its trait declares of the associated
         // type, by the declaration alone.
@@ -364,11 +408,8 @@ impl Query<'_> {
                 // The bound's arguments are what the impl must answer at.
                 // Selection asks without this gate.
                 Verdict::Holds(answer) => {
-                    if answers_args(program, def, ty, subject, &answer.trait_args, args) {
-                        Verdict::Holds(answer.holds)
-                    } else {
-                        Verdict::Fails
-                    }
+                    answers_args(program, def, ty, subject, &answer.trait_args, args)
+                        .map(|()| answer.holds)
                 }
                 Verdict::Fails => Verdict::Fails,
                 Verdict::Unknown => Verdict::Unknown,
@@ -379,14 +420,19 @@ impl Query<'_> {
         }
         answer
             .or_else(|| {
-                if self.at_itself.as_ref() == Some(ty)
-                    || written_only_at(program, ty) == Some(trait_)
-                {
+                if self.at_itself.as_ref() == Some(ty) {
                     return Verdict::Fails;
                 }
                 let Some(base) = newtype_base(program, ty) else {
                     return Verdict::Fails;
                 };
+                if program.hash == Some(trait_) {
+                    match written_comparison_reaches(program, ty) {
+                        Verdict::Holds(()) => return Verdict::Fails,
+                        Verdict::Unknown => *may_fail = true,
+                        Verdict::Fails => {}
+                    }
+                }
                 self.holds_at(&base, trait_, args, subject.or(Some(ty)))
             })
             .or_else(|| {
@@ -418,12 +464,17 @@ impl Query<'_> {
         };
         // A value blanket answers no reference; `&T` reaches it through the
         // pointee.
-        if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Ref { .. }) {
+        let value_blanket = matches!(def.target, SolverType::Param(_));
+        if value_blanket && matches!(ty, SolverType::Ref { .. }) {
             return Verdict::Fails;
         }
+        let depth = u32::try_from(self.asking.len()).expect("fewer than 2^32 open questions");
+        let mut unifier = Unifier::new(depth);
+        // A variable may yet be a reference.
+        unifier.undecided = value_blanket && matches!(ty, SolverType::Var(_));
         let mut bindings: Vec<Option<Binding>> = vec![None; def.params.len()];
         let mut deferred = Vec::new();
-        if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
+        if !match_target(&def.target, ty, &mut bindings, &mut deferred, &mut unifier) {
             return Verdict::Fails;
         }
         // A parameter the trait reference alone determines, `impl<U> Tr<U>
@@ -436,7 +487,7 @@ impl Query<'_> {
             };
             match asked.get(at).and_then(Option::as_ref) {
                 Some(ask) => {
-                    if !match_target(offer, ask, &mut bindings, &mut deferred) {
+                    if !match_target(offer, ask, &mut bindings, &mut deferred, &mut unifier) {
                         return Verdict::Fails;
                     }
                 }
@@ -449,16 +500,25 @@ impl Query<'_> {
                 }
             }
         }
-        if !self.bound_through_projections(&mut deferred, &mut bindings)
-            || self.projections_refuted(&deferred, &bindings)
-        {
-            return Verdict::Fails;
+        let through = self.bound_through_projections(&mut deferred, &mut bindings, &mut unifier);
+        // A check failing where the match left a part undecided may have failed
+        // for that part alone.
+        let mut after_unknown = unifier.undecided;
+        if !through || self.projections_refuted(&deferred, &bindings, &mut unifier) {
+            return refuted(after_unknown);
         }
-        if reached_by(program, implemented, ty, def.origin.yields_to())
-            || (def.origin != ImplOrigin::Written
-                && written_only_at(program, ty) == Some(implemented))
-        {
-            return Verdict::Fails;
+        let yielded = if def.origin == ImplOrigin::Written || program.hash != Some(implemented) {
+            Verdict::Fails
+        } else {
+            written_comparison_reaches(program, ty)
+        };
+        match any_of([
+            reached_by(program, implemented, ty, def.origin.yields_to()),
+            yielded,
+        ]) {
+            Verdict::Holds(()) => return refuted(after_unknown),
+            Verdict::Unknown => after_unknown = true,
+            Verdict::Fails => {}
         }
         let mut requests = match def.origin {
             ImplOrigin::Written => Vec::new(),
@@ -472,7 +532,15 @@ impl Query<'_> {
                         .traits
                         .get(&implemented)
                         .is_some_and(|t| t.structural)
-                        && !eq_from_cmp(program, implemented, ty),
+                        && match eq_from_cmp(program, implemented, ty) {
+                            Verdict::Holds(()) => false,
+                            Verdict::Fails => true,
+                            // What the body owes is not known yet.
+                            Verdict::Unknown => {
+                                after_unknown = true;
+                                true
+                            }
+                        },
                 }]
             }
         };
@@ -489,7 +557,6 @@ impl Query<'_> {
             .filter(|&i| !from_pin[i])
             .chain((0..def.params.len()).filter(|&i| from_pin[i]))
             .collect();
-        let mut after_unknown = false;
         for index in order {
             let param = &def.params[index];
             // Only a pin on a member channel descends into the type's members;
@@ -509,8 +576,8 @@ impl Query<'_> {
                 return refuted(after_unknown);
             };
             let elements: Vec<SolverType> = match binding {
-                Binding::One(ty) => vec![ty],
-                Binding::Pack(elems) => elems,
+                Binding::One(ty) => vec![unifier.resolve(&ty)],
+                Binding::Pack(elems) => elems.iter().map(|e| unifier.resolve(e)).collect(),
             };
             // The marker owes no body, so its answer's requests are dropped.
             if param.copyable
@@ -534,7 +601,7 @@ impl Query<'_> {
                         .args
                         .iter()
                         .map(|arg| {
-                            self.at_bindings(arg, &bindings)
+                            self.at_bindings(arg, &bindings, &unifier)
                                 .unwrap_or_else(|| arg.clone())
                         })
                         .collect();
@@ -547,6 +614,7 @@ impl Query<'_> {
                                 &answer,
                                 &mut bindings,
                                 &mut deferred,
+                                &mut unifier,
                             ) {
                                 return refuted(after_unknown);
                             }
@@ -576,15 +644,21 @@ impl Query<'_> {
         }
         // A projection may name a parameter only a later pin binds, so each is
         // read in full once every answer has bound what it binds.
-        if !self.projections_met(&deferred, &bindings) {
-            return refuted(after_unknown);
+        if !self.projections_met(&deferred, &bindings, &mut unifier) {
+            return refuted(after_unknown || unifier.undecided);
         }
-        if after_unknown {
+        // An impl applying only at some instances of the question's variables
+        // answers only there.
+        if after_unknown || unifier.constrains() {
             return Verdict::Unknown;
         }
         let matched: Vec<Option<SolverType>> = bindings
             .iter()
-            .map(|binding| binding.as_ref().map(Binding::as_type))
+            .map(|binding| {
+                binding
+                    .as_ref()
+                    .map(|binding| unifier.resolve(&binding.as_type()))
+            })
             .collect();
         let assoc = program
             .assoc_bindings
@@ -605,7 +679,7 @@ impl Query<'_> {
                 .trait_args
                 .iter()
                 .map(|arg| {
-                    self.at_bindings(arg, &bindings)
+                    self.at_bindings(arg, &bindings, &unifier)
                         .unwrap_or_else(|| arg.clone())
                 })
                 .collect(),
@@ -623,23 +697,22 @@ impl Query<'_> {
         answer: &Holds,
         bindings: &mut [Option<Binding>],
         deferred: &mut Vec<(SolverType, SolverType)>,
+        unifier: &mut Unifier,
     ) -> bool {
         for pin in pins.iter().filter(|pin| pin.trait_ == trait_) {
             let Some(actual) = answer.assoc_at(pin.assoc, &[]) else {
                 continue;
             };
             let actual = self.normalized(&actual);
-            match self.at_bindings(&pin.ty, bindings) {
-                Some(expected) if expected != actual => return false,
-                Some(_) => {}
-                None => {
-                    let from = deferred.len();
-                    if !match_target(&pin.ty, &actual, bindings, deferred)
-                        || self.projections_refuted(&deferred[from..], bindings)
-                    {
-                        return false;
-                    }
-                }
+            let met = if let Some(expected) = self.at_bindings(&pin.ty, bindings, unifier) {
+                unifier.unify(&expected, &actual)
+            } else {
+                let from = deferred.len();
+                match_target(&pin.ty, &actual, bindings, deferred, unifier)
+                    && !self.projections_refuted(&deferred[from..], bindings, unifier)
+            };
+            if !met {
+                return false;
             }
         }
         true
@@ -654,11 +727,12 @@ impl Query<'_> {
         &mut self,
         deferred: &mut Vec<(SolverType, SolverType)>,
         bindings: &mut [Option<Binding>],
+        unifier: &mut Unifier,
     ) -> bool {
         loop {
             let mut bound_any = false;
             for (projection, met) in mem::take(deferred) {
-                match self.bound_through(&projection, &met, bindings) {
+                match self.bound_through(&projection, &met, bindings, unifier) {
                     Through::Bound(nested) => {
                         bound_any = true;
                         deferred.extend(nested);
@@ -682,18 +756,29 @@ impl Query<'_> {
         projection: &SolverType,
         met: &SolverType,
         bindings: &mut [Option<Binding>],
+        unifier: &mut Unifier,
     ) -> Through {
         let SolverType::Projection { base, .. } = projection else {
             unreachable!("only a projection is deferred");
         };
-        let met = self.normalized(met);
+        let met = self.normalized(&unifier.resolve(met));
         // A projection the normalizer leaves standing reads off a caller's
         // parameter, which names no type yet: the impl's projection of the
         // same member meets it argument for argument, its base among them.
         let off_caller = projection_parts(projection, &met).is_some();
-        if (!off_caller && self.at_bindings(base, bindings).is_none())
-            || self.at_bindings(projection, bindings).is_some()
+        if (!off_caller && self.at_bindings(base, bindings, unifier).is_none())
+            || self.at_bindings(projection, bindings, unifier).is_some()
         {
+            return Through::Open;
+        }
+        for binding in bindings.iter_mut().flatten() {
+            *binding = unifier.resolved(binding);
+        }
+        // The member's parameters move past the caller's, where no variable
+        // standing for one is minted, so a match meeting a variable is left to
+        // the instance.
+        if met.is_open() || bindings.iter().flatten().any(|b| b.as_type().is_open()) {
+            unifier.undecided = true;
             return Through::Open;
         }
         let past = bindings
@@ -716,12 +801,14 @@ impl Query<'_> {
             .chain(bindings.iter().cloned())
             .collect();
         let mut nested = Vec::new();
+        // Neither side holds a variable, so the match binds none.
+        let mut closed = Unifier::new(u32::MAX);
         let matched = match projection_parts(&member, &met) {
-            Some(parts) => parts
-                .into_iter()
-                .all(|(ours, theirs)| match_target(ours, theirs, &mut slots, &mut nested)),
+            Some(parts) => parts.into_iter().all(|(ours, theirs)| {
+                match_target(ours, theirs, &mut slots, &mut nested, &mut closed)
+            }),
             None if matches!(member, SolverType::Projection { .. }) => return Through::Open,
-            None => match_target(&member, &met, &mut slots, &mut nested),
+            None => match_target(&member, &met, &mut slots, &mut nested, &mut closed),
         };
         if !matched {
             return Through::Refuted;
@@ -752,9 +839,10 @@ impl Query<'_> {
         &mut self,
         deferred: &[(SolverType, SolverType)],
         bindings: &[Option<Binding>],
+        unifier: &mut Unifier,
     ) -> bool {
         deferred.iter().any(|(projection, met)| {
-            self.projection_holds(projection, met, bindings) == Some(false)
+            self.projection_holds(projection, met, bindings, unifier) == Some(false)
         })
     }
 
@@ -764,10 +852,11 @@ impl Query<'_> {
         &mut self,
         deferred: &[(SolverType, SolverType)],
         bindings: &[Option<Binding>],
+        unifier: &mut Unifier,
     ) -> bool {
-        deferred
-            .iter()
-            .all(|(projection, met)| self.projection_holds(projection, met, bindings) == Some(true))
+        deferred.iter().all(|(projection, met)| {
+            self.projection_holds(projection, met, bindings, unifier) == Some(true)
+        })
     }
 
     /// Whether `projection` read at `bindings` is `met`; `None` where it names
@@ -777,17 +866,24 @@ impl Query<'_> {
         projection: &SolverType,
         met: &SolverType,
         bindings: &[Option<Binding>],
+        unifier: &mut Unifier,
     ) -> Option<bool> {
-        let expected = self.at_bindings(projection, bindings)?;
-        Some(expected == self.normalized(met))
+        let expected = self.at_bindings(projection, bindings, unifier)?;
+        let met = self.normalized(&unifier.resolve(met));
+        Some(unifier.unify(&expected, &met))
     }
 
     /// `ty`, written in an impl's parameter space, at what the match bound
     /// each parameter to, normalized there. `None` where it names a parameter
     /// the match left unbound.
-    fn at_bindings(&mut self, ty: &SolverType, bindings: &[Option<Binding>]) -> Option<SolverType> {
+    fn at_bindings(
+        &mut self,
+        ty: &SolverType,
+        bindings: &[Option<Binding>],
+        unifier: &Unifier,
+    ) -> Option<SolverType> {
         let bound = ty.map_params(&|i| bindings.get(i as usize)?.as_ref().map(Binding::as_type))?;
-        Some(self.normalized(&bound))
+        Some(self.normalized(&unifier.resolve(&bound)))
     }
 
     /// `ty` with each projection an impl answers replaced by what that impl
@@ -828,7 +924,10 @@ impl Query<'_> {
                 is_mut: *is_mut,
                 inner: Box::new(self.normalized(inner)),
             },
-            SolverType::Param(_) | SolverType::Pack(_) | SolverType::AnyRow => ty.clone(),
+            SolverType::Param(_)
+            | SolverType::Pack(_)
+            | SolverType::AnyRow
+            | SolverType::Var(_) => ty.clone(),
         }
     }
 }
@@ -841,11 +940,16 @@ fn reached_by(
     trait_: TraitDeclId,
     ty: &SolverType,
     origins: &[ImplOrigin],
-) -> bool {
-    !origins.is_empty()
-        && program
+) -> Verdict<()> {
+    if origins.is_empty() {
+        return Verdict::Fails;
+    }
+    any_of(
+        program
             .impls_for(trait_, ty)
-            .any(|(_, def)| at_self(program, def, trait_, origins) && reaches_target(def, ty))
+            .filter(|(_, def)| at_self(program, def, trait_, origins))
+            .map(|(_, def)| reaches_target(def, ty)),
+    )
 }
 
 /// Whether `def` is an impl of `trait_` at its defaults from one of `origins`,
@@ -866,7 +970,7 @@ pub(super) fn at_self(
 /// reaches it alone.
 pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
     let (eq, ord) = program.comparisons?;
-    row_is(program, ty, eq).then_some(ord)
+    row_is(program, ty, eq).settled().map(|()| ord)
 }
 
 /// `!` and a newtype over it hold every trait, binding each associated type to
@@ -906,61 +1010,98 @@ fn is_never(program: &Program, ty: &SolverType) -> bool {
 
 /// Whether `ty` has no `trait_`, as `withheld_at` says, checking the trait
 /// before the row: the row scans every impl.
-fn withholds(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
-    program
-        .comparisons
-        .is_some_and(|(eq, ord)| trait_ == ord && row_is(program, ty, eq))
+fn withholds(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> Verdict<()> {
+    match program.comparisons {
+        Some((eq, ord)) if trait_ == ord => row_is(program, ty, eq),
+        Some(_) | None => Verdict::Fails,
+    }
 }
 
 /// The trait only an impl written at `ty` itself answers: [`Program::hash`],
 /// where a written comparison reaches `ty`. Neither a derived body nor a
 /// newtype's base answers it there.
 pub(super) fn written_only_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
-    program
-        .hash
-        .filter(|_| written_comparison(program, ty).is_some())
+    let hash = program.hash?;
+    written_comparison_reaches(program, ty)
+        .settled()
+        .map(|()| hash)
+}
+
+/// Whether a written impl of `Eq` or `Ord` reaches `ty`.
+fn written_comparison_reaches(program: &Program, ty: &SolverType) -> Verdict<()> {
+    let Some((eq, ord)) = program.comparisons else {
+        return Verdict::Fails;
+    };
+    any_of(
+        [eq, ord]
+            .into_iter()
+            .map(|written| reached_by(program, written, ty, &[ImplOrigin::Written])),
+    )
 }
 
 /// Which of `Eq` and `Ord` a written impl reaching `ty` implements, `Eq` first.
 #[must_use]
 pub fn written_comparison(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
     let (eq, ord) = program.comparisons?;
-    [eq, ord]
-        .into_iter()
-        .find(|&written| reached_by(program, written, ty, &[ImplOrigin::Written]))
+    [eq, ord].into_iter().find(|&written| {
+        reached_by(program, written, ty, &[ImplOrigin::Written])
+            .settled()
+            .is_some()
+    })
 }
 
 /// Whether `trait_`'s body at `ty` is the `==` a `cmp` written alone gives.
-fn eq_from_cmp(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
-    program
-        .comparisons
-        .is_some_and(|(eq, ord)| trait_ == eq && row_is(program, ty, ord))
+fn eq_from_cmp(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> Verdict<()> {
+    match program.comparisons {
+        Some((eq, ord)) if trait_ == eq => row_is(program, ty, ord),
+        Some(_) | None => Verdict::Fails,
+    }
 }
 
-fn row_is(program: &Program, ty: &SolverType, written: TraitDeclId) -> bool {
-    matches!(comparison_row(program, ty), Some((row, _)) if row == written)
+fn row_is(program: &Program, ty: &SolverType, written: TraitDeclId) -> Verdict<()> {
+    match comparison_row_at(program, ty) {
+        Verdict::Holds((row, _)) if row == written => Verdict::Holds(()),
+        Verdict::Holds(_) | Verdict::Fails => Verdict::Fails,
+        Verdict::Unknown => Verdict::Unknown,
+    }
 }
 
 /// The row of the comparison table `ty` reads (spec-traits.md §Derivation
 /// Policy): which of `Eq` and `Ord` a written impl reaching `ty` implements
-/// without the other, with that impl. A concrete impl answers before a generic
-/// one, as coherence Rule 1 orders them.
+/// without the other, with that impl.
 #[must_use]
 pub fn comparison_row(program: &Program, ty: &SolverType) -> Option<(TraitDeclId, ImplId)> {
-    let (eq, ord) = program.comparisons?;
-    let written = |trait_| {
-        program
-            .impls_for(trait_, ty)
-            .filter(|(_, def)| {
-                at_self(program, def, trait_, &[ImplOrigin::Written]) && reaches_target(def, ty)
-            })
+    comparison_row_at(program, ty).settled()
+}
+
+/// [`comparison_row`] at every instance of `ty`'s variables. A concrete impl
+/// answers before a generic one, as coherence Rule 1 orders them.
+fn comparison_row_at(program: &Program, ty: &SolverType) -> Verdict<(TraitDeclId, ImplId)> {
+    let Some((eq, ord)) = program.comparisons else {
+        return Verdict::Fails;
+    };
+    let written = |trait_| -> Verdict<ImplId> {
+        let mut reaching = Vec::new();
+        for (id, def) in program.impls_for(trait_, ty) {
+            if !at_self(program, def, trait_, &[ImplOrigin::Written]) {
+                continue;
+            }
+            match reaches_target(def, ty) {
+                Verdict::Holds(()) => reaching.push((id, def)),
+                Verdict::Unknown => return Verdict::Unknown,
+                Verdict::Fails => {}
+            }
+        }
+        reaching
+            .into_iter()
             .min_by_key(|(_, def)| !def.params.is_empty())
-            .map(|(id, _)| id)
+            .map_or(Verdict::Fails, |(id, _)| Verdict::Holds(id))
     };
     match (written(eq), written(ord)) {
-        (Some(id), None) => Some((eq, id)),
-        (None, Some(id)) => Some((ord, id)),
-        _ => None,
+        (Verdict::Holds(id), Verdict::Fails) => Verdict::Holds((eq, id)),
+        (Verdict::Fails, Verdict::Holds(id)) => Verdict::Holds((ord, id)),
+        (Verdict::Holds(_), Verdict::Holds(_)) | (Verdict::Fails, Verdict::Fails) => Verdict::Fails,
+        (Verdict::Unknown, _) | (_, Verdict::Unknown) => Verdict::Unknown,
     }
 }
 
@@ -1012,6 +1153,7 @@ pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverT
     };
     let mut bindings: Vec<Option<Binding>> = vec![None; source.params];
     let mut deferred = Vec::new();
+    let mut unifier = Unifier::new(0);
     source.bounds.iter().all(|bound| {
         query
             .holds(ty, bound.trait_, &bound.args)
@@ -1023,9 +1165,10 @@ pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverT
                     &answer,
                     &mut bindings,
                     &mut deferred,
+                    &mut unifier,
                 )
             })
-    }) && query.projections_met(&deferred, &bindings)
+    }) && query.projections_met(&deferred, &bindings, &mut unifier)
 }
 
 /// What a target parameter matched: a pack takes every element past the
@@ -1056,8 +1199,16 @@ fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
         | SolverType::Pack(_)
         | SolverType::Ref { .. }
         | SolverType::Projection { .. }
-        | SolverType::AnyRow => None,
+        | SolverType::AnyRow
+        | SolverType::Var(_) => None,
     }
+}
+
+/// Whether `ty` names no type of its own until inference settles it: a
+/// variable, or a projection off one. No rule refutes a trait of such a type,
+/// since `!` holds every trait.
+fn is_opaque(ty: &SolverType) -> bool {
+    matches!(ty, SolverType::Var(_) | SolverType::Projection { .. })
 }
 
 /// The base a newtype receiver inherits from, at the receiver's own type
@@ -1096,8 +1247,10 @@ pub(super) fn answers_args(
     subject: Option<&SolverType>,
     written: &[SolverType],
     args: &[SolverType],
-) -> bool {
-    answers_args_by(program, def, ty, subject, written, args, SolverType::eq)
+) -> Verdict<()> {
+    answers_args_by(program, def, ty, subject, written, args, |ask, offer| {
+        same(&[(ask.clone(), offer.clone())])
+    })
 }
 
 /// Whether the impl answers a call that names `args` at an instance, as
@@ -1111,7 +1264,26 @@ pub(super) fn answers_named_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
-    answers_args_by(program, def, ty, Some(subject), written, args, fits)
+    answers_args_by(
+        program,
+        def,
+        ty,
+        Some(subject),
+        written,
+        args,
+        |ask, offer| decided(fits(ask, offer)),
+    )
+    .settled()
+    .is_some()
+}
+
+/// The answer a question holding no variable gives.
+fn decided(holds: bool) -> Verdict<()> {
+    if holds {
+        Verdict::Holds(())
+    } else {
+        Verdict::Fails
+    }
 }
 
 /// At every parameter, whether an argument `args` says `fits` one `written`
@@ -1124,8 +1296,8 @@ fn answers_args_by(
     subject: Option<&SolverType>,
     written: &[SolverType],
     args: &[SolverType],
-    mut fits: impl FnMut(&SolverType, &SolverType) -> bool,
-) -> bool {
+    mut fits: impl FnMut(&SolverType, &SolverType) -> Verdict<()>,
+) -> Verdict<()> {
     // A `Self` default lowers to the impl's target, which the match bound to
     // `ty` — and to the newtype a peeled question was asked at, which the
     // inherited impl also spells `Self`.
@@ -1151,16 +1323,27 @@ fn answers_args_by(
             .collect()
     };
     let (asked, offered) = (said(args), said(written));
-    (0..asked.len().max(offered.len())).all(|i| {
+    let mut answer = Verdict::Holds(());
+    for i in 0..asked.len().max(offered.len()) {
         let asks = asked.get(i).map_or(&[][..], Vec::as_slice);
         let offered = offered.get(i).map_or(&[][..], Vec::as_slice);
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
-        asks.is_empty()
-            || asks
-                .iter()
-                .any(|ask| offered.iter().any(|offer| fits(ask, offer)))
-    })
+        if asks.is_empty() {
+            continue;
+        }
+        let pairs: Vec<Verdict<()>> = asks
+            .iter()
+            .flat_map(|ask| offered.iter().map(move |offer| (ask, offer)))
+            .map(|(ask, offer)| fits(ask, offer))
+            .collect();
+        match any_of(pairs) {
+            Verdict::Holds(()) => {}
+            Verdict::Fails => return Verdict::Fails,
+            Verdict::Unknown => answer = Verdict::Unknown,
+        }
+    }
+    answer
 }
 
 /// Whether `offered` is `asked`, a parameter in `asked` fitting any type.
@@ -1209,8 +1392,18 @@ pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
         None,
         &def.trait_args,
         &[],
-        |default, written| match_target(written, default, &mut bindings, &mut Vec::new()),
+        |default, written| {
+            decided(match_target(
+                written,
+                default,
+                &mut bindings,
+                &mut Vec::new(),
+                &mut Unifier::new(u32::MAX),
+            ))
+        },
     )
+    .settled()
+    .is_some()
 }
 
 /// What reading a deferred projection through its bound base came to.
@@ -1259,7 +1452,7 @@ fn projection_parts<'t>(
 fn params_past(ty: &SolverType) -> u32 {
     match ty {
         SolverType::Param(index) | SolverType::Pack(index) => index + 1,
-        SolverType::AnyRow => 0,
+        SolverType::AnyRow | SolverType::Var(_) => 0,
         SolverType::Decl(_, inner) | SolverType::Tuple(inner) => {
             inner.iter().map(params_past).max().unwrap_or(0)
         }
@@ -1271,24 +1464,222 @@ fn params_past(ty: &SolverType) -> u32 {
     }
 }
 
+/// What one match binds the question's inference variables to. It is local to
+/// the match, so asking a question changes no variable.
+struct Unifier {
+    /// How deep the question whose impl is matched is: a variable minted there
+    /// stands for an impl parameter, and binding it constrains nothing asked.
+    depth: u32,
+    subst: Vec<(Var, SolverType)>,
+    /// Whether a part of the match meets a variable at a type no substitution
+    /// spells: a pack, or a projection off a variable.
+    undecided: bool,
+}
+
+impl Unifier {
+    fn new(depth: u32) -> Self {
+        Self {
+            depth,
+            subst: Vec::new(),
+            undecided: false,
+        }
+    }
+
+    /// `ty` with every variable bound here replaced by its binding.
+    fn resolve(&self, ty: &SolverType) -> SolverType {
+        ty.map_vars(&|var| match self.binding(var) {
+            Some(bound) => self.resolve(bound),
+            None => SolverType::Var(var),
+        })
+    }
+
+    fn resolved(&self, binding: &Binding) -> Binding {
+        match binding {
+            Binding::One(ty) => Binding::One(self.resolve(ty)),
+            Binding::Pack(elems) => Binding::Pack(elems.iter().map(|e| self.resolve(e)).collect()),
+        }
+    }
+
+    /// `ty`, read through the bindings of the variable it is.
+    fn shallow(&self, ty: &SolverType) -> SolverType {
+        match ty {
+            SolverType::Var(var) => match self.binding(*var) {
+                Some(bound) => self.shallow(bound),
+                None => ty.clone(),
+            },
+            SolverType::Decl(..)
+            | SolverType::Param(_)
+            | SolverType::Pack(_)
+            | SolverType::Ref { .. }
+            | SolverType::Tuple(_)
+            | SolverType::Projection { .. }
+            | SolverType::AnyRow => ty.clone(),
+        }
+    }
+
+    fn binding(&self, var: Var) -> Option<&SolverType> {
+        self.subst
+            .iter()
+            .find(|(bound, _)| *bound == var)
+            .map(|(_, ty)| ty)
+    }
+
+    /// The variable standing for the impl's parameter `param`.
+    fn mint(&self, param: u32) -> SolverType {
+        SolverType::Var(Var::Local {
+            depth: self.depth,
+            param,
+        })
+    }
+
+    fn is_own(&self, var: Var) -> bool {
+        matches!(var, Var::Local { depth, .. } if depth == self.depth)
+    }
+
+    /// Whether the match holds only at some instances of the question's
+    /// variables: it bound one, or left a part undecided.
+    fn constrains(&self) -> bool {
+        self.undecided || self.subst.iter().any(|(var, _)| !self.is_own(*var))
+    }
+
+    /// Bind `var` to `ty`, unless `ty` holds it.
+    fn bind(&mut self, var: Var, ty: &SolverType) -> bool {
+        let ty = self.resolve(ty);
+        if ty == SolverType::Var(var) {
+            return true;
+        }
+        if ty.mentions_var(&|v| v == var) {
+            return false;
+        }
+        self.subst.push((var, ty));
+        true
+    }
+
+    /// Make `a` and `b`, both in the question's own space, one type. A
+    /// parameter is rigid there, a caller's, and meets only itself.
+    fn unify(&mut self, a: &SolverType, b: &SolverType) -> bool {
+        let (a, b) = (self.shallow(a), self.shallow(b));
+        match (&a, &b) {
+            (SolverType::Var(x), SolverType::Var(y)) if x == y => true,
+            // An impl's own variable takes the other, so binding it stays its own.
+            (SolverType::Var(x), SolverType::Var(y)) if self.is_own(*y) && !self.is_own(*x) => {
+                self.bind(*y, &a)
+            }
+            (SolverType::Var(x), _) => self.bind(*x, &b),
+            (_, SolverType::Var(y)) => self.bind(*y, &a),
+            (SolverType::AnyRow, _) | (_, SolverType::AnyRow) => true,
+            (SolverType::Projection { .. }, _) | (_, SolverType::Projection { .. }) => {
+                if a == b {
+                    return true;
+                }
+                if a.is_open() || b.is_open() {
+                    self.undecided = true;
+                    return true;
+                }
+                false
+            }
+            (SolverType::Decl(head, args), SolverType::Decl(other, other_args)) => {
+                head == other && self.unify_all(args, other_args)
+            }
+            (
+                SolverType::Ref { is_mut, inner },
+                SolverType::Ref {
+                    is_mut: other_mut,
+                    inner: other,
+                },
+            ) => is_mut == other_mut && self.unify(inner, other),
+            (SolverType::Tuple(elems), SolverType::Tuple(others)) => self.unify_all(elems, others),
+            (SolverType::Param(i), SolverType::Param(j))
+            | (SolverType::Pack(i), SolverType::Pack(j)) => i == j,
+            (
+                SolverType::Decl(..)
+                | SolverType::Ref { .. }
+                | SolverType::Tuple(_)
+                | SolverType::Param(_)
+                | SolverType::Pack(_),
+                _,
+            ) => false,
+        }
+    }
+
+    fn unify_all(&mut self, a: &[SolverType], b: &[SolverType]) -> bool {
+        a.len() == b.len() && a.iter().zip(b).all(|(a, b)| self.unify(a, b))
+    }
+}
+
+/// Whether each pair is one type at every instance of their variables.
+fn same(pairs: &[(SolverType, SolverType)]) -> Verdict<()> {
+    let mut unifier = Unifier::new(u32::MAX);
+    if !pairs.iter().all(|(a, b)| unifier.unify(a, b)) {
+        Verdict::Fails
+    } else if unifier.constrains() {
+        Verdict::Unknown
+    } else {
+        Verdict::Holds(())
+    }
+}
+
+/// Holds where one of `verdicts` holds, fails where each fails.
+fn any_of(verdicts: impl IntoIterator<Item = Verdict<()>>) -> Verdict<()> {
+    let mut answer = Verdict::Fails;
+    for verdict in verdicts {
+        match verdict {
+            Verdict::Holds(()) => return Verdict::Holds(()),
+            Verdict::Unknown => answer = Verdict::Unknown,
+            Verdict::Fails => {}
+        }
+    }
+    answer
+}
+
 /// Match an impl target against a type, binding the target's parameters by
 /// position. A projection the target writes, inside an `<F: fn(...)>`
 /// signature, is decided only once its base is bound, so it is left in
-/// `deferred` beside the type it met.
+/// `deferred` beside the type it met. A variable the target meets is bound to
+/// the target, its parameters minted as variables of their own.
 fn match_target(
     target: &SolverType,
     ty: &SolverType,
     bindings: &mut [Option<Binding>],
     deferred: &mut Vec<(SolverType, SolverType)>,
+    unifier: &mut Unifier,
 ) -> bool {
-    let mut each = |a: &SolverType, b: &SolverType| match_target(a, b, bindings, deferred);
+    let ty = &unifier.shallow(ty);
+    let mut each = |a: &SolverType, b: &SolverType| match_target(a, b, bindings, deferred, unifier);
     match (target, ty) {
-        (SolverType::Param(index), _) => {
-            let slot = &mut bindings[*index as usize];
-            if let Some(bound) = slot {
-                return *bound == Binding::One(ty.clone());
+        (SolverType::Var(_), _) => unreachable!("an impl target holds no inference variable"),
+        (SolverType::Param(index), _) => match &bindings[*index as usize] {
+            Some(Binding::One(bound)) => {
+                let bound = bound.clone();
+                unifier.unify(&bound, ty)
             }
-            *slot = Some(Binding::One(ty.clone()));
+            Some(Binding::Pack(_)) => false,
+            None => {
+                bindings[*index as usize] = Some(Binding::One(ty.clone()));
+                true
+            }
+        },
+        (SolverType::Projection { .. }, _) => {
+            deferred.push((target.clone(), ty.clone()));
+            true
+        }
+        // An open row meets any row, on either side.
+        (SolverType::AnyRow, _) | (_, SolverType::AnyRow) => true,
+        (
+            SolverType::Decl(..)
+            | SolverType::Ref { .. }
+            | SolverType::Tuple(_)
+            | SolverType::Pack(_),
+            SolverType::Var(var),
+        ) => bind_to_target(target, *var, bindings, unifier),
+        (
+            SolverType::Decl(..)
+            | SolverType::Ref { .. }
+            | SolverType::Tuple(_)
+            | SolverType::Pack(_),
+            SolverType::Projection { .. },
+        ) if ty.is_open() => {
+            unifier.undecided = true;
             true
         }
         (SolverType::Decl(head, args), SolverType::Decl(ty_head, ty_args)) => {
@@ -1321,12 +1712,6 @@ fn match_target(
             bindings[*index as usize] = Some(Binding::Pack(ty_elems.clone()));
             true
         }
-        (SolverType::Projection { .. }, _) => {
-            deferred.push((target.clone(), ty.clone()));
-            true
-        }
-        // An open row meets any row, on either side.
-        (SolverType::AnyRow, _) | (_, SolverType::AnyRow) => true,
         (
             SolverType::Decl(_, _)
             | SolverType::Ref { .. }
@@ -1342,23 +1727,73 @@ fn match_target(
     }
 }
 
-/// Whether `def`'s target meets `ty` without a projection left to decide. A
-/// projection is decided only against the impl's bindings, which
-/// [`Query::impl_answers`] checks, so a target writing one reaches nothing here.
-fn reaches_target(def: &ImplDef, ty: &SolverType) -> bool {
+/// Bind `var` to `target`, each of the target's parameters still unbound
+/// minted as a variable of its own. A pack or a projection in the target has
+/// no instance a substitution spells, so the match is left undecided there.
+fn bind_to_target(
+    target: &SolverType,
+    var: Var,
+    bindings: &mut [Option<Binding>],
+    unifier: &mut Unifier,
+) -> bool {
+    if target.mentions(&|p| matches!(p, SolverType::Pack(_))) || has_projection(target) {
+        unifier.undecided = true;
+        return true;
+    }
+    let instance = target.map_params(&|index| match &bindings[index as usize] {
+        Some(Binding::One(bound)) => Some(bound.clone()),
+        Some(Binding::Pack(_)) => unreachable!("a target holding a pack is undecided"),
+        None => Some(unifier.mint(index)),
+    });
+    for (index, slot) in bindings.iter_mut().enumerate() {
+        let index = u32::try_from(index).expect("fewer than 2^32 impl parameters");
+        if slot.is_none() && target.mentions_param(index) {
+            *slot = Some(Binding::One(unifier.mint(index)));
+        }
+    }
+    unifier.bind(var, &instance.expect("every parameter maps"))
+}
+
+/// Whether `ty` holds a projection.
+fn has_projection(ty: &SolverType) -> bool {
+    match ty {
+        SolverType::Projection { .. } => true,
+        SolverType::Decl(_, inner) | SolverType::Tuple(inner) => inner.iter().any(has_projection),
+        SolverType::Ref { inner, .. } => has_projection(inner),
+        SolverType::Param(_) | SolverType::Pack(_) | SolverType::AnyRow | SolverType::Var(_) => {
+            false
+        }
+    }
+}
+
+/// Whether `def`'s target meets `ty` without a projection left to decide, at
+/// every instance of `ty`'s variables. A projection is decided only against
+/// the impl's bindings, which [`Query::impl_answers`] checks, so a target
+/// writing one reaches nothing here.
+fn reaches_target(def: &ImplDef, ty: &SolverType) -> Verdict<()> {
     let mut deferred = Vec::new();
-    match_target(
+    let mut unifier = Unifier::new(u32::MAX);
+    let matched = match_target(
         &def.target,
         ty,
         &mut vec![None; def.params.len()],
         &mut deferred,
-    ) && deferred.is_empty()
+        &mut unifier,
+    );
+    if !matched || !deferred.is_empty() {
+        Verdict::Fails
+    } else if unifier.constrains() {
+        Verdict::Unknown
+    } else {
+        Verdict::Holds(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::program::{ArgDefault, Fact, ParamDef, Pin, TraitDef, TypeDef};
     use super::super::testing::{Builder, concrete, decl, generic, holds, holds_with_args, ref_to};
+    use super::holds as verdict_of;
     use super::*;
 
     const ALPHA: TraitDeclId = TraitDeclId(0);
@@ -1382,6 +1817,131 @@ mod tests {
                 .map(|b| b.into_iter().map(ParamBound::bare).collect())
                 .collect(),
         }
+    }
+
+    const PAIR: TypeDeclId = TypeDeclId(3);
+
+    fn pair(a: SolverType, b: SolverType) -> SolverType {
+        SolverType::Decl(PAIR, vec![a, b])
+    }
+
+    fn var(id: u32) -> SolverType {
+        SolverType::Var(Var::Infer(id))
+    }
+
+    fn verdict(p: &Program, ty: &SolverType, trait_: TraitDeclId) -> Verdict<()> {
+        verdict_of(p, &Env::default(), ty, trait_).map(|_| ())
+    }
+
+    /// An impl written for one instance applies to a variable only where the
+    /// variable becomes that instance.
+    #[test]
+    fn a_variable_meeting_a_written_instance_is_not_yet_known() {
+        let p = Builder::default().concrete(ALPHA, decl(POINT)).build();
+        assert_eq!(verdict(&p, &var(0), ALPHA), Verdict::Unknown);
+        assert_eq!(
+            verdict(&p, &list_of(var(0)), ALPHA),
+            Verdict::Fails,
+            "no instance of `List<?0>` is `Point`"
+        );
+    }
+
+    /// A variable no impl answers is still not refuted: `!` holds every trait.
+    #[test]
+    fn a_bare_variable_is_never_refuted() {
+        let p = Program::default();
+        assert_eq!(verdict(&p, &var(0), ALPHA), Verdict::Unknown);
+    }
+
+    /// An impl at every instance of the head holds whatever the variable
+    /// inside becomes, and a value blanket does not: the variable may yet be a
+    /// reference, which a value blanket does not answer.
+    #[test]
+    fn an_impl_at_every_instance_holds_of_a_variable_inside() {
+        let p = Builder::default()
+            .impl_(generic(1, concrete(ALPHA, list_of(SolverType::Param(0)))))
+            .impl_(generic(1, concrete(BETA, SolverType::Param(0))))
+            .build();
+        assert_eq!(verdict(&p, &list_of(var(0)), ALPHA), Verdict::Holds(()));
+        assert_eq!(verdict(&p, &list_of(var(0)), BETA), Verdict::Holds(()));
+        assert_eq!(verdict(&p, &var(0), BETA), Verdict::Unknown);
+    }
+
+    /// Two occurrences of one variable are one type, so a parameter the target
+    /// writes twice binds once.
+    #[test]
+    fn a_variable_is_one_type_wherever_it_occurs() {
+        let same = generic(
+            1,
+            concrete(ALPHA, pair(SolverType::Param(0), SolverType::Param(0))),
+        );
+        let p = Builder::default().impl_(same).build();
+        assert_eq!(
+            verdict(&p, &pair(var(0), var(0)), ALPHA),
+            Verdict::Holds(())
+        );
+        assert_eq!(verdict(&p, &pair(var(0), var(1)), ALPHA), Verdict::Unknown);
+        assert_eq!(
+            verdict(&p, &pair(var(0), decl(POINT)), ALPHA),
+            Verdict::Unknown
+        );
+        assert_eq!(
+            verdict(&p, &pair(list_of(var(0)), decl(POINT)), ALPHA),
+            Verdict::Fails
+        );
+    }
+
+    /// A variable never becomes a type holding itself.
+    #[test]
+    fn a_variable_does_not_bind_to_a_type_holding_it() {
+        let target = pair(SolverType::Param(0), list_of(SolverType::Param(0)));
+        let p = Builder::default()
+            .impl_(generic(1, concrete(ALPHA, target)))
+            .build();
+        assert_eq!(verdict(&p, &pair(var(0), var(0)), ALPHA), Verdict::Fails);
+    }
+
+    /// A bound refutes the impl at the only instance it applies at.
+    #[test]
+    fn a_bound_refutes_at_the_instance_the_match_binds() {
+        let p = Builder::default()
+            .bounded(
+                ALPHA,
+                pair(SolverType::Param(0), SolverType::Param(0)),
+                vec![BETA],
+            )
+            .concrete(BETA, decl(I32))
+            .build();
+        assert_eq!(
+            verdict(&p, &pair(var(0), decl(POINT)), ALPHA),
+            Verdict::Fails
+        );
+        assert_eq!(
+            verdict(&p, &pair(var(0), decl(I32)), ALPHA),
+            Verdict::Unknown
+        );
+    }
+
+    /// A bound not yet known leaves the impl not yet known.
+    #[test]
+    fn a_bound_not_yet_known_leaves_the_impl_unknown() {
+        let p = Builder::default()
+            .bounded(ALPHA, list_of(SolverType::Param(0)), vec![BETA])
+            .concrete(BETA, decl(I32))
+            .build();
+        assert_eq!(verdict(&p, &list_of(var(0)), ALPHA), Verdict::Unknown);
+        assert_eq!(verdict(&p, &list_of(decl(I32)), ALPHA), Verdict::Holds(()));
+    }
+
+    /// Asking with a variable binds nothing the asker sees: the same question
+    /// asked twice answers the same.
+    #[test]
+    fn asking_changes_no_variable() {
+        let p = Builder::default().concrete(ALPHA, decl(POINT)).build();
+        let ty = list_of(var(0));
+        let first = verdict(&p, &ty, ALPHA);
+        assert_eq!(verdict(&p, &ty, ALPHA), first);
+        assert_eq!(verdict(&p, &var(0), ALPHA), Verdict::Unknown);
     }
 
     /// A bound writing no argument says the trait’s declared defaults, so a
