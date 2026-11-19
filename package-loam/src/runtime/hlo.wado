@@ -1913,13 +1913,13 @@ impl Graph for Cpu {
         let n = packed.extents[0];
         let rows = element_count(&a.extents) / k;
         let bytes = packed.extents[1] * packed.extents[2];
-        let mut weights = List::<E>::filled(k, E::from_f32(0.0));
+        let wide: List<f32> = a.data.into_iter().map(|x| x.cast_to::<f32>()).collect();
+        let mut weights = List::<f32>::filled(k, 0.0);
         let mut out = List::<E>::filled(rows * n, E::from_f32(0.0));
         for let c of 0..<n {
             unpacked_row(&packed.data, bytes, scales, zero_points, quantized, c, &mut weights);
-            let column = product_by_rows(&a.data, &weights, 1, rows, k, 1);
             for let r of 0..<rows {
-                out[r * n + c] = column[r];
+                out[r * n + c] = E::from_f32(dot(&wide, r * k, &weights, 0, k));
             }
         }
         extents[last] = n;
@@ -1945,17 +1945,18 @@ impl Graph for Cpu {
         let zero_points = zero_points.map(|z| self.held(z));
         let [rows, bytes] = [packed.extents[0], packed.extents[1]];
         let width = bytes * (8 / quantized.bits);
-        let zeros = List::<E>::filled(width, E::from_f32(0.0));
-        let mut values = zeros;
+        let mut values = List::<f32>::filled(width, 0.0);
         let mut out = List::<E>::with_capacity(indices.data.len() * width);
         for let index of indices.data {
             let row = if index < 0 { index + rows as i64 } else { index };
             if row < 0 || row >= rows as i64 {
-                out.extend(&zeros);
+                out.extend(&List::<E>::filled(width, E::from_f32(0.0)));
                 continue;
             }
             unpacked_row(&packed.data, bytes, scales, zero_points, quantized, row as i32, &mut values);
-            out.extend(&values);
+            for let v of values {
+                out.push(E::from_f32(v));
+            }
         }
         let mut extents = indices.extents;
         extents.push(width);
@@ -1964,7 +1965,7 @@ impl Graph for Cpu {
 }
 
 /// The first `into.len()` values of row `row` of a weight packed `bytes` to a
-/// row, rounded as `dequantized` rounds them.
+/// row, each rounded to `E` as `dequantized` rounds it and held as an f32.
 fn unpacked_row<E: Float, R, Blocks, Z>(
     packed: &List<u8>,
     bytes: i32,
@@ -1972,21 +1973,26 @@ fn unpacked_row<E: Float, R, Blocks, Z>(
     zero_points: Option<&Tensor<u8, [R, Z]>>,
     quantized: &Quantized,
     row: i32,
-    into: &mut List<E>,
+    into: &mut List<f32>,
 ) {
     let bits = quantized.bits;
     let per = 8 / bits;
     let mask = (1 << bits) - 1;
     let blocks = scales.extents[1];
-    for let i of 0..<into.len() {
-        let b = i / quantized.block;
-        let q = packed[row * bytes + i / per] as i32 >> i % per * bits & mask;
+    // A block's values take only `1 << bits` values, each rounded once here.
+    let mut rounded = List::<f32>::filled(1 << bits, 0.0);
+    for let b of 0..<(into.len() + quantized.block - 1) / quantized.block {
         let zero = match zero_points {
             Some(z) => z.data[row * z.extents[1] + b / per] as i32 >> b % per * bits & mask,
             None => 1 << bits - 1,
         };
         let scale = scales.data[row * blocks + b].cast_to::<f32>();
-        into[i] = E::from_f32((q - zero) as f32 * scale);
+        for let q of 0..<rounded.len() {
+            rounded[q] = E::from_f32((q - zero) as f32 * scale).cast_to::<f32>();
+        }
+        for let i of b * quantized.block..<i32::min(into.len(), (b + 1) * quantized.block) {
+            into[i] = rounded[packed[row * bytes + i / per] as i32 >> i % per * bits & mask];
+        }
     }
 }
 
@@ -2346,23 +2352,29 @@ fn product_by_rows<E: Float>(a: &List<E>, b: &List<E>, batch: i32, m: i32, k: i3
     let mut out = List::<E>::with_capacity(batch * m * n);
     for let s of 0..<batch {
         for let r of 0..<m {
-            let a_at = (s * m + r) * k;
             for let c of 0..<n {
-                let b_at = (s * n + c) * k;
-                let [mut s0, mut s1, mut s2, mut s3]: [f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0];
-                let quads = k - k % 4;
-                for let mut j = 0; j < quads; j += 4 {
-                    s0 += (unchecked a[a_at + j]).cast_to::<f32>() * (unchecked b[b_at + j]).cast_to::<f32>();
-                    s1 += (unchecked a[a_at + j + 1]).cast_to::<f32>() * (unchecked b[b_at + j + 1]).cast_to::<f32>();
-                    s2 += (unchecked a[a_at + j + 2]).cast_to::<f32>() * (unchecked b[b_at + j + 2]).cast_to::<f32>();
-                    s3 += (unchecked a[a_at + j + 3]).cast_to::<f32>() * (unchecked b[b_at + j + 3]).cast_to::<f32>();
-                }
-                for let j of quads..<k {
-                    s0 += (unchecked a[a_at + j]).cast_to::<f32>() * (unchecked b[b_at + j]).cast_to::<f32>();
-                }
-                out.push(E::from_f32(s0 + s1 + (s2 + s3)));
+                out.push(E::from_f32(dot(a, (s * m + r) * k, b, (s * n + c) * k, k)));
             }
         }
     }
     return out;
+}
+
+/// The f32 sum of the products of the `k` elements of `a` from `a_at` and of
+/// `b` from `b_at`, in four running sums.
+fn dot<A: Element, B: Element>(a: &List<A>, a_at: i32, b: &List<B>, b_at: i32, k: i32) -> f32
+    contract a_at + k <= a.len() && b_at + k <= b.len()
+{
+    let [mut s0, mut s1, mut s2, mut s3]: [f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0];
+    let quads = k - k % 4;
+    for let mut j = 0; j < quads; j += 4 {
+        s0 += (unchecked a[a_at + j]).cast_to::<f32>() * (unchecked b[b_at + j]).cast_to::<f32>();
+        s1 += (unchecked a[a_at + j + 1]).cast_to::<f32>() * (unchecked b[b_at + j + 1]).cast_to::<f32>();
+        s2 += (unchecked a[a_at + j + 2]).cast_to::<f32>() * (unchecked b[b_at + j + 2]).cast_to::<f32>();
+        s3 += (unchecked a[a_at + j + 3]).cast_to::<f32>() * (unchecked b[b_at + j + 3]).cast_to::<f32>();
+    }
+    for let j of quads..<k {
+        s0 += (unchecked a[a_at + j]).cast_to::<f32>() * (unchecked b[b_at + j]).cast_to::<f32>();
+    }
+    return s0 + s1 + (s2 + s3);
 }
