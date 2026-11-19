@@ -218,21 +218,26 @@ impl Query<'_> {
         answer
     }
 
-    /// [`Self::holds_at`] once the question is open: every step that asks
-    /// another, a bound's projection normalized included, finds it asked.
     /// Whether some type may satisfy `trait_`: an impl, a declaration's fact,
     /// a caller's bound, or the trait's own rule says it of one.
     fn anything_may_hold(&self, trait_: TraitDeclId) -> bool {
         let program = self.program;
-        program.traits.get(&trait_).is_some_and(|def| {
-            def.holds_for_all || def.on_ref == RefRule::Always
-        }) || program.impls_of(trait_).next().is_some()
+        program
+            .traits
+            .get(&trait_)
+            .is_some_and(|def| def.holds_for_all || def.on_ref == RefRule::Always)
+            || program.impls_of(trait_).next().is_some()
             || program.facts.keys().any(|&(_, of)| of == trait_)
-            || self.env.param_bounds.iter().flatten().any(|bound| {
-                program.bound_reaches(bound.trait_, trait_, &SolverType::Var)
-            })
+            || self
+                .env
+                .param_bounds
+                .iter()
+                .flatten()
+                .any(|bound| program.bound_reaches(bound.trait_, trait_, &SolverType::Var))
     }
 
+    /// [`Self::holds_at`] once the question is open: every step that asks
+    /// another, a bound's projection normalized included, finds it asked.
     fn decide(
         &mut self,
         ty: &SolverType,
@@ -1041,7 +1046,15 @@ pub(super) fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
-    answers_args_by(program, def, ty, subject, written, args, SolverType::may_equal)
+    answers_args_by(
+        program,
+        def,
+        ty,
+        subject,
+        written,
+        args,
+        SolverType::may_equal,
+    )
 }
 
 /// Whether the impl answers a call that names `args` at an instance, as

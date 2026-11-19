@@ -1517,9 +1517,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A trait the call site cannot name answers only where nothing it can
         // name does, so an import it lacks never hides what it reaches.
         let spelled = self.spelled_type(receiver);
-        let supplied_at = |this: &Self, reach| {
-            spelled.and_then(|ty| this.ordered_impls(ty, method_name, reach))
-        };
+        let supplied_at =
+            |this: &Self, reach| spelled.and_then(|ty| this.ordered_impls(ty, method_name, reach));
         let mut supplied = supplied_at(self, Reach::InScope);
         if supplied.is_none() && own.iter().all(Option::is_none) {
             supplied = supplied_at(self, Reach::OutOfScope);
