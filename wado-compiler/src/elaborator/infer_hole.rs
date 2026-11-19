@@ -505,6 +505,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Pin `var` to the error type: a reported diagnostic already covers it,
+    /// and nothing later may settle it.
+    pub(super) fn close_infer_var(&mut self, var: TypeId) {
+        self.answer_infer_var(var, TypeTable::ERROR);
+    }
+
     /// [`Self::solve_infer_var`] by a type the source wrote for `var`. A
     /// written `!` answers it, where an inferred one, a diverging arm's, says
     /// nothing.
@@ -675,29 +681,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         subst
     }
 
-    /// End-of-module finalize: raise diagnostics for unsolved holes and
-    /// substitute every hole (solved → concrete, unsolved → `error`) into all
-    /// recorded facts that can carry one.
-    pub(super) fn finalize_infer_holes(&mut self) {
-        if self.infer_holes.is_empty() {
-            return;
-        }
-        let diags = std::mem::take(&mut self.infer_holes.diags);
-        let mismatches = self.infer_holes.mismatches.take();
-        // Group by what the variables belong to, in mint order, so one use
-        // site's unsolved slots become one message naming them all.
+    /// Report each variable `blames` names as never answered. One use site's
+    /// slots, in mint order, become one message naming them all.
+    fn report_uninferred(&self, blames: Vec<Blame>) {
         let mut groups: IndexMap<(Span, String), Vec<Option<String>>> = IndexMap::default();
         let mut owners: IndexMap<(Span, String), Blame> = IndexMap::default();
-        for (hole, blame) in diags {
-            if !self
-                .infer_holes
-                .solutions
-                .get(&hole)
-                .is_some_and(Option::is_none)
-                || mismatches.iter().any(|outer| covers(outer, &blame.span))
-            {
-                continue;
-            }
+        for blame in blames {
             let key = (blame.span, blame.owner.clone());
             groups
                 .entry(key.clone())
@@ -716,6 +705,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: blame.span,
             });
         }
+    }
+
+    /// Report `vars` as never answered now, then pin each to the error type so
+    /// nothing later settles them.
+    pub(super) fn close_uninferred(&mut self, vars: &[TypeId]) {
+        let blames = vars
+            .iter()
+            .filter_map(|var| self.infer_holes.diags.shift_remove(var))
+            .collect();
+        self.report_uninferred(blames);
+        for &var in vars {
+            self.close_infer_var(var);
+        }
+    }
+
+    /// End-of-module finalize: raise diagnostics for unsolved holes and
+    /// substitute every hole (solved → concrete, unsolved → `error`) into all
+    /// recorded facts that can carry one.
+    pub(super) fn finalize_infer_holes(&mut self) {
+        if self.infer_holes.is_empty() {
+            return;
+        }
+        let diags = std::mem::take(&mut self.infer_holes.diags);
+        let mismatches = self.infer_holes.mismatches.take();
+        let unsolved: Vec<Blame> = diags
+            .into_iter()
+            .filter(|(hole, blame)| {
+                self.infer_holes
+                    .solutions
+                    .get(hole)
+                    .is_some_and(Option::is_none)
+                    && !mismatches.iter().any(|outer| covers(outer, &blame.span))
+            })
+            .map(|(_, blame)| blame)
+            .collect();
+        self.report_uninferred(unsolved);
         for unwalked in std::mem::take(&mut self.infer_holes.unwalked_defaults) {
             let solved = unwalked.holes.iter().all(|hole| {
                 self.infer_holes

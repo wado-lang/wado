@@ -1134,12 +1134,12 @@ struct Answer {
     trait_args: Vec<SolverType>,
 }
 
-/// The trait arguments `def` applies to `ty` at. This is selection's question, and it differs from a bound's twice: it
-/// names the trait, so it accepts an impl at any argument list
-/// (WEP 2026-07-31); and it asks about `ty` at the type itself, so a blanket
-/// whose bound only `ty`'s newtype base carries does not apply here — the chain
-/// reaches that blanket at the base's own level, which is the depth rank 1
-/// wants.
+/// The trait arguments `def` applies to `ty` at. This is selection's question,
+/// and it differs from a bound's twice: it names the trait, so it accepts an
+/// impl at any argument list (WEP 2026-07-31); and it asks about `ty` at the
+/// type itself, so a blanket whose bound only `ty`'s newtype base carries does
+/// not apply here — the chain reaches that blanket at the base's own level,
+/// which is the depth rank 1 wants.
 pub(super) fn impl_applies(
     program: &Program,
     env: &Env,

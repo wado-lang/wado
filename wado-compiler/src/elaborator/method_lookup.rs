@@ -1509,9 +1509,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Close the trait arguments of a call through a blanket whose receiver
-    /// cannot key it while they are variables the call left unsettled. Each
-    /// reports itself as uninferred, and pinning it to the error keeps
-    /// anything later from settling the instance the call was keyed without.
+    /// cannot key it while they are variables the call left unsettled: none
+    /// may settle the instance later, since the call was keyed without it.
     pub(super) fn close_open_trait_args(&mut self, trait_args: &[TypeId]) {
         let open: Vec<TypeId> = trait_args
             .iter()
@@ -1522,13 +1521,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !open.is_empty(),
             "the receiver and the trait arguments settle every blanket slot"
         );
-        for arg in open {
-            assert!(
-                self.tysys.type_table.borrow().is_infer_var(arg),
-                "an unsettled trait argument is the variable minted for it"
-            );
-            self.solve_infer_var(arg, TypeTable::ERROR);
-        }
+        assert!(
+            open.iter()
+                .all(|&arg| self.tysys.type_table.borrow().is_infer_var(arg)),
+            "an unsettled trait argument is the variable minted for it"
+        );
+        self.close_uninferred(&open);
     }
 
     /// The key of `block`'s instance at a call whose receiver fills `given`
@@ -2450,6 +2448,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The order names the impls; the matches are read off those blocks and
         // nothing else (`docs/wep-2026-09-01-trait-resolution.md`).
         let order = self.order_for_call(type_key, receiver_type_id, method_name, required_trait);
+        if let Some(Ordered::One(Some(def))) = order
+            && let Some(receiver) = receiver_type_id
+        {
+            self.defer_awaited_impl_bounds(def, receiver, span);
+        }
         let named: &[Option<DefId>] = match &order {
             Some(Ordered::One(def)) => std::slice::from_ref(def),
             Some(
@@ -2473,13 +2476,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(Ordered::Undecided(_)) => {
                 let receiver = receiver_type_id.expect("the order answers a receiver it can say");
-                let receiver = self.tysys.type_table.borrow().name(receiver);
+                let receiver = self.apply_infer_holes(receiver);
+                let (name, open) = {
+                    let table = self.tysys.type_table.borrow();
+                    (table.name(receiver), table.infer_vars_in(receiver))
+                };
                 let _ = self.emit(TypeError::CannotInferType {
                     message: format!(
-                        "cannot infer `{receiver}` far enough to choose which `{method_name}` this calls; annotate it"
+                        "cannot infer `{name}` far enough to choose which `{method_name}` this calls; annotate it"
                     ),
                     span,
                 });
+                for var in open {
+                    self.close_infer_var(var);
+                }
                 return TraitLookup::Reported;
             }
             Some(Ordered::Nothing) | None => &[],

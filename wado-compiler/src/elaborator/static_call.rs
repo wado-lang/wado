@@ -1549,7 +1549,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .key
             .decl()
             .and_then(|def| self.type_lookup().declared_generic_params(def))
-            .expect("blocks told apart only by their targets' arguments target a generic type");
+            .unwrap_or_default();
         let scope = self.scope_type_param_ids();
         let names: Vec<String> = params
             .iter()
@@ -1561,10 +1561,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .map(|(_, param)| param.name.clone())
             .collect();
-        assert!(
-            !names.is_empty(),
-            "two inherent blocks reaching one instance are rejected where declared"
-        );
+        // Blocks no argument of the receiver tells apart declare the name twice
+        // at one instance, which is reported where they are declared.
+        if names.is_empty() {
+            assert!(
+                self.logger.has_errors(),
+                "two inherent blocks reaching one instance are reported where declared"
+            );
+            return self.overloaded_callee(&receiver.key, method_name, Vec::new());
+        }
         let head = receiver.spelled(self.tysys.resolutions.defs());
         StaticLookup::Unseparated {
             message: TypeError::receiver_args_uninferred_message(&names, head, method_name),

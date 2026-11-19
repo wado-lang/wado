@@ -1,0 +1,31 @@
+// A call commits to the one impl its open receiver may reach, and that impl's
+// bound is checked once the receiver's variable settles: here it fails.
+struct Bx<T> {
+    v: List<T>,
+}
+
+fn mk<T>() -> Bx<T> {
+    return Bx::<T> { v: [] };
+}
+
+trait First<T> {
+    fn first(&self) -> T;
+}
+
+impl<T: Default> First<T> for Bx<T> {
+    fn first(&self) -> T {
+        return T::default();
+    }
+}
+
+struct NoDef {
+    x: i32,
+}
+
+test {
+    let n: NoDef = mk().first();
+    assert n.x == 0;
+}
+
+__DATA__
+{"compile_error": "type 'NoDef' does not implement trait 'Default'"}
