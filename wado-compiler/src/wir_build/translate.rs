@@ -3380,19 +3380,23 @@ impl FunctionTranslator<'_, '_> {
                 // box precedes no operand written after it.
                 // A guest value backing a box is no object of the host's: a
                 // drop of one ends there, and any other call traps on it
-                // (WEP: Guest-Backed Resources).
-                let drops = matches!(
-                    target.canonical(),
-                    Some(CanonicalIntrinsic::ResourceDrop(_))
-                );
-                let owns = args.iter().any(|a| self.is_owned_handle_box(*a));
+                // (WEP: Guest-Backed Resources). A drop reads its box twice,
+                // for the test and for the handle, so it spills it as an own
+                // does, whether or not the end is taken by value.
+                let drops = target
+                    .canonical()
+                    .is_some_and(CanonicalIntrinsic::ends_handle);
+                let spills = drops || args.iter().any(|a| self.is_owned_handle_box(*a));
                 let mut before = Vec::new();
+                // Where the dropped box is spilled: what follows runs only
+                // when no guest value backs it.
+                let mut dropped_box = None;
                 let translated_args: Vec<WirInstr> = args
                     .iter()
                     .map(|a| {
                         let arg = self.translate_operand(*a);
                         let type_id = self.operand_type_id(*a);
-                        if !owns {
+                        if !spills {
                             return if self.is_handle_box(type_id) {
                                 self.host_handle_of(arg)
                             } else {
@@ -3408,6 +3412,8 @@ impl FunctionTranslator<'_, '_> {
                         }
                         let handle = self.fresh_local("cm_handle");
                         let host_handle = if drops {
+                            assert!(dropped_box.is_none(), "a drop ends one handle");
+                            dropped_box = Some((before.len(), read.clone()));
                             self.handle_of(read.clone())
                         } else {
                             self.host_handle_of(read.clone())
@@ -3474,25 +3480,21 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     call
                 };
-                let call = if before.is_empty() {
+                if let Some((spilled, dropped)) = dropped_box {
+                    let mut ends_host_handle = before.split_off(spilled);
+                    ends_host_handle.push(call);
+                    before.push(WirInstr::If {
+                        condition: Box::new(self.is_backed_box(dropped)),
+                        result: None,
+                        then_body: Vec::new(),
+                        else_body: Some(ends_host_handle),
+                    });
+                    WirInstr::Seq(before)
+                } else if before.is_empty() {
                     call
                 } else {
                     before.push(call);
                     WirInstr::Seq(before)
-                };
-                if drops {
-                    let [dropped] = args.as_slice() else {
-                        unreachable!("`resource.drop` takes its resource alone");
-                    };
-                    let dropped = self.translate_operand(*dropped);
-                    WirInstr::If {
-                        condition: Box::new(self.is_backed_box(dropped)),
-                        result: None,
-                        then_body: Vec::new(),
-                        else_body: Some(vec![call]),
-                    }
-                } else {
-                    call
                 }
             }
 

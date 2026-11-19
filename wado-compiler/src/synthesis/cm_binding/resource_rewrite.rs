@@ -1767,8 +1767,8 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
 impl CmMethodRewriter<'_> {
     /// `r.drop()` on a resource: the canonical `resource.drop` of its
     /// declaration, handed the box itself, which the drop zeroes. A resource
-    /// no host implements reaches here only where no handler is ever
-    /// installed for it, and its drop then ends with the guest value it holds.
+    /// no host implements has no handle to release: its drop, reached where
+    /// no handler answers it, ends with the guest value it holds.
     fn rewrite_resource_drop(&self, expr: &mut TirExpr) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             unreachable!("a `cm_name` is read off a call");
@@ -1801,10 +1801,20 @@ impl CmMethodRewriter<'_> {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             return;
         };
+        // A drop is handed the box itself, as `resource.drop` is, so that a
+        // backed one never reaches the host.
+        let ends_handle =
+            matches!(&target, BindingTarget::Canonical(intrinsic) if intrinsic.ends_handle());
         let taken_args: Vec<TirExpr> = std::mem::take(args)
             .into_vec()
             .into_iter()
-            .map(|a| affine_handle(a.expr, self.tt))
+            .map(|a| {
+                if ends_handle {
+                    a.expr
+                } else {
+                    affine_handle(a.expr, self.tt)
+                }
+            })
             .collect();
 
         *expr = match target {

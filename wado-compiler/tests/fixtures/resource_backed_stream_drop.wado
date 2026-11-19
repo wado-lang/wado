@@ -1,0 +1,20 @@
+// A backed stream end dropped with no handler installed ends with the value it
+// holds: the canonical `stream.drop-readable` never sees it.
+use { println, Stdout } from "core:cli";
+
+struct Names {
+    names: List<String>,
+}
+
+fn make() with Stdout {
+    let _s = Stream::<u8>::backed_by(Names { names: [] });
+    println("made");
+}
+
+export fn run() with Stdout {
+    make();
+    println("ok");
+}
+
+__DATA__
+{"stdout": "made\nok\n"}

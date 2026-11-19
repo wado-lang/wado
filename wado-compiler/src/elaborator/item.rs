@@ -2418,7 +2418,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     method
                         .body
                         .as_ref()
-                        .filter(|_| generic_resource)
+                        .filter(|_| generic_resource && !cm_backed)
                         .map(|b| b.span),
                     "cannot carry a default implementation: one on an operation of a generic \
                      resource is not supported yet",
@@ -2427,7 +2427,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     method
                         .body
                         .as_ref()
-                        .filter(|_| is_resource && method.name == "drop")
+                        .filter(|_| is_resource && !cm_backed && method.name == "drop")
                         .map(|b| b.span),
                     "cannot carry a default implementation: one on `drop` is not supported yet",
                 ),

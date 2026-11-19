@@ -240,13 +240,18 @@ impl UncoveredEffectCallCollector<'_> {
         })?;
         Some(InstantiationKey {
             effect: (*effect).clone(),
-            type_args: func
-                .monomorph_info
-                .as_ref()
-                .map(|info| info.impl_type_args.clone())
-                .unwrap_or_default(),
+            type_args: static_call_type_args(func),
         })
     }
+}
+
+/// The resource instantiation a static operation call names, which it carries
+/// only as its monomorphization's impl type args.
+fn static_call_type_args(func: &FunctionRef) -> Vec<TypeId> {
+    func.monomorph_info
+        .as_ref()
+        .map(|info| info.impl_type_args.clone())
+        .unwrap_or_default()
 }
 
 impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
@@ -2776,13 +2781,11 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
     let new_call: Option<TirExpr> = match &expr.kind {
         TirExprKind::Call { func, args, .. } if args.receiver().is_none() => {
             let return_type = expr.type_id;
-            // Static resource call: receiver type isn't directly available,
-            // fall back to single-instantiation routing.
             let resource_wrapper = func.method_info.as_ref().and_then(|method_info| {
                 pick_resource_wrapper(
                     declaring_resource(method_info)?,
                     &method_info.method_name,
-                    &[],
+                    &static_call_type_args(func),
                     ctx,
                 )
             });
