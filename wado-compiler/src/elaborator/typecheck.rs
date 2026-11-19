@@ -15,6 +15,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::ArgSite;
+use super::infer_hole::DeferredCheck;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
 
@@ -561,7 +562,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn typecheck_in(&self, actual: TypeId, expected: TypeId, span: Span, frame: SlotFrame) {
-        self.typecheck_worded(actual, expected, span, frame, |payload| {
+        self.typecheck_worded(actual, expected, span, frame, move |payload| {
             TypeError::TypeMismatch {
                 expected: payload.expected,
                 found: payload.found,
@@ -578,7 +579,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected,
             site.span(),
             SlotFrame::Callee,
-            |payload| site.mismatch(payload.expected, payload.found),
+            move |payload| site.mismatch(payload.expected, payload.found),
         );
         if let ArgSite::Written { value, .. } = site {
             self.record_widening(value, actual, expected);
@@ -591,12 +592,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected: TypeId,
         span: Span,
         frame: SlotFrame,
-        mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError,
+        mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError + 'static,
     ) {
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
             let _ = self.emit(mismatch(payload));
             return;
         }
+        self.defer_check(actual, expected, mismatch);
         self.record_row_flows(actual, expected, span, frame);
         self.reject_pack_layout_mismatch(actual, expected, span);
     }
@@ -613,7 +615,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if result != TypeCheckResult::Incompatible {
             self.record_row_flows(actual, expected, span, SlotFrame::Own);
         }
+        if result == TypeCheckResult::Deferred {
+            self.defer_check(actual, expected, move |payload| TypeError::TypeMismatch {
+                expected: payload.expected,
+                found: payload.found,
+                span,
+            });
+        }
         result
+    }
+
+    /// Ask the check of `actual` against `expected` again once the variables
+    /// either holds settle, worded by `mismatch` if it fails then.
+    fn defer_check(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+        mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError + 'static,
+    ) {
+        if self.type_has_infer_hole(actual) || self.type_has_infer_hole(expected) {
+            self.infer_holes.note_deferred_check(DeferredCheck {
+                actual,
+                expected,
+                mismatch: Box::new(mismatch),
+            });
+        }
     }
 
     /// Record each row of `actual` beside the row of `expected` it moves into,

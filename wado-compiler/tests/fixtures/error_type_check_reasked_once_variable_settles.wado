@@ -1,0 +1,25 @@
+// A type check that a variable left undecided is asked again once the variable
+// settles. `x = b` meets `Bx<?T>` with `Bx<u8>` and binds nothing; `== 200`
+// later settles `T` to `i32`, and the assignment is then a mismatch rather
+// than a `Bx<u8>` stored where a `Bx<i32>` is read.
+
+struct Bx<T> {
+    v: List<T>,
+}
+
+impl<T> Bx<T> {
+    fn new() -> Bx<T> {
+        return Bx { v: [] };
+    }
+}
+
+export fn run() {
+    let a = Bx::new();
+    let b = Bx::<u8> { v: [200] };
+    let mut x = a;
+    x = b;
+    assert x.v[0] == 200;
+}
+
+__DATA__
+{"compile_error": ":20:9: analysis error: type mismatch: expected 'Bx<i32>', found 'Bx<u8>'"}

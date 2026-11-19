@@ -27,6 +27,7 @@ use crate::elaborator::sem::types::{
     LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch, SequenceCoercionFacts,
     StaticMethodDispatch,
 };
+use crate::elaborator::typecheck::TypeMismatchPayload;
 use crate::elaborator::types::VariantInfo;
 use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name, written_param_name};
 use crate::tir;
@@ -62,6 +63,17 @@ pub(crate) struct InferHoleTable {
     /// asked again once they settle. Recorded where selection reads the
     /// table, so behind a cell.
     commitments: std::cell::RefCell<Vec<Commitment>>,
+    /// The type checks that admitted a value while a variable on either side
+    /// left them undecided, asked again once the variables settle. Recorded
+    /// where a check reads the table, so behind a cell.
+    deferred_checks: std::cell::RefCell<Vec<DeferredCheck>>,
+}
+
+/// A type check a variable left undecided, and how its mismatch is worded.
+pub(super) struct DeferredCheck {
+    pub(super) actual: TypeId,
+    pub(super) expected: TypeId,
+    pub(super) mismatch: Box<dyn FnOnce(TypeMismatchPayload) -> TypeError>,
 }
 
 struct UnwalkedDefaults {
@@ -95,6 +107,10 @@ impl InferHoleTable {
 
     pub(super) fn note_commitment(&self, commitment: Commitment) {
         self.commitments.borrow_mut().push(commitment);
+    }
+
+    pub(super) fn note_deferred_check(&self, check: DeferredCheck) {
+        self.deferred_checks.borrow_mut().push(check);
     }
 }
 
@@ -716,6 +732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let subst = self.pinned_hole_subst();
         self.verify_solved_hole_bounds(&subst);
+        self.verify_deferred_checks(&subst);
         self.verify_commitments(&subst);
         self.sweep_recorded_facts(&subst);
         self.infer_holes = InferHoleTable::default();
@@ -858,6 +875,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual,
             span: link.span,
         });
+    }
+
+    /// Ask each deferred type check again at what its variables settled to.
+    fn verify_deferred_checks(&self, subst: &IndexMap<InferVarId, TypeId>) {
+        for check in self.infer_holes.deferred_checks.take() {
+            let (actual, expected) = {
+                let mut tt = self.tysys.type_table.borrow_mut();
+                (
+                    sub(&mut tt, check.actual, subst),
+                    sub(&mut tt, check.expected, subst),
+                )
+            };
+            if let Err(payload) = self.tysys.typecheck(actual, expected) {
+                let _ = self.emit((check.mismatch)(payload));
+            }
+        }
     }
 
     /// Ask each commitment again at what its variables settled to. A variable
