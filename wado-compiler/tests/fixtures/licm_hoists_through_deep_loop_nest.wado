@@ -1,0 +1,86 @@
+// Each loop's guard recomputes `src.len()`, a subtraction of two fields LICM
+// hoists. A nest deeper than the optimizer's round cap converges only if one
+// LICM walk carries the subtraction out of every loop, not one loop per round.
+fn first_position(src: &StrSlice, start: i32) -> i32 {
+    let mut pos = start;
+    for let mut a = 0; a < 2; a += 1 {
+        if pos >= src.len() { return -1; }
+        pos += a;
+        for let mut b = 0; b < 2; b += 1 {
+            if pos >= src.len() { return -1; }
+            pos += b;
+            for let mut c = 0; c < 2; c += 1 {
+                if pos >= src.len() { return -1; }
+                pos += c;
+                for let mut d = 0; d < 2; d += 1 {
+                    if pos >= src.len() { return -1; }
+                    pos += d;
+                    for let mut e = 0; e < 2; e += 1 {
+                        if pos >= src.len() { return -1; }
+                        pos += e;
+                        for let mut f = 0; f < 2; f += 1 {
+                            if pos >= src.len() { return -1; }
+                            pos += f;
+                            for let mut g = 0; g < 2; g += 1 {
+                                if pos >= src.len() { return -1; }
+                                pos += g;
+                                for let mut h = 0; h < 2; h += 1 {
+                                    if pos >= src.len() { return -1; }
+                                    pos += h;
+                                    for let mut i = 0; i < 2; i += 1 {
+                                        if pos >= src.len() { return -1; }
+                                        pos += i;
+                                        for let mut j = 0; j < 2; j += 1 {
+                                            if pos >= src.len() { return -1; }
+                                            pos += j;
+                                            for let mut k = 0; k < 2; k += 1 {
+                                                if pos >= src.len() { return -1; }
+                                                pos += k;
+                                                for let mut l = 0; l < 2; l += 1 {
+                                                    if pos >= src.len() { return -1; }
+                                                    pos += l;
+                                                    for let mut m = 0; m < 2; m += 1 {
+                                                        if pos >= src.len() { return -1; }
+                                                        pos += m;
+                                                        for let mut n = 0; n < 2; n += 1 {
+                                                            if pos >= src.len() { return -1; }
+                                                            pos += n;
+                                                            for let mut o = 0; o < 2; o += 1 {
+                                                                if pos >= src.len() { return -1; }
+                                                                pos += o;
+                                                                for let mut p = 0; p < 2; p += 1 {
+                                                                    if pos >= src.len() { return -1; }
+                                                                    pos += p;
+                                                                    for let mut q = 0; q < 2; q += 1 {
+                                                                        if pos >= src.len() { return -1; }
+                                                                        pos += q;
+                                                                        for let mut r = 0; r < 2; r += 1 {
+                                                                            if pos >= src.len() { return -1; }
+                                                                            pos += r;
+                                                                            if pos > 0 { return pos; }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return -1;
+}
+
+test {
+    let s = "abc";
+    assert first_position(&s.as_str_slice(), 0) == 1;
+    assert first_position(&"".as_str_slice(), 0) == -1;
+}

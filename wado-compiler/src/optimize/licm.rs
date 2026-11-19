@@ -473,7 +473,12 @@ fn licm_loop(
     preheader: &[HoistedField],
 ) -> (Vec<StmtId>, bool) {
     let mut all_hoist_stmts = Vec::new();
-    let mut changed = false;
+
+    // Nested loops first, so what they hoist into this body is a candidate here
+    // in the same walk: one walk carries an invariant out of a whole nest. The
+    // nested `licm_block` accumulates aliases from this loop's `let`s itself.
+    let mut nested_aliases: Vec<(u32, u32)> = outer_aliases.to_vec();
+    let mut changed = licm_block(engine, loop_body, ctx, &mut nested_aliases);
 
     // Run LICM iteratively until no more candidates are found (second-level
     // hoisting), bounded to avoid pathological cases.
@@ -618,12 +623,7 @@ fn licm_loop(
     // Step 6: reloadable field-load hoisting.
     hoist_reloadable_field_loads(engine, loop_body, ctx, outer_aliases, &mut all_hoist_stmts);
 
-    // Nested loops: recurse. The nested `licm_block` accumulates aliases from
-    // the outer loop's `let` statements on its own walk.
-    let mut nested_aliases: Vec<(u32, u32)> = outer_aliases.to_vec();
-    changed |= licm_block(engine, loop_body, ctx, &mut nested_aliases);
-
-    changed |= !all_hoist_stmts.is_empty();
+    changed |=!all_hoist_stmts.is_empty();
     (all_hoist_stmts, changed)
 }
 
