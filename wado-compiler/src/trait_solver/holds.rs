@@ -1303,7 +1303,7 @@ fn match_target(
 /// Bind `slot` to `binding`. Each place a parameter or pack meets says what it
 /// may be, so a bound slot keeps the meet of both, and fails where none is.
 fn bind(slot: &mut Option<Binding>, binding: Binding) -> bool {
-    let met = match (slot.take(), binding) {
+    let met = match (&*slot, binding) {
         (None, binding) => Some(binding),
         (Some(Binding::One(bound)), Binding::One(ty)) => bound.meet(&ty).map(Binding::One),
         (Some(Binding::Pack(bound)), Binding::Pack(elems)) if bound.len() == elems.len() => bound
@@ -1314,8 +1314,11 @@ fn bind(slot: &mut Option<Binding>, binding: Binding) -> bool {
             .map(Binding::Pack),
         (Some(Binding::One(_) | Binding::Pack(_)), _) => None,
     };
-    *slot = met;
-    slot.is_some()
+    let Some(met) = met else {
+        return false;
+    };
+    *slot = Some(met);
+    true
 }
 
 /// Whether `def`'s target meets `ty` without a projection left to decide. A
