@@ -9,7 +9,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use wasmtime::component::{Access, HasData, Resource, ResourceTable};
 use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
@@ -149,7 +149,7 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
     }
     let mut dirs = Vec::with_capacity(preopened_dirs.len());
     for (index, (host, guest)) in preopened_dirs.iter().enumerate() {
-        let path = std::path::absolute(host)?;
+        let path = std::path::absolute(host).with_context(|| cannot_open(host))?;
         // The child starts in the first grant, so there `.` names it on both
         // sides; anywhere else `.` names another directory than the child's.
         if !(index == 0 && guest == ".") && Path::new(guest) != path {
@@ -164,10 +164,16 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
                 )),
             }));
         }
-        let dir = Arc::new(File::open(&path)?);
+        let dir = Arc::new(File::open(&path).with_context(|| cannot_open(host))?);
         dirs.push(Grant { path, dir });
     }
     Ok(Answer::Available(Grants { dirs, read, trace }))
+}
+
+/// The report of a granted directory that cannot be opened, the same wherever
+/// the grant is opened.
+pub(crate) fn cannot_open(host_path: &str) -> String {
+    format!("cannot open the directory `{host_path}`")
 }
 
 /// Where the guest's own standard streams go, which is where a child's

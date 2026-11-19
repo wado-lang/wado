@@ -29,7 +29,7 @@ use crate::http_hooks::WadoHttpHooks;
 use crate::options::{ProfileMode, RuntimeKnobs};
 use crate::process_host::{
     GuestStdio, ProcessCtx, ProcessGrant, ProcessView, Spawning,
-    add_to_linker as add_process_to_linker,
+    add_to_linker as add_process_to_linker, cannot_open,
 };
 use crate::random;
 use crate::timezone::add_to_linker as add_timezone_to_linker;
@@ -307,7 +307,7 @@ impl Preopens {
             builder
                 .preopened_dir(host_path, guest_path, FsPerms::ReadWrite)
                 .map_err(anyhow::Error::from)
-                .with_context(|| format!("cannot open the directory `{host_path}`"))?;
+                .with_context(|| cannot_open(host_path))?;
         }
         let mut ctx = builder.build();
         Ok(Self {
@@ -500,9 +500,7 @@ mod tests {
         ) else {
             panic!("a missing directory opened");
         };
-        assert!(
-            format!("{error:#}").contains("/nonexistent/grant"),
-            "{error:#}"
-        );
+        assert_eq!(error.to_string(), cannot_open("/nonexistent/grant"));
+        assert!(error.source().is_some(), "the OS's reason is kept");
     }
 }
