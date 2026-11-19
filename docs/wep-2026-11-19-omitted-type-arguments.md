@@ -101,8 +101,7 @@ candidates that hold or are not yet known, and drops those that do not hold.
   annotation.
 - Several are left: the call asks for a turbofish or an annotation.
 
-So the impl committed to settles nothing of the variables. Under `impl Me for
-Bx<u64>` alone, `mk().me()` with `mk<T>() -> Bx<T>` asks for an annotation, and
+So the impl committed to settles nothing of the variables. Under `impl Me for Bx<u64>` alone, `mk().me()` with `mk<T>() -> Bx<T>` asks for an annotation, and
 `mk::<u64>().me()` resolves. Inferring `T` from the one impl would let an impl
 written anywhere else later turn the call into an error, the action at a
 distance this WEP removes from statics. Asking at the call, rather than waiting
@@ -175,9 +174,11 @@ inference broke as soon as a second impl was written elsewhere.
   selection decides which trait impl a receiver holding one waits on. Only
   inherent impls, which the solver does not hold, are still probed apart.
 - [ ] The literal's variable binds only to a type of its kind.
-- [ ] A check over the fixtures rewrites each qualified call that writes every
+- [x] A check over the fixtures rewrites each qualified call that writes every
   argument into the spelling that omits them, and requires the same result or
-  a request for an annotation.
+  a request for an annotation. Every rewrite that changed its result now
+  ends in a compile error, except one: `Alpha::m(&o)` on a newtype chain
+  answers with the nearest link's impl, as `o.m()` does.
 - [ ] Every question reaches the solver with the elaborator's variables, and a
   bound not yet known is checked once the module's inference finishes. The
   lowering that refuses a variable, and the reading of an open type as one
