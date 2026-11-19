@@ -31,8 +31,8 @@ mod loc_set;
 
 use loc_set::{Loc, LocSet};
 
-use super::analyze::collect_pattern_bindings;
 use super::super::closure::ClosurePlan;
+use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
 use super::last_use::collect_child_exprs;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
@@ -43,8 +43,8 @@ use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    BuiltinDeclaration, BuiltinDeclarations, CaptureSource, FunctionKind,
-    FunctionRef, ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
+    BuiltinDeclaration, BuiltinDeclarations, CaptureSource, FunctionKind, FunctionRef,
+    ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
@@ -87,7 +87,7 @@ pub struct PointsTo {
 /// The storage a call writes beyond what it is handed: the only storage
 /// besides that a callee can reach is what a global reaches, so a part of
 /// [`PointsTo::global_reach`].
-#[derive(Clone, Default, PartialEq)]
+#[derive(Default)]
 pub struct Mod {
     /// It may write all of it.
     pub all: bool,
@@ -310,6 +310,13 @@ impl PointsTo {
             Some(frame) => &self.mods.of[frame as usize],
             None => &self.mods.all,
         }
+    }
+
+    /// What a call into code the analysis cannot see writes beyond what it is
+    /// handed.
+    #[must_use]
+    pub fn opaque_mod(&self) -> &Mod {
+        &self.mods.all
     }
 
     /// What the call through a function value `call` writes beyond what it is

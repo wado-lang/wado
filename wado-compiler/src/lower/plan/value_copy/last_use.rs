@@ -258,8 +258,6 @@ struct CallStart {
 enum Beyond<'a> {
     /// A call's, which writes this much of what a global reaches.
     Call(&'a Mod),
-    /// A call's that may write anything.
-    Opaque,
     /// One to storage no local names.
     Lands(Lands<'a>),
 }
@@ -2580,11 +2578,7 @@ impl<'a> Analyzer<'a> {
             }
         }
         let beyond = &self.beyond_handed[since.beyond_handed..];
-        let beyond_handed = beyond.iter().any(|b| match b {
-            Beyond::Call(m) => m.all,
-            Beyond::Opaque => true,
-            Beyond::Lands(_) => false,
-        });
+        let beyond_handed = beyond.iter().any(|b| matches!(b, Beyond::Call(m) if m.all));
         let mut written = pt.reach_written(sources, beyond_handed);
         let landed = |lands: Lands<'a>, written: &mut IndexSet<u32>| match lands {
             Lands::Local(local) => {
@@ -2598,7 +2592,6 @@ impl<'a> Analyzer<'a> {
         for b in beyond {
             match *b {
                 Beyond::Call(m) => written.extend(m.locations.iter().copied()),
-                Beyond::Opaque => {}
                 Beyond::Lands(lands) => landed(lands, &mut written),
             }
         }
@@ -3339,7 +3332,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
-                self.start_call(Some(Beyond::Opaque));
+                self.start_call(Some(Beyond::Call(self.points_to.opaque_mod())));
                 self.hold_loans(&args.iter().collect::<Vec<_>>(), live);
                 for arg in args.iter().rev() {
                     self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);

@@ -6,10 +6,7 @@ use super::place::{Names, Resolver, ReturnPaths, Selector, carries_storage, fiel
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    BuiltinDeclarations, TirExpr, TirExprKind, TirFunction, TirStmt,
-    TypeId,
-};
+use crate::tir::{BuiltinDeclarations, TirExpr, TirExprKind, TirFunction, TirStmt, TypeId};
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
 
