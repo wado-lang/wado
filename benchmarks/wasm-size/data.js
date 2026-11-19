@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795045964061,
+  "lastUpdate": 1795062396293,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79697,6 +79697,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d93056024f5d509f4490c4e13506900d3099e9c4"
         },
         "date": 1795045963031,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 435013,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "301ef80847d697fb326bf7bfb13852b4fab6169b",
+          "message": "Merge pull request #2689 from wado-lang/gfx/eloquent-edison-06cjpr\n\nfix(eddy): keep the checkout tests under the timeout on a loaded CI runner",
+          "timestamp": "2026-11-19T13:10:14+09:00",
+          "tree_id": "19e5d09534b5fd6dffb19db7390fa5cbb713af61",
+          "url": "https://github.com/wado-lang/wado/commit/301ef80847d697fb326bf7bfb13852b4fab6169b"
+        },
+        "date": 1795062395092,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
