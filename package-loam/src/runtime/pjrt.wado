@@ -368,7 +368,7 @@ impl PjrtBackend {
     }
 
     /// `t` as `Cpu` computes on it.
-    fn on_cpu<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> CpuTensor<E, Axes> {
+    fn on_cpu<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> CpuTensor<E, Axes> with PjrtHost {
         return CpuTensor::Value(self.host(t));
     }
 }
