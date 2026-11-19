@@ -728,11 +728,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 blocks,
                 trait_args,
             }),
-            Selection::Unseparated => Some(self.unseparated_lookup(
-                receiver,
-                method_name,
-                declaring_args,
-            )),
+            Selection::Unseparated => {
+                Some(self.unseparated_lookup(receiver, method_name, declaring_args))
+            }
             Selection::None => None,
         }
     }

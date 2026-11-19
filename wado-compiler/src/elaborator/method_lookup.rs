@@ -1331,7 +1331,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_trait_def(item)
             .expect("a compiler trait item names a declaration");
         let bound = DeclaredBound {
-            trait_: self.tysys.compiler_trait(item).expect("its declaration exists"),
+            trait_: self
+                .tysys
+                .compiler_trait(item)
+                .expect("its declaration exists"),
             written: self.tysys.resolutions.defs().name(decl).to_string(),
             each_element: false,
         };
