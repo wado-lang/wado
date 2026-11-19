@@ -21,8 +21,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use super::context::WirContext;
 use crate::name::{
     BACKED_HANDLE_CLASS_FIELD, BACKED_HANDLE_STRUCT, BACKED_HANDLE_VALUE_FIELD, CELL_FIELD,
-    GUEST_RESOURCE_STRUCT, RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name, wir_enum_type_key,
-    wir_tuple_type_key, wir_type_key, wir_variant_case_key,
+    GUEST_RESOURCE_STRUCT, RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name,
+    wir_enum_type_key, wir_tuple_type_key, wir_type_key, wir_variant_case_key,
 };
 
 /// What a concrete Wado type's WIR type is built from.

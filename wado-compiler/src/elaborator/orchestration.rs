@@ -13,8 +13,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, GenericParam, HandleClasses, Item, Module, Pattern, Stmt,
-    Type, binds_no_cm, declared_handle_classes, declares_extern_handle, walk_expr, walk_stmt, walk_type,
-    world_import_of,
+    Type, binds_no_cm, declared_handle_classes, declares_extern_handle, walk_expr, walk_stmt,
+    walk_type, world_import_of,
 };
 use crate::bail_with;
 use crate::builtin_registry::BuiltinRegistry;
