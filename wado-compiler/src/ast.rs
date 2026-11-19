@@ -252,8 +252,8 @@ pub struct Module {
     /// those two readings apart, so it records its own, and every other token's
     /// lexical class is its role. Read by `wado_lsp::semantic_tokens`.
     contextual_keywords: Vec<Span>,
-    /// [`crate::lexer::LexResult::invalid_literals`], which keep the analysis
-    /// from calling the module complete.
+    /// [`crate::lexer::LexResult::invalid_literals`], which count as syntax
+    /// errors.
     invalid_literals: Vec<LexError>,
 }
 

@@ -1716,10 +1716,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // A recovered syntax error anywhere in the loaded set means the parse was
     // partial (covers block-internal errors that leave no `Item::Error` node),
     // so the result is never "complete" even if later phases ran clean.
-    let no_syntax_errors = load_result
-        .modules
-        .values()
-        .all(|m| !m.has_syntax_errors());
+    let no_syntax_errors = load_result.modules.values().all(|m| !m.has_syntax_errors());
 
     // Source-level liveness was computed inside `build_tir_from_state`
     // (between `annotate_bodies` and `reify`, so reify can gate on it). Move

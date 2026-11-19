@@ -599,7 +599,8 @@ impl<'a> Lexer<'a> {
             );
         };
 
-        if let Some(kind) = self.lex_literal(|lexer, quote| Some(lexer.lex_template_string(quote))) {
+        if let Some(kind) = self.lex_literal(|lexer, quote| Some(lexer.lex_template_string(quote)))
+        {
             return Token::new(kind, self.span_from(start, start_line, start_column));
         }
         let kind = match ch {
@@ -2252,7 +2253,11 @@ test data";
 
         let hole = lex(r##"`${b"é" + b'\u{41}' + ab"ok" + b#"é"#}`"##);
         assert!(hole.errors.is_empty(), "{:?}", hole.errors);
-        let columns: Vec<usize> = hole.invalid_literals.iter().map(|e| e.span.column).collect();
+        let columns: Vec<usize> = hole
+            .invalid_literals
+            .iter()
+            .map(|e| e.span.column)
+            .collect();
         assert_eq!(columns, [4, 11, 32], "{:?}", hole.invalid_literals);
 
         let unterminated = lex(r#""\q"#);
