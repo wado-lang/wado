@@ -1864,9 +1864,9 @@ struct Verdict {
     /// growing it past the budget is one-way. This is what an
     /// `#[inline(never)]` on each leaf otherwise applies by hand.
     hold: bool,
-    /// Wait at a site that does not yet hand it the constants a site may
-    /// still hand it: they halve it, and spliced into a caller that has none
-    /// it can no longer fold on the constants that caller's own callers pass.
+    /// Wait at a site whose numeric arguments may still turn constant: they
+    /// halve the callee, and spliced into a caller that lacks them it can no
+    /// longer fold on what that caller's own callers pass.
     awaits: bool,
 }
 
@@ -1982,8 +1982,8 @@ fn classify_callee(
     let effective_threshold = effective_threshold(func, inline_threshold);
     let params = func.params.len();
 
-    // `(fits, drops a loop)` for one reading of the body, where `fits` asks
-    // that the constants halve it too.
+    // `(halves, drops a loop)` for one reading of the body, both false unless
+    // the folded body fits.
     let weigh = |view: &ConstView<'_>| {
         let folded = inline_cost_folded(body, type_table, cold, view, spliced);
         if net_cost(folded, params) > effective_threshold {
