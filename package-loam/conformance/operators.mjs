@@ -284,6 +284,19 @@ add('ReduceSumNoop', {
   inputs: { A: float([2, 3]) },
   nodes: [node('ReduceSum', ['A'], 'Y', { noop_with_empty_axes: 1 })],
 });
+// Integers sum exactly, where an f32 would round 2^53 + 1 - 7.
+add('ReduceSumInt64', {
+  inputs: { A: int64([2, 3], [1, 0, 1, 2 ** 53, 1, -7]) },
+  inits: { X: int64([1], [1]) },
+  nodes: [node('ReduceSum', ['A', 'X'], 'Y')],
+  out: INT64,
+});
+add('SubInt64', {
+  inputs: { A: int64([2, 2], [5, -3, 2 ** 53, 0]) },
+  inits: { B: int64([1], [1]) },
+  nodes: [node('Sub', ['A', 'B'], 'Y')],
+  out: INT64,
+});
 
 // `halves` puts each lane's greatest at one index, and these move it about.
 const scattered = (dims) => float(dims, Array.from({ length: dims.reduce((a, b) => a * b, 1) }, (_, i) => ((i * 5) % 7) - 3));
@@ -549,6 +562,38 @@ const gqa = ({ s, past, heads, kv, dim, attrs = {}, rotary = false, bias = null,
   };
 };
 add('GqaPrompt', gqa({ s: 3, past: 0, heads: 2, kv: 1, dim: 16 }));
+// The lengths as gpt-oss's export computes them, from the mask's values: its
+// sum less one, as int32.
+const masked = (spec, mask) => {
+  const nodes = [
+    node('ReduceSum', ['M', 'One'], 'Summed', { keepdims: 1 }),
+    node('Sub', ['Summed', 'One'], 'Last'),
+    node('Cast', ['Last'], 'L', { to: INT32 }),
+    ...spec.nodes,
+  ];
+  const { L, ...inits } = spec.inits;
+  return {
+    ...spec,
+    inputs: { ...spec.inputs, M: int64([1, mask.length], mask) },
+    inits: { ...inits, One: int64([1], [1]) },
+    nodes,
+  };
+};
+// The query, key and value packed in one operand, as gpt-oss's export gives
+// them: the query heads, then the key heads, then the value heads.
+const packed = (spec) => {
+  const { Q, K, V, ...inputs } = spec.inputs;
+  const nodes = spec.nodes.map((n) => ({ ...n, inputs: ['QKV', '', '', ...n.inputs.slice(3)] }));
+  return {
+    ...spec,
+    inputs: { ...inputs, QKV: float([1, Q.dims[1], Q.dims[2] + 2 * K.dims[2]]) },
+    nodes,
+  };
+};
+add('GqaPacked', packed(gqa({ s: 3, past: 2, heads: 4, kv: 2, dim: 16 })));
+add('GqaMaskedLengths', masked(gqa({ s: 3, past: 2, heads: 2, kv: 1, dim: 16 }), [1, 1, 1, 1, 1]));
+// A prompt padded on the right: the last position is no key.
+add('GqaMaskedPadding', masked(gqa({ s: 4, past: 0, heads: 2, kv: 1, dim: 16 }), [1, 1, 1, 0]));
 add('GqaPast', gqa({ s: 1, past: 3, heads: 4, kv: 2, dim: 16 }));
 add('GqaPastPrompt', gqa({ s: 2, past: 3, heads: 2, kv: 2, dim: 16 }));
 add('GqaRotary', gqa({ s: 3, past: 2, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 } }));

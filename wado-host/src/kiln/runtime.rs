@@ -305,6 +305,9 @@ async fn instantiate(
     store
         .set_fuel(fuel)
         .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e:#}")))?;
+    // The fuel above already bounds a generator. wasmtime's default cap on what
+    // one host call copies refuses the source a large graph generates.
+    store.set_hostcall_fuel(usize::MAX);
 
     let instance = linker
         .instantiate_async(&mut store, component)

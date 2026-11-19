@@ -34,11 +34,13 @@ use {
     MATMUL_NBITS,
     QMOE,
     absent,
+    computes_integers,
     data_type,
     dims_of,
     element_of,
     is_binary_elementwise,
     is_float,
+    is_signed_integer,
     is_unary_operator,
     operands_short,
     settled,
@@ -835,6 +837,7 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
             Some(Float16) => Result::Ok(Option::Some("f16")),
             Some(Bfloat16) => Result::Ok(Option::Some("bf16")),
             Some(Int64) => Result::Ok(Option::Some("i64")),
+            Some(Int32) => Result::Ok(Option::Some("i32")),
             Some(Bool) => Result::Ok(Option::Some("bool")),
             _ => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
         };
@@ -900,13 +903,13 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         let Some(p) = primitives.get(input) else {
             continue;
         };
-        if !is_float(&p) {
+        if !is_float(&p) && !(is_signed_integer(&p) && computes_integers(&op)) {
             return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in a float`));
         }
         if let Some(e) = element && e != p {
             return Result::Err(refusal(
                 node,
-                `operand ${input} is ${p} and ${first.unwrap()} is ${e}, and ${op} computes in one float`,
+                `operand ${input} is ${p} and ${first.unwrap()} is ${e}, and ${op} computes in one element`,
             ));
         }
         first = Option::Some(input);
@@ -2120,9 +2123,17 @@ fn attention(
     for let t of given(6)? {
         owe_equal(node, owed, &t, &total, "total_sequence_length must be the past and the sequence")?;
     }
-    let last = difference(node, &total, &Poly::constant(1))?;
-    for let l of given(5)? {
-        owe_equal(node, owed, &l, &last, "seqlens_k must be one short of the total")?;
+    // Lengths computed at run time, as from a mask's values, bound each row's
+    // keys there; known ones must be every position's.
+    if known.contains_key(node.inputs[5]) {
+        let last = difference(node, &total, &Poly::constant(1))?;
+        for let l of given(5)? {
+            owe_equal(node, owed, &l, &last, "seqlens_k must be one short of the total")?;
+        }
+    } else {
+        let extents: List<Extent> = operand_at(node, shapes, 5).axes.into_iter().map(|a| a.extent).collect();
+        let count = count_of(&extents).expect("a count of elements is within i64");
+        owe_equal(node, owed, &count, &q.axes[0].extent.poly(), "seqlens_k holds one length per row")?;
     }
     if options.rotary {
         if !node.has_operand(ROTARY_COS) || !node.has_operand(ROTARY_SIN) {

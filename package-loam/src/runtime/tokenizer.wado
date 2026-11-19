@@ -1,10 +1,11 @@
 //! Byte-pair encoding (Sennrich et al. 2016) in the two spellings Hugging Face
 //! tokenizers write down. GPT-2's (Radford et al. 2019, § 2.2) splits text by
-//! its pattern and spells each piece as bytes. SentencePiece's (Kudo and
-//! Richardson 2018), as Gemma uses it, spells each space as `▁`, takes the
-//! whole text as one piece, and spells a character the vocabulary lacks as its
-//! UTF-8 bytes, each a `<0xXX>` token. A generated tokenizer builds one from the
-//! vocabulary and merges its `tokenizer.json` names.
+//! its pattern, or by o200k's as gpt-oss does, and spells each piece as bytes.
+//! SentencePiece's (Kudo and Richardson 2018), as Gemma uses it, spells each
+//! space as `▁`, takes the whole text as one piece, and spells a character the
+//! vocabulary lacks as its UTF-8 bytes, each a `<0xXX>` token. A generated
+//! tokenizer builds one from the vocabulary and merges its `tokenizer.json`
+//! names.
 
 use { HashMap } from "core:collections";
 use icu from "core:icu";
@@ -19,6 +20,16 @@ pub enum TokenSpelling {
     Pieces,
 }
 
+/// How a tokenizer splits text into the pieces it merges apart.
+pub enum PieceSplit {
+    /// The whole text as one piece, as SentencePiece takes it.
+    Whole,
+    /// GPT-2's pattern.
+    Gpt2,
+    /// The pattern of OpenAI's o200k encoding, which gpt-oss's tokenizer uses.
+    O200k,
+}
+
 /// The character SentencePiece spells a space as.
 global SPACE_PIECE: char = '▁';
 
@@ -29,6 +40,9 @@ global SPACE_PIECE: char = '▁';
 /// at every collection.
 pub struct BpeTokenizer {
     spelling: TokenSpelling,
+    split: PieceSplit,
+    /// Whether a piece the vocabulary spells whole is that token, merged or not.
+    ignore_merges: bool,
     /// Each token, its id the index, separated by NUL bytes.
     text: String,
     /// Where each token starts in `text`, then one past the end of `text`.
@@ -57,6 +71,10 @@ pub struct BpeTokenizer {
     prefix: List<i32>,
     letters: List<[u32, u32]>,
     numbers: List<[u32, u32]>,
+    /// Under `O200k`, what its pattern lets lead a word, `[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]`,
+    /// and what it lets end one, `[\p{Ll}\p{Lm}\p{Lo}\p{M}]`.
+    capitals: List<[u32, u32]>,
+    lowers: List<[u32, u32]>,
 }
 
 enum Class {
@@ -81,9 +99,13 @@ impl BpeTokenizer {
         merges: &ByteList,
         specials: List<String>,
         spelling: TokenSpelling,
+        split: PieceSplit,
+        ignore_merges: bool,
         unknown: i32,
         prefix: List<i32>,
-    ) -> BpeTokenizer {
+    ) -> BpeTokenizer
+        contract spelling matches { Pieces } == split matches { Whole }, "SentencePiece's spelling takes the whole text as one piece"
+    {
         let Ok(text) = String::try_from_utf8(*tokens) else {
             unreachable();
         };
@@ -99,8 +121,11 @@ impl BpeTokenizer {
                 triples[rank * 3 + 2],
             ));
         }
+        let o200k = split matches { O200k };
         let mut t = BpeTokenizer {
             spelling,
+            split,
+            ignore_merges,
             text,
             starts,
             by_token,
@@ -114,6 +139,12 @@ impl BpeTokenizer {
             prefix,
             letters: icu::ranges(GeneralCategoryGroup::Letter),
             numbers: icu::ranges(GeneralCategoryGroup::Number),
+            capitals: if o200k {
+                union_of([UppercaseLetter, TitlecaseLetter, ModifierLetter, OtherLetter, Mark]);
+            } else {
+                [];
+            },
+            lowers: if o200k { union_of([LowercaseLetter, ModifierLetter, OtherLetter, Mark]) } else { [] },
         };
         for let special of t.specials {
             t.special_ids[t.id_of(&special).unwrap()] = true;
@@ -242,30 +273,44 @@ impl BpeTokenizer {
     }
 
     fn encode_ordinary(&self, text: StrSlice, out: &mut List<i32>) {
-        if text.is_empty() {
-            return;
-        }
-        if self.spelling matches { Pieces } {
-            let mut parts: List<i32> = [];
-            for let c of text.chars() {
-                self.spell_piece(if c == ' ' { SPACE_PIECE } else { c }, &mut parts);
-            }
-            self.merge(parts, out);
-            return;
-        }
         let chars: List<char> = text.chars().collect();
         let mut at = 0;
         while at < chars.len() {
-            let end = self.piece_end(&chars, at);
+            let end = match self.split {
+                Whole => chars.len(),
+                Gpt2 => self.piece_end(&chars, at),
+                O200k => self.o200k_end(&chars, at),
+            };
             let mut parts: List<i32> = [];
             for let k of at..<end {
-                for let b of chars[k].encode_utf8() {
-                    parts.push(self.byte_ids[b as i32]);
+                match self.spelling {
+                    ByteLevel => {
+                        for let b of chars[k].encode_utf8() {
+                            parts.push(self.byte_ids[b as i32]);
+                        }
+                    },
+                    Pieces => self.spell_piece(if chars[k] == ' ' { SPACE_PIECE } else { chars[k] }, &mut parts),
                 }
             }
-            self.merge(parts, out);
+            if let Some(id) = self.spelled_whole(&parts) {
+                out.push(id);
+            } else {
+                self.merge(parts, out);
+            }
             at = end;
         }
+    }
+
+    /// The token that spells `parts` whole, where merges are ignored.
+    fn spelled_whole(&self, parts: &List<i32>) -> Option<i32> {
+        if !self.ignore_merges || parts.len() < 2 {
+            return null;
+        }
+        let mut spelled = "";
+        for let id of *parts {
+            spelled.push_str(self.token(id));
+        }
+        return self.id_of(&spelled);
     }
 
     /// `c` as `Pieces` spells it before merging: its own token, else its
@@ -290,24 +335,75 @@ impl BpeTokenizer {
     /// Where the piece starting at `at` ends, as GPT-2's pattern splits text:
     /// `'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+`.
     fn piece_end(&self, chars: &List<char>, at: i32) -> i32 {
+        if let Some(end) = contraction_end(chars, at, false) {
+            return end;
+        }
+        let spaced = chars[at] == ' ' && at + 1 < chars.len() && !self.class_of(chars[at + 1]) matches { Space };
+        let lead = if spaced { at + 1 } else { at };
+        let class = self.class_of(chars[lead]);
+        let end = run_end(chars, lead + 1, |d| self.class_of(d) == class);
+        return if class matches { Space } { space_run_end(chars, at, end) } else { end };
+    }
+
+    /// Where the piece starting at `at` ends, as o200k's pattern splits text,
+    /// its alternatives tried in turn, each quantifier greedy:
+    /// `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?`,
+    /// `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?`,
+    /// `\p{N}{1,3}`, ` ?[^\s\p{L}\p{N}]+[\r\n/]*`, `\s*[\r\n]+`, `\s+(?!\S)`, `\s+`.
+    fn o200k_end(&self, chars: &List<char>, at: i32) -> i32 {
         let n = chars.len();
-        if chars[at] == '\'' {
-            for let suffix of ["s", "t", "re", "ve", "m", "ll", "d"] {
-                if spells(chars, at + 1, &suffix) {
-                    return at + 1 + suffix.len();
+        let c = chars[at];
+        let leads: List<i32> = if c != '\r' && c != '\n' && self.class_of(c) matches { Space | Other } {
+            [at + 1, at];
+        } else {
+            [at];
+        };
+        for let capital_first of [false, true] {
+            for let start of leads {
+                if let Some(end) = self.cased_end(chars, start, capital_first) {
+                    return contraction_end(chars, end, true).unwrap_or(end);
                 }
             }
         }
-        let spaced = chars[at] == ' ' && at + 1 < n && !self.class_of(chars[at + 1]) matches { Space };
-        let lead = if spaced { at + 1 } else { at };
-        let class = self.class_of(chars[lead]);
-        let mut end = lead + 1;
-        while end < n && self.class_of(chars[end]) == class {
-            end += 1;
+        if within(&self.numbers, c as u32) {
+            return i32::min(run_end(chars, at, |d| within(&self.numbers, d as u32)), at + 3);
         }
-        // A space run before a word leaves its last space to the word.
-        let leaves_one = class matches { Space } && end < n && end - at > 1;
-        return if leaves_one { end - 1 } else { end };
+        let other = |d: char| self.class_of(d) matches { Other };
+        let spaced: List<i32> = if c == ' ' { [at + 1, at] } else { [at] };
+        for let start of spaced {
+            if start < n && other(chars[start]) {
+                return run_end(chars, run_end(chars, start, other), |d| d == '\r' || d == '\n' || d == '/');
+            }
+        }
+        let spaces = run_end(chars, at, |d| d.is_whitespace());
+        for let mut q = spaces - 1; q >= at; q -= 1 {
+            if chars[q] == '\r' || chars[q] == '\n' {
+                return q + 1;
+            }
+        }
+        assert spaces > at, "every character starts some alternative of the pattern";
+        return space_run_end(chars, at, spaces);
+    }
+
+    /// Where a word from `start` ends under o200k's pattern: capitals then
+    /// lowercase, at least one of the lowercase, or with `capital_first` at
+    /// least one capital then any lowercase. None where neither matches.
+    fn cased_end(&self, chars: &List<char>, start: i32, capital_first: bool) -> Option<i32> {
+        if start >= chars.len() {
+            return null;
+        }
+        let capitals = run_end(chars, start, |d| within(&self.capitals, d as u32));
+        let lowers_from = |from: i32| run_end(chars, from, |d| within(&self.lowers, d as u32));
+        if capital_first {
+            return if capitals > start { Option::Some(lowers_from(capitals)) } else { null };
+        }
+        // The capitals give back what the lowercase need, from the right.
+        for let mut split = capitals; split >= start; split -= 1 {
+            if split < chars.len() && within(&self.lowers, chars[split] as u32) {
+                return Option::Some(lowers_from(split));
+            }
+        }
+        return null;
     }
 
     fn class_of(&self, c: char) -> Class {
@@ -466,6 +562,34 @@ fn within(ranges: &List<[u32, u32]>, code: u32) -> bool {
     return false;
 }
 
+/// The code points of any of `groups`, as disjoint ranges, lowest first.
+fn union_of(groups: List<GeneralCategoryGroup>) -> List<[u32, u32]> {
+    let mut all: List<[u32, u32]> = [];
+    for let group of groups {
+        all.extend(&icu::ranges(group));
+    }
+    all.sort();
+    let mut merged: List<[u32, u32]> = [];
+    for let [start, end] of all {
+        let last = merged.len() - 1;
+        if last >= 0 && start <= merged[last].1 + 1 {
+            merged[last] = [merged[last].0, u32::max(merged[last].1, end)];
+        } else {
+            merged.push([start, end]);
+        }
+    }
+    return merged;
+}
+
+/// Where the run of characters from `from` that `holds` takes ends.
+fn run_end(chars: &List<char>, from: i32, holds: fn(char) -> bool) -> i32 {
+    let mut end = from;
+    while end < chars.len() && holds(chars[end]) {
+        end += 1;
+    }
+    return end;
+}
+
 /// Where each entry of `text`, separated by NUL bytes, starts, then one past
 /// the end of `text`. An empty `text` holds no entry.
 fn starts_of(text: &String) -> List<i32> {
@@ -504,13 +628,33 @@ pub fn byte_chars() -> List<char> {
     return chars;
 }
 
-fn spells(chars: &List<char>, at: i32, text: &String) -> bool {
+fn spells(chars: &List<char>, at: i32, text: &String, folded: bool) -> bool {
     let mut i = at;
     for let c of text.chars() {
-        if i >= chars.len() || chars[i] != c {
+        if i >= chars.len() || if folded { icu::simple_fold(chars[i]) } else { chars[i] } != c {
             return false;
         }
         i += 1;
     }
     return true;
+}
+
+/// One past the contraction at `at`, an apostrophe and `s`, `t`, `re`, `ve`,
+/// `m`, `ll` or `d`, its letters in either case where `folded`.
+fn contraction_end(chars: &List<char>, at: i32, folded: bool) -> Option<i32> {
+    if at >= chars.len() || chars[at] != '\'' {
+        return null;
+    }
+    for let suffix of ["s", "t", "re", "ve", "m", "ll", "d"] {
+        if spells(chars, at + 1, &suffix, folded) {
+            return Option::Some(at + 1 + suffix.len());
+        }
+    }
+    return null;
+}
+
+/// Where a whitespace run from `at` to `end` ends as a piece: a run of two or
+/// more before anything else leaves its last character to the next piece.
+fn space_run_end(chars: &List<char>, at: i32, end: i32) -> i32 {
+    return if end < chars.len() && end - at > 1 { end - 1 } else { end };
 }

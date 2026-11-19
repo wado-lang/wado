@@ -106,17 +106,23 @@ and the little-endian bytes the checkpoint stores, in linear memory. Each
 backend lays its copy out from those bytes. `PjrtBackend` uploads them as they
 are, and an f32 weight as bf16 where every value's low half is zero.
 `WebGpuBackend` builds its matrix layout, packed in a half where one holds every
-value, by reading values from the bytes. `Cpu` decodes them into a tensor. A
-float or bool weight reaches a device with no GC list on the way; WebGPU decodes
-a `u8` or `i64` one and keeps it as `keep` does.
+value, by reading values from the bytes. `Cpu` keeps the bytes, as a device
+keeps its copy, so a model's weights need not fit the GC heap beside what a
+pass computes. A reshape decodes nothing, a gather the rows it takes, and any
+other operation the whole weight, for as long as it reads it. A float or bool weight reaches a
+device with no GC list on the way; WebGPU decodes a `u8` or `i64` one and keeps
+it as `keep` does.
+
+A `Cpu` reads only the weights it keeps, as a device does, so a model's
+`Params` and the `compute` that reads them take the same `Cpu`.
 
 `conformance/large/` shows a checkpoint larger than the guest loading. It writes
 80 MiB of weights over two shards, a chain of permutations that move each
 element where no other order of them would. Under `--max-memory 32m` the chain
 loads onto `WebGpuBackend` and `PjrtBackend` and runs with every output in
-place. `Cpu`, which holds the weights whole, loads them from the same
-`FileSource` with no limit and runs out of heap under it. The runners' tests run
-it.
+place. `Cpu`, which keeps the weights whole in linear memory, loads them from
+the same `FileSource` with no limit and runs out of memory under it. The
+runners' tests run it.
 
 Two sources come with the runtime. `FileSource { dir }` reads the files of a
 directory, a range at a time. A `HashMap<String, ByteList>` holds each file
@@ -266,6 +272,11 @@ onnxruntime packs them. A block without a zero point is centered on
 `2^(bits-1)`. A gathered index past either end of the table, after one wrap
 from the end, gives a row of zeros, which onnxruntime gives as well.
 
+A product is as exact as its input's float, whatever `MatMulNBits`'s
+`accuracy_level` permits. At level 4 onnxruntime's CPU quantizes the input to
+int8, so the oracle runs a model without the attribute, as `tools/exact.mjs`
+writes it.
+
 No device unpacks a weight when it loads.
 
 - `Cpu` dequantizes one row of the weight at a time, rounded as the
@@ -345,8 +356,11 @@ Which experts a layer needs is known only once its router has run. The pass
 records a host step there: `Graph::fetched` names the values the host reads and
 the ones it gives back. `Programs::run` splits a recording at each host step
 into programs of its own. It runs a program, reads the values the step names,
-runs the step, and passes what the step gives to the programs after it. Only
-the pass's own region may hold a host step, not a branch or a loop.
+runs the step, and passes what the step gives to the programs after it. A loop
+or branch that holds a host step runs on the host instead. The host reads its
+count or predicate back, and runs each iteration or the branch it takes as
+programs split the same way. A loop or branch without a host step stays inside
+a program, so a device still runs it whole.
 
 So a pass waits for the host once a layer, which
 [WEP: Loam § The MVP Is Tier 1 Only](../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only)

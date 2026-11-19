@@ -199,10 +199,11 @@ pub struct ModuleSourceInterner {
     root_dir: Option<String>,
     /// Each path dependency's package root → its entry module.
     dependency_roots: hashmap::IndexMap<String, String>,
-    /// The root of each path dependency that a path reached before any
-    /// manifest declared it, by lib: the package keeps the identity its first
-    /// modules were given.
-    reached_first: hashmap::IndexMap<String, InternedStr>,
+    /// The package of each path dependency that already has an identity, by
+    /// lib: the entry's own package, reached back through a package it
+    /// reaches, or one a path reached before any manifest declared it. Its
+    /// modules keep that identity, so one file stays one module.
+    placed_libs: hashmap::IndexMap<String, PackageId>,
     /// Each local module the host has placed, and its package. A module in a
     /// path dependency's root is placed in that dependency.
     local_packages: hashmap::IndexMap<InternedStr, PackageId>,
@@ -232,7 +233,7 @@ impl ModuleSourceInterner {
             root_package: PackageId::Root,
             root_dir: None,
             dependency_roots: hashmap::IndexMap::default(),
-            reached_first: hashmap::IndexMap::default(),
+            placed_libs: hashmap::IndexMap::default(),
             local_packages: hashmap::IndexMap::default(),
             undeclared_packages: hashmap::IndexMap::default(),
             no_dependencies: DependencyIndex::default(),
@@ -264,14 +265,14 @@ impl ModuleSourceInterner {
     /// the root the host answers for it. A single-file dependency has no
     /// manifest, so it claims no root: the tree around it is not its package.
     pub fn bound_packages(&mut self, entry: &str, host: &impl PackageHost) {
-        let libs: Vec<String> = self.dependency_libs().map(str::to_string).collect();
-        self.bound_dependency_roots(libs, host);
         let ModuleDir { package, path } = self.dir_of(entry, host);
         self.build_root = match &package {
             Some(package) => climb(&path, &package.dir),
             None => path,
         };
         self.root_dir = package.map(|package| package.root);
+        let libs: Vec<String> = self.dependency_libs().map(str::to_string).collect();
+        self.bound_dependency_roots(libs, host);
     }
 
     /// Claim the root of each package among `libs` that has a manifest, and
@@ -284,8 +285,12 @@ impl ModuleSourceInterner {
                 && let Some(root) = self.root_of(&lib, host)
             {
                 let interned = self.intern(&root);
-                if self.undeclared_packages.contains_key(&interned) {
-                    self.reached_first.insert(lib.clone(), interned);
+                if self.root_dir.as_ref() == Some(&root) {
+                    self.placed_libs
+                        .insert(lib.clone(), self.root_package.clone());
+                } else if self.undeclared_packages.contains_key(&interned) {
+                    self.placed_libs
+                        .insert(lib.clone(), PackageId::Path(interned));
                 }
                 self.dependency_roots.insert(root, lib);
             }
@@ -423,13 +428,12 @@ impl ModuleSourceInterner {
     /// by [`Self::elect_package_root`] so one file reached two ways stays one
     /// module in one package.
     ///
-    /// A package a path reached first stays the [`PackageId::Path`] its first
-    /// modules were placed in, so each module of it is a placed local one.
+    /// A package with an identity already, in `placed_libs`, keeps it, so each
+    /// module of it is a placed local one.
     pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
         let name = self.name_of(path);
         let path = self.intern(path);
-        if let Some(root) = self.reached_first.get(pkg) {
-            let package = PackageId::Path(root.clone());
+        if let Some(package) = self.placed_libs.get(pkg).cloned() {
             self.local_packages.insert(path.clone(), package.clone());
             return ModuleSource::Local {
                 path,

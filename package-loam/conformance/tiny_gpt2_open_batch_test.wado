@@ -1,7 +1,7 @@
 //! The tiny GPT-2's step built with its batch left open: its empty cache takes
 //! the batch, and a step from it computes a position for each row.
 
-use { Cpu, Tensor } from "lib:loam";
+use { Cpu, Holds, Tensor } from "lib:loam";
 use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
     with {
         type: "onnx",
@@ -11,8 +11,9 @@ use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
 test "a step whose batch the graph leaves open starts from an empty cache of the batch asked for" {
     let mut cpu = Cpu {};
     let cache = step::Cache::empty(&mut cpu, 2);
-    assert cache.past_key_values_0_key.extents == [2, 4, 0, 8] as List<i32>;
+    assert cpu.extents_of(&cache.past_key_values_0_key) == [2, 4, 0, 8] as List<i32>;
 
+    let mut model = step::Model::new(step::Params::embedded(&mut cpu));
     let o = step::compute(
         &mut cpu,
         &Tensor::<i64, [step::BatchSize, step::InputIds1]> {
@@ -24,8 +25,8 @@ test "a step whose batch the graph leaves open starts from an empty cache of the
             extents: [2, 1],
         },
         &cache,
-        &mut step::Model::new(step::Params::embedded(&mut cpu)),
+        &mut model,
     );
     assert o.logits.extents[0..<2].to_list() == [2, 1] as List<i32>;
-    assert o.cache.past_key_values_4_value.extents == [2, 4, 1, 8] as List<i32>;
+    assert cpu.extents_of(&o.cache.past_key_values_4_value) == [2, 4, 1, 8] as List<i32>;
 }

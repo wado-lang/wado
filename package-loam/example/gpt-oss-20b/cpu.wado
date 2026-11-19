@@ -1,0 +1,26 @@
+//! gpt-oss-20b on `Cpu`: continues the prompt the arguments give, or with none
+//! checks the first tokens of each prompt `generate.json` records against
+//! onnxruntime.
+
+use { args, println, Environment, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { Cpu } from "lib:loam";
+use { Model, Tokenizer, checked } from "./model.wado";
+
+/// The bytes of experts the pools hold, of 12 GB in all.
+global BUDGET: i64 = 2_000_000_000;
+
+/// The tokens each prompt continues with: those a check compares, which Cpu,
+/// the slowest backend, holds to the first few onnxruntime picks.
+global STEPS: i32 = 8;
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let given = args();
+    if given.is_empty() {
+        checked(Cpu {}, BUDGET, STEPS);
+        return;
+    }
+    let mut model = Model::load(Cpu {}, BUDGET).unwrap();
+    let [picked, _] = model.continued(&Tokenizer::encode(&given.join(" ")), STEPS);
+    println(Tokenizer::decode(&picked));
+}

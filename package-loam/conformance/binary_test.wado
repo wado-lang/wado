@@ -28,11 +28,13 @@ test "Pow reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_pow/test_data_set_0/output_0.pb"),
     );
 
+    let mut cpu = Cpu {};
+    let mut model = Model::new(Params::embedded(&mut cpu));
     let got = compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<f32, [Axis00, Axis01, Axis02, Axis03]> { data: x, extents: x_extents },
         &Tensor::<f32, [Axis00, Axis01, Axis02, Axis03]> { data: y, extents: y_extents },
-        &mut Model::new(Params::embedded(&mut Cpu {})),
+        &mut model,
     );
 
     assert got.extents == want_extents;

@@ -52,8 +52,10 @@ fn last_rows(batch: i32, seq: i32) -> List<f32> {
 }
 
 fn run(batch: i32, seq: i32) -> Tensor<f32, [N, S, W1]> {
+    let mut cpu = Cpu {};
+    let mut model = Model::new(Params::embedded(&mut cpu));
     return compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<f32, [N, S, X2]> {
             data: X[0..<batch * seq * 4].to_list(),
             extents: [batch, seq, 4],
@@ -66,7 +68,7 @@ fn run(batch: i32, seq: i32) -> Tensor<f32, [N, S, W1]> {
             data: W,
             extents: [4, 3],
         },
-        &mut Model::new(Params::embedded(&mut Cpu {})),
+        &mut model,
     );
 }
 

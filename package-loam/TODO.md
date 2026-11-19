@@ -184,7 +184,10 @@ outside ONNX's default domain are among them, onnxruntime's:
 
 - `GroupQueryAttention`, without position ids, interleaved rotation, a
   quantized or windowed cache, a smooth softmax, the scores as an output,
-  query and key norm weights, or query lengths.
+  query and key norm weights, or query lengths. A `seqlens_k` computed at run
+  time, as from a mask's values, bounds each row's keys, which matches
+  onnxruntime for a mask padded on the right; a mask with a zero before a one
+  is held to nothing.
 - `MatMulNBits`, without `g_idx`, a prepacked weight, or zero points in the
   input's float.
 - `GatherBlockQuantized`, over a table of rank 2 gathered along its rows and
@@ -295,12 +298,14 @@ products take most of the device time (`benchmark/gemma3_270m/profile.wado`).
 A norm runs apart from the product it feeds. The `q4f16` export's products
 are slower still: each weight rounds to f16 through an emulated conversion.
 
-A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64` or `bool`, and every
-other element type stops the build naming it. So does a `CastLike`
+A tensor is held in `f32`, `f16`, `bf16`, `u8`, `i64`, `i32` or `bool`, and
+every other element type stops the build naming it. So does a `CastLike`
 of a value computed at run, since it converts only a tensor the build knows.
-Arithmetic in `double` and the integer types is a second instantiation of the
-same kernels. Wado has a primitive for nearly every ONNX element type, so what
-a step adds is kernels that compute in one, never the mapping.
+`i64` and `i32` compute `ReduceSum` and the binary arithmetic but `Pow`, and
+every other operator over them stops the build. Arithmetic in `double` and the
+other integer types is a second instantiation of the same kernels. Wado has a
+primitive for nearly every ONNX element type, so what a step adds is kernels
+that compute in one, never the mapping.
 
 A half graph computes at the precision its exporter chose, and a caller cannot
 keep a node's output in f32 instead. An exporter that keeps a softmax or a norm
@@ -370,16 +375,16 @@ first call.
 
 ### Experts held on demand
 
-- [ ] `decode` and `Requests` with fewer experts held than the layers route to.
-  Their steps run in a loop, and a host step is allowed only in the pass's own
-  region, so recording one traps. They run where the budget holds every
-  expert.
 - [ ] `conformance/held_experts.wado` on an input that is not ill-conditioned
   and that still reaches every product. Its second token moves by 1.7e-4 with
   the order a held pass sums in, so the device tests hold it to 4e-4 rather
   than to `LOAM_TOLERANCE`.
 
 ### Devices
+
+A `Cpu` keeps every weight it is given until it drops: `kept_weight` and `pool`
+only add to `Cpu.kept`. A model loaded again on the same `Cpu` holds its weights
+twice in linear memory.
 
 [Loam on TPU and WebGPU](./devices.md#known-gaps) lists the gaps of the device
 design.

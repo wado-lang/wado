@@ -1,0 +1,14 @@
+// A global initializer calling a function with `contract` clauses checks them
+// there, binding each argument ahead of the last as a call elsewhere does.
+
+fn span(lo: i32, hi: i32) -> i32
+    contract lo <= hi, "lo must not exceed hi"
+{
+    return hi - lo;
+}
+
+global WIDTH: i32 = span(builtin::black_box(3), 10);
+
+test {
+    assert WIDTH == 7;
+}

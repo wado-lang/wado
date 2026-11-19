@@ -16,7 +16,7 @@ use {
     axis_list,
     capacity_key,
     f32_literal,
-    float_literal,
+    number_literal,
     symbol_carriers,
     symbol_key,
 } from "./emit_symbols.wado";
@@ -513,11 +513,12 @@ fn emit_weights(
     let pools = if experts.groups.is_empty() {
         "[]";
     } else {
-        w.line(`let mut source = ${EMBEDDED_SOURCE}::new();`);
+        w.begin("let pools = HeldExperts::resident(expert_layouts(|at| Result::Ok(ExpertBytes::Held(match at");
         for let [at, vi] of pooled_initializers(graph, experts) {
-            w.line(wado`source["${at}"] = ${hosts[vi.name]}.stored_bytes();`);
+            w.line(`${at} => ${hosts[vi.name]}.stored_bytes(),`);
         }
-        w.line(`let pools = HeldExperts::resident(${BY_POSITION}).pools(backend, &source);`);
+        w.line("_ => unreachable(),");
+        w.end_with("))).unwrap()).pools(backend, &Unread {});");
         "pools";
     };
     emit_held_call(w, graph, experts, &hosts, false, pools);
@@ -542,12 +543,12 @@ fn pooled_initializers(graph: &Graph, experts: &ExpertPlan) -> List<[i32, ValueI
     return graph.initializers.into_iter().enumerate().filter(|p| experts.is_pooled(&p.1.name)).collect();
 }
 
-/// The pools' layouts where each initializer is a file named by its position.
-global BY_POSITION: String = "expert_layouts(|at| Result::Ok([`${at}`, 0])).unwrap()";
+/// The pools' layouts where the graph carries every pooled initializer.
+global CARRIED_LAYOUTS: String = "expert_layouts(|at| Result::Ok(ExpertBytes::Held(embedded_data(at)))).unwrap()";
 
 /// `expert_layouts`: each pool layout, every layer's expert weights where its
-/// argument places the initializer at each position, by its file and its
-/// first byte. The pools follow the held initializers and `kept` in `Params`.
+/// argument places the initializer at each position. The pools follow the
+/// held initializers and `kept` in `Params`.
 fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kept: &List<String>, experts: &ExpertPlan) {
     if experts.groups.is_empty() {
         return;
@@ -557,9 +558,9 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
     let mut layouts: List<String> = [];
     w.blank();
     w.line("/// Each layout of pools, every layer's expert weights where `placed` finds");
-    w.line("/// the initializer at each position: its file and its first byte.");
+    w.line("/// the initializer at each position.");
     w.begin(
-        "fn expert_layouts(placed: fn(i32) -> Result<[String, i32], LoadError> with _) -> Result<List<ExpertLayout>, LoadError> with _",
+        "fn expert_layouts(placed: fn(i32) -> Result<ExpertBytes, LoadError> with _) -> Result<List<ExpertLayout>, LoadError> with _",
     );
     for let group of &experts.groups {
         let mut layers: List<String> = [];
@@ -569,9 +570,8 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
                 let at = position(weight);
                 let extents = static_extents(&checked.shapes[*weight]).unwrap();
                 let slice: List<String> = extents[1..<extents.len()].into_iter().map(|e| `${e}`).collect();
-                w.line(`let placed_${at} = placed(${at})?;`);
                 stored.push(
-                    `StoredExperts { file: placed_${at}.0, start: placed_${at}.1, kind: ElementKind::${any_case(
+                    `StoredExperts { bytes: placed(${at})?, kind: ElementKind::${any_case(
                         &checked.primitives[*weight],
                     )}, extents: [${slice.join(", ")}] }`,
                 );
@@ -706,10 +706,14 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         let pools = if pooled {
             w.begin("let mut experts = HeldExperts::within(expert_layouts(|at| Result::Ok(match at");
             for let [at, vi] of pooled_initializers(graph, experts) {
-                w.line(`${at} => ${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)},`);
+                let bytes = match vi.data {
+                    Some(_) => `ExpertBytes::Held(${EMBEDDED_DATA}(${at}))`,
+                    None => `ExpertBytes::File(${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)})`,
+                };
+                w.line(`${at} => ${bytes},`);
             }
             w.line("_ => unreachable(),");
-            w.end_with("}))?, budget)?;");
+            w.end_with("))?, budget)?;");
             w.line("let pools = experts.pools(backend, source);");
             "pools";
         } else {
@@ -746,24 +750,20 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     }
     w.line("/// Its pools hold every expert.");
     embedded.emit_begin(w);
-    w.line(
-        `return Params::embedded_within(backend, &mut HeldExperts::resident(${BY_POSITION}), &embedded_experts());`,
-    );
+    w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}));`);
     w.end();
     w.blank();
-    w.line("/// The weights the graph carries, the experts as many as `experts` holds,");
-    w.line("/// read from `files`.");
+    w.line("/// The weights the graph carries, the experts as many as `experts` holds.");
     FnSpec::new("embedded_within")
         .add_param("backend", `&mut ${BACKEND_PARAM}`)
         .add_param(
             "experts",
             "&mut HeldExperts",
         )
-        .add_param("files", `&${EMBEDDED_SOURCE}`)
         .set_return_type(PARAMS_TYPE)
         .add_effect("_")
         .emit_begin(w);
-    w.line("let pools = experts.pools(backend, files);");
+    w.line("let pools = experts.pools(backend, &Unread {});");
     emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "pools");
     w.line("return weights;");
     w.end();
@@ -772,27 +772,17 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         w,
         "embedded",
         "the weights the graph carries",
-        EMBEDDED_SOURCE,
+        UNREAD,
         [],
         [
-            `let mut experts = HeldExperts::within(${BY_POSITION}, budget)?;`, "let source = embedded_experts();",
-            "let weights = Params::embedded_within(backend, &mut experts, &source);",
+            `let mut experts = HeldExperts::within(${CARRIED_LAYOUTS}, budget)?;`, "let source = Unread {};",
+            "let weights = Params::embedded_within(backend, &mut experts);",
         ],
     );
-    w.blank();
-    w.line("/// The expert weights the graph carries, each a file named by its position");
-    w.line("/// among the initializers.");
-    w.begin(`fn embedded_experts() -> ${EMBEDDED_SOURCE}`);
-    w.line(`let mut files = ${EMBEDDED_SOURCE}::new();`);
-    for let [at, _] of pooled_initializers(graph, experts) {
-        w.line(wado`files["${at}"] = ${EMBEDDED_DATA}(${at});`);
-    }
-    w.line("return files;");
-    w.end();
 }
 
-/// The source of the experts a graph carries.
-global EMBEDDED_SOURCE: String = "HeldFiles";
+/// The source of a model that reads nothing past what the graph carries.
+global UNREAD: String = "Unread";
 
 /// `Model::<name>`, over `source`, whose pools hold the experts within a
 /// budget: `params` it takes beside the backend and the budget, and `lines`
@@ -814,7 +804,7 @@ fn emit_model_constructor(
     }
     block.emit_begin(w);
     w.line(`/// A model of ${doc}, its pools holding as many experts as \`budget\` bytes`);
-    w.line("/// hold, and reading the others from the source as a pass picks them.");
+    w.line("/// hold, and filling a slot with another as a pass picks it.");
     let mut spec = FnSpec::new(name, Vis::Pub);
     spec.add_param("backend", `&mut ${BACKEND_PARAM}`);
     for let [ident, ty] of params {
@@ -2006,6 +1996,7 @@ fn any_case(primitive: &String) -> String {
         "bf16" => "BF16",
         "u8" => "U8",
         "i64" => "I64",
+        "i32" => "I32",
         "bool" => "Bool",
         _ => unreachable(),
     };
@@ -2791,8 +2782,7 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
         operands.push(exprs.reference(&node.inputs[i]));
     }
     operands.push(symbols.length_operand(&past.axes[2].extent.poly(), &q)?);
-    // A causal attention reads no padding, whose hidden score is infinite.
-    operands.push("null");
+    operands.push(reach_of_lengths(node, checked, exprs, symbols, &q)?);
     // The caches are read only where the attribute asks for rotation.
     for let index of [ROTARY_COS, ROTARY_SIN] {
         operands.push(if options.rotary { exprs.optional(node, index) } else { "null" });
@@ -2801,6 +2791,29 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     operands.push(exprs.optional(node, HEAD_SINK));
     operands.push(attention);
     return Result::Ok(`backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`);
+}
+
+/// The `reach` a `GroupQueryAttention` passes its composite: none where the
+/// build knows `seqlens_k`, which infer holds to every position, and otherwise
+/// each row's length one past it, as i64 over `[Slots]`, past which a key is
+/// padding.
+fn reach_of_lengths(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+    q: &Shape,
+) -> Result<String, EmitError> {
+    let lengths = node.inputs[5];
+    if checked.known.contains_key(lengths) {
+        return Result::Ok("null");
+    }
+    let axes = axis_list(&checked.shapes[lengths]);
+    let rows = `[${symbols.spell_extent(&q.axes[0].extent.poly())?}]`;
+    let wide = `backend.convert::<${checked.primitives[lengths]}, i64, [${axes}]>(${exprs.reference(&lengths)})`;
+    let flat = `backend.reshape::<i64, [${axes}], [Slots]>(&${wide}, ${rows})`;
+    let one = `full::<${BACKEND_PARAM}, i64, [Slots]>(backend, 1 as i64, ${rows})`;
+    return Result::Ok(`Option::Some(&backend.binary::<i64, [Slots]>(Binary::Add, &${flat}, &${one}))`);
 }
 
 /// An attention spelled in parts as the composite's call, computing what the
@@ -3189,7 +3202,7 @@ fn constant_elements(elements: &Elements, element: &String) -> String {
     return match *elements {
         Ints(v) => `${v}`,
         Floats(v) => {
-            let spelled: List<String> = v.into_iter().map(|x| float_literal(element, x)).collect();
+            let spelled: List<String> = v.into_iter().map(|x| number_literal(element, x)).collect();
             `[${spelled.join(", ")}]`;
         },
         // A mask is as large as the context it covers, so it is spelled as

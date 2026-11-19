@@ -117,7 +117,10 @@ impl Sampling {
     pub fn first_tokens<F: Float, Axes>(&self, logits: &Tensor<F, Axes>, at: i64) -> List<i64> {
         let mut cpu = Cpu {};
         let decoding = Decoding::new(&mut cpu, self, List::<bool>::filled(logits.extents[0], false), 1, [at]);
-        return picked(&mut cpu, &rows_of::<Cpu, F, Axes>(&mut cpu, logits), &decoding, &scalar(&mut cpu, 0 as i64)).data;
+        let uploaded = cpu.upload(logits);
+        let rows = rows_of::<Cpu, F, Axes>(&mut cpu, &uploaded);
+        let picks = picked(&mut cpu, &rows, &decoding, &scalar(&mut cpu, 0 as i64));
+        return cpu.download(&picks).data;
     }
 }
 

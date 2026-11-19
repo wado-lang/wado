@@ -50,9 +50,10 @@ test "the same module reproduces them for seven" {
 test "a sequence longer than the mask stops compute" {
     let ids = List::<i64>::filled(513, 0);
     let mask = List::<i64>::filled(513, 1);
-    let weights = gpt2::Params::load(&mut Cpu {}, &checkpoint()).unwrap();
+    let mut cpu = Cpu {};
+    let weights = gpt2::Params::load(&mut cpu, &checkpoint()).unwrap();
     gpt2::compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
             data: ids,
             extents: [1, 513],

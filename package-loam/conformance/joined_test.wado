@@ -17,8 +17,10 @@ test "the new position joins a past at its capacity" {
         data: List::<f32>::filled(16, 0.0),
         extents: [1, 2, 4, 2],
     };
+    let mut cpu = Cpu {};
+    let mut model = Model::new(Params::embedded(&mut cpu));
     let o = compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<f32, [Q0, Q1, Q2]> {
             data: [0.0, 0.0, 0.0, 0.0],
             extents: [1, 1, 4],
@@ -33,7 +35,7 @@ test "the new position joins a past at its capacity" {
         },
         &held_key,
         &held_value,
-        &mut Model::new(Params::embedded(&mut Cpu {})),
+        &mut model,
     );
     assert o.joined_key.extents == [1, 2, 5, 2] as List<i32>;
     assert [o.joined_key.data[8], o.joined_key.data[9], o.joined_key.data[18], o.joined_key.data[19]] == [

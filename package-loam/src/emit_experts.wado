@@ -52,16 +52,13 @@ internal struct ExpertPlan {
 impl ExpertPlan {
     /// The pools of `graph`, each slot marker named past every name the module
     /// binds and `axes`. A `QMoE` is pooled where each expert weight it reads
-    /// is an initializer nothing else reads, read from where the graph's other
-    /// weights are: a checkpoint where one holds some, the graph otherwise.
+    /// is an initializer nothing else reads, whether the graph carries it or a
+    /// checkpoint holds it.
     internal fn of(graph: &Graph, checked: &Checked, axes: &List<String>) -> ExpertPlan {
         let elsewhere = read_twice(graph, checked);
-        let loads = graph.initializers.into_iter().any(|vi| vi.data matches { None });
         let mut initializers = HashSet::<String>::new();
         for let vi of &graph.initializers {
-            if vi.data matches { None } == loads {
-                initializers.insert(vi.name);
-            }
+            initializers.insert(vi.name);
         }
         let mut plan = ExpertPlan {
             groups: [],

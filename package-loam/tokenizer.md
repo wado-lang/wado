@@ -52,8 +52,9 @@ interpret at run time:
 
 - A `pre_tokenizer` pattern is a matcher, so the run needs no regular
   expression engine. `ByteLevel` fixes GPT-2's pattern, so its matcher is
-  written once in the runtime. Unicode classes such as `\p{L}` come from
-  `core:icu`.
+  written once in the runtime. A `Split` is accepted only by o200k's pattern,
+  whose matcher is written by hand beside GPT-2's; any other pattern stops the
+  build. Unicode classes such as `\p{L}` come from `core:icu`.
 - The vocabulary and the merges are embedded as data in byte literals, as
   `Params::embedded` embeds a graph's weights. Each merge is resolved to ids at
   build time.
@@ -85,5 +86,8 @@ belongs where the model is trained.
   byte tokens, a `TemplateProcessing` that puts `<bos>` first, and the decoder
   that reverses them. Under it the decoder runs over added tokens too, so `▁▁`
   decodes as two spaces.
+- [x] gpt-oss's pipeline: a `Split` by o200k's pattern ahead of a `ByteLevel`
+  that applies none, and BPE that ignores merges, taking a piece the
+  vocabulary spells whole as that token.
 - [ ] Load time. Building the maps of Gemma's 262144 tokens and 514906 merges
   dominates the first call.

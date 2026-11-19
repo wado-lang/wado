@@ -8,7 +8,7 @@ use {
     zeroed_fields,
 } from "./fields.wado";
 use { Any, Recorder } from "./recorded.wado";
-use { Cpu, Holds, Tensor } from "./tensor.wado";
+use { Cpu, CpuTensor, Holds, Tensor } from "./tensor.wado";
 
 struct X {
 }
@@ -22,14 +22,14 @@ struct Pair<affine G: Holds> {
 
 fn pair() -> Pair<Cpu> {
     return Pair::<Cpu> {
-        a: Tensor {
+        a: CpuTensor::Value(Tensor {
             data: [1.5],
             extents: [1],
-        },
-        b: Tensor {
+        }),
+        b: CpuTensor::Value(Tensor {
             data: [1, 2, 3, 4, 5, 6],
             extents: [2, 3],
-        },
+        }),
     };
 }
 
@@ -42,14 +42,14 @@ test "erasing walks the fields in their order" {
 test "restoring builds the struct back from an offset" {
     let g = Cpu {};
     let mut held: List<Any<Cpu>> = [
-        Any::Bool(Tensor {
+        Any::Bool(CpuTensor::Value(Tensor {
             data: [true],
             extents: [1],
-        }),
+        })),
     ];
     held.extend(&erased_fields(&g, &pair()));
     let back: Pair<Cpu> = restored_fields(&g, &held, 1);
-    assert back.a.data == [1.5] && back.b.extents == [2, 3];
+    assert back.a.value().data == [1.5] && back.b.value().extents == [2, 3];
 }
 
 test "recording makes a parameter of each field's extents" {
@@ -69,7 +69,7 @@ fn round_trip<affine G: Graph>(g: &G, p: &Pair<G>) -> Pair<G> {
 }
 
 test "a caller generic over the backend" {
-    assert round_trip(&Cpu {}, &pair()).b.data == [1, 2, 3, 4, 5, 6];
+    assert round_trip(&Cpu {}, &pair()).b.value().data == [1, 2, 3, 4, 5, 6];
 }
 
 test "zeroing gives each field its own extents" {
@@ -77,7 +77,9 @@ test "zeroing gives each field its own extents" {
         [2],
         [1, 3],
     ]);
-    assert zeroed.a.data == [0.0, 0.0] && zeroed.b.data == [0, 0, 0] && zeroed.b.extents == [1, 3];
+    assert zeroed.a.value().data == [0.0, 0.0]
+        && zeroed.b.value().data == [0, 0, 0]
+        && zeroed.b.value().extents == [1, 3];
 }
 
 test "fitting cuts and grows each field along its own axes" {
@@ -90,8 +92,8 @@ test "fitting cuts and grows each field along its own axes" {
             [1, 2],
         ],
     ]);
-    assert fitted.a.data == [1.5, 0.0, 0.0];
-    assert fitted.b.data == [1, 2] && fitted.b.extents == [1, 2];
+    assert fitted.a.value().data == [1.5, 0.0, 0.0];
+    assert fitted.b.value().data == [1, 2] && fitted.b.value().extents == [1, 2];
 }
 
 #[expect_trap]
@@ -105,11 +107,11 @@ test "writing puts the rows of one into another, fitted to its extents" {
         [1],
         [3, 4],
     ]);
-    let at = Tensor::<i64, [Slots]> {
+    let at = CpuTensor::Value(Tensor::<i64, [Slots]> {
         data: [0],
         extents: [1],
-    };
+    });
     let written: Pair<Cpu> = written_fields(&mut g, &into, &pair(), &[0, 1], &at);
-    assert written.a.data == [1.5];
-    assert written.b.data == [1, 2, 3, 0, 4, 5, 6, 0, 0, 0, 0, 0];
+    assert written.a.value().data == [1.5];
+    assert written.b.value().data == [1, 2, 3, 0, 4, 5, 6, 0, 0, 0, 0, 0];
 }

@@ -1,5 +1,5 @@
-//! What `fp16.wado` and `q4.wado` share: what onnxruntime recorded of each
-//! prompt, and the verdict on what an export computes after it.
+//! What the examples checked against onnxruntime share: what it recorded of
+//! each prompt, and the verdict on what a model computes after it.
 
 use { eprintln, println, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
@@ -46,10 +46,14 @@ pub fn deviation<E: Element>(logits: &List<E>, onnxruntime: &LinearArray<f32>, p
     return largest;
 }
 
-/// Says whether `generated` are the tokens onnxruntime picks after `g`, and how
-/// far, `apart`, the logits it picked the first from are from onnxruntime's.
-pub fn reported(g: &Generated, generated: &List<i32>, apart: f32) with Stdout {
-    let verdict = if *generated == g.generated { "matches onnxruntime" } else { `onnxruntime picks ${g.generated:?}` };
+/// Says whether `generated` are the tokens onnxruntime picks first after `g`,
+/// and how far, `apart`, the logits it picked the first from are from
+/// onnxruntime's.
+pub fn reported(g: &Generated, generated: &List<i32>, apart: f32) with Stdout
+    contract generated.len() <= g.generated.len()
+{
+    let picked = g.generated[0..<generated.len()].to_list();
+    let verdict = if *generated == picked { "matches onnxruntime" } else { `onnxruntime picks ${picked:?}` };
     println(`${g.prompt:?} -> ${generated:?}: ${verdict}`);
     println(`  the first token's logits are within ${apart} of onnxruntime's`);
 }

@@ -2,7 +2,7 @@
 //! them.
 
 use { HashMap } from "core:collections";
-use { EmitError, Operands, Symbols, axis_list, f32_literal, float_literal } from "./emit_symbols.wado";
+use { EmitError, Operands, Symbols, axis_list, f32_literal, number_literal } from "./emit_symbols.wado";
 use { fill_of } from "./fold.wado";
 use {
     Elements,
@@ -168,7 +168,7 @@ internal fn built_call(
     // Stage 0 refuses every operator the graph lowers no other way.
     let unary = case_named::<UnaryOp>(&op).unwrap();
     if unary matches { Relu } {
-        let zero = `&full::<${BACKEND_PARAM}, ${element}, [${axes}]>(backend, ${float_literal(&element, 0.0)}, ${symbols.spell_shape(
+        let zero = `&full::<${BACKEND_PARAM}, ${element}, [${axes}]>(backend, ${number_literal(&element, 0.0)}, ${symbols.spell_shape(
             &out,
         )?})`;
         return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::Maximum, ${operand(0)}, ${zero})`);
@@ -274,7 +274,7 @@ impl Computed {
 /// The f32s `operand` refers to, of axes `shape`, times `factor`.
 fn scaled(operand: &String, shape: &Shape, factor: f32, symbols: &mut Symbols) -> Result<String, EmitError> {
     let axes = axis_list(shape);
-    let by = `&full::<${BACKEND_PARAM}, f32, [${axes}]>(backend, ${float_literal(&"f32", factor)}, ${symbols.spell_shape(
+    let by = `&full::<${BACKEND_PARAM}, f32, [${axes}]>(backend, ${f32_literal(factor)}, ${symbols.spell_shape(
         shape,
     )?})`;
     return Result::Ok(`backend.binary::<f32, [${axes}]>(Binary::Multiply, ${*operand}, ${by})`);
@@ -697,7 +697,7 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
     return Result::Ok(call);
 }
 
-/// `operand`, of `element`, a float, and axes `shape`, its padding along
+/// `operand`, of `element` and axes `shape`, its padding along
 /// `axis` read as `fill`, where a valid length enters that axis's extent.
 fn masked_along(
     operand: String,
@@ -713,7 +713,7 @@ fn masked_along(
     }
     let typed = `${*element}, [${axis_list(shape)}]`;
     return Result::Ok(
-        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, ${symbols.lengths_along(&extent, shape)?}, ${float_literal(
+        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, ${symbols.lengths_along(&extent, shape)?}, ${number_literal(
             element,
             fill,
         )})`,
@@ -876,7 +876,7 @@ fn ranked(node: &Node, checked: &Checked, call: String, symbols: &mut Symbols) -
 fn element_literal(element: &String, elements: &Elements) -> String {
     return match elements {
         Ints(v) => `${v[0]}`,
-        Floats(v) => float_literal(element, v[0]),
+        Floats(v) => number_literal(element, v[0]),
         Bools(v) => `${v[0]}`,
         // A tensor attribute holds numbers.
         Symbolic(_) => unreachable(),

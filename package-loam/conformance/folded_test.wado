@@ -8,13 +8,15 @@ use { Model, Params, X0, compute } from "./folded.onnxtext"
     };
 
 test "a folded scalar output comes back as a rank-0 tensor" {
+    let mut cpu = Cpu {};
+    let mut model = Model::new(Params::embedded(&mut cpu));
     let got: Tensor<f32, []> = compute(
-        &mut Cpu {},
+        &mut cpu,
         &Tensor::<f32, [X0]> {
             data: [1.0, 2.0],
             extents: [2],
         },
-        &mut Model::new(Params::embedded(&mut Cpu {})),
+        &mut model,
     );
     assert got.extents == [];
     assert got.data == [0.5];

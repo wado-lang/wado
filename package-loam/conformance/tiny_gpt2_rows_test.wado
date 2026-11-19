@@ -3,7 +3,7 @@
 //! which puts each row's padding between the rows while they are merged. Each
 //! row computes what it computes alone, at lengths shared or its own.
 
-use { Cpu, Slots, Tensor, capacity_of, resized } from "lib:loam";
+use { Cpu, CpuTensor, Holds, Slots, Tensor, capacity_of, resized } from "lib:loam";
 use { assert_close } from "./oracle.wado";
 use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
@@ -14,6 +14,7 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
 /// The logits for each of `rows` after the `past` positions `cache` holds in
 /// each, and the cache grown by theirs.
 fn run(
+    cpu: &mut Cpu,
     rows: List<List<i64>>,
     past: i32,
     cache: &merged::Cache<Cpu>,
@@ -25,7 +26,7 @@ fn run(
         ids.extend(row);
     }
     let o = merged::compute(
-        &mut Cpu {},
+        cpu,
         &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
             data: ids,
             extents: [rows.len(), s],
@@ -77,14 +78,14 @@ test "each row of a batch computes the logits it computes alone, its prompt and 
                 [steps[1][at - 1]],
             ];
         };
-        let [logits, grown] = run(rows, past, &both, &mut model);
+        let [logits, grown] = run(cpu, rows, past, &both, &mut model);
         for let r of 0..<rows.len() {
-            let [own, own_grown] = run([rows[r]], past, &alone[r], &mut model);
+            let [own, own_grown] = run(cpu, [rows[r]], past, &alone[r], &mut model);
             assert_close(&row_of(&logits, r), &own.data);
             alone[r] = own_grown;
         }
         past += rows[0].len();
-        assert grown.past_key_values_0_key.extents == [2, 4, capacity_of(past), 8] as List<i32>;
+        assert cpu.extents_of(&grown.past_key_values_0_key) == [2, 4, capacity_of(past), 8] as List<i32>;
         padded = padded || capacity_of(past) > past;
         both = grown;
     }
@@ -92,11 +93,11 @@ test "each row of a batch computes the logits it computes alone, its prompt and 
 }
 
 /// Each of `lengths` as a length of its row.
-fn each_row(lengths: &List<i32>) -> Tensor<i64, [Slots]> {
-    return Tensor {
+fn each_row(cpu: &mut Cpu, lengths: &List<i32>) -> CpuTensor<i64, [Slots]> {
+    return cpu.upload(&Tensor::<i64, [Slots]> {
         data: lengths.into_iter().map(|l| l as i64).collect(),
         extents: [lengths.len()],
-    };
+    });
 }
 
 /// `tokens`, a list per row each `width` long, padded with 0 past each row's.
@@ -110,19 +111,24 @@ fn padded_rows(tokens: &List<List<i64>>, width: i32) -> List<i64> {
 }
 
 /// `cache`, of two rows, each past held at `capacity` positions.
-fn held_at(cache: &merged::Cache<Cpu>, capacity: i32) -> merged::Cache<Cpu> {
+fn held_at(cpu: &mut Cpu, cache: &merged::Cache<Cpu>, capacity: i32) -> merged::Cache<Cpu> {
     return merged::Cache {
-        past_key_values_0_key: resized(&cache.past_key_values_0_key, [2, 4, capacity, 8]),
-        past_key_values_0_value: resized(&cache.past_key_values_0_value, [2, 4, capacity, 8]),
-        past_key_values_1_key: resized(&cache.past_key_values_1_key, [2, 4, capacity, 8]),
-        past_key_values_1_value: resized(&cache.past_key_values_1_value, [2, 4, capacity, 8]),
-        past_key_values_2_key: resized(&cache.past_key_values_2_key, [2, 4, capacity, 8]),
-        past_key_values_2_value: resized(&cache.past_key_values_2_value, [2, 4, capacity, 8]),
-        past_key_values_3_key: resized(&cache.past_key_values_3_key, [2, 4, capacity, 8]),
-        past_key_values_3_value: resized(&cache.past_key_values_3_value, [2, 4, capacity, 8]),
-        past_key_values_4_key: resized(&cache.past_key_values_4_key, [2, 4, capacity, 8]),
-        past_key_values_4_value: resized(&cache.past_key_values_4_value, [2, 4, capacity, 8]),
+        past_key_values_0_key: past_at(cpu, &cache.past_key_values_0_key, capacity),
+        past_key_values_0_value: past_at(cpu, &cache.past_key_values_0_value, capacity),
+        past_key_values_1_key: past_at(cpu, &cache.past_key_values_1_key, capacity),
+        past_key_values_1_value: past_at(cpu, &cache.past_key_values_1_value, capacity),
+        past_key_values_2_key: past_at(cpu, &cache.past_key_values_2_key, capacity),
+        past_key_values_2_value: past_at(cpu, &cache.past_key_values_2_value, capacity),
+        past_key_values_3_key: past_at(cpu, &cache.past_key_values_3_key, capacity),
+        past_key_values_3_value: past_at(cpu, &cache.past_key_values_3_value, capacity),
+        past_key_values_4_key: past_at(cpu, &cache.past_key_values_4_key, capacity),
+        past_key_values_4_value: past_at(cpu, &cache.past_key_values_4_value, capacity),
     };
+}
+
+/// One past of two rows, held at `capacity` positions.
+fn past_at<Axes>(cpu: &mut Cpu, past: &CpuTensor<f32, Axes>, capacity: i32) -> CpuTensor<f32, Axes> {
+    return cpu.upload(&resized(&cpu.download(past), [2, 4, capacity, 8]));
 }
 
 /// Position `p` of row `r` of `t`, of axes rows, positions and logits.
@@ -147,39 +153,46 @@ test "rows of their own lengths in one buffer each compute the logits they compu
     // Each row's prompt, padded to the longest, with no past.
     let mut lengths: List<i32> = prompts.into_iter().map(|p| p.len()).collect();
     let width = 5;
+    let ids = cpu.upload(&Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+        data: padded_rows(&prompts, width),
+        extents: [2, width],
+    });
+    let mask = cpu.upload(&Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+        data: padded_rows(&prompts.into_iter().map(|p| List::<i64>::filled(p.len(), 1)).collect(), width),
+        extents: [2, width],
+    });
+    let without_past = cpu.upload(&Tensor::<bool, [merged::UseCacheBranch0]> {
+        data: [false],
+        extents: [1],
+    });
+    let empty = merged::Cache::empty(cpu, 2);
+    let prompt_lengths = merged::Lengths {
+        dim_sequence_length: each_row(cpu, &lengths),
+        dim_past_sequence_length: each_row(cpu, &[0, 0]),
+    };
     let o = merged::build(
         cpu,
-        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
-            data: padded_rows(&prompts, width),
-            extents: [2, width],
-        },
-        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
-            data: padded_rows(&prompts.into_iter().map(|p| List::<i64>::filled(p.len(), 1)).collect(), width),
-            extents: [2, width],
-        },
-        &Tensor::<bool, [merged::UseCacheBranch0]> {
-            data: [false],
-            extents: [1],
-        },
-        &merged::Cache::empty(cpu, 2),
-        &merged::Lengths {
-            dim_sequence_length: each_row(&lengths),
-            dim_past_sequence_length: each_row(&[0, 0]),
-        },
+        &ids,
+        &mask,
+        &without_past,
+        &empty,
+        &prompt_lengths,
         &merged::Chosen { use_cache_branch: Option::Some(false) },
         &params,
     );
+    let prompt_logits = cpu.download(&o.logits);
     let mut alone: List<merged::Cache<Cpu>> = [];
     for let r of 0..<2 {
-        let [own, own_cache] = run([prompts[r]], 0, &merged::Cache::empty(cpu, 1), &mut model);
+        let empty_row = merged::Cache::empty(cpu, 1);
+        let [own, own_cache] = run(cpu, [prompts[r]], 0, &empty_row, &mut model);
         for let p of 0..<lengths[r] {
-            assert_close(&position_of(&o.logits, r, p), &position_of(&own, 0, p));
+            assert_close(&position_of(&prompt_logits, r, p), &position_of(&own, 0, p));
         }
         alone.push(own_cache);
     }
     // The steps write each row's token after its own past, in one buffer.
     let capacity = 8;
-    let mut both = held_at(&o.cache, capacity);
+    let mut both = held_at(cpu, &o.cache, capacity);
     for let at of 0..<steps[0].len() {
         let pasts = lengths;
         lengths = pasts.into_iter().map(|l| l + 1).collect();
@@ -187,31 +200,36 @@ test "rows of their own lengths in one buffer each compute the logits they compu
             [steps[0][at]],
             [steps[1][at]],
         ];
+        let step_ids = cpu.upload(&Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: [steps[0][at], steps[1][at]],
+            extents: [2, 1],
+        });
+        let step_mask = cpu.upload(&Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+            data: padded_rows(&lengths.into_iter().map(|l| List::<i64>::filled(l, 1)).collect(), capacity),
+            extents: [2, capacity],
+        });
+        let with_past = cpu.upload(&Tensor::<bool, [merged::UseCacheBranch0]> {
+            data: [true],
+            extents: [1],
+        });
+        let step_lengths = merged::Lengths {
+            dim_sequence_length: each_row(cpu, &[1, 1]),
+            dim_past_sequence_length: each_row(cpu, &pasts),
+        };
         let stepped = merged::build(
             cpu,
-            &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
-                data: [steps[0][at], steps[1][at]],
-                extents: [2, 1],
-            },
-            &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
-                data: padded_rows(&lengths.into_iter().map(|l| List::<i64>::filled(l, 1)).collect(), capacity),
-                extents: [2, capacity],
-            },
-            &Tensor::<bool, [merged::UseCacheBranch0]> {
-                data: [true],
-                extents: [1],
-            },
+            &step_ids,
+            &step_mask,
+            &with_past,
             &both,
-            &merged::Lengths {
-                dim_sequence_length: each_row(&[1, 1]),
-                dim_past_sequence_length: each_row(&pasts),
-            },
+            &step_lengths,
             &merged::Chosen { use_cache_branch: Option::Some(true) },
             &params,
         );
+        let step_logits = cpu.download(&stepped.logits);
         for let r of 0..<2 {
-            let [own, own_cache] = run([tokens[r]], pasts[r], &alone[r], &mut model);
-            assert_close(&position_of(&stepped.logits, r, 0), &own.data);
+            let [own, own_cache] = run(cpu, [tokens[r]], pasts[r], &alone[r], &mut model);
+            assert_close(&position_of(&step_logits, r, 0), &own.data);
             alone[r] = own_cache;
         }
         both = stepped.cache;

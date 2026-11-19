@@ -21,6 +21,7 @@ import assert from 'node:assert';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fields, message, text, varintField } from './protobuf.mjs';
 
 /** The output the appended nodes write: the next token, as an int64 `[1, 1]`. */
 export const NEXT = 'loam.next';
@@ -64,34 +65,6 @@ function opset(bytes) {
     if (domain === '' || domain === 'ai.onnx') return parts.find((p) => p.number === 2).value;
   }
   throw new Error('the model imports no default operator set');
-}
-
-/**
- * The top-level fields of the message `bytes`: a varint's value as a number,
- * a length-delimited one's as its bytes, and each field's bytes whole.
- */
-function fields(bytes) {
-  const out = [];
-  let at = 0;
-  while (at < bytes.length) {
-    const start = at;
-    let key;
-    let value;
-    [key, at] = readVarint(bytes, at);
-    const wire = key & 7;
-    if (wire === 0) {
-      [value, at] = readVarint(bytes, at);
-    } else if (wire === 2) {
-      let length;
-      [length, at] = readVarint(bytes, at);
-      value = bytes.subarray(at, at + length);
-      at += length;
-    } else {
-      throw new Error(`a field of wire type ${wire}`);
-    }
-    out.push({ number: key >> 3, value, raw: bytes.subarray(start, at) });
-  }
-  return out;
 }
 
 const n = (name) => `loam.pick.${name}`;
@@ -168,33 +141,6 @@ function intsAttr(name, values) {
   const INTS = 7;
   return message(5, Buffer.concat([text(1, name), ...values.map((v) => varintField(8, v)), varintField(20, INTS)]));
 }
-
-/** `value` as a protobuf varint, a negative one in 64-bit two's complement. */
-function varint(value) {
-  let v = BigInt.asUintN(64, BigInt(value));
-  const out = [];
-  while (v > 127n) {
-    out.push(Number(v & 127n) | 128);
-    v >>= 7n;
-  }
-  out.push(Number(v));
-  return out;
-}
-
-function readVarint(bytes, at) {
-  let value = 0;
-  let scale = 1;
-  for (;;) {
-    const b = bytes[at++];
-    value += (b & 127) * scale;
-    scale *= 128;
-    if (b < 128) return [value, at];
-  }
-}
-
-const varintField = (number, value) => Buffer.from([...varint(number * 8), ...varint(value)]);
-const message = (number, bytes) => Buffer.concat([Buffer.from([...varint(number * 8 + 2), ...varint(bytes.length)]), bytes]);
-const text = (number, s) => message(number, Buffer.from(s));
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [dir, name, form] = process.argv.slice(2);

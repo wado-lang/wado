@@ -1,0 +1,124 @@
+//! gpt-oss-20b as onnx-community's `q4f16` export stores it, as a library: its
+//! tokenizer, and the model that continues a prompt, its experts held within a
+//! budget and the others read from `build/` as a token routes to them.
+
+use { eprintln, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { Backend, FileSource, LoadError, Sampling, Tensor } from "lib:loam";
+use { deviation, recorded, reported } from "../checks.wado";
+/// gpt-oss's byte-level BPE, split by o200k's pattern.
+pub use {
+    Tokenizer,
+} from "https://huggingface.co/onnx-community/gpt-oss-20b-ONNX/resolve/0cb2c910963421423a6011d51dd0fef9d6e99f36/tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        integrity: "sha256:0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
+        generator: { module: "lib:loam" },
+    };
+/// The graph alone: its weights are external data in the seven
+/// `model_q4f16.onnx_data` files beside it.
+use gptoss from "https://huggingface.co/onnx-community/gpt-oss-20b-ONNX/resolve/0cb2c910963421423a6011d51dd0fef9d6e99f36/onnx/model_q4f16.onnx"
+    with {
+        type: "onnx",
+        integrity: "sha256:5834cda2698332a02b1451a2935d10e7484b871bfa30c3a8b62cb72cc74e6a83",
+        generator: {
+            module: "lib:loam",
+            options: {
+                // 55 MB of weights sit in the graph itself; read them in place.
+                embed: false,
+                dims: { batch_size: 1 },
+                // Only the last position ranks the next token.
+                last: { logits: 1 },
+                decode: { ids: "input_ids", mask: "attention_mask", logits: "logits" },
+            },
+        },
+    };
+
+/// The export's weights loaded from `build/` onto a backend, its pools holding
+/// as many experts as `budget` bytes hold.
+pub struct Model<affine Bk: Backend> {
+    on: Bk,
+    model: gptoss::Model<Bk, FileSource>,
+}
+
+impl<affine Bk: Backend> Model<Bk> {
+    pub fn load(backend: Bk, budget: i64) -> Result<Model<Bk>, LoadError> with (_, Preopens) {
+        let mut on = backend;
+        let model = gptoss::Model::load(&mut on, FileSource { dir: "build" }, budget)?;
+        return Ok(Model { on, model });
+    }
+
+    pub fn backend_mut(&mut self) -> &mut Bk {
+        return &mut self.on;
+    }
+
+    /// The `steps` tokens greedy decoding picks after `ids` from an empty
+    /// cache, and the logits it picks the first from: the prompt in one pass,
+    /// then every token after its first in one call.
+    pub fn continued(&mut self, ids: &List<i32>, steps: i32) -> [List<i32>, List<f16>] with (_, Preopens) {
+        let greedy = Sampling {};
+        let passed = gptoss::compute(
+            &mut self.on,
+            &token_ids(ids.into_iter().map(|id| id as i64).collect()),
+            &mask_of(ids.len()),
+            &gptoss::Cache::empty(&mut self.on),
+            steps - 1,
+            &mut self.model,
+        );
+        let first = greedy.first_tokens(&passed.logits, ids.len() as i64)[0];
+        if steps == 1 {
+            return [
+                [first as i32],
+                passed.logits.data,
+            ];
+        }
+        let decoded = gptoss::decode(
+            &mut self.on,
+            &token_ids([first]),
+            &mask_of(ids.len() + 1),
+            &passed.cache,
+            steps - 1,
+            &greedy,
+            &mut self.model,
+        );
+        let mut generated: List<i32> = [first as i32];
+        generated.extend(&decoded.tokens.data.into_iter().map(|id| id as i32).collect());
+        return [generated, passed.logits.data];
+    }
+}
+
+/// Continues each prompt `generate.json` records on `backend` by `steps`
+/// tokens, its pools holding as many experts as `budget` bytes hold, and says
+/// whether it picks the tokens onnxruntime picks.
+pub fn checked<affine Bk: Backend>(backend: Bk, budget: i64, steps: i32) with (_, Stdout, Stderr, Preopens) {
+    let Some([generate, expected]) = recorded("generate.json", "build/logits.bin") else {
+        return;
+    };
+    let mut loaded = match Model::load(backend, budget) {
+        Ok(loaded) => loaded,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    for let p of 0..<generate.len() {
+        let g = &generate[p];
+        let [generated, logits] = loaded.continued(&g.ids, i32::min(steps, g.generated.len()));
+        reported(g, &generated, deviation(&logits, &expected, p));
+    }
+}
+
+fn token_ids(data: List<i64>) -> Tensor<i64, [gptoss::BatchSize, gptoss::SequenceLength]> {
+    return Tensor {
+        data,
+        extents: [gptoss::BatchSize::EXTENT, data.len()],
+    };
+}
+
+/// A mask of `length` positions, all of them read.
+fn mask_of(length: i32) -> Tensor<i64, [gptoss::BatchSize, gptoss::TotalSequenceLength]> {
+    return Tensor {
+        data: List::<i64>::filled(length, 1),
+        extents: [gptoss::BatchSize::EXTENT, length],
+    };
+}
