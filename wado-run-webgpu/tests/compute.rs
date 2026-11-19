@@ -326,7 +326,7 @@ fn a_profile_path_that_cannot_be_written_fails_before_the_run() {
 const LOAM_TOLERANCE: f32 = 1e-4;
 
 /// Runs a Loam conformance program, each line of which ends in how far one
-/// output sits from the CPU's, and holds it to `lines` lines within tolerance.
+/// output sits from the CPU's, and holds every line within tolerance.
 fn assert_loam_conformance(program: &str) {
     let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../package-loam/conformance")
@@ -335,6 +335,7 @@ fn assert_loam_conformance(program: &str) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "stderr: {stderr}");
+    assert!(!stdout.trim().is_empty(), "a conformance program prints a line a case");
     for line in stdout.lines() {
         let deviation: f32 = line
             .rsplit(' ')

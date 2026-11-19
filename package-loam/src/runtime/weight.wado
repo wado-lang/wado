@@ -92,7 +92,9 @@ impl HostWeight {
     }
 
     /// Zeros of `kind` under `extents`.
-    pub fn zeroed(kind: ElementKind, extents: List<i32>) -> HostWeight {
+    pub fn zeroed(kind: ElementKind, extents: List<i32>) -> HostWeight
+        contract element_count(&extents) <= i32::MAX / stored_width(kind), "a weight's bytes fit linear memory"
+    {
         let bytes = LinearArray::<u8>::filled(element_count(&extents) * stored_width(kind), 0);
         return HostWeight { kind, extents, bytes };
     }

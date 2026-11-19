@@ -375,6 +375,10 @@ first call.
 
 ### Devices
 
+A `Cpu` keeps every weight it is given until it drops: `kept_weight` and `pool`
+only add to `Cpu.kept`. A model loaded again on the same `Cpu` holds its weights
+twice in linear memory.
+
 [Loam on TPU and WebGPU](./devices.md#known-gaps) lists the gaps of the device
 design.
 
