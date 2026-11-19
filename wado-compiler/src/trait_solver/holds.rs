@@ -449,7 +449,15 @@ impl Query<'_> {
             .filter(|&i| !from_pin[i])
             .chain((0..def.params.len()).filter(|&i| from_pin[i]))
             .collect();
-        for index in order {
+        // A pin may settle a parameter whose bounds were asked while it was
+        // unsettled, so a parameter is asked again at each binding it reaches.
+        let mut asked_at: Vec<Option<Option<Binding>>> = vec![None; def.params.len()];
+        while let Some(index) = order
+            .iter()
+            .copied()
+            .find(|&i| asked_at[i].as_ref() != Some(&bindings[i]))
+        {
+            asked_at[index] = Some(bindings[index].clone());
             let param = &def.params[index];
             // Only a pin on a member channel descends into the type's members;
             // any other associated type is no part of it.
@@ -1304,7 +1312,8 @@ fn match_target(
 /// may be, so a bound slot keeps the meet of both, and fails where none is.
 fn bind(slot: &mut Option<Binding>, binding: Binding) -> bool {
     let met = match (&*slot, binding) {
-        (None, binding) => Some(binding),
+        // An unsettled binding does not know yet whether it is one or a pack.
+        (None | Some(Binding::One(SolverType::Var)), binding) => Some(binding),
         (Some(Binding::One(bound)), Binding::One(ty)) => bound.meet(&ty).map(Binding::One),
         (Some(Binding::Pack(bound)), Binding::Pack(elems)) if bound.len() == elems.len() => bound
             .iter()

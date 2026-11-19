@@ -1,0 +1,83 @@
+// A pin may settle what an omitted type argument leaves open: the parameter
+// takes what the pin binds, and its bounds are asked again at that.
+
+trait Items with () {
+    type Items;
+}
+
+struct Foo {
+    x: i32,
+}
+
+impl Items for Foo {
+    type Items = [i32];
+}
+
+struct Two<A, T> {
+    a: A,
+    t: T,
+}
+
+trait Count with () {
+    fn count(&self) -> i32;
+}
+
+impl<A: Items<Items = [..P]>, ..P> Count for Two<A, [..P]> {
+    fn count(&self) -> i32 {
+        return 1;
+    }
+}
+
+test "a pack left open" {
+    let t: Two<Foo, [i32]> = { a: { x: 0 }, t: [3] };
+    assert t.count() == 1;
+    assert Two::count(&t) == 1;
+    assert Two::<Foo, _>::count(&t) == 1;
+}
+
+trait Alpha with () {}
+
+impl Alpha for i32 {}
+
+trait Source with () {
+    type Output;
+}
+
+struct Src<O> {
+    o: Option<O>,
+}
+
+impl<O> Source for Src<O> {
+    type Output = O;
+}
+
+struct Wrap<T, S> {
+    t: Option<T>,
+    s: S,
+}
+
+trait Made with () {
+    fn made() -> i32;
+}
+
+trait Taken with () {
+    fn made(&self) -> i32;
+}
+
+// `S = Src<bool>` pins `T` to `bool`, which is not `Alpha`.
+impl<T: Alpha, S: Source<Output = T>> Made for Wrap<T, S> {
+    fn made() -> i32 {
+        return 1;
+    }
+}
+
+impl<T> Taken for Wrap<T, Src<bool>> {
+    fn made(&self) -> i32 {
+        return 2;
+    }
+}
+
+test "a bound asked again once a pin settles its parameter" {
+    let w: Wrap<String, Src<bool>> = { t: null, s: { o: null } };
+    assert Wrap::<_, Src<bool>>::made(&w) == 2;
+}
