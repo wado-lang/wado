@@ -33,6 +33,7 @@ use super::call::{
 };
 use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::{InferCtx, infer_var_answers, unify};
+use super::infer_hole::DeclaredBound;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
@@ -1272,10 +1273,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Err(inherent) if !inherent.is_empty() => return false,
             Err(_) => {
                 let target = self.impl_target_of(base);
-                let Some(Ordered::One(Some(def))) =
+                let Some(Ordered::One(chosen)) =
                     self.order_for_call(&target, Some(base), method_name, required)
                 else {
                     return false;
+                };
+                // A derived impl meets every instance of its declaration, and
+                // the match built for it owes its bound.
+                let Some(def) = chosen else {
+                    return true;
                 };
                 // Only an impl keyed by the receiver's head writes what its
                 // target binds there; past a blanket the literals settle first.
@@ -1311,6 +1317,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// answered.
     pub(super) fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
         self.defer_impl_bounds(def, slots, slots, span, OwedBounds::Open);
+    }
+
+    /// Check that `receiver` derives the trait declaring `method_name` once
+    /// its variables are answered.
+    fn defer_derived_bound(&mut self, method_name: &str, receiver: TypeId, span: Span) {
+        let (item, ..) = self
+            .tysys
+            .auto_derive_by_method(method_name)
+            .expect("a derived match names its trait");
+        let decl = self
+            .tysys
+            .compiler_trait_def(item)
+            .expect("a compiler trait item names a declaration");
+        let bound = DeclaredBound {
+            trait_: self.tysys.compiler_trait(item).expect("its declaration exists"),
+            written: self.tysys.resolutions.defs().name(decl).to_string(),
+            each_element: false,
+        };
+        let witness = self.mint_infer_var();
+        self.chain_infer_var(witness, receiver);
+        self.attach_infer_var_bounds(witness, "Self".to_string(), vec![bound], span);
     }
 
     /// The bounds impl `def` places on `slots`, read where `space` binds its
@@ -2438,6 +2465,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_type_args,
             receiver_type_id,
             asked,
+            span,
         );
         // A named block declares the method, or its trait does, so it yields a
         // match; none means the block and the lowering disagree on the name.
@@ -2504,6 +2532,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
         asked: Option<&[TypeId]>,
+        span: Span,
     ) -> Vec<TraitMethodMatch> {
         let mut found = Vec::new();
         // An impl the order names at two levels of the chain is one block.
@@ -2520,13 +2549,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_type_id,
                     asked,
                 )),
+                // The order chose the derived impl, so its bound held, or is
+                // owed once the receiver's variables settle.
                 None => {
                     if let Some(recv_id) = receiver_type_id {
-                        found.extend(self.try_auto_derived_method_match(
+                        let derived = self.try_auto_derived_method_match(
                             method_name,
                             recv_id,
-                            DerivedAt::Instance,
-                        ));
+                            DerivedAt::Declaration,
+                        );
+                        if derived.is_some() && self.names_pending_var(recv_id) {
+                            self.defer_derived_bound(method_name, recv_id, span);
+                        }
+                        found.extend(derived);
                     }
                 }
             }
