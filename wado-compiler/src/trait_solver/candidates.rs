@@ -174,9 +174,9 @@ fn collect(
     let mut withheld: Vec<TraitDeclId> = Vec::new();
     let mut maybe_withheld: Vec<TraitDeclId> = Vec::new();
     let withhold = |verdict: Verdict<TraitDeclId>,
-                        unknown: Option<TraitDeclId>,
-                        withheld: &mut Vec<TraitDeclId>,
-                        maybe_withheld: &mut Vec<TraitDeclId>| match verdict {
+                    unknown: Option<TraitDeclId>,
+                    withheld: &mut Vec<TraitDeclId>,
+                    maybe_withheld: &mut Vec<TraitDeclId>| match verdict {
         Verdict::Holds(trait_) => withheld.push(trait_),
         Verdict::Unknown => maybe_withheld.extend(unknown),
         Verdict::Fails => {}

@@ -317,11 +317,7 @@ mod tests {
 
     #[test]
     fn a_candidate_outranking_at_every_instance_answers() {
-        let found = Build::new()
-            .concrete(TR, 0)
-            .blanket(TR, 0)
-            .unknown()
-            .done();
+        let found = Build::new().concrete(TR, 0).blanket(TR, 0).unknown().done();
         assert_eq!(rank_open(&found), Selection::One(0));
     }
 

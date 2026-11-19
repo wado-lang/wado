@@ -121,6 +121,60 @@ impl SolverType {
         self.mentions_var(&|_| true)
     }
 
+    /// Whether `self` is `other` once each variable of one is renamed to a
+    /// variable of the other, one to one. `renaming` holds the pairs already
+    /// fixed, so several types are compared under one renaming.
+    pub fn alike(&self, other: &Self, renaming: &mut Vec<(Var, Var)>) -> bool {
+        let each = |a: &[Self], b: &[Self], renaming: &mut Vec<(Var, Var)>| {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.alike(b, renaming))
+        };
+        match (self, other) {
+            (Self::Var(a), Self::Var(b)) => {
+                if let Some(pair) = renaming.iter().find(|(x, y)| x == a || y == b) {
+                    *pair == (*a, *b)
+                } else {
+                    renaming.push((*a, *b));
+                    true
+                }
+            }
+            (Self::Decl(a, x), Self::Decl(b, y)) => a == b && each(x, y, renaming),
+            (Self::Tuple(x), Self::Tuple(y)) => each(x, y, renaming),
+            (
+                Self::Ref {
+                    is_mut: a,
+                    inner: x,
+                },
+                Self::Ref {
+                    is_mut: b,
+                    inner: y,
+                },
+            ) => a == b && x.alike(y, renaming),
+            (
+                Self::Projection {
+                    base: x,
+                    trait_: a,
+                    assoc: p,
+                    args: xs,
+                },
+                Self::Projection {
+                    base: y,
+                    trait_: b,
+                    assoc: q,
+                    args: ys,
+                },
+            ) => a == b && p == q && x.alike(y, renaming) && each(xs, ys, renaming),
+            (Self::Param(_) | Self::Pack(_) | Self::AnyRow, _) => self == other,
+            (
+                Self::Var(_)
+                | Self::Decl(..)
+                | Self::Tuple(_)
+                | Self::Ref { .. }
+                | Self::Projection { .. },
+                _,
+            ) => false,
+        }
+    }
+
     /// Whether matching `self` against a type binds a parameter or pack
     /// satisfying `pred`. A projection binds none: its base settles only
     /// through another slot (`G` in `G::Of<E>`).

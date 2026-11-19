@@ -259,6 +259,21 @@ impl Query<'_> {
                 Verdict::Fails
             };
         }
+        // The same question at fresh variables: each step down mints new ones
+        // and asks it again, so descending decides nothing.
+        if self.asking.iter().any(|open| {
+            let mut renaming = Vec::new();
+            open.trait_ == trait_
+                && open.ty.alike(ty, &mut renaming)
+                && open.args.len() == args.len()
+                && open
+                    .args
+                    .iter()
+                    .zip(args)
+                    .all(|(a, b)| a.alike(b, &mut renaming))
+        }) {
+            return Verdict::Unknown;
+        }
         self.asking.push(Open {
             ty: ty.clone(),
             trait_,
@@ -1901,6 +1916,16 @@ mod tests {
             .impl_(generic(1, concrete(ALPHA, target)))
             .build();
         assert_eq!(verdict(&p, &pair(var(0), var(0)), ALPHA), Verdict::Fails);
+    }
+
+    /// `impl<T: Alpha> Alpha for List<T>` asks of `?0` what it asks of `T`,
+    /// at a fresh variable each step down.
+    #[test]
+    fn a_question_repeating_at_fresh_variables_is_not_yet_known() {
+        let p = Builder::default()
+            .bounded(ALPHA, list_of(SolverType::Param(0)), vec![ALPHA])
+            .build();
+        assert_eq!(verdict(&p, &var(0), ALPHA), Verdict::Unknown);
     }
 
     /// A bound refutes the impl at the only instance it applies at.

@@ -1,6 +1,7 @@
 // A closure body that reaches for a method on a parameter no argument has
-// answered yet. The type is still an inference variable, and the message names
-// the slot it stands for (`A`) rather than the variable's own identity.
+// answered yet. The type is still an inference variable, which several impls
+// may answer, so the call asks for an annotation. The message names the slot
+// the variable stands for (`A`) rather than the variable's own identity.
 
 struct Counter {
     v: i32,
@@ -18,4 +19,4 @@ test "an unanswered parameter is named by its slot" {
 }
 
 __DATA__
-{"test": {}, "compile_error": "no method 'len' found on type 'A'"}
+{"test": {}, "compile_error": "cannot infer `A` far enough to choose which `len` this calls; annotate it"}

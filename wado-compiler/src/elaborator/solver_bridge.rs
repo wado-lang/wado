@@ -15,10 +15,10 @@ use crate::tir::{EffectRef, ResolvedType, TypeId, TypeParamId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId,
     ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
-    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, answering_link,
+    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, answering_link,
     bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
-    holds_with_args, instance_candidates, mark_duplicates, owed, pair_comparisons, rank, rank_open, sourced,
-    written_comparison, written_over,
+    holds_with_args, instance_candidates, mark_duplicates, owed, pair_comparisons, rank, rank_open,
+    sourced, written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -160,6 +160,15 @@ enum Binder {
     /// A generic associated type's own parameter, by its identity: an impl
     /// may write it under a name of its own.
     Family(TypeId),
+}
+
+/// Whether a lowering hands the solver the elaborator's inference variables.
+/// Only a question whose answer is checked again once inference settles may
+/// ask with them.
+#[derive(Clone, Copy)]
+enum Variables {
+    Refused,
+    Asked,
 }
 
 /// The interning both directions share, so an impl lowered from its header
@@ -628,13 +637,24 @@ impl Lowering {
     }
 
     /// One resolved type as the solver reads it. `param` gives a rigid binder
-    /// its position.
+    /// its position. An inference variable is open.
     fn type_id(
         &self,
         table: &TypeTable,
         id: TypeId,
         param: &dyn Fn(Binder) -> Option<u32>,
     ) -> Result<SolverType, Unsaid> {
+        self.lower_type(table, id, param, Variables::Refused)
+    }
+
+    fn lower_type(
+        &self,
+        table: &TypeTable,
+        id: TypeId,
+        param: &dyn Fn(Binder) -> Option<u32>,
+        variables: Variables,
+    ) -> Result<SolverType, Unsaid> {
+        let lower = |a: TypeId| self.lower_type(table, a, param, variables);
         let decl = |key: DeclKey, args: Vec<SolverType>| {
             self.known_type(&key)
                 .map(|id| SolverType::Decl(id, args))
@@ -648,7 +668,7 @@ impl Lowering {
                 id, mapped_elem, ..
             } = table.get(a)
             else {
-                return self.type_id(table, a, param);
+                return lower(a);
             };
             let pack = placed(*id)?;
             match mapped_elem {
@@ -659,14 +679,14 @@ impl Lowering {
         let instance = |def: DefId, type_args: &[TypeId]| {
             decl(
                 DeclKey::Def(def),
-                said(type_args.iter().map(|&a| self.type_id(table, a, param)))?,
+                said(type_args.iter().map(|&a| lower(a)))?,
             )
         };
         match table.get(id) {
             ResolvedType::Primitive(p) => decl(DeclKey::Builtin(p.as_str().to_string()), vec![]),
             ResolvedType::BuiltinArray(elem) => decl(
                 DeclKey::Builtin(ARRAY_TYPE_NAME.to_string()),
-                vec![self.type_id(table, *elem, param)?],
+                vec![lower(*elem)?],
             ),
             // `()` is the unit declaration, not the empty tuple
             // (WEP 2026-09-01, "The candidates").
@@ -685,7 +705,7 @@ impl Lowering {
             } => {
                 if let Some(template) = table.template_shape(*shape) {
                     let fields = said(template.holes.iter().map(|hole| {
-                        let held = self.type_id(table, hole.ty, param)?;
+                        let held = lower(hole.ty)?;
                         Ok(if table.hole_held_by_ref(hole.ty) {
                             SolverType::Ref {
                                 is_mut: false,
@@ -704,7 +724,7 @@ impl Lowering {
                     table
                         .anon_struct_fields(*shape)
                         .iter()
-                        .map(|(_, ty)| self.type_id(table, *ty, param)),
+                        .map(|(_, ty)| lower(*ty)),
                 )?;
                 decl(DeclKey::AnonymousStruct, vec![SolverType::Tuple(fields)])
             }
@@ -717,7 +737,7 @@ impl Lowering {
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
                 is_mut: table.is_mut_ref(id),
-                inner: Box::new(self.type_id(table, *inner, param)?),
+                inner: Box::new(lower(*inner)?),
             }),
             ResolvedType::TypeParam { id, .. } => placed(*id).map(SolverType::Param),
             // Outside a tuple, a pack stands for one of its elements: a rigid
@@ -731,8 +751,8 @@ impl Lowering {
             ResolvedType::TypePack {
                 mapped_elem: Some(mapped),
                 ..
-            } => self.type_id(table, *mapped, param),
-            ResolvedType::PackElement { pack, .. } => self.type_id(table, *pack, param),
+            } => lower(*mapped),
+            ResolvedType::PackElement { pack, .. } => lower(*pack),
             ResolvedType::Function {
                 is_mut,
                 params,
@@ -743,7 +763,7 @@ impl Lowering {
                     params
                         .iter()
                         .chain(std::iter::once(return_type))
-                        .map(|&a| self.type_id(table, a, param)),
+                        .map(|&a| lower(a)),
                 )?;
                 Ok(self.fn_type(*is_mut, signature, self.effect_row(effects)))
             }
@@ -759,8 +779,8 @@ impl Lowering {
                 owning_trait,
                 ..
             } => {
-                let base = self.type_id(table, *param_id, param)?;
-                let args = said(args.iter().map(|&a| self.type_id(table, a, param)))?;
+                let base = lower(*param_id)?;
+                let args = said(args.iter().map(|&a| lower(a)))?;
                 let trait_ = self.known_trait(*owning_trait).ok_or(Unsaid::Unsayable)?;
                 Ok(SolverType::Projection {
                     base: Box::new(base),
@@ -774,7 +794,10 @@ impl Lowering {
             ResolvedType::AssocParam { .. } => param(Binder::Family(id))
                 .map(SolverType::Param)
                 .ok_or(Unsaid::Open),
-            ResolvedType::InferVar(_) => Err(Unsaid::Open),
+            ResolvedType::InferVar(var) => match variables {
+                Variables::Refused => Err(Unsaid::Open),
+                Variables::Asked => Ok(SolverType::Var(Var::Infer(var.0))),
+            },
             ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
         }
     }
@@ -2004,6 +2027,7 @@ impl SolverBridge {
         tysys: &TypeSystem,
         ctx: &scope::Scope,
         type_id: TypeId,
+        variables: Variables,
     ) -> Result<(Env, SolverType), Unsaid> {
         // Every parameter in scope takes a position, bounded or not: an
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
@@ -2096,7 +2120,9 @@ impl SolverBridge {
             }
             env.param_bounds.push(ids);
         }
-        let ty = self.lowering.type_id(&table, type_id, &placed)?;
+        let ty = self
+            .lowering
+            .lower_type(&table, type_id, &placed, variables)?;
         said(
             unstated
                 .into_iter()
@@ -2131,7 +2157,7 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Result<Question, Unsaid> {
-        let (env, ty) = self.env_for(tysys, ctx, type_id)?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id, Variables::Refused)?;
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return Err(Unsaid::Unsayable);
         }
@@ -2536,7 +2562,7 @@ impl SolverBridge {
             Some(def) => Some(self.lowering.known_trait(def)?),
             None => None,
         };
-        let (env, ty) = self.env_for(tysys, ctx, type_id).ok()?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id, Variables::Asked).ok()?;
         let ty = match through_ref {
             Some(is_mut) => SolverType::Ref {
                 is_mut,

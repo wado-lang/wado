@@ -4400,6 +4400,25 @@ pub(super) struct RequiredTrait {
     pub(super) display: String,
 }
 
+/// What `find_trait_method_for_type` found.
+pub(super) enum TraitLookup {
+    Found(Box<TraitMethodMatch>),
+    /// No impl answers the method.
+    Missing,
+    /// The lookup reported why it cannot answer, so the call reports nothing
+    /// more.
+    Reported,
+}
+
+impl TraitLookup {
+    pub(super) fn found(self) -> Option<TraitMethodMatch> {
+        match self {
+            Self::Found(found) => Some(*found),
+            Self::Missing | Self::Reported => None,
+        }
+    }
+}
+
 /// Result of finding a trait method for a type via `find_trait_method_for_type`.
 pub(super) struct TraitMethodMatch {
     /// The matched trait as a mangled method name embeds it: named by the

@@ -52,7 +52,7 @@ use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
 use crate::elaborator::solver_bridge::Ordered;
 use crate::elaborator::types::{
-    ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitMethodMatch,
+    ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitLookup, TraitMethodMatch,
 };
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::{FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
@@ -2381,7 +2381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // among one trait's argument lists. `None` from callers with no
         // argument list at hand.
         probe: Option<&mut ArgProbe<'_>>,
-    ) -> Option<TraitMethodMatch> {
+    ) -> TraitLookup {
         let receiver_display = type_key
             .display_name(self.tysys.resolutions.defs())
             .to_string();
@@ -2410,13 +2410,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impls
             }
             Some(Ordered::Undecided(_)) => {
+                let receiver = receiver_type_id.expect("the order answers a receiver it can say");
+                let receiver = self.tysys.type_table.borrow().name(receiver);
                 let _ = self.emit(TypeError::CannotInferType {
                     message: format!(
-                        "cannot infer `{receiver_display}` far enough to choose which `{method_name}` this calls; annotate it"
+                        "cannot infer `{receiver}` far enough to choose which `{method_name}` this calls; annotate it"
                     ),
                     span,
                 });
-                return None;
+                return TraitLookup::Reported;
             }
             Some(Ordered::Nothing) | None => &[],
         };
@@ -2476,7 +2478,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | None => {}
             Some(Ordered::Undecided(_)) => unreachable!("returned above"),
         }
-        self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)
+        match self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe) {
+            Some(found) => TraitLookup::Found(Box::new(found)),
+            None => TraitLookup::Missing,
+        }
     }
 
     /// The matches the named impls yield for `method_name`: read off each
@@ -3105,7 +3110,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.tysys,
             &self.annotate_ctx,
             self.frame_module(),
-            receiver_type_id?,
+            self.apply_infer_holes(receiver_type_id?),
             through_ref,
             method_name,
             required,
@@ -4100,8 +4105,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // built from it), so argument-directed selection applies here exactly
         // as on the plain method-call path.
         let mut probe = ArgProbe::new(&method_call.args, ctx, expected_type);
-        if method_info.is_none()
-            && let Some(trait_match) = self.find_trait_method_for_type(
+        if method_info.is_none() {
+            match self.find_trait_method_for_type(
                 &self.impl_target_of(output_base_type_id),
                 &method_call.method,
                 output_type_args.as_deref(),
@@ -4109,11 +4114,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_call.span,
                 None,
                 Some(&mut probe),
-            )
-        {
-            method_trait_name = Some(trait_match.trait_name);
-            method_info = Some(trait_match.method_info);
-            method_trait_impl_source = Some(trait_match.impl_module_source);
+            ) {
+                TraitLookup::Found(trait_match) => {
+                    method_trait_name = Some(trait_match.trait_name);
+                    method_info = Some(trait_match.method_info);
+                    method_trait_impl_source = Some(trait_match.impl_module_source);
+                }
+                TraitLookup::Missing => {}
+                TraitLookup::Reported => return Some(TypeTable::ERROR),
+            }
         }
 
         let MethodInfo {

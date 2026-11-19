@@ -38,7 +38,7 @@ use super::solver_bridge::Reach;
 use super::static_call::{ReceiverId, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::{NewtypePeel, OnBoundTrait, SelfBinding};
-use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
+use super::types::{FunctionContext, MethodInfo, MethodOwner, TraitLookup, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator, util};
 use crate::compiler_item::CompilerItem;
@@ -589,6 +589,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let subject_ref_kind = subject
             .and_then(|s| RefKind::from_resolved(&self.tysys.type_table.borrow().get(s).clone()));
+        // A lookup that reported why it cannot answer leaves the call nothing
+        // more to report.
+        let mut reported = false;
         if let Some(ref_kind) = subject_ref_kind
             && trait_answers_nearer(self, Some(ref_kind == RefKind::Mut))
         {
@@ -601,10 +604,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 required_trait,
                 Some(&mut probe),
             );
+            reported |= matches!(result, TraitLookup::Reported);
             // Only use ref-type impls that target a concrete container type
             // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
             // (e.g., impl Inspect for &T where the inner type is just a type param).
-            if let Some(trait_match) = result
+            if let Some(trait_match) = result.found()
                 && !trait_match.is_blanket_ref_impl
             {
                 let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
@@ -662,8 +666,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Fall back to base type trait methods
-        if method_info.is_none()
-            && let Some(trait_match) = self.find_trait_method_for_type(
+        let lookup = if method_info.is_none() && !reported {
+            self.find_trait_method_for_type(
                 &self.impl_target_of(base_type_id),
                 method_name,
                 receiver_type_args_for_trait.as_deref(),
@@ -672,7 +676,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 required_trait,
                 Some(&mut probe),
             )
-        {
+        } else {
+            TraitLookup::Missing
+        };
+        reported |= matches!(lookup, TraitLookup::Reported);
+        if let Some(trait_match) = lookup.found() {
             let mut info = trait_match.method_info;
             // A blanket answers a parameter's call only until the instance
             // names its type, where an impl written for that type outranks it.
@@ -789,9 +797,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = if let Some(info) = method_info {
             info
         } else {
-            if !self.report_unmet_impl_bound(receiver, span, |s, def| {
-                s.impl_offers_method(def, method_name, required_trait)
-            }) {
+            if !reported
+                && !self.report_unmet_impl_bound(receiver, span, |s, def| {
+                    s.impl_offers_method(def, method_name, required_trait)
+                })
+            {
                 let type_name = self.tysys.type_table.borrow().name(base_type_id);
                 let hint = [OnBoundTrait::Ord, OnBoundTrait::Hash]
                     .into_iter()
