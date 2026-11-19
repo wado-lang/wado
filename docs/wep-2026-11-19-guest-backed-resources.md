@@ -62,6 +62,17 @@ without a host implementation. A default is what answers when no handler is
 installed. Where there is a host, the host already answers then, so a body
 there would be a second answer.
 
+### A resource with no host is affine
+
+A resource without `#[cm(...)]` is affine, as the specification already states.
+It cannot be declared copyable, since `linearity` is a field of `#[cm(...)]`.
+Being affine is what gives a drop to the handler. A copyable handle a guest
+value backs is an extern handle, which already exists.
+
+It takes no part in `extends` either. An upcast copies the handle, which an
+affine one forbids, so `extends` already requires both sides to be extern
+handles ([Resource Inheritance](./spec-components.md#resource-inheritance)).
+
 ### A resource with no host does not cross a component boundary
 
 A resource without `#[cm(...)]` has no WIT name. An export whose signature
@@ -92,13 +103,6 @@ operations never test.
 - [ ] Reject an export signature mentioning a resource with no host
   implementation.
 - [ ] State the rules in `spec-components.md` and `spec-effects.md`.
-
-## Known gaps
-
-- A resource with no host implementation is affine. A copyable one cannot be
-  declared, since `linearity` is a field of `#[cm(...)]`.
-- `extends` and type patterns need `classes`, which only an extern handle
-  declares. A resource with no host implementation takes part in neither.
 
 ## Related WEPs
 
