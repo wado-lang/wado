@@ -286,7 +286,7 @@ impl Query<'_> {
         }
         // Where a rule holds at some instance of the variables, no answer
         // fails; where one fails at some instance, none holds.
-        let mut may_hold = ty.is_open() && is_opaque(ty);
+        let mut may_hold = is_opaque(ty);
         let mut may_fail = false;
         match withholds(program, trait_, ty) {
             Verdict::Holds(()) => return Verdict::Fails,
@@ -328,18 +328,13 @@ impl Query<'_> {
         if let SolverType::Param(index) | SolverType::Pack(index) = ty
             && let Some(bounds) = env.param_bounds.get(*index as usize)
         {
-            let bounds: Vec<ParamBound> = bounds
-                .iter()
-                .map(|bound| ParamBound {
+            let answered = any_of(bounds.iter().map(|bound| {
+                let bound = ParamBound {
                     trait_: bound.trait_,
                     args: bound.args.iter().map(|arg| self.normalized(arg)).collect(),
-                })
-                .collect();
-            let answered = any_of(
-                bounds
-                    .iter()
-                    .map(|bound| bound_answers(program, ty, bound, trait_, args)),
-            );
+                };
+                bound_answers(program, ty, &bound, trait_, args)
+            }));
             match answered {
                 Verdict::Holds(()) => return Verdict::Holds(Holds::default()),
                 Verdict::Unknown => *may_hold = true,
@@ -802,7 +797,7 @@ impl Query<'_> {
             .collect();
         let mut nested = Vec::new();
         // Neither side holds a variable, so the match binds none.
-        let mut closed = Unifier::new(u32::MAX);
+        let mut closed = Unifier::standalone();
         let matched = match projection_parts(&member, &met) {
             Some(parts) => parts.into_iter().all(|(ours, theirs)| {
                 match_target(ours, theirs, &mut slots, &mut nested, &mut closed)
@@ -1153,7 +1148,7 @@ pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverT
     };
     let mut bindings: Vec<Option<Binding>> = vec![None; source.params];
     let mut deferred = Vec::new();
-    let mut unifier = Unifier::new(0);
+    let mut unifier = Unifier::standalone();
     source.bounds.iter().all(|bound| {
         query
             .holds(ty, bound.trait_, &bound.args)
@@ -1208,7 +1203,7 @@ fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
 /// variable, or a projection off one. No rule refutes a trait of such a type,
 /// since `!` holds every trait.
 fn is_opaque(ty: &SolverType) -> bool {
-    matches!(ty, SolverType::Var(_) | SolverType::Projection { .. })
+    matches!(ty, SolverType::Var(_) | SolverType::Projection { .. }) && ty.is_open()
 }
 
 /// The base a newtype receiver inherits from, at the receiver's own type
@@ -1398,7 +1393,7 @@ pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
                 default,
                 &mut bindings,
                 &mut Vec::new(),
-                &mut Unifier::new(u32::MAX),
+                &mut Unifier::standalone(),
             ))
         },
     )
@@ -1482,6 +1477,22 @@ impl Unifier {
             depth,
             subst: Vec::new(),
             undecided: false,
+        }
+    }
+
+    /// One for a match no question runs, whose bindings nothing reads after it.
+    fn standalone() -> Self {
+        Self::new(u32::MAX)
+    }
+
+    /// What a match that `matched` says of the question's variables.
+    fn verdict(&self, matched: bool) -> Verdict<()> {
+        if !matched {
+            Verdict::Fails
+        } else if self.constrains() {
+            Verdict::Unknown
+        } else {
+            Verdict::Holds(())
         }
     }
 
@@ -1609,14 +1620,9 @@ impl Unifier {
 
 /// Whether each pair is one type at every instance of their variables.
 fn same(pairs: &[(SolverType, SolverType)]) -> Verdict<()> {
-    let mut unifier = Unifier::new(u32::MAX);
-    if !pairs.iter().all(|(a, b)| unifier.unify(a, b)) {
-        Verdict::Fails
-    } else if unifier.constrains() {
-        Verdict::Unknown
-    } else {
-        Verdict::Holds(())
-    }
+    let mut unifier = Unifier::standalone();
+    let matched = pairs.iter().all(|(a, b)| unifier.unify(a, b));
+    unifier.verdict(matched)
 }
 
 /// Holds where one of `verdicts` holds, fails where each fails.
@@ -1772,7 +1778,7 @@ fn has_projection(ty: &SolverType) -> bool {
 /// writing one reaches nothing here.
 fn reaches_target(def: &ImplDef, ty: &SolverType) -> Verdict<()> {
     let mut deferred = Vec::new();
-    let mut unifier = Unifier::new(u32::MAX);
+    let mut unifier = Unifier::standalone();
     let matched = match_target(
         &def.target,
         ty,
@@ -1780,13 +1786,7 @@ fn reaches_target(def: &ImplDef, ty: &SolverType) -> Verdict<()> {
         &mut deferred,
         &mut unifier,
     );
-    if !matched || !deferred.is_empty() {
-        Verdict::Fails
-    } else if unifier.constrains() {
-        Verdict::Unknown
-    } else {
-        Verdict::Holds(())
-    }
+    unifier.verdict(matched && deferred.is_empty())
 }
 
 #[cfg(test)]
