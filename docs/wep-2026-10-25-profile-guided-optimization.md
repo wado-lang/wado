@@ -338,7 +338,7 @@ judge included. A hot site in or under an unlikely region keeps it too: the
 branch into it is predicted not taken. They mirror LLVM's `hot-callsite-threshold`
 (3000) and `inline-cold-callsite-threshold` (45) beside its `inline-threshold`
 (225), but count statements as Wado's inliner does, so the benchmarks settle
-their defaults: 4 times the level's threshold at a hot site and a quarter of it
+their defaults: 5 times the level's threshold at a hot site and a quarter of it
 at a cold one. LLVM's ratios are about 13 and a fifth.
 
 The hot ratio was measured at 4, 8 and 16 on the fuel benchmarks against
@@ -346,7 +346,10 @@ The hot ratio was measured at 4, 8 and 16 on the fuel benchmarks against
 not what a huge function costs once compiled. At 8, `cbor_twitter`'s
 deserializer spliced its record decoders into one function and ran 58% longer
 by the wall clock for the same fuel, and `json_twitter`'s 29% longer. At 4 both
-ran within a few percent of `-f no-pgo`. The cold ratio was measured at a half
+ran within a few percent of `-f no-pgo`. Once a price counted what a round
+splices into the callee, 4 cost the cbor serialize rows 10% to 13% of fuel,
+since their drivers price 108 at a hot site against 96. At 5 both
+deserializers ran within 1.5% of the wall clock at 4 before. The cold ratio was measured at a half
 down to an eighth, and moved no fuel region. A quarter grew `gale_gen` least.
 `--optimize-predictable-branch-threshold` keeps LLVM's 99: at 90, 95 and 98 the
 geometric mean moved by under 0.03 points.
@@ -563,8 +566,8 @@ output at every level. It is a nightly campaign, not a gate.
 ### The lookahead at a hot site
 
 The table of what a round splices is built at the plain threshold. A hot
-site's price therefore counts a loopy callee that only a hot site would splice
-as a call, not as its size. A table per heat, charging each call at the cooler
+site's price therefore counts a callee that only a hot site would splice as a
+call, not as its size. A table per heat, charging each call at the cooler
 of its own heat and the pricing site's, closes that gap. It gained no
 benchmark.
 

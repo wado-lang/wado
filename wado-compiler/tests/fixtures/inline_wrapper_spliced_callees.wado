@@ -1,0 +1,41 @@
+// A wrapper is priced with the callees this round splices into it, not as the
+// calls it reads as: `scaled` and `offset` each fit the threshold and splice
+// into `combined`, which then holds both bodies, so its callers keep the call.
+
+fn scaled(a: i32, b: i32) -> i32 {
+    return (a * 3 + b * 5 - 7 ^ a) * (a - b * 11 + 13 ^ b);
+}
+
+fn offset(a: i32, b: i32) -> i32 {
+    return (a * 9 - b * 4 + 3 ^ b) * (b - a * 17 + 19 ^ a);
+}
+
+fn combined(a: i32, b: i32) -> i32 {
+    return scaled(a, b) ^ offset(a, b);
+}
+
+#[inline(never)]
+fn first(a: i32, b: i32) -> i32 {
+    return combined(a, b) + scaled(b, a);
+}
+
+#[inline(never)]
+fn second(a: i32, b: i32) -> i32 {
+    return combined(b, a) - offset(b, a);
+}
+
+export fn run() {
+    let a = builtin::black_box(3);
+    let b = builtin::black_box(4);
+    assert first(a, b) + second(a, b) != 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/inline"]},
+    "wir_scope": "inline_wrapper_spliced_callees.wado/first",
+    "wir_expect:O2": [
+        "combined\"(a, b)"
+    ]
+}

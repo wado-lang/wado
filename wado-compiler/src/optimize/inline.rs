@@ -2736,14 +2736,13 @@ fn inline_round(
     //
     // The two disagree on one shape: this admission test reads the gross price,
     // while `classify_callee` reads the price this table produces, so a driver
-    // that its own loopy callees push over the threshold is declined there and
+    // that its own callees push over the threshold is declined there and
     // charged to its callers here. Closing that takes a second lookahead level.
     //
-    // Only a callee carrying a loop is priced this way. A loop is what the model
-    // charges most to splice, being a region of its own in the caller. Pricing
-    // every inlinable callee by its whole body judges a driver by its
-    // post-inlining size against a threshold calibrated on as-written ones, and
-    // that suppresses inlining the CBOR serializers need.
+    // Every callee is priced this way, so a wrapper reads as the bodies it
+    // splices: priced as calls, `Cpu::held` spliced its two callees' 55 into
+    // each of 400 sites of a Loam program. The thresholds are calibrated on
+    // these prices, not on as-written ones.
     let exec = gate.exec().clone();
     let type_table: &TypeTable = &types;
     let functions = &project.functions;
@@ -2767,7 +2766,7 @@ fn inline_round(
         let Some(body) = func.body.as_ref() else {
             return 0;
         };
-        if !loopy[i] || splice_barred(&func, cycle_cuts, type_table).is_some() {
+        if splice_barred(&func, cycle_cuts, type_table).is_some() {
             return 0;
         }
         let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
@@ -2777,6 +2776,19 @@ fn inline_round(
             gross
         } else {
             0
+        }
+    });
+    // A call to a callee this pass splices reaches what that body reaches.
+    let round_safepoints: Vec<CallSafepoint> = exec.map_indices(functions.len(), |i| {
+        if spliced[i] == 0 {
+            return safepoint_calls[i];
+        }
+        let func = functions[i].borrow();
+        let body = func.body.as_ref().expect("a spliced callee has a body");
+        if has_safepoint(body, type_table, &cold_runs[i], &safepoint_calls, &scans[i].written) {
+            CallSafepoint::Always
+        } else {
+            CallSafepoint::Never
         }
     });
     let logging: Option<&InlineLog> = record.as_ref().map(|(log, _)| *log);
@@ -2824,7 +2836,7 @@ fn inline_round(
                 },
                 &foldable,
                 &loopy,
-                &safepoint_calls,
+                &round_safepoints,
                 &scans[i].written,
                 call_sites[i],
                 &spliced,
