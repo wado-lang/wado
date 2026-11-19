@@ -2028,9 +2028,10 @@ fn unpacked_dot<E: Float, R, Blocks, Z>(
     return s0 + s1 + (s2 + s3);
 }
 
-/// One row of a packed weight read a block at a time: the `1 << bits` values
-/// a block's values take, each rounded to `E` as `dequantized` rounds it and
-/// held as an f32, rounded once as the block is entered.
+/// One row of a packed weight read a block at a time, each value rounded to
+/// `E` as `dequantized` rounds it and held as an f32. Where rounding to `E`
+/// changes a value, the `1 << bits` values a block takes are rounded once as
+/// the block is entered.
 struct PackedRow<E, R, Blocks, Z> {
     packed: &List<u8>,
     scales: &Tensor<E, [R, Blocks]>,
