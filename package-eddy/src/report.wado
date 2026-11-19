@@ -16,7 +16,7 @@ use { Call } from "./agent.wado";
 use { ask_json, json_object, Credential, Usage } from "./anthropic.wado";
 use { git, try_git } from "./git.wado";
 use { Repro, Reviewed, Submission } from "./review.wado";
-use { checkout_at, reset_snapshot, tree_args, tree_git } from "./snapshot.wado";
+use { checkout_at, reset_snapshot, Worktree } from "./snapshot.wado";
 use { Ran, RunInput, Runner, Workspace, WriteInput, RUN_TIMEOUT } from "./tools.wado";
 
 global REPORT: String = #"You prepare the findings of a code review for reporting. You do not judge, reword or drop a finding.
@@ -235,12 +235,13 @@ fn patch_of(w: &Workspace, commit: &String, paths: &List<String>) -> Result<Stri
     // an ignored one only when forced in.
     let mut add = ["add", "--force", "--intent-to-add", "--"] as List<String>;
     add.extend(&inside);
-    if try_git(tree_args(&w.repo, &w.root, add)) matches { None } {
+    let tree = Worktree::of(&w.repo, &w.root);
+    if try_git(tree.args(add)) matches { None } {
         return Err("a file of the reproduction is not in the tree");
     }
     let mut diff = ["diff", "--binary", *commit, "--"] as List<String>;
     diff.extend(&inside);
-    let patch = tree_git(&w.repo, &w.root, diff);
+    let patch = tree.git(diff);
     if patch.is_empty() {
         return Err("the files of the reproduction do not differ from the reviewed commit");
     }
@@ -258,7 +259,7 @@ fn apply(w: &Workspace, patch: &String) -> Result<(), String> with (Preopens, Pr
     let name = `${fs::file_name(&w.root).unwrap()}.patch`;
     let path = `${w.root}.patch`;
     fs::write(&path, patch).map_err(|e| `${e}`)?;
-    let applied = try_git(tree_args(&w.repo, &w.root, ["apply", `../${name}`]));
+    let applied = try_git(Worktree::of(&w.repo, &w.root).args(["apply", `../${name}`]));
     fs::remove_file(&path).map_err(|e| `${e}`)?;
     return match applied {
         Some(_) => Ok(()),
@@ -382,7 +383,7 @@ test "a reproduction's files leave the tree as a patch that applies to a clean o
     git(["-C", repo, "add", "--all"]);
     git(["-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "--message", "base"]);
     let commit = git(["-C", repo, "rev-parse", "HEAD"]).trim().to_string();
-    let root = checkout_at(&repo, &"tree", &commit);
+    let root = checkout_at(&repo, &"tree", &commit).root;
     let w = Workspace { root, repo, runner: Some(Runner {
         target_dir: "build/target",
         cargo_home: "",
