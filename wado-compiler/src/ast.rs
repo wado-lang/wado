@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::defs::DefId;
 use crate::escape::escape_string;
 use crate::hashmap::IndexMap;
-use crate::lexer::WILDCARD;
+use crate::lexer::{LexError, WILDCARD};
 use crate::name::{UNIT_TYPE_NAME, repeated_element};
 use crate::token::{Delimiter, Quote, Span};
 
@@ -254,7 +254,7 @@ pub struct Module {
     contextual_keywords: Vec<Span>,
     /// [`crate::lexer::LexResult::invalid_literals`], which keep the analysis
     /// from calling the module complete.
-    invalid_literals: Vec<crate::lexer::LexError>,
+    invalid_literals: Vec<LexError>,
 }
 
 /// Inner attribute like `#![no_prelude]`, `#![wasm_module("mem")]`, or
@@ -347,11 +347,11 @@ impl Module {
         }
     }
 
-    pub fn invalid_literals(&self) -> &[crate::lexer::LexError] {
+    pub fn invalid_literals(&self) -> &[LexError] {
         &self.invalid_literals
     }
 
-    pub(crate) fn set_invalid_literals(&mut self, errors: Vec<crate::lexer::LexError>) {
+    pub(crate) fn set_invalid_literals(&mut self, errors: Vec<LexError>) {
         self.invalid_literals = errors;
     }
 
@@ -365,9 +365,10 @@ impl Module {
         &self.contextual_keywords
     }
 
-    /// True if parsing recovered from one or more syntax errors.
+    /// True if parsing recovered from one or more syntax errors, or the source
+    /// holds a literal whose text denotes no value.
     pub fn has_syntax_errors(&self) -> bool {
-        self.has_syntax_errors
+        self.has_syntax_errors || !self.invalid_literals.is_empty()
     }
 
     /// The [`AstIdSpace`] this module's ids live in.

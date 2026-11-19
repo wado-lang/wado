@@ -1254,8 +1254,11 @@ fn distribute_contested_ends(arms: &List<LexerAlternative>, scope: &SpliceScope)
             out.extend(&distribute_contested_ends(&split, scope));
         }
     }
+    assert out.len() <= MAX_DISTRIBUTED_ARMS, "a group's contested ends must distribute into a bounded number of arms";
     return out;
 }
+
+global MAX_DISTRIBUTED_ARMS: i32 = 4096;
 
 /// The elements `elem` stands for in its sequence, when a contested alternation
 /// sits at its end: a single alternative's own, or a rule body as a group.

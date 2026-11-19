@@ -1,0 +1,15 @@
+// A parse error stops the load, but the bad escapes lexed before it are
+// reported with it.
+export fn run() {
+    let a = "\q";
+}
+
+fn broken(
+
+__DATA__
+{
+    "compile_error": ":4:13: lexer error: invalid escape sequence: \\q",
+    "compile_errors_contains": [
+        "parse error:"
+    ]
+}

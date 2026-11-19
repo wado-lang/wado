@@ -1719,7 +1719,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     let no_syntax_errors = load_result
         .modules
         .values()
-        .all(|m| !m.has_syntax_errors() && m.invalid_literals().is_empty());
+        .all(|m| !m.has_syntax_errors());
 
     // Source-level liveness was computed inside `build_tir_from_state`
     // (between `annotate_bodies` and `reify`, so reify can gate on it). Move

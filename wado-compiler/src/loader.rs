@@ -1574,17 +1574,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
         };
-        self.report_invalid_literals(&entry_ast, &tentative_entry_source);
+        self.report_invalid_literals(entry_ast.invalid_literals(), &tentative_entry_source);
         self.load_all_inner(entry_ast, tentative_entry_source).await
     }
 
-    /// Report `ast`'s invalid literals as it joins the load, ahead of whatever
-    /// a later step fails on. They reach the host uncounted, since the
-    /// analysis runs on past them and bails at its logger's first error; the
-    /// module is never complete.
-    fn report_invalid_literals(&self, ast: &Module, module_source: &ModuleSource) {
+    /// Report a module's invalid literals as it joins the load, or as its parse
+    /// fails, ahead of whatever a later step fails on. They reach the host
+    /// uncounted, since the analysis runs on past them and bails at its
+    /// logger's first error; the module is never complete.
+    fn report_invalid_literals(&self, invalid_literals: &[LexError], module_source: &ModuleSource) {
         let file = module_source.source_path();
-        for e in ast.invalid_literals() {
+        for e in invalid_literals {
             self.host.emit_diagnostic(e.diagnostic(Some(&file)));
         }
     }
@@ -1709,7 +1709,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     self.parse_source_with(&source, &module_source, skip_generated_bodies)?
                 }
             };
-            self.report_invalid_literals(&ast, &module_source);
+            self.report_invalid_literals(ast.invalid_literals(), &module_source);
 
             // Collect its imports (before bind)
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
@@ -2502,6 +2502,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // as a load error so compilation never proceeds on a partial AST.
         let mut ast = parser.parse();
         if let Some(e) = parser.take_errors().first() {
+            self.report_invalid_literals(&invalid_literals, module_source);
             return Err(LoadError::from_parse_error(e, module_source.clone()));
         }
         ast.set_invalid_literals(invalid_literals);

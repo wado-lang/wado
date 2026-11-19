@@ -599,28 +599,15 @@ impl<'a> Lexer<'a> {
             );
         };
 
+        if let Some(kind) = self.lex_literal(|lexer, quote| Some(lexer.lex_template_string(quote))) {
+            return Token::new(kind, self.span_from(start, start_line, start_column));
+        }
         let kind = match ch {
-            // `b"..."` / `b'x'` — before the identifier rule so `b` is not an ident.
-            'b' if self.peek_second() == Some('"') => self.lex_byte_string(Quote::Cooked),
-            'b' if let Some((hashes, Delimiter::Quote)) = self.hash_run_then_delimiter(1) => {
-                self.lex_byte_string(Quote::Raw { hashes })
-            }
-            'b' if self.peek_second() == Some('\'') => self.lex_byte_char(),
-
             // Identifiers and keywords
             c if is_ident_start(c) => self.lex_ident_or_keyword(),
 
             // Numbers
             '0'..='9' => self.lex_number(),
-
-            // Strings
-            '"' => self.lex_string(Quote::Cooked),
-
-            // Character literals
-            '\'' => self.lex_char(),
-
-            // Template strings
-            '`' => self.lex_template_string(Quote::Cooked),
 
             // Punctuation and operators
             '(' => {
@@ -843,16 +830,10 @@ impl<'a> Lexer<'a> {
                     _ => TokenKind::Ampersand,
                 }
             }
-            '#' => match self.hash_run_then_delimiter(0) {
-                Some((hashes, Delimiter::Backtick)) => {
-                    self.lex_template_string(Quote::Raw { hashes })
-                }
-                Some((hashes, Delimiter::Quote)) => self.lex_string(Quote::Raw { hashes }),
-                None => {
-                    self.advance();
-                    TokenKind::Hash
-                }
-            },
+            '#' => {
+                self.advance();
+                TokenKind::Hash
+            }
 
             _ => {
                 // Unrecognised character: consume it, record an error, and
@@ -1618,6 +1599,15 @@ impl<'a> Lexer<'a> {
                 }
                 continue;
             }
+            // A word is read whole, so a `b` inside it opens no byte literal.
+            if scan == Scan::Code && self.peek_char().is_some_and(is_ident_continue) {
+                let word_start = self.pos;
+                self.advance_while(is_ident_continue);
+                for ch in self.input[word_start..self.pos].chars() {
+                    push(&mut expr, &mut format, ch);
+                }
+                continue;
+            }
             let ch = self.advance().expect("the cursor is on a character");
             push(&mut expr, &mut format, ch);
 
@@ -1703,22 +1693,37 @@ impl<'a> Lexer<'a> {
             lexer.template_depth -= 1;
             Some(kind)
         };
-        let kind = match self.peek_char()? {
-            '"' => self.lex_string(Quote::Cooked),
-            '\'' => self.lex_char(),
-            '`' => template(self, Quote::Cooked)?,
-            '#' => match self.hash_run_then_delimiter(0)? {
-                (hashes, Delimiter::Backtick) => template(self, Quote::Raw { hashes })?,
-                (hashes, Delimiter::Quote) => self.lex_string(Quote::Raw { hashes }),
-            },
-            _ => return None,
-        };
+        let kind = self.lex_literal(template)?;
         let span = self.span_from(open.offset, open.line, open.column);
         self.check_literal(errors, &kind, span);
         // The parser lexes the hole's source again, and reports its errors
         // then. An invalid literal stays, since that lex does not report it.
         self.errors.truncate(errors);
         Some(&self.input[before..self.pos])
+    }
+
+    /// Lex the literal starting at the cursor, if one does. `template` lexes a
+    /// template string, or declines to, leaving the cursor where it was.
+    fn lex_literal(
+        &mut self,
+        template: impl FnOnce(&mut Self, Quote) -> Option<TokenKind>,
+    ) -> Option<TokenKind> {
+        match self.peek_char()? {
+            // Before any identifier rule, so the `b` is no identifier.
+            'b' if self.peek_second() == Some('"') => Some(self.lex_byte_string(Quote::Cooked)),
+            'b' if let Some((hashes, Delimiter::Quote)) = self.hash_run_then_delimiter(1) => {
+                Some(self.lex_byte_string(Quote::Raw { hashes }))
+            }
+            'b' if self.peek_second() == Some('\'') => Some(self.lex_byte_char()),
+            '"' => Some(self.lex_string(Quote::Cooked)),
+            '\'' => Some(self.lex_char()),
+            '`' => template(self, Quote::Cooked),
+            '#' => match self.hash_run_then_delimiter(0)? {
+                (hashes, Delimiter::Backtick) => template(self, Quote::Raw { hashes }),
+                (hashes, Delimiter::Quote) => Some(self.lex_string(Quote::Raw { hashes })),
+            },
+            _ => None,
+        }
     }
 
     fn lex_char(&mut self) -> TokenKind {
@@ -2244,6 +2249,11 @@ test data";
         assert!(r.errors.is_empty(), "{:?}", r.errors);
         let columns: Vec<usize> = r.invalid_literals.iter().map(|e| e.span.column).collect();
         assert_eq!(columns, [1, 6, 21, 26, 35, 51], "{:?}", r.invalid_literals);
+
+        let hole = lex(r##"`${b"é" + b'\u{41}' + ab"ok" + b#"é"#}`"##);
+        assert!(hole.errors.is_empty(), "{:?}", hole.errors);
+        let columns: Vec<usize> = hole.invalid_literals.iter().map(|e| e.span.column).collect();
+        assert_eq!(columns, [4, 11, 32], "{:?}", hole.invalid_literals);
 
         let unterminated = lex(r#""\q"#);
         assert!(unterminated.invalid_literals.is_empty());
