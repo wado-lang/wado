@@ -2799,10 +2799,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|(_, name)| name)
                     .collect();
                 if !names.is_empty() {
-                    let message = TypeError::cannot_infer_message(
+                    let message = TypeError::receiver_args_uninferred_message(
                         &names,
-                        &format!("`{}::{}`", head.name, static_call.method),
-                        &format!("`{}::<...>::{}()`", head.name, static_call.method),
+                        &head.name,
+                        &static_call.method,
                     );
                     if !self.defers_uninferred(&args, &vars, expected_type) {
                         let _ = self.emit(TypeError::CannotInferType {

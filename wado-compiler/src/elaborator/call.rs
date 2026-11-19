@@ -4032,12 +4032,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if names.is_empty() {
             return;
         }
-        let _ = self.emit(TypeError::cannot_infer(
-            &names,
-            &format!("`{prefix}::{suffix}`"),
-            &format!("`{prefix}::<...>::{suffix}()`"),
+        let _ = self.emit(TypeError::CannotInferType {
+            message: TypeError::receiver_args_uninferred_message(&names, &prefix, suffix),
             span,
-        ));
+        });
     }
 
     /// Substitute a declared default (`fn f<T = Fallback>`) into any dense
@@ -5726,12 +5724,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|&param| self.tysys.type_id_to_string(param))
                 .collect();
-            let _ = self.emit(TypeError::cannot_infer(
-                &names,
-                &format!("`{prefix}::{method}`"),
-                &format!("`{prefix}::<...>::{method}()`"),
+            let _ = self.emit(TypeError::CannotInferType {
+                message: TypeError::receiver_args_uninferred_message(&names, &prefix, method),
                 span,
-            ));
+            });
             return Some(TypeTable::ERROR);
         };
         // The blanket would key on the argument-less head, which carries no

@@ -3952,21 +3952,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         key: Option<TypeId>,
     ) -> TypeId {
-        let (Some(key), Some(trait_)) = (key, self.tysys.compiler_trait_def(item)) else {
+        let Some(key) = key else {
             return container;
         };
         if !self.type_has_infer_hole(container) {
             return container;
         }
-        let required = RequiredTrait {
-            decl: Resolution::Def(trait_),
-            args: Some(vec![key]),
-            display: self
-                .tysys
-                .type_table
-                .borrow()
-                .compiler_trait_name(item)
-                .to_string(),
+        let Some(required) = self.subscript_trait(item, key) else {
+            return container;
         };
         let target = self.impl_target_of(container);
         let Some(Ordered::One(Some(def))) =
@@ -3985,6 +3978,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.solve_infer_holes_against(index_type, key);
         self.apply_infer_holes(container)
+    }
+
+    /// The indexing trait `item` at `key`, as a subscript reaches a method
+    /// through it.
+    pub(super) fn subscript_trait(&self, item: CompilerItem, key: TypeId) -> Option<RequiredTrait> {
+        let trait_ = self.tysys.compiler_trait_def(item)?;
+        Some(RequiredTrait {
+            decl: Resolution::Def(trait_),
+            args: Some(vec![key]),
+            display: self
+                .tysys
+                .type_table
+                .borrow()
+                .compiler_trait_name(item)
+                .to_string(),
+        })
     }
 
     /// Every indexing trait impl [`Self::find_indexing_trait_impl`] may pick

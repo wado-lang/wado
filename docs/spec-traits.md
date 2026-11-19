@@ -414,11 +414,10 @@ else settles is reported as one that cannot be inferred, even where only one
 impl could apply: inferring it from that impl would let an impl written
 elsewhere later make the call fail.
 
-> Not yet implemented: the order does not run at a type holding a variable. A
-> qualified call omitting arguments reads its kind from the impls written for
-> the type's chain, by value or by reference, and where none is, from every
-> blanket, the type's own declaration answering first; a method call on a
-> receiver holding a variable finds no method. See
+> Not yet implemented: only selecting the method a call names reads a type
+> holding a variable as open. Every other question, a bound check among them,
+> reads it as a type that holds only what every type holds, so a call can be
+> refused before inference settles a variable that would let it apply. See
 > [WEP: Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md).
 
 An associated function with no `self` has no receiver argument to bind `Self`

@@ -1567,11 +1567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let head = receiver.spelled(self.tysys.resolutions.defs());
         StaticLookup::Unseparated {
-            message: TypeError::cannot_infer_message(
-                &names,
-                &format!("`{head}::{method_name}`"),
-                &format!("`{head}::<...>::{method_name}()`"),
-            ),
+            message: TypeError::receiver_args_uninferred_message(&names, head, method_name),
         }
     }
 

@@ -1769,6 +1769,20 @@ impl TypeError {
 
     /// [`Self::cannot_infer`]'s sentence, for a variable to raise if it is
     /// never answered.
+    /// [`Self::cannot_infer_message`] for the receiver's arguments of
+    /// `head::method(…)`, which a turbofish on `head` supplies.
+    pub(super) fn receiver_args_uninferred_message(
+        names: &[String],
+        head: &str,
+        method: &str,
+    ) -> String {
+        Self::cannot_infer_message(
+            names,
+            &format!("`{head}::{method}`"),
+            &format!("`{head}::<...>::{method}()`"),
+        )
+    }
+
     pub(super) fn cannot_infer_message(names: &[String], owner: &str, turbofish: &str) -> String {
         let named = names
             .iter()
