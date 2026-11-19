@@ -487,56 +487,56 @@ fn "extern_handle_slot.wado/$cm_binding__example:demo/global#touch-all"(ns) with
     let $ns_i: i32;
     let $ns_addr: i32;
     let $ns_elem: ref extern;
+    let self_17: i32;
     let slot: i32;
-    let self_26: ref "core:prelude/list.wado//List<core:prelude/types.wado/Option<core:prelude/types.wado/ExternObject>>";
-    let $v_1_31: i32;
-    let self_36: ref "core:prelude/list.wado//List<i32>";
-    let $licm_repr_44: ref "Array<extern_handle_slot.wado/Node>";
-    let self_46: i32;
-    self_46 = ns.used;
-    if @unlikely(536870911 <u self_46) {
+    let self_28: ref "core:prelude/list.wado//List<core:prelude/types.wado/Option<core:prelude/types.wado/ExternObject>>";
+    let $v_1_33: i32;
+    let self_38: ref "core:prelude/list.wado//List<i32>";
+    let $licm_repr_46: ref "Array<extern_handle_slot.wado/Node>";
+    self_17 = ns.used;
+    if @unlikely(536870911 <u self_17) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;
     }
-    $ns_base = "mem/realloc"(0, 0, 4, self_46 * 4);
+    $ns_base = "mem/realloc"(0, 0, 4, self_17 * 4);
     $ns_i = 0;
-    $licm_repr_44 = ns.repr;
+    $licm_repr_46 = ns.repr;
     b24: block {
         l25: loop {
-            break_if b24 $ns_i >= self_46;
+            break_if b24 $ns_i >= self_17;
             $ns_addr = $ns_base + ($ns_i * 4);
-            $ns_elem = builtin::array_get_value<ref extern>($licm_repr_44, $ns_i);
+            $ns_elem = builtin::array_get_value<ref extern>($licm_repr_46, $ns_i);
             builtin::store_i32($ns_addr, "core:rt/extern_slot_put"($ns_elem));
             $ns_i = $ns_i + 1;
             continue l25;
         };
     };
-    $ns_i = "wasi/$example:demo/global#touch-all"($ns_base, self_46);
+    $ns_i = "wasi/$example:demo/global#touch-all"($ns_base, self_17);
     $ns_addr = 0;
     b26: block {
         l27: loop {
-            break_if b26 $ns_addr >= self_46;
+            break_if b26 $ns_addr >= self_17;
             slot = builtin::load_i32($ns_base + ($ns_addr * 4));
-            $v_1_31 = local.tee self_26(global:core:rt::EXTERN_SLOTS).used;
-            if @unlikely(slot >=u $v_1_31) {
+            $v_1_33 = local.tee self_28(global:core:rt::EXTERN_SLOTS).used;
+            if @unlikely(slot >=u $v_1_33) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Option<core:prelude/types.wado/ExternObject>>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(slot, $v_1_31);
+                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Option<core:prelude/types.wado/ExternObject>>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(slot, $v_1_33);
                 unreachable;
             }
-            builtin::array_set<ref null extern>(self_26.repr, slot, ref.null noextern);
-            if @unlikely(local.tee $v_1_31(local.tee self_36(global:core:rt::FREE_EXTERN_SLOTS).used) >= builtin::array_len(self_36.repr)) {
+            builtin::array_set<ref null extern>(self_28.repr, slot, ref.null noextern);
+            if @unlikely(local.tee $v_1_33(local.tee self_38(global:core:rt::FREE_EXTERN_SLOTS).used) >= builtin::array_len(self_38.repr)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_36);
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_38);
             }
-            builtin::array_set<i32>(self_36.repr, $v_1_31, slot);
-            self_36.used = $v_1_31 + 1;
+            builtin::array_set<i32>(self_38.repr, $v_1_33, slot);
+            self_38.used = $v_1_33 + 1;
             $ns_addr = $ns_addr + 1;
             continue l27;
         };
     };
-    if self_46 > 0 {
-        drop("mem/realloc"($ns_base, self_46 * 4, 4, 0));
+    if self_17 > 0 {
+        drop("mem/realloc"($ns_base, self_17 * 4, 4, 0));
     }
     return $ns_i;
 }

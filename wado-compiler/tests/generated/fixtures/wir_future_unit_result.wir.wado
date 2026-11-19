@@ -1099,10 +1099,10 @@ fn "wir_future_unit_result.wado/$cm_future_read_core:prelude/types.wado/Result<(
     let $result_val: ref null "wasi:filesystem/types.wado//ErrorCode";
     let $local_9: ref null "core:prelude/string.wado//String";
     let $local_12: ref "core:prelude/string.wado//String";
-    let arr_18: ref Array<u8>;
     let packed: i32;
     let evt_ptr: i32;
-    let status_27: i32;
+    let status_19: i32;
+    let arr_26: ref Array<u8>;
     ptr_1 = "mem/realloc"(0, 0, 4, 20);
     packed = $inline_cm_await_blocked_0: block -> i32 {
         if local.tee packed("wasi/future-read:transmission-wasi:filesystem/types.wado#ErrorCode"(handle, ptr_1)) != -1 {
@@ -1112,11 +1112,11 @@ fn "wir_future_unit_result.wado/$cm_future_read_core:prelude/types.wado/Result<(
         "wasi/waitable-join"(handle, packed);
         evt_ptr = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(packed, evt_ptr));
-        status_27 = builtin::load_i32(evt_ptr + 4);
+        status_19 = builtin::load_i32(evt_ptr + 4);
         drop("mem/realloc"(evt_ptr, 8, 4, 0));
         "wasi/waitable-join"(handle, 0);
         "wasi/waitable-set-drop"(packed);
-        break $inline_cm_await_blocked_0: status_27;
+        break $inline_cm_await_blocked_0: status_19;
     };
     result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>$0;
     if (packed & 15) == 0 {
@@ -1199,8 +1199,8 @@ fn "wir_future_unit_result.wado/$cm_future_read_core:prelude/types.wado/Result<(
             $local_9 = ref.null none;
             if packed != 0 {
                 packed = builtin::load_i32(((ptr_1 + 4) + 4) + 4);
-                "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_18(builtin::array_new<u8>(local.tee evt_ptr(builtin::load_i32((((ptr_1 + 4) + 4) + 4) + 4)))), packed, evt_ptr);
-                $local_12 = struct.new "core:prelude/string.wado//String" { repr: arr_18, used: evt_ptr };
+                "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_26(builtin::array_new<u8>(local.tee evt_ptr(builtin::load_i32((((ptr_1 + 4) + 4) + 4) + 4)))), packed, evt_ptr);
+                $local_12 = struct.new "core:prelude/string.wado//String" { repr: arr_26, used: evt_ptr };
                 if evt_ptr > 0 {
                     drop("mem/realloc"(packed, evt_ptr, 1, 0));
                 }

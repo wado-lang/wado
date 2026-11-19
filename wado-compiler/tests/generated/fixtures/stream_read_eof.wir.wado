@@ -1044,7 +1044,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<stream_read
 fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"(self) {
     let chunk: ref "core:prelude/types.wado//StreamChunk<u8>";
     let packed: i32;
-    let $sroa_slot_21: i32;
+    let $sroa_slot_19: i32;
     let $sroa_all_repr_36: ref Array<u8>;
     let $sroa_all_used_37: i32;
     let $sroa_write_back_38: ref "core:prelude/list.wado//List<u8>";
@@ -1052,17 +1052,17 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_size
     $sroa_all_used_37 = 0;
     block {
         l110: loop {
-            $sroa_slot_21 = "mem/realloc"(0, 0, 1, 4096);
-            packed = "wasi/stream-read"(self, $sroa_slot_21, 4096);
-            chunk = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"(struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: self, packed: packed, ptr: $sroa_slot_21, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } });
+            $sroa_slot_19 = "mem/realloc"(0, 0, 1, 4096);
+            packed = "wasi/stream-read"(self, $sroa_slot_19, 4096);
+            chunk = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"(struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: self, packed: packed, ptr: $sroa_slot_19, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } });
             $inline_core_prelude_list_wado_List_u8___extend_2: block {
-                break_if $inline_core_prelude_list_wado_List_u8___extend_2 local.tee $sroa_slot_21(chunk.items.used) == 0;
-                if @unlikely(local.tee packed($sroa_all_used_37 + $sroa_slot_21) > builtin::array_len($sroa_all_repr_36)) {
+                break_if $inline_core_prelude_list_wado_List_u8___extend_2 local.tee $sroa_slot_19(chunk.items.used) == 0;
+                if @unlikely(local.tee packed($sroa_all_used_37 + $sroa_slot_19) > builtin::array_len($sroa_all_repr_36)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(local.tee $sroa_write_back_38(struct.new "core:prelude/list.wado//List<u8>" { repr: $sroa_all_repr_36, used: $sroa_all_used_37 }), packed);
                     $sroa_all_repr_36 = $sroa_write_back_38.repr;
                 }
-                builtin::array_copy<u8>($sroa_all_repr_36, $sroa_all_used_37, chunk.items.repr, 0, $sroa_slot_21);
+                builtin::array_copy<u8>($sroa_all_repr_36, $sroa_all_used_37, chunk.items.repr, 0, $sroa_slot_19);
                 $sroa_all_used_37 = packed;
             };
             if chunk.result != 0 {

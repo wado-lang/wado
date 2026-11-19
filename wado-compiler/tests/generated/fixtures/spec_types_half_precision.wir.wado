@@ -1220,24 +1220,24 @@ fn "core:prelude/fpfmt.wado/write_digits_at"(buf, offset, val, nd) {
 fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
     let start_6: i32;
     let raw_9: ref Array<u8>;
-    let offset_16: i32;
+    let offset_18: i32;
     if local.tee p(nd + p) <= 0 {
         p = 0 - p;
         start_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, (2 + p) + nd);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(buf, start_6, 48);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(buf, start_6 + 1, 46);
-        $inline_zeros_at_sroa__mut_buf_repr___1: block {
-            offset_16 = start_6 + 2;
-            break_if $inline_zeros_at_sroa__mut_buf_repr___1 p <= 0;
-            builtin::array_fill<u8>(buf.repr, offset_16, 48, p);
+        $inline_zeros_at_sroa__mut_buf_repr___0: block {
+            offset_18 = start_6 + 2;
+            break_if $inline_zeros_at_sroa__mut_buf_repr___0 p <= 0;
+            builtin::array_fill<u8>(buf.repr, offset_18, 48, p);
         };
         "core:prelude/fpfmt.wado/write_digits_at"(buf, (start_6 + 2) + p, d, nd);
     } else if p >= nd {
         start_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, p);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_6, d, nd);
-        $inline_zeros_at_sroa__mut_buf_repr___2: block {
+        $inline_zeros_at_sroa__mut_buf_repr___1: block {
             start_6 = start_6 + nd;
-            break_if $inline_zeros_at_sroa__mut_buf_repr___2 local.tee p(p - nd) <= 0;
+            break_if $inline_zeros_at_sroa__mut_buf_repr___1 local.tee p(p - nd) <= 0;
             builtin::array_fill<u8>(buf.repr, start_6, 48, p);
         };
     } else {
@@ -1251,7 +1251,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
 fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper) {
     let start_6: i32;
     let raw: ref Array<u8>;
-    let other_18: ref "core:prelude/string.wado//String";
+    let other_20: ref "core:prelude/string.wado//String";
     p = (p + nd) - 1;
     if nd > 1 {
         start_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, nd + 1);
@@ -1262,12 +1262,12 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper) {
         nd = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(buf, 1);
         "core:prelude/fpfmt.wado/write_digits_at"(buf, nd, d, 1);
     }
-    other_18 = (if upper -> ref "core:prelude/string.wado//String" {
+    other_20 = (if upper -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69), used: 1 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 };
     });
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(buf, other_18);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(buf, other_20);
     if p < 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(buf, global:core:prelude/fpfmt.wado::$const_obj_1);
     }

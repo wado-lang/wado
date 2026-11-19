@@ -1259,9 +1259,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec6" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(412)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(413)
+type "functype//core:prelude/format.wado/&hash_derived.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value,f.buf]" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(413)
 
-type "functype//core:prelude/format.wado/&hash_derived.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value,f.buf]" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(414)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(414)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(415)
 
@@ -7469,7 +7469,7 @@ fn "core:prelude/traits.wado/hash_derived.wado/Shape^core:prelude/traits.wado/Ha
     let $load_2: u64;
     let a_13: u64;
     let hi_16: i64;
-    let self_41: ref "tuple//[i32, i32]";
+    let self_33: ref "tuple//[i32, i32]";
     if @likely(local.tee $load_0(self.discriminant) == 0) {
         a_13 = h.state;
         $load_2 = h.key;
@@ -7491,10 +7491,10 @@ fn "core:prelude/traits.wado/hash_derived.wado/Shape^core:prelude/traits.wado/Ha
         if @unlikely($load_0 != 1) {
             unreachable;
         }
-        hi_16 = builtin::i64_extend_i32_s(local.tee self_41(ref.cast "hash_derived.wado//Shape::Rect"(self).payload_0).0);
+        hi_16 = builtin::i64_extend_i32_s(local.tee self_33(ref.cast "hash_derived.wado//Shape::Rect"(self).payload_0).0);
         multivalue_bind [a_13, hi_16] = i64.mul_wide_u(a_13 ^ hi_16, $load_2);
         a_13 = a_13 ^ hi_16;
-        hi_16 = builtin::i64_extend_i32_s(self_41.1);
+        hi_16 = builtin::i64_extend_i32_s(self_33.1);
         h.state = multivalue_bind [a_13, $load_2] = i64.mul_wide_u(a_13 ^ hi_16, $load_2); a_13 ^ $load_2;
         return;
     }
@@ -8061,6 +8061,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 8);
 }
 
+fn "core:prelude/format.wado/&hash_derived.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value,f.buf]"(self, f) {
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"(f, global:core:prelude/format.wado::$const_obj_114);
+    "core:prelude/traits.wado/hash_derived.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f);
+}
+
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let $load_0: i32;
     let $load_1: ref "core:prelude/string.wado//String";
@@ -8075,11 +8080,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/tr
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec5"($load_1, global:core:prelude/traits.wado::$const_obj_13);
         "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(multivalue_bind [$load_0] = "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]"(self); $load_0, f);
     }
-}
-
-fn "core:prelude/format.wado/&hash_derived.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value.value,f.buf]"(self, f) {
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"(f, global:core:prelude/format.wado::$const_obj_114);
-    "core:prelude/traits.wado/hash_derived.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {

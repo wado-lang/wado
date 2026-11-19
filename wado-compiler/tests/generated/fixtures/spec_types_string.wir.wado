@@ -2210,7 +2210,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     let new_used: i32;
     let start_9: i32;
-    let repr: ref Array<u8>;
     if c <u 128 {
         c = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
@@ -2231,29 +2230,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
-    self.used = local.tee new_used(self.used) + $inline_encode_char_8: block -> i32 {
-        repr = self.repr;
-        if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
-            break $inline_encode_char_8: 1;
-        }
-        if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
-            break $inline_encode_char_8: 2;
-        }
-        if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
-            break $inline_encode_char_8: 3;
-        }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
-        break $inline_encode_char_8: 4;
-    };
+    self.used = local.tee new_used(self.used) + "core:prelude/string.wado/encode_char"(self.repr, new_used, c);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self, byte) {
@@ -3088,9 +3065,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     $licm_arith_37 = c <u 128;
     $licm_arith_38 = c & 255;
     $hfs_used_39 = self.used;
-    b395: block {
-        l396: loop {
-            break_if b395 i >= n;
+    b392: block {
+        l393: loop {
+            break_if b392 i >= n;
             $inline_core_prelude_string_wado_String__push_0: block {
                 if $licm_arith_37 {
                     if @unlikely(local.tee $hfs_used_39($hfs_used_39 + 1) > builtin::array_len($licm_repr_36)) {
@@ -3122,7 +3099,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
             };
             i = i + 1;
             self.used = $hfs_used_39;
-            continue l396;
+            continue l393;
         };
     };
 }
@@ -3307,11 +3284,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
     $sroa_result_used_25 = 0;
     $licm_repr_27 = iter.repr;
     $hfs_byte_index_53 = iter.byte_index;
-    b422: block {
-        l423: loop {
+    b419: block {
+        l420: loop {
             if $hfs_byte_index_53 >= 11 {
                 iter.byte_index = $hfs_byte_index_53;
-                break b422;
+                break b419;
             }
             $inline_decode_char_at_0: block {
                 if local.tee b0(builtin::array_get_value<u8>($licm_repr_27, $hfs_byte_index_53)) <u 128 {
@@ -3356,7 +3333,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits
             }
             builtin::array_set<char>($sroa_result_repr_24, $sroa_result_used_25, b0);
             $sroa_result_used_25 = $sroa_result_used_25 + 1;
-            continue l423;
+            continue l420;
         };
     };
     return $sroa_result_repr_24, $sroa_result_used_25;

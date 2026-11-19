@@ -2302,52 +2302,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let new_used: i32;
-    let start_9: i32;
-    let repr: ref Array<u8>;
+    let $load_0: i32;
     if c <u 128 {
-        c = c & 255;
-        if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
-        }
-        start_9 = self.used;
-        self.used = new_used;
-        if @unlikely(start_9 >=u new_used) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_9, new_used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
-            unreachable;
-        }
-        builtin::array_set_u8(self.repr, start_9, c);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self, c & 255);
         return;
     }
-    if @unlikely((local.tee new_used(self.used) + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((local.tee $load_0(self.used) + 4) > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $load_0 + 4);
     }
-    self.used = local.tee new_used(self.used) + $inline_encode_char_8: block -> i32 {
-        repr = self.repr;
-        if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c);
-            break $inline_encode_char_8: 1;
-        }
-        if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
-            break $inline_encode_char_8: 2;
-        }
-        if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
-            break $inline_encode_char_8: 3;
-        }
-        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
-        break $inline_encode_char_8: 4;
-    };
+    self.used = local.tee $load_0(self.used) + "core:prelude/string.wado/encode_char"(self.repr, $load_0, c);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self, byte) {
@@ -2847,9 +2811,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     $licm_arith_37 = c <u 128;
     $licm_arith_38 = c & 255;
     $hfs_used_39 = self.used;
-    b374: block {
-        l375: loop {
-            break_if b374 i >= n;
+    b369: block {
+        l370: loop {
+            break_if b369 i >= n;
             $inline_core_prelude_string_wado_String__push_0: block {
                 if $licm_arith_37 {
                     if @unlikely(local.tee $hfs_used_39($hfs_used_39 + 1) > builtin::array_len($licm_repr_36)) {
@@ -2881,7 +2845,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
             };
             i = i + 1;
             self.used = $hfs_used_39;
-            continue l375;
+            continue l370;
         };
     };
 }
@@ -3342,16 +3306,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temp
     start_164 = $sroa_out_used_321;
     $sroa_out_used_321 = is_negative_65;
     t = start_164 + t;
-    b446: block {
-        l447: loop {
-            break_if b446 (t - start_164) < 2;
+    b441: block {
+        l442: loop {
+            break_if b441 (t - start_164) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($sroa_out_repr_320, t - 1, (48 + is_negative_65) - (tens * 10));
             builtin::array_set_u8($sroa_out_repr_320, t - 2, 48 + tens);
             t = t - 2;
             x = q;
-            continue l447;
+            continue l442;
         };
     };
     if t > start_164 {
@@ -3451,16 +3415,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temp
     start_164 = $sroa_out_used_321;
     $sroa_out_used_321 = is_negative_65;
     t = start_164 + t;
-    b470: block {
-        l471: loop {
-            break_if b470 (t - start_164) < 2;
+    b465: block {
+        l466: loop {
+            break_if b465 (t - start_164) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($sroa_out_repr_320, t - 1, (48 + is_negative_65) - (tens * 10));
             builtin::array_set_u8($sroa_out_repr_320, t - 2, 48 + tens);
             t = t - 2;
             x = q;
-            continue l471;
+            continue l466;
         };
     };
     if t > start_164 {
@@ -3560,16 +3524,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_temp
     start_164 = $sroa_out_used_321;
     $sroa_out_used_321 = is_negative_65;
     t = start_164 + t;
-    b494: block {
-        l495: loop {
-            break_if b494 (t - start_164) < 2;
+    b489: block {
+        l490: loop {
+            break_if b489 (t - start_164) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($sroa_out_repr_320, t - 1, (48 + is_negative_65) - (tens * 10));
             builtin::array_set_u8($sroa_out_repr_320, t - 2, 48 + tens);
             t = t - 2;
             x = q;
-            continue l495;
+            continue l490;
         };
     };
     if t > start_164 {

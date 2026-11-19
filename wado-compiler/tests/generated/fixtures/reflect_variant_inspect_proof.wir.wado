@@ -3336,92 +3336,48 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sr
     let start_13: i32;
     let self_30: i32;
     let $licm_repr_36: ref Array<u8>;
-    let $licm_arith_70: bool;
-    let $licm_arith_71: u8;
-    let $licm_arith_72: bool;
-    let $licm_arith_73: bool;
-    let $licm_arith_74: u8;
-    let $licm_arith_75: u8;
-    let $licm_arith_76: bool;
-    let $licm_arith_77: u8;
-    let $licm_arith_78: u8;
-    let $licm_arith_79: u8;
-    let $licm_arith_80: u8;
-    let $licm_arith_81: u8;
-    let $licm_arith_82: u8;
-    let $hfs_used_84: i32;
+    let $licm_arith_37: bool;
+    let $licm_arith_38: u8;
+    let $hfs_used_39: i32;
     i = 0;
     $licm_repr_36 = self.repr;
-    $licm_arith_70 = c <u 128;
-    $licm_arith_71 = c & 255;
-    $licm_arith_72 = c <u 128;
-    $licm_arith_73 = c <u 2048;
-    $licm_arith_74 = (192 | (c >>u 6)) & 255;
-    $licm_arith_75 = 128 | (c & 63);
-    $licm_arith_76 = c <u 65536;
-    $licm_arith_77 = (224 | (c >>u 12)) & 255;
-    $licm_arith_78 = 128 | ((c >>u 6) & 63);
-    $licm_arith_79 = 128 | (c & 63);
-    $licm_arith_80 = (240 | (c >>u 18)) & 255;
-    $licm_arith_81 = 128 | ((c >>u 12) & 63);
-    $licm_arith_82 = 128 | ((c >>u 6) & 63);
-    c = 128 | (c & 63);
-    $hfs_used_84 = self.used;
+    $licm_arith_37 = c <u 128;
+    $licm_arith_38 = c & 255;
+    $hfs_used_39 = self.used;
     b443: block {
         l444: loop {
             break_if b443 i >= n;
             $inline_core_prelude_string_wado_String__push_0: block {
-                if $licm_arith_70 {
-                    if @unlikely(local.tee $hfs_used_84($hfs_used_84 + 1) > builtin::array_len($licm_repr_36)) {
+                if $licm_arith_37 {
+                    if @unlikely(local.tee $hfs_used_39($hfs_used_39 + 1) > builtin::array_len($licm_repr_36)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $hfs_used_84);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $hfs_used_39);
                         $licm_repr_36 = self.repr;
                     } else {
                     }
                     start_13 = self.used;
-                    self_30 = $hfs_used_84;
+                    self_30 = $hfs_used_39;
                     if @unlikely(((0 <= start_13) & (start_13 < self_30)) == 0) {
                         cold_path;
-                        self.used = $hfs_used_84;
+                        self.used = $hfs_used_39;
                         "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_13, self_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:558"), used: 28 });
                         unreachable;
                     }
-                    builtin::array_set_u8($licm_repr_36, start_13, $licm_arith_71);
+                    builtin::array_set_u8($licm_repr_36, start_13, $licm_arith_38);
                     break $inline_core_prelude_string_wado_String__push_0;
                 } else {
                 }
-                if @unlikely(($hfs_used_84 + 4) > builtin::array_len($licm_repr_36)) {
+                if @unlikely(($hfs_used_39 + 4) > builtin::array_len($licm_repr_36)) {
                     cold_path;
-                    self.used = $hfs_used_84;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $hfs_used_84 + 4);
+                    self.used = $hfs_used_39;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $hfs_used_39 + 4);
                     $licm_repr_36 = self.repr;
-                    $hfs_used_84 = self.used;
+                    $hfs_used_39 = self.used;
                 }
-                $hfs_used_84 = $hfs_used_84 + $inline_encode_char_0: block -> i32 {
-                    if $licm_arith_72 {
-                        builtin::array_set_u8($licm_repr_36, $hfs_used_84, $licm_arith_71);
-                        break $inline_encode_char_0: 1;
-                    }
-                    if $licm_arith_73 {
-                        builtin::array_set_u8($licm_repr_36, $hfs_used_84, $licm_arith_74);
-                        builtin::array_set_u8($licm_repr_36, $hfs_used_84 + 1, $licm_arith_75);
-                        break $inline_encode_char_0: 2;
-                    }
-                    if $licm_arith_76 {
-                        builtin::array_set_u8($licm_repr_36, $hfs_used_84, $licm_arith_77);
-                        builtin::array_set_u8($licm_repr_36, $hfs_used_84 + 1, $licm_arith_78);
-                        builtin::array_set_u8($licm_repr_36, $hfs_used_84 + 2, $licm_arith_79);
-                        break $inline_encode_char_0: 3;
-                    }
-                    builtin::array_set_u8($licm_repr_36, $hfs_used_84, $licm_arith_80);
-                    builtin::array_set_u8($licm_repr_36, $hfs_used_84 + 1, $licm_arith_81);
-                    builtin::array_set_u8($licm_repr_36, $hfs_used_84 + 2, $licm_arith_82);
-                    builtin::array_set_u8($licm_repr_36, $hfs_used_84 + 3, c);
-                    break $inline_encode_char_0: 4;
-                };
+                $hfs_used_39 = $hfs_used_39 + "core:prelude/string.wado/encode_char"($licm_repr_36, $hfs_used_39, c);
             };
             i = i + 1;
-            self.used = $hfs_used_84;
+            self.used = $hfs_used_39;
             continue l444;
         };
     };
@@ -3881,14 +3837,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     if val_i64_66 == 0_i64 {
         builtin::array_set_u8($sroa_out_repr_330, 0, 48);
     } else {
-        b513: block {
-            l514: loop {
-                break_if b513 val_i64_66 == 0_i64;
+        b510: block {
+            l511: loop {
+                break_if b510 val_i64_66 == 0_i64;
                 q = q - 1;
                 digit = builtin::i32_wrap_i64(val_i64_66 & 15_i64);
                 builtin::array_set_u8($sroa_out_repr_330, q, select i32(digit < 10, 48 + digit, (97 + digit) - 10));
                 val_i64_66 = val_i64_66 >>u 4_i64;
-                continue l514;
+                continue l511;
             };
         };
     }

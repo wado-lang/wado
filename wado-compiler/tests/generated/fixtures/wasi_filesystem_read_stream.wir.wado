@@ -691,7 +691,7 @@ fn "wasi_filesystem_read_stream.wado/run"() with Stdout, Stderr, Preopens {
     let started_83: ref null "core:prelude/types.wado//StartedRead<u8>";
     let handle_87: i32;
     let packed: i32;
-    let $sroa_slot_21: i32;
+    let $sroa_slot_19: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:wasi_filesystem_read_stream.wado::$modules_initialized);
         cold_path;
@@ -731,9 +731,9 @@ fn "wasi_filesystem_read_stream.wado/run"() with Stdout, Stderr, Preopens {
         b5: block {
             l6: loop {
                 handle_87 = file_rx.value;
-                $sroa_slot_21 = "mem/realloc"(0, 0, 1, 4096);
-                packed = "wasi/stream-read"(handle_87, $sroa_slot_21, 4096);
-                started_83 = struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: handle_87, packed: packed, ptr: $sroa_slot_21, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
+                $sroa_slot_19 = "mem/realloc"(0, 0, 1, 4096);
+                packed = "wasi/stream-read"(handle_87, $sroa_slot_19, 4096);
+                started_83 = struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: handle_87, packed: packed, ptr: $sroa_slot_19, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
                 copy = struct.new "core:prelude/types.wado//ReadCopy<u8>" { copy: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>]" { 0: file_rx, 1: started_83 } } } };
                 file_rx = local.tee $local_9($inline_core_prelude_types_wado_Option__core_prelude_types_wado_Stream_u8__core_prelude_types_wado_StartedRead_u8_____unwrap_5: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>]" {
                     $replaced_3 = local.tee self_75(copy.copy).value;

@@ -676,7 +676,7 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) with Request, Respons
     let $replaced_3: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>";
     let started_262: ref null "core:prelude/types.wado//StartedRead<u8>";
     let packed: i32;
-    let $sroa_slot_21: i32;
+    let $sroa_slot_19: i32;
     $sroa_$pattern_temp_0_0_230 = builtin::i32_wrap_i64(local.tee $cm_pair_203("wasi/future-new:transmission-wasi:http/types.wado#ErrorCode"()));
     $sroa_$pattern_temp_0_1_231 = builtin::i32_wrap_i64($cm_pair_203 >> 32_i64);
     body_stream_3 = local.tee $local_207("stream_http_echo.wado/$cm_binding__wasi:http/types@0.3.0#[static]request.consume-body"(request, $sroa_$pattern_temp_0_0_230)).0;
@@ -686,9 +686,9 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) with Request, Respons
     b1: block {
         l2: loop {
             $sroa_$pattern_temp_0_0_230 = body_stream_3.value;
-            $sroa_slot_21 = "mem/realloc"(0, 0, 1, 4096);
-            packed = "wasi/stream-read"($sroa_$pattern_temp_0_0_230, $sroa_slot_21, 4096);
-            started_262 = struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: $sroa_$pattern_temp_0_0_230, packed: packed, ptr: $sroa_slot_21, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
+            $sroa_slot_19 = "mem/realloc"(0, 0, 1, 4096);
+            packed = "wasi/stream-read"($sroa_$pattern_temp_0_0_230, $sroa_slot_19, 4096);
+            started_262 = struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: $sroa_$pattern_temp_0_0_230, packed: packed, ptr: $sroa_slot_19, size: 4096, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
             copy = struct.new "core:prelude/types.wado//ReadCopy<u8>" { copy: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>]" { 0: body_stream_3, 1: started_262 } } } };
             body_stream_3 = local.tee $local_9($inline_core_prelude_types_wado_Option__core_prelude_types_wado_Stream_u8__core_prelude_types_wado_StartedRead_u8_____unwrap_3: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StartedRead<u8>]" {
                 $replaced_3 = local.tee self_254(copy.copy).value;
@@ -723,7 +723,7 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) with Request, Respons
     $sroa_$pattern_temp_0_0_230 = builtin::i32_wrap_i64(local.tee $cm_pair_203("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_231 = builtin::i32_wrap_i64($cm_pair_203 >> 32_i64);
     body_stream_3 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_203("wasi/stream-new"())) };
-    $sroa_slot_21 = builtin::i32_wrap_i64($cm_pair_203 >> 32_i64);
+    $sroa_slot_19 = builtin::i32_wrap_i64($cm_pair_203 >> 32_i64);
     body_stream_3 = local.tee $local_211("stream_http_echo.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("stream_http_echo.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: body_stream_3 }, $sroa_$pattern_temp_0_0_230)).0;
     _tx_future = $local_211.1;
     $sroa_$pattern_temp_0_0_230 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: body_stream_3 }).payload_0.value;
@@ -735,11 +735,11 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) with Request, Respons
             packed = local.tee v_218(builtin::array_get_value<ref "core:prelude/list.wado//List<u8>">($sroa_chunks_repr_232, $sroa_$pattern_temp_0_0_230)).used;
             v_218 = struct.new "core:prelude/list.wado//List<u8>" { repr: $array_clone_src_3 = v_218.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(packed)), 0, $array_clone_src_3, 0, packed); $array_clone_dst_4, used: packed };
             $iter_0.index = $sroa_$pattern_temp_0_0_230 + 1;
-            drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_slot_21, v_218.repr, packed));
+            drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_slot_19, v_218.repr, packed));
             continue l7;
         };
     };
-    "wasi/stream-drop-writable"($sroa_slot_21);
+    "wasi/stream-drop-writable"($sroa_slot_19);
     drop("stream_http_echo.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_231, global:stream_http_echo.wado::$const_obj_0));
     if ref.is_null(_tx_future) == 0 {
         "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(_tx_future.value);
@@ -1000,9 +1000,9 @@ fn "stream_http_echo.wado/$cm_future_write_core:prelude/types.wado/Result<(),was
             }
         }
     }
-    $load_0 = $inline_cm_await_blocked_0: block -> i32 {
+    $load_0 = $inline_cm_await_blocked_36: block -> i32 {
         if local.tee $load_0("wasi/future-write:transmission-wasi:http/types.wado#ErrorCode"(handle, ptr_2)) != -1 {
-            break $inline_cm_await_blocked_0: $load_0;
+            break $inline_cm_await_blocked_36: $load_0;
         }
         $load_0 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, $load_0);
@@ -1012,12 +1012,12 @@ fn "stream_http_echo.wado/$cm_future_write_core:prelude/types.wado/Result<(),was
         drop("mem/realloc"(ptr_85, 8, 4, 0));
         "wasi/waitable-join"(handle, 0);
         "wasi/waitable-set-drop"($load_0);
-        break $inline_cm_await_blocked_0: status;
+        break $inline_cm_await_blocked_36: status;
     };
     drop("mem/realloc"(ptr_2, 40, 8, 0));
     "wasi/future-drop-writable:transmission-wasi:http/types.wado#ErrorCode"(handle);
-    $inline_cm_future_write_result_36: block {
-        break_if $inline_cm_future_write_result_36 $load_0 == -1;
+    $inline_cm_future_write_result_38: block {
+        break_if $inline_cm_future_write_result_38 $load_0 == -1;
         drop((if local.tee handle((if local.tee handle($load_0 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
             0;
         } else if handle == 1 -> "core:prelude/types.wado//enum:CopyResult" {
@@ -1035,7 +1035,7 @@ fn "stream_http_echo.wado/$cm_future_write_core:prelude/types.wado/Result<(),was
             "core:rt/unreachable"();
             unreachable;
         }));
-        break $inline_cm_future_write_result_36;
+        break $inline_cm_future_write_result_38;
     };
     return struct.new "core:prelude/types.wado//FutureWrite<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>" {};
 }

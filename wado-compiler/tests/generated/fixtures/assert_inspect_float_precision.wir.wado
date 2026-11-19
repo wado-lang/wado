@@ -400,7 +400,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
 
 fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
     let $load_4: ref Array<u8>;
-    let start_57: i32;
+    let start_59: i32;
     let $av_141: i32;
     p = nd + p;
     $av_141 = buf.used;
@@ -410,16 +410,16 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, $av_141);
         }
-        start_57 = buf.used;
+        start_59 = buf.used;
         buf.used = $av_141;
-        builtin::array_set_u8(local.tee $load_4(buf.repr), start_57, 48);
-        builtin::array_set_u8($load_4, start_57 + 1, 46);
-        $inline_zeros_at_sroa__mut_buf_repr___2: block {
-            $av_141 = start_57 + 2;
-            break_if $inline_zeros_at_sroa__mut_buf_repr___2 p <= 0;
+        builtin::array_set_u8(local.tee $load_4(buf.repr), start_59, 48);
+        builtin::array_set_u8($load_4, start_59 + 1, 46);
+        $inline_zeros_at_sroa__mut_buf_repr___1: block {
+            $av_141 = start_59 + 2;
+            break_if $inline_zeros_at_sroa__mut_buf_repr___1 p <= 0;
             builtin::array_fill<u8>($load_4, $av_141, 48, p);
         };
-        nd = (local.tee p((start_57 + 2) + p) + nd) - 1;
+        nd = (local.tee p((start_59 + 2) + p) + nd) - 1;
         b26: block {
             l27: loop {
                 break_if b26 nd < p;
@@ -434,22 +434,22 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, $av_141);
         }
-        start_57 = buf.used;
+        start_59 = buf.used;
         buf.used = $av_141;
-        $av_141 = (start_57 + nd) - 1;
+        $av_141 = (start_59 + nd) - 1;
         $load_4 = buf.repr;
         b30: block {
             l31: loop {
-                break_if b30 $av_141 < start_57;
+                break_if b30 $av_141 < start_59;
                 builtin::array_set_u8($load_4, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 $av_141 = $av_141 - 1;
                 continue l31;
             };
         };
-        $inline_zeros_at_sroa__mut_buf_repr___6: block {
-            $av_141 = start_57 + nd;
-            break_if $inline_zeros_at_sroa__mut_buf_repr___6 local.tee p(p - nd) <= 0;
+        $inline_zeros_at_sroa__mut_buf_repr___5: block {
+            $av_141 = start_59 + nd;
+            break_if $inline_zeros_at_sroa__mut_buf_repr___5 local.tee p(p - nd) <= 0;
             builtin::array_fill<u8>($load_4, $av_141, 48, p);
         };
     } else {
@@ -457,21 +457,21 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, $av_141);
         }
-        start_57 = buf.used;
+        start_59 = buf.used;
         buf.used = $av_141;
-        $av_141 = (start_57 + nd) - 1;
+        $av_141 = (start_59 + nd) - 1;
         $load_4 = buf.repr;
         b33: block {
             l34: loop {
-                break_if b33 $av_141 < start_57;
+                break_if b33 $av_141 < start_59;
                 builtin::array_set_u8($load_4, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 $av_141 = $av_141 - 1;
                 continue l34;
             };
         };
-        builtin::array_copy<u8>($load_4, (start_57 + p) + 1, $load_4, start_57 + p, nd - p);
-        builtin::array_set_u8($load_4, start_57 + p, 46);
+        builtin::array_copy<u8>($load_4, (start_59 + p) + 1, $load_4, start_59 + p, nd - p);
+        builtin::array_set_u8($load_4, start_59 + p, 46);
     }
 }
 
@@ -537,7 +537,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
         builtin::array_copy<u8>(buf.repr, $av_274, global:core:prelude/fpfmt.wado::$const_obj_0, 0, 1);
     }
     if local.tee p(select i32(p < 0, 0 - p, p)) < 10 {
-        $inline_core_prelude_string_wado_String__push_10: block {
+        $inline_core_prelude_string_wado_String__push_9: block {
             if local.tee p(48 + p) <u 128 {
                 p = p & 255;
                 if @unlikely(local.tee nd(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -547,7 +547,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
                 $av_274 = buf.used;
                 buf.used = nd;
                 builtin::array_set_u8(buf.repr, $av_274, p);
-                break $inline_core_prelude_string_wado_String__push_10;
+                break $inline_core_prelude_string_wado_String__push_9;
             }
             if @unlikely((local.tee nd(buf.used) + 4) > builtin::array_len(buf.repr)) {
                 cold_path;
@@ -556,7 +556,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
             buf.used = local.tee nd(buf.used) + "core:prelude/string.wado/encode_char"(buf.repr, nd, p);
         };
     } else if p < 100 {
-        $inline_core_prelude_string_wado_String__push_13: block {
+        $inline_core_prelude_string_wado_String__push_12: block {
             if local.tee nd(48 + (p / 10)) <u 128 {
                 nd = nd & 255;
                 if @unlikely(local.tee $av_274(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -566,7 +566,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
                 start_44 = buf.used;
                 buf.used = $av_274;
                 builtin::array_set_u8(buf.repr, start_44, nd);
-                break $inline_core_prelude_string_wado_String__push_13;
+                break $inline_core_prelude_string_wado_String__push_12;
             }
             if @unlikely((local.tee $av_274(buf.used) + 4) > builtin::array_len(buf.repr)) {
                 cold_path;
@@ -574,7 +574,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
             }
             buf.used = local.tee $av_274(buf.used) + "core:prelude/string.wado/encode_char"(buf.repr, $av_274, nd);
         };
-        $inline_core_prelude_string_wado_String__push_17: block {
+        $inline_core_prelude_string_wado_String__push_16: block {
             if local.tee p(48 + (p % 10)) <u 128 {
                 p = p & 255;
                 if @unlikely(local.tee nd(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -584,7 +584,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
                 $av_274 = buf.used;
                 buf.used = nd;
                 builtin::array_set_u8(buf.repr, $av_274, p);
-                break $inline_core_prelude_string_wado_String__push_17;
+                break $inline_core_prelude_string_wado_String__push_16;
             }
             if @unlikely((local.tee nd(buf.used) + 4) > builtin::array_len(buf.repr)) {
                 cold_path;
@@ -593,7 +593,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
             buf.used = local.tee nd(buf.used) + "core:prelude/string.wado/encode_char"(buf.repr, nd, p);
         };
     } else {
-        $inline_core_prelude_string_wado_String__push_21: block {
+        $inline_core_prelude_string_wado_String__push_20: block {
             if local.tee nd(48 + (p / 100)) <u 128 {
                 nd = nd & 255;
                 if @unlikely(local.tee $av_274(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -603,7 +603,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
                 start_44 = buf.used;
                 buf.used = $av_274;
                 builtin::array_set_u8(buf.repr, start_44, nd);
-                break $inline_core_prelude_string_wado_String__push_21;
+                break $inline_core_prelude_string_wado_String__push_20;
             }
             if @unlikely((local.tee $av_274(buf.used) + 4) > builtin::array_len(buf.repr)) {
                 cold_path;
@@ -611,7 +611,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
             }
             buf.used = local.tee $av_274(buf.used) + "core:prelude/string.wado/encode_char"(buf.repr, $av_274, nd);
         };
-        $inline_core_prelude_string_wado_String__push_24: block {
+        $inline_core_prelude_string_wado_String__push_23: block {
             if local.tee nd(48 + ((p % 100) / 10)) <u 128 {
                 nd = nd & 255;
                 if @unlikely(local.tee $av_274(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -621,7 +621,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
                 start_44 = buf.used;
                 buf.used = $av_274;
                 builtin::array_set_u8(buf.repr, start_44, nd);
-                break $inline_core_prelude_string_wado_String__push_24;
+                break $inline_core_prelude_string_wado_String__push_23;
             }
             if @unlikely((local.tee $av_274(buf.used) + 4) > builtin::array_len(buf.repr)) {
                 cold_path;
@@ -629,7 +629,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
             }
             buf.used = local.tee $av_274(buf.used) + "core:prelude/string.wado/encode_char"(buf.repr, $av_274, nd);
         };
-        $inline_core_prelude_string_wado_String__push_28: block {
+        $inline_core_prelude_string_wado_String__push_27: block {
             if local.tee p(48 + ((p % 100) % 10)) <u 128 {
                 p = p & 255;
                 if @unlikely(local.tee nd(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -639,7 +639,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
                 $av_274 = buf.used;
                 buf.used = nd;
                 builtin::array_set_u8(buf.repr, $av_274, p);
-                break $inline_core_prelude_string_wado_String__push_28;
+                break $inline_core_prelude_string_wado_String__push_27;
             }
             if @unlikely((local.tee nd(buf.used) + 4) > builtin::array_len(buf.repr)) {
                 cold_path;
