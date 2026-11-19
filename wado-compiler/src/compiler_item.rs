@@ -308,9 +308,12 @@ pub enum CompilerItem {
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
-    /// `ExternHandle` — sealed marker every extern handle holds, whose
-    /// methods back a handle with a guest value (WEP: Extern Handles).
+    /// `ExternHandle` — sealed marker every extern handle holds (WEP: Extern
+    /// Handles).
     ExternHandle,
+    /// `Backable` — sealed marker of a resource a guest value may back: an
+    /// extern handle, or a resource declared without `#[cm(...)]`.
+    Backable,
     /// `AnyBits` — sealed marker of a type every bit pattern of its width is a
     /// value of, so `builtin::load` may read one from any bytes.
     AnyBits,
@@ -887,6 +890,7 @@ impl CompilerItem {
         Self::Resource,
         Self::AffineResource,
         Self::ExternHandle,
+        Self::Backable,
         Self::AnyBits,
         Self::Waitable,
         Self::Copyable,
@@ -1180,6 +1184,7 @@ impl CompilerItem {
             Self::Resource => "resource",
             Self::AffineResource => "affine_resource",
             Self::ExternHandle => "extern_handle",
+            Self::Backable => "backable",
             Self::AnyBits => "any_bits",
             Self::Waitable => "waitable",
             Self::Copyable => "copyable",
@@ -1510,6 +1515,7 @@ impl CompilerItem {
             | Self::Resource
             | Self::AffineResource
             | Self::ExternHandle
+            | Self::Backable
             | Self::AnyBits
             | Self::Waitable
             | Self::Copyable
@@ -1866,6 +1872,7 @@ impl CompilerItem {
             | Self::Resource
             | Self::AffineResource
             | Self::ExternHandle
+            | Self::Backable
             | Self::AnyBits
             | Self::Waitable
             | Self::Copyable

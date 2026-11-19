@@ -1,0 +1,43 @@
+// A resource declared without `#[cm(...)]` is the program's own: `backed_by`
+// makes a handle of it, and the handler answering its operations reaches the
+// value behind the handle with `backing`.
+use { println, Stdout } from "core:cli";
+
+struct Count {
+    n: i32,
+}
+
+resource Counter {
+    fn bump(&self);
+    fn get(&self) -> i32;
+}
+
+struct Impl {}
+
+impl Counter for Impl {
+    fn bump(&mut self, this: &Counter) {
+        let Some(c) = this.backing::<Count>() else { unreachable(); };
+        c.n += 1;
+        resume ();
+    }
+
+    fn get(&mut self, this: &Counter) -> i32 {
+        let Some(c) = this.backing::<Count>() else { unreachable(); };
+        resume c.n;
+    }
+
+    ..trap
+}
+
+export fn run() with Stdout {
+    let mut h = Impl {};
+    with Counter => &mut h do {
+        let c = Counter::backed_by(Count { n: 0 });
+        c.bump();
+        c.bump();
+        println(`${c.get()}`);
+    }
+}
+
+__DATA__
+{"stdout": "2\n"}

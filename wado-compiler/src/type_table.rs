@@ -151,6 +151,9 @@ pub struct TypeTable {
     /// Resources declared `#[cm(..., linearity = "unrestricted")]`, with the
     /// classes their handles carry where they declare them.
     unrestricted_resources: IndexMap<DefId, Option<HandleClasses>>,
+    /// Resources declared without `#[cm(...)]`: the program's own, whose every
+    /// handle a guest value backs.
+    guest_resources: IndexSet<DefId>,
     /// Structs and variants declared `affine`.
     affine_decls: IndexSet<DefId>,
     /// `resource Child extends Parent`, child → parent.
@@ -299,6 +302,7 @@ impl TypeTable {
             decl_index: IndexMap::default(),
             cm_decl_index: IndexMap::default(),
             unrestricted_resources: IndexMap::default(),
+            guest_resources: IndexSet::default(),
             affine_decls: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
@@ -639,6 +643,17 @@ impl TypeTable {
         self.unrestricted_resources.contains_key(&def)
     }
 
+    pub fn mark_guest_resource(&mut self, def: DefId) {
+        self.guest_resources.insert(def);
+    }
+
+    /// Whether `def` declares a resource without `#[cm(...)]`: the program's
+    /// own, which no host implements, so a guest value backs every handle.
+    #[must_use]
+    pub fn is_guest_resource(&self, def: DefId) -> bool {
+        self.guest_resources.contains(&def)
+    }
+
     pub fn mark_affine_decl(&mut self, def: DefId) {
         self.affine_decls.insert(def);
     }
@@ -681,12 +696,13 @@ impl TypeTable {
             })
     }
 
-    /// Whether `ty` is an affine resource, which the guest holds as a GC object
-    /// boxing its `i32` handle.
+    /// Whether `ty` is an affine resource of the Component Model, which the
+    /// guest holds as a GC object boxing its `i32` handle.
     #[must_use]
     pub fn is_resource_object(&self, ty: TypeId) -> bool {
-        self.resource_def_of(ty)
-            .is_some_and(|def| !self.is_unrestricted_resource(def))
+        self.resource_def_of(ty).is_some_and(|def| {
+            !self.is_unrestricted_resource(def) && !self.is_guest_resource(def)
+        })
     }
 
     /// Whether `ty` is an extern handle: one `externref`, the host's object or
@@ -697,6 +713,16 @@ impl TypeTable {
             .is_some_and(|def| self.is_unrestricted_resource(def))
     }
 
+    /// Whether `ty` is a resource held as one `externref` of a backing struct
+    /// where it is not the host's object: an extern handle, or a resource
+    /// declared without `#[cm(...)]`, which only a guest value backs.
+    #[must_use]
+    pub fn is_backable_resource(&self, ty: TypeId) -> bool {
+        self.resource_def_of(ty).is_some_and(|def| {
+            self.is_unrestricted_resource(def) || self.is_guest_resource(def)
+        })
+    }
+
     /// Whether a value of `ty` is an `externref`: an extern handle, or a
     /// variant of two cases, one holding nothing and one holding a handle,
     /// which is the handle or the null. `Option` of a handle is one.
@@ -704,7 +730,7 @@ impl TypeTable {
     pub fn is_externref(&self, ty: TypeId) -> bool {
         let head = self.representation_head(ty);
         let ResolvedType::Variant { def, type_args } = self.get(head) else {
-            return self.is_extern_handle(head);
+            return self.is_backable_resource(head);
         };
         let Some(payloads) = self.variant_instance_payloads(*def, type_args) else {
             return false;
@@ -712,7 +738,7 @@ impl TypeTable {
         let [a, b] = payloads[..] else {
             return false;
         };
-        let holds_handle = |ty| self.is_extern_handle(self.representation_head(ty));
+        let holds_handle = |ty| self.is_backable_resource(self.representation_head(ty));
         (a == Self::UNIT && holds_handle(b)) || (b == Self::UNIT && holds_handle(a))
     }
 
@@ -1019,7 +1045,9 @@ impl TypeTable {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => !self.is_stackless(ty),
             // An extern handle is an `externref`, which holds no place to
             // write. An affine resource is its own box.
-            ResolvedType::Resource { .. } => self.is_extern_handle(self.representation_head(ty)),
+            ResolvedType::Resource { .. } => {
+                self.is_backable_resource(self.representation_head(ty))
+            }
             _ => false,
         }
     }

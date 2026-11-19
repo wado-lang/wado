@@ -2110,6 +2110,11 @@ pub fn declares_extern_handle(attrs: &[Attribute]) -> bool {
         .any(|a| a.name == CM && a.kv_value("repr") == Some(EXTERNREF_REPR))
 }
 
+/// Whether these attributes bind nothing in the Component Model: no `#[cm]`.
+pub fn binds_no_cm(attrs: &[Attribute]) -> bool {
+    attrs.iter().all(|a| a.name != CM)
+}
+
 /// The class numbers `#[cm(..., classes = "lo..=hi")]` gives a resource's
 /// handles: its own is `lo`, the rest belong to the resources extending it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

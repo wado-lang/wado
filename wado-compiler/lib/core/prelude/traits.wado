@@ -801,12 +801,20 @@ pub trait AffineResource: Resource with () {
 /// Sealed and compiler-stated; user impls are rejected. See WEP: Extern
 /// Handles.
 #[compiler_item("extern_handle")]
-pub trait ExternHandle: Resource with () {
+pub trait ExternHandle: Backable with () {
 }
 
-/// What every extern handle offers: it is the host's object, or backed by a
-/// value of the guest. Only a `RefMut` type backs one: a reference to any
-/// other is a cell, which carries neither the value's identity nor its type.
+/// Marker of a resource a value of the guest may back: an extern handle, or a
+/// resource declared without `#[cm(...)]`, which only such a value backs.
+/// Sealed and compiler-stated; user impls are rejected.
+#[compiler_item("backable")]
+pub trait Backable: Resource with () {
+}
+
+/// What every backable resource offers: a handle is the host's object, or
+/// backed by a value of the guest. Only a `RefMut` type backs one: a reference
+/// to any other is a cell, which carries neither the value's identity nor its
+/// type.
 pub trait Backing with () {
     /// A new handle holding `value`, which only the handle reaches from here
     /// on. Each call makes a handle equal to no other.
@@ -818,7 +826,7 @@ pub trait Backing with () {
     fn backing<T: RefMut>(&self) -> Option<&mut T>;
 }
 
-impl<R: ExternHandle> Backing for R {
+impl<R: Backable> Backing for R {
     fn backed_by<T: RefMut>(value: T) -> R {
         return builtin::extern_handle_backed_by::<R, T>(value);
     }

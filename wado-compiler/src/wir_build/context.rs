@@ -863,7 +863,7 @@ impl<'a> WirContext<'a> {
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Resource { .. } => {
-                if type_table.is_extern_handle(type_id) {
+                if type_table.is_backable_resource(type_id) {
                     WirType::EXTERN
                 } else {
                     Self::ref_to(self.handle_box())
