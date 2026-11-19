@@ -1900,7 +1900,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
                     // `AstId` every other function's do.
-                    for method in default_impl_methods(effect_decl) {
+                    for method in default_impl_methods(&effect_decl.name, &effect_decl.methods) {
                         self.resolve_function(&method);
                     }
                 }
@@ -1912,6 +1912,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         OperationOwner::Resource {
                             has_host: resource_decl.has_host(),
+                            generic: !resource_decl.type_params.is_empty(),
                         },
                     );
                     let resource = self.tysys.def_at(resource_decl.id);
@@ -1921,6 +1922,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         Some(resource),
                     );
+                    let resource_type = self.tysys.type_table.borrow_mut().make_resource(resource);
+                    for method in default_impl_methods(&resource_decl.name, &resource_decl.methods)
+                    {
+                        self.resolve_resource_default(&method, resource_type);
+                    }
                 }
                 // Other items will be added as needed
                 _ => {}

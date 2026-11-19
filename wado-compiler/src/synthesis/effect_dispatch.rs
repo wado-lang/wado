@@ -836,7 +836,7 @@ fn build_dispatch_wrapper_function(
     // effect-like `Call` for effects, a `cm_name`-tagged one for resources —
     // and cm_binding rewrites both uniformly.
     let mut else_stmts: Vec<TirStmt> = Vec::new();
-    if !is_resource && op.cm_name.is_none() && !is_open_boundary_effect && op.has_default {
+    if op.cm_name.is_none() && !is_open_boundary_effect && op.has_default {
         // The declaration gave the operation a body: that is what "no handler
         // installed" does, where nothing else answers for the operation. Being
         // open at the CM boundary is a property of the world rather than of the

@@ -1,0 +1,43 @@
+// An operation of a resource with no host implementation may carry a body, its
+// default: what answers when no handler is installed, as an interface
+// operation's does. An installed handler still answers first.
+
+use { println, Stdout } from "core:cli";
+
+struct Count {
+    n: i32,
+}
+
+resource Counter {
+    fn get(&self) -> i32 {
+        let Some(c) = self.backing::<Count>() else { return -1; };
+        return c.n;
+    }
+    fn label() -> String {
+        return "counter";
+    }
+}
+
+struct Doubling {}
+
+impl Counter for Doubling {
+    fn get(&mut self, this: &Counter) -> i32 {
+        let Some(c) = this.backing::<Count>() else { unreachable(); };
+        resume c.n * 2;
+    }
+    fn label(&mut self) -> String {
+        resume "doubled";
+    }
+}
+
+export fn run() with (Stdout, Counter) {
+    let c = Counter::backed_by(Count { n: 21 });
+    println(`${Counter::label()} ${c.get()}`);
+    let mut d = Doubling {};
+    with Counter => &mut d do {
+        println(`${Counter::label()} ${c.get()}`);
+    }
+}
+
+__DATA__
+{"stdout": "counter 21\ndoubled 42\n"}
