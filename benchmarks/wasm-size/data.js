@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795062396293,
+  "lastUpdate": 1795064902796,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79761,6 +79761,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 435013,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "43441c48636d515459422cbb05fd910e417ec6fa",
+          "message": "Merge pull request #2688 from wado-lang/gfx/optimistic-carson-ltw4it\n\nfeat(lexer): report every bad escape in one compile, as a lexer error",
+          "timestamp": "2026-11-19T13:50:57+09:00",
+          "tree_id": "9055e313910d45bd8d48e0589e5c5aeee71e5ca1",
+          "url": "https://github.com/wado-lang/wado/commit/43441c48636d515459422cbb05fd910e417ec6fa"
+        },
+        "date": 1795064901903,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7291,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24432,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434000,
             "unit": "bytes"
           }
         ]
