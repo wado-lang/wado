@@ -25,7 +25,7 @@ use super::infer_hole::InferHoleTable;
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig, own_effect_params};
 use super::trait_query::SelfBinding;
-use super::types::{FunctionContext, TypeError};
+use super::types::{ComponentLocalResource, FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
 use super::{AbstractSelections, Elaborator};
@@ -1479,12 +1479,35 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         .is_some()
     }
 
-    /// Whether `type_id` is or holds an extern handle anywhere within it.
-    fn type_contains_extern_handle(&self, type_id: TypeId) -> bool {
-        self.first_type_within(type_id, true, &|scope: &Self, t| {
-            scope.tysys.type_table.borrow().is_extern_handle(t)
-        })
-        .is_some()
+    /// Reject a resource no other component can hold, anywhere within
+    /// `type_id`, the type of `position` in the `export` `func`.
+    fn check_export_resources(
+        &mut self,
+        func: &ast::Function,
+        position: String,
+        type_id: TypeId,
+        span: Span,
+    ) {
+        let Some(found) = self.first_type_within(type_id, true, &|scope: &Self, t| {
+            let tt = scope.tysys.type_table.borrow();
+            tt.is_extern_handle(t) || tt.is_hostless_resource_type(t)
+        }) else {
+            return;
+        };
+        let resource = {
+            let tt = self.tysys.type_table.borrow();
+            if tt.is_extern_handle(found) {
+                ComponentLocalResource::ExternHandle
+            } else {
+                ComponentLocalResource::Hostless(tt.name(found))
+            }
+        };
+        let _ = self.emit(TypeError::ComponentLocalResourceAtExport {
+            function: func.name.clone(),
+            position,
+            resource,
+            span,
+        });
     }
 
     /// The first reference `type_id` is or holds anywhere within it, as the
@@ -2693,12 +2716,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: param.span,
                 });
             }
-            if func.is_export && scope.type_contains_extern_handle(type_id) {
-                let _ = scope.emit(TypeError::ExternHandleAtExport {
-                    function: func.name.clone(),
-                    position: format!("parameter '{}'", param.name),
-                    span: param.span,
-                });
+            if func.is_export {
+                scope.check_export_resources(
+                    func,
+                    format!("parameter '{}'", param.name),
+                    type_id,
+                    param.span,
+                );
             }
             // A reference or a view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
@@ -2747,13 +2771,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         if func.is_export {
             scope.check_published(func, "return type", return_type, func.span);
-            if scope.type_contains_extern_handle(return_type) {
-                let _ = scope.emit(TypeError::ExternHandleAtExport {
-                    function: func.name.clone(),
-                    position: "return type".to_string(),
-                    span: func.span,
-                });
-            }
+            scope.check_export_resources(func, "return type".to_string(), return_type, func.span);
         }
         if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(return_type) {
             let _ = scope.emit(TypeError::RefAtCmBoundary {
