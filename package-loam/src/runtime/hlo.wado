@@ -1976,9 +1976,14 @@ fn unpacked_row<E: Float, R, Blocks, Z>(
     into: &mut List<f32>,
 ) {
     let bits = quantized.bits;
+    assert bits == 1 || bits == 2 || bits == 4 || bits == 8;
     let per = 8 / bits;
+    // `per` is a power of two, so a value's byte and place in it are shifts.
+    let places = i32::ctz(per);
     let mask = (1 << bits) - 1;
     let blocks = scales.extents[1];
+    let at = row * bytes;
+    assert at + (into.len() + per - 1) / per <= packed.len();
     // A block's values take only `1 << bits` values, each rounded once here.
     let mut rounded = List::<f32>::filled(1 << bits, 0.0);
     for let b of 0..<(into.len() + quantized.block - 1) / quantized.block {
@@ -1991,7 +1996,8 @@ fn unpacked_row<E: Float, R, Blocks, Z>(
             rounded[q] = E::from_f32((q - zero) as f32 * scale).cast_to::<f32>();
         }
         for let i of b * quantized.block..<i32::min(into.len(), (b + 1) * quantized.block) {
-            into[i] = rounded[packed[row * bytes + i / per] as i32 >> i % per * bits & mask];
+            let q = (unchecked packed[at + (i >> places)]) as i32 >> (i & per - 1) * bits & mask;
+            into[i] = unchecked rounded[q];
         }
     }
 }
