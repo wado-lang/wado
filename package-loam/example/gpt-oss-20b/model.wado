@@ -87,10 +87,10 @@ impl<affine Bk: Backend> Model<Bk> {
     }
 }
 
-/// Continues each prompt `generate.json` records on `backend`, its pools
-/// holding as many experts as `budget` bytes hold, and says whether it picks
-/// the tokens onnxruntime picks.
-pub fn checked<affine Bk: Backend>(backend: Bk, budget: i64) with (_, Stdout, Stderr, Preopens) {
+/// Continues each prompt `generate.json` records on `backend` by `steps`
+/// tokens, its pools holding as many experts as `budget` bytes hold, and says
+/// whether it picks the tokens onnxruntime picks.
+pub fn checked<affine Bk: Backend>(backend: Bk, budget: i64, steps: i32) with (_, Stdout, Stderr, Preopens) {
     let Some([generate, expected]) = recorded("generate.json", "build/logits.bin") else {
         return;
     };
@@ -103,7 +103,7 @@ pub fn checked<affine Bk: Backend>(backend: Bk, budget: i64) with (_, Stdout, St
     };
     for let p of 0..<generate.len() {
         let g = &generate[p];
-        let [generated, logits] = loaded.continued(&g.ids, g.generated.len());
+        let [generated, logits] = loaded.continued(&g.ids, i32::min(steps, g.generated.len()));
         reported(g, &generated, deviation(&logits, &expected, p));
     }
 }

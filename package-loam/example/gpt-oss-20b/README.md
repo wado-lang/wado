@@ -10,8 +10,9 @@ when a token routes to an expert the pools lack.
     cd package-loam/example/gpt-oss-20b
     wado run cpu.wado -- "The capital of France is"
 
-With no prompt, `cpu.wado` continues each prompt `generate.json` records. It
-says whether it picks the tokens onnxruntime picks, and how far the logits it
+With no prompt, `cpu.wado` continues each prompt `generate.json` records by 8
+tokens. It says whether it picks the first tokens onnxruntime picks, and how far
+the logits it
 picks the first token from are from onnxruntime's:
 
     mise run loam-oracle-deps
