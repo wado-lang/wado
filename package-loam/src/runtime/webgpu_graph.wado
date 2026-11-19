@@ -135,16 +135,8 @@ impl Backend for WebGpuBackend {
         recorded: Recorded,
         weights: &List<Any<WebGpuBackend>>,
         earlier: &List<&WebGpuProgram>,
-<<<<<<< HEAD
-    ) -> WebGpuProgram with _ {
-        let folded = constants(&mut self.cpu, &recorded);
-||||||| 3f1db20a83c
-    ) -> WebGpuProgram with _ {
-        let folded = constants(&recorded);
-=======
     ) -> WebGpuProgram with (_, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let folded = constants(&recorded);
->>>>>>> origin/main
+        let folded = constants(&mut self.cpu, &recorded);
         let splats = splats_of(&folded);
         let serial = self.program_serial(structure_of(&recorded));
         let mut reused: Option<Plan> = null;

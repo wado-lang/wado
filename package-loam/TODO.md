@@ -373,28 +373,13 @@ its cost is known to be zero and the effect's is unmeasured. A device builds the
 graph once per shape class, so on one either cost falls only on a shape class's
 first call.
 
-<<<<<<< HEAD
-||||||| 3f1db20a83c
 ### Experts held on demand
 
-- [ ] `decode` and `Requests` with fewer experts held than the layers route to.
-  Their steps run in a loop, and a host step is allowed only in the pass's own
-  region, so recording one traps. They run where the budget holds every
-  expert.
-
-=======
-### Experts held on demand
-
-- [ ] `decode` and `Requests` with fewer experts held than the layers route to.
-  Their steps run in a loop, and a host step is allowed only in the pass's own
-  region, so recording one traps. They run where the budget holds every
-  expert.
 - [ ] `conformance/held_experts.wado` on an input that is not ill-conditioned
   and that still reaches every product. Its second token moves by 1.7e-4 with
   the order a held pass sums in, so the device tests hold it to 4e-4 rather
   than to `LOAM_TOLERANCE`.
 
->>>>>>> origin/main
 ### Devices
 
 A `Cpu` keeps every weight it is given until it drops: `kept_weight` and `pool`
