@@ -25,7 +25,10 @@ mise run on-task-started
 
 ## Procedure
 
-1. Run `mise run benchmark-all` **three times**, each to its own log in
+1. Record the PGO profiles again first:
+   `scripts/dev-bin.sh wado test --pgo benchmark package-gale-highlight-html`,
+   and commit the profiles it rewrites.
+2. Run `mise run benchmark-all` **three times**, each to its own log in
    `scratchpad/`, then pick per row with
    `mise exec -- node benchmark/pick.ts scratchpad/run{1,2,3}.log` (throttling
    only ever slows things down). Use that tool rather than reading the logs by
@@ -33,24 +36,24 @@ mise run on-task-started
    a rate that rounds to a tie across runs cannot pair with the wrong ms/iter.
    Which benchmarks run, and in what order, is `benchmark/mise.toml`'s `all`
    task.
-2. Run http-routing separately (needs `oha` + pinned cores):
+3. Run http-routing separately (needs `oha` + pinned cores):
    `SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`. It keeps
    the per-(server, request) max internally, so one invocation suffices, and it
    measures one worker shape per entry in `SHAPES`. Add `HEADROOM_CHECK=1` when
    `CONNECTIONS_PER_WORKER`, `OHA_CORE_COUNT` or `SHAPES` changed, to confirm
    `oha` was not the ceiling.
-3. Refresh the README Environment line versions: `mise exec -- node --version`,
+4. Refresh the README Environment line versions: `mise exec -- node --version`,
    `mise -C benchmark exec -- bun --version`, `rustc --version`,
    `cc --version | head -1`. `mise -C benchmark ls` names wasi-sdk, and wasmtime's
    version is the `vendor/wasmtime` workspace version.
-4. Update the tables, following README.md's existing layout. http-routing is
+5. Update the tables, following README.md's existing layout. http-routing is
    req/s (higher is better), one table per worker shape. Keep measured figures
    inside tables — prose around them is not re-measured and drifts. An input
    size in the prose comes from the program's own header line, such as
    `gale-gen (Rust): 42786 bytes`, so compare each one with the log.
-5. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
+6. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
    `mise -C wasm-size ls` names Zig, and `moon version` names Moonbit.
-6. Compare every Wado row with the README's previous figure, and attribute each
+7. Compare every Wado row with the README's previous figure, and attribute each
    one that moved (see [PGO](#pgo)). Report those to the user.
 
 ## PGO
