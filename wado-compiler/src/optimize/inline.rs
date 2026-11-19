@@ -2785,7 +2785,13 @@ fn inline_round(
         }
         let func = functions[i].borrow();
         let body = func.body.as_ref().expect("a spliced callee has a body");
-        if has_safepoint(body, type_table, &cold_runs[i], &safepoint_calls, &scans[i].written) {
+        if has_safepoint(
+            body,
+            type_table,
+            &cold_runs[i],
+            &safepoint_calls,
+            &scans[i].written,
+        ) {
             CallSafepoint::Always
         } else {
             CallSafepoint::Never

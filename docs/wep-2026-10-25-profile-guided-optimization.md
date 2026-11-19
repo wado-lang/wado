@@ -349,7 +349,8 @@ by the wall clock for the same fuel, and `json_twitter`'s 29% longer. At 4 both
 ran within a few percent of `-f no-pgo`. Once a price counted what a round
 splices into the callee, 4 cost the cbor serialize rows 10% to 13% of fuel,
 since their drivers price 108 at a hot site against 96. At 5 both
-deserializers ran within 1.5% of the wall clock at 4 before. The cold ratio was measured at a half
+deserializers ran within 1.5% of the wall clock they took at 4 under the
+earlier prices. The cold ratio was measured at a half
 down to an eighth, and moved no fuel region. A quarter grew `gale_gen` least.
 `--optimize-predictable-branch-threshold` keeps LLVM's 99: at 90, 95 and 98 the
 geometric mean moved by under 0.03 points.

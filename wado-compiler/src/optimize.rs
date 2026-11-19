@@ -305,10 +305,9 @@ pub fn optimize(
             // The heaviest source in the tree — the Gale-generated SQLite parser
             // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack.
             //
-            // Threshold 39, O2's 24 scaled as 26 was to 16. Against O3 before
-            // splice-aware prices it gains 0.4% of fuel, and the Gale CSS3
-            // parser's test world grows from 1.54MB at 26 to 1.67MB with no
-            // step: 45 emits 1.77MB.
+            // Threshold 39, O2's 24 scaled by the ratio O3 has kept to O2. The
+            // Gale CSS3 parser's test world grows with it in no step: 1.54MB
+            // at 26, 1.67MB at 39, 1.77MB at 45, in about the same time.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),
                 inline_thresholds: thresholds(39),
