@@ -2,10 +2,10 @@
 // already cloned for another one still gets scalarized.
 //
 // A derived `Serialize` for `Entities` serializes `Urls` at several sites, one
-// through `Option`, so it stays out of line. The clone that scalarized `Urls`'s receiver still took the
-// `JsonSerializer` around the output buffer, because inlining had not yet
-// reduced that parameter to its one field when the clone was minted. Every
-// call then built the wrapper only to pass it.
+// through `Option`, so it stays out of line. The clone that scalarized
+// `Urls`'s receiver still took the `JsonSerializer` around the output buffer,
+// because inlining had not yet reduced that parameter to its one field when
+// the clone was minted. Every call then built the wrapper only to pass it.
 //
 // The clone that narrows both parameters is named for `Urls::serialize` and
 // both narrowings, however many rounds it took to reach: the name spells what

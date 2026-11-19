@@ -1255,26 +1255,25 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
     folds_to_constant(body, op, const_locals, None)
 }
 
-/// Whether the call `call_id` may still hand `callee` a constant it lacks now,
-/// at a numeric parameter [`Verdict::awaits`] weighs: the argument forwards one
-/// of the caller's own parameters, `caller_hopeful`, that the caller's sites
-/// may hand one. A constant arriving later arrives that way. Waiting anywhere
-/// else only delays the splice: `String::len` waited at every site of a cbor
-/// serializer's loop, for 12% of its fuel.
+/// Whether the call `call_id` may still hand its callee a constant it lacks
+/// now at one of `numbers`, the parameters [`Verdict::awaits`] waits on: the
+/// argument is computed from one of the caller's own parameters that the
+/// caller's sites may hand one, `caller_hopeful`. A constant arriving later
+/// arrives that way. Waiting anywhere else only delays the splice:
+/// `String::len` waited at every site of a cbor serializer's loop, for 12% of
+/// its fuel.
 fn may_still_hand_constant(
     caller: &Body,
     call_id: ExprId,
-    callee: &NirFunction,
-    hopeful: &[IndexSet<u32>],
+    numbers: &IndexSet<u32>,
     caller_hopeful: &IndexSet<u32>,
-    type_table: &TypeTable,
 ) -> bool {
-    let ExprKind::Call { func_id, args, .. } = &caller.exprs[call_id].kind else {
+    let ExprKind::Call { args, .. } = &caller.exprs[call_id].kind else {
         unreachable!("a site is a call")
     };
-    numeric_params(callee, &hopeful[func_id.index()], type_table)
-        .into_iter()
-        .any(|p| forwards_param(caller, args[p as usize].expr, caller_hopeful))
+    numbers
+        .iter()
+        .any(|&p| forwards_param(caller, args[p as usize].expr, caller_hopeful))
 }
 
 /// Whether `op` is computed from one of `params` by arithmetic, field accesses
@@ -1283,9 +1282,9 @@ fn forwards_param(body: &Body, op: Operand, params: &IndexSet<u32>) -> bool {
     let Operand::Expr(e) = op else { return false };
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => params.contains(index),
-        ExprKind::FieldAccess { expr, .. } | ExprKind::Cast { expr, .. } | ExprKind::Unary { expr, .. } => {
-            forwards_param(body, *expr, params)
-        }
+        ExprKind::FieldAccess { expr, .. }
+        | ExprKind::Cast { expr, .. }
+        | ExprKind::Unary { expr, .. } => forwards_param(body, *expr, params),
         ExprKind::Binary { left, right, .. } => {
             forwards_param(body, *left, params) || forwards_param(body, *right, params)
         }
@@ -1295,7 +1294,11 @@ fn forwards_param(body: &Body, op: Operand, params: &IndexSet<u32>) -> bool {
 
 /// The parameters among `params` that hold a number. A constant receiver halves
 /// almost any method, so only a number is worth waiting for.
-fn numeric_params(func: &NirFunction, params: &IndexSet<u32>, type_table: &TypeTable) -> IndexSet<u32> {
+fn numeric_params(
+    func: &NirFunction,
+    params: &IndexSet<u32>,
+    type_table: &TypeTable,
+) -> IndexSet<u32> {
     params
         .iter()
         .copied()
@@ -2024,7 +2027,7 @@ fn classify_callee(
 
     // Over budget as written, but the caller's constants may still fold it
     // under.
-
+    //
     // `inline` reads the call sites, since splicing pays at the sites that
     // exist; the hold reads the body alone, since it protects an option whose
     // evidence has not arrived — a `field<T>` in a derived serializer is
@@ -2588,10 +2591,9 @@ struct Candidates<'a> {
     /// Whether a call the engine may fold is still left to it: until the loop
     /// first converges ([`InlineHolds::release`]).
     fold_pending: bool,
-    /// The candidates [`Verdict::awaits`] keeps waiting, and per function the
-    /// parameters some site may still hand a constant.
-    awaiting: &'a IndexSet<FuncId>,
-    hopeful: &'a [IndexSet<u32>],
+    /// The candidates [`Verdict::awaits`] keeps waiting, each with the numeric
+    /// parameters it waits on.
+    awaiting: &'a IndexMap<FuncId, IndexSet<u32>>,
     /// What the re-scan of a splice may add, by the heat of the site that
     /// started it: a hot site's own callee may spend a plain cap by itself.
     rescan_cap: ByHeat<usize>,
@@ -2777,7 +2779,7 @@ fn inline_round(
     let mut reach: IndexMap<FuncId, ByHeat<Reach>> = IndexMap::default();
     let mut net_price: IndexMap<FuncId, ByHeat<Option<usize>>> = IndexMap::default();
     let mut shrinking: IndexSet<FuncId> = IndexSet::default();
-    let mut awaiting: IndexSet<FuncId> = IndexSet::default();
+    let mut awaiting: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
 
     // Also collect function_strings for each candidate (to update caller's
     // strings after inlining). `function_strings` is keyed by `(module, name)`;
@@ -2995,7 +2997,10 @@ fn inline_round(
             shrinking.insert(id);
         }
         if verdict.awaits {
-            awaiting.insert(id);
+            awaiting.insert(
+                id,
+                numeric_params(&func, &hopeful_params[id.index()], type_table),
+            );
         }
         inline_candidates.insert(id, func);
     }
@@ -3103,7 +3108,6 @@ fn inline_round(
             ctfe_eligible: &ctfe_eligible,
             fold_pending,
             awaiting: &awaiting,
-            hopeful: &hopeful_params,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels. A cold site
             // splices less, but what it spliced recurses as far as a plain one.
@@ -3858,8 +3862,9 @@ fn try_inline_call_expr(
     };
     // Like a call left to the engine, a wait lapses when the loop converges.
     let awaits = candidates.fold_pending
-        && candidates.awaiting.contains(&func_id)
-        && may_still_hand_constant(caller, call_id, candidate, candidates.hopeful, frame.hopeful, type_table);
+        && candidates.awaiting.get(&func_id).is_some_and(|numbers| {
+            may_still_hand_constant(caller, call_id, numbers, frame.hopeful)
+        });
     frame.deferred |= awaits;
     let refusal = match (site.admission(), reach) {
         _ if awaits => Some(Refusal::AwaitingConstant),
