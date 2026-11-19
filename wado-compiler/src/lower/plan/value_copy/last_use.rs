@@ -7,7 +7,7 @@ use super::confine::ConfinedParams;
 use super::funcset::FuncKeySet;
 use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
-use super::points_to::{Locations, PointsTo};
+use super::points_to::{Locations, Mod, PointsTo};
 use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use super::{is_scalar_type, needs_value_copy};
@@ -109,7 +109,7 @@ pub fn analyze_ownership(
         match_sources: Vec::new(),
         pending_writes: Vec::new(),
         handed: Vec::new(),
-        beyond_handed_writes: 0,
+        beyond_handed: Vec::new(),
         points_to,
         frame: points_to
             .frame(&func.module_source, &func.name)
@@ -250,7 +250,18 @@ struct WriteCheck<'a> {
 struct CallStart {
     mutations: usize,
     handed: usize,
-    beyond_handed_writes: usize,
+    beyond_handed: usize,
+}
+
+/// A write beyond what calls are handed.
+#[derive(Clone, Copy)]
+enum Beyond<'a> {
+    /// A call's, which writes this much of what a global reaches.
+    Call(&'a Mod),
+    /// A call's that may write anything.
+    Opaque,
+    /// One to storage no local names.
+    Lands(Lands<'a>),
 }
 
 /// What may be written while a callee holds an argument.
@@ -876,10 +887,9 @@ impl<'a> Analyzer<'a> {
                 });
             }
             // A write to storage no local names, a global's say, lands beyond
-            // what calls are handed, as a callee's own such write does in
-            // `ModRef`.
+            // what calls are handed, as a callee's own such write does.
             if self.mutations.len() == recorded {
-                self.beyond_handed_writes += 1;
+                self.beyond_handed.push(Beyond::Lands(lands));
             }
         }
     }
@@ -1285,17 +1295,23 @@ pub fn mark_unanalyzed_in_place_assigns(
     scan.visit_block(body);
 }
 
-/// Whether `body` borrows a value of its own that a copy would wrap, which the
-/// walk decides the copy of even where no local needs one.
-pub fn borrows_temporary(body: &TirBlock, type_table: &TypeTable) -> bool {
+/// Whether `body` hands a call a value a copy would wrap, or borrows one of its
+/// own, which the walk decides the copy of even where no local needs one: a
+/// global read straight into a call.
+pub fn hands_copyable_value(body: &TirBlock, type_table: &TypeTable) -> bool {
     struct Scan<'t> {
         type_table: &'t TypeTable,
         found: bool,
     }
     impl TirRefVisitor for Scan<'_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
-            self.found |= place::borrowed_temporary(expr, self.type_table.compiler_items())
-                .is_some_and(|value| needs_value_copy(value.type_id, self.type_table));
+            let needs_copy = |e: &TirExpr| needs_value_copy(e.type_id, self.type_table);
+            self.found |= match &expr.kind {
+                TirExprKind::Call { args, .. } => args.iter().any(|a| needs_copy(&a.expr)),
+                TirExprKind::IndirectCall { args, .. } => args.iter().any(needs_copy),
+                _ => false,
+            } || place::borrowed_temporary(expr, self.type_table.compiler_items())
+                .is_some_and(needs_copy);
             if !self.found {
                 self.walk_expr(expr);
             }
@@ -1492,10 +1508,10 @@ struct Analyzer<'a> {
     /// What every value handed to a call reaches, in walk order, so a check
     /// reads what the later arguments handed on.
     handed: Vec<Locations<'a>>,
-    /// How many writes walked so far may land beyond what calls are handed,
-    /// a call's or one to storage no local names, so a check sees whether one
-    /// ran while the callee held its argument.
-    beyond_handed_writes: usize,
+    /// The writes walked so far that may land beyond what calls are handed, a
+    /// call's or one to storage no local names, in walk order, so a check reads
+    /// those made while the callee held its argument.
+    beyond_handed: Vec<Beyond<'a>>,
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
@@ -2563,18 +2579,31 @@ impl<'a> Analyzer<'a> {
                 sources.extend(handed.iter());
             }
         }
-        let beyond_handed = self.beyond_handed_writes > since.beyond_handed_writes;
+        let beyond = &self.beyond_handed[since.beyond_handed..];
+        let beyond_handed = beyond.iter().any(|b| match b {
+            Beyond::Call(m) => m.all,
+            Beyond::Opaque => true,
+            Beyond::Lands(_) => false,
+        });
         let mut written = pt.reach_written(sources, beyond_handed);
-        for m in &self.mutations[since.mutations..] {
-            match m.lands {
-                Lands::Local(local) => {
-                    written.insert(
-                        pt.location(frame, local)
-                            .expect("the analysis gives every local a body writes a location"),
-                    );
-                }
-                Lands::Place(set) => written.extend(set.iter()),
+        let landed = |lands: Lands<'a>, written: &mut IndexSet<u32>| match lands {
+            Lands::Local(local) => {
+                written.insert(
+                    pt.location(frame, local)
+                        .expect("the analysis gives every local a body writes a location"),
+                );
             }
+            Lands::Place(set) => written.extend(set.iter()),
+        };
+        for b in beyond {
+            match *b {
+                Beyond::Call(m) => written.extend(m.locations.iter().copied()),
+                Beyond::Opaque => {}
+                Beyond::Lands(lands) => landed(lands, &mut written),
+            }
+        }
+        for m in &self.mutations[since.mutations..] {
+            landed(m.lands, &mut written);
         }
         CallWrites {
             locations: written,
@@ -2583,14 +2612,14 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Where the walk stands as a call begins, counting the call itself among
-    /// those that may write beyond what they are handed when `beyond_handed`.
-    fn start_call(&mut self, beyond_handed: bool) -> CallStart {
+    /// those that may write beyond what they are handed by `beyond`.
+    fn start_call(&mut self, beyond: Option<Beyond<'a>>) -> CallStart {
         let start = CallStart {
             mutations: self.mutations.len(),
             handed: self.handed.len(),
-            beyond_handed_writes: self.beyond_handed_writes,
+            beyond_handed: self.beyond_handed.len(),
         };
-        self.beyond_handed_writes += usize::from(beyond_handed);
+        self.beyond_handed.extend(beyond);
         start
     }
 
@@ -3266,8 +3295,8 @@ impl<'a> Analyzer<'a> {
                 let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 // A call that never returns writes nothing anyone reads after.
                 let start = self.start_call(
-                    !self.type_table.is_never(expr.type_id)
-                        && self.mod_ref.writes_beyond_handed(func, self.builtins),
+                    (!self.type_table.is_never(expr.type_id))
+                        .then(|| Beyond::Call(self.points_to.call_mod(func, self.builtins))),
                 );
                 self.hold_loans(&exprs, live);
                 if record {
@@ -3310,7 +3339,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
-                self.start_call(true);
+                self.start_call(Some(Beyond::Opaque));
                 self.hold_loans(&args.iter().collect::<Vec<_>>(), live);
                 for arg in args.iter().rev() {
                     self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
@@ -3319,7 +3348,10 @@ impl<'a> Analyzer<'a> {
             TirExprKind::IndirectCall { callee, args } => {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
                 let exprs: Vec<&TirExpr> = args.iter().collect();
-                let start = self.start_call(true);
+                let start = self.start_call(
+                    (!self.type_table.is_never(expr.type_id))
+                        .then(|| Beyond::Call(self.points_to.indirect_mod(expr))),
+                );
                 self.hold_loans(&exprs, live);
                 let kept = if record {
                     // The closure called hands on what it captured.

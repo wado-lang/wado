@@ -19,14 +19,20 @@
 //!
 //! The solve collapses each cycle of copies into one node, as every node on it
 //! ends with one set, and merges a node fed by one copy alone into its source.
+//!
+//! A call writes what it is handed, and beyond that only what a global
+//! reaches. Of the latter, each function's [`Mod`] is what its own body assigns
+//! or hands a builtin, closed over the calls it makes.
 
 use std::ops::Range;
+use std::rc::Rc;
 
 mod loc_set;
 
 use loc_set::{Loc, LocSet};
 
 use super::analyze::collect_pattern_bindings;
+use super::super::closure::ClosurePlan;
 use super::funcset::FuncIndex;
 use super::last_use::collect_child_exprs;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
@@ -37,8 +43,8 @@ use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
-    ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
+    BuiltinDeclaration, BuiltinDeclarations, CaptureSource, FunctionKind,
+    FunctionRef, ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
@@ -75,6 +81,38 @@ pub struct PointsTo {
     /// What a call writing beyond what it is handed may write:
     /// [`Self::global_reach`].
     global_reach: IndexSet<u32>,
+    mods: Mods,
+}
+
+/// The storage a call writes beyond what it is handed: the only storage
+/// besides that a callee can reach is what a global reaches, so a part of
+/// [`PointsTo::global_reach`].
+#[derive(Clone, Default, PartialEq)]
+pub struct Mod {
+    /// It may write all of it.
+    pub all: bool,
+    /// The locations it writes where not `all`.
+    pub locations: IndexSet<u32>,
+}
+
+impl Mod {
+    fn all() -> Mod {
+        Mod {
+            all: true,
+            locations: IndexSet::default(),
+        }
+    }
+
+    fn absorb(&mut self, other: &Mod) {
+        if self.all {
+            return;
+        }
+        if other.all {
+            *self = Mod::all();
+        } else {
+            self.locations.extend(other.locations.iter().copied());
+        }
+    }
 }
 
 /// Record `node` for `expr` in `sites`, keyed by the expression's address.
@@ -257,6 +295,174 @@ impl PointsTo {
     pub fn global_reach(&self) -> &IndexSet<u32> {
         &self.global_reach
     }
+
+    /// What a call to `func` writes beyond what it is handed.
+    #[must_use]
+    pub fn call_mod(&self, func: &FunctionRef, builtins: &BuiltinDeclarations) -> &Mod {
+        if builtins.get(func).is_some() {
+            return if builtins.stays_within_handed(func) {
+                &self.mods.none
+            } else {
+                &self.mods.all
+            };
+        }
+        match self.frame(&func.module_source, &func.name) {
+            Some(frame) => &self.mods.of[frame as usize],
+            None => &self.mods.all,
+        }
+    }
+
+    /// What the call through a function value `call` writes beyond what it is
+    /// handed.
+    #[must_use]
+    pub fn indirect_mod(&self, call: &TirExpr) -> &Mod {
+        let (m, span) = self
+            .mods
+            .through
+            .get(&std::ptr::from_ref(call).addr())
+            .expect("the analysis records every call through a function value");
+        assert_eq!(
+            *span, call.span,
+            "a site keyed by address moved after the analysis"
+        );
+        m
+    }
+
+    /// The functions a call through the function value in `node` may run, or
+    /// `None` where one is code the analysis cannot see.
+    fn run_through(&self, node: u32, targets: &IndexMap<u32, Option<Frame>>) -> Option<Vec<Frame>> {
+        let mut frames = Vec::new();
+        for loc in self.set(node).iter() {
+            match targets.get(&loc) {
+                Some(Some(frame)) => frames.push(*frame),
+                Some(None) => return None,
+                None => {}
+            }
+        }
+        Some(frames)
+    }
+
+    /// What `writes` names of [`Self::global_reach`], before the calls it
+    /// makes are counted.
+    fn own_mod(&self, writes: &FrameWrites) -> Mod {
+        if writes.all {
+            return Mod::all();
+        }
+        let held = |loc: &u32| self.global_reach.contains(loc);
+        let mut locations: IndexSet<u32> = writes.locations.iter().copied().filter(held).collect();
+        for &place in &writes.places {
+            locations.extend(self.set(place).iter().filter(held));
+        }
+        // What a global reaches is closed under reach, so the walk stays in it.
+        let seeds: Vec<u32> = writes
+            .handed
+            .iter()
+            .flat_map(|&node| self.set(node).iter())
+            .filter(held)
+            .collect();
+        locations.extend(self.reach_until(seeds, &IndexSet::default()));
+        Mod {
+            all: false,
+            locations,
+        }
+    }
+
+    /// Close each function's own writes over the calls it makes.
+    fn solve_mods(
+        &self,
+        writes: &[FrameWrites],
+        analyzed: &[bool],
+        targets: &IndexMap<u32, Option<Frame>>,
+        through: IndexMap<usize, (u32, Span)>,
+    ) -> Mods {
+        let none = FrameWrites::default();
+        let mut own: Vec<Mod> = Vec::with_capacity(analyzed.len());
+        let mut callees: Vec<Vec<usize>> = vec![Vec::new(); analyzed.len()];
+        for (frame, &analyzed) in analyzed.iter().enumerate() {
+            if !analyzed {
+                own.push(Mod::all());
+                continue;
+            }
+            let w = writes.get(frame).unwrap_or(&none);
+            let mut m = self.own_mod(w);
+            callees[frame].extend(w.calls.iter().map(|&c| c as usize));
+            for &value in &w.through {
+                match self.run_through(value, targets) {
+                    Some(frames) => callees[frame].extend(frames.into_iter().map(|f| f as usize)),
+                    None => m = Mod::all(),
+                }
+            }
+            own.push(m);
+        }
+        let mut of: Vec<Rc<Mod>> = vec![Rc::default(); analyzed.len()];
+        for component in strongly_connected_components(&callees) {
+            let mut m = Mod::default();
+            for &frame in &component {
+                m.absorb(&own[frame]);
+                for &callee in &callees[frame] {
+                    if !component.contains(&callee) {
+                        m.absorb(&of[callee]);
+                    }
+                }
+            }
+            let m = Rc::new(m);
+            for &frame in &component {
+                of[frame] = Rc::clone(&m);
+            }
+        }
+        let through = through
+            .into_iter()
+            .map(|(site, (value, span))| {
+                let m = match self.run_through(value, targets) {
+                    Some(frames) => {
+                        let mut m = Mod::default();
+                        for frame in frames {
+                            m.absorb(&of[frame as usize]);
+                        }
+                        m
+                    }
+                    None => Mod::all(),
+                };
+                (site, (m, span))
+            })
+            .collect();
+        Mods {
+            of,
+            through,
+            none: Mod::default(),
+            all: Mod::all(),
+        }
+    }
+}
+
+/// What calls write beyond what they are handed.
+#[derive(Default)]
+struct Mods {
+    /// By the frame of the function called.
+    of: Vec<Rc<Mod>>,
+    /// By the call through a function value, keyed as `handed` is.
+    through: IndexMap<usize, (Mod, Span)>,
+    none: Mod,
+    all: Mod,
+}
+
+/// What a frame's own code writes, and the calls it makes, before the solve
+/// says which storage that is.
+#[derive(Default)]
+struct FrameWrites {
+    /// Locations it assigns.
+    locations: Vec<u32>,
+    /// Nodes naming storage it assigns.
+    places: Vec<u32>,
+    /// Nodes naming storage a builtin it calls may write, with all that
+    /// storage reaches.
+    handed: Vec<u32>,
+    /// The functions it calls.
+    calls: Vec<Frame>,
+    /// The function values it calls through.
+    through: Vec<u32>,
+    /// It runs code that may write anything a global reaches.
+    all: bool,
 }
 
 /// What a handle held in a value lets its holder do to another local's storage.
@@ -1120,10 +1326,18 @@ struct Builder<'a> {
     /// The value of a function the analysis has no body for: what a call
     /// through it hands escapes, and its result is what escapes.
     unseen_function: u32,
+    /// What each frame writes, by frame.
+    frame_writes: Vec<FrameWrites>,
+    /// The function each function value's location runs, `None` for code the
+    /// analysis cannot see.
+    targets: IndexMap<u32, Option<Frame>>,
+    /// The function value each indirect call runs, keyed as `handed` is.
+    through: IndexMap<usize, (u32, Span)>,
 }
 
 #[must_use]
-pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFunctor]) -> PointsTo {
+pub fn compute(flat: &FlatPackage, fields: &StructFields, closures: &ClosurePlan) -> PointsTo {
+    let functors = &closures.functor_infos;
     let type_table = flat.type_table.borrow();
     let mut functions = FuncIndex::default();
     for (i, func) in flat.functions.iter().enumerate() {
@@ -1167,6 +1381,9 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         labels: Vec::new(),
         closure_calls: Vec::new(),
         unseen_function: 0,
+        frame_writes: Vec::new(),
+        targets: IndexMap::default(),
+        through: IndexMap::default(),
     };
     b.escape = b.g.node();
     // Whatever escapes may reach, and be stored in, whatever else escapes.
@@ -1191,6 +1408,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
             ret: b.escape,
         },
     );
+    b.targets.insert(unseen, None);
     b.unseen_function = b.naming(unseen);
     for (i, func) in flat.functions.iter().enumerate() {
         let func = func.borrow();
@@ -1227,6 +1445,20 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
                 .expect("closure planning adds each `$call` to the package")
         })
         .collect();
+    // A callee specialized to a closure is handed the closure's captures, not a
+    // function value, and runs that closure's `$call` wherever it calls the
+    // parameter.
+    for ((module, name), specialized) in &closures.specialized_locals {
+        let frame = functions
+            .id(module, name)
+            .expect("closure planning adds each specialized callee to the package");
+        for local in specialized {
+            let captured = b.local(frame, local.local_index);
+            let call = b.closure_calls[local.functor_id as usize];
+            let value = b.function_value(call, true, vec![captured]);
+            b.g.copy(value, captured);
+        }
+    }
     for global in &flat.globals {
         let node = b.global(&global.module_source, &global.name);
         b.frame = b.next_frame;
@@ -1265,8 +1497,16 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         written: std::mem::take(&mut b.written),
         globals: std::mem::take(&mut b.globals),
         global_reach: IndexSet::default(),
+        mods: Mods::default(),
     };
     result.global_reach = result.reach_until(global_nodes, &IndexSet::default());
+    let analyzed: Vec<bool> = b.callees.iter().map(|c| c.analyzed).collect();
+    result.mods = result.solve_mods(
+        &b.frame_writes,
+        &analyzed,
+        &b.targets,
+        std::mem::take(&mut b.through),
+    );
     drop(b);
     result.functions = functions;
     result
@@ -1285,6 +1525,15 @@ impl Builder<'_> {
             self.g.inert.insert(node);
         }
         node
+    }
+
+    /// What the frame being read writes.
+    fn frame_writes(&mut self) -> &mut FrameWrites {
+        let at = self.frame as usize;
+        if self.frame_writes.len() <= at {
+            self.frame_writes.resize_with(at + 1, FrameWrites::default);
+        }
+        &mut self.frame_writes[at]
     }
 
     fn global(&mut self, module: &ModuleSource, name: &str) -> u32 {
@@ -1312,6 +1561,7 @@ impl Builder<'_> {
             ret: self.returns[frame as usize],
         };
         self.g.targets.insert(object, target);
+        self.targets.insert(object, Some(frame));
         value
     }
 
@@ -1588,11 +1838,13 @@ impl Builder<'_> {
     fn assign(&mut self, target: &TirExpr, value: Option<u32>) {
         if let TirExprKind::Local { index, .. } = &target.kind {
             let node = self.local(self.frame, *index);
+            self.frame_writes().locations.push(node);
             if let Some(v) = value {
                 self.g.copy(v, node);
             }
         } else {
             let place = self.referenced(target);
+            self.frame_writes().places.push(place);
             if let Some(v) = value {
                 self.g.store(place, v);
             }
@@ -1741,6 +1993,7 @@ impl Builder<'_> {
                 value,
             } => {
                 let node = self.global(module_source, name);
+                self.frame_writes().locations.push(node);
                 if let Some(v) = self.eval(value) {
                     self.g.copy(v, node);
                 }
@@ -1779,16 +2032,39 @@ impl Builder<'_> {
                 None
             }
             TirExprKind::Call { func, args, .. } => {
+                // A call that never returns writes nothing anyone reads after.
+                let returns = !self.type_table.is_never(expr.type_id);
                 let mut args = args.iter().map(|a| &a.expr);
                 if let Some(decl) = self.builtins.get(&**func) {
                     let args: Vec<&TirExpr> = args.collect();
                     let returns_reference = self.type_table.is_reference(expr.type_id);
-                    return self.builtin_call(decl, returns_reference, &args);
+                    let result = self.builtin_call(decl, returns_reference, &args);
+                    if returns {
+                        let handed: Vec<u32> =
+                            args.iter().map(|arg| site_of(&self.handed, arg)).collect();
+                        let beyond = !self.builtins.stays_within_handed(&**func);
+                        let writes = self.frame_writes();
+                        writes.handed.extend(handed);
+                        writes.all |= beyond;
+                    }
+                    return result;
                 }
                 match self.functions.id(&func.module_source, &func.name) {
-                    Some(id) => self.call(id, &mut args),
-                    None => self.opaque_call(&[], &mut args),
+                    Some(id) => {
+                        if returns {
+                            self.frame_writes().calls.push(id);
+                        }
+                        self.call(id, &mut args)
+                    }
+                    None => {
+                        self.frame_writes().all |= returns;
+                        self.opaque_call(&[], &mut args)
+                    }
                 }
+            }
+            TirExprKind::CmRawCall { .. } => {
+                self.frame_writes().all = true;
+                self.eval_children(expr)
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let slots = self.fn_slots(callee.type_id);
@@ -1814,6 +2090,10 @@ impl Builder<'_> {
                         result,
                     },
                 );
+                note_site(&mut self.through, expr, v);
+                if !self.type_table.is_never(expr.type_id) {
+                    self.frame_writes().through.push(v);
+                }
                 Some(result)
             }
             TirExprKind::FuncRef {
@@ -1910,13 +2190,16 @@ impl Builder<'_> {
                 }
                 self.eval(body)
             }
-            _ => {
-                let mut children = Vec::new();
-                collect_child_exprs(expr, &mut children);
-                let values: Vec<Option<u32>> = children.into_iter().map(|c| self.eval(c)).collect();
-                self.join(values)
-            }
+            _ => self.eval_children(expr),
         }
+    }
+
+    /// The union of what `expr`'s children carry.
+    fn eval_children(&mut self, expr: &TirExpr) -> Option<u32> {
+        let mut children = Vec::new();
+        collect_child_exprs(expr, &mut children);
+        let values: Vec<Option<u32>> = children.into_iter().map(|c| self.eval(c)).collect();
+        self.join(values)
     }
 }
 

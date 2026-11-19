@@ -1,0 +1,63 @@
+// A call that writes one global leaves another global's storage alone, so an
+// argument read out of the other takes no copy across the call, whether or not
+// the body has a local a copy would wrap. One that writes the argument's own
+// global still copies it.
+
+struct Pair {
+    a: i32,
+    s: List<i32>,
+}
+
+global mut READ: Pair = Pair { a: 1, s: [] };
+global mut LOG: List<i32> = [];
+
+#[inline("never")]
+fn note(n: i32) -> i32 {
+    LOG.push(n);
+    return n;
+}
+
+#[inline("never")]
+fn bump_read(n: i32) -> i32 {
+    READ.a += 1000;
+    return n;
+}
+
+#[inline("never")]
+fn two(p: Pair, n: i32) -> i32 {
+    return p.a * 10 + n;
+}
+
+#[inline("never")]
+fn untouched() -> i32 {
+    return two(READ, note(2));
+}
+
+#[inline("never")]
+fn untouched_beside_local() -> i32 {
+    let mine = Pair { a: builtin::black_box(3), s: [] };
+    return two(READ, note(2)) + mine.a;
+}
+
+#[inline("never")]
+fn written() -> i32 {
+    return two(READ, bump_read(2));
+}
+
+export fn run() {
+    assert untouched() == 12;
+    assert untouched_beside_local() == 15;
+    assert LOG.len() == 2;
+    assert written() == 12;
+    assert READ.a == 1001;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["lower/value_copy/confined"]},
+    "wir_expect:O2": [
+        "fn \"value_copy_call_writes_other_global.wado/untouched\"() {\n    return block -> i32 {\n        let $mv_arg_1: ref \"value_copy_call_writes_other_global.wado//Pair\";\n        \"value_copy_call_writes_other_global.wado/two\"(local.tee $mv_arg_1(global:value_copy_call_writes_other_global.wado::READ).a, $mv_arg_1.s,",
+        "$sroa_mine_a_3 = black_box(3);\n    return block -> i32 {\n        let $mv_arg_1: ref \"value_copy_call_writes_other_global.wado//Pair\";\n        \"value_copy_call_writes_other_global.wado/two\"(local.tee $mv_arg_1(global:value_copy_call_writes_other_global.wado::READ).a, $mv_arg_1.s,"
+    ]
+}

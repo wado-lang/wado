@@ -63,40 +63,39 @@ fn "remark_param_gate.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(
 }
 
 fn "remark_param_gate.wado/$cm_export__run"() {
-    let $load_1: i32;
-    let v: ref "core:prelude/string.wado//String";
+    let s: ref "core:prelude/string.wado//String";
+    let a_end: i32;
+    let b: ref Array<u8>;
     let i: i32;
+    let $licm_repr_11: ref Array<u8>;
     let $cm_pair_7: i64;
     if $inline_is_trace_3: block -> bool {
-        v = global:remark_param_gate.wado::LOG_LEVEL;
-        let $array_clone_src_1: ref Array<u8>;
-        $array_clone_src_1 = v.repr;
-        $load_1 = v.used;
-        let $array_clone_dst_2: ref Array<u8>;
-        builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1);
-        if $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
-            $array_clone_src_1 = array.new_data<u8>("trace");
-            if $load_1 != 5 {
-                break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+        s = global:remark_param_gate.wado::LOG_LEVEL;
+        if $inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
+            a_end = s.used;
+            b = array.new_data<u8>("trace");
+            if a_end != 5 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
             }
             i = 0;
+            $licm_repr_11 = s.repr;
             b4: block {
                 l5: loop {
-                    break_if b4 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($load_1);
-                    if builtin::array_get_value<u8>($array_clone_dst_2, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                    break_if b4 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
+                    if builtin::array_get_value<u8>($licm_repr_11, i) != builtin::array_get_value<u8>(b, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                    if builtin::array_get_value<u8>($licm_repr_11, i) != builtin::array_get_value<u8>(b, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                    if builtin::array_get_value<u8>($licm_repr_11, i) != builtin::array_get_value<u8>(b, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                     }
                     i = i + 1;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                    if builtin::array_get_value<u8>($licm_repr_11, i) != builtin::array_get_value<u8>(b, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                     }
                     i = i + 1;
                     continue l5;
@@ -104,36 +103,36 @@ fn "remark_param_gate.wado/$cm_export__run"() {
             };
             b10: block {
                 l11: loop {
-                    break_if b10 i >= $load_1;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, i) != builtin::array_get_value<u8>($array_clone_src_1, i) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                    break_if b10 i >= a_end;
+                    if builtin::array_get_value<u8>($licm_repr_11, i) != builtin::array_get_value<u8>(b, i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                     }
                     i = i + 1;
                     continue l11;
                 };
             };
-            break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
         } {
             break $inline_is_trace_3: 1;
         }
         break $inline_is_trace_3: 0;
     } {
-        $array_clone_src_1 = array.new_data<u8>("tracing");
-        $load_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+        b = array.new_data<u8>("tracing");
+        a_end = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
         i = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-        $load_1 = "remark_param_gate.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_1);
-        builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(8)), 0, $array_clone_src_1, 0, 7);
-        builtin::array_set_u8($array_clone_dst_2, 7, 10);
+        a_end = "remark_param_gate.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_end);
+        builtin::array_copy<u8>(local.tee $licm_repr_11(builtin::array_new<u8>(8)), 0, b, 0, 7);
+        builtin::array_set_u8($licm_repr_11, 7, 10);
         "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
-        }; i, $array_clone_dst_2);
+        }; i, $licm_repr_11);
         if ref.is_null(ref.null eq) == 0 {
         } else {
             "wasi/stream-drop-writable"(i);
         }
         if ref.is_null(ref.null eq) == 0 {
         } else {
-            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_1);
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(a_end);
         }
     }
     "wasi/task-return"(0);

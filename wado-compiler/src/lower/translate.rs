@@ -98,7 +98,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
     // After the last rewrite of a body, which would move the arguments it keys.
     let struct_fields_map = struct_fields(&flat.structs);
     let points_to = in_span(profiler, "lower/points_to", || {
-        value_copy::points_to::compute(&flat, &struct_fields_map, &closure.functor_infos)
+        value_copy::points_to::compute(&flat, &struct_fields_map, &closure)
     });
     let FlatPackage {
         entry_module_source,
@@ -507,7 +507,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // them — running them is otherwise pure per-function allocation, and most
         // functions (scalar/reference-only) hit this path. What a reference
         // leads to counts, which `*r` hands to a call, and so does what a cell
-        // local holds, and a borrowed temporary, whose copy the walk decides.
+        // local holds, and a value a call is handed or a borrowed temporary,
+        // whose copy the walk decides.
         let needs_copy_analysis = {
             let tt = base.type_table.borrow();
             func.params
@@ -518,7 +519,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 || func
                     .body
                     .as_ref()
-                    .is_some_and(|b| value_copy::last_use::borrows_temporary(b, &tt))
+                    .is_some_and(|b| value_copy::last_use::hands_copyable_value(b, &tt))
         };
         // One resolver for the body, shared by every question about what an
         // expression names: the ownership walk and the reference-root table.
