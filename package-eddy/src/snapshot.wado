@@ -92,7 +92,8 @@ internal fn checkout_at(repo: &String, tree: &String, sha: &String) -> String wi
     let root = fs::normalize(fs::join(repo, tree)).unwrap();
     // Either half may outlive the other when one is removed by hand: git's
     // record of the worktree, or its directory.
-    if !fs::exists(&root) || worktree_git_dir(repo, &root) matches { None } {
+    let recorded = if fs::exists(&root) { worktree_git_dir(repo, &root) } else { null };
+    let Some(git_dir) = recorded else {
         git(["-C", *repo, "worktree", "prune"]);
         fs::remove_dir_all(&root).unwrap();
         // `worktree_git_dir` finds the tree by the absolute path git records.
@@ -101,21 +102,21 @@ internal fn checkout_at(repo: &String, tree: &String, sha: &String) -> String wi
             "--force", "--detach", *tree, *sha,
         ]);
         return root;
-    }
-    tree_git(repo, &root, ["checkout", "--force", "--detach", "--quiet", *sha]);
-    reset_checkout(repo, &root, sha);
+    };
+    git(git_dir_args(&git_dir, &root, ["checkout", "--force", "--detach", "--quiet", *sha]));
+    reset_worktree(&git_dir, &root, sha);
     return root;
 }
 
-test "a tree is checked out again in place, and what a review left is gone" {
-    // `wado test` lets git see no repository above the package.
-    let repo = "build/checkout-test";
+/// A repository at `repo` with one commit, and that commit. `wado test` lets
+/// git see no repository above the package.
+fn committed_repo(repo: &String) -> String with (Process, Preopens) {
     fs::remove_dir_all(repo).unwrap();
     fs::create_dir_all(repo).unwrap();
     fs::write(fs::join(repo, "kept.rs"), &"kept").unwrap();
     fs::write(fs::join(repo, "README.md"), &"read me").unwrap();
     let in_repo = |args: List<String>| {
-        let mut full = ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t"] as List<String>;
+        let mut full = ["-C", *repo, "-c", "user.name=t", "-c", "user.email=t@t"] as List<String>;
         full.extend(&args);
         return git(full);
     };
@@ -125,8 +126,12 @@ test "a tree is checked out again in place, and what a review left is gone" {
     in_repo(["config", "worktree.useRelativePaths", "true"]);
     in_repo(["add", "."]);
     in_repo(["commit", "--quiet", "-m", "c"]);
-    let head = in_repo(["rev-parse", "HEAD"]).trim().to_string();
+    return in_repo(["rev-parse", "HEAD"]).trim().to_string();
+}
 
+test "a tree is checked out again in place, and what a review left is gone" {
+    let repo = "build/checkout-test";
+    let head = committed_repo(&repo);
     let root = checkout_at(&repo, &"tree", &head);
     let kept = fs::join(&root, "kept.rs");
     let before = fs::metadata(&kept).unwrap().modified;
@@ -138,23 +143,33 @@ test "a tree is checked out again in place, and what a review left is gone" {
     assert fs::metadata(&kept).unwrap().modified == before;
     assert fs::read_to_string(fs::join(&root, "README.md")).unwrap() == "read me";
     assert !fs::exists(fs::join(&root, "left-behind.rs"));
+}
 
+test "a tree's own .git is not what checks it out again" {
     // A run in the tree may point its `.git` at a repository of its own,
     // whose configuration would run anything in eddy's git.
-    let planted = "build/checkout-test-planted";
+    let repo = "build/planted-test";
+    let head = committed_repo(&repo);
+    let root = checkout_at(&repo, &"tree", &head);
+    let planted = "build/planted-test-planted";
     fs::remove_dir_all(planted).unwrap();
     git(["init", "--quiet", planted]);
-    fs::write(fs::join(&root, ".git"), &"gitdir: ../../checkout-test-planted/.git\n").unwrap();
+    fs::write(fs::join(&root, ".git"), &"gitdir: ../../planted-test-planted/.git\n").unwrap();
     fs::write(fs::join(&root, "README.md"), &"scribbled").unwrap();
     assert checkout_at(&repo, &"tree", &head) == root;
     assert fs::read_to_string(fs::join(&root, "README.md")).unwrap() == "read me";
     assert try_git(["-C", planted, "rev-parse", "--verify", "HEAD"]) matches { None };
+}
 
+test "a tree removed by hand is checked out again beside a worktree of a like path" {
     // The directory removed by hand, git's record of it left; and another
     // worktree whose path ends in the tree's, which takes the record named
     // after both.
+    let repo = "build/removed-test";
+    let head = committed_repo(&repo);
+    let root = checkout_at(&repo, &"tree", &head);
     fs::remove_dir_all(&root).unwrap();
-    in_repo(["worktree", "add", "--quiet", "--detach", "elsewhere/build/checkout-test/tree", head]);
+    git(["-C", repo, "worktree", "add", "--quiet", "--detach", `elsewhere/${repo}/tree`, head]);
     assert checkout_at(&repo, &"tree", &head) == root;
     assert fs::read_to_string(fs::join(&root, "README.md")).unwrap() == "read me";
     fs::write(fs::join(&root, "README.md"), &"scribbled").unwrap();
@@ -209,8 +224,18 @@ pub fn tree_git(repo: &String, root: &String, args: List<String>) -> String with
 /// command that rewrites the tree, such as `reset --hard`, would otherwise
 /// make it a link again.
 pub fn tree_args(repo: &String, root: &String, args: List<String>) -> List<String> with (Process, Preopens) {
-    let git_dir = worktree_git_dir(repo, root).expect("the tree must be a worktree of the repository");
-    let mut full = ["-c", "core.symlinks=false", "-C", *root, `--git-dir=${git_dir}`, "--work-tree=."] as List<String>;
+    return git_dir_args(&tree_git_dir(repo, root), root, args);
+}
+
+fn tree_git_dir(repo: &String, root: &String) -> String with (Process, Preopens) {
+    return worktree_git_dir(repo, root).expect("the tree must be a worktree of the repository");
+}
+
+/// `tree_args` for the git directory `git_dir` already found, which saves a
+/// `git` run per command: on a loaded host, a run costs far more than git's
+/// own work.
+fn git_dir_args(git_dir: &String, root: &String, args: List<String>) -> List<String> {
+    let mut full = ["-c", "core.symlinks=false", "-C", *root, `--git-dir=${*git_dir}`, "--work-tree=."] as List<String>;
     full.extend(&args);
     return full;
 }
@@ -407,10 +432,14 @@ pub fn reset_snapshot(repo: &String, root: &String, sha: &String) with (Process,
 }
 
 fn reset_checkout(repo: &String, root: &String, commit: &String) with (Process, Preopens) {
-    tree_git(repo, root, ["reset", "--hard", "--quiet", *commit]);
+    reset_worktree(&tree_git_dir(repo, root), root, commit);
+}
+
+fn reset_worktree(git_dir: &String, root: &String, commit: &String) with Process {
+    git(git_dir_args(git_dir, root, ["reset", "--hard", "--quiet", *commit]));
     // Twice forced: once leaves an untracked directory that is a repository
     // of its own, such as one a test made.
-    tree_git(repo, root, ["clean", "-ffdx", "--quiet"]);
+    git(git_dir_args(git_dir, root, ["clean", "-ffdx", "--quiet"]));
 }
 
 fn index_dir(root: &String) -> String {
