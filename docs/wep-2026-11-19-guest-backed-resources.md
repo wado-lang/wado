@@ -39,8 +39,8 @@ be copied.
 
 With a handler installed, the handler answers, whatever the handle is. With
 none, an operation of a resource with a host implementation calls the host. An
-operation of a resource without one traps, as an interface operation without a
-default does.
+operation of a resource without one runs its default, and traps where it has
+none, as an interface operation does.
 
 ### A backed handle never reaches the host
 

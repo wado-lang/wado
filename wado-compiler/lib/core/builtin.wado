@@ -770,7 +770,7 @@ pub fn error_context_drop(handle: i32);
 /// The host's handle `r` holds, read without moving it. Traps where a guest
 /// value backs `r`. `ResourceId::of` bounds `R` to an affine resource.
 #[storage(none)]
-#[side_effect(trap)]
+#[side_effect(read, trap)]
 internal fn resource_handle<affine R>(r: &R) -> i32;
 
 /// Empty the box `r`: 0, which the Component Model never issues, and no guest
@@ -794,13 +794,13 @@ internal fn extern_handle_is_backed<R>(handle: R) -> bool;
 
 /// Whether a `T` backs the handle of the resource `R`.
 #[storage(none)]
-#[side_effect(none)]
+#[side_effect(read)]
 internal fn resource_is_backed_by<affine R, T>(handle: &R) -> bool;
 
 /// The `T` backing the handle of the resource `R`. Traps unless a `T`
 /// backs it.
 #[storage(opaque)]
-#[side_effect(trap)]
+#[side_effect(read, trap)]
 internal fn resource_backing<affine R, T>(handle: &R) -> &mut T;
 
 /// The class a backed `handle` carries. Traps on a host object.
