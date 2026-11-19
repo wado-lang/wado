@@ -958,7 +958,7 @@ impl FunctionTranslator<'_, '_> {
             "swap_handles" => {
                 let box_ty = self.wir_type(self.operand_type_id(args[0].expr));
                 let (mut seq, [a, b]) = self.spill_operands(args, [box_ty.clone(), box_ty]);
-                for field in [ResourceField::Handle, ResourceField::Backing] {
+                for field in ResourceField::ALL {
                     let held = self.fresh_local("held");
                     seq.extend(declare_and_set_local(
                         held.clone(),

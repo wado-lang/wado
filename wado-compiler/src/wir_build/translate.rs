@@ -1954,7 +1954,7 @@ impl FunctionTranslator<'_, '_> {
     /// handle (index 0 of a handle table is reserved), and no guest value.
     pub(super) fn zero_handle(&mut self, resource: WirInstr) -> WirInstr {
         let (mut seq, resource) = self.rereadable_box(resource, "zeroed");
-        for field in [ResourceField::Handle, ResourceField::Backing] {
+        for field in ResourceField::ALL {
             seq.push(self.set_resource_field(resource.clone(), field, field.empty()));
         }
         WirInstr::Seq(seq)

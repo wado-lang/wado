@@ -1796,13 +1796,12 @@ impl CmMethodRewriter<'_> {
 
     /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
     /// builtin/internal call, casting each handle it passes to the scalar the
-    /// canonical import takes.
+    /// canonical import takes. A drop is handed the box itself, as
+    /// `resource.drop` is, so that a backed one never reaches the host.
     fn rewrite_call(&self, expr: &mut TirExpr, target: BindingTarget) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             return;
         };
-        // A drop is handed the box itself, as `resource.drop` is, so that a
-        // backed one never reaches the host.
         let ends_handle =
             matches!(&target, BindingTarget::Canonical(intrinsic) if intrinsic.ends_handle());
         let taken_args: Vec<TirExpr> = std::mem::take(args)

@@ -416,6 +416,8 @@ pub(super) enum ResourceField {
 }
 
 impl ResourceField {
+    pub(super) const ALL: [Self; 2] = [Self::Handle, Self::Backing];
+
     pub(super) fn name(self) -> &'static str {
         match self {
             Self::Handle => RESOURCE_HANDLE_FIELD,
@@ -452,7 +454,7 @@ fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
             name: WirName { fq },
-            fields: [ResourceField::Handle, ResourceField::Backing]
+            fields: ResourceField::ALL
                 .into_iter()
                 .map(|field| WirField {
                     name: field.name().to_string(),

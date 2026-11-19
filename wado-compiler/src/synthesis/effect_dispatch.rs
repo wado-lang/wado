@@ -2694,19 +2694,10 @@ fn pick_resource_wrapper(
             ctx.resource_op_wrappers
                 .get(&(declaring, op_name.to_string()))
         })?;
-    // Exact instantiation match first.
-    if let Some((_, name)) = candidates.iter().find(|(args, _)| args == call_type_args) {
-        return Some(name.clone());
-    }
-    // Single-instantiation fallback: when the call site couldn't
-    // pin down its type args (static methods of generic resources
-    // can hide them) but only one impl instantiation is active,
-    // route through it. Multi-instantiation static-call ambiguity
-    // is rejected (returns None → falls through to cm_binding).
-    if call_type_args.is_empty() && candidates.len() == 1 {
-        return Some(candidates[0].1.clone());
-    }
-    None
+    candidates
+        .iter()
+        .find(|(args, _)| args == call_type_args)
+        .map(|(_, name)| name.clone())
 }
 
 /// The resource declaring an operation, as `resource_op_wrappers` keys it.
