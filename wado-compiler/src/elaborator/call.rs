@@ -2176,13 +2176,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return TypeTable::ERROR;
                 }
+                let scope = self.scope_type_param_ids();
                 for (i, arg) in args.iter().enumerate() {
                     // A slot neither the receiver nor the turbofish filled says
                     // only "whatever this instantiation binds", which every
                     // argument satisfies. Checking against it rejects the call
-                    // the declaration was written to accept.
+                    // the declaration was written to accept. The caller's own
+                    // parameter is no such slot: `5` is not a `T`.
                     if let Some(&expected) = substituted.get(i)
-                        && !self.tysys.is_unbound_type_param(expected)
+                        && !self.is_open_slot(expected, &scope)
                     {
                         self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
                     }
