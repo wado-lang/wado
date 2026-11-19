@@ -1729,9 +1729,30 @@ impl Graph for Cpu {
         let own = row_major_strides(&table_extents);
         let index_strides = row_major_strides(&indices.extents);
         let vector_stride = if implicit { 0 } else { index_strides[dims.index_vector_dim] };
-        let mut places = List::<i32>::with_capacity(element_count(&extents));
+        // The innermost output axes that walk the table's innermost axes in
+        // order read one run of the table's elements, so each run's start is
+        // found once: an expert's weights are one run.
+        let mut run = 1;
+        let mut walked = out_rank;
+        let mut table_axis = rank - 1;
+        while walked > 0 && table_axis >= 0 {
+            let Some(j) = dims.offset_dims.position(|d| d == walked - 1) else {
+                break;
+            };
+            if offset_axes[j] != table_axis {
+                break;
+            }
+            walked -= 1;
+            run *= extents[walked];
+            if extents[walked] != table_extents[table_axis] {
+                break;
+            }
+            table_axis -= 1;
+        }
+        let outer: List<i32> = extents[0..<walked].to_list();
+        let mut starts = List::<i32>::with_capacity(element_count(&outer));
         let mut out = List::<i32>::filled(out_rank, 0);
-        for let _ of 0..<element_count(&extents) {
+        for let _ of 0..<element_count(&outer) {
             let mut index_base = 0;
             let mut batch_axis = 0;
             for let i of 0..<indices.extents.len() {
@@ -1750,10 +1771,10 @@ impl Graph for Cpu {
             for let [j, d] of dims.offset_dims.into_iter().enumerate() {
                 at += out[d] * own[offset_axes[j]];
             }
-            places.push(at);
-            advance(&mut out, &extents);
+            starts.push(at);
+            advance(&mut out, &outer);
         }
-        return CpuTensor::Value(Tensor { data: self.elements_at(table, &places), extents });
+        return CpuTensor::Value(Tensor { data: self.runs_at(table, &starts, run), extents });
     }
 
     fn scatter<E: Element, D, I, U>(

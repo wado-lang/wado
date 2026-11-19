@@ -1688,29 +1688,15 @@ impl Cpu {
         };
     }
 
-    /// The elements of `t` at each place `at` lists, a kept weight's read a
-    /// run of consecutive places at a time, so a gather of a few rows reads
-    /// those rows alone.
-    pub fn elements_at<E: Element, Axes>(&self, t: &CpuTensor<E, Axes>, at: &List<i32>) -> List<E> {
-        let mut out = List::<E>::with_capacity(at.len());
-        match t {
-            Value(v) => {
-                for let i of *at {
-                    out.push(v.data[i]);
-                }
-            },
-            Kept(k) => {
-                let bytes = self.weight(k).bytes();
-                let mut run = 0;
-                while run < at.len() {
-                    let mut end = run + 1;
-                    while end < at.len() && at[end] == at[end - 1] + 1 {
-                        end += 1;
-                    }
-                    out.extend(&E::loaded(bytes, at[run], end - run));
-                    run = end;
-                }
-            },
+    /// The `run` consecutive elements of `t` from each of `starts`, so a
+    /// gather of a few rows of a kept weight reads those rows alone.
+    pub fn runs_at<E: Element, Axes>(&self, t: &CpuTensor<E, Axes>, starts: &List<i32>, run: i32) -> List<E> {
+        let mut out = List::<E>::with_capacity(starts.len() * run);
+        for let start of *starts {
+            match t {
+                Value(v) => out.extend_from_slice(v.data.slice(start, start + run)),
+                Kept(k) => out.extend(&E::loaded(self.weight(k).bytes(), start, run)),
+            }
         }
         return out;
     }
