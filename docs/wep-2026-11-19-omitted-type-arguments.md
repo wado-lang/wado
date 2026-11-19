@@ -29,68 +29,129 @@ The list also acts at a distance. A static `Pair::make()` resolved through the
 one impl written for `Pair<i32, i32>`, and a second impl written for another
 instance anywhere in the program made the same call fail.
 
+The same gap shows on a method call whose receiver still holds a variable.
+`mk().eq(&other)`, where `mk<T>() -> Tree<T>`, reports that `Tree<T>` has no
+method `eq`: the solver cannot be asked about a type holding a variable, so it
+answers nothing, and nothing is read as "no such method".
+
+Two designs that stopped short show what a fix must not do:
+
+- Teaching the solver a type that may be anything, without identity, and
+  reading its "may hold" through the same `Option<Holds>` as "holds". Each
+  solver rule needed a second reading, the type did not say which rules had
+  one, and review found the missing ones one at a time.
+- Deciding the kind of an omitted spelling from the impls written for the type,
+  apart from the order that decides a spelling with every argument. Two rules
+  for one call drift apart by construction.
+
 ## Decision
+
+### The rule
 
 A type argument the spelling omits is an inference variable, as an omitted
 argument of a generic function is. `Pair::m(…)` means `Pair::<_, _>::m(…)`.
 Nothing lists the instances an impl is written for.
 
-### The kind of the call
+A call holding an inference variable resolves exactly as the spelling with every
+argument would resolve at the instance inference settles. Where the call must be
+resolved before inference settles it, and the impls that may apply would resolve
+it in different ways, the call asks for a turbofish or an annotation. It never
+resolves otherwise than the full spelling would.
 
-A spelling that writes every argument names one instance. The resolution order
-runs at it, so a blanket answers only where its bounds hold. Such a spelling
-resolves as before.
+This holds wherever a variable reaches trait resolution: a qualified call
+spelling a type without its arguments, and a method call on a receiver whose
+type still holds a variable.
 
-A spelling that omits an argument names an instance the call has yet to infer.
-The impls that may answer it at some instance decide the kind, in the order a
-method call ranks them:
+### Three answers, as a type
 
-- the type's own declaration at the nearest link;
-- the impls written for the nearest link of the type's newtype chain, by value
-  or by reference;
-- where neither answers, every blanket, whether or not its bounds will hold.
+Trait resolution answers "does this type satisfy this trait" with one of three
+values, and the type of the answer says which:
 
-Bounds do not take part, since only the settled instance can say whether one
-holds. A blanket comes last because it is written for no type in particular:
-counting it beside what is written for the type would let any blanket of the
-same name, in any imported library, change the call.
+- holds, with the derivations the answer owes and the bindings of variables it
+  implies;
+- does not hold, at any instance the variables may become;
+- not yet known: some instance would make it hold and another would not.
+
+Every rule of the solver returns this type, so a rule that has not decided what
+"not yet known" means for it does not compile. `Option<Holds>` is gone from the
+solver's interface.
+
+### Inference variables with identity
+
+The solver has a type for the elaborator's inference variable, carrying its id.
+Two occurrences of one variable are one type: matching `Pair<?1, ?1>` against
+`impl<T> Tr for Pair<T, T>` binds `T` once.
+
+Matching an impl's target against a type holding variables unifies the two
+under a substitution local to the question, with an occurs check. Where every
+answer that holds implies the same binding for a variable, the answer reports
+it. Asking a question never changes the elaborator's variables.
+
+### Selection, commitment and the deferred check
+
+Selection runs the order of
+[WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md) over the
+candidates that hold or are not yet known, and drops those that do not hold.
+
+- One candidate is left: the call commits to it. The bindings the answer implies
+  are unified into the elaborator's variables, so the impl chosen settles what
+  it determines of the receiver. A bound that was not yet known is recorded
+  against the variables it reads, the same way the elaborator already records a
+  bound on a variable, and checked when the module's inference finishes.
+- Several are left: the call asks for a turbofish or an annotation.
+- None is left: the method does not exist at any instance, and the call says
+  so.
+
+When the module's inference finishes, every commitment made with variables
+unsettled is resolved again at the instance they settled to, as the spelling
+with every argument would be. The two must name the same impl. A difference is
+an internal compiler error, so the rule above is checked on every fixture
+rather than left for review to sample.
+
+### The kind of a qualified call
+
+The kind is read from the impls selection keeps at the spelled type, variables
+included, by the same order as for a spelling with every argument:
 
 - Every candidate takes a receiver: the call is a method call on its first
-  argument. That argument settles the variables, and the call selects what
-  `recv.method(…)` selects. The receiver must be of the spelled type or a
-  resource extending it.
+  argument, and selects what `recv.method(…)` selects. The receiver must be of
+  the spelled type or a resource extending it.
 - Every candidate is a static: the expected type or the arguments answer the
   variables. Where neither does, the call reports that the type's arguments
-  cannot be inferred, and a turbofish or an annotation supplies them.
-- Candidates of both kinds: the call is ambiguous, as two traits at one link
-  are. The trait-qualified form names the one meant.
+  cannot be inferred.
+- Candidates of both kinds: the call asks for a turbofish, an annotation, or
+  the trait-qualified form.
 
 The type's own declaration at the nearest link still answers before any trait,
 and it decides the kind alone.
 
 ### What is given up
 
-- A static with neither an expected type nor an argument to settle its
-  instance no longer takes the one instance an impl is written for. A generic
-  function does not infer its parameter from the impls written for it either,
-  and the inference broke as soon as a second impl was written elsewhere.
-- The kind is read from what is written, not from the instance. An impl whose
-  bounds will not hold at the receiver's instance still counts, and where it
-  is the other kind, the omitted spelling is ambiguous while the spelling with
-  every argument resolves. A blanket whose bounds do hold there counts only
-  where nothing written for the type answers.
-
-The trait solver never sees an inference variable. An earlier design taught it
-one, a type that may be anything. Each of its rules then needed a second,
-"may hold" reading, and review kept finding rules without one. Deciding the
-kind from the impls written, before any instance is known, keeps that question
-out of the solver.
+A static with neither an expected type nor an argument to settle its instance
+no longer takes the one instance an impl is written for. A generic function
+does not infer its parameter from the impls written for it either, and the
+inference broke as soon as a second impl was written elsewhere.
 
 ## Roadmap
 
 - [x] The specification states the rule in `spec-traits.md` § Qualified Calls,
   in place of the listed instances.
-- [x] Fixtures for each row of the table in Context, for a static whose
-  instance nothing settles, and for candidates of both kinds.
-- [x] The kind comes from the impls written for the chain and the blankets, and
-  the code listing written instances is deleted.
+- [x] Fixtures for each row of the table in Context, and for a static whose
+  instance nothing settles.
+- [ ] The solver's answer is the three-valued type, and every rule returns it.
+  No program changes behavior: nothing yet asks with a variable.
+- [ ] The solver's inference variable, its unification under a local
+  substitution, and the bindings an answer implies. The lowering hands it the
+  elaborator's variables instead of refusing them.
+- [ ] Selection keeps the candidates not yet known, the elaborator commits and
+  unifies the implied bindings, and a bound not yet known is checked when the
+  module's inference finishes, through the elaborator's existing bound records.
+- [ ] Every commitment made with variables unsettled is resolved again at the
+  settled instance, and a difference is an internal compiler error.
+- [ ] The kind of a qualified call is read from selection at the spelled type,
+  and the reading from the impls written for the type is deleted.
+- [ ] A method call on a receiver holding a variable resolves by the same
+  selection, and reports a missing method only where no candidate is left.
+- [ ] A check over the fixtures rewrites each qualified call that writes every
+  argument into the spelling that omits them, and requires the same result or
+  a request for an annotation.
