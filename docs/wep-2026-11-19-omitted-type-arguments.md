@@ -151,9 +151,9 @@ inference broke as soon as a second impl was written elsewhere.
   instance nothing settles.
 - [x] The solver's answer is the three-valued type, and every rule returns it.
   No program changes behavior: nothing yet asks with a variable.
-- [ ] The solver's inference variable, its unification under a local
+- [x] The solver's inference variable, its unification under a local
   substitution, and the bindings an answer implies. The lowering hands it the
-  elaborator's variables instead of refusing them.
+  elaborator's variables for method selection.
 - [ ] Selection keeps the candidates not yet known, the elaborator commits to
   the one left, and a bound not yet known is checked when the module's
   inference finishes, through the elaborator's existing bound records.
@@ -163,6 +163,13 @@ inference broke as soon as a second impl was written elsewhere.
   and the reading from the impls written for the type is deleted.
 - [ ] A method call on a receiver holding a variable resolves by the same
   selection, and reports a missing method only where no candidate is left.
+- [ ] A numeric literal's variable reaches the solver as a variable of its
+  kind, which binds only to a type of that kind. The probe that let a
+  receiver holding one wait is deleted.
 - [ ] A check over the fixtures rewrites each qualified call that writes every
   argument into the spelling that omits them, and requires the same result or
   a request for an annotation.
+- [ ] Every question reaches the solver with the elaborator's variables, and a
+  bound not yet known is checked once the module's inference finishes. The
+  lowering that refuses a variable, and the reading of an open type as one
+  that holds only what every type holds, are deleted.
