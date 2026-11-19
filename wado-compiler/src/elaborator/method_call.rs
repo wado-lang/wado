@@ -789,22 +789,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = if let Some(info) = method_info {
             info
         } else {
-            let uninferred = {
-                let receiver = self.apply_infer_holes(base_type_id);
-                self.tysys.type_table.borrow().contains_infer_var(receiver)
-            };
-            // Which methods a receiver has depends on its type arguments, so
-            // one not inferred yet is what the call lacks.
-            if uninferred {
-                let type_name = self.tysys.type_table.borrow().name(base_type_id);
-                let _ = self.emit(TypeError::CannotInferType {
-                    message: format!(
-                        "cannot infer the type of the receiver '{type_name}' of \
-                         '{method_name}'; add a turbofish or a type annotation"
-                    ),
-                    span,
-                });
-            } else if !self.report_unmet_impl_bound(receiver, span, |s, def| {
+            if !self.report_unmet_impl_bound(receiver, span, |s, def| {
                 s.impl_offers_method(def, method_name, required_trait)
             }) {
                 let type_name = self.tysys.type_table.borrow().name(base_type_id);
