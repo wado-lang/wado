@@ -17,7 +17,7 @@ use crate::trait_solver::{
     ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
     Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, answering_link,
     bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
-    holds_with_args, instance_candidates, mark_duplicates, owed, pair_comparisons, rank, sourced,
+    holds_with_args, instance_candidates, mark_duplicates, owed, pair_comparisons, rank, rank_open, sourced,
     written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
@@ -2342,6 +2342,7 @@ impl SolverBridge {
             | Selection::AmbiguousTraits(_)
             | Selection::Overloaded(_)
             | Selection::Duplicated(_) => Vec::new(),
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
         })
     }
 
@@ -2362,6 +2363,7 @@ impl SolverBridge {
             | Selection::AmbiguousTraits(_)
             | Selection::AmbiguousBlankets(_)
             | Selection::Overloaded(_) => Vec::new(),
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
         })
         .into_iter()
         .flatten()
@@ -2421,7 +2423,7 @@ impl SolverBridge {
                 .map(|&i| self.impl_def_of(found.in_scope[i].impl_))
                 .collect()
         };
-        Some(match rank(&found.in_scope) {
+        Some(match rank_open(&found.in_scope) {
             Selection::One(index) => Ordered::One(self.impl_def_of(found.in_scope[index].impl_)),
             Selection::None if !found.out_of_scope.is_empty() => {
                 let mut traits: Vec<DefId> = Vec::new();
@@ -2449,6 +2451,7 @@ impl SolverBridge {
             // One trait at several argument lists is the call's arguments to
             // settle (WEP 2026-07-31), which the order does not answer.
             Selection::Overloaded(live) => Ordered::Overloaded(named(&live)),
+            Selection::Undecided(live) => Ordered::Undecided(named(&live)),
         })
     }
 
@@ -2665,6 +2668,7 @@ impl SolverBridge {
                     .map(|&i| self.impl_def_of(found[i].impl_))
                     .collect(),
             ),
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
         })
     }
 
@@ -2771,6 +2775,9 @@ pub(super) enum Ordered {
     /// Several impls written for the receiver at one argument list, kept apart
     /// only by bounds that all hold here.
     Duplicated(Vec<Option<DefId>>),
+    /// The impls that may answer would answer differently at different
+    /// instances of the receiver's inference variables.
+    Undecided(Vec<Option<DefId>>),
 }
 
 /// Where the binder a [`TypeHead::Binder`] names sits among `binders` (a

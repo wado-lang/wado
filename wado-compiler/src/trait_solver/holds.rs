@@ -963,9 +963,11 @@ pub(super) fn at_self(
 
 /// The trait `ty` has none of, whatever answers it: `Ord`, where a written `eq`
 /// reaches it alone.
-pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
-    let (eq, ord) = program.comparisons?;
-    row_is(program, ty, eq).settled().map(|()| ord)
+pub(super) fn withheld_at(program: &Program, ty: &SolverType) -> Verdict<TraitDeclId> {
+    let Some((eq, ord)) = program.comparisons else {
+        return Verdict::Fails;
+    };
+    row_is(program, ty, eq).map(|()| ord)
 }
 
 /// `!` and a newtype over it hold every trait, binding each associated type to
@@ -1015,11 +1017,11 @@ fn withholds(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> Verdict
 /// The trait only an impl written at `ty` itself answers: [`Program::hash`],
 /// where a written comparison reaches `ty`. Neither a derived body nor a
 /// newtype's base answers it there.
-pub(super) fn written_only_at(program: &Program, ty: &SolverType) -> Option<TraitDeclId> {
-    let hash = program.hash?;
-    written_comparison_reaches(program, ty)
-        .settled()
-        .map(|()| hash)
+pub(super) fn written_only_at(program: &Program, ty: &SolverType) -> Verdict<TraitDeclId> {
+    let Some(hash) = program.hash else {
+        return Verdict::Fails;
+    };
+    written_comparison_reaches(program, ty).map(|()| hash)
 }
 
 /// Whether a written impl of `Eq` or `Ord` reaches `ty`.

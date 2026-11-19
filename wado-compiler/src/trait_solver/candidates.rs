@@ -3,8 +3,8 @@
 //! between them is [`rank`](super::rank).
 
 use super::holds::{
-    answers_args, answers_named_args, comparison_row, impl_applies, newtype_base, peels_to_never,
-    withheld_at, written_only_at,
+    Verdict, answers_args, answers_named_args, comparison_row, impl_applies, newtype_base,
+    peels_to_never, withheld_at, written_only_at,
 };
 use super::program::{
     Env, ImplId, ImplOrigin, MethodId, ModuleId, Program, SolverType, TraitDeclId,
@@ -169,8 +169,18 @@ fn collect(
 ) -> Candidates {
     let mut found = Candidates::default();
     // What a level withholds, no impl on it answers and no level below it
-    // lends.
+    // lends; what it may withhold, at some instances of the receiver's
+    // variables, no impl answers at every instance.
     let mut withheld: Vec<TraitDeclId> = Vec::new();
+    let mut maybe_withheld: Vec<TraitDeclId> = Vec::new();
+    let withhold = |verdict: Verdict<TraitDeclId>,
+                        unknown: Option<TraitDeclId>,
+                        withheld: &mut Vec<TraitDeclId>,
+                        maybe_withheld: &mut Vec<TraitDeclId>| match verdict {
+        Verdict::Holds(trait_) => withheld.push(trait_),
+        Verdict::Unknown => maybe_withheld.extend(unknown),
+        Verdict::Fails => {}
+    };
     let own_levels = own_levels(receiver);
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         // `!` holds every trait with no impl answering, so not even a blanket
@@ -179,7 +189,12 @@ fn collect(
             break;
         }
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
-        withheld.extend(withheld_at(program, ty));
+        withhold(
+            withheld_at(program, ty),
+            program.comparisons.map(|(_, ord)| ord),
+            &mut withheld,
+            &mut maybe_withheld,
+        );
         for (impl_, def) in program.trait_impls_for(ty) {
             let Some(trait_) = def.trait_ else {
                 continue;
@@ -196,10 +211,12 @@ fn collect(
             if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
-            let Some(trait_args) = impl_applies(program, env, impl_, def, ty, asked).settled()
-            else {
-                continue;
-            };
+            let (trait_args, applies_everywhere) =
+                match impl_applies(program, env, impl_, def, ty, asked) {
+                    Verdict::Holds(trait_args) => (trait_args, true),
+                    Verdict::Unknown => (def.trait_args.clone(), false),
+                    Verdict::Fails => continue,
+                };
             let candidate = Candidate {
                 impl_,
                 trait_,
@@ -211,6 +228,7 @@ fn collect(
                     .iter()
                     .any(|arg| arg.mentions(&|p| !def.target.binds(&|q| q == p))),
                 is_variadic: is_variadic(&def.target),
+                known: applies_everywhere && !maybe_withheld.contains(&trait_),
             };
             if in_scope.contains(&trait_) {
                 found.in_scope.push(candidate);
@@ -218,7 +236,12 @@ fn collect(
                 found.out_of_scope.push(candidate);
             }
         }
-        withheld.extend(written_only_at(program, ty));
+        withhold(
+            written_only_at(program, ty),
+            program.hash,
+            &mut withheld,
+            &mut maybe_withheld,
+        );
     }
     // A marker asks for a body, which any other impl answering at its level
     // already gives: beside one it is a no-op.
@@ -399,7 +422,8 @@ mod tests {
             | Selection::AmbiguousTraits(_)
             | Selection::AmbiguousBlankets(_)
             | Selection::Overloaded(_)
-            | Selection::Duplicated(_) => None,
+            | Selection::Duplicated(_)
+            | Selection::Undecided(_) => None,
         }
     }
 

@@ -21,4 +21,4 @@ pub use program::{
     MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, SolverType,
     Source, TraitDeclId, TraitDef, TypeDeclId, TypeDef, args_per_param,
 };
-pub use rank::{Candidate, Generality, Selection, rank};
+pub use rank::{Candidate, Generality, Selection, rank, rank_open};

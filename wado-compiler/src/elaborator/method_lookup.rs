@@ -2409,6 +2409,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 impls
             }
+            Some(Ordered::Undecided(_)) => {
+                let _ = self.emit(TypeError::CannotInferType {
+                    message: format!(
+                        "cannot infer `{receiver_display}` far enough to choose which `{method_name}` this calls; annotate it"
+                    ),
+                    span,
+                });
+                return None;
+            }
             Some(Ordered::Nothing) | None => &[],
         };
         let asked = required_trait.and_then(|wanted| wanted.args.as_deref());
@@ -2465,6 +2474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | Ordered::Duplicated(_),
             )
             | None => {}
+            Some(Ordered::Undecided(_)) => unreachable!("returned above"),
         }
         self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)
     }
