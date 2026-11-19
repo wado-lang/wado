@@ -955,9 +955,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (def, args) = {
             let table = self.tysys.type_table.borrow();
             match (table.nominal_def(ty), table.declared_type_args(ty)) {
-                (Some(def), Some(args)) if args.contains(&TypeTable::UNKNOWN) => {
-                    (def, args.to_vec())
-                }
+                (Some(def), Some(args)) if args.contains(&TypeTable::UNKNOWN) => (def, args),
                 _ => return ty,
             }
         };
