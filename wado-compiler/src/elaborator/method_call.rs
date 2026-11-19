@@ -1597,42 +1597,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The link of the spelled type's chain where trait impls answer
-    /// `method_name`, and those impls. A spelling that writes every argument
-    /// names one instance, and the order asks it, by value and through each
-    /// reference, so a blanket answers where its bounds hold. One that omits
-    /// an argument names an instance the call has yet to infer, so the impls
-    /// written for the nearest link of its chain answer, and where none is,
-    /// every blanket does, whether or not its bounds will hold: after every
-    /// link, so the type's own declaration answers first.
+    /// `method_name`, and those impls. The order asks the spelled type, by
+    /// value and through each reference, with a variable for each argument
+    /// the spelling omits: an impl answers where it can at some instance, so
+    /// a blanket answers where its bounds hold or may. Where nothing can, the
+    /// impls written for its chain answer, for the call to report.
     fn trait_answer(
         &mut self,
         receiver: &ReceiverId,
         method_name: &str,
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
-        let written = self.written_impls(receiver, method_name, reach);
+        self.spelled_at_vars(receiver)
+            .and_then(|ty| self.ordered_impls(ty, method_name, reach))
+            .or_else(|| self.written_impls(receiver, method_name, reach))
+    }
+
+    /// [`Self::spelled_type`] with a fresh variable for each argument the
+    /// spelling omits.
+    fn spelled_at_vars(&mut self, receiver: &ReceiverId) -> Option<TypeId> {
         if !self.omits_type_args(receiver) {
-            let ordered = self
-                .spelled_type(receiver)
-                .and_then(|ty| self.ordered_impls(ty, method_name, reach));
-            return ordered.or(written);
+            return self.spelled_type(receiver);
         }
-        if written.is_some() {
-            return written;
+        if let Some(ty) = receiver.ty() {
+            let written = self
+                .tysys
+                .type_table
+                .borrow()
+                .declared_type_args(ty)
+                .expect("an omitted argument is a generic instance's");
+            let args: Vec<TypeId> = written
+                .into_iter()
+                .map(|arg| {
+                    if arg == TypeTable::UNKNOWN {
+                        self.mint_infer_var()
+                    } else {
+                        arg
+                    }
+                })
+                .collect();
+            return Some(self.with_written_args(ty, &args));
         }
-        let blankets: Vec<DefId> = self
-            .tysys
-            .trait_env
-            .blanket_impls
-            .values()
-            .flatten()
-            .map(|blanket| blanket.def)
-            .filter(|&block| {
-                self.block_takes_receiver(block, method_name).is_some()
-                    && self.block_in_reach(block, reach)
-            })
-            .collect();
-        (!blankets.is_empty()).then_some((u32::MAX, blankets))
+        let def = receiver.key().decl()?;
+        let arity = self
+            .receiver_generic_arity(receiver)
+            .expect("a bare spelling omitting arguments names a generic");
+        let args: Vec<TypeId> = (0..arity).map(|_| self.mint_infer_var()).collect();
+        Some(if self.lookup_generic_newtype_of_decl(def).is_some() {
+            self.generic_newtype_instance(def, args)
+        } else {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, args)
+        })
     }
 
     /// Whether `receiver` spells a generic type without one of its arguments:

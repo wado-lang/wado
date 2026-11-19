@@ -160,14 +160,16 @@ inference broke as soon as a second impl was written elsewhere.
 - [x] The solver's inference variable, its unification under a local
   substitution, and the bindings an answer implies. The lowering hands it the
   elaborator's variables for method selection.
-- [ ] Selection keeps the candidates not yet known, the elaborator commits to
+- [x] Selection keeps the candidates not yet known, the elaborator commits to
   the one left, and a bound not yet known is checked when the module's
   inference finishes, through the elaborator's existing bound records.
-- [ ] Every commitment made with variables unsettled is resolved again at the
+- [x] Every commitment made with variables unsettled is resolved again at the
   settled instance, and a difference is an internal compiler error.
-- [ ] The kind of a qualified call is read from selection at the spelled type,
-  and the reading from the impls written for the type is deleted.
-- [ ] A method call on a receiver holding a variable resolves by the same
+- [x] The kind of a qualified call is read from selection at the spelled type,
+  a variable standing for each omitted argument. The impls written for the
+  type answer only where selection keeps none, so the call reports the bound
+  that failed.
+- [x] A method call on a receiver holding a variable resolves by the same
   selection, and reports a missing method only where no candidate is left.
 - [x] A numeric literal's variable reaches the solver marked as one, and
   selection decides which trait impl a receiver holding one waits on. Only
