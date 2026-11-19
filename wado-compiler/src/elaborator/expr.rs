@@ -11,6 +11,7 @@ use crate::compiler_host::CompilerHost;
 use crate::cut_memo::CutWalk;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
+use crate::resolve::Resolution;
 use crate::tir::{
     EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext,
     TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
@@ -27,7 +28,7 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
 use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
-use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
+use super::types::{CallableKind, FunctionContext, RequiredTrait, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{RangeExpr, Visibility};
@@ -2167,10 +2168,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let class = key_class.get_or_init(|| this.synthesize_arg_class(&index.index, ctx));
                 this.index_key_type(receiver, class, KeyedAccess::Read)
-                    .is_some_and(|key| {
-                        this.receiver_waits(receiver, "index_value", index.span, |this, def| {
-                            this.impl_takes_key(def, key)
-                        })
+                    .zip(this.tysys.compiler_trait_def(CompilerItem::IndexValue))
+                    .is_some_and(|(key, trait_)| {
+                        let required = RequiredTrait {
+                            decl: Resolution::Def(trait_),
+                            args: Some(vec![key]),
+                            display: "IndexValue".to_string(),
+                        };
+                        this.receiver_waits(receiver, "index_value", index.span, Some(&required))
                     })
             },
             |this, receiver, ctx| this.resolve_index_of(index, receiver, ctx, access, &key_class),

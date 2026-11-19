@@ -426,7 +426,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
             expected_type,
             |this, receiver, _| {
-                this.receiver_waits(receiver, &method_call.method, method_call.span, |_, _| true)
+                this.receiver_waits(receiver, &method_call.method, method_call.span, None)
             },
             |this, receiver, ctx| {
                 // A `_` resolves to UNKNOWN, so these are their own hole mask.

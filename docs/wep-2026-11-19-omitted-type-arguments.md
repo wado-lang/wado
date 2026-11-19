@@ -169,9 +169,10 @@ inference broke as soon as a second impl was written elsewhere.
   and the reading from the impls written for the type is deleted.
 - [ ] A method call on a receiver holding a variable resolves by the same
   selection, and reports a missing method only where no candidate is left.
-- [ ] A numeric literal's variable reaches the solver as a variable of its
-  kind, which binds only to a type of that kind. The probe that let a
-  receiver holding one wait is deleted.
+- [x] A numeric literal's variable reaches the solver marked as one, and
+  selection decides which trait impl a receiver holding one waits on. Only
+  inherent impls, which the solver does not hold, are still probed apart.
+- [ ] The literal's variable binds only to a type of its kind.
 - [ ] A check over the fixtures rewrites each qualified call that writes every
   argument into the spelling that omits them, and requires the same result or
   a request for an annotation.
