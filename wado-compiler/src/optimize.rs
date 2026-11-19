@@ -277,7 +277,10 @@ pub fn optimize(
                 // infer loses 6.4%; 28 buys no row and grows fts 14% and
                 // cbor_twitter 6%. `inline::net_cost` subtracts the call site a
                 // splice removes, so the gate is `gross - (CALL + params) <= 24`.
-                inline_thresholds: thresholds(24),
+                //
+                // `-Os` keeps 16: at 24 sqlite_parse, sqlite_highlight and
+                // cbor_twitter grow 19-21% over 16.
+                inline_thresholds: thresholds(if opt_level == OptLevel::Os { 16 } else { 24 }),
                 inline_growth,
                 specializations,
                 cap_is_defect: opt_iterations.is_none(),
