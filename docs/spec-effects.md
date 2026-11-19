@@ -308,6 +308,11 @@ A test block may perform any effect without declaring it (see [Syntax Rules](./s
 
 Every `resource` is an effect. Its constructors, static methods and instance methods are host calls, so calling any of them demands the resource. `Stream<T>` and `Future<T>` are resources like any other. A resource a composed component implements is the exception: it demands what the component's own host imports map to, as its interface does ([Components](./spec-modules.md#components)).
 
+A resource declared without `#[cm(...)]` binds no host call. An installed
+handler answers its operations. With none installed, an operation traps, as an
+interface operation without a default does
+([Default Implementations](#default-implementations)).
+
 <!-- {"fixture":"spec_effects_resource.wado"} -->
 
 ```wado
