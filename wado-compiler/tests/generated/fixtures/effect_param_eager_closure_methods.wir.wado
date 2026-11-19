@@ -589,12 +589,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
     let $match_13: "core:prelude/traits.wado//enum:Ordering";
     let b_15: i32;
     let $licm_repr_16: ref Array<i32>;
+    let $licm_repr_18: ref Array<i32>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<i32>(n);
     width = 1;
-    $licm_repr_16 = self.repr;
+    $licm_repr_18 = self.repr;
     b70: block {
         l71: loop {
             start = 0;
@@ -605,6 +606,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                     i = start;
                     j = mid;
                     k = start;
+                    $licm_repr_16 = $licm_repr_18;
                     b74: block {
                         l75: loop {
                             break_if b74 k >= b_15;
@@ -615,7 +617,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                                     $match_13 = block -> "core:prelude/traits.wado//enum:Ordering" {
                                         call_ref "functype/$canonical_closure_fn_0"(cmp.func, cmp.env, a_11, b_12);
                                     };
-                                    $licm_repr_16 = self.repr;
+                                    $licm_repr_16 = local.tee $licm_repr_18(self.repr);
                                     if $match_13 == 2 {
                                         builtin::array_copy<i32>(buf, k, $licm_repr_16, j, 1);
                                         j = j + 1;
@@ -635,7 +637,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                             continue l75;
                         };
                     };
-                    builtin::array_copy<i32>($licm_repr_16, start, buf, start, b_15 - start);
+                    builtin::array_copy<i32>($licm_repr_18, start, buf, start, b_15 - start);
                     start = b_15;
                     continue l73;
                 };
