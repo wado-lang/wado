@@ -623,7 +623,7 @@ fn licm_loop(
     // Step 6: reloadable field-load hoisting.
     hoist_reloadable_field_loads(engine, loop_body, ctx, outer_aliases, &mut all_hoist_stmts);
 
-    changed |=!all_hoist_stmts.is_empty();
+    changed |= !all_hoist_stmts.is_empty();
     (all_hoist_stmts, changed)
 }
 
