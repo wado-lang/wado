@@ -2444,6 +2444,11 @@ impl SolverBridge {
             required_args,
             unsettled,
         )?;
+        // Of several impls that may apply, the receiver's answer chooses, so
+        // ranking them now would choose for it.
+        if unsettled == Unsettled::Var && found.in_scope.len() > 1 {
+            return None;
+        }
         let named = |live: &[usize]| {
             live.iter()
                 .map(|&i| self.impl_def_of(found.in_scope[i].impl_))

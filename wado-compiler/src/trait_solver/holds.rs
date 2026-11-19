@@ -188,10 +188,10 @@ impl Query<'_> {
         subject: Option<&SolverType>,
     ) -> Option<Holds> {
         let through_member = std::mem::take(&mut self.member_next);
-        // An unsettled type may be one that satisfies the trait; the type the
-        // call settles is asked again.
+        // An unsettled type may be one that satisfies the trait, unless nothing
+        // does; the type the call settles is asked again.
         if *ty == SolverType::Var {
-            return Some(Holds::default());
+            return self.anything_may_hold(trait_).then(Holds::default);
         }
         // Keyed by the arguments too: the same trait asked at two
         // instantiations is two questions, and only one of them may hold.
@@ -220,6 +220,19 @@ impl Query<'_> {
 
     /// [`Self::holds_at`] once the question is open: every step that asks
     /// another, a bound's projection normalized included, finds it asked.
+    /// Whether some type may satisfy `trait_`: an impl, a declaration's fact,
+    /// a caller's bound, or the trait's own rule says it of one.
+    fn anything_may_hold(&self, trait_: TraitDeclId) -> bool {
+        let program = self.program;
+        program.traits.get(&trait_).is_some_and(|def| {
+            def.holds_for_all || def.on_ref == RefRule::Always
+        }) || program.impls_of(trait_).next().is_some()
+            || program.facts.keys().any(|&(_, of)| of == trait_)
+            || self.env.param_bounds.iter().flatten().any(|bound| {
+                program.bound_reaches(bound.trait_, trait_, &SolverType::Var)
+            })
+    }
+
     fn decide(
         &mut self,
         ty: &SolverType,
@@ -706,7 +719,7 @@ impl Query<'_> {
         bindings: &[Option<Binding>],
     ) -> Option<bool> {
         let expected = self.at_bindings(projection, bindings)?;
-        Some(expected == self.normalized(met))
+        Some(expected.may_equal(&self.normalized(met)))
     }
 
     /// `ty`, written in an impl's parameter space, at what the match bound
@@ -1028,7 +1041,7 @@ pub(super) fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
-    answers_args_by(program, def, ty, subject, written, args, SolverType::eq)
+    answers_args_by(program, def, ty, subject, written, args, SolverType::may_equal)
 }
 
 /// Whether the impl answers a call that names `args` at an instance, as
@@ -1217,13 +1230,15 @@ fn match_target(
         (SolverType::Param(index), _) => {
             let slot = &mut bindings[*index as usize];
             match slot {
-                // An unsettled type meets whatever the parameter is bound to,
-                // and a settled one says more than it did.
-                Some(Binding::One(SolverType::Var)) => {
-                    *slot = Some(Binding::One(ty.clone()));
-                    true
-                }
-                Some(Binding::One(bound)) => bound.may_equal(ty),
+                // Each place the parameter meets says what it may be; the
+                // binding keeps what all of them say.
+                Some(Binding::One(bound)) => match bound.meet(ty) {
+                    Some(met) => {
+                        *slot = Some(Binding::One(met));
+                        true
+                    }
+                    None => false,
+                },
                 Some(Binding::Pack(_)) => false,
                 None => {
                     *slot = Some(Binding::One(ty.clone()));
@@ -1241,7 +1256,9 @@ fn match_target(
             }
             true
         }
-        (SolverType::Var, _) => unreachable!("an impl target writes no inference variable"),
+        // A projection's member, read at a binding that holds one, carries a
+        // `Var` to the target side.
+        (SolverType::Var, _) => true,
         (SolverType::Decl(head, args), SolverType::Decl(ty_head, ty_args)) => {
             head == ty_head
                 && args.len() == ty_args.len()

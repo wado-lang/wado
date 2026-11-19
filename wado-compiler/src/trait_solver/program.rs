@@ -73,28 +73,44 @@ pub struct Pin {
 }
 
 impl SolverType {
-    /// Whether `self` and `other` may be one type: equal but where either
-    /// holds a [`Var`](Self::Var), which may be anything.
+    /// The type `self` and `other` both may be: equal but where either holds a
+    /// [`Var`](Self::Var), which may be anything and takes what the other side
+    /// says there. `None` where no type is both.
     #[must_use]
-    pub fn may_equal(&self, other: &Self) -> bool {
-        let each = |a: &[Self], b: &[Self]| {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.may_equal(b))
+    pub fn meet(&self, other: &Self) -> Option<Self> {
+        let each = |a: &[Self], b: &[Self]| -> Option<Vec<Self>> {
+            if a.len() != b.len() {
+                return None;
+            }
+            a.iter().zip(b).map(|(a, b)| a.meet(b)).collect()
         };
         match (self, other) {
-            (Self::Var, _) | (_, Self::Var) => true,
-            (Self::Decl(head, args), Self::Decl(other_head, other_args)) => {
-                head == other_head && each(args, other_args)
+            (Self::Var, _) => Some(other.clone()),
+            (_, Self::Var) => Some(self.clone()),
+            (Self::Decl(head, args), Self::Decl(other_head, other_args)) if head == other_head => {
+                Some(Self::Decl(*head, each(args, other_args)?))
             }
-            (Self::Tuple(elems), Self::Tuple(other_elems)) => each(elems, other_elems),
+            (Self::Tuple(elems), Self::Tuple(other_elems)) => {
+                Some(Self::Tuple(each(elems, other_elems)?))
+            }
             (
                 Self::Ref { is_mut, inner },
                 Self::Ref {
                     is_mut: other_mut,
                     inner: other_inner,
                 },
-            ) => is_mut == other_mut && inner.may_equal(other_inner),
-            _ => self == other,
+            ) if is_mut == other_mut => Some(Self::Ref {
+                is_mut: *is_mut,
+                inner: Box::new(inner.meet(other_inner)?),
+            }),
+            _ => (self == other).then(|| self.clone()),
         }
+    }
+
+    /// Whether `self` and `other` may be one type.
+    #[must_use]
+    pub fn may_equal(&self, other: &Self) -> bool {
+        self.meet(other).is_some()
     }
 
     /// Whether a [`Param`](Self::Param) or [`Pack`](Self::Pack) in `self`
