@@ -62,6 +62,13 @@ without a host implementation. A default is what answers when no handler is
 installed. Where there is a host, the host already answers then, so a body
 there would be a second answer.
 
+Two operations of such a resource still take none, as consequences of this one:
+
+- `drop`, since the default would take the resource and its own drop would
+  dispatch to the default again. Unhandled, a drop already ends with the value.
+- An operation of a generic resource, since a default is one function, as an
+  interface operation's is, and the resource's instances cannot share it.
+
 ### A resource with no host is affine
 
 A resource without `#[cm(...)]` is affine, as the specification already states.
@@ -78,31 +85,36 @@ handles ([Resource Inheritance](./spec-components.md#resource-inheritance)).
 A resource without `#[cm(...)]` has no WIT name. An export whose signature
 mentions one is a compile error.
 
-### An affine resource is one of two objects
+### An affine resource is one box with two fields
 
-An affine resource stays one box type, `$Resource`, and a value of it is one of
-two subtypes: a host handle holding the `i32`, or a backed handle holding the
-value. `ref.test` tells them apart, as it tells a backed extern handle from the
-host's object. A host call casts to the host handle, which is where a backed
-handle traps.
+An affine resource stays one box type, `$Resource`, which holds the host's
+`i32` handle and a nullable reference to the backing value. A host handle holds
+a null backing; a backed handle holds 0 and the value. A host call reads the
+handle after testing the backing is null, which is where a backed handle traps.
 
-A resource with no host implementation is always a backed handle, so its
-operations never test.
+Two subtypes, a host handle and a backed handle, were the first design. It
+fails on a store through `&mut R`: the box keeps its identity, and a store
+writes the new content into it, which may replace a host handle with a backed
+one. A box's type cannot change, so both kinds share its fields.
+
+A resource with no host implementation lowers to the same box, so where a
+handle crosses from one place to another nothing tells the two apart. The
+optimizer unboxes a handle to its `i32` only where no backed box reaches it.
 
 ## Roadmap
 
-- [ ] Offer `Backing` on every resource, bounded by `Resource`. Remove the
+- [x] Offer `Backing` on every resource, bounded by `Resource`. Remove the
   `Backable` marker the prototype added.
-- [ ] Split `$Resource` into the host handle and the backed handle. A host call
-  traps on a backed handle. A resource with no host implementation lowers
-  to the backed handle, which replaces the prototype's `$GuestResource`.
-- [ ] Route a drop of a backed handle to an installed handler, and do nothing
+- [x] Give `$Resource` a backing beside the handle. A host call traps on a
+  backed handle. A resource with no host implementation lowers to the same box,
+  which replaces the prototype's `$GuestResource`.
+- [x] Route a drop of a backed handle to an installed handler, and do nothing
   without one.
-- [ ] Admit a default implementation on an operation of a resource with no host
+- [x] Admit a default implementation on an operation of a resource with no host
   implementation, and keep rejecting it elsewhere.
-- [ ] Reject an export signature mentioning a resource with no host
+- [x] Reject an export signature mentioning a resource with no host
   implementation.
-- [ ] State the rules in `spec-components.md` and `spec-effects.md`.
+- [x] State the rules in `spec-components.md` and `spec-effects.md`.
 
 ## Related WEPs
 

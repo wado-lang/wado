@@ -109,9 +109,11 @@ A parameter may declare a default, which the call fills in ([Restrictions](./spe
 
 Beyond a name, parameters and a return type, an operation declares nothing else. Each of these is a compile error, for the reason given:
 
-- A body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method). With no handler installed, the host answers it, so the body could never run.
+- A body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every operation of a resource the host implements). With no handler installed, the host answers it, so the body could never run.
+- A body on a resource's `drop`. The body would take the resource, and its own drop would dispatch to the body again. With no handler installed, a drop of a resource no host implements already ends with the value backing it ([Resources as Effects](#resources-as-effects)).
+- A body on an operation of a generic resource. A default is one function, which the resource's instances cannot share.
 - A body on an `async` operation. A call to it evaluates to an `AsyncCall`, which a plain body does not produce.
-- A `self` receiver. An operation is called as `Effect::op(args)`, with no receiver to bind it to.
+- A `self` receiver on an `interface` operation. It is called as `Effect::op(args)`, with no receiver to bind it to.
 - A `with` clause. A call demands only the operation's interface, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means code that performs no effects, or `#[ambient]` code.
 - A `#[storage(...)]` or `#[side_effect(...)]` attribute. An operation dispatches to a handler, whose own body states what it keeps and does, so one here would constrain call sites on a promise the handler never makes.
 - Type parameters. An operation dispatches to one handler method, not to one per instantiation.
@@ -308,10 +310,13 @@ A test block may perform any effect without declaring it (see [Syntax Rules](./s
 
 Every `resource` is an effect. Its constructors, static methods and instance methods are host calls, so calling any of them demands the resource. `Stream<T>` and `Future<T>` are resources like any other. A resource a composed component implements is the exception: it demands what the component's own host imports map to, as its interface does ([Components](./spec-modules.md#components)).
 
-A resource declared without `#[cm(...)]` binds no host call. An installed
-handler answers its operations. With none installed, an operation traps, as an
-interface operation without a default does
-([Default Implementations](#default-implementations)).
+A resource declared without `#[cm(...)]`, on itself or on any operation, has no
+host implementation, and a guest value backs every handle of it
+([Backed Handles](./spec-components.md#backed-handles)). An installed handler
+answers its operations. With none installed, an operation runs its default, and
+one without a default traps, as an interface operation does
+([Default Implementations](#default-implementations)). Its `self` is the
+resource.
 
 <!-- {"fixture":"spec_effects_resource.wado"} -->
 
@@ -341,6 +346,11 @@ function declares no effect for a drop it performs. Every drop of the resource
 reaches an installed handler, a written `x.drop()` and an implicit one alike
 ([Drop](./spec-affine.md#drop)), so a test double that counts drops sees both. A
 double that leaves its other operations to `..trap` answers `drop` itself.
+
+With no handler installed, a drop of the host's object ends it through the
+Component Model's `resource.drop`. A drop of a backed handle ends with the value
+backing it, which the collector reclaims. A resource no host implements is
+dropped only where it declares a `drop` operation.
 
 ### Implied Resources
 

@@ -549,7 +549,7 @@ internal fn forget<affine T>(value: T);
 #[side_effect(none)]
 pub fn replace<affine T>(r: &mut T, value: T) -> T;
 
-/// Exchange the handles the boxes `a` and `b` hold: `replace` on a resource,
+/// Exchange what the boxes `a` and `b` hold: `replace` on a resource,
 /// whose box keeps its identity (WEP: Affine Types).
 #[storage(none)]
 #[side_effect(opaque)]
@@ -767,20 +767,22 @@ pub fn error_context_debug_message(handle: i32, outptr: i32);
 #[side_effect(opaque)]
 pub fn error_context_drop(handle: i32);
 
-/// The handle `r` holds, read without moving it. `ResourceId::of` bounds `R`
-/// to an affine resource.
+/// The host's handle `r` holds, read without moving it. Traps where a guest
+/// value backs `r`. `ResourceId::of` bounds `R` to an affine resource.
 #[storage(none)]
-#[side_effect(read)]
+#[side_effect(trap)]
 internal fn resource_handle<affine R>(r: &R) -> i32;
 
-/// Write 0, which the Component Model never issues, into the box `r`: what an
-/// object holds once its content moved into another (WEP: Affine Types).
+/// Empty the box `r`: 0, which the Component Model never issues, and no guest
+/// value. What an object holds once its content moved into another (WEP:
+/// Affine Types).
 #[storage(none)]
 #[side_effect(opaque)]
 internal fn zero_handle<R>(r: &R);
 
-/// The handle of the backable resource `R` that `value` backs. An extern
-/// handle carries `R`'s own class, and may be handed to the host.
+/// The handle of the resource `R` that `value` backs. An extern handle
+/// carries `R`'s own class, and may be handed to the host; an affine
+/// resource's may not (WEP: Guest-Backed Resources).
 #[storage(opaque)]
 #[side_effect(none)]
 internal fn resource_backed_by<affine R, T>(value: T) -> R;
@@ -790,12 +792,12 @@ internal fn resource_backed_by<affine R, T>(value: T) -> R;
 #[side_effect(none)]
 internal fn extern_handle_is_backed<R>(handle: R) -> bool;
 
-/// Whether a `T` backs the handle of the backable resource `R`.
+/// Whether a `T` backs the handle of the resource `R`.
 #[storage(none)]
 #[side_effect(none)]
 internal fn resource_is_backed_by<affine R, T>(handle: &R) -> bool;
 
-/// The `T` backing the handle of the backable resource `R`. Traps unless a `T`
+/// The `T` backing the handle of the resource `R`. Traps unless a `T`
 /// backs it.
 #[storage(opaque)]
 #[side_effect(trap)]
