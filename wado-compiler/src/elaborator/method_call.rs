@@ -2771,17 +2771,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect();
             let solved = self.answer_receiver_vars(&vars, &callee_args, &answers);
+            let mut unanswered = Vec::new();
             for (&(i, var), answer) in receiver_holes.iter().zip(solved) {
-                let answered = answer != var;
-                if answered {
+                if answer == var {
+                    unanswered.push((i, var));
+                    declaring_args[i] = TypeTable::UNKNOWN;
+                } else {
                     self.solve_infer_var(var, answer);
+                    declaring_args[i] = answer;
                 }
-                declaring_args[i] = if answered { answer } else { TypeTable::UNKNOWN };
             }
-            target_type_id = self.with_written_args(target_type_id, &declaring_args);
-            let callee_args =
+            let spelled = target_type_id;
+            target_type_id = self.with_written_args(spelled, &declaring_args);
+            let mut callee_args =
                 self.args_at_callee(target_type_id, &declaring_args, callee_sig.as_ref());
-            // A `_` nothing answered would reach the instance unknown.
+            // A `_` nothing answered would reach the instance unknown: it waits
+            // for a later use where the bare spelling's slot would, and is
+            // reported otherwise.
             if let Some(sig) = callee_sig.as_ref()
                 && let Some(head) = &head
             {
@@ -2793,13 +2799,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|(_, name)| name)
                     .collect();
                 if !names.is_empty() {
-                    let _ = self.emit(TypeError::cannot_infer(
+                    let message = TypeError::cannot_infer_message(
                         &names,
                         &format!("`{}::{}`", head.name, static_call.method),
                         &format!("`{}::<...>::{}()`", head.name, static_call.method),
-                        static_call.span,
-                    ));
-                    return TypeTable::ERROR;
+                    );
+                    if !self.defers_uninferred(&args, &vars, expected_type) {
+                        let _ = self.emit(TypeError::CannotInferType {
+                            message,
+                            span: static_call.span,
+                        });
+                        return TypeTable::ERROR;
+                    }
+                    let param_names: Vec<String> = self
+                        .type_decl_key(spelled)
+                        .and_then(|def| self.type_lookup().declared_generic_params(def))
+                        .expect("a `_` fills a parameter its declaration writes")
+                        .iter()
+                        .map(|param| param.name.clone())
+                        .collect();
+                    for (i, var) in unanswered {
+                        let name = param_names[i].clone();
+                        declaring_args[i] = self.defer_slot(
+                            Some(var),
+                            static_call.span,
+                            message.clone(),
+                            name,
+                            Vec::new(),
+                        );
+                    }
+                    target_type_id = self.with_written_args(spelled, &declaring_args);
+                    callee_args =
+                        self.args_at_callee(target_type_id, &declaring_args, callee_sig.as_ref());
                 }
             }
             self.instantiate_static_params(

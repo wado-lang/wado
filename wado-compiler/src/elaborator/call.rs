@@ -3973,7 +3973,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// call's value reaches, a sibling branch's type among them. It does where
     /// no type is expected of the call and its arguments hold no variable but
     /// the call's own `type_args`, as a closure argument typed by them does.
-    fn defers_uninferred(
+    pub(super) fn defers_uninferred(
         &self,
         args: &[TypeId],
         type_args: &[TypeId],
