@@ -171,7 +171,7 @@ type "functype//wasi/$wado-lang:web/html-input-element#value" = fn(ref extern, i
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(42)
 
-type "functype//type_pattern_narrowing_web_handles.wado/from_effect" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(43)
+type "functype//type_pattern_narrowing_web_handles.wado/run" = fn();  // TypeId(43)
 
 type "functype//type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/global#document" = fn() -> ref extern;  // TypeId(44)
 
@@ -351,75 +351,164 @@ global mut global:type_pattern_narrowing_web_handles.wado::$effect_../../../pack
 global mut global:type_pattern_narrowing_web_handles.wado::$modules_initialized: bool = 0;
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "type_pattern_narrowing_web_handles.wado/from_effect"() with Dom, HtmlInputElement {
-    let self_3: ref "core:prelude//$Cell<extern>";
-    let element_id: ref "core:prelude/string.wado//String";
-    let $local_2_5: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Document";
-    let $local_3_6: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Document";
-    let $local_4: ref null extern;
-    let $local_0: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Dom";
-    let $local_1_9: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Dom";
-    let $local_2_10: ref extern;
-    let $local_1_13: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/HtmlInputElement";
-    let $local_2_14: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/HtmlInputElement";
-    let $av_17: i32;
-    if ref.is_null(local.tee $local_4($inline__effect_dispatch___________package_web_src_dom_wado_Document__get_element_by_id_0: block -> ref null extern {
-        self_3 = struct.new "core:prelude//$Cell<extern>" { value: $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_1: block -> ref extern {
-            if ref.is_null(local.tee $local_0(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom)) == 0 {
-                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom = local.tee $local_1_9(ref.as_non_null($local_0)).outer;
-                $local_2_10 = block -> ref extern {
-                    let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1_9.op_document).env);
-                };
-                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom = $local_0;
-                break $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_1: $local_2_10;
-            } else {
-                break $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_1: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/global#document"();
-            }
-            unreachable;
-        } };
-        element_id = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105), used: 1 };
-        if ref.is_null(local.tee $local_2_5(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document)) == 0 {
-            global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document = local.tee $local_3_6(ref.as_non_null($local_2_5)).outer;
-            $local_4 = block -> ref null extern {
-                let $indirect_call_2: ref null "canonical//CanonicalClosure_3";
-                call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2($local_3_6.op_get_element_by_id).env, self_3, element_id);
+fn "type_pattern_narrowing_web_handles.wado/run"() with Dom, HtmlInputElement {
+    let $local_0_1: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Dom";
+    let $local_1_2: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Dom";
+    let $local_2_3: ref extern;
+    let self_7: ref "core:prelude//$Cell<extern>";
+    let $local_1_8: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/HtmlInputElement";
+    let $local_2_9: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/HtmlInputElement";
+    let v_11: ref "core:prelude/string.wado//String";
+    let $local_3_18: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Document";
+    let $local_4_19: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Document";
+    let $local_4_34: ref null extern;
+    let $av_44: i32;
+    $inline__initialize_modules_0: block {
+        break_if $inline__initialize_modules_0 @likely(global:type_pattern_narrowing_web_handles.wado::$modules_initialized);
+        cold_path;
+        "type_pattern_narrowing_web_handles.wado/$initialize_modules$cold0"();
+    };
+    $local_2_3 = $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_1: block -> ref extern {
+        if ref.is_null(local.tee $local_0_1(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom)) == 0 {
+            global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom = local.tee $local_1_2(ref.as_non_null($local_0_1)).outer;
+            $local_2_3 = block -> ref extern {
+                let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1_2.op_document).env);
             };
-            global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document = $local_2_5;
-            break $inline__effect_dispatch___________package_web_src_dom_wado_Document__get_element_by_id_0: $local_4;
+            global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom = $local_0_1;
+            break $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_1: $local_2_3;
         } else {
-            break $inline__effect_dispatch___________package_web_src_dom_wado_Document__get_element_by_id_0: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/document#get-element-by-id"(self_3.value, element_id);
+            break $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_1: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/global#document"();
         }
         unreachable;
-    })) == 0 {
-        $local_2_10 = ref.as_non_null($local_4);
-        if ($inline_handle_class_2: block -> i32 {
-            if ref.test "core:prelude//$BackedHandle"(extern.internalize($local_2_10)) {
-                break $inline_handle_class_2: ref.cast "core:prelude//$BackedHandle"(extern.internalize($local_2_10)).class;
+    };
+    drop((if ($inline_handle_class_3: block -> i32 {
+        if ref.test "core:prelude//$BackedHandle"(extern.internalize($local_2_3)) {
+            break $inline_handle_class_3: ref.cast "core:prelude//$BackedHandle"(extern.internalize($local_2_3)).class;
+        }
+        break $inline_handle_class_3: "wasi/$class-of"($local_2_3);
+    } - 6) <=u 0 -> ref "core:prelude/string.wado//String" {
+        $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_4: block -> ref "core:prelude/string.wado//String" {
+            self_7 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_3 };
+            if ref.is_null(local.tee $local_1_8(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement)) == 0 {
+                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = local.tee $local_2_9(ref.as_non_null($local_1_8)).outer;
+                $av_44 = local.tee v_11(block -> ref "core:prelude/string.wado//String" {
+                    let $indirect_call_2: ref null "canonical//CanonicalClosure_4";
+                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_2.func, local.tee $indirect_call_2($local_2_9.op_value).env, self_7);
+                }).used;
+                v_11 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = v_11.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_44)), 0, $array_clone_src_3, 0, $av_44); $array_clone_dst_4, used: $av_44 };
+                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = $local_1_8;
+                break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_4: v_11;
+            } else {
+                break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_4: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/html-input-element#value"(self_7.value);
             }
-            break $inline_handle_class_2: "wasi/$class-of"($local_2_10);
-        } - 6) <=u 0 {
-            return $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_3: block -> ref "core:prelude/string.wado//String" {
-                self_3 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_10 };
-                if ref.is_null(local.tee $local_1_13(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement)) == 0 {
-                    global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = local.tee $local_2_14(ref.as_non_null($local_1_13)).outer;
-                    $av_17 = local.tee element_id(block -> ref "core:prelude/string.wado//String" {
-                        let $indirect_call_3: ref null "canonical//CanonicalClosure_4";
-                        call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3($local_2_14.op_value).env, self_3);
-                    }).used;
-                    element_id = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = element_id.repr; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($av_17)), 0, $array_clone_src_4, 0, $av_17); $array_clone_dst_5, used: $av_17 };
-                    global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = $local_1_13;
-                    break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_3: element_id;
+            unreachable;
+        };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    }));
+    drop($inline_from_let_else_6: block -> ref "core:prelude/string.wado//String" {
+        $local_2_3 = $inline__effect_dispatch___________package_web_src_dom_wado_Document__create_element_7: block -> ref extern {
+            self_7 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_3 };
+            v_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("input"), used: 5 };
+            if ref.is_null(local.tee $local_3_18(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document)) == 0 {
+                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document = local.tee $local_4_19(ref.as_non_null($local_3_18)).outer;
+                $local_2_3 = block -> ref extern {
+                    let $indirect_call_6: ref null "canonical//CanonicalClosure_2";
+                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_6.func, local.tee $indirect_call_6($local_4_19.op_create_element).env, self_7, v_11, ref.null none);
+                };
+                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document = $local_3_18;
+                break $inline__effect_dispatch___________package_web_src_dom_wado_Document__create_element_7: $local_2_3;
+            } else {
+                break $inline__effect_dispatch___________package_web_src_dom_wado_Document__create_element_7: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/document#create-element"(self_7.value, v_11, ref.null none);
+            }
+            unreachable;
+        };
+        $local_2_3 = (if ($inline_handle_class_8: block -> i32 {
+            if ref.test "core:prelude//$BackedHandle"(extern.internalize($local_2_3)) {
+                break $inline_handle_class_8: ref.cast "core:prelude//$BackedHandle"(extern.internalize($local_2_3)).class;
+            }
+            break $inline_handle_class_8: "wasi/$class-of"($local_2_3);
+        } - 6) <=u 0 -> ref extern {
+            $local_2_3;
+        } else {
+            break $inline_from_let_else_6: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+        });
+        $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_9: block -> ref "core:prelude/string.wado//String" {
+            self_7 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_3 };
+            if ref.is_null(local.tee $local_1_8(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement)) == 0 {
+                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = local.tee $local_2_9(ref.as_non_null($local_1_8)).outer;
+                $av_44 = local.tee v_11(block -> ref "core:prelude/string.wado//String" {
+                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_2.func, local.tee $indirect_call_2($local_2_9.op_value).env, self_7);
+                }).used;
+                v_11 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = v_11.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_44)), 0, $array_clone_src_3, 0, $av_44); $array_clone_dst_4, used: $av_44 };
+                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = $local_1_8;
+                break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_9: v_11;
+            } else {
+                break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_9: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/html-input-element#value"(self_7.value);
+            }
+            unreachable;
+        };
+        break $inline_from_let_else_6;
+    });
+    drop($inline_from_effect_11: block -> ref "core:prelude/string.wado//String" {
+        if ref.is_null(local.tee $local_4_34($inline__effect_dispatch___________package_web_src_dom_wado_Document__get_element_by_id_12: block -> ref null extern {
+            self_7 = struct.new "core:prelude//$Cell<extern>" { value: $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_13: block -> ref extern {
+                if ref.is_null(local.tee $local_0_1(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom)) == 0 {
+                    global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom = local.tee $local_1_2(ref.as_non_null($local_0_1)).outer;
+                    $local_2_3 = block -> ref extern {
+                        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1_2.op_document).env);
+                    };
+                    global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom = $local_0_1;
+                    break $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_13: $local_2_3;
                 } else {
-                    break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_3: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/html-input-element#value"(self_3.value);
+                    break $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_13: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/global#document"();
                 }
                 unreachable;
-            };
+            } };
+            v_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105), used: 1 };
+            if ref.is_null(local.tee $local_3_18(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document)) == 0 {
+                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document = local.tee $local_4_19(ref.as_non_null($local_3_18)).outer;
+                $local_4_34 = block -> ref null extern {
+                    let $indirect_call_12: ref null "canonical//CanonicalClosure_3";
+                    call_ref "functype/$canonical_closure_fn_3"($indirect_call_12.func, local.tee $indirect_call_12($local_4_19.op_get_element_by_id).env, self_7, v_11);
+                };
+                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document = $local_3_18;
+                break $inline__effect_dispatch___________package_web_src_dom_wado_Document__get_element_by_id_12: $local_4_34;
+            } else {
+                break $inline__effect_dispatch___________package_web_src_dom_wado_Document__get_element_by_id_12: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/document#get-element-by-id"(self_7.value, v_11);
+            }
+            unreachable;
+        })) == 0 {
+            $local_2_3 = ref.as_non_null($local_4_34);
+            if ($inline_handle_class_14: block -> i32 {
+                if ref.test "core:prelude//$BackedHandle"(extern.internalize($local_2_3)) {
+                    break $inline_handle_class_14: ref.cast "core:prelude//$BackedHandle"(extern.internalize($local_2_3)).class;
+                }
+                break $inline_handle_class_14: "wasi/$class-of"($local_2_3);
+            } - 6) <=u 0 {
+                $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_15: block -> ref "core:prelude/string.wado//String" {
+                    self_7 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_3 };
+                    if ref.is_null(local.tee $local_1_8(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement)) == 0 {
+                        global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = local.tee $local_2_9(ref.as_non_null($local_1_8)).outer;
+                        $av_44 = local.tee v_11(block -> ref "core:prelude/string.wado//String" {
+                            call_ref "functype/$canonical_closure_fn_4"($indirect_call_2.func, local.tee $indirect_call_2($local_2_9.op_value).env, self_7);
+                        }).used;
+                        v_11 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = v_11.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_44)), 0, $array_clone_src_3, 0, $av_44); $array_clone_dst_4, used: $av_44 };
+                        global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = $local_1_8;
+                        break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_15: v_11;
+                    } else {
+                        break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_15: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/html-input-element#value"(self_7.value);
+                    }
+                    unreachable;
+                };
+                break $inline_from_effect_11;
+            } else {
+            }
         } else {
         }
-    } else {
-    }
-    return struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+        break $inline_from_effect_11: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    });
 }
 
 fn "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/global#document"() with Dom {
@@ -565,110 +654,12 @@ fn "type_pattern_narrowing_web_handles.wado/$cm_extern_slot_get"(a0) {
 }
 
 fn "type_pattern_narrowing_web_handles.wado/$cm_export__run"() {
-    let $local_0: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Dom";
-    let $local_1_2: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Dom";
-    let $local_2_3: ref extern;
-    let self_7: ref "core:prelude//$Cell<extern>";
-    let $local_1_8: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/HtmlInputElement";
-    let $local_2_9: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/HtmlInputElement";
-    let v_11: ref "core:prelude/string.wado//String";
-    let $local_3_18: ref null "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Document";
-    let $local_4: ref "type_pattern_narrowing_web_handles.wado//$Dispatch_../../../package-web/src/dom.wado/Document";
-    let $av_27: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:type_pattern_narrowing_web_handles.wado::$modules_initialized);
         cold_path;
         "type_pattern_narrowing_web_handles.wado/$initialize_modules$cold0"();
     };
-    $inline__initialize_modules_2: block {
-        break_if $inline__initialize_modules_2 @likely(global:type_pattern_narrowing_web_handles.wado::$modules_initialized);
-        cold_path;
-        "type_pattern_narrowing_web_handles.wado/$initialize_modules$cold0"();
-    };
-    $local_2_3 = $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_3: block -> ref extern {
-        if ref.is_null(local.tee $local_0(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom)) == 0 {
-            global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom = local.tee $local_1_2(ref.as_non_null($local_0)).outer;
-            $local_2_3 = block -> ref extern {
-                let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_1_2.op_document).env);
-            };
-            global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Dom = $local_0;
-            break $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_3: $local_2_3;
-        } else {
-            break $inline__effect_dispatch___________package_web_src_dom_wado_Dom__document_3: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/global#document"();
-        }
-        unreachable;
-    };
-    drop((if ($inline_handle_class_5: block -> i32 {
-        if ref.test "core:prelude//$BackedHandle"(extern.internalize($local_2_3)) {
-            break $inline_handle_class_5: ref.cast "core:prelude//$BackedHandle"(extern.internalize($local_2_3)).class;
-        }
-        break $inline_handle_class_5: "wasi/$class-of"($local_2_3);
-    } - 6) <=u 0 -> ref "core:prelude/string.wado//String" {
-        $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_6: block -> ref "core:prelude/string.wado//String" {
-            self_7 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_3 };
-            if ref.is_null(local.tee $local_1_8(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement)) == 0 {
-                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = local.tee $local_2_9(ref.as_non_null($local_1_8)).outer;
-                $av_27 = local.tee v_11(block -> ref "core:prelude/string.wado//String" {
-                    let $indirect_call_2: ref null "canonical//CanonicalClosure_4";
-                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_2.func, local.tee $indirect_call_2($local_2_9.op_value).env, self_7);
-                }).used;
-                v_11 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = v_11.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_27)), 0, $array_clone_src_3, 0, $av_27); $array_clone_dst_4, used: $av_27 };
-                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = $local_1_8;
-                break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_6: v_11;
-            } else {
-                break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_6: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/html-input-element#value"(self_7.value);
-            }
-            unreachable;
-        };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    }));
-    drop($inline_from_let_else_8: block -> ref "core:prelude/string.wado//String" {
-        $local_2_3 = $inline__effect_dispatch___________package_web_src_dom_wado_Document__create_element_9: block -> ref extern {
-            self_7 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_3 };
-            v_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("input"), used: 5 };
-            if ref.is_null(local.tee $local_3_18(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document)) == 0 {
-                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document = local.tee $local_4(ref.as_non_null($local_3_18)).outer;
-                $local_2_3 = block -> ref extern {
-                    let $indirect_call_6: ref null "canonical//CanonicalClosure_2";
-                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_6.func, local.tee $indirect_call_6($local_4.op_create_element).env, self_7, v_11, ref.null none);
-                };
-                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/Document = $local_3_18;
-                break $inline__effect_dispatch___________package_web_src_dom_wado_Document__create_element_9: $local_2_3;
-            } else {
-                break $inline__effect_dispatch___________package_web_src_dom_wado_Document__create_element_9: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/document#create-element"(self_7.value, v_11, ref.null none);
-            }
-            unreachable;
-        };
-        $local_2_3 = (if ($inline_handle_class_10: block -> i32 {
-            if ref.test "core:prelude//$BackedHandle"(extern.internalize($local_2_3)) {
-                break $inline_handle_class_10: ref.cast "core:prelude//$BackedHandle"(extern.internalize($local_2_3)).class;
-            }
-            break $inline_handle_class_10: "wasi/$class-of"($local_2_3);
-        } - 6) <=u 0 -> ref extern {
-            $local_2_3;
-        } else {
-            break $inline_from_let_else_8: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-        });
-        $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_11: block -> ref "core:prelude/string.wado//String" {
-            self_7 = struct.new "core:prelude//$Cell<extern>" { value: $local_2_3 };
-            if ref.is_null(local.tee $local_1_8(global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement)) == 0 {
-                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = local.tee $local_2_9(ref.as_non_null($local_1_8)).outer;
-                $av_27 = local.tee v_11(block -> ref "core:prelude/string.wado//String" {
-                    call_ref "functype/$canonical_closure_fn_4"($indirect_call_2.func, local.tee $indirect_call_2($local_2_9.op_value).env, self_7);
-                }).used;
-                v_11 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = v_11.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_27)), 0, $array_clone_src_3, 0, $av_27); $array_clone_dst_4, used: $av_27 };
-                global:type_pattern_narrowing_web_handles.wado::$effect_../../../package-web/src/dom.wado/HtmlInputElement = $local_1_8;
-                break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_11: v_11;
-            } else {
-                break $inline__effect_dispatch___________package_web_src_dom_wado_HtmlInputElement__value_11: "type_pattern_narrowing_web_handles.wado/$cm_binding__wado-lang:web/html-input-element#value"(self_7.value);
-            }
-            unreachable;
-        };
-        break $inline_from_let_else_8;
-    });
-    drop("type_pattern_narrowing_web_handles.wado/from_effect"());
+    "type_pattern_narrowing_web_handles.wado/run"();
     "wasi/task-return"(0);
 }
 

@@ -49,21 +49,19 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
 
-type "functype//value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::take_digits" = fn(ref "value_copy_callee_frame_local_write.wado//P") -> [ref Array<i64>, i32];  // TypeId(19)
+type "functype//value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::scan" = fn(ref "value_copy_callee_frame_local_write.wado//P") -> i64;  // TypeId(19)
 
-type "functype//value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::scan" = fn(ref "value_copy_callee_frame_local_write.wado//P") -> i64;  // TypeId(20)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow" = fn(ref "core:prelude/list.wado//List<i64>");  // TypeId(20)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow" = fn(ref "core:prelude/list.wado//List<i64>");  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
-
-type "functype//value_copy_callee_frame_local_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(26)
+type "functype//value_copy_callee_frame_local_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(25)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -327,77 +325,66 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::take_digits"(self) {
-    let value_5: i64;
+fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::scan"(self) {
+    let $load_0: ref Array<u8>;
+    let item: i64;
+    let value_21: i64;
     let $sroa_out_repr_11: ref Array<i64>;
     let $sroa_out_used_12: i32;
     let $sroa_write_back_13: ref "core:prelude/list.wado//List<i64>";
-    let $licm_repr_14: ref Array<u8>;
-    let $hfs_pos_15: i32;
+    let $hfs_pos_36: i32;
+    $load_0 = self.repr;
     $sroa_out_repr_11 = array.new_fixed<i64>();
     $sroa_out_used_12 = 0;
-    $licm_repr_14 = self.repr;
-    $hfs_pos_15 = self.pos;
+    $hfs_pos_36 = self.pos;
     b43: block {
         l44: loop {
-            if $hfs_pos_15 >= 4 {
-                self.pos = $hfs_pos_15;
+            if $hfs_pos_36 >= 4 {
+                self.pos = $hfs_pos_36;
                 break b43;
             }
-            value_5 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($licm_repr_14, $hfs_pos_15));
+            value_21 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_0, $hfs_pos_36));
             if @unlikely($sroa_out_used_12 >= builtin::array_len($sroa_out_repr_11)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow"(local.tee $sroa_write_back_13(struct.new "core:prelude/list.wado//List<i64>" { repr: $sroa_out_repr_11, used: $sroa_out_used_12 }));
                 $sroa_out_repr_11 = $sroa_write_back_13.repr;
             }
-            builtin::array_set<i64>($sroa_out_repr_11, $sroa_out_used_12, value_5);
+            builtin::array_set<i64>($sroa_out_repr_11, $sroa_out_used_12, value_21);
             $sroa_out_used_12 = $sroa_out_used_12 + 1;
-            $hfs_pos_15 = $hfs_pos_15 + 1;
+            $hfs_pos_36 = $hfs_pos_36 + 1;
             continue l44;
         };
     };
-    return $sroa_out_repr_11, $sroa_out_used_12;
-}
-
-fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::scan"(self) {
-    let raw: ref Array<u8>;
-    let sum: i64;
-    let item: i64;
-    let $sroa_$iter_0_index_17: i32;
-    raw = self.repr;
-    let $mv$digits$repr: ref Array<i64>;
-    let $mv$digits$used: i32;
-    multivalue_bind [$mv$digits$repr, $mv$digits$used] = "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::take_digits"(self);
-    sum = 0_i64;
-    $sroa_$iter_0_index_17 = 0;
+    value_21 = 0_i64;
+    $hfs_pos_36 = 0;
     b47: block {
         l48: loop {
-            break_if b47 (builtin::i64_extend_i32_s($sroa_$iter_0_index_17) + 3_i64) >= builtin::i64_extend_i32_s($mv$digits$used);
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
+            break_if b47 (builtin::i64_extend_i32_s($hfs_pos_36) + 3_i64) >= builtin::i64_extend_i32_s($sroa_out_used_12);
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
             continue l48;
         };
     };
     b49: block {
         l50: loop {
-            break_if b49 $sroa_$iter_0_index_17 >= $mv$digits$used;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
+            break_if b49 $hfs_pos_36 >= $sroa_out_used_12;
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
             continue l50;
         };
     };
-    return sum + builtin::i64_extend_i32_u(builtin::array_get_value_u8(raw, 0));
+    return value_21 + builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_0, 0));
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow"(self) {

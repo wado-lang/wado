@@ -82,7 +82,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//array_bounds_elim_version_shifted_le_oob.wado/shift_left" = fn(ref "core:prelude/list.wado//List<i32>", i32);  // TypeId(18)
+type "functype//array_bounds_elim_version_shifted_le_oob.wado/run" = fn();  // TypeId(18)
 
 type "functype//array_bounds_elim_version_shifted_le_oob.wado/$cm_export__run" = fn();  // TypeId(19)
 
@@ -215,14 +215,18 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 
 global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "array_bounds_elim_version_shifted_le_oob.wado/shift_left"(xs, h) {
+fn "array_bounds_elim_version_shifted_le_oob.wado/run"() with Stdout {
+    let xs_0: ref "core:prelude/list.wado//List<i32>";
+    let h: i32;
     let i: i32;
     let $contract_arg_0: i32;
     let $licm_used_25: i32;
     let $licm_repr_26: ref Array<i32>;
+    xs_0 = black_box(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 });
+    h = black_box(4);
     i = 0;
-    $licm_used_25 = xs.used;
-    $licm_repr_26 = xs.repr;
+    $licm_used_25 = xs_0.used;
+    $licm_repr_26 = xs_0.repr;
     if ($licm_used_25 >= 1) & (h < ($licm_used_25 - 1)) {
         b1: block {
             l2: loop {
@@ -277,7 +281,7 @@ fn "array_bounds_elim_version_shifted_le_oob.wado/shift_left"(xs, h) {
 }
 
 fn "array_bounds_elim_version_shifted_le_oob.wado/$cm_export__run"() {
-    "array_bounds_elim_version_shifted_le_oob.wado/shift_left"(black_box(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 }), black_box(4));
+    "array_bounds_elim_version_shifted_le_oob.wado/run"();
     "wasi/task-return"(0);
 }
 

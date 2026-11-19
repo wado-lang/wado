@@ -7,6 +7,8 @@
 // checks pin the hoist (`$licm_repr` read) and the reload (`= s.repr`).
 use { println, Stdout } from "core:cli";
 
+// Spliced into `run`, the two references are seen apart and nothing reloads.
+#[inline("never")]
 fn escape_quotes(buf: &mut String, s: &String) {
     let n = s.len();
     for let mut i = 0; i < n; i += 1 {

@@ -82,18 +82,18 @@ global global:trait_bound_assoc_type_ambiguous.wado::$const_obj_0: ref Array<u8>
 global global:trait_bound_assoc_type_ambiguous.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49, 50, 51), used: 3 };
 
 fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
+    let new_repr_114: ref Array<u8>;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let new_repr_575: ref Array<u8>;
-    let $sroa_out_repr_586: ref Array<u8>;
-    let $sroa_write_back_588: ref "core:prelude/string.wado//String";
+    let $sroa_out_repr_370: ref Array<u8>;
+    let $sroa_write_back_372: ref "core:prelude/string.wado//String";
     let $mv$r$0: i32;
     let $mv$r$1: u64;
     let $mv$r$2: i32;
     multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "trait_bound_assoc_type_ambiguous.wado/trait_bound_assoc_type_ambiguous.wado/parse_scalar<u64>$sroa[return]$spec0"(global:trait_bound_assoc_type_ambiguous.wado::$const_obj_1);
     if $mv$r$0 == 0 {
-        $sroa_out_repr_586 = builtin::array_new<u8>(16);
+        $sroa_out_repr_370 = builtin::array_new<u8>(16);
         $inline_core_prelude_string_wado_String__internal_push_view_22: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_22;
         };
@@ -158,8 +158,8 @@ fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
             break $inline_count_digits_u64_0: 20;
         }) > 16) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_588(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_586, used: 0 }), $mv$r$0);
-            $sroa_out_repr_586 = $sroa_write_back_588.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_372(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_370, used: 0 }), $mv$r$0);
+            $sroa_out_repr_370 = $sroa_write_back_372.repr;
         }
         $mv$r$2 = $mv$r$0;
         b21: block {
@@ -167,15 +167,15 @@ fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
                 break_if b21 $mv$r$2 < 2;
                 q = $mv$r$1 /u 100_i64;
                 tens = local.tee pair(builtin::i32_wrap_i64($mv$r$1 - (q * 100_i64))) / 10;
-                builtin::array_set_u8($sroa_out_repr_586, $mv$r$2 - 1, (48 + pair) - (tens * 10));
-                builtin::array_set_u8($sroa_out_repr_586, $mv$r$2 - 2, 48 + tens);
+                builtin::array_set_u8($sroa_out_repr_370, $mv$r$2 - 1, (48 + pair) - (tens * 10));
+                builtin::array_set_u8($sroa_out_repr_370, $mv$r$2 - 2, 48 + tens);
                 $mv$r$2 = $mv$r$2 - 2;
                 $mv$r$1 = q;
                 continue l22;
             };
         };
         if $mv$r$2 > 0 {
-            builtin::array_set_u8($sroa_out_repr_586, 0, 48 + builtin::i32_wrap_i64($mv$r$1 %u 10_i64));
+            builtin::array_set_u8($sroa_out_repr_370, 0, 48 + builtin::i32_wrap_i64($mv$r$1 %u 10_i64));
         }
         $inline_core_prelude_string_wado_String__internal_push_view_40: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_40;
@@ -183,11 +183,11 @@ fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
         $mv$r$2 = builtin::i32_wrap_i64(local.tee $mv$r$1("wasi/stream-new"()));
         pair = builtin::i32_wrap_i64($mv$r$1 >> 32_i64);
         $mv$r$2 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$2);
-        builtin::array_copy<u8>(local.tee new_repr_575(builtin::array_new<u8>($mv$r$0 + 1)), 0, $sroa_out_repr_586, 0, $mv$r$0);
-        builtin::array_set_u8(new_repr_575, $mv$r$0, 10);
+        builtin::array_copy<u8>(local.tee new_repr_114(builtin::array_new<u8>($mv$r$0 + 1)), 0, $sroa_out_repr_370, 0, $mv$r$0);
+        builtin::array_set_u8(new_repr_114, $mv$r$0, 10);
         drop(block -> "core:prelude/types.wado//enum:CopyResult" {
             $mv$r$0 = $mv$r$0 + 1;
-            "core:rt/cm_stream_write_raw_all_u8"(pair, new_repr_575, 0, $mv$r$0);
+            "core:rt/cm_stream_write_raw_all_u8"(pair, new_repr_114, 0, $mv$r$0);
         });
         "wasi/stream-drop-writable"(pair);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$r$2);
@@ -195,9 +195,9 @@ fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
         $mv$r$0 = builtin::i32_wrap_i64(local.tee $mv$r$1("wasi/stream-new"()));
         $mv$r$2 = builtin::i32_wrap_i64($mv$r$1 >> 32_i64);
         $mv$r$0 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$0);
-        builtin::array_copy<u8>(local.tee $sroa_out_repr_586(builtin::array_new<u8>(4)), 0, global:trait_bound_assoc_type_ambiguous.wado::$const_obj_0, 0, 3);
-        builtin::array_set_u8($sroa_out_repr_586, 3, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$r$2, $sroa_out_repr_586));
+        builtin::array_copy<u8>(local.tee $sroa_out_repr_370(builtin::array_new<u8>(4)), 0, global:trait_bound_assoc_type_ambiguous.wado::$const_obj_0, 0, 3);
+        builtin::array_set_u8($sroa_out_repr_370, 3, 10);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$r$2, $sroa_out_repr_370));
         "wasi/stream-drop-writable"($mv$r$2);
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$r$0);
     }
@@ -427,9 +427,9 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
         l64: loop {
             i = $mv$data$start + ptr_13;
             $licm_arith_7 = $mv$data$end - ptr_13;
-            $licm_arith_7 = local.tee i($inline_cm_await_blocked_6: block -> i32 {
+            $licm_arith_7 = local.tee i($inline_cm_await_blocked_5: block -> i32 {
                 if local.tee i("wasi/stream-write"(handle, i, select i32($licm_arith_7 < 268435455, $licm_arith_7, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: i;
+                    break $inline_cm_await_blocked_5: i;
                 }
                 i = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, i);
@@ -439,7 +439,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($licm_arith_7, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(i);
-                break $inline_cm_await_blocked_6: at;
+                break $inline_cm_await_blocked_5: at;
             }) >>u 4;
             i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
@@ -463,8 +463,8 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 
 fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(handle, data) {
     let ptr_13: i32;
-    let ptr_19: i32;
-    let count_20: i32;
+    let ptr_18: i32;
+    let count_19: i32;
     let status: i32;
     let i: i32;
     let w: i64;
@@ -500,36 +500,36 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(handle, data) {
     i = 0;
     block {
         l77: loop {
-            ptr_19 = ptr_13 + i;
-            count_20 = 4 - i;
-            count_20 = local.tee ptr_19($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee ptr_19("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: ptr_19;
+            ptr_18 = ptr_13 + i;
+            count_19 = 4 - i;
+            count_19 = local.tee ptr_18($inline_cm_await_blocked_5: block -> i32 {
+                if local.tee ptr_18("wasi/stream-write"(handle, ptr_18, select i32(count_19 < 268435455, count_19, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_5: ptr_18;
                 }
-                ptr_19 = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ptr_19);
-                count_20 = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ptr_19, count_20));
-                status = builtin::load_i32(count_20 + 4);
-                drop("mem/realloc"(count_20, 8, 4, 0));
+                ptr_18 = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, ptr_18);
+                count_19 = "mem/realloc"(0, 0, 4, 8);
+                drop("wasi/waitable-set-wait"(ptr_18, count_19));
+                status = builtin::load_i32(count_19 + 4);
+                drop("mem/realloc"(count_19, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(ptr_19);
-                break $inline_cm_await_blocked_6: status;
+                "wasi/waitable-set-drop"(ptr_18);
+                break $inline_cm_await_blocked_5: status;
             }) >>u 4;
-            ptr_19 = (if local.tee ptr_19(ptr_19 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_18 = (if local.tee ptr_18(ptr_18 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if ptr_19 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_18 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_19 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_18 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_20;
-            if ((ptr_19 != 0) | (count_20 <= 0)) | (i >= 4) {
+            i = i + count_19;
+            if ((ptr_18 != 0) | (count_19 <= 0)) | (i >= 4) {
                 drop("mem/realloc"(ptr_13, 4, 1, 0));
-                return ptr_19;
+                return ptr_18;
             }
             continue l77;
         };

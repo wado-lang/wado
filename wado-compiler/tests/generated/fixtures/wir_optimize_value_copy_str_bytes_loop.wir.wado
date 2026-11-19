@@ -66,19 +66,19 @@ global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_
 
 fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     let byte_sum: u64;
-    let i_1: i32;
+    let i: i32;
     let byte_9: u8;
     let out_24: ref "core:prelude/string.wado//String";
     let q: u64;
     let $sroa_$iter_2_index_151: i32;
     byte_sum = 0_i64;
-    i_1 = 0;
+    i = 0;
     b0: block {
         l1: loop {
-            break_if b0 i_1 >= 3;
+            break_if b0 i >= 3;
             let $mv$s$repr: ref Array<u8>;
             let $mv$s$used: i32;
-            multivalue_bind [$mv$s$repr, $mv$s$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimize_value_copy_str_bytes_loop.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(i_1);
+            multivalue_bind [$mv$s$repr, $mv$s$used] = "core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimize_value_copy_str_bytes_loop.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(i);
             $sroa_$iter_2_index_151 = 0;
             b2: block {
                 l3: loop {
@@ -107,7 +107,7 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
                     continue l5;
                 };
             };
-            i_1 = i_1 + 1;
+            i = i + 1;
             continue l1;
         };
     };
@@ -115,7 +115,7 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_27: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_27;
     };
-    i_1 = $inline_count_digits_u64_1: block -> i32 {
+    i = $inline_count_digits_u64_1: block -> i32 {
         if byte_sum <u 100000_i64 {
             if byte_sum <u 100_i64 {
                 if byte_sum <u 10_i64 {
@@ -175,35 +175,35 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if @unlikely(local.tee $mv$s$used(0 + i_1) > builtin::array_len(out_24.repr)) {
+    if @unlikely(local.tee $mv$s$used(0 + i) > builtin::array_len(out_24.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_24, $mv$s$used);
     }
     $sroa_$iter_2_index_151 = out_24.used;
     out_24.used = $mv$s$used;
     $mv$s$repr = out_24.repr;
-    i_1 = $sroa_$iter_2_index_151 + i_1;
+    i = $sroa_$iter_2_index_151 + i;
     b26: block {
         l27: loop {
-            break_if b26 (i_1 - $sroa_$iter_2_index_151) < 2;
+            break_if b26 (i - $sroa_$iter_2_index_151) < 2;
             q = byte_sum /u 100_i64;
             byte_9 = local.tee $mv$s$used(builtin::i32_wrap_i64(byte_sum - (q * 100_i64))) / 10;
-            builtin::array_set_u8($mv$s$repr, i_1 - 1, (48 + $mv$s$used) - (byte_9 * 10));
-            builtin::array_set_u8($mv$s$repr, i_1 - 2, 48 + byte_9);
-            i_1 = i_1 - 2;
+            builtin::array_set_u8($mv$s$repr, i - 1, (48 + $mv$s$used) - (byte_9 * 10));
+            builtin::array_set_u8($mv$s$repr, i - 2, 48 + byte_9);
+            i = i - 2;
             byte_sum = q;
             continue l27;
         };
     };
-    if i_1 > $sroa_$iter_2_index_151 {
+    if i > $sroa_$iter_2_index_151 {
         builtin::array_set_u8($mv$s$repr, $sroa_$iter_2_index_151, 48 + builtin::i32_wrap_i64(byte_sum %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
     };
-    i_1 = builtin::i32_wrap_i64(local.tee byte_sum("wasi/stream-new"()));
+    i = builtin::i32_wrap_i64(local.tee byte_sum("wasi/stream-new"()));
     $mv$s$used = builtin::i32_wrap_i64(byte_sum >> 32_i64);
-    i_1 = "wir_optimize_value_copy_str_bytes_loop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_1);
+    i = "wir_optimize_value_copy_str_bytes_loop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i);
     builtin::array_copy<u8>(local.tee $mv$s$repr(builtin::array_new<u8>(local.tee $sroa_$iter_2_index_151(out_24.used) + 1)), 0, out_24.repr, 0, $sroa_$iter_2_index_151);
     builtin::array_set_u8($mv$s$repr, $sroa_$iter_2_index_151, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
@@ -211,7 +211,7 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
         "core:rt/cm_stream_write_raw_all_u8"($mv$s$used, $mv$s$repr, 0, $sroa_$iter_2_index_151);
     });
     "wasi/stream-drop-writable"($mv$s$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_1);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i);
 }
 
 fn "wir_optimize_value_copy_str_bytes_loop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -339,13 +339,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimiz
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_206: i32;
-    let $sroa_out_repr_502: ref Array<u8>;
-    let $sroa_out_used_503: i32;
-    let $sroa_write_back_506: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_502 = builtin::array_new<u8>(22);
-    $sroa_out_used_503 = 6;
-    builtin::array_copy<u8>($sroa_out_repr_502, 0, global:core:prelude/string.wado::$const_obj_1, 0, 6);
+    let start_162: i32;
+    let $sroa_out_repr_306: ref Array<u8>;
+    let $sroa_out_used_307: i32;
+    let $sroa_write_back_310: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_306 = builtin::array_new<u8>(22);
+    $sroa_out_used_307 = 6;
+    builtin::array_copy<u8>($sroa_out_repr_306, 0, global:core:prelude/string.wado::$const_obj_1, 0, 6);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -410,37 +410,37 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<wir_optimiz
         break $inline_count_digits_u64_31: 20;
     };
     if is_negative_65 {
-        $sroa_out_used_503 = 7;
-        builtin::array_set_u8($sroa_out_repr_502, 6, 45);
+        $sroa_out_used_307 = 7;
+        builtin::array_set_u8($sroa_out_repr_306, 6, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65($sroa_out_used_503 + t) > 22) {
+    if @unlikely(local.tee is_negative_65($sroa_out_used_307 + t) > 22) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_506(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_502, used: $sroa_out_used_503 }), is_negative_65);
-        $sroa_out_repr_502 = $sroa_write_back_506.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_310(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_306, used: $sroa_out_used_307 }), is_negative_65);
+        $sroa_out_repr_306 = $sroa_write_back_310.repr;
     }
-    start_206 = $sroa_out_used_503;
-    $sroa_out_used_503 = is_negative_65;
-    t = start_206 + t;
+    start_162 = $sroa_out_used_307;
+    $sroa_out_used_307 = is_negative_65;
+    t = start_162 + t;
     b68: block {
         l69: loop {
-            break_if b68 (t - start_206) < 2;
+            break_if b68 (t - start_162) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_out_repr_502, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8($sroa_out_repr_502, t - 2, 48 + tens);
+            builtin::array_set_u8($sroa_out_repr_306, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8($sroa_out_repr_306, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l69;
         };
     };
-    if t > start_206 {
-        builtin::array_set_u8($sroa_out_repr_502, start_206, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_162 {
+        builtin::array_set_u8($sroa_out_repr_306, start_162, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
     };
-    return $sroa_out_repr_502, $sroa_out_used_503;
+    return $sroa_out_repr_306, $sroa_out_used_307;
 }
 
 export fn "wir_optimize_value_copy_str_bytes_loop.wado/$cm_export__run" as "run"

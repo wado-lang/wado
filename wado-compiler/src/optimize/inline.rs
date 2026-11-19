@@ -1445,6 +1445,7 @@ fn hopeful_params(
     let n = project.functions.len();
     let funcs: Vec<_> = project.functions.iter().map(|f| f.borrow()).collect();
     let bindings = exec.map(scans, single_bindings);
+    let bodied: Vec<bool> = funcs.iter().map(|f| f.body.is_some()).collect();
     let callers: Vec<Option<Caller<'_>>> = funcs
         .iter()
         .zip(scans)
@@ -1456,6 +1457,7 @@ fn hopeful_params(
                 written: &scan.written,
                 bindings,
                 sites,
+                bodied: &bodied,
             })
         })
         .collect();
@@ -1494,6 +1496,9 @@ struct Caller<'a> {
     /// The one value each unwritten, once-bound local holds.
     bindings: IndexMap<u32, Operand>,
     sites: &'a [ArgSite],
+    /// Per function, whether it has a body to splice. A call to one without
+    /// stays a call, and `builtin::black_box(7)` never turns constant.
+    bodied: &'a [bool],
 }
 
 /// How deep [`Caller::may_turn_constant`] follows an operand before it answers
@@ -1564,7 +1569,9 @@ impl Caller<'_> {
             }
             ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| next(f.value)),
             ExprKind::VariantConstruct { payload, .. } => next(*payload),
-            ExprKind::Call { args, .. } => args.iter().all(|a| !a.is_mut && next(a.expr)),
+            ExprKind::Call { func_id, args, .. } => {
+                self.bodied[func_id.index()] && args.iter().all(|a| !a.is_mut && next(a.expr))
+            }
             ExprKind::Dead
             | ExprKind::Assign { .. }
             | ExprKind::GlobalVarSet { .. }

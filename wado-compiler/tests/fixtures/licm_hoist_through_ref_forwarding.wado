@@ -4,6 +4,8 @@
 // `s.repr` from LICM: the per-byte field load is hoisted out of the scan.
 use { println, Stdout } from "core:cli";
 
+// A call, so `buf` may alias `s` and only the twin's clobber blocks the hoist.
+#[inline(never)]
 fn count_quotes<S: AsStrSlice>(buf: &mut String, s: S) -> i32 {
     let n = s.len();
     let mut i = 0;
@@ -32,7 +34,7 @@ __DATA__
     "stdout": "2 [Q]\n-1\n",
     "wir_pass": {"O2": ["nir/licm"]},
     "wir_contrast": {"O2": [
-        {"    while i < n {\n": "    while i < n {\n        note(buf);\n", "fn count_quotes": "#[inline(never)]\nfn note(buf: &mut String) {\n    buf.push_str(&\"x\");\n}\n\nfn count_quotes"}
+        {"    while i < n {\n": "    while i < n {\n        note(buf);\n", "fn count_quotes": "fn note(buf: &mut String) {\n    buf.push_str(&\"x\");\n}\n\n#[inline(never)]\nfn count_quotes"}
     ]},
     "wir_expect:O2": ["array_get_value<u8>($licm_repr"],
     "wir_not_expect:O2": ["array_get_value<u8>(s.repr"]
