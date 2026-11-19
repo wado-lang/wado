@@ -3184,38 +3184,52 @@ fn try_NUMBER(src: &StrSlice, start: i32) -> i32 {
         if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_4; }
         pos += 1;
     }
+    let mut la_end_5: i32 = -1;
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
-        rep_5: {
-            if pos >= src.len() { break rep_5; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_5; }
+        let mut la_tot_6: i32 = -1;
+        let peek_save_7 = pos;
+        let opt_saved_8 = pos;
+        let mut opt_ok_8 = false;
+        opt_8: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_8; }
+            pos += 1;
+            if pos >= src.len() { break opt_8; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_8; }
+            pos += 1;
+            loop {
+                rep_9: {
+                    if pos >= src.len() { break rep_9; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_9; }
+                    pos += 1;
+                    continue;
+                }
+                break;
+            }
+            opt_ok_8 = true;
+        }
+        if !opt_ok_8 { pos = opt_saved_8; }
+        la_tot_6 = pos;
+        pos = peek_save_7;
+        if la_tot_6 >= 0 && la_tot_6 >= la_end_5 {
+            la_end_5 = la_tot_6;
+        }
+        let la_saved_5 = pos;
+        la_rep_5: {
+            if pos >= src.len() { break la_rep_5; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break la_rep_5; }
             pos += 1;
             continue;
         }
+        pos = la_saved_5;
         break;
     }
-    let opt_saved_7 = pos;
-    let mut opt_ok_7 = false;
-    opt_7: {
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_7; }
-        pos += 1;
-        if pos >= src.len() { break opt_7; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_7; }
-        pos += 1;
-        loop {
-            rep_8: {
-                if pos >= src.len() { break rep_8; }
-                if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_8; }
-                pos += 1;
-                continue;
-            }
-            break;
-        }
-        opt_ok_7 = true;
+    if la_end_5 < 0 {
+        return -1;
     }
-    if !opt_ok_7 { pos = opt_saved_7; }
+    pos = la_end_5;
     return pos;
 }
 
@@ -3225,9 +3239,9 @@ fn try_SYMBOL(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'*'..=b'+' | b'-'..=b'/' | b'A'..=b'Z' | b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        rep_10: {
-            if pos >= src.len() { break rep_10; }
-            if !(unchecked src.byte_at(pos) matches { b'*'..=b'+' | b'-'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' }) { break rep_10; }
+        rep_11: {
+            if pos >= src.len() { break rep_11; }
+            if !(unchecked src.byte_at(pos) matches { b'*'..=b'+' | b'-'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' }) { break rep_11; }
             pos += 1;
             continue;
         }

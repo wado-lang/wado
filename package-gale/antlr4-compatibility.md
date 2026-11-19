@@ -260,7 +260,7 @@ input these differ from the jar:
 
 - `$index` (`getCharIndex()`), and `start` / `pos` in a lexer action.
 - `LexerView`'s `start()`, `pos()`, `char_at(i)` and `input_len()`, which a
-  `superClass` base reads. `char_at` traps at an offset inside a char.
+  `superClass` base reads, and a Wado lexer body through `view`. `char_at` traps at an offset inside a char.
 
 What ANTLR4 prints stays in chars: a `Diagnostic`'s `col`, `$pos`,
 `getCharPositionInLine()`, and the indices `to_lexer_string` prints. So do

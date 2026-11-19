@@ -1,0 +1,59 @@
+// A family under `extends` is one effect: holding any member holds every
+// other, ancestors, descendants and siblings alike.
+#[cm("test:dom/dom#event-target", linearity = "unrestricted", repr = "externref", classes = "0..=2")]
+resource EventTarget {
+    #[cm("test:dom/dom#tag")]
+    fn tag(&self) -> String;
+}
+
+#[cm("test:dom/dom#elem", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Elem extends EventTarget {
+    #[cm("test:dom/dom#b")]
+    fn b(&self) -> String;
+}
+
+#[cm("test:dom/dom#other", linearity = "unrestricted", repr = "externref", classes = "2..=2")]
+resource Other extends EventTarget {
+    #[cm("test:dom/dom#c")]
+    fn c(&self) -> String;
+}
+
+fn descendant(e: Elem) -> String with EventTarget {
+    return e.b();
+}
+
+fn ancestor(e: Elem) -> String with Elem {
+    return e.tag();
+}
+
+fn sibling(o: Other) -> String with Elem {
+    return o.c();
+}
+
+test {
+    with EventTarget => &Mock {}, Elem => &Mock {}, Other => &Mock {} do {
+        assert descendant(Elem::backed_by(Mock {})) == "b";
+        assert ancestor(Elem::backed_by(Mock {})) == "t";
+        assert sibling(Other::backed_by(Mock {})) == "c";
+    }
+}
+
+struct Mock {}
+
+impl EventTarget for Mock {
+    fn tag(&self, this: &EventTarget) -> String {
+        resume "t"
+    }
+}
+
+impl Elem for Mock {
+    fn b(&self, this: &Elem) -> String {
+        resume "b"
+    }
+}
+
+impl Other for Mock {
+    fn c(&self, this: &Other) -> String {
+        resume "c"
+    }
+}

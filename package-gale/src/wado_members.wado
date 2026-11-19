@@ -1,5 +1,5 @@
 use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
-use { wado_opaque_end, comment_end, skip_ws, word_at, ident_end } from "./g4/scan.wado";
+use { wado_opaque_end, comment_end, skip_trivia, skip_ws, word_at, ident_end, text_at } from "./g4/scan.wado";
 
 pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, String> {
     let src = body.as_str_slice();
@@ -8,7 +8,7 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
     let mut methods: List<MemberMethod> = [];
     let mut i = 0;
     loop {
-        let [start, doc_start] = skip_ws_semi(&src, i, n);
+        let [start, doc_start] = skip_separators(&src, i, n);
         if start >= n {
             break;
         }
@@ -33,11 +33,7 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
 /// predicate cannot reach, since it holds `&Lexer`. A Wado member writes its own
 /// receiver, so the source says which those are.
 fn method_head(src: &StrSlice, start: i32, paren: i32, n: i32) -> [String, bool] {
-    let mut i = skip_ws(src, start, n);
-    if word_at(src, i, n, "pub") {
-        i = skip_ws(src, i + 3, n);
-    }
-    i = skip_ws(src, i + 2, n);
+    let i = method_name_start(src, start, n);
     let name = src.slice(i, ident_end(src, i, n)).to_string();
     let mut r = skip_ws(src, paren + 1, n);
     if !word_at(src, r, n, "&mut") {
@@ -47,14 +43,14 @@ fn method_head(src: &StrSlice, start: i32, paren: i32, n: i32) -> [String, bool]
     return [name, word_at(src, r, n, "self")];
 }
 
-/// Past what separates two members (whitespace, `;` and comments), and where
-/// the `///` run documenting the next one starts: a method keeps its docs.
-fn skip_ws_semi(src: &StrSlice, start: i32, n: i32) -> [i32, i32] {
+/// Past what separates two members (whitespace, `;`, `,` and comments), and
+/// where the `///` run documenting the next one starts: a method keeps its docs.
+fn skip_separators(src: &StrSlice, start: i32, n: i32) -> [i32, i32] {
     let mut i = start;
     let mut doc_start = -1;
     while i < n {
         let b = src.byte_at(i);
-        if b.is_ascii_whitespace() || b == b';' {
+        if b.is_ascii_whitespace() || b matches { b';' | b',' } {
             i += 1;
         } else if let Some(end) = comment_end(src, i, n) {
             if is_doc_comment(src, i, n) {
@@ -80,15 +76,34 @@ fn is_doc_comment(src: &StrSlice, i: i32, n: i32) -> bool {
         && !(i + 3 < n && src.byte_at(i + 3) == b'/');
 }
 
+/// Where a member's own text starts, past whitespace and a `pub`.
+fn after_pub(src: &StrSlice, start: i32, n: i32) -> i32 {
+    let i = skip_ws(src, start, n);
+    return if word_at(src, i, n, "pub") { skip_ws(src, i + 3, n) } else { i };
+}
+
+/// A named `fn`: a function type such as `fn(i32)` is part of a field's type.
 fn is_method_start(src: &StrSlice, i: i32, n: i32) -> bool {
-    if word_at(src, i, n, "fn") {
+    if !word_at(src, after_pub(src, i, n), n, "fn") {
+        return false;
+    }
+    let name = method_name_start(src, i, n);
+    return ident_end(src, name, n) > name;
+}
+
+fn method_name_start(src: &StrSlice, start: i32, n: i32) -> i32 {
+    return skip_ws(src, after_pub(src, start, n) + 2, n);
+}
+
+/// A method, or a field's `name:` (not a path's `name::`).
+fn is_member_start(src: &StrSlice, i: i32, n: i32) -> bool {
+    if is_method_start(src, i, n) {
         return true;
     }
-    if word_at(src, i, n, "pub") {
-        let j = skip_ws(src, i + 3, n);
-        return word_at(src, j, n, "fn");
-    }
-    return false;
+    let j = after_pub(src, i, n);
+    let name_end = ident_end(src, j, n);
+    let colon = skip_ws(src, name_end, n);
+    return name_end > j && text_at(src, colon, n, ":") && !text_at(src, colon, n, "::");
 }
 
 /// Where a method's parts sit: its `(`, just past its `)`, its body's `{`,
@@ -147,11 +162,8 @@ fn skip_balanced(src: &StrSlice, open_idx: i32, n: i32, open: u8, close: u8) -> 
 }
 
 fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField>) -> Result<i32, String> {
-    let mut i = skip_ws(src, start, n);
-    if word_at(src, i, n, "pub") {
-        i = skip_ws(src, i + 3, n);
-    }
-    let name_start = i;
+    let name_start = after_pub(src, start, n);
+    let mut i = name_start;
     i = ident_end(src, i, n);
     if i == name_start {
         return Result::Err("gale: Wado @members: expected a field name");
@@ -163,7 +175,7 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
     }
     i += 1;
     let ty_end = scan_to(src, i, n, b'=');
-    if ty_end >= n {
+    if ty_end >= n || src.byte_at(ty_end) != b'=' {
         return Result::Err(`gale: Wado @members: field '${name}' needs an initializer ('= ...')`);
     }
     let ty = src.slice(i, ty_end).trim();
@@ -176,6 +188,9 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
     if init.is_empty() {
         return Result::Err(`gale: Wado @members: field '${name}' has an empty initializer`);
     }
+    if init_end < n && !src.byte_at(init_end) matches { b';' | b',' } {
+        return Result::Err(`gale: Wado @members: expected ';' or ',' after field '${name}'`);
+    }
     fields.push(MemberField {
         name,
         ty: ty.to_string(),
@@ -184,14 +199,53 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
     return Result::Ok(if init_end < n { init_end + 1 } else { n });
 }
 
+/// Whether the `\n` or `,` at `i` ends a member: the next member follows it, or
+/// for a `,`, the end of the block does. A separator after a line break ends
+/// the member itself.
+fn ends_member(src: &StrSlice, i: i32, n: i32) -> bool {
+    if src.byte_at(i) == b'\n' {
+        let next = skip_trivia(src, i + 1, n);
+        return next < n && is_member_start(src, next, n);
+    }
+    let next = skip_separators(src, i + 1, n).0;
+    return next >= n || is_member_start(src, next, n);
+}
+
+/// Where `target` or a `;` sits outside any bracket, or the separator or line
+/// break before the next member when the text runs into one first. A `|` where
+/// an operand starts opens a closure's parameter list, whose commas separate
+/// nothing.
 fn scan_to(src: &StrSlice, start: i32, n: i32, target: u8) -> i32 {
     let mut i = start;
     let mut depth = 0;
+    let mut operand_starts = true;
     while i < n {
         let b = src.byte_at(i);
-        if b == target && depth == 0 {
+        if depth == 0 && (b == target || b == b';' || b matches { b'\n' | b',' } && ends_member(src, i, n)) {
             return i;
         }
+        if b.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if let Some(end) = comment_end(src, i, n) {
+            i = end;
+            continue;
+        }
+        if text_at(src, i, n, "||") {
+            i += 2;
+            operand_starts = true;
+            continue;
+        }
+        if b == b'|' && operand_starts {
+            i += 1;
+            while i < n && src.byte_at(i) != b'|' {
+                i = skip_span(src, i, n);
+            }
+            i += 1;
+            continue;
+        }
+        operand_starts = b matches { b'=' | b'(' | b'[' | b'{' | b',' };
         if b matches { b'(' | b'[' | b'{' } {
             depth += 1;
             i += 1;

@@ -1057,7 +1057,7 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -1684,7 +1684,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     return out_3;
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>::finish"(self) {
+fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<wasi:filesystem/types.wado/DirectoryEntry>::finish"(self) with Stream {
     let end: ref null "core:prelude//$Resource";
     let chunk: ref "core:prelude/types.wado//StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>";
     let $drop_spill_8: ref null "tuple//[core:prelude/types.wado/Stream<wasi:filesystem/types.wado/DirectoryEntry>, core:prelude/types.wado/StreamChunk<wasi:filesystem/types.wado/DirectoryEntry>]";
@@ -1754,7 +1754,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
     return $taken_9;
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>::settle"(self, end) {
+fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<wasi:filesystem/types.wado/DirectoryEntry>::settle"(self, end) with Stream {
     let packed_3: i32;
     let count: i32;
     let items: ref "core:prelude/list.wado//List<wasi:filesystem/types.wado/DirectoryEntry>";

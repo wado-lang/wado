@@ -466,16 +466,16 @@ fn "bug_nested_for_of_break.wado/$test_0_nested_for_of_with_break_selects_the_pr
     let has_prec_14: bool;
     let end_34: i32;
     let ref_val_36: ref "bug_nested_for_of_break.wado//Transition";
-    let $licm_repr_28_38: ref "Array<bug_nested_for_of_break.wado/State>";
+    let $licm_repr_30_40: ref "Array<bug_nested_for_of_break.wado/State>";
     let $sroa_$iter_1_repr_31_41: ref "Array<bug_nested_for_of_break.wado/Transition>";
     let $sroa_$iter_1_index_32_42: i32;
     if @unlikely(local.tee i_12($inline_loop_entry_decision_spec0_dae_rule__0: block -> i32 {
         i_12 = 0;
-        $licm_repr_28_38 = global:bug_nested_for_of_break.wado::$const_obj_0.repr;
+        $licm_repr_30_40 = global:bug_nested_for_of_break.wado::$const_obj_0.repr;
         b1: block {
             l2: loop {
                 break_if b1 i_12 >= 2;
-                if ((local.tee st_13(builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">($licm_repr_28_38, i_12)).kind == 9) & (st_13.rule == 0)) & (st_13.decision >= 0) {
+                if ((local.tee st_13(builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">($licm_repr_30_40, i_12)).kind == 9) & (st_13.rule == 0)) & (st_13.decision >= 0) {
                     has_prec_14 = 0;
                     end_34 = local.tee $load_3(st_13.transitions).used;
                     $sroa_$iter_1_repr_31_41 = $load_3.repr;
@@ -515,11 +515,11 @@ loop_entry_decision(&states, 0): "), used: 34 }, s2: struct.new "core:prelude/st
     }
     if @unlikely(local.tee i_12($inline_loop_entry_decision_spec1_dae_rule__1: block -> i32 {
         i_12 = 0;
-        $licm_repr_28_38 = global:bug_nested_for_of_break.wado::$const_obj_0.repr;
+        $licm_repr_30_40 = global:bug_nested_for_of_break.wado::$const_obj_0.repr;
         b9: block {
             l10: loop {
                 break_if b9 i_12 >= 2;
-                if ((local.tee st_13(builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">($licm_repr_28_38, i_12)).kind == 9) & (st_13.rule == 7)) & (st_13.decision >= 0) {
+                if ((local.tee st_13(builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">($licm_repr_30_40, i_12)).kind == 9) & (st_13.rule == 7)) & (st_13.decision >= 0) {
                     has_prec_14 = 0;
                     end_34 = local.tee $load_3(st_13.transitions).used;
                     $sroa_$iter_1_repr_31_41 = $load_3.repr;
@@ -1105,7 +1105,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

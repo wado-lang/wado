@@ -1,0 +1,38 @@
+// A handler of a child resource does not discharge an operation the child
+// inherits: the call reaches the declaring resource's handler or the host,
+// past it.
+#[cm("test:dom/dom#event-target", linearity = "unrestricted", repr = "externref", classes = "0..=1")]
+resource EventTarget {
+    #[cm("test:dom/dom#tag")]
+    fn tag(&self) -> String;
+}
+
+#[cm("test:dom/dom#node", linearity = "unrestricted", repr = "externref", classes = "1..=1")]
+resource Node extends EventTarget {
+    #[cm("test:dom/dom#text")]
+    fn text(&self) -> String;
+}
+
+fn sneaky(n: &Node) -> String {
+    let mut s = "";
+    with Node => &Mock {} do {
+        s = n.tag();
+    }
+    return s;
+}
+
+struct Mock {}
+
+impl Node for Mock {
+    fn text(&self, this: &Node) -> String {
+        resume "m"
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":19:13: analysis error: missing resource 'EventTarget' required by 'tag'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

@@ -407,4 +407,5 @@ to 4e-4 from the value computed in f64, so the case holds Loam to that value.
 `held_experts.wado` holds each device's run of it to the same device's run with
 every expert held. Its second token is ill-conditioned: a device parts from
 `Cpu` there by as much as onnxruntime does, and the order in which a held run
-sums its experts moves it by up to 6.3e-5.
+sums its experts moves it by up to 1.7e-4 on XLA's CPU plugin, so the device
+tests hold this case to 4e-4.

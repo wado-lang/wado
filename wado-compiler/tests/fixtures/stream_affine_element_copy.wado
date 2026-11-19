@@ -8,13 +8,13 @@
 use { println, Stdout } from "core:cli";
 use { TcpSocket } from "wasi:sockets";
 
-fn accept(sockets: Stream<TcpSocket>) -> List<TcpSocket> {
+fn accept(sockets: Stream<TcpSocket>) -> List<TcpSocket> with Stream {
     let [sockets, chunk] = sockets.start_read(4).finish();
     sockets.drop();
     return chunk.items;
 }
 
-fn hand_over(writer: StreamWritable<TcpSocket>, sockets: List<TcpSocket>) -> List<TcpSocket> {
+fn hand_over(writer: StreamWritable<TcpSocket>, sockets: List<TcpSocket>) -> List<TcpSocket> with StreamWritable {
     let [writer, written] = writer.start_write(sockets).finish();
     writer.drop();
     return written.rest;

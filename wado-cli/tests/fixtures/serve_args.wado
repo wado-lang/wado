@@ -1,7 +1,7 @@
 use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 use { args, program_name, Environment } from "core:cli";
 
-export async fn handle(_request: Request) -> Result<Response, ErrorCode> with Environment {
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> with (Environment, Response) {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
     let headers = Headers::new();

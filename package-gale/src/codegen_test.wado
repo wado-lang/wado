@@ -1716,6 +1716,151 @@ WS : [ \\t]+ -> skip ;";
     assert got == "if IF iF x => IF:if IF:IF IF:iF STRICT:x\nX => error:X\n";
 }
 
+test "a predicate after the first element does not steer the choice between alternatives" {
+    // Both arms start with `ID` and test it after, so prediction reads tokens
+    // alone and takes the first arm that can match. `#inc("a")` also matches the
+    // `file` arm followed by a call, so the arm order decides it.
+    let grammar = |first: &String, second: &String| `grammar C;
+s : e EOF ;
+e : p ('(' a? ')')* ;
+a : ID | STR ;
+p : '#' ( ${first} | ${second} ) | ID ;
+ID : [a-z]+ ;
+STR : '\"' ~'\"'* '\"' ;
+WS : ' ' -> skip ;`;
+    let file = "ID {$ID.text.equals(\"file\")}?";
+    let inc = "ID {$ID.text.equals(\"inc\")}? '(' STR ')'";
+    let inputs: List<String> = ["#file", "#inc(\"a\")", "#file(x)", "#file(\"a\")"];
+    assert parses(grammar(&file, &inc), "s", inputs) == "#file => (s (e (p # file)))
+#inc(\"a\") => error
+#file(x) => (s (e (p # file) ( (a x) )))
+#file(\"a\") => (s (e (p # file) ( (a \"a\") )))
+";
+    assert parses(grammar(&inc, &file), "s", inputs) == "#file => (s (e (p # file)))
+#inc(\"a\") => (s (e (p # inc ( \"a\" ))))
+#file(x) => (s (e (p # file) ( (a x) )))
+#file(\"a\") => error
+";
+}
+
+test "a Wado lexer body reads the char stream through `view`" {
+    // `view` is the `LexerView` a superClass base receives, at the cursor the
+    // body runs at: here the token's start, so `la(-1)` is the char before it.
+    let input = "lexer grammar L;
+options { language = Wado; }
+TAG : { view.la(-1) == 'x' as i32 }? '`' ;
+BT : '`' ;
+X : 'x' ;
+WS : ' ' -> skip ;";
+    let got = lexes(input, ["x`", "x `", "`"]);
+    assert got == "x` => X:x TAG:`\nx ` => X:x BT:`\n` => BT:`\n";
+}
+
+test "a lexer member naming `LexerView` carries the type" {
+    let input = "lexer grammar L;
+options { language = Wado; }
+@lexer::members {
+    fn after_x(&self, src: &StrSlice, start: i32, pos: i32) -> bool {
+        return LexerView { src, start, pos }.la(-1) == 'x' as i32;
+    }
+}
+TAG : { lx.after_x(src, start, pos) }? '`' ;
+BT : '`' ;
+X : 'x' ;";
+    assert lexes(input, ["x`", "`"]) == "x` => X:x TAG:`\n` => BT:`\n";
+}
+
+test "a Java lexer body reads the char stream through `_input.LA`" {
+    // In a lexer `_input` is the char stream, not the parser's token stream.
+    let input = "lexer grammar L;
+TAG : {_input.LA(-1) == 'x'}? '`' ;
+BT : '`' ;
+X : 'x' ;
+WS : ' ' -> skip ;";
+    let got = lexes(input, ["x`", "x `", "`"]);
+    assert got == "x` => X:x TAG:`\nx ` => X:x BT:`\n` => BT:`\n";
+}
+
+test "a repeat over a fragment backs off for the element after it" {
+    // `F` takes `>` too, so `>5` matches only with `F` skipped, and `G*` must
+    // hand back the `ab` the suffix needs. The jar lexes each as one token.
+    let input = "lexer grammar Test;
+X : (F? [<>])? [0-9]* ;
+Y : '.' G* 'ab' 'c' ;
+fragment F : ~[ ] ;
+fragment G : 'a' 'b' ;
+WS : ' ' -> skip ;";
+    let got = lexes(input, [">5", "a>5", "5", ".abababc", ".abc"]);
+    assert got == ">5 => X:>5\na>5 => X:a>5\n5 => X:5\n.abababc => Y:.abababc\n.abc => Y:.abc\n";
+}
+
+test "no predicate sees what an action of the same token wrote" {
+    // The jar runs the actions once the token is matched: `on` holds for every
+    // iteration of the first `S`, and is off for the second.
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+@lexer::members { on: bool = true, }
+S : 'x' ({ lx.on }? 'a' { lx.on = false; } | 'b')* 'a' 'c' ;
+A : 'a' ;
+C : 'c' ;
+X : 'x' ;
+WS : ' ' -> skip ;
+", ["xaabac xaac"]);
+    assert got == "xaabac xaac => S:xaabac X:x A:a A:a C:c\n";
+}
+
+test "an action written in a fragment never runs" {
+    // The jar runs only the actions of the rule that matched the token.
+    let input = "lexer grammar L;
+@lexer::members { int count = 0; }
+D : F+ { System.out.println(count); } ;
+fragment F : 'd' { count += 1; } ;";
+    assert lexes(input, ["ddd"]) == "ddd => D:ddd [0\n]\n";
+}
+
+test "no predicate in a token rule the replay calls sees an action of the same token" {
+    // The jar prints `xb`: `B`'s predicate sees `on` as the match saw it.
+    let input = "lexer grammar L;
+@lexer::members { boolean on = true; }
+A : 'x' { on = false; } B* { System.out.println(getText()); } ;
+B : { on }? 'b' ;";
+    assert lexes(input, ["xb"]) == "xb => A:xb [xb\n]\n";
+}
+
+test "an action in a fragment arm copied into its caller never runs" {
+    // `'d'` and `'dd'` contest the suffix, so `F`'s arms are spliced into `D`.
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+D : F 'c' ;
+fragment F : 'd' { lx.emit(\"ran\"); } | 'dd' ;
+", ["dc"]);
+    assert got == "dc => D:dc\n";
+}
+
+test "a member method may drive the lexer where no rule runs an action" {
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+@lexer::members {
+fn quiet(&mut self) { self.skip /* now */ (); }
+}
+A : 'a' ;
+", ["a"]);
+    assert got == "a => A:a\n";
+}
+
+test "a member method may read the mode where no rule runs an action" {
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+@lexer::members {
+fn now(&self) -> String { return `${self.mode()}`; }
+}
+A : 'a' ;
+mode M;
+B : 'b' ;
+", ["a"]);
+    assert got == "a => A:a\n";
+}
+
 test "a first-char dispatch whose arms claim every char compiles without a `_` arm" {
     let input = "lexer grammar Test;
 A : 'a' ;
@@ -1742,6 +1887,12 @@ NOT_SPACE : ~[ a-zα-ω]+ ;
 WS : ' ' -> skip ;";
     let got = lexes(input, ["café caf αβγ abc 日本 .é"]);
     assert got == "café caf αβγ abc 日本 .é => CAFE:café ID:caf GREEK:αβγ ID:abc NOT_SPACE:日本 DOT:.é\n";
+}
+
+test "a Java char appended to a string prints as itself" {
+    let input = "lexer grammar L;
+A : 'a' { System.out.println(\"<\" + '\\\\' + \"n\" + '$' + \"{x}\" + '`' + '\\r' + \">\"); } ;";
+    assert lexes(input, ["a"]) == "a => A:a [<\\n${x}`\r>\n]\n";
 }
 
 // Pins "Positions an action reads are byte offsets" in antlr4-compatibility.md:
@@ -3637,12 +3788,6 @@ WS : ' ' -> skip ;
 ", "lexer grammar L;
 options { language = Wado; }
 A : ('a' { lx.set_type(TK_B) })+ ;
-B : 'b' ;
-WS : ' ' -> skip ;
-", "lexer grammar L;
-options { language = Wado; }
-A : F 'z' ;
-fragment F : 'a' { lx.set_type(TK_B) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ", "lexer grammar L;
@@ -6515,7 +6660,7 @@ struct Inputs {
 impl Inputs {
     /// A stream serving `content`, made before the handler is installed, since
     /// it traps on `new`.
-    fn serve(&mut self, content: ByteList) -> Stream<u8> {
+    fn serve(&mut self, content: ByteList) -> Stream<u8> with Stream {
         let [rx, tx] = Stream::<u8>::new();
         tx.drop();
         self.contents[ResourceId::of(&rx)] = content;
@@ -6570,7 +6715,7 @@ fn kiln(
     supplementary: List<[String, ByteList, Option<String>]>,
     options: Options,
     primary_type: Option<String> = null,
-) -> KilnRun with Log {
+) -> KilnRun with (Log, Stream) {
     let mut inputs = Inputs {};
     let mut files: List<InputFile> = [];
     for let [path, content, type_] of supplementary {
@@ -7838,8 +7983,8 @@ test "a tail repeat takes a token only where the continuation still parses past 
         let got = parses(`grammar R;\ns : a X X Y EOF ;\na : ${body} ;\n${tokens}`, "s", ["xxy", "xxxy"], &LONGEST);
         assert got == "xxy => (s a x x y)\nxxxy => (s (a x) x x y)\n", `${body}: ${got}`;
     }
-    let got = parses(`grammar R;\ns : a X X Y EOF ;\na : X* ;\n${tokens}`, "s", ["xxxxy"], &LONGEST);
-    assert got == "xxxxy => (s (a x x) x x y)\n";
+    let deep = parses(`grammar R;\ns : a X X Y EOF ;\na : X* ;\n${tokens}`, "s", ["xxxxy"], &LONGEST);
+    assert deep == "xxxxy => (s (a x x) x x y)\n";
     for let body of ["X?", "X*"] {
         let got = parses(
             `grammar R;\ns : t EOF ;\nt : a X X Y | a X B ;\na : ${body} ;\n${tokens}`,

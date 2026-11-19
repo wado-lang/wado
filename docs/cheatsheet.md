@@ -1696,7 +1696,7 @@ export(Command::run) fn main() with Stdout {
 ```wado
 use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Response {
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_rx);

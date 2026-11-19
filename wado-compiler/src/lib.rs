@@ -1728,12 +1728,14 @@ fn check_effects_and_moves<H: CompilerHost>(
     sem: &mut semantics::Semantics,
     provided_import_fqs: hashmap::IndexSet<String>,
     exports: Exports,
+    lints: Lints,
     logger: &Logger<'_, H>,
 ) -> Result<Option<hashmap::IndexSet<String>>, Bail> {
     let _span = logger.span("effect-check");
     let library_exports: Option<Vec<_>> = (exports == Exports::Recorded)
         .then(|| lib_export_functions(&sem.entry_module_source, &sem.modules).collect());
-    let diags = effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref());
+    let diags =
+        effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref(), lints);
     let move_errors = affine_move_check::check_affine_moves_semantic(sem);
     let had_error = !diags.is_empty() || !move_errors.is_empty();
     sem.write_back_effect_rows(&diags.rows);
@@ -1742,6 +1744,14 @@ fn check_effects_and_moves<H: CompilerHost>(
     }
     for error in diags.purity {
         let _ = logger.error(error);
+    }
+    for warning in diags.unhandled {
+        let diag = Diagnostic::from(warning);
+        logger.warn_at(
+            diag.code,
+            diag.message,
+            diag.span.expect("a scope has a span"),
+        );
     }
     for error in move_errors {
         let _ = logger.error(error);
@@ -1988,6 +1998,7 @@ fn build_after_load<H: CompilerHost>(
         } else {
             Exports::Unrecorded
         },
+        options.lints,
         logger,
     )?;
 
@@ -2765,15 +2776,16 @@ pub async fn dump_with_options<H: CompilerHost>(
     };
 
     // === Phase 1: Lexer ===
-    let mut lex_result = {
+    let lex_result = {
         let _span = logger.span("lex");
         lexer::lex(source)
     };
     let tokens_for_dump = lex_result.tokens.clone();
-    // Batch path is fail-fast: report any recovered lex error before parsing
-    // so the wire format keeps the `lexer error: …` prefix.
-    if !lex_result.errors.is_empty() {
-        let _ = logger.error_in(&entry_source, lex_result.errors.remove(0));
+    // Batch path is fail-fast: report a recovered lex error before parsing
+    // so the wire format keeps the `lexer error: …` prefix. The load below
+    // reports the invalid literals.
+    if let Some(e) = lex_result.errors.first() {
+        let _ = logger.error_in(&entry_source, e.clone());
         return Err(Bail);
     }
 
@@ -2865,7 +2877,7 @@ pub async fn dump_with_options<H: CompilerHost>(
 /// section.
 pub fn format(source: &str) -> Result<String, CompileError> {
     // Formatting requires a clean parse — the first recovered lex error
-    // becomes a `CompileError::Lexer`.
+    // becomes a `CompileError::Lexer`. A bad escape is kept as written.
     let lex_result = lexer::lex(source);
     if let Some(e) = lex_result.errors.first() {
         return Err(CompileError::from_lex_error(e, None));
@@ -2954,13 +2966,23 @@ fn dropped_comment(before: &str, after: &str) -> Option<DroppedComment> {
 pub struct ParseResult {
     pub ast: ast::Module,
     pub trivia: comment::TriviaMap,
-    /// Lexer errors recovered while tokenising, in source order.
+    /// Lexer errors recovered while tokenising, in source order. The invalid
+    /// literals are `ast`'s, which a compile reports past the parse.
     pub lex_errors: Vec<lexer::LexError>,
     /// Parser errors recovered while building the AST, in source order.
     pub errors: Vec<parser::ParseError>,
 }
 
 impl ParseResult {
+    /// Every error the lex and the parse recovered, attributed to `file`: the
+    /// recovered lex errors, the invalid literals, then the parse errors.
+    pub fn diagnostics(&self, file: Option<&str>) -> impl Iterator<Item = Diagnostic> {
+        let lexed = self.lex_errors.iter().chain(self.ast.invalid_literals());
+        lexed
+            .map(move |e| e.diagnostic(file))
+            .chain(self.errors.iter().map(move |e| e.diagnostic(file)))
+    }
+
     /// Fail-fast adapter: if lexing or parsing recovered any syntax error,
     /// return the first as a `CompileError`; otherwise yield the result
     /// unchanged. Used by batch compilation, `wado doc`, and the formatter,
@@ -3001,8 +3023,10 @@ pub async fn load<H: CompilerHost>(
 pub fn parse(source: &str) -> ParseResult {
     let mut lex_result = lexer::lex(source);
     let lex_errors = std::mem::take(&mut lex_result.errors);
+    let invalid_literals = std::mem::take(&mut lex_result.invalid_literals);
     let mut parser = Parser::from_lex(lex_result);
-    let ast = parser.parse();
+    let mut ast = parser.parse();
+    ast.set_invalid_literals(invalid_literals);
     let errors = parser.take_errors();
     let mut trivia = parser.take_trivia();
     comment::populate_trailing(&mut trivia, &ast);

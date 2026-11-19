@@ -30,7 +30,7 @@ impl Log for Filter {                      // a layer: decorate one operation
 }
 
 impl TcpSocket for MinimalTcp {            // a mock: anything unexpected traps
-    fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
+    fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> with TcpSocket {
         resume Result::Ok(mock_socket())
     }
     fn drop(&self, this: TcpSocket) {      // a drop is an operation too

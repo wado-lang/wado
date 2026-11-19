@@ -3717,7 +3717,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -6023,13 +6023,13 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
     let a_10: i32;
     let b_11: i32;
     let b_14: i32;
-    let $licm_repr_20: ref Array<i32>;
+    let $licm_repr_22: ref Array<i32>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<i32>(n);
     width = 1;
-    $licm_repr_20 = self.repr;
+    $licm_repr_22 = self.repr;
     b930: block {
         l931: loop {
             start = 0;
@@ -6045,8 +6045,8 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
                             break_if b934 (builtin::i64_extend_i32_s(k) + 1_i64) >= builtin::i64_extend_i32_s(b_14);
                             if i < mid {
                                 if j < b_14 {
-                                    a_10 = builtin::array_get_value<i32>($licm_repr_20, i);
-                                    b_11 = builtin::array_get_value<i32>($licm_repr_20, j);
+                                    a_10 = builtin::array_get_value<i32>($licm_repr_22, i);
+                                    b_11 = builtin::array_get_value<i32>($licm_repr_22, j);
                                     if $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         if a_10 < b_11 {
                                             break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
@@ -6056,25 +6056,25 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
                                         }
                                         break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 1;
                                     } == 2 {
-                                        builtin::array_copy<i32>(buf, k, $licm_repr_20, j, 1);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_22, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_copy<i32>(buf, k, $licm_repr_20, i, 1);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_22, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    builtin::array_copy<i32>(buf, k, $licm_repr_20, i, 1);
+                                    builtin::array_copy<i32>(buf, k, $licm_repr_22, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                builtin::array_copy<i32>(buf, k, $licm_repr_20, j, 1);
+                                builtin::array_copy<i32>(buf, k, $licm_repr_22, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             if i < mid {
                                 if j < b_14 {
-                                    a_10 = builtin::array_get_value<i32>($licm_repr_20, i);
-                                    b_11 = builtin::array_get_value<i32>($licm_repr_20, j);
+                                    a_10 = builtin::array_get_value<i32>($licm_repr_22, i);
+                                    b_11 = builtin::array_get_value<i32>($licm_repr_22, j);
                                     if $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         if a_10 < b_11 {
                                             break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
@@ -6084,18 +6084,18 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
                                         }
                                         break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 1;
                                     } == 2 {
-                                        builtin::array_copy<i32>(buf, k, $licm_repr_20, j, 1);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_22, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_copy<i32>(buf, k, $licm_repr_20, i, 1);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_22, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    builtin::array_copy<i32>(buf, k, $licm_repr_20, i, 1);
+                                    builtin::array_copy<i32>(buf, k, $licm_repr_22, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                builtin::array_copy<i32>(buf, k, $licm_repr_20, j, 1);
+                                builtin::array_copy<i32>(buf, k, $licm_repr_22, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
@@ -6107,8 +6107,8 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
                             break_if b946 k >= b_14;
                             if i < mid {
                                 if j < b_14 {
-                                    a_10 = builtin::array_get_value<i32>($licm_repr_20, i);
-                                    b_11 = builtin::array_get_value<i32>($licm_repr_20, j);
+                                    a_10 = builtin::array_get_value<i32>($licm_repr_22, i);
+                                    b_11 = builtin::array_get_value<i32>($licm_repr_22, j);
                                     if $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         if a_10 < b_11 {
                                             break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
@@ -6118,25 +6118,25 @@ fn "spec_literals_lists.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_
                                         }
                                         break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 1;
                                     } == 2 {
-                                        builtin::array_copy<i32>(buf, k, $licm_repr_20, j, 1);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_22, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_copy<i32>(buf, k, $licm_repr_20, i, 1);
+                                        builtin::array_copy<i32>(buf, k, $licm_repr_22, i, 1);
                                         i = i + 1;
                                     }
                                 } else {
-                                    builtin::array_copy<i32>(buf, k, $licm_repr_20, i, 1);
+                                    builtin::array_copy<i32>(buf, k, $licm_repr_22, i, 1);
                                     i = i + 1;
                                 }
                             } else {
-                                builtin::array_copy<i32>(buf, k, $licm_repr_20, j, 1);
+                                builtin::array_copy<i32>(buf, k, $licm_repr_22, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l947;
                         };
                     };
-                    builtin::array_copy<i32>($licm_repr_20, start, buf, start, b_14 - start);
+                    builtin::array_copy<i32>($licm_repr_22, start, buf, start, b_14 - start);
                     start = b_14;
                     continue l933;
                 };

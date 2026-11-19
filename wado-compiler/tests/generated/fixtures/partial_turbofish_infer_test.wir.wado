@@ -2159,7 +2159,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -5723,19 +5723,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
     let i: i32;
     let b0: u8;
     let $contract_arg_0: i32;
-    let $licm_arith_36: i32;
-    let $licm_arith_38: i32;
+    let $licm_arith_39: i32;
+    let $licm_arith_40: i32;
     len = $mv$bytes$end - $mv$bytes$start;
     i = 0;
-    $licm_arith_36 = $mv$bytes$end - $mv$bytes$start;
-    $licm_arith_38 = $mv$bytes$end - $mv$bytes$start;
+    $licm_arith_39 = $mv$bytes$end - $mv$bytes$start;
+    $licm_arith_40 = $mv$bytes$end - $mv$bytes$start;
     b846: block {
         l847: loop {
             break_if b846 i >= len;
             if local.tee b0(block -> u8 {
-                if @unlikely(((0 <= i) & (i < $licm_arith_36)) == 0) {
+                if @unlikely(((0 <= i) & (i < $licm_arith_39)) == 0) {
                     cold_path;
-                    "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $licm_arith_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1039"), used: 29 });
+                    "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $licm_arith_39, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1039"), used: 29 });
                     unreachable;
                 }
                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($mv$bytes$repr, $mv$bytes$start, i);
@@ -5745,9 +5745,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
                     l852: loop {
                         break_if b851 (if i < len -> i32 {
                             block -> u8 {
-                                if @unlikely(((0 <= i) & (i < $licm_arith_38)) == 0) {
+                                if @unlikely(((0 <= i) & (i < $licm_arith_40)) == 0) {
                                     cold_path;
-                                    "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $licm_arith_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1042"), used: 29 });
+                                    "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $licm_arith_40, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1042"), used: 29 });
                                     unreachable;
                                 }
                                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($mv$bytes$repr, $mv$bytes$start, i);
@@ -5764,16 +5764,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
             if (((b0 >=u 225) & (b0 <u 240)) & (b0 != 237)) & ((i + 2) < len) {
                 if (((block -> u8 {
                     $contract_arg_0 = i + 1;
-                    if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_arith_36)) == 0) {
+                    if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_arith_39)) == 0) {
                         cold_path;
-                        "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $licm_arith_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1048"), used: 29 });
+                        "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $licm_arith_39, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1048"), used: 29 });
                         unreachable;
                     }
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($mv$bytes$repr, $mv$bytes$start, $contract_arg_0);
                 } ^ 128) & 255) | ((block -> u8 {
-                    if @unlikely(local.tee $contract_arg_0(i + 2) >= $licm_arith_36) {
+                    if @unlikely(local.tee $contract_arg_0(i + 2) >= $licm_arith_39) {
                         cold_path;
-                        "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $licm_arith_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1048"), used: 29 });
+                        "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $licm_arith_39, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1048"), used: 29 });
                         unreachable;
                     }
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($mv$bytes$repr, $mv$bytes$start, $contract_arg_0);
@@ -5785,9 +5785,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
             if ((b0 >=u 194) & (b0 <u 224)) & ((i + 1) < len) {
                 if ((block -> u8 {
                     b0 = i + 1;
-                    if @unlikely(((0 <= b0) & (b0 < $licm_arith_36)) == 0) {
+                    if @unlikely(((0 <= b0) & (b0 < $licm_arith_39)) == 0) {
                         cold_path;
-                        "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(b0, $licm_arith_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1052"), used: 29 });
+                        "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(b0, $licm_arith_39, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1052"), used: 29 });
                         unreachable;
                     }
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked"($mv$bytes$repr, $mv$bytes$start, b0);

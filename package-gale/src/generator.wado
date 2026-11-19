@@ -70,7 +70,7 @@ fn type_refusal(primary: &InputFile, inputs: &List<InputFile>) -> Option<String>
 fn read_inputs(
     primary: InputFile,
     inputs: List<InputFile>,
-) -> Result<[List<[String, String]>, List<[String, String]>], Error> {
+) -> Result<[List<[String, String]>, List<[String, String]>], Error> with Stream {
     if let Some(reason) = type_refusal(&primary, &inputs) {
         return Result::Err(Error::Unsupported(reason));
     }
@@ -103,7 +103,7 @@ fn read_inputs(
 /// `bind_request` shape during
 /// `kiln::import_check::inject_kiln_request_adapter` (runs before
 /// analyze).
-export fn generate(req: Request<Options>) -> Result<Response, Error> {
+export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream {
     let module = ModuleSpec::from_origin(&req.origin());
     // A `"tree-sitter-highlights"` input is a highlight query, compiled into
     // the highlighter, and every other file a grammar half merged into the

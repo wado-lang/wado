@@ -18,7 +18,7 @@ use crate::elaborator::sem::types::{
 };
 use crate::elaborator::typecheck::{TypeCheckResult, check_assignable};
 use crate::elaborator::types::FromArrayInfo;
-use crate::escape::{bytes_value, unescape_byte};
+use crate::escape::unescape_byte;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::{defaults_to_float, has_decimal_point};
 use crate::module_source::ModuleSource;
@@ -521,19 +521,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let repr = match kind {
             NumericLiteralKind::Byte(raw) => {
                 assert!(neg.is_none(), "there is no negated byte literal");
-                match unescape_byte(raw) {
-                    Ok(byte) => {
-                        byte_repr = byte.to_string();
-                        byte_repr.as_str()
-                    }
-                    Err(message) => {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        return Some(target_type);
-                    }
-                }
+                // The lexer reported a byte literal that denotes no byte.
+                let Ok(byte) = unescape_byte(raw) else {
+                    return Some(target_type);
+                };
+                byte_repr = byte.to_string();
+                byte_repr.as_str()
             }
             NumericLiteralKind::Number(repr) => repr,
         };
@@ -1266,15 +1259,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None
             };
             if let Some(target_type) = bytes_type {
-                if let Expr::Literal(lit) = expr
-                    && let Literal::Bytes(raw, quote) = &lit.value
-                    && let Err(message) = bytes_value(raw, *quote)
-                {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                }
                 self.record_coercion(expr.id(), CoercionKind::BytesNewtype, target_type);
                 self.record_expression_type(expr.id(), target_type);
                 return Some(target_type);

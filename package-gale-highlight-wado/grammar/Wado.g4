@@ -5,8 +5,60 @@ grammar Wado;
 
 options { language = Wado; }
 
+// A hole's specifier follows its first `:` outside brackets. Each open hole
+// counts its own braces apart from its parentheses and brackets, as the
+// compiler's scanner does: only a `}` closes the hole.
 @lexer::members {
-    raw_hashes: List<i32> = []
+    raw_hashes: List<i32> = [];
+    hole_braces: List<i32> = [];
+    hole_brackets: List<i32> = [];
+
+    fn open_hole(&mut self) {
+        self.hole_braces.push(0);
+        self.hole_brackets.push(0);
+    }
+
+    fn close_brace(&mut self) {
+        let Some(depth) = self.hole_braces.last() else {
+            return;
+        };
+        if depth > 0 {
+            self.hole_braces[self.hole_braces.len() - 1] = depth - 1;
+        } else {
+            self.close_hole();
+        }
+    }
+
+    fn close_hole(&mut self) {
+        self.hole_braces.pop();
+        self.hole_brackets.pop();
+    }
+
+    fn open_brace(&mut self) {
+        if let Some(depth) = self.hole_braces.last() {
+            self.hole_braces[self.hole_braces.len() - 1] = depth + 1;
+        }
+    }
+
+    fn open_bracket(&mut self) {
+        if let Some(depth) = self.hole_brackets.last() {
+            self.hole_brackets[self.hole_brackets.len() - 1] = depth + 1;
+        }
+    }
+
+    fn close_bracket(&mut self) {
+        if let Some(depth) = self.hole_brackets.last() && depth > 0 {
+            self.hole_brackets[self.hole_brackets.len() - 1] = depth - 1;
+        }
+    }
+
+    fn at_hole_top(&self) -> bool {
+        return self.hole_braces.last() == Some(0) && self.hole_brackets.last() == Some(0);
+    }
+
+    fn ends_name(&self, c: i32) -> bool {
+        return c >= 0 && c < 128 && ((c as u8).is_ascii_alphanumeric() || c == b'_' as i32);
+    }
 }
 
 sourceFile
@@ -79,6 +131,7 @@ attrArgs
 
 attrArg
     : identifier ('=' attrValue)?
+    | '_'
     | STRING_LITERAL
     | number
     ;
@@ -373,7 +426,7 @@ typeArgs
     ;
 
 typeArg
-    : (IDENTIFIER | 'Self') '=' typeRef
+    : IDENTIFIER '=' typeRef
     | IDENTIFIER ':' traitBounds
     | typeRef
     ;
@@ -707,6 +760,7 @@ atom
     | 'self'
     | compileTimeExpr
     | taggedTemplate
+    | selfBoundCall
     | exprPath
     | tupleOrArrayLiteral
     | closure
@@ -730,6 +784,14 @@ braceLiteral
 // spells with its `(`.
 exprPath
     : (identifier | 'Self') ('::' pathSegment)* ('::' typeArgs ('::' pathSegment)*)?
+    ;
+
+// `Trait::<Self = T>::method(…)` binds the receiver of a trait's static
+// method. The binding closes the trait's own arguments, and a call follows. A
+// namespace is as much qualification as the trait takes.
+selfBoundCall
+    : identifier ('::' pathSegment)? '::' '<' (typeRef ',')* 'Self' '=' typeRef '>'
+      '::' pathSegment ('::' typeArgs)? '(' argumentList? ')'
     ;
 
 // A template literal directly after a path tags it (WEP 2026-01-10). A gap
@@ -760,8 +822,15 @@ pathSegment
     : memberName
     ;
 
+// The name is an identifier read by its spelling, so a predicate checks it,
+// after the name: prediction reads the tokens alone and takes the first arm
+// that can match. `#file("a")` matches the include, so it is refused here and
+// parsed by the compiler. An include's path is a text string, never bytes.
 compileTimeExpr
-    : '#' IDENTIFIER ('(' argumentList? ')')?
+    : '#' ( IDENTIFIER { p.token_text(p.lt(-1)) matches { "include_str" | "include_bytes" } }?
+            '(' { !p.token_text(p.lt(1)).starts_with("b") }? STRING_LITERAL ')'
+          | IDENTIFIER { p.token_text(p.lt(-1)) matches { "file" | "line" | "function" | "data" } }?
+          )
     ;
 
 // `expression`'s levels where a brace opens the block that follows, as in a
@@ -1000,16 +1069,7 @@ interpolationEnd
     ;
 
 formatSpec
-    : ':' formatSpecAtom*
-    ;
-
-// The fill is any character the interpolation scanner does not read as
-// structure, so this lists the punctuation the lexer already tokenizes,
-// minus the quotes, braces and `/`. NON_ASCII covers a multi-byte fill.
-formatSpecAtom
-    : IDENTIFIER | INTEGER | FLOAT | NON_ASCII
-    | '.' | '<' | '>' | '^' | '+' | '-' | '#' | '?' | '_' | '*'
-    | '!' | '%' | '&' | '(' | ')' | ',' | ';' | '=' | '[' | ']' | '|' | '~' | '$'
+    : ':' FORMAT_SPEC
     ;
 
 // An `_` stands between two digits. A float with an exponent is its own token,
@@ -1033,9 +1093,11 @@ fragment DIGITS
     : [0-9] ('_'? [0-9])*
     ;
 
-// In literal text a CR is the line break of a CRLF and nothing else.
+// In literal text a CR is the line break of a CRLF and nothing else. A byte
+// string is ASCII, escaped by `\xNN` where a string takes `\u`.
 STRING_LITERAL
-    : 'b'? '"' ('\\' ~[\r] | '\\'? '\r\n' | ~["\\\r])* '"'
+    : '"' (~["\\\r] | '\r\n' | SIMPLE_ESCAPE | UNICODE_ESCAPE)* '"'
+    | 'b"' (~["\\\r\u0080-\u{10FFFF}] | '\r\n' | SIMPLE_ESCAPE | HEX_ESCAPE)* '"'
     ;
 
 // A raw string is one STRING_LITERAL, as a cooked one is: `more` carries the
@@ -1046,28 +1108,47 @@ RAW_STRING_OPEN
     ;
 
 RAW_BYTES_OPEN
-    : 'b' '#'+ '"' { lx.raw_hashes.push(pos - start - 2) } -> more, pushMode(RAW_STRING)
+    : 'b' '#'+ '"' { lx.raw_hashes.push(pos - start - 2) } -> more, pushMode(RAW_BYTES)
     ;
 
 LBRACE
-    : '{' -> pushMode(DEFAULT_MODE)
+    : '{' { lx.open_brace() } -> pushMode(DEFAULT_MODE)
     ;
 
 RBRACE
-    : '}' -> popMode
+    : '}' { lx.close_brace() } -> popMode
+    ;
+
+LPAREN
+    : '(' { lx.open_bracket() }
+    ;
+
+RPAREN
+    : ')' { lx.close_bracket() }
+    ;
+
+LBRACKET
+    : '[' { lx.open_bracket() }
+    ;
+
+RBRACKET
+    : ']' { lx.close_bracket() }
+    ;
+
+// The specifier replaces the hole's mode, so its `}` returns to the template.
+COLON
+    : ':' { if lx.at_hole_top() { lx.set_mode(MODE_FORMAT); } }
     ;
 
 // A template touching the name before it is tagged. Whitespace never reaches
 // the parser, so the lexer tells the touching opener apart. Ahead of
 // `BACKTICK` and `RAW_OPEN`, which it otherwise ties.
 TAG_BACKTICK
-    : '`' { start > 0 && (lx.src.byte_at(start - 1).is_ascii_alphanumeric() || lx.src.byte_at(start - 1) == b'_') }?
-      -> pushMode(TEMPLATE)
+    : { lx.ends_name(view.la(-1)) }? '`' -> pushMode(TEMPLATE)
     ;
 
 TAG_RAW_OPEN
-    : '#'+ '`' { start > 0 && (lx.src.byte_at(start - 1).is_ascii_alphanumeric() || lx.src.byte_at(start - 1) == b'_') }?
-      { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
+    : { lx.ends_name(view.la(-1)) }? '#'+ '`' { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
     ;
 
 BACKTICK
@@ -1080,17 +1161,43 @@ RAW_OPEN
     : '#'+ '`' { lx.raw_hashes.push(pos - start - 1) } -> pushMode(RAW_TEMPLATE)
     ;
 
+// One character, or one ASCII byte; a line break may be it.
 CHAR_LITERAL
-    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' ~[\r] | ~['\\\r\n])+ '\''
+    : '\'' (~['\\\r\n] | '\r'? '\n' | SIMPLE_ESCAPE | UNICODE_ESCAPE) '\''
+    | 'b\'' (~['\\\r\n\u0080-\u{10FFFF}] | '\r'? '\n' | SIMPLE_ESCAPE | HEX_ESCAPE) '\''
+    ;
+
+fragment SIMPLE_ESCAPE
+    : '\\' [ntr\\"'/bf0]
     ;
 
 fragment HEX_ESCAPE
-    : '\\' 'x' [0-9a-fA-F] [0-9a-fA-F]
+    : '\\' 'x' HEX HEX
     ;
 
+// A scalar value: `\u{…}` up to 10FFFF, or `\uHHHH`, where a surrogate is
+// only the high half of a pair whose low half follows.
 fragment UNICODE_ESCAPE
-    : '\\' 'u' '{' [0-9a-fA-F]+ '}'
-    | '\\' 'u' [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]
+    : '\\' 'u' '{' ('0'+ | '0'* SCALAR_DIGITS) '}'
+    | '\\' 'u' BMP_UNIT
+    | '\\' 'u' [dD] [89abAB] HEX HEX '\\' 'u' [dD] [c-fC-F] HEX HEX
+    ;
+
+fragment SCALAR_DIGITS
+    : [1-9a-fA-F] HEX? HEX?
+    | BMP_UNIT
+    | [1-9a-fA-F] HEX HEX HEX HEX
+    | '10' HEX HEX HEX HEX
+    ;
+
+// Four hex digits, past a leading zero, naming no surrogate.
+fragment BMP_UNIT
+    : [0-9a-cA-Ce-fE-F] HEX HEX HEX
+    | [dD] [0-7] HEX HEX
+    ;
+
+fragment HEX
+    : [0-9a-fA-F]
     ;
 
 // `_` alone lexes as the wildcard token '_', defined ahead of this rule.
@@ -1118,22 +1225,15 @@ WS
     : [ \t\r\n\f]+ -> skip
     ;
 
-// A format specifier's fill character when it is not ASCII: `${x:あ>8}`.
-// Every other token is ASCII-only and a bare non-ASCII character is legal
-// nowhere else, so this steals nothing: a string, char literal or comment
-// containing one matches its own rule from an ASCII delimiter.
-NON_ASCII
-    : ~[\u0000-\u007F]
-    ;
-
 mode TEMPLATE;
 
+// A template also escapes its delimiter and the hole's syntax.
 TEMPLATE_TEXT
-    : ('\\' ~[\r] | '\\'? '\r\n' | ~[`$\\\r])+
+    : (~[`$\\\r] | '\r\n' | SIMPLE_ESCAPE | '\\' [`${}] | UNICODE_ESCAPE)+
     ;
 
 INTERP_OPEN
-    : '${' -> pushMode(DEFAULT_MODE)
+    : '${' { lx.open_hole() } -> pushMode(DEFAULT_MODE)
     ;
 
 DOLLAR_TEXT
@@ -1156,7 +1256,7 @@ RAW_CLOSE
     ;
 
 RAW_INTERP_OPEN
-    : '${' -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
+    : '${' { lx.open_hole() } -> type(INTERP_OPEN), pushMode(DEFAULT_MODE)
     ;
 
 RAW_TEXT
@@ -1181,4 +1281,42 @@ RAW_STRING_TEXT
 
 RAW_STRING_QUOTE
     : '"' -> more
+    ;
+
+// RAW_STRING over ASCII.
+mode RAW_BYTES;
+
+RAW_BYTES_CLOSE
+    : '"' ({ pos - start <= lx.raw_hashes.last().unwrap() }? '#')+
+      { pos - start == lx.raw_hashes.last().unwrap() + 1 }?
+      { lx.raw_hashes.pop() } -> type(STRING_LITERAL), popMode
+    ;
+
+RAW_BYTES_TEXT
+    : (~["\r\u0080-\u{10FFFF}] | '\r\n')+ -> more
+    ;
+
+RAW_BYTES_QUOTE
+    : '"' -> more
+    ;
+
+// `[[fill] align] ['+'] ['#'] ['0'] [width] ['.' precision] [kind]`, read by
+// character and trimmed. A fill is any character but a space, a brace or a
+// quote, which the hole's scanner reads as its own structure.
+mode FORMAT;
+
+FORMAT_SPEC
+    : (FORMAT_FILL? [<^>])? '+'? '#'? '0'? [0-9]* ('.' [0-9]+)? [boxXeEf?]?
+    ;
+
+FORMAT_CLOSE
+    : '}' { lx.close_hole() } -> type(RBRACE), popMode
+    ;
+
+FORMAT_WS
+    : [\p{White_Space}]+ -> skip
+    ;
+
+fragment FORMAT_FILL
+    : ~[{}'"`\p{White_Space}]
     ;

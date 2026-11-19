@@ -1,6 +1,6 @@
 use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 
-export async fn handle(_request: Request) -> Result<Response, ErrorCode> with ErrorContext {
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> with (ErrorContext, Response) {
     ErrorContext::new("made and dropped").drop();
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Headers::new();

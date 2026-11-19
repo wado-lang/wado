@@ -1,0 +1,13 @@
+// A literal inside a template's hole is a lexer error where one outside is,
+// and the compile goes on past it to the type error.
+export fn run() {
+    let t = `${"\q"}`;
+    let c: i32 = "x";
+}
+
+__DATA__
+{
+    "compile_error": ":4:16: lexer error: invalid escape sequence: \\q",
+    "compile_errors_contains": ["type mismatch: expected 'i32', found 'String'"],
+    "compile_errors_not_contains": ["parse error"]
+}

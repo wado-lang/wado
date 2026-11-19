@@ -1,22 +1,22 @@
-// A narrowing hands out a held resource's handle as the resource it extends,
-// so the arm may call that resource's own methods with no `with` naming it.
+// Narrowing a web handle grants nothing: an arm calling the narrowed
+// resource's methods declares that resource, whatever its function holds.
 use { Dom, Element, HtmlInputElement, Node } from "wado-lang:web";
 
-fn from_param(n: Node) -> String {
+fn from_param(n: Node) -> String with HtmlInputElement {
     return match n {
         input: HtmlInputElement => input.value(),
         _ => "",
     };
 }
 
-fn from_let_else(el: Element) -> String {
+fn from_let_else(el: Element) -> String with HtmlInputElement {
     let input: HtmlInputElement = el else {
         return "";
     };
     return input.value();
 }
 
-fn from_effect() -> String with Dom {
+fn from_effect() -> String with (Dom, HtmlInputElement) {
     if let Some(el) = Dom::document().get_element_by_id("i") {
         if let input: HtmlInputElement = el {
             return input.value();
@@ -25,7 +25,7 @@ fn from_effect() -> String with Dom {
     return "";
 }
 
-export fn run() with Dom {
+export fn run() with (Dom, HtmlInputElement) {
     let doc = Dom::document();
     let _ = from_param(doc);
     let _ = from_let_else(doc.create_element("input", null));

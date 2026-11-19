@@ -1,0 +1,18 @@
+// A field default is walked before inference, so a slot it names that no
+// written field settles is reported as the literal's own, not as the default's
+// `T::default` reaching no function.
+
+struct Defaulted<T: Default> {
+    cached: Option<T>,
+    items: List<T>,
+    fallback: T = T::default(),
+}
+
+test {
+    let mut open = Defaulted { cached: null, items: [] };
+    open.items.push(3);
+    assert open.fallback == 0;
+}
+
+__DATA__
+{"test": {}, "compile_error": ":12:20: analysis error: cannot infer type parameter `T` of struct `Defaulted`"}

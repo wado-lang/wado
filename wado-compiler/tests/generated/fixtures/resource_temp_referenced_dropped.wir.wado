@@ -788,7 +788,7 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[st
     let v_53: ref "core:prelude/string.wado//String";
     let v_54: ref "core:prelude/list.wado//List<u8>";
     let ptr_58: i32;
-    let $licm_repr_84: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
+    let $licm_repr_86: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
     self_42 = entries.used;
     if @unlikely(134217727 <u self_42) {
         cold_path;
@@ -797,12 +797,12 @@ fn "resource_temp_referenced_dropped.wado/$cm_binding__wasi:http/types@0.3.0#[st
     }
     $entries_base = "mem/realloc"(0, 0, 4, self_42 * 16);
     $entries_i = 0;
-    $licm_repr_84 = entries.repr;
+    $licm_repr_86 = entries.repr;
     b32: block {
         l33: loop {
             break_if b32 $entries_i >= self_42;
             $entries_addr = $entries_base + ($entries_i * 16);
-            v_53 = local.tee v_45(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_repr_84, $entries_i)).0;
+            v_53 = local.tee v_45(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_repr_86, $entries_i)).0;
             let $array_clone_src_3: ref Array<u8>;
             $array_clone_src_3 = v_53.repr;
             $load_4 = v_53.used;
@@ -940,7 +940,7 @@ fn "resource_temp_referenced_dropped.wado/$cm_export__handle"($p_0) {
     "resource_temp_referenced_dropped.wado/$cm_task_entry__handle"(struct.new "core:prelude//$Resource" { value: $p_0 });
 }
 
-fn "resource_temp_referenced_dropped.wado/$cm_task_entry__handle"(request) {
+fn "resource_temp_referenced_dropped.wado/$cm_task_entry__handle"(request) with Request, Response {
     let $v_3: ref null "core:prelude//$Resource";
     let $temp_29: ref null "core:prelude//$Resource";
     let $temp_33: ref null "resource_temp_referenced_dropped.wado//Holder";
@@ -1959,7 +1959,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

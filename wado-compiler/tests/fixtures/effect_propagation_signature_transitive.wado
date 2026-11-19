@@ -1,8 +1,6 @@
-// Test: signature-resource inference composes with the propagation closure.
-// `f` takes `Stream<u8>` in its signature, so inference adds `with Stream`.
-// Stream's propagation closure (from `Stream::new -> [Stream, StreamWritable]`)
-// grants StreamWritable transitively, enough to call a helper declared
-// `with StreamWritable`.
+// Test: a declared resource implies what its operations hand out. Stream's
+// closure (from `Stream::new -> [Stream, StreamWritable]`) grants
+// StreamWritable, enough to call a helper declared `with StreamWritable`.
 
 use { println, Stdout } from "core:cli";
 
@@ -10,8 +8,7 @@ pub fn needs_sw(tx: StreamWritable<u8>) with StreamWritable {
     tx.drop();
 }
 
-// No `with` declared — Stream from param, StreamWritable from propagation.
-pub fn f(s: Stream<u8>, tx: StreamWritable<u8>) {
+pub fn f(s: Stream<u8>, tx: StreamWritable<u8>) with Stream {
     needs_sw(tx);
     s.drop();
 }

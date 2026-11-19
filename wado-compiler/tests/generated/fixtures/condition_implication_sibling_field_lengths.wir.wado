@@ -672,7 +672,7 @@ fn "core:prelude/string.wado/utf8_prefix_end"(repr, start, len, char_count) {
     return end;
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -1612,42 +1612,42 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
     let e: i32;
     let self_13: ref "core:prelude/string.wado//String";
     let i: i32;
-    let $licm_keys_28: ref "Array<core:prelude/string.wado/String>";
-    let $licm_repr_29: ref Array<u8>;
-    let $licm_repr_30: ref Array<u8>;
+    let $licm_repr_25: ref Array<u8>;
+    let $licm_repr_26: ref Array<u8>;
+    let $licm_keys_30: ref "Array<core:prelude/string.wado/String>";
     mask = builtin::array_len($mv$self$table) - 1;
     $mv$self$shift = fp >>u $mv$self$shift;
-    $licm_keys_28 = $mv$self$log.keys;
+    $licm_keys_30 = $mv$self$log.keys;
     block {
         l210: loop {
             if local.tee e(builtin::array_get_value<i32>($mv$self$table, $mv$self$shift)) == -1 {
                 return -1 - $mv$self$shift;
             }
             if builtin::array_get_value<i32>($mv$self$fps, e) == fp {
-                self_13 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_keys_28, e);
+                self_13 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_keys_30, e);
                 if $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
                     if local.tee e(self_13.used) != key.used {
                         break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                     }
                     i = 0;
-                    $licm_repr_29 = self_13.repr;
-                    $licm_repr_30 = key.repr;
+                    $licm_repr_25 = self_13.repr;
+                    $licm_repr_26 = key.repr;
                     b215: block {
                         l216: loop {
                             break_if b215 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(e);
-                            if builtin::array_get_value<u8>($licm_repr_29, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                            if builtin::array_get_value<u8>($licm_repr_25, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<u8>($licm_repr_29, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                            if builtin::array_get_value<u8>($licm_repr_25, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<u8>($licm_repr_29, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                            if builtin::array_get_value<u8>($licm_repr_25, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                             }
                             i = i + 1;
-                            if builtin::array_get_value<u8>($licm_repr_29, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                            if builtin::array_get_value<u8>($licm_repr_25, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                             }
                             i = i + 1;
@@ -1657,7 +1657,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
                     b221: block {
                         l222: loop {
                             break_if b221 i >= e;
-                            if builtin::array_get_value<u8>($licm_repr_29, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                            if builtin::array_get_value<u8>($licm_repr_25, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                 break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                             }
                             i = i + 1;

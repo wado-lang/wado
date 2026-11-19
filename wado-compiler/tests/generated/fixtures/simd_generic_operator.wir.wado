@@ -1244,7 +1244,7 @@ fn "core:prelude/string.wado/utf8_prefix_end"(repr, start, len, char_count) {
     return end;
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -2468,8 +2468,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     let k: i32;
     let index_22: i32;
     let value_23: u8;
-    let $licm_repr_40: ref Array<u8>;
     let $licm_arith_42: i32;
+    let $licm_repr_43: ref Array<u8>;
     if local.tee fill_len("core:prelude/primitive.wado/char::len_utf8$sroa[self.value]"(c)) == 1 {
         c = c & 255;
         fill_len = 0;
@@ -2485,7 +2485,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
     c = 0;
-    $licm_repr_40 = encoded.repr;
+    $licm_repr_43 = encoded.repr;
     b290: block {
         l291: loop {
             break_if b290 c >= n;
@@ -2495,19 +2495,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
                 l293: loop {
                     break_if b292 (builtin::i64_extend_i32_s(k) + 3_i64) >= builtin::i64_extend_i32_s(fill_len);
                     index_22 = $licm_arith_42 + k;
-                    value_23 = builtin::array_get_value<u8>($licm_repr_40, k);
+                    value_23 = builtin::array_get_value<u8>($licm_repr_43, k);
                     builtin::array_set_u8(self, index_22, value_23);
                     k = k + 1;
                     index_22 = $licm_arith_42 + k;
-                    value_23 = builtin::array_get_value<u8>($licm_repr_40, k);
+                    value_23 = builtin::array_get_value<u8>($licm_repr_43, k);
                     builtin::array_set_u8(self, index_22, value_23);
                     k = k + 1;
                     index_22 = $licm_arith_42 + k;
-                    value_23 = builtin::array_get_value<u8>($licm_repr_40, k);
+                    value_23 = builtin::array_get_value<u8>($licm_repr_43, k);
                     builtin::array_set_u8(self, index_22, value_23);
                     k = k + 1;
                     index_22 = $licm_arith_42 + k;
-                    value_23 = builtin::array_get_value<u8>($licm_repr_40, k);
+                    value_23 = builtin::array_get_value<u8>($licm_repr_43, k);
                     builtin::array_set_u8(self, index_22, value_23);
                     k = k + 1;
                     continue l293;
@@ -2517,7 +2517,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
                 l295: loop {
                     break_if b294 k >= fill_len;
                     index_22 = $licm_arith_42 + k;
-                    value_23 = builtin::array_get_value<u8>($licm_repr_40, k);
+                    value_23 = builtin::array_get_value<u8>($licm_repr_43, k);
                     builtin::array_set_u8(self, index_22, value_23);
                     k = k + 1;
                     continue l295;

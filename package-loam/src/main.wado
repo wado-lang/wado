@@ -182,7 +182,7 @@ fn read_file_header(path: &String) -> Result<ByteList, String> with Preopens {
 
 /// What `read` makes of the file at `path` as a stream, as the Kiln generator
 /// is handed one.
-fn read_stream<T>(path: &String, read: fn(Stream<u8>) -> T) -> Result<T, String> with Preopens {
+fn read_stream<T>(path: &String, read: fn(Stream<u8>) -> T with Stream) -> Result<T, String> with Preopens {
     let root = fs::root().map_err(|e| `loam: ${e}`)?;
     let file = match root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait() {
         Ok(file) => file,

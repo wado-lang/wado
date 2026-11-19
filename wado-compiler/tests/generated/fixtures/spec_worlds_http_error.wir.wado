@@ -442,7 +442,7 @@ fn "spec_worlds_http_error.wado/$cm_export__handle"($p_0) {
     "spec_worlds_http_error.wado/$cm_task_entry__handle"($p_0);
 }
 
-fn "spec_worlds_http_error.wado/$cm_task_entry__handle"(request) {
+fn "spec_worlds_http_error.wado/$cm_task_entry__handle"(request) with Request {
     let $load_5: i32;
     let path: ref null "core:prelude/string.wado//String";
     let $v_1: ref null "core:prelude/string.wado//String";
@@ -1046,7 +1046,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

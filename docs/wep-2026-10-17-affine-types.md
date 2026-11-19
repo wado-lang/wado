@@ -482,8 +482,10 @@ pub affine trait Drop with () {
   declares none. A resource's drop is benign in its own effect, and a type
   whose `drop` performs another names it with
   [`#[ambient(E)]`](./spec-effects.md#ambient-functions) (then `#[benign(E)]`), which any function may
-  carry already. `AsyncCall`'s drop needs none: its signature names
-  `AsyncCall`, whose field holds the `Subtask`. A flush is output
+  carry already. `AsyncCall`'s drop needs none, since `Drop::drop` is
+  `#[ambient(_)]`
+  ([WEP: Resources Are Held Only by `with`](./wep-2026-11-17-resources-held-by-with.md)).
+  A flush is output
   a caller observes, so a writer that buffers ahead of a stream flushes by an
   explicit call, not in its drop.
 
@@ -757,10 +759,9 @@ case with a payload asks the payload, and one without is
 `Settled(Unreported)`. `Subtask` stays public, since a `WaitableSet<Subtask>`
 names it, but no value of it can be had outside `core`.
 
-A method of `WaitableSet` names the set in its signature, and the set's field
-is the `RawWaitableSet`, so each holds that resource as
-[Resources in a Signature](./spec-effects.md#resources-in-a-signature) says,
-and declares nothing. `AsyncCall`'s drop holds the `Subtask` the same way.
+A method of `WaitableSet` that calls the `RawWaitableSet` is
+`#[ambient(RawWaitableSet)]`: waiting grants no capability, and a caller cannot
+name the internal resource. `AsyncCall`'s drop is ambient as every drop is.
 `AsyncCall::wait` and `cancel` declare `with Subtask`, since waiting is
 something a caller observes. That costs a caller nothing where it already holds
 the call's effect. An interface whose operation returns an `AsyncCall`

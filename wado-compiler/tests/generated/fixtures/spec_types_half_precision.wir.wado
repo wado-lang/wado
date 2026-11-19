@@ -1958,7 +1958,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -3701,9 +3701,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     let fill_len: i32;
     let encoded: ref "core:prelude/string.wado//String";
     let k: i32;
-    let $licm_used_24: i32;
-    let $licm_repr_25: ref Array<u8>;
     let $licm_arith_26: i32;
+    let $licm_used_27: i32;
+    let $licm_repr_28: ref Array<u8>;
     if local.tee fill_len("core:prelude/primitive.wado/char::len_utf8$sroa[self.value]"(c)) == 1 {
         c = c & 255;
         fill_len = 0;
@@ -3719,18 +3719,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
     c = 0;
-    $licm_used_24 = encoded.used;
-    $licm_repr_25 = encoded.repr;
+    $licm_used_27 = encoded.used;
+    $licm_repr_28 = encoded.repr;
     b442: block {
         l443: loop {
             break_if b442 c >= n;
             k = 0;
             $licm_arith_26 = at + (c * fill_len);
-            if fill_len <= $licm_used_24 {
+            if fill_len <= $licm_used_27 {
                 b445: block {
                     l446: loop {
                         break_if b445 k >= fill_len;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, builtin::array_get_value<u8>($licm_repr_25, k));
+                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, builtin::array_get_value<u8>($licm_repr_28, k));
                         k = k + 1;
                         continue l446;
                     };
@@ -3739,11 +3739,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
                 b447: block {
                     l448: loop {
                         break_if b447 k >= fill_len;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, if @unlikely(k >= $licm_used_24) {
+                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + k, if @unlikely(k >= $licm_used_27) {
                             cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(k, $licm_used_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
+                            "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(k, $licm_used_27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
                             unreachable;
-                        }; builtin::array_get_value<u8>($licm_repr_25, k));
+                        }; builtin::array_get_value<u8>($licm_repr_28, k));
                         k = k + 1;
                         continue l448;
                     };

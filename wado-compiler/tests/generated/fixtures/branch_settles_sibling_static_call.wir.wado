@@ -1176,7 +1176,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -2443,9 +2443,9 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
     let e_62: i32;
     let self_70: ref "core:prelude/string.wado//String";
     let i: i32;
-    let $licm_fps_26: ref Array<i32>;
-    let $licm_keys_28: ref "Array<core:prelude/string.wado/String>";
-    let $licm_repr_30: ref Array<u8>;
+    let $licm_repr_26: ref Array<u8>;
+    let $licm_fps_28: ref Array<i32>;
+    let $licm_keys_30: ref "Array<core:prelude/string.wado/String>";
     if ((local.tee e_2(self.log.count) + 1) * 2) > builtin::array_len(local.tee $load_2(self.table)) {
         "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,bool>::rebuild_table$unchecked"(self, b_20 = builtin::array_len($load_2) * 2; $v_1 = local.tee b_20(select i32(8 > b_20, 8, b_20)) - 1; if @unlikely((local.tee $v_2(b_20 & $v_1) == 0) == 0) {
             cold_path;
@@ -2462,38 +2462,38 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
     if local.tee $v_1($inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0: block -> i32 {
         $v_1 = builtin::array_len(local.tee $load_2(self.table)) - 1;
         $v_2 = b_20 >>u self.shift;
-        $licm_fps_26 = self.fps;
-        $licm_keys_28 = self.log.keys;
+        $licm_fps_28 = self.fps;
+        $licm_keys_30 = self.log.keys;
         block {
             l345: loop {
                 if local.tee e_62(builtin::array_get_value<i32>($load_2, $v_2)) == -1 {
                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0: -1 - $v_2;
                 }
-                if builtin::array_get_value<i32>($licm_fps_26, e_62) == b_20 {
-                    self_70 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_keys_28, e_62);
+                if builtin::array_get_value<i32>($licm_fps_28, e_62) == b_20 {
+                    self_70 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_keys_30, e_62);
                     if $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
                         if local.tee e_62(self_70.used) != key.used {
                             break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                         }
                         i = 0;
                         $mv_field_2 = self_70.repr;
-                        $licm_repr_30 = key.repr;
+                        $licm_repr_26 = key.repr;
                         b350: block {
                             l351: loop {
                                 break_if b350 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(e_62);
-                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
-                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
-                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
-                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
@@ -2503,7 +2503,7 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
                         b356: block {
                             l357: loop {
                                 break_if b356 i >= e_62;
-                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_30, i) {
+                                if builtin::array_get_value<u8>($mv_field_2, i) != builtin::array_get_value<u8>($licm_repr_26, i) {
                                     break $inline_core_collections_hashmap_wado_HashMap_core_prelude_string_wado_String_bool___find_slot_0__$inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                                 }
                                 i = i + 1;
@@ -2531,8 +2531,8 @@ fn "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:pre
     }
     if e_2 == builtin::array_len(local.tee $load_2(self.fps)) {
         $v_1 = e_2 * 2;
-        builtin::array_copy<i32>(local.tee $licm_fps_26(builtin::array_new<i32>(select i32(4 > $v_1, 4, $v_1))), 0, $load_2, 0, e_2);
-        self.fps = $licm_fps_26;
+        builtin::array_copy<i32>(local.tee $licm_fps_28(builtin::array_new<i32>(select i32(4 > $v_1, 4, $v_1))), 0, $load_2, 0, e_2);
+        self.fps = $licm_fps_28;
     }
     builtin::array_set<i32>(self.fps, e_2, b_20);
     return -1;

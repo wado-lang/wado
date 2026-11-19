@@ -9,7 +9,7 @@ struct Counter {
 }
 
 impl Future<i32> for Counter {
-    fn new(&mut self) -> [Future<i32>, FutureWritable<i32>] {
+    fn new(&mut self) -> [Future<i32>, FutureWritable<i32>] with Future {
         resume Future::<i32>::new()
     }
     fn read(&mut self, this: &Future<i32>) -> Option<i32> {

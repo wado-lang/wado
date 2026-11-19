@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::defs::DefId;
 use crate::escape::escape_string;
 use crate::hashmap::IndexMap;
-use crate::lexer::WILDCARD;
+use crate::lexer::{LexError, WILDCARD};
 use crate::name::{UNIT_TYPE_NAME, repeated_element};
 use crate::token::{Delimiter, Quote, Span};
 
@@ -252,6 +252,9 @@ pub struct Module {
     /// those two readings apart, so it records its own, and every other token's
     /// lexical class is its role. Read by `wado_lsp::semantic_tokens`.
     contextual_keywords: Vec<Span>,
+    /// [`crate::lexer::LexResult::invalid_literals`], which count as syntax
+    /// errors.
+    invalid_literals: Vec<LexError>,
 }
 
 /// Inner attribute like `#![no_prelude]`, `#![wasm_module("mem")]`, or
@@ -312,6 +315,7 @@ impl Module {
             ast_id_count: 0,
             has_syntax_errors: false,
             contextual_keywords: Vec::new(),
+            invalid_literals: Vec::new(),
         }
     }
 
@@ -339,7 +343,16 @@ impl Module {
             ast_id_count,
             has_syntax_errors,
             contextual_keywords,
+            invalid_literals: Vec::new(),
         }
+    }
+
+    pub fn invalid_literals(&self) -> &[LexError] {
+        &self.invalid_literals
+    }
+
+    pub(crate) fn set_invalid_literals(&mut self, errors: Vec<LexError>) {
+        self.invalid_literals = errors;
     }
 
     pub fn source(&self) -> &str {
@@ -352,9 +365,10 @@ impl Module {
         &self.contextual_keywords
     }
 
-    /// True if parsing recovered from one or more syntax errors.
+    /// True if parsing recovered from one or more syntax errors, or the source
+    /// holds a literal whose text denotes no value.
     pub fn has_syntax_errors(&self) -> bool {
-        self.has_syntax_errors
+        self.has_syntax_errors || !self.invalid_literals.is_empty()
     }
 
     /// The [`AstIdSpace`] this module's ids live in.
@@ -1913,6 +1927,9 @@ pub mod lint {
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// An `#[ambient]` outside the standard library.
     pub const UNDECLARED_EFFECTS: &str = "undeclared_effects";
+    /// A handler scope leaving out an operation its body reaches through the
+    /// `extends` family of a resource it handles.
+    pub const UNHANDLED_OPERATION: &str = "unhandled_operation";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";
     /// Integer literals alone overflowing their type, `200 as u8 + 100`, or a

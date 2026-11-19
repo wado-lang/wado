@@ -331,7 +331,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -1245,21 +1245,21 @@ fn "value_copy_demote_template_read.wado/core:prelude/list.wado/List<core:prelud
     let a_10: ref "core:prelude/string.wado//String";
     let b_11: ref "core:prelude/string.wado//String";
     let b_14: i32;
-    let $licm_repr_20: ref "Array<core:prelude/string.wado/String>";
+    let $licm_repr_22: ref "Array<core:prelude/string.wado/String>";
     let a_end: i32;
     let b_end: i32;
     let min_len: i32;
-    let i_30: i32;
+    let i_32: i32;
     let x: u8;
     let y: u8;
-    let $licm_repr_35: ref Array<u8>;
-    let $licm_repr_36: ref Array<u8>;
+    let $licm_repr_37: ref Array<u8>;
+    let $licm_repr_38: ref Array<u8>;
     if local.tee n(self.used) <= 1 {
         return;
     }
     buf = builtin::array_new<ref "core:prelude/string.wado//String">(n);
     width = 1;
-    $licm_repr_20 = self.repr;
+    $licm_repr_22 = self.repr;
     b163: block {
         l164: loop {
             start = 0;
@@ -1275,69 +1275,69 @@ fn "value_copy_demote_template_read.wado/core:prelude/list.wado/List<core:prelud
                             break_if b167 k >= b_14;
                             if i_7 < mid {
                                 if j < b_14 {
-                                    a_10 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_20, i_7);
-                                    b_11 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_20, j);
+                                    a_10 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_22, i_7);
+                                    b_11 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_22, j);
                                     if $inline_core_prelude_array_wado_seq_cmp_u8__0: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         a_end = a_10.used;
                                         b_end = b_11.used;
                                         min_len = select i32(a_end < b_end, a_end, b_end);
-                                        i_30 = 0;
-                                        $licm_repr_35 = a_10.repr;
-                                        $licm_repr_36 = b_11.repr;
+                                        i_32 = 0;
+                                        $licm_repr_37 = a_10.repr;
+                                        $licm_repr_38 = b_11.repr;
                                         b172: block {
                                             l173: loop {
-                                                break_if b172 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
-                                                x = builtin::array_get_value<u8>($licm_repr_35, i_30);
-                                                y = builtin::array_get_value<u8>($licm_repr_36, i_30);
+                                                break_if b172 (builtin::i64_extend_i32_s(i_32) + 3_i64) >= builtin::i64_extend_i32_s(min_len);
+                                                x = builtin::array_get_value<u8>($licm_repr_37, i_32);
+                                                y = builtin::array_get_value<u8>($licm_repr_38, i_32);
                                                 if x <u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                                 }
                                                 if x >u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                                 }
-                                                i_30 = i_30 + 1;
-                                                x = builtin::array_get_value<u8>($licm_repr_35, i_30);
-                                                y = builtin::array_get_value<u8>($licm_repr_36, i_30);
+                                                i_32 = i_32 + 1;
+                                                x = builtin::array_get_value<u8>($licm_repr_37, i_32);
+                                                y = builtin::array_get_value<u8>($licm_repr_38, i_32);
                                                 if x <u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                                 }
                                                 if x >u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                                 }
-                                                i_30 = i_30 + 1;
-                                                x = builtin::array_get_value<u8>($licm_repr_35, i_30);
-                                                y = builtin::array_get_value<u8>($licm_repr_36, i_30);
+                                                i_32 = i_32 + 1;
+                                                x = builtin::array_get_value<u8>($licm_repr_37, i_32);
+                                                y = builtin::array_get_value<u8>($licm_repr_38, i_32);
                                                 if x <u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                                 }
                                                 if x >u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                                 }
-                                                i_30 = i_30 + 1;
-                                                x = builtin::array_get_value<u8>($licm_repr_35, i_30);
-                                                y = builtin::array_get_value<u8>($licm_repr_36, i_30);
+                                                i_32 = i_32 + 1;
+                                                x = builtin::array_get_value<u8>($licm_repr_37, i_32);
+                                                y = builtin::array_get_value<u8>($licm_repr_38, i_32);
                                                 if x <u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                                 }
                                                 if x >u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                                 }
-                                                i_30 = i_30 + 1;
+                                                i_32 = i_32 + 1;
                                                 continue l173;
                                             };
                                         };
                                         b182: block {
                                             l183: loop {
-                                                break_if b182 i_30 >= min_len;
-                                                x = builtin::array_get_value<u8>($licm_repr_35, i_30);
-                                                y = builtin::array_get_value<u8>($licm_repr_36, i_30);
+                                                break_if b182 i_32 >= min_len;
+                                                x = builtin::array_get_value<u8>($licm_repr_37, i_32);
+                                                y = builtin::array_get_value<u8>($licm_repr_38, i_32);
                                                 if x <u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                                                 }
                                                 if x >u y {
                                                     break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                                                 }
-                                                i_30 = i_30 + 1;
+                                                i_32 = i_32 + 1;
                                                 continue l183;
                                             };
                                         };
@@ -1349,25 +1349,25 @@ fn "value_copy_demote_template_read.wado/core:prelude/list.wado/List<core:prelud
                                         }
                                         break $inline_core_prelude_array_wado_seq_cmp_u8__0: 1;
                                     } == 2 {
-                                        builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_20, j, 1);
+                                        builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_22, j, 1);
                                         j = j + 1;
                                     } else {
-                                        builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_20, i_7, 1);
+                                        builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_22, i_7, 1);
                                         i_7 = i_7 + 1;
                                     }
                                 } else {
-                                    builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_20, i_7, 1);
+                                    builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_22, i_7, 1);
                                     i_7 = i_7 + 1;
                                 }
                             } else {
-                                builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_20, j, 1);
+                                builtin::array_copy<ref "core:prelude/string.wado//String">(buf, k, $licm_repr_22, j, 1);
                                 j = j + 1;
                             }
                             k = k + 1;
                             continue l168;
                         };
                     };
-                    builtin::array_copy<ref "core:prelude/string.wado//String">($licm_repr_20, start, buf, start, b_14 - start);
+                    builtin::array_copy<ref "core:prelude/string.wado//String">($licm_repr_22, start, buf, start, b_14 - start);
                     start = b_14;
                     continue l166;
                 };

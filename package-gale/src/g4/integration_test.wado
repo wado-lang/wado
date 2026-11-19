@@ -960,6 +960,14 @@ test "parse lexer_star_overlaps_next_set.g4" {
     assert g.lexer_rules[1].name == "ITEM_LINE_CONTENT";
 }
 
+test "parse lexer_arm_ends_in_alternation.g4" {
+    let input = #include_str("../../tests/grammars/lexer_arm_ends_in_alternation.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LexerArmEndsInAlternation";
+    assert g.lexer_rules.len() == 3;
+    assert g.lexer_rules[1].body.len() == 3;
+}
+
 test "parse lr_token_assoc_ignored.g4" {
     let input = #include_str("../../tests/grammars/lr_token_assoc_ignored.g4");
     let g = parse(input).unwrap();

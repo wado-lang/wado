@@ -2388,9 +2388,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         match util::literal_pattern(lit) {
             Ok(pattern) => self.resolve_instance_pattern(&pattern, scrutinee_type, ctx, span, site),
-            Err(message) => {
+            Err(Some(message)) => {
                 let _ = self.emit(TypeError::InvalidPattern { message, span });
             }
+            Err(None) => {}
         }
     }
 
@@ -2536,7 +2537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut type_table = self.tysys.type_table.borrow_mut();
                     util::bound_value(&bound, scrutinee, &mut type_table).err()
                 }
-                Some(Err(message)) => Some(util::PatternLiteralError::Invalid(message)),
+                Some(Err(message)) => message.map(util::PatternLiteralError::Invalid),
                 None => Some(util::PatternLiteralError::Invalid(
                     "a range bound is a literal or a constant".to_string(),
                 )),

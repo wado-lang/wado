@@ -172,14 +172,16 @@ impl TypeSystem {
     }
 
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
-    /// handed it may write: one it is or holds at any depth, or one behind a
-    /// function or resource, whose captures and state no type shows.
+    /// handed it may write without performing an effect: one it is or holds at
+    /// any depth, or one behind a function, whose captures no type shows. A
+    /// resource's state is reached only by its operations, which a callee
+    /// declares.
     pub(crate) fn reaches_mut_ref(&self, type_id: TypeId) -> bool {
-        self.reaches(type_id, &|reached, resolved| {
+        self.reaches(type_id, &|_, resolved| {
             matches!(
                 resolved,
                 ResolvedType::MutRef(_) | ResolvedType::Function { .. }
-            ) || self.type_table.borrow().is_resource_type(reached)
+            )
         })
     }
 

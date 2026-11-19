@@ -13,7 +13,6 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-use crate::escape::template_segment_value;
 
 /// Each hole's resolved type and specifier, in source order.
 pub(super) struct TemplateParts {
@@ -26,45 +25,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        if let Some(parts) = self.resolve_template_parts(template, ctx) {
-            for ((ty, spec), expr) in parts.holes.iter().zip(template.interpolations()) {
-                self.check_hole_format_trait(*ty, spec.as_deref(), expr.span());
-            }
+        let parts = self.resolve_template_parts(template, ctx);
+        for ((ty, spec), expr) in parts.holes.iter().zip(template.interpolations()) {
+            self.check_hole_format_trait(*ty, spec.as_deref(), expr.span());
         }
         self.get_string_struct_type()
     }
 
     /// Walk each interpolation so its facts (`expression_types`, use→def
-    /// edges, nested coercion / dispatch) land on `ModuleSemantics`, and
-    /// validate each segment's escapes. `None` where a segment is malformed.
+    /// edges, nested coercion / dispatch) land on `ModuleSemantics`.
     pub(super) fn resolve_template_parts(
         &mut self,
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
-    ) -> Option<TemplateParts> {
+    ) -> TemplateParts {
         let mut holes = Vec::new();
-        let mut sound = true;
         for part in &template.parts {
-            match part {
-                ast::TemplatePart::Interpolation { expr, format, .. } => {
-                    let ty = self.resolve_expr(expr, ctx, None);
-                    let ty = self.apply_infer_holes(ty);
-                    holes.push((ty, format.as_ref().map(|f| f.spec.clone())));
-                }
-                // The gate reify relies on: it decodes these segments with no
-                // diagnostic channel of its own.
-                ast::TemplatePart::String(raw) => {
-                    if let Err(message) = template_segment_value(raw, template.quote) {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message,
-                            span: template.span,
-                        });
-                        sound = false;
-                    }
-                }
+            if let ast::TemplatePart::Interpolation { expr, format, .. } = part {
+                let ty = self.resolve_expr(expr, ctx, None);
+                let ty = self.apply_infer_holes(ty);
+                holes.push((ty, format.as_ref().map(|f| f.spec.clone())));
             }
         }
-        sound.then_some(TemplateParts { holes })
+        TemplateParts { holes }
     }
 
     /// A specifier binds under any tag, whether or not the tag renders the

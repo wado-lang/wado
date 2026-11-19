@@ -23,11 +23,11 @@ impl Stdin for MockStdin {
 }
 
 impl Fields for CountingFields {
-    fn new(&mut self) -> Fields {                                 // answers `Fields::new()`
+    fn new(&mut self) -> Fields with Fields {                     // answers `Fields::new()`
         self.calls += 1;
         resume Fields::new()
     }
-    fn has(&mut self, this: &Fields, name: FieldName) -> bool {   // answers `f.has(name)`
+    fn has(&mut self, this: &Fields, name: FieldName) -> bool with Fields {  // answers `f.has(name)`
         self.calls += 1;
         resume this.has(name)
     }

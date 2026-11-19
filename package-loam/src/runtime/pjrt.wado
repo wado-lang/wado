@@ -356,7 +356,7 @@ impl PjrtBackend {
         return buffer;
     }
 
-    fn host<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> Tensor<E, Axes> {
+    fn host<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> Tensor<E, Axes> with PjrtHost {
         return match t {
             Host(h) => *h,
             Device(d) => {
@@ -399,7 +399,7 @@ impl Holds for PjrtBackend {
         };
     }
 
-    fn download<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> Tensor<E, Axes> {
+    fn download<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> Tensor<E, Axes> with PjrtHost {
         return self.host(t);
     }
 
@@ -624,16 +624,45 @@ impl Graph for PjrtBackend {
         return hosted(self.cpu.iota(extents, dimension));
     }
 
+<<<<<<< HEAD
     fn convert<A: Element, B: Element, Axes>(&mut self, x: &Located<A, Axes>) -> Located<B, Axes> {
         return hosted(self.cpu.convert(&self.on_cpu(x)));
+||||||| 3f1db20a83c
+    fn convert<A: Element, B: Element, Axes>(&mut self, x: &Located<A, Axes>) -> Located<B, Axes> {
+        return Located::Host(self.cpu.convert(&self.host(x)));
+=======
+    fn convert<A: Element, B: Element, Axes>(&mut self, x: &Located<A, Axes>) -> Located<B, Axes> with PjrtHost {
+        return Located::Host(self.cpu.convert(&self.host(x)));
+>>>>>>> origin/main
     }
 
+<<<<<<< HEAD
     fn unary<E: Float, Axes>(&mut self, op: Unary, x: &Located<E, Axes>) -> Located<E, Axes> {
         return hosted(self.cpu.unary(op, &self.on_cpu(x)));
+||||||| 3f1db20a83c
+    fn unary<E: Float, Axes>(&mut self, op: Unary, x: &Located<E, Axes>) -> Located<E, Axes> {
+        return Located::Host(self.cpu.unary(op, &self.host(x)));
+=======
+    fn unary<E: Float, Axes>(&mut self, op: Unary, x: &Located<E, Axes>) -> Located<E, Axes> with PjrtHost {
+        return Located::Host(self.cpu.unary(op, &self.host(x)));
+>>>>>>> origin/main
     }
 
+<<<<<<< HEAD
     fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Located<E, Axes>, b: &Located<E, Axes>) -> Located<E, Axes> {
         return hosted(self.cpu.binary(op, &self.on_cpu(a), &self.on_cpu(b)));
+||||||| 3f1db20a83c
+    fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Located<E, Axes>, b: &Located<E, Axes>) -> Located<E, Axes> {
+        return Located::Host(self.cpu.binary(op, &self.host(a), &self.host(b)));
+=======
+    fn binary<E: Element, Axes>(
+        &mut self,
+        op: Binary,
+        a: &Located<E, Axes>,
+        b: &Located<E, Axes>,
+    ) -> Located<E, Axes> with PjrtHost {
+        return Located::Host(self.cpu.binary(op, &self.host(a), &self.host(b)));
+>>>>>>> origin/main
     }
 
     fn compare<E: Element, Axes>(
@@ -641,8 +670,16 @@ impl Graph for PjrtBackend {
         direction: Comparison,
         a: &Located<E, Axes>,
         b: &Located<E, Axes>,
+<<<<<<< HEAD
     ) -> Located<bool, Axes> {
         return hosted(self.cpu.compare(direction, &self.on_cpu(a), &self.on_cpu(b)));
+||||||| 3f1db20a83c
+    ) -> Located<bool, Axes> {
+        return Located::Host(self.cpu.compare(direction, &self.host(a), &self.host(b)));
+=======
+    ) -> Located<bool, Axes> with PjrtHost {
+        return Located::Host(self.cpu.compare(direction, &self.host(a), &self.host(b)));
+>>>>>>> origin/main
     }
 
     fn select<E: Element, Axes>(
@@ -650,8 +687,16 @@ impl Graph for PjrtBackend {
         pred: &Located<bool, Axes>,
         on_true: &Located<E, Axes>,
         on_false: &Located<E, Axes>,
+<<<<<<< HEAD
     ) -> Located<E, Axes> {
         return hosted(self.cpu.select(&self.on_cpu(pred), &self.on_cpu(on_true), &self.on_cpu(on_false)));
+||||||| 3f1db20a83c
+    ) -> Located<E, Axes> {
+        return Located::Host(self.cpu.select(&self.host(pred), &self.host(on_true), &self.host(on_false)));
+=======
+    ) -> Located<E, Axes> with PjrtHost {
+        return Located::Host(self.cpu.select(&self.host(pred), &self.host(on_true), &self.host(on_false)));
+>>>>>>> origin/main
     }
 
     fn broadcast_in_dim<E: Element, In, Out>(
@@ -659,16 +704,40 @@ impl Graph for PjrtBackend {
         x: &Located<E, In>,
         extents: List<i32>,
         dims: List<i32>,
+<<<<<<< HEAD
     ) -> Located<E, Out> {
         return hosted(self.cpu.broadcast_in_dim(&self.on_cpu(x), extents, dims));
+||||||| 3f1db20a83c
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.broadcast_in_dim(&self.host(x), extents, dims));
+=======
+    ) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.broadcast_in_dim(&self.host(x), extents, dims));
+>>>>>>> origin/main
     }
 
+<<<<<<< HEAD
     fn reshape<E: Element, In, Out>(&mut self, x: &Located<E, In>, extents: List<i32>) -> Located<E, Out> {
         return hosted(self.cpu.reshape(&self.on_cpu(x), extents));
+||||||| 3f1db20a83c
+    fn reshape<E: Element, In, Out>(&mut self, x: &Located<E, In>, extents: List<i32>) -> Located<E, Out> {
+        return Located::Host(self.cpu.reshape(&self.host(x), extents));
+=======
+    fn reshape<E: Element, In, Out>(&mut self, x: &Located<E, In>, extents: List<i32>) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.reshape(&self.host(x), extents));
+>>>>>>> origin/main
     }
 
+<<<<<<< HEAD
     fn transpose<E: Element, In, Out>(&mut self, x: &Located<E, In>, perm: List<i32>) -> Located<E, Out> {
         return hosted(self.cpu.transpose(&self.on_cpu(x), perm));
+||||||| 3f1db20a83c
+    fn transpose<E: Element, In, Out>(&mut self, x: &Located<E, In>, perm: List<i32>) -> Located<E, Out> {
+        return Located::Host(self.cpu.transpose(&self.host(x), perm));
+=======
+    fn transpose<E: Element, In, Out>(&mut self, x: &Located<E, In>, perm: List<i32>) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.transpose(&self.host(x), perm));
+>>>>>>> origin/main
     }
 
     fn slice<E: Element, In, Out>(
@@ -677,8 +746,16 @@ impl Graph for PjrtBackend {
         start: List<i32>,
         limit: List<i32>,
         strides: List<i32>,
+<<<<<<< HEAD
     ) -> Located<E, Out> {
         return hosted(self.cpu.slice(&self.on_cpu(x), start, limit, strides));
+||||||| 3f1db20a83c
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.slice(&self.host(x), start, limit, strides));
+=======
+    ) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.slice(&self.host(x), start, limit, strides));
+>>>>>>> origin/main
     }
 
     fn concatenate<E: Element, A, B, Out>(
@@ -686,8 +763,16 @@ impl Graph for PjrtBackend {
         a: &Located<E, A>,
         b: &Located<E, B>,
         dimension: i32,
+<<<<<<< HEAD
     ) -> Located<E, Out> {
         return hosted(self.cpu.concatenate(&self.on_cpu(a), &self.on_cpu(b), dimension));
+||||||| 3f1db20a83c
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.concatenate(&self.host(a), &self.host(b), dimension));
+=======
+    ) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.concatenate(&self.host(a), &self.host(b), dimension));
+>>>>>>> origin/main
     }
 
     fn reduce<E: Element, In, Out>(
@@ -696,8 +781,16 @@ impl Graph for PjrtBackend {
         op: Binary,
         init: f32,
         dims: List<i32>,
+<<<<<<< HEAD
     ) -> Located<E, Out> {
         return hosted(self.cpu.reduce(&self.on_cpu(x), op, init, dims));
+||||||| 3f1db20a83c
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.reduce(&self.host(x), op, init, dims));
+=======
+    ) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.reduce(&self.host(x), op, init, dims));
+>>>>>>> origin/main
     }
 
     fn dot_general<E: Float, A, B, Out>(
@@ -705,8 +798,16 @@ impl Graph for PjrtBackend {
         lhs: &Located<E, A>,
         rhs: &Located<E, B>,
         dims: &DotDims,
+<<<<<<< HEAD
     ) -> Located<E, Out> {
         return hosted(self.cpu.dot_general(&self.on_cpu(lhs), &self.on_cpu(rhs), dims));
+||||||| 3f1db20a83c
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.dot_general(&self.host(lhs), &self.host(rhs), dims));
+=======
+    ) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.dot_general(&self.host(lhs), &self.host(rhs), dims));
+>>>>>>> origin/main
     }
 
     fn gather<E: Element, D, I, Out>(
@@ -714,8 +815,16 @@ impl Graph for PjrtBackend {
         operand: &Located<E, D>,
         indices: &Located<i64, I>,
         dims: &GatherDims,
+<<<<<<< HEAD
     ) -> Located<E, Out> {
         return hosted(self.cpu.gather(&self.on_cpu(operand), &self.on_cpu(indices), dims));
+||||||| 3f1db20a83c
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.gather(&self.host(operand), &self.host(indices), dims));
+=======
+    ) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.gather(&self.host(operand), &self.host(indices), dims));
+>>>>>>> origin/main
     }
 
     fn scatter<E: Element, D, I, U>(
@@ -724,8 +833,16 @@ impl Graph for PjrtBackend {
         indices: &Located<i64, I>,
         updates: &Located<E, U>,
         dims: &ScatterDims,
+<<<<<<< HEAD
     ) -> Located<E, D> {
         return hosted(self.cpu.scatter(&self.on_cpu(operand), &self.on_cpu(indices), &self.on_cpu(updates), dims));
+||||||| 3f1db20a83c
+    ) -> Located<E, D> {
+        return Located::Host(self.cpu.scatter(&self.host(operand), &self.host(indices), &self.host(updates), dims));
+=======
+    ) -> Located<E, D> with PjrtHost {
+        return Located::Host(self.cpu.scatter(&self.host(operand), &self.host(indices), &self.host(updates), dims));
+>>>>>>> origin/main
     }
 
     fn convolution<E: Float, In, K, Out>(
@@ -733,8 +850,16 @@ impl Graph for PjrtBackend {
         x: &Located<E, In>,
         kernel: &Located<E, K>,
         conv: &Convolution,
+<<<<<<< HEAD
     ) -> Located<E, Out> {
         return hosted(self.cpu.convolution(&self.on_cpu(x), &self.on_cpu(kernel), conv));
+||||||| 3f1db20a83c
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.convolution(&self.host(x), &self.host(kernel), conv));
+=======
+    ) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.convolution(&self.host(x), &self.host(kernel), conv));
+>>>>>>> origin/main
     }
 
     fn reduce_window<E: Float, In, Out>(
@@ -743,12 +868,28 @@ impl Graph for PjrtBackend {
         op: Binary,
         init: f32,
         window: &WindowReduce,
+<<<<<<< HEAD
     ) -> Located<E, Out> {
         return hosted(self.cpu.reduce_window(&self.on_cpu(x), op, init, window));
+||||||| 3f1db20a83c
+    ) -> Located<E, Out> {
+        return Located::Host(self.cpu.reduce_window(&self.host(x), op, init, window));
+=======
+    ) -> Located<E, Out> with PjrtHost {
+        return Located::Host(self.cpu.reduce_window(&self.host(x), op, init, window));
+>>>>>>> origin/main
     }
 
+<<<<<<< HEAD
     fn reverse<E: Element, Axes>(&mut self, x: &Located<E, Axes>, dims: List<i32>) -> Located<E, Axes> {
         return hosted(self.cpu.reverse(&self.on_cpu(x), dims));
+||||||| 3f1db20a83c
+    fn reverse<E: Element, Axes>(&mut self, x: &Located<E, Axes>, dims: List<i32>) -> Located<E, Axes> {
+        return Located::Host(self.cpu.reverse(&self.host(x), dims));
+=======
+    fn reverse<E: Element, Axes>(&mut self, x: &Located<E, Axes>, dims: List<i32>) -> Located<E, Axes> with PjrtHost {
+        return Located::Host(self.cpu.reverse(&self.host(x), dims));
+>>>>>>> origin/main
     }
 
     fn conditional<Axes, T>(
@@ -756,11 +897,27 @@ impl Graph for PjrtBackend {
         pred: &Located<bool, Axes>,
         then: fn() -> T with _,
         otherwise: fn() -> T with _,
+<<<<<<< HEAD
     ) -> T with _ {
         return self.cpu.conditional(&self.on_cpu(pred), then, otherwise);
+||||||| 3f1db20a83c
+    ) -> T with _ {
+        return self.cpu.conditional(&self.host(pred), then, otherwise);
+=======
+    ) -> T with (_, PjrtHost) {
+        return self.cpu.conditional(&self.host(pred), then, otherwise);
+>>>>>>> origin/main
     }
 
+<<<<<<< HEAD
     fn arg_max<E: Float, Axes>(&mut self, x: &Located<E, Axes>, axis: i32) -> Located<i64, Axes> {
         return hosted(self.cpu.arg_max(&self.on_cpu(x), axis));
+||||||| 3f1db20a83c
+    fn arg_max<E: Float, Axes>(&mut self, x: &Located<E, Axes>, axis: i32) -> Located<i64, Axes> {
+        return Located::Host(self.cpu.arg_max(&self.host(x), axis));
+=======
+    fn arg_max<E: Float, Axes>(&mut self, x: &Located<E, Axes>, axis: i32) -> Located<i64, Axes> with PjrtHost {
+        return Located::Host(self.cpu.arg_max(&self.host(x), axis));
+>>>>>>> origin/main
     }
 }

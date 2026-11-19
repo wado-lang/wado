@@ -623,7 +623,7 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
     };
 }
 
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -861,39 +861,39 @@ fn "core:cli/env$spec0$sroa[name.repr]"(name) with Environment {
     let pair: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
     let a_end: i32;
     let i_25: i32;
-    let $licm_used_27: i32;
-    let $licm_repr_28: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
-    let $licm_repr_31: ref Array<u8>;
+    let $licm_repr_29: ref Array<u8>;
+    let $licm_used_30: i32;
+    let $licm_repr_31: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
     vars = "spec_worlds_command_args.wado/$cm_binding__wasi:cli/environment@0.3.0#get-environment"();
     i_2 = 0;
-    $licm_used_27 = vars.used;
-    $licm_repr_28 = vars.repr;
+    $licm_used_30 = vars.used;
+    $licm_repr_31 = vars.repr;
     b77: block {
         l78: loop {
-            break_if b77 i_2 >= $licm_used_27;
-            pair = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_28, i_2);
+            break_if b77 i_2 >= $licm_used_30;
+            pair = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_31, i_2);
             if $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
                 if local.tee a_end(local.tee $load_2(pair.0).used) != 17 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
                 i_25 = 0;
-                $licm_repr_31 = $load_2.repr;
+                $licm_repr_29 = $load_2.repr;
                 b81: block {
                     l82: loop {
                         break_if b81 (builtin::i64_extend_i32_s(i_25) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
-                        if builtin::array_get_value<u8>($licm_repr_31, i_25) != builtin::array_get_value<u8>(name, i_25) {
+                        if builtin::array_get_value<u8>($licm_repr_29, i_25) != builtin::array_get_value<u8>(name, i_25) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_25 = i_25 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_31, i_25) != builtin::array_get_value<u8>(name, i_25) {
+                        if builtin::array_get_value<u8>($licm_repr_29, i_25) != builtin::array_get_value<u8>(name, i_25) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_25 = i_25 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_31, i_25) != builtin::array_get_value<u8>(name, i_25) {
+                        if builtin::array_get_value<u8>($licm_repr_29, i_25) != builtin::array_get_value<u8>(name, i_25) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_25 = i_25 + 1;
-                        if builtin::array_get_value<u8>($licm_repr_31, i_25) != builtin::array_get_value<u8>(name, i_25) {
+                        if builtin::array_get_value<u8>($licm_repr_29, i_25) != builtin::array_get_value<u8>(name, i_25) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_25 = i_25 + 1;
@@ -903,7 +903,7 @@ fn "core:cli/env$spec0$sroa[name.repr]"(name) with Environment {
                 b87: block {
                     l88: loop {
                         break_if b87 i_25 >= a_end;
-                        if builtin::array_get_value<u8>($licm_repr_31, i_25) != builtin::array_get_value<u8>(name, i_25) {
+                        if builtin::array_get_value<u8>($licm_repr_29, i_25) != builtin::array_get_value<u8>(name, i_25) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                         }
                         i_25 = i_25 + 1;
@@ -912,7 +912,7 @@ fn "core:cli/env$spec0$sroa[name.repr]"(name) with Environment {
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
             } {
-                return struct.new "core:prelude/string.wado//String" { repr: name = local.tee $load_2(pair.1).repr; builtin::array_copy<u8>(local.tee $licm_repr_31(builtin::array_new<u8>(local.tee i_2($load_2.used))), 0, name, 0, i_2); $licm_repr_31, used: i_2 };
+                return struct.new "core:prelude/string.wado//String" { repr: name = local.tee $load_2(pair.1).repr; builtin::array_copy<u8>(local.tee $licm_repr_29(builtin::array_new<u8>(local.tee i_2($load_2.used))), 0, name, 0, i_2); $licm_repr_29, used: i_2 };
             }
             i_2 = i_2 + 1;
             continue l78;

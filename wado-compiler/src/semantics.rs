@@ -1491,11 +1491,8 @@ pub async fn semantics_for_world<H: CompilerHost>(
     // `Semantics::empty()` below — recovery helps only when binding succeeds,
     // which holds for the common cases (missing brace, garbage item) where
     // scopes stay separate.
-    for e in &parsed.lex_errors {
-        host.emit_diagnostic(e.diagnostic(filename));
-    }
-    for e in &parsed.errors {
-        host.emit_diagnostic(e.diagnostic(filename));
+    for d in parsed.diagnostics(filename) {
+        host.emit_diagnostic(d);
     }
     match load(parsed, filename, host, invocations, LogLevel::default()).await {
         Ok(mut loaded) => {

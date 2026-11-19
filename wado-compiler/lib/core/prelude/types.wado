@@ -250,7 +250,7 @@ impl<affine T> FutureReadCopy<T> {
     /// The value, or None where the writer dropped without writing. Waits for a
     /// read that has not settled, so a read never inserted into a set finishes
     /// as well. The end drops, as a read consumes it.
-    pub fn finish(self) -> Option<T> {
+    pub fn finish(self) -> Option<T> with Future {
         let mut copy = self;
         let [end, mut buffer] = copy.read.take().unwrap();
         if copy_result(buffer.settle()) != CopyResult::Completed {
@@ -489,7 +489,7 @@ impl<affine T> StartedRead<T> {
 
     /// What the copy moved, once it has settled, lifted as `end`'s elements.
     /// The buffer frees as this returns.
-    internal fn settle(self, end: &Stream<T>) -> StreamChunk<T> {
+    internal fn settle(self, end: &Stream<T>) -> StreamChunk<T> with Stream {
         let mut started = self;
         let packed = started.buffer.settle();
         let count = cm_packed_upper(packed);
@@ -508,7 +508,7 @@ pub affine struct ReadCopy<affine T> {
 impl<affine T> ReadCopy<T> {
     /// The end and what the copy moved. Waits for a copy that has not settled,
     /// so a copy never inserted into a set finishes as well.
-    pub fn finish(self) -> [Stream<T>, StreamChunk<T>] {
+    pub fn finish(self) -> [Stream<T>, StreamChunk<T>] with Stream {
         let mut copy = self;
         let [end, started] = copy.copy.take().unwrap();
         let chunk = started.settle(&end);
@@ -930,8 +930,8 @@ internal fn cm_packed_upper(packed: i32) -> i32 {
 }
 
 /// The host's waitable set, which holds handles. `WaitableSet` wraps one and
-/// holds the values behind them, so each of its methods holds this resource
-/// through its signature.
+/// holds the values behind them. Waiting grants no capability, so its methods
+/// perform this resource ambiently.
 internal resource RawWaitableSet {
     #[cm("waitable-set-new")]
     fn new() -> RawWaitableSet;
@@ -973,6 +973,7 @@ pub struct Ready<affine W> {
 }
 
 impl<affine W: Waitable> WaitableSet<W> {
+    #[ambient(RawWaitableSet)]
     pub fn new() -> WaitableSet<W> {
         return WaitableSet { raw: RawWaitableSet::new(), members: [], ready: [] };
     }
@@ -992,6 +993,7 @@ impl<affine W: Waitable> WaitableSet<W> {
     /// Blocks until a member is ready, and moves it out: a copy once it
     /// settled, a call once it resolved. A member ready without the host comes
     /// first. Traps on an empty set.
+    #[ambient(RawWaitableSet)]
     pub fn wait(&mut self) -> Ready<W> {
         assert !self.is_empty(), "a set waits on a member";
         if !self.ready.is_empty() {
@@ -1006,6 +1008,7 @@ impl<affine W: Waitable> WaitableSet<W> {
 
     /// The member that is ready, as `wait` means it, moved out, or None where
     /// none is yet.
+    #[ambient(RawWaitableSet)]
     pub fn poll(&mut self) -> Option<Ready<W>> {
         if !self.ready.is_empty() {
             return Option::Some(self.ready.remove(0));

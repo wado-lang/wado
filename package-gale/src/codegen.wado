@@ -22,6 +22,7 @@ use {
     gen_lexer,
     lexer_rule_executes_actions,
     lexer_grammar_executes_actions,
+    drop_fragment_actions,
     collect_unhandled_lexer_alt_action_ids,
     collect_lexer_predicate_ids,
     vocab_display_names,
@@ -48,6 +49,7 @@ use {
     parser_superclass_name,
     collect_lexer_super_ops,
     collect_parser_super_ops,
+    lexer_names_view,
     lexer_bodies_name_unwired_base,
     lexer_super_refusal,
     parser_super_refusal,
@@ -127,6 +129,8 @@ global GEN_PER_RULE_CAPACITY: i32 = 4096;
 /// builder all lower the same grammar, so a pass only one of them runs makes
 /// the others describe a parser nobody emits.
 pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
+    // Before `splice_suffixed_alternations` copies a fragment's arms into its callers.
+    drop_fragment_actions(&mut grammar.lexer_rules);
     // Before `collect_literal_tokens`, which must not see an aliased text.
     alias_parser_literals(grammar);
     // Fill in `snake_name` / `field_name` caches on every name-bearing IR
@@ -385,7 +389,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             atn_lr: ctx.plan.needs_lr_atn,
             latn: needs_latn,
             highlight: emit_highlight,
-            superclass: ctx.settings.has_superclass(),
+            lexer_view: ctx.settings.has_superclass() || lexer_names_view(&grammar.lexer_rules, &lexer_members),
             scan_memo: ctx.plan.scan_memo,
             lr_frames: ctx.plan.lr_frames,
         },
@@ -708,7 +712,7 @@ struct RuntimeFeatures {
     atn_lr: bool,
     latn: bool,
     highlight: bool,
-    superclass: bool,
+    lexer_view: bool,
     scan_memo: bool,
     lr_frames: bool,
 }
@@ -733,7 +737,7 @@ fn gen_runtime(f: &RuntimeFeatures) -> InlinedRuntime {
     gen_runtime_fragment(&mut rt, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(&mut rt, &#include_str("./runtime/tree.wado"));
     gen_runtime_fragment(&mut rt, &#include_str("./runtime/tools.wado"));
-    if f.superclass {
+    if f.lexer_view {
         gen_runtime_fragment(&mut rt, &#include_str("./runtime/superclass.wado"));
     }
     if f.emit_follow {

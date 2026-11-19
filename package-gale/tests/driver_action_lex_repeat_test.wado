@@ -16,12 +16,8 @@ test "an action under a repeat runs once per iteration" {
     assert one.output == "ab", "one iteration leaves B alone";
 }
 
-test "an action in a fragment the repeat inlines runs once per iteration too" {
+test "an action in a fragment the repeat inlines never runs" {
     let three = lr::parse_t("dddb");
     assert three.ok(), "clean parse";
-    assert three.output == "dc", "three iterations retype B to C";
-
-    let one = lr::parse_t("db");
-    assert one.ok(), "clean parse";
-    assert one.output == "db", "one iteration leaves B alone";
+    assert three.output == "db", "the jar runs no fragment action";
 }

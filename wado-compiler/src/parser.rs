@@ -201,8 +201,8 @@ pub enum ParseErrorKind {
     /// The tokens parse, but break a rule a context-free grammar over the same
     /// tokens cannot state, or states only by restating the expression or type
     /// grammar per context: a count or depth limit, what an identifier or a
-    /// string spells, or an expression or type allowed in one context and not
-    /// another.
+    /// string spells where the grammar tests no predicate on it, or an
+    /// expression or type allowed in one context and not another.
     Restriction,
 }
 
@@ -215,15 +215,6 @@ impl ParseError {
             code: Code::InvalidSyntax,
             message: format!("parse error: {}", self.message),
             span: Some(DiagnosticSpan::from_span(&self.span, file)),
-        }
-    }
-
-    /// This error, raised where the rule it breaks is a
-    /// [`ParseErrorKind::Restriction`].
-    fn restricted(self) -> Self {
-        Self {
-            kind: ParseErrorKind::Restriction,
-            ..self
         }
     }
 }
@@ -1787,10 +1778,9 @@ impl Parser {
         let TokenKind::StringLit { raw, quote } = token.kind else {
             unreachable!("the caller matched a string literal")
         };
-        // An expression's string is decoded later, so only where a string is
-        // decoded here does a bad escape stop the parse.
-        let value = string_value(&raw, quote)
-            .map_err(|message| self.restriction_at_span(token.span, &message))?;
+        // The lexer reported a text that denotes no string, which fails the
+        // compile; the raw text stands in for it meanwhile.
+        let value = string_value(&raw, quote).unwrap_or_else(|_| raw.clone());
         Ok(StrLit { value, raw, quote })
     }
 
@@ -1935,6 +1925,11 @@ impl Parser {
                 (None, TokenKind::NumberLit(value)) => {
                     self.advance();
                     AttrArg::Number(value)
+                }
+                // `#[ambient(_)]`: every effect, as `with _` is every row.
+                (None, TokenKind::Underscore) => {
+                    self.advance();
+                    AttrArg::Ident("_".to_string())
                 }
                 (None, _) => break,
             };
@@ -4882,12 +4877,10 @@ impl Parser {
                 && self.check(&TokenKind::ColonColon)
                 && self.peek_nth(1).kind.as_ident_name().is_some())
         {
-            return Err(self
-                .error_at_span(
-                    *span,
-                    "a `Self` binding closes a trait's turbofish, and a method call follows it: `Trait::<Self = T>::method(…)`",
-                )
-                .restricted());
+            return Err(self.error_at_span(
+                *span,
+                "a `Self` binding closes a trait's turbofish, and a method call follows it: `Trait::<Self = T>::method(…)`",
+            ));
         }
 
         // A value, a struct literal's brace and a second turbofish all follow a
@@ -4935,12 +4928,10 @@ impl Parser {
         if !self.check(&TokenKind::LParen)
             && let Some((_, span)) = &self_type
         {
-            return Err(self
-                .error_at_span(
-                    *span,
-                    &format!("`{}::<Self = …>::{method}` needs a call", head.name),
-                )
-                .restricted());
+            return Err(self.error_at_span(
+                *span,
+                &format!("`{}::<Self = …>::{method}` needs a call", head.name),
+            ));
         }
         if !self.check(&TokenKind::LParen) {
             let mut segments = Vec::new();
@@ -5308,26 +5299,20 @@ impl Parser {
         let name = raw_name.clone();
         let name_span = self.advance().span;
 
-        // What a literal takes hangs on how its name is spelled, which a
-        // grammar reading the name as any identifier cannot see.
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
-            self.expect(&TokenKind::LParen)
-                .map_err(ParseError::restricted)?;
+            self.expect(&TokenKind::LParen)?;
             let path_span = self.peek().span;
             let path = match self.peek_kind() {
                 TokenKind::StringLit { .. } => self.take_string()?,
                 _ => {
-                    return Err(self.restriction_at_span(
+                    return Err(self.error_at_span(
                         self.peek().span,
                         &format!("expected string literal path argument for `#{name}`"),
                     ));
                 }
             };
-            let close_span = self
-                .expect(&TokenKind::RParen)
-                .map_err(ParseError::restricted)?
-                .span;
+            let close_span = self.expect(&TokenKind::RParen)?.span;
             self.include_paths
                 .entry(path.value.clone())
                 .or_insert(path_span);
@@ -5349,7 +5334,7 @@ impl Parser {
             "function" => Literal::LocationFunction,
             "data" => Literal::DataSection,
             _ => {
-                return Err(self.restriction_at_span(
+                return Err(self.error_at_span(
                     start_span.merge(&name_span),
                     &format!(
                         "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, `#data`, `#include_str`, or `#include_bytes`"
@@ -7409,12 +7394,13 @@ impl Parser {
             return Ok(());
         };
         let at = origin.advance(&spec[..error.offset]);
-        // A specifier is read by character, out of tokens a grammar reads as
-        // whole identifiers and numbers.
-        Err(self.restriction_at_span(
-            span_of(at, spec[error.offset..].chars().next(), self.ast_id_space),
-            &format!("{error} in template string"),
-        ))
+        let span = span_of(at, spec[error.offset..].chars().next(), self.ast_id_space);
+        let message = format!("{error} in template string");
+        Err(if error.too_large {
+            self.restriction_at_span(span, &message)
+        } else {
+            self.error_at_span(span, &message)
+        })
     }
 
     /// Parse an interpolation expression string.

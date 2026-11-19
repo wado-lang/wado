@@ -29,13 +29,13 @@ impl MockStdio {
     }
 
     /// Ends each future a handler handed out, since an end dropped unwritten traps.
-    fn end_writes(&mut self) {
+    fn end_writes(&mut self) with FutureWritable {
         while let Some(end) = self.ends.pop() {
             end.write(Result::Ok(()));
         }
     }
 
-    fn pending(&mut self) -> Future<Result<(), ErrorCode>> {
+    fn pending(&mut self) -> Future<Result<(), ErrorCode>> with Future {
         let [future, end] = Future::<Result<(), ErrorCode>>::new();
         self.ends.push(end);
         return future;
