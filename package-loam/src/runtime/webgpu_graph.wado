@@ -94,7 +94,7 @@ use {
     kept_any,
 } from "./recorded.wado";
 use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced } from "./webgpu.wado";
-use { HostWeight, stored_width } from "./weight.wado";
+use { HostWeight, stored_bytes } from "./weight.wado";
 use { LinearArray } from "core:linear";
 
 /// A pass recorded once per shape class and planned into kernels, which each
@@ -1057,7 +1057,7 @@ fn rows_laid<Er>(
     let [kind, mut extents, size] = [first.kind, first.extents, first.bytes().len()];
     let mut head = Option::Some(first);
     assert !paired || run.len() == 2, "a pair is of two weights";
-    let row = stored_width(kind) * element_count(&extents[1..<extents.len()].to_list());
+    let row = stored_bytes(kind, &extents[1..<extents.len()].to_list());
     let mut bytes = LinearArray::<u8>::filled(if paired { 2 * size } else { 0 }, 0);
     let mut rows: List<i32> = [];
     for let [j, at] of run.into_iter().enumerate() {

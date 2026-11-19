@@ -26,12 +26,19 @@ pub fn stored_width(kind: ElementKind) -> i32 {
     };
 }
 
+/// The bytes `kind` elements under `extents` take as a checkpoint stores them.
+pub fn stored_bytes(kind: ElementKind, extents: &List<i32>) -> i32
+    contract element_count(extents) <= i32::MAX / stored_width(kind), "a weight's bytes fit linear memory"
+{
+    return element_count(extents) * stored_width(kind);
+}
+
 impl HostWeight {
     /// `bytes`, which hold the `kind` elements of `extents` as a checkpoint
     /// stores them. A bool's nonzero byte becomes 1 here, so every backend
     /// reads one truth from it, as a PJRT `PRED` must hold 0 or 1.
     pub fn stored(kind: ElementKind, extents: List<i32>, bytes: LinearArray<u8>) -> HostWeight
-        contract bytes.len() == element_count(&extents) * stored_width(kind)
+        contract bytes.len() == stored_bytes(kind, &extents)
     {
         let mut held = bytes;
         if kind matches { Bool } {
@@ -45,7 +52,7 @@ impl HostWeight {
     /// `t`'s elements, stored.
     pub fn of<E: Element, Axes>(t: &Tensor<E, Axes>) -> HostWeight {
         let count = t.data.len();
-        let mut bytes = LinearArray::<u8>::filled(count * stored_width(E::kind()), 0);
+        let mut bytes = LinearArray::<u8>::filled(stored_bytes(E::kind(), &t.extents), 0);
         match data_of(&t.data) {
             F32(values) => {
                 for let i of 0..<count {
@@ -92,10 +99,8 @@ impl HostWeight {
     }
 
     /// Zeros of `kind` under `extents`.
-    pub fn zeroed(kind: ElementKind, extents: List<i32>) -> HostWeight
-        contract element_count(&extents) <= i32::MAX / stored_width(kind), "a weight's bytes fit linear memory"
-    {
-        let bytes = LinearArray::<u8>::filled(element_count(&extents) * stored_width(kind), 0);
+    pub fn zeroed(kind: ElementKind, extents: List<i32>) -> HostWeight {
+        let bytes = LinearArray::<u8>::filled(stored_bytes(kind, &extents), 0);
         return HostWeight { kind, extents, bytes };
     }
 

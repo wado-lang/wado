@@ -7,8 +7,8 @@ use { LoadError, WeightSource } from "./checkpoint.wado";
 use { Picked, Pool, Tokens } from "./experts.wado";
 use { Backend, One } from "./hlo.wado";
 use { Any, Untyped, typed } from "./recorded.wado";
-use { ElementKind, Tensor, element_count } from "./tensor.wado";
-use { HostWeight, stored_width } from "./weight.wado";
+use { ElementKind, Tensor } from "./tensor.wado";
+use { HostWeight, stored_bytes } from "./weight.wado";
 use { LinearArray } from "core:linear";
 
 /// Where a layer's experts of one weight are stored, back to back: from a byte
@@ -29,7 +29,7 @@ pub struct StoredExperts {
 
 impl StoredExperts {
     fn slice_bytes(&self) -> i32 {
-        return element_count(&self.extents) * stored_width(self.kind);
+        return stored_bytes(self.kind, &self.extents);
     }
 
     /// The bytes of expert `expert`.

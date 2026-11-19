@@ -21,7 +21,7 @@ use { Any, Programs, Recorded, Recorder, Untyped, Value, typed } from "./recorde
 use { Experts, mixture_of_experts } from "./experts.wado";
 use { ExpertBytes, ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
 use { HashMap } from "core:collections";
-use { HostWeight, stored_width } from "./weight.wado";
+use { HostWeight, stored_bytes } from "./weight.wado";
 use { Attention, ElementKind, Float, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
 
@@ -682,7 +682,7 @@ pub fn stacked_runs<affine G: Backend>(
     runs: List<[i32, i64]>,
 ) -> List<Any<G>> with _ {
     let [files, layers] = stacked_experts();
-    let expert_bytes = layers[0].into_iter().map(|w| element_count(&w.extents) * stored_width(w.kind)).sum().unwrap();
+    let expert_bytes = layers[0].into_iter().map(|w| stored_bytes(w.kind, &w.extents)).sum().unwrap();
     let mut store = HeldExperts::within(
         [
             ExpertLayout {
