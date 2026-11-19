@@ -789,7 +789,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = if let Some(info) = method_info {
             info
         } else {
-            if !self.report_unmet_impl_bound(receiver, span, |s, def| {
+            let uninferred = {
+                let receiver = self.apply_infer_holes(base_type_id);
+                self.tysys.type_table.borrow().contains_infer_var(receiver)
+            };
+            // Which methods a receiver has depends on its type arguments, so
+            // one not inferred yet is what the call lacks.
+            if uninferred {
+                let type_name = self.tysys.type_table.borrow().name(base_type_id);
+                let _ = self.emit(TypeError::CannotInferType {
+                    message: format!(
+                        "cannot infer the type of the receiver '{type_name}' of \
+                         '{method_name}'; add a turbofish or a type annotation"
+                    ),
+                    span,
+                });
+            } else if !self.report_unmet_impl_bound(receiver, span, |s, def| {
                 s.impl_offers_method(def, method_name, required_trait)
             }) {
                 let type_name = self.tysys.type_table.borrow().name(base_type_id);
@@ -1590,18 +1605,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `method_name`, and those impls. A spelling that writes every argument
     /// names one instance, and the order asks it, by value and through each
     /// reference, so a blanket answers where its bounds hold. One that omits
-    /// an argument names an instance the call has yet to infer, so every impl
-    /// that may answer it does: those written for a link of its chain, and
-    /// every blanket, whether or not its bounds will hold.
+    /// an argument names an instance the call has yet to infer, so the impls
+    /// written for the nearest link of its chain answer, and where none is,
+    /// every blanket does, whether or not its bounds will hold: after every
+    /// link, so the type's own declaration answers first.
     fn trait_answer(
         &mut self,
         receiver: &ReceiverId,
         method_name: &str,
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
+        let written = self.written_impls(receiver, method_name, reach);
         if !self.omits_type_args(receiver) {
-            let ty = self.spelled_type(receiver)?;
-            return self.ordered_impls(ty, method_name, reach);
+            let ordered = self
+                .spelled_type(receiver)
+                .and_then(|ty| self.ordered_impls(ty, method_name, reach));
+            return ordered.or(written);
+        }
+        if written.is_some() {
+            return written;
         }
         let blankets: Vec<DefId> = self
             .tysys
@@ -1615,12 +1637,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && self.block_in_reach(block, reach)
             })
             .collect();
-        let written = self.written_impls(receiver, method_name, reach);
-        if blankets.is_empty() {
-            return written;
-        }
-        let written = written.map(|(_, blocks)| blocks).unwrap_or_default();
-        Some((0, blankets.into_iter().chain(written).collect()))
+        (!blankets.is_empty()).then_some((u32::MAX, blankets))
     }
 
     /// Whether `receiver` spells a generic type without one of its arguments:
@@ -1690,6 +1707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let blocks: Vec<DefId> = self
                 .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), declared), &[])
                 .into_iter()
+                .chain(self.ref_impls_of_head(&key))
                 .filter(|&block| {
                     self.block_takes_receiver(block, method_name).is_some()
                         && self.block_in_reach(block, reach)
@@ -1702,6 +1720,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (key, declared) = (next, Some(ty));
         }
         unreachable!("a chain ends")
+    }
+
+    /// The trait impls written for a reference to `key`'s declaration, at any
+    /// instance: `impl<T> Tr for &Pair<T>` for `Pair`.
+    fn ref_impls_of_head(&self, key: &ImplTargetKey) -> Vec<DefId> {
+        let Some(decl) = key.decl() else {
+            return Vec::new();
+        };
+        let defs = self.tysys.resolutions.defs();
+        let table = self.tysys.type_table.borrow();
+        [RefKind::Shared, RefKind::Mut]
+            .into_iter()
+            .flat_map(|kind| {
+                self.tysys
+                    .trait_env
+                    .entries_by_receiver_vec(&ImplTargetKey::Ref(kind).receiver(defs))
+            })
+            .filter(|&block| {
+                table.nominal_def(table.peel_refs(table.impl_target_whole(block))) == Some(decl)
+            })
+            .collect()
     }
 
     /// Whether the declaration that impl block `block` answers `method_name`

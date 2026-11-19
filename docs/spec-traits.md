@@ -395,9 +395,10 @@ the spelling does not reach is reached as `Trait::method(recv, …)`.
 
 A type argument the spelling omits is an inference variable, so
 `Pair::method(…)` means `Pair::<_, _>::method(…)`. Such a spelling names no
-instance yet, so every trait impl that may answer it at some instance decides
-the kind of the call: each impl written for a link of the type's chain, and
-each blanket, whether or not its bounds will hold. Where every one takes a
+instance yet, so the trait impls that may answer it at some instance decide
+the kind of the call: those written for the nearest link of the type's chain,
+by value or by reference, and where none is, every blanket, whether or not its
+bounds will hold. The type's own declaration answers before a blanket. Where every one takes a
 receiver, the call selects what `recv.method(…)` selects, and the receiver's
 type settles the variables. Where every one is a static, the expected type or
 an argument settles them, as a generic function's parameters are settled;

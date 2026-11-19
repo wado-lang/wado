@@ -42,13 +42,18 @@ runs at it, so a blanket answers only where its bounds hold. Such a spelling
 resolves as before.
 
 A spelling that omits an argument names an instance the call has yet to infer.
-Every impl that may answer it at some instance decides the kind:
+The impls that may answer it at some instance decide the kind, in the order a
+method call ranks them:
 
-- each impl written for a link of the type's newtype chain;
-- each blanket, whether or not its bounds will hold.
+- the type's own declaration at the nearest link;
+- the impls written for the nearest link of the type's newtype chain, by value
+  or by reference;
+- where neither answers, every blanket, whether or not its bounds will hold.
 
 Bounds do not take part, since only the settled instance can say whether one
-holds.
+holds. A blanket comes last because it is written for no type in particular:
+counting it beside what is written for the type would let any blanket of the
+same name, in any imported library, change the call.
 
 - Every candidate takes a receiver: the call is a method call on its first
   argument. That argument settles the variables, and the call selects what
@@ -69,9 +74,11 @@ and it decides the kind alone.
   instance no longer takes the one instance an impl is written for. A generic
   function does not infer its parameter from the impls written for it either,
   and the inference broke as soon as a second impl was written elsewhere.
-- A blanket or an impl whose bounds will not hold at the receiver's instance
-  still counts toward the kind. Where it is the other kind, the omitted
-  spelling is ambiguous while the spelling with every argument resolves.
+- The kind is read from what is written, not from the instance. An impl whose
+  bounds will not hold at the receiver's instance still counts, and where it
+  is the other kind, the omitted spelling is ambiguous while the spelling with
+  every argument resolves. A blanket whose bounds do hold there counts only
+  where nothing written for the type answers.
 
 The trait solver never sees an inference variable. An earlier design taught it
 one, a type that may be anything. Each of its rules then needed a second,
