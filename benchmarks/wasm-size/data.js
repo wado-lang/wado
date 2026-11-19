@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795089070546,
+  "lastUpdate": 1795101877534,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79849,6 +79849,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 434000,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "45c3d9190c62b52667993d01fbcfb0b20a439447",
+          "message": "Merge pull request #2692 from wado-lang/gfx/eloquent-edison-06cjpr\n\nfeat: every resource can be backed by a guest value",
+          "timestamp": "2026-11-20T00:02:01+09:00",
+          "tree_id": "30752fb33059ff362dd8bb03c91fb7e9915c2aa7",
+          "url": "https://github.com/wado-lang/wado/commit/45c3d9190c62b52667993d01fbcfb0b20a439447"
+        },
+        "date": 1795101876599,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7332,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24599,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 434173,
             "unit": "bytes"
           }
         ]
