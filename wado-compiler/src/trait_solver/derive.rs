@@ -55,7 +55,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
                     .members
                     .iter()
                     .filter(|member| !member.projects_param(&program.projecting))
-                    .all(|member| holds(program, env, member, trait_).is_some())
+                    .all(|member| holds(program, env, member, trait_).settled().is_some())
             })
             .map(|(_, id, _)| *id)
             .collect();
@@ -241,7 +241,7 @@ fn derived_bounds(
 mod tests {
     use super::super::holds::owed;
     use super::super::program::{ArgDefault, AssocId, Fact, Pin, Source, TypeDef};
-    use super::super::testing::{Builder, bounded, concrete, decl};
+    use super::super::testing::{Builder, bounded, concrete, decl, holds};
     use super::*;
 
     const EQ: TraitDeclId = TraitDeclId(0);
