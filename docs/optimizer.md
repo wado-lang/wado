@@ -24,10 +24,10 @@ since removing it changes what the program does.
 | Flag  | Iterations | Inline threshold | Contract checks | Notes                                                                    |
 | ----- | ---------- | ---------------- | --------------- | ------------------------------------------------------------------------ |
 | `-O0` | 0          | N/A              | on              | DCE alone, which keeps an e2e run cheap; nothing else is optimized       |
-| `-O1` | 2          | 4                | on              | The default of `wado run`, `wado serve`, `wado test` and each `run-*`    |
-| `-O2` | 15         | 16               | off             | For a release build; the default of every other subcommand               |
-| `-O3` | 20         | 26               | off             | For fuzzing the optimizer, more than for a build                         |
-| `-Os` | 15         | 16               | off             | Strips the name section; a failed `assert` only traps; no loop unrolling |
+| `-O1` | 2          | 6                | on              | The default of `wado run`, `wado serve`, `wado test` and each `run-*`    |
+| `-O2` | 15         | 24               | off             | For a release build; the default of every other subcommand               |
+| `-O3` | 20         | 39               | off             | For fuzzing the optimizer, more than for a build                         |
+| `-Os` | 15         | 24               | off             | Strips the name section; a failed `assert` only traps; no loop unrolling |
 
 The levels differ in what a program does, not only in its speed: below `-O2`, a
 call marked `unchecked` traps when it breaks its contract (see
