@@ -84,9 +84,14 @@ impl SolverType {
             }
             a.iter().zip(b).map(|(a, b)| a.meet(b)).collect()
         };
+        // A projection read off an unsettled type names no type yet, so it may
+        // be any.
+        let unread = |ty: &Self| matches!(ty, Self::Projection { .. }) && ty.holds_var();
         match (self, other) {
             (Self::Var, _) => Some(other.clone()),
             (_, Self::Var) => Some(self.clone()),
+            _ if unread(self) => Some(other.clone()),
+            _ if unread(other) => Some(self.clone()),
             (Self::Decl(head, args), Self::Decl(other_head, other_args)) if head == other_head => {
                 Some(Self::Decl(*head, each(args, other_args)?))
             }
@@ -111,6 +116,20 @@ impl SolverType {
     #[must_use]
     pub fn may_equal(&self, other: &Self) -> bool {
         self.meet(other).is_some()
+    }
+
+    /// Whether a [`Var`](Self::Var) sits anywhere in `self`.
+    #[must_use]
+    pub fn holds_var(&self) -> bool {
+        match self {
+            Self::Var => true,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(Self::holds_var),
+            Self::Ref { inner, .. } => inner.holds_var(),
+            Self::Projection { base, args, .. } => {
+                base.holds_var() || args.iter().any(Self::holds_var)
+            }
+        }
     }
 
     /// Whether a [`Param`](Self::Param) or [`Pack`](Self::Pack) in `self`

@@ -183,6 +183,40 @@ fn lr_maybe<V>() -> Maybe<Lr, V> {
     return { a: { x: 0 }, b: null };
 }
 
+// A projection read off a variable names no type yet, so it does not refute
+// the impl whose target writes it.
+trait Source with () {
+    type Item;
+}
+
+impl Source for Lr {
+    type Item = i32;
+}
+
+trait Echo with () {
+    fn echoed(&self) -> Self;
+}
+
+struct Sourced<G, I> {
+    g: Option<G>,
+    item: I,
+}
+
+impl<G: Source> Echo for Sourced<G, G::Item> {
+    fn echoed(&self) -> Self {
+        return *self;
+    }
+}
+
+fn sourced<V>() -> Sourced<V, i32> {
+    return { g: null, item: 7 };
+}
+
+test "a projection read off a variable" {
+    let s: Sourced<Lr, i32> = sourced().echoed();
+    assert s.item == 7;
+}
+
 test "two pins on one parameter" {
     let p: Maybe<Lr, Box<i32>> = lr_maybe().agreed();
     assert p.which() == 2;

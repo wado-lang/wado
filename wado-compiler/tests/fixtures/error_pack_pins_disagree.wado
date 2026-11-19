@@ -1,0 +1,45 @@
+// Two pins on one pack must agree, element by element, so an impl whose pins
+// name two lists for it does not apply.
+trait LeftItems with () {
+    type Items;
+}
+
+trait RightItems with () {
+    type Items;
+}
+
+struct Both {
+    x: i32,
+}
+
+impl LeftItems for Both {
+    type Items = [i32];
+}
+
+impl RightItems for Both {
+    type Items = [bool];
+}
+
+struct Holder<A> {
+    a: A,
+}
+
+trait Count with () {
+    fn count(&self) -> i32;
+}
+
+impl<A: LeftItems<Items = [..P]> + RightItems<Items = [..P]>, ..P> Count for Holder<A> {
+    fn count(&self) -> i32 {
+        return 1;
+    }
+}
+
+test {
+    let h: Holder<Both> = { a: { x: 0 } };
+    assert h.count() == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":39:12: analysis error: no method 'count' found on type 'Holder<Both>'"
+}

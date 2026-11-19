@@ -1282,19 +1282,14 @@ fn match_target(
             Some((SolverType::Pack(index), prefix)) => {
                 ty_elems.len() >= prefix.len()
                     && prefix.iter().zip(ty_elems).all(|(a, b)| each(a, b))
-                    && {
-                        bindings[*index as usize] =
-                            Some(Binding::Pack(ty_elems[prefix.len()..].to_vec()));
-                        true
-                    }
+                    && bind_pack(&mut bindings[*index as usize], &ty_elems[prefix.len()..])
             }
             _ => {
                 elems.len() == ty_elems.len() && elems.iter().zip(ty_elems).all(|(a, b)| each(a, b))
             }
         },
         (SolverType::Pack(index), SolverType::Tuple(ty_elems)) => {
-            bindings[*index as usize] = Some(Binding::Pack(ty_elems.clone()));
-            true
+            bind_pack(&mut bindings[*index as usize], ty_elems)
         }
         (SolverType::Projection { .. }, _) => {
             deferred.push((target.clone(), ty.clone()));
@@ -1315,6 +1310,23 @@ fn match_target(
             | SolverType::Projection { .. },
         ) => false,
     }
+}
+
+/// Bind a pack to `elems`, or, where it is bound already, keep what both say
+/// at each element, as a parameter's binding does.
+fn bind_pack(slot: &mut Option<Binding>, elems: &[SolverType]) -> bool {
+    let met = match slot {
+        None => Some(elems.to_vec()),
+        Some(Binding::Pack(bound)) if bound.len() == elems.len() => {
+            bound.iter().zip(elems).map(|(a, b)| a.meet(b)).collect()
+        }
+        Some(Binding::Pack(_) | Binding::One(_)) => None,
+    };
+    let Some(met) = met else {
+        return false;
+    };
+    *slot = Some(Binding::Pack(met));
+    true
 }
 
 /// Whether `def`'s target meets `ty` without a projection left to decide. A
