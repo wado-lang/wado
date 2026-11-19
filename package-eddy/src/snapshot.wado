@@ -422,17 +422,14 @@ test "a directory's programs are the files in it that can be executed" {
 /// included, back as checked out: a run may have written, committed or
 /// checked out anything in it.
 pub fn reset_snapshot(repo: &String, root: &String, sha: &String) with (Process, Preopens) {
-    reset_checkout(repo, root, sha);
+    reset_worktree(&tree_git_dir(repo, root), root, sha);
     // Read once the tree is back at `sha`, so HEAD records what it checked out.
     let built = build_submodules(repo, root);
     drop_other_submodules(repo, root, &built);
     for let [path, recorded] of built {
-        reset_checkout(&fs::join(repo, &path), &`${*root}/${path}`, &recorded);
+        let checkout = `${*root}/${path}`;
+        reset_worktree(&tree_git_dir(&fs::join(repo, &path), &checkout), &checkout, &recorded);
     }
-}
-
-fn reset_checkout(repo: &String, root: &String, commit: &String) with (Process, Preopens) {
-    reset_worktree(&tree_git_dir(repo, root), root, commit);
 }
 
 fn reset_worktree(git_dir: &String, root: &String, commit: &String) with Process {
