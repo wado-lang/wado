@@ -1733,23 +1733,23 @@ impl Graph for Cpu {
         // order read one run of the table's elements, so each run's start is
         // found once: an expert's weights are one run.
         let mut run = 1;
-        let mut walked = out_rank;
+        let mut outer_rank = out_rank;
         let mut table_axis = rank - 1;
-        while walked > 0 && table_axis >= 0 {
-            let Some(j) = dims.offset_dims.position(|d| d == walked - 1) else {
+        while outer_rank > 0 && table_axis >= 0 {
+            let Some(j) = dims.offset_dims.position(|d| d == outer_rank - 1) else {
                 break;
             };
             if offset_axes[j] != table_axis {
                 break;
             }
-            walked -= 1;
-            run *= extents[walked];
-            if extents[walked] != table_extents[table_axis] {
+            outer_rank -= 1;
+            run *= extents[outer_rank];
+            if extents[outer_rank] != table_extents[table_axis] {
                 break;
             }
             table_axis -= 1;
         }
-        let outer: List<i32> = extents[0..<walked].to_list();
+        let outer: List<i32> = extents[0..<outer_rank].to_list();
         let mut starts = List::<i32>::with_capacity(element_count(&outer));
         let mut out = List::<i32>::filled(out_rank, 0);
         for let _ of 0..<element_count(&outer) {
