@@ -1517,9 +1517,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A trait the call site cannot name answers only where nothing it can
         // name does, so an import it lacks never hides what it reaches.
         let spelled = self.spelled_type(receiver);
-        let mut supplied = self.trait_answer(receiver, spelled, method_name, Reach::InScope);
+        let supplied_at = |this: &Self, reach| {
+            spelled.and_then(|ty| this.ordered_impls(ty, method_name, reach))
+        };
+        let mut supplied = supplied_at(self, Reach::InScope);
         if supplied.is_none() && own.iter().all(Option::is_none) {
-            supplied = self.trait_answer(receiver, spelled, method_name, Reach::OutOfScope);
+            supplied = supplied_at(self, Reach::OutOfScope);
         }
         let supplied = supplied.map(|(link, blocks)| ((link, true), blocks, false));
         let Some((_, blocks, takes_receiver)) = own
@@ -1590,29 +1593,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         unreachable!("a chain ends")
     }
 
-    /// The link of `spelled`'s chain where trait impls answer `method_name`,
-    /// and those impls. The order asks the type itself, by value and through
-    /// each reference, so a blanket answers where its bounds may hold; an
-    /// argument the spelling omits is a variable, so the impls named are
-    /// those that may apply. The blocks written for `receiver`'s head answer
-    /// besides.
-    fn trait_answer(
-        &mut self,
-        receiver: &ReceiverId,
-        spelled: Option<TypeId>,
-        method_name: &str,
-        reach: Reach,
-    ) -> Option<(u32, Vec<DefId>)> {
-        let mut found: Vec<(u32, Vec<DefId>)> = spelled
-            .and_then(|ty| self.ordered_impls(ty, method_name, reach))
-            .into_iter()
-            .collect();
-        found.extend(self.written_impls(receiver, method_name, reach));
-        nearest_link(found)
-    }
-
-    /// [`SolverBridge::nearest_impls`] at `ty`, by value and through each
-    /// reference.
+    /// The link of `ty`'s chain where trait impls answer `method_name`, and
+    /// those impls. The order asks the type itself, by value and through each
+    /// reference, so a blanket answers where its bounds may hold; an argument
+    /// the spelling omits is a variable, so the impls named are those that may
+    /// apply.
     fn ordered_impls(
         &self,
         ty: TypeId,
@@ -1637,42 +1622,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect(),
         )
-    }
-
-    /// The trait impls written for a link of `receiver`'s chain that declare
-    /// `method_name`, among those `reach` names, at the nearest link any does.
-    fn written_impls(
-        &mut self,
-        receiver: &ReceiverId,
-        method_name: &str,
-        reach: Reach,
-    ) -> Option<(u32, Vec<DefId>)> {
-        let reached = |this: &Self, block: DefId| {
-            let in_scope = this.tysys.signatures.impl_trait(block).is_some_and(|decl| {
-                this.tysys
-                    .resolutions
-                    .decl_in_scope(this.frame_module(), decl)
-            });
-            in_scope == (reach == Reach::InScope)
-        };
-        // A link keyed by no declaration (`&Point`) is told apart by its whole
-        // type, which the chain declares.
-        let (mut key, mut declared) = (receiver.key().clone(), receiver.ty());
-        for link in 0.. {
-            let blocks: Vec<DefId> = self
-                .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), declared), &[])
-                .into_iter()
-                .filter(|&block| {
-                    self.block_takes_receiver(block, method_name).is_some() && reached(self, block)
-                })
-                .collect();
-            if !blocks.is_empty() {
-                return Some((link, blocks));
-            }
-            let (next, ty) = self.newtype_link_target(&key)?;
-            (key, declared) = (next, Some(ty));
-        }
-        unreachable!("a chain ends")
     }
 
     /// Whether the declaration that impl block `block` answers `method_name`

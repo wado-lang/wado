@@ -63,3 +63,68 @@ test "a bound met by a generic impl" {
     assert Box::m(&b) == "blanket";
     assert Box::<_>::m(&b) == "blanket";
 }
+
+// A blanket whose bound nothing meets may not apply, so a static of the same
+// name beside it does not make the call ambiguous.
+trait Unmet with () {
+    fn unmet(&self) -> i32;
+}
+
+trait Made with () {
+    fn made() -> i32;
+}
+
+trait Taken with () {
+    fn made(&self) -> i32;
+}
+
+impl<T: Unmet> Made for Box<T> {
+    fn made() -> i32 {
+        return 1;
+    }
+}
+
+impl Taken for Box<String> {
+    fn made(&self) -> i32 {
+        return 2;
+    }
+}
+
+test "a blanket whose bound nothing meets" {
+    let b: Box<String> = { v: "x" };
+    assert Box::made(&b) == 2;
+    assert Box::<String>::made(&b) == 2;
+}
+
+// A projection in an impl's target, read at a variable, may be what it meets.
+trait Fam with () {
+    type Of;
+}
+
+struct Kin<T> {
+    t: Option<T>,
+}
+
+impl<T> Fam for Kin<T> {
+    type Of = Kin<T>;
+}
+
+trait Same with () {
+    fn same(&self) -> Self;
+}
+
+impl<F: Fam> Same for Pair<F, F::Of> {
+    fn same(&self) -> Self {
+        return *self;
+    }
+}
+
+fn kin_pair<U>() -> Pair<Kin<U>, Kin<i32>> {
+    return { a: { t: null }, b: { t: null } };
+}
+
+test "a projection in the target" {
+    let p: Pair<Kin<i32>, Kin<i32>> = kin_pair().same();
+    assert p.b.t matches { None };
+    assert Pair::same(&p).a.t matches { None };
+}
