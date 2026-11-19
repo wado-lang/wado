@@ -12,7 +12,7 @@ use crate::name::{BACKED_HANDLE_CLASS_FIELD, ExternHostQuery, MangledName, cm_im
 use crate::rarity::Mark;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
-use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirAbstractHeapType, WirInstr, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
@@ -867,12 +867,12 @@ impl FunctionTranslator<'_, '_> {
                     "`AffineResource` bounds `resource_handle` to an affine resource"
                 );
                 let resource = self.translate_operand(args[0].expr);
-                Some(self.handle_of(resource))
+                Some(self.host_handle_of(resource))
             }
             "resource_backed_by" => {
                 let value = self.translate_operand(args[0].expr);
-                if self.type_table.is_guest_resource_type(type_args[0]) {
-                    return Some(self.struct_new(self.ctx.guest_resource().clone(), vec![value]));
+                if !self.type_table.is_extern_handle(type_args[0]) {
+                    return Some(self.backed_box_of(value));
                 }
                 let class = self
                     .type_table
@@ -889,12 +889,12 @@ impl FunctionTranslator<'_, '_> {
             }
             "resource_is_backed_by" => {
                 let backing = self.backing_struct(type_args[1]);
-                if self.type_table.is_guest_resource_type(type_args[0]) {
+                if !self.type_table.is_extern_handle(type_args[0]) {
                     let object = self.translate_operand(args[0].expr);
                     return Some(WirInstr::RefTest {
                         type_id: backing,
                         nullable: false,
-                        expr: Box::new(self.guest_backing_of(object)),
+                        expr: Box::new(self.backing_in(object)),
                     });
                 }
                 let handle = self.extern_handle_behind(args[0].expr);
@@ -912,9 +912,9 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::Seq(seq))
             }
             "resource_backing" => {
-                let held = if self.type_table.is_guest_resource_type(type_args[0]) {
+                let held = if !self.type_table.is_extern_handle(type_args[0]) {
                     let object = self.translate_operand(args[0].expr);
-                    self.guest_backing_of(object)
+                    self.backing_in(object)
                 } else {
                     let handle = self.extern_handle_behind(args[0].expr);
                     self.backing_of(handle)
@@ -963,8 +963,20 @@ impl FunctionTranslator<'_, '_> {
                     WirType::I32,
                     self.handle_of(a.clone()),
                 ));
-                seq.push(self.set_handle(a, self.handle_of(b.clone())));
-                seq.push(self.set_handle(b, local_get(&held, &WirType::I32)));
+                seq.push(self.set_handle(a.clone(), self.handle_of(b.clone())));
+                seq.push(self.set_handle(b.clone(), local_get(&held, &WirType::I32)));
+                let backing_ty = WirType::AbstractRef {
+                    heap_type: WirAbstractHeapType::Eq,
+                    nullable: true,
+                };
+                let held_backing = self.fresh_local("held_backing");
+                seq.extend(declare_and_set_local(
+                    held_backing.clone(),
+                    backing_ty.clone(),
+                    self.backing_in(a.clone()),
+                ));
+                seq.push(self.set_backing(a, self.backing_in(b.clone())));
+                seq.push(self.set_backing(b, local_get(&held_backing, &backing_ty)));
                 Some(WirInstr::Seq(seq))
             }
             "zero_handle" => {
@@ -981,7 +993,7 @@ impl FunctionTranslator<'_, '_> {
                 let rx = self.translate_operand(args[0].expr);
                 let call = WirInstr::Call {
                     func_id,
-                    args: vec![self.handle_of(rx)],
+                    args: vec![self.host_handle_of(rx)],
                 };
                 Some(self.handle_box_of(call))
             }

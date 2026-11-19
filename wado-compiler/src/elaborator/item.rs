@@ -2367,11 +2367,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         methods: &[ast::Function],
         kind: OperationOwner,
     ) {
-        let is_resource = matches!(kind, OperationOwner::Resource);
+        let is_resource = matches!(kind, OperationOwner::Resource { .. });
+        let host_resource = matches!(kind, OperationOwner::Resource { has_host: true });
         for method in methods {
-            // A resource operation is a CM import in every case; an effect
-            // operation only when it carries the attribute.
-            let cm_backed = is_resource || method.attrs.iter().any(|a| a.cm_boundary.is_some());
+            // An operation of a resource the host implements is a CM import in
+            // every case; an effect operation only when it carries the
+            // attribute.
+            let cm_backed =
+                host_resource || method.attrs.iter().any(|a| a.cm_boundary.is_some());
             // A resource method's `&self` becomes the CM adapter's first
             // parameter; an effect operation is called as `E::op(args)`.
             let receiver = (!is_resource)
@@ -3094,10 +3097,11 @@ fn declares_a_default(methods: &[ast::Function]) -> bool {
         .any(|m| m.params.iter().any(|p| p.default.is_some()))
 }
 
-/// Which declaration an operation belongs to. A resource's operations are
-/// Component Model imports with a `&self` receiver; an effect's are neither.
+/// Which declaration an operation belongs to. A resource's operations take a
+/// `&self` receiver, and are Component Model imports where the host implements
+/// the resource; an effect's are neither.
 #[derive(Clone, Copy)]
 pub(super) enum OperationOwner {
     Interface,
-    Resource,
+    Resource { has_host: bool },
 }

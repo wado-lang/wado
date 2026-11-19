@@ -1893,9 +1893,6 @@ impl SolverBridge {
                     CompilerItem::AffineResource
                 },
             );
-            if table.is_unrestricted_resource(def) || table.is_guest_resource(def) {
-                fact(def, CompilerItem::Backable);
-            }
         }
     }
 

@@ -21,7 +21,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use super::context::WirContext;
 use crate::name::{
     BACKED_HANDLE_CLASS_FIELD, BACKED_HANDLE_STRUCT, BACKED_HANDLE_VALUE_FIELD, CELL_FIELD,
-    GUEST_RESOURCE_STRUCT, RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name,
+    RESOURCE_BACKING_FIELD, RESOURCE_HANDLE_FIELD, RESOURCE_OBJECT_STRUCT,
+    mangle_builtin_array_type, mangle_generic_name,
     wir_enum_type_key, wir_tuple_type_key, wir_type_key, wir_variant_case_key,
 };
 
@@ -43,7 +44,6 @@ enum Shape<'a> {
 pub fn register_types(ctx: &mut WirContext<'_>) {
     ctx.handle_box = Some(register_resource_object(ctx));
     ctx.backed_handle = Some(register_backed_handle(ctx));
-    ctx.guest_resource = Some(register_guest_resource(ctx));
     let package = ctx.package;
     let shapes: Vec<(WirTypeId, Shape<'_>)> = wado_types(package)
         .into_iter()
@@ -413,11 +413,21 @@ fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
             name: WirName { fq },
-            fields: vec![WirField {
-                name: "value".to_string(),
-                ty: WirType::I32,
-                mutable: true,
-            }],
+            fields: vec![
+                WirField {
+                    name: RESOURCE_HANDLE_FIELD.to_string(),
+                    ty: WirType::I32,
+                    mutable: true,
+                },
+                WirField {
+                    name: RESOURCE_BACKING_FIELD.to_string(),
+                    ty: WirType::AbstractRef {
+                        heap_type: WirAbstractHeapType::Eq,
+                        nullable: true,
+                    },
+                    mutable: true,
+                },
+            ],
             meta: WirMeta {
                 module_source: Some(module_source),
                 ..WirMeta::default()
@@ -452,35 +462,6 @@ fn register_backed_handle(ctx: &mut WirContext<'_>) -> WirTypeId {
                     },
                 ),
             ],
-            meta: WirMeta {
-                module_source: Some(module_source),
-                ..WirMeta::default()
-            },
-            generic_origin: None,
-            newtype_origin: None,
-            supertype: None,
-        }),
-    )
-}
-
-/// The struct a resource declared without `#[cm(...)]` is. Its field is
-/// mutable for the reason `$Resource`'s is: a store through a reference to the
-/// resource writes into the object.
-fn register_guest_resource(ctx: &mut WirContext<'_>) -> WirTypeId {
-    let module_source = ModuleSource::prelude();
-    let fq = wir_type_key(&module_source, GUEST_RESOURCE_STRUCT);
-    ctx.register_type(
-        fq.clone(),
-        WirTypeDef::Struct(WirStructType {
-            name: WirName { fq },
-            fields: vec![WirField {
-                name: BACKED_HANDLE_VALUE_FIELD.to_string(),
-                ty: WirType::AbstractRef {
-                    heap_type: WirAbstractHeapType::Eq,
-                    nullable: false,
-                },
-                mutable: true,
-            }],
             meta: WirMeta {
                 module_source: Some(module_source),
                 ..WirMeta::default()

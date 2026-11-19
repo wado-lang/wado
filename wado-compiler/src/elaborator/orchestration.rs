@@ -13,7 +13,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, GenericParam, HandleClasses, Item, Module, Pattern, Stmt,
-    Type, binds_no_cm, declared_handle_classes, declares_extern_handle, walk_expr, walk_stmt,
+    Type, declared_handle_classes, declares_extern_handle, walk_expr, walk_stmt,
     walk_type, world_import_of,
 };
 use crate::bail_with;
@@ -641,13 +641,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 def,
                                 declared_handle_classes(&resource_decl.attrs),
                             );
-                        } else if binds_no_cm(&resource_decl.attrs)
-                            && resource_decl.methods.iter().all(|m| binds_no_cm(&m.attrs))
-                        {
-                            // `Stream<T>` and its kin declare no `#[cm]` of their
-                            // own, but their operations bind the canonical
-                            // built-ins.
-                            type_table.borrow_mut().mark_guest_resource(def);
+                        } else if !resource_decl.has_host() {
+                            type_table.borrow_mut().mark_hostless_resource(def, resource_decl.droppable());
                         }
                         // A static is not inherited, so it shadows nothing.
                         resource_method_names.insert(
@@ -953,7 +948,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Resource,
             CompilerItem::AffineResource,
             CompilerItem::ExternHandle,
-            CompilerItem::Backable,
             CompilerItem::AnyBits,
             CompilerItem::Waitable,
         ]) {

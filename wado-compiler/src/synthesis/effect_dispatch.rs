@@ -22,7 +22,7 @@ use crate::name::{
 };
 use crate::package::Package;
 use crate::synthesis::common::{
-    alloc_local, alloc_named_local, assign, expr_stmt, let_mut_stmt, local_ref, option_none,
+    alloc_local, alloc_named_local, assign, builtin_call, expr_stmt, let_mut_stmt, local_ref, option_none,
     option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
 use crate::tir::{
@@ -929,10 +929,25 @@ fn build_dispatch_wrapper_function(
             },
             span,
         ));
+    } else if is_resource
+        && op_name == "drop"
+        && type_table.borrow().is_hostless_resource(effect.def())
+    {
+        // No host object stands behind a handle of a resource no host
+        // implements, so releasing it unhandled ends with the guest value it
+        // holds. `forget` keeps the drop of `this` from coming back here.
+        let [this] = arg_exprs.as_slice() else {
+            unreachable!("a `drop` takes its resource alone");
+        };
+        else_stmts.push(TirStmt::new(
+            TirStmtKind::Expr(builtin_call("forget", vec![this.clone()], TypeTable::UNIT)),
+            span,
+        ));
+        else_stmts.push(TirStmt::new(TirStmtKind::Return { value: None }, span));
     } else {
         // Nothing answers with no handler installed: an operation of a user
-        // interface without a default, of a resource without `#[cm(...)]`,
-        // or of a dependency's guest effect no export leaves open. It traps.
+        // interface without a default, of a resource no host implements, or
+        // of a dependency's guest effect no export leaves open. It traps.
         let string_type_id = {
             let tt = type_table.borrow();
             let def = tt.require_compiler_item_def(CompilerItem::String);

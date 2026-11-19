@@ -1910,7 +1910,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.reject_unsupported_operation_clauses(
                         &resource_decl.name,
                         &resource_decl.methods,
-                        OperationOwner::Resource,
+                        OperationOwner::Resource {
+                            has_host: resource_decl.has_host(),
+                        },
                     );
                     let resource = self.tysys.def_at(resource_decl.id);
                     self.resolve_operation_param_defaults(

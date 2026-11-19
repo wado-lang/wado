@@ -19,7 +19,8 @@ use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId}
 use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::name::{
-    BACKED_HANDLE_VALUE_FIELD, CELL_FIELD, MangledName, closure_call_wrapper_name,
+    BACKED_HANDLE_VALUE_FIELD, CELL_FIELD, MangledName, RESOURCE_BACKING_FIELD,
+    RESOURCE_HANDLE_FIELD, closure_call_wrapper_name,
     closure_inspect_wrapper_name, multi_value_split_local,
 };
 use crate::nir_arena::{
@@ -1791,19 +1792,87 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// The handle an affine resource's box holds.
+    /// The host's handle an affine resource's box holds, 0 where a guest value
+    /// backs it.
     pub(super) fn handle_of(&self, resource: WirInstr) -> WirInstr {
         WirInstr::StructGet {
             type_id: self.ctx.handle_box().clone(),
-            field_name: "value".to_string(),
+            field_name: RESOURCE_HANDLE_FIELD.to_string(),
             expr: Box::new(resource),
             result_ty: WirType::I32,
         }
     }
 
-    /// A new box holding `handle`, the object an affine resource is.
+    /// The guest value backing an affine resource's box, null for the host's
+    /// object.
+    pub(super) fn backing_in(&self, resource: WirInstr) -> WirInstr {
+        WirInstr::StructGet {
+            type_id: self.ctx.handle_box().clone(),
+            field_name: RESOURCE_BACKING_FIELD.to_string(),
+            expr: Box::new(resource),
+            result_ty: WirType::AbstractRef {
+                heap_type: WirAbstractHeapType::Eq,
+                nullable: true,
+            },
+        }
+    }
+
+    /// Whether a guest value backs the box `resource`.
+    pub(super) fn is_backed_box(&self, resource: WirInstr) -> WirInstr {
+        WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(Box::new(
+            self.backing_in(resource),
+        ))))
+    }
+
+    /// The handle the host is handed for the box `resource`. A guest value
+    /// backing it is no object of the host's, so handing one over traps
+    /// (WEP: Guest-Backed Resources).
+    pub(super) fn host_handle_of(&mut self, resource: WirInstr) -> WirInstr {
+        let (mut seq, resource) = self.rereadable_box(resource, "host_resource");
+        seq.push(WirInstr::If {
+            condition: Box::new(self.is_backed_box(resource.clone())),
+            result: None,
+            then_body: vec![WirInstr::Unreachable],
+            else_body: None,
+        });
+        seq.push(self.handle_of(resource));
+        WirInstr::Seq(seq)
+    }
+
+    /// The box `resource` as an instruction to read more than once: a local
+    /// read as it is, so a store into it reaches the place it names, which
+    /// `unbox_handle` relies on, and anything else spilled.
+    fn rereadable_box(&mut self, resource: WirInstr, what: &str) -> (Vec<WirInstr>, WirInstr) {
+        if matches!(resource, WirInstr::LocalGet { .. }) {
+            return (Vec::new(), resource);
+        }
+        let ty = WirType::Ref {
+            type_id: self.ctx.handle_box().clone(),
+            nullable: false,
+        };
+        self.spill(resource, ty, what)
+    }
+
+    /// A new box holding the host's `handle`, the object an affine resource is.
     pub(super) fn handle_box_of(&self, handle: WirInstr) -> WirInstr {
-        self.struct_new(self.ctx.handle_box().clone(), vec![handle])
+        self.struct_new(
+            self.ctx.handle_box().clone(),
+            vec![
+                handle,
+                WirInstr::RefNull {
+                    heap_type: WirAbstractHeapType::Eq,
+                },
+            ],
+        )
+    }
+
+    /// A new box holding the guest value `backing`, which stands for the host's
+    /// object.
+    pub(super) fn backed_box_of(&self, backing: WirInstr) -> WirInstr {
+        self.struct_new(
+            self.ctx.handle_box().clone(),
+            vec![WirInstr::I32Const(0), backing],
+        )
     }
 
     /// Whether a guest value backs the extern handle `handle`: no host object
@@ -1849,20 +1918,6 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// The value a resource declared without `#[cm(...)]` holds, as the `eqref`
-    /// it is held as.
-    pub(super) fn guest_backing_of(&self, object: WirInstr) -> WirInstr {
-        WirInstr::StructGet {
-            type_id: self.ctx.guest_resource().clone(),
-            field_name: BACKED_HANDLE_VALUE_FIELD.to_string(),
-            expr: Box::new(object),
-            result_ty: WirType::AbstractRef {
-                heap_type: WirAbstractHeapType::Eq,
-                nullable: false,
-            },
-        }
-    }
-
     /// The extern handle a reference to one, `reference`, reads: the cell
     /// holding it, since an `externref` holds no place to write.
     pub(super) fn extern_handle_behind(&mut self, reference: Operand) -> WirInstr {
@@ -1893,19 +1948,37 @@ impl FunctionTranslator<'_, '_> {
         self.is_handle_box(type_id) && !self.type_table.is_reference(type_id)
     }
 
-    /// Write 0 into the box `resource`, which the Component Model never issues
-    /// as a handle: index 0 of a handle table is reserved.
-    pub(super) fn zero_handle(&self, resource: WirInstr) -> WirInstr {
-        self.set_handle(resource, WirInstr::I32Const(0))
+    /// Empty the box `resource`: 0, which the Component Model never issues as a
+    /// handle (index 0 of a handle table is reserved), and no guest value.
+    pub(super) fn zero_handle(&mut self, resource: WirInstr) -> WirInstr {
+        let (mut seq, resource) = self.rereadable_box(resource, "zeroed");
+        seq.push(self.set_handle(resource.clone(), WirInstr::I32Const(0)));
+        seq.push(self.set_backing(
+            resource,
+            WirInstr::RefNull {
+                heap_type: WirAbstractHeapType::Eq,
+            },
+        ));
+        WirInstr::Seq(seq)
     }
 
     /// Write `handle` into the box `resource`.
     pub(super) fn set_handle(&self, resource: WirInstr, handle: WirInstr) -> WirInstr {
         WirInstr::StructSet {
             type_id: self.ctx.handle_box().clone(),
-            field_name: "value".to_string(),
+            field_name: RESOURCE_HANDLE_FIELD.to_string(),
             expr: Box::new(resource),
             value: Box::new(handle),
+        }
+    }
+
+    /// Write `backing` into the box `resource`.
+    pub(super) fn set_backing(&self, resource: WirInstr, backing: WirInstr) -> WirInstr {
+        WirInstr::StructSet {
+            type_id: self.ctx.handle_box().clone(),
+            field_name: RESOURCE_BACKING_FIELD.to_string(),
+            expr: Box::new(resource),
+            value: Box::new(backing),
         }
     }
 
@@ -3327,6 +3400,13 @@ impl FunctionTranslator<'_, '_> {
                 // owns the handle from then on (WEP: Affine Types). The operands
                 // are then evaluated in order before the call, so zeroing one
                 // box precedes no operand written after it.
+                // A guest value backing a box is no object of the host's: a
+                // drop of one ends there, and any other call traps on it
+                // (WEP: Guest-Backed Resources).
+                let drops = matches!(
+                    target.canonical(),
+                    Some(CanonicalIntrinsic::ResourceDrop(_))
+                );
                 let owns = args.iter().any(|a| self.is_owned_handle_box(*a));
                 let mut before = Vec::new();
                 let translated_args: Vec<WirInstr> = args
@@ -3336,7 +3416,7 @@ impl FunctionTranslator<'_, '_> {
                         let type_id = self.operand_type_id(*a);
                         if !owns {
                             return if self.is_handle_box(type_id) {
-                                self.handle_of(arg)
+                                self.host_handle_of(arg)
                             } else {
                                 arg
                             };
@@ -3349,10 +3429,15 @@ impl FunctionTranslator<'_, '_> {
                             return read;
                         }
                         let handle = self.fresh_local("cm_handle");
+                        let host_handle = if drops {
+                            self.handle_of(read.clone())
+                        } else {
+                            self.host_handle_of(read.clone())
+                        };
                         before.extend(declare_and_set_local(
                             handle.clone(),
                             WirType::I32,
-                            self.handle_of(read.clone()),
+                            host_handle,
                         ));
                         if self.is_owned_handle_box(*a) {
                             before.push(self.zero_handle(read));
@@ -3411,11 +3496,25 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     call
                 };
-                if before.is_empty() {
+                let call = if before.is_empty() {
                     call
                 } else {
                     before.push(call);
                     WirInstr::Seq(before)
+                };
+                if drops {
+                    let [dropped] = args.as_slice() else {
+                        unreachable!("`resource.drop` takes its resource alone");
+                    };
+                    let dropped = self.translate_operand(*dropped);
+                    WirInstr::If {
+                        condition: Box::new(self.is_backed_box(dropped)),
+                        result: None,
+                        then_body: Vec::new(),
+                        else_body: Some(vec![call]),
+                    }
+                } else {
+                    call
                 }
             }
 

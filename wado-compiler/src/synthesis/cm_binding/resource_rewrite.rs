@@ -29,7 +29,8 @@ use crate::type_table::TypeTable;
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmStreamPayload};
 use crate::synthesis::common::{
-    affine_handle, alloc_named_local, assign, binary, block, break_stmt, cast, cm_canonical_call,
+    affine_handle, alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast,
+    cm_canonical_call,
     entry_call, expr_stmt, i32_const, i64_const, if_stmt, internal_call, is_affine_resource,
     let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt, option_none,
     option_some, return_stmt, struct_literal, synth_span,
@@ -1766,7 +1767,9 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
 
 impl CmMethodRewriter<'_> {
     /// `r.drop()` on a resource: the canonical `resource.drop` of its
-    /// declaration, handed the box itself, which the drop zeroes.
+    /// declaration, handed the box itself, which the drop zeroes. A resource
+    /// no host implements reaches here only where no handler is ever
+    /// installed for it, and its drop then ends with the guest value it holds.
     fn rewrite_resource_drop(&self, expr: &mut TirExpr) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             unreachable!("a `cm_name` is read off a call");
@@ -1777,6 +1780,10 @@ impl CmMethodRewriter<'_> {
             .next()
             .expect("a drop takes its resource")
             .expr;
+        if self.tt.is_hostless_resource_type(receiver.type_id) {
+            *expr = builtin_call("forget", vec![receiver], TypeTable::UNIT);
+            return;
+        }
         *expr = cm_canonical_call(
             CanonicalIntrinsic::ResourceDrop(resource_decl(
                 receiver.type_id,

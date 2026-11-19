@@ -11,7 +11,7 @@ use sha2::Digest;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, RangeKind};
+use crate::ast::{AstId, Droppable, HandleClasses, RangeKind};
 use crate::compiler_item::CompilerItems;
 use crate::cut_memo::CutMemo;
 use crate::defs::{DefId, DefKind, DefTable};
@@ -151,9 +151,10 @@ pub struct TypeTable {
     /// Resources declared `#[cm(..., linearity = "unrestricted")]`, with the
     /// classes their handles carry where they declare them.
     unrestricted_resources: IndexMap<DefId, Option<HandleClasses>>,
-    /// Resources declared without `#[cm(...)]`: the program's own, whose every
-    /// handle a guest value backs.
-    guest_resources: IndexSet<DefId>,
+    /// Resources no host implements: the program's own, whose every handle a
+    /// guest value backs. Each says whether it declares a `drop` operation,
+    /// which is what releases one.
+    hostless_resources: IndexMap<DefId, Droppable>,
     /// Structs and variants declared `affine`.
     affine_decls: IndexSet<DefId>,
     /// `resource Child extends Parent`, child → parent.
@@ -302,7 +303,7 @@ impl TypeTable {
             decl_index: IndexMap::default(),
             cm_decl_index: IndexMap::default(),
             unrestricted_resources: IndexMap::default(),
-            guest_resources: IndexSet::default(),
+            hostless_resources: IndexMap::default(),
             affine_decls: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
@@ -643,15 +644,23 @@ impl TypeTable {
         self.unrestricted_resources.contains_key(&def)
     }
 
-    pub fn mark_guest_resource(&mut self, def: DefId) {
-        self.guest_resources.insert(def);
+    pub fn mark_hostless_resource(&mut self, def: DefId, droppable: Droppable) {
+        self.hostless_resources.insert(def, droppable);
     }
 
-    /// Whether `def` declares a resource without `#[cm(...)]`: the program's
-    /// own, which no host implements, so a guest value backs every handle.
+    /// Whether `def` declares a resource no host implements
+    /// ([`ast::ResourceDecl::has_host`]): the program's own, so a guest value
+    /// backs every handle.
     #[must_use]
-    pub fn is_guest_resource(&self, def: DefId) -> bool {
-        self.guest_resources.contains(&def)
+    pub fn is_hostless_resource(&self, def: DefId) -> bool {
+        self.hostless_resources.contains_key(&def)
+    }
+
+    /// Whether `def` declares a resource no host implements and no `drop`
+    /// operation, so nothing releases a handle of it.
+    #[must_use]
+    pub fn is_undroppable_hostless_resource(&self, def: DefId) -> bool {
+        self.hostless_resources.get(&def) == Some(&Droppable::No)
     }
 
     pub fn mark_affine_decl(&mut self, def: DefId) {
@@ -713,12 +722,12 @@ impl TypeTable {
             .is_some_and(|def| self.is_unrestricted_resource(def))
     }
 
-    /// Whether `ty` is a resource declared without `#[cm(...)]`, whose object
-    /// boxes the guest value backing it.
+    /// Whether `ty` is a resource no host implements, every handle of which a
+    /// guest value backs.
     #[must_use]
-    pub fn is_guest_resource_type(&self, ty: TypeId) -> bool {
+    pub fn is_hostless_resource_type(&self, ty: TypeId) -> bool {
         self.resource_def_of(ty)
-            .is_some_and(|def| self.is_guest_resource(def))
+            .is_some_and(|def| self.is_hostless_resource(def))
     }
 
     /// Whether a value of `ty` is an `externref`: an extern handle, or a
