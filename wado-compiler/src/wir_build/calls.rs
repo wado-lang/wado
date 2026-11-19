@@ -913,12 +913,12 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::Seq(seq))
             }
             "resource_backing" => {
-                let held = if !self.type_table.is_extern_handle(type_args[0]) {
-                    let object = self.translate_operand(args[0].expr);
-                    self.resource_field(object, ResourceField::Backing)
-                } else {
+                let held = if self.type_table.is_extern_handle(type_args[0]) {
                     let handle = self.extern_handle_behind(args[0].expr);
                     self.backing_of(handle)
+                } else {
+                    let object = self.translate_operand(args[0].expr);
+                    self.resource_field(object, ResourceField::Backing)
                 };
                 Some(WirInstr::RefCast {
                     type_id: self.backing_struct(type_args[1]),
