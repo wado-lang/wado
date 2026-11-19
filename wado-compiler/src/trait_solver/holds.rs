@@ -512,10 +512,13 @@ impl Query<'_> {
         }
         let through = self.bound_through_projections(&mut deferred, &mut bindings, &mut unifier);
         // A check failing where the match left a part undecided may have failed
-        // for that part alone.
+        // for that part alone, and so may one asked without the binding a pin
+        // of an answer not yet known would supply. Any other failure fails at
+        // every instance, whatever else is not yet known.
         let mut after_unknown = unifier.undecided;
+        let mut refutation_assumes = unifier.undecided;
         if !through || self.projections_refuted(&deferred, &bindings, &mut unifier) {
-            return refuted(after_unknown);
+            return refuted(refutation_assumes);
         }
         let yielded = if def.origin == ImplOrigin::Written || program.hash != Some(implemented) {
             Verdict::Fails
@@ -526,7 +529,7 @@ impl Query<'_> {
             reached_by(program, implemented, ty, def.origin.yields_to()),
             yielded,
         ]) {
-            Verdict::Holds(()) => return refuted(after_unknown),
+            Verdict::Holds(()) => return refuted(refutation_assumes),
             Verdict::Unknown => after_unknown = true,
             Verdict::Fails => {}
         }
@@ -583,7 +586,7 @@ impl Query<'_> {
                 {
                     continue;
                 }
-                return refuted(after_unknown);
+                return refuted(refutation_assumes);
             };
             let elements: Vec<SolverType> = match binding {
                 Binding::One(ty) => vec![unifier.resolve(&ty)],
@@ -597,7 +600,7 @@ impl Query<'_> {
                     self.member_next = through_member;
                     match self.holds(&peel_newtypes(program, element), copyable, &[]) {
                         Verdict::Holds(_) => {}
-                        Verdict::Fails => return refuted(after_unknown),
+                        Verdict::Fails => return refuted(refutation_assumes),
                         Verdict::Unknown => after_unknown = true,
                     }
                 }
@@ -626,12 +629,16 @@ impl Query<'_> {
                                 &mut deferred,
                                 &mut unifier,
                             ) {
-                                return refuted(after_unknown);
+                                return refuted(refutation_assumes);
                             }
                             requests.extend(answer.requests);
                         }
-                        Verdict::Fails => return refuted(after_unknown),
-                        Verdict::Unknown => after_unknown = true,
+                        Verdict::Fails => return refuted(refutation_assumes),
+                        Verdict::Unknown => {
+                            after_unknown = true;
+                            refutation_assumes |=
+                                param.pins.iter().any(|pin| pin.trait_ == bound.trait_);
+                        }
                     }
                 }
             }
@@ -647,7 +654,7 @@ impl Query<'_> {
                 self.member_next = true;
                 match self.holds(&member, implemented, &[]) {
                     Verdict::Holds(answer) => requests.extend(answer.requests),
-                    Verdict::Fails => return refuted(after_unknown),
+                    Verdict::Fails => return refuted(refutation_assumes),
                     Verdict::Unknown => after_unknown = true,
                 }
             }
@@ -655,7 +662,7 @@ impl Query<'_> {
         // A projection may name a parameter only a later pin binds, so each is
         // read in full once every answer has bound what it binds.
         if !self.projections_met(&deferred, &bindings, &mut unifier) {
-            return refuted(after_unknown || unifier.undecided);
+            return refuted(refutation_assumes || unifier.undecided);
         }
         // An impl applying only at some instances of the question's variables
         // answers only there.
@@ -1927,6 +1934,21 @@ mod tests {
             verdict(&p, &pair(list_of(var(0)), decl(POINT)), ALPHA),
             Verdict::Fails
         );
+    }
+
+    /// A bound failing at every instance refutes the impl, whatever a bound
+    /// asked before it left unknown: neither answer depends on the other.
+    #[test]
+    fn a_bound_failing_everywhere_refutes_past_one_not_yet_known() {
+        let p = Builder::default()
+            .concrete(BASE, pair(decl(POINT), decl(POINT)))
+            .impl_(ImplDef {
+                params: vec![ParamDef::bounded(vec![BASE, BETA])],
+                ..concrete(ALPHA, SolverType::Param(0))
+            })
+            .build();
+        assert_eq!(verdict(&p, &pair(var(0), var(1)), BASE), Verdict::Unknown);
+        assert_eq!(verdict(&p, &pair(var(0), var(1)), ALPHA), Verdict::Fails);
     }
 
     /// A variable never becomes a type holding itself.
