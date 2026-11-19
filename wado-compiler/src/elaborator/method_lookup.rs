@@ -3103,7 +3103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The order reads the reference as a level of the receiver's chain, so
         // it has to be put back.
         let through_ref = type_key.ref_kind().map(|kind| kind == RefKind::Mut);
-        bridge.select(
+        let (ordered, commitment) = bridge.select(
             &self.tysys,
             &self.annotate_ctx,
             self.frame_module(),
@@ -3114,7 +3114,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             required_trait
                 .and_then(|r| r.args.as_deref())
                 .unwrap_or_default(),
-        )
+        )?;
+        if let Some(commitment) = commitment {
+            self.infer_holes.note_commitment(commitment);
+        }
+        Some(ordered)
     }
 
     /// The winner among the matches the order named: the call's arguments

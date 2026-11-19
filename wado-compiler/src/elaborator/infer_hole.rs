@@ -15,6 +15,7 @@ use super::Elaborator;
 use super::call::assoc_target_slot;
 use super::infer::unify;
 use super::scope::{ParamRef, ScopeParams};
+use super::solver_bridge::Commitment;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
 use super::types::TypeError;
@@ -57,6 +58,10 @@ pub(crate) struct InferHoleTable {
     /// are typed by was a hole. An unsolved hole reports itself; a solved one
     /// came too late for the defaults, so the literal reports it.
     unwalked_defaults: Vec<UnwalkedDefaults>,
+    /// The impls calls committed to while their receivers held variables,
+    /// asked again once they settle. Recorded where selection reads the
+    /// table, so behind a cell.
+    commitments: std::cell::RefCell<Vec<Commitment>>,
 }
 
 struct UnwalkedDefaults {
@@ -86,6 +91,10 @@ struct ProjectionLink {
 impl InferHoleTable {
     pub(super) fn note_mismatch(&self, span: DiagnosticSpan) {
         self.mismatches.borrow_mut().push(span);
+    }
+
+    pub(super) fn note_commitment(&self, commitment: Commitment) {
+        self.commitments.borrow_mut().push(commitment);
     }
 }
 
@@ -140,7 +149,7 @@ impl Blame {
 
 impl InferHoleTable {
     pub(super) fn is_empty(&self) -> bool {
-        self.solutions.is_empty()
+        self.solutions.is_empty() && self.commitments.borrow().is_empty()
     }
 }
 
@@ -707,6 +716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let subst = self.pinned_hole_subst();
         self.verify_solved_hole_bounds(&subst);
+        self.verify_commitments(&subst);
         self.sweep_recorded_facts(&subst);
         self.infer_holes = InferHoleTable::default();
     }
@@ -848,6 +858,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual,
             span: link.span,
         });
+    }
+
+    /// Ask each commitment again at what its variables settled to. A variable
+    /// no hole holds belongs to no call left to answer it. A reported error can
+    /// be the very bound a commitment deferred, so only a clean program owes
+    /// the answer.
+    fn verify_commitments(&self, subst: &IndexMap<InferVarId, TypeId>) {
+        let commitments = self.infer_holes.commitments.take();
+        let Some(solver) = self.tysys.solver.as_ref() else {
+            assert!(commitments.is_empty(), "a commitment comes from the solver");
+            return;
+        };
+        if self.logger.has_errors() {
+            return;
+        }
+        let bridge = solver.borrow();
+        let solution = |var: InferVarId| subst.get(&var).copied().unwrap_or(TypeTable::ERROR);
+        for commitment in &commitments {
+            bridge.check_commitment(&self.tysys, commitment, &solution);
+        }
     }
 
     /// Verify each solved bounded hole satisfies its bound (the call-site check

@@ -1382,7 +1382,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let method = self.tysys.resolutions.defs().name(candidates[0].method_id);
         let bridge = self.tysys.solver.as_ref()?.borrow();
-        bridge.select(
+        let (ordered, commitment) = bridge.select(
             &self.tysys,
             &self.annotate_ctx,
             self.frame_module(),
@@ -1391,7 +1391,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             Some(trait_decl),
             &[],
-        )
+        )?;
+        if let Some(commitment) = commitment {
+            self.infer_holes.note_commitment(commitment);
+        }
+        Some(ordered)
     }
 
     /// The rule a method call's selection applies, over the static

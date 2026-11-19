@@ -121,6 +121,38 @@ impl SolverType {
         self.mentions_var(&|_| true)
     }
 
+    /// `self` with each variable replaced by what `var` gives for it; `None`
+    /// where `var` gives nothing for one.
+    pub fn try_map_vars(&self, var: &mut dyn FnMut(Var) -> Option<Self>) -> Option<Self> {
+        fn each(
+            inner: &[SolverType],
+            var: &mut dyn FnMut(Var) -> Option<SolverType>,
+        ) -> Option<Vec<SolverType>> {
+            inner.iter().map(|t| t.try_map_vars(var)).collect()
+        }
+        Some(match self {
+            Self::Var(v) => var(*v)?,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => self.clone(),
+            Self::Decl(head, inner) => Self::Decl(*head, each(inner, var)?),
+            Self::Tuple(inner) => Self::Tuple(each(inner, var)?),
+            Self::Ref { is_mut, inner } => Self::Ref {
+                is_mut: *is_mut,
+                inner: Box::new(inner.try_map_vars(var)?),
+            },
+            Self::Projection {
+                base,
+                trait_,
+                assoc,
+                args,
+            } => Self::Projection {
+                base: Box::new(base.try_map_vars(var)?),
+                trait_: *trait_,
+                assoc: *assoc,
+                args: each(args, var)?,
+            },
+        })
+    }
+
     /// Whether `self` is `other` once each variable of one is renamed to a
     /// variable of the other, one to one. `renaming` holds the pairs already
     /// fixed, so several types are compared under one renaming.
