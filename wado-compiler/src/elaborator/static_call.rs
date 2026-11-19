@@ -187,6 +187,12 @@ pub(super) enum StaticLookup {
         blocks: Vec<DefId>,
         trait_args: Vec<TypeId>,
     },
+    /// Several of the receiver's own blocks declare the name, and neither the
+    /// arguments nor the receiver's settled arguments separate them. The call
+    /// site asks for the receiver's arguments `message` names.
+    Unseparated {
+        message: String,
+    },
     /// The rules picked this value blanket impl. Its template is written
     /// against its receiver parameter, so the blanket resolver, not this
     /// resolution, instantiates it at the receiver.
@@ -256,6 +262,8 @@ enum Selection {
         blocks: Vec<DefId>,
         trait_args: Vec<TypeId>,
     },
+    /// Several of the receiver's own blocks, which nothing told apart.
+    Unseparated,
     None,
 }
 
@@ -386,6 +394,7 @@ impl StaticLookup {
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Unseparated { .. }
             | Self::Blanket(_)
             | Self::NotStatic => None,
         }
@@ -399,6 +408,7 @@ impl StaticLookup {
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Unseparated { .. }
             | Self::NotStatic => None,
         }
     }
@@ -412,6 +422,7 @@ impl StaticLookup {
             Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Unseparated { .. }
             | Self::Blanket(_)
             | Self::NotStatic => TypeTable::UNKNOWN,
         }
@@ -427,6 +438,7 @@ impl StaticLookup {
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Unseparated { .. }
             | Self::Blanket(_)
             | Self::NotStatic => (CalleeParams::default(), false),
         }
@@ -716,6 +728,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 blocks,
                 trait_args,
             }),
+            Selection::Unseparated => Some(self.unseparated_lookup(
+                receiver,
+                method_name,
+                declaring_args,
+            )),
             Selection::None => None,
         }
     }
@@ -1226,6 +1243,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.report_blocks_tied(blocks, trait_args, receiver, span);
                 return true;
             }
+            StaticLookup::Unseparated { message } => TypeError::CannotInferType {
+                message: message.clone(),
+                span,
+            },
             StaticLookup::Found(_)
             | StaticLookup::Overloaded { .. }
             | StaticLookup::Blanket(_)
@@ -1353,6 +1374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 Selection::One(Box::new(candidates.remove(0)))
             }
+            _ if candidates.iter().all(|c| c.supply.is_none()) => Selection::Unseparated,
             // One trait, several impls, and no argument that separated them.
             _ => Selection::Overloaded(
                 candidates
@@ -1514,6 +1536,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         StaticLookup::Overloaded {
             return_type: agreed,
             traits,
+        }
+    }
+
+    /// The report for the receiver's own blocks that nothing told apart: the
+    /// receiver's arguments `declaring_args` leaves open are what would.
+    fn unseparated_lookup(
+        &self,
+        receiver: &ReceiverId,
+        method_name: &str,
+        declaring_args: &[TypeId],
+    ) -> StaticLookup {
+        let params = receiver
+            .key
+            .decl()
+            .and_then(|def| self.type_lookup().declared_generic_params(def))
+            .expect("blocks told apart only by their targets' arguments target a generic type");
+        let scope = self.scope_type_param_ids();
+        let names: Vec<String> = params
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| {
+                declaring_args
+                    .get(i)
+                    .is_none_or(|&arg| self.slot_unanswered(arg, &scope))
+            })
+            .map(|(_, param)| param.name.clone())
+            .collect();
+        assert!(
+            !names.is_empty(),
+            "two inherent blocks reaching one instance are rejected where declared"
+        );
+        let head = receiver.spelled(self.tysys.resolutions.defs());
+        StaticLookup::Unseparated {
+            message: TypeError::cannot_infer_message(
+                &names,
+                &format!("`{head}::{method_name}`"),
+                &format!("`{head}::<...>::{method_name}()`"),
+            ),
         }
     }
 

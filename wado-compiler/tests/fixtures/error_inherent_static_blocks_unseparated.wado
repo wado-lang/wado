@@ -1,0 +1,28 @@
+// Two inherent blocks on one head declare a static `make`, each pinning a
+// different argument. A bare spelling that settles neither argument cannot
+// pick one, so it asks for them rather than leaving the result untyped.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T: Default> Pair<T, i32> {
+    fn make() -> Pair<T, i32> {
+        return Pair { a: T::default(), b: 32 };
+    }
+}
+
+impl<T: Default> Pair<T, i64> {
+    fn make() -> Pair<T, i64> {
+        return Pair { a: T::default(), b: 64 };
+    }
+}
+
+test {
+    let q = Pair::make();
+    assert q.b == 64;
+}
+
+__DATA__
+{"compile_error": ":23:13: analysis error: cannot infer type parameter `A`, `B` of `Pair::make`; add a turbofish (`Pair::<...>::make()`) or a type annotation"}

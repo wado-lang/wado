@@ -2087,8 +2087,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // re-check resolves a different declaration than the call was
                 // mangled to.
                 let typed = receiver.at_type(Some(receiver_type));
-                let resolved =
-                    self.static_callee_params(&typed, suffix, &args, (None, &[]), expected_type);
+                let resolved = self.resolve_static_callee(StaticQuery {
+                    arg_types: &args,
+                    receiver_args: &receiver_args,
+                    expected_return: expected_type,
+                    ..StaticQuery::of(&typed, suffix)
+                });
                 if self.report_unresolved_static(&resolved, suffix, &args, call.span) {
                     return TypeTable::ERROR;
                 }
