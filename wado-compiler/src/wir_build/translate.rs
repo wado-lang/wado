@@ -17,10 +17,10 @@ use crate::type_table::TypeTable;
 use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::{SplitParam, WirContext};
+use super::types::ResourceField;
 use crate::canonical::CanonicalIntrinsic;
 use crate::name::{
-    BACKED_HANDLE_VALUE_FIELD, CELL_FIELD, MangledName, RESOURCE_BACKING_FIELD,
-    RESOURCE_HANDLE_FIELD, closure_call_wrapper_name,
+    BACKED_HANDLE_VALUE_FIELD, CELL_FIELD, MangledName, closure_call_wrapper_name,
     closure_inspect_wrapper_name, multi_value_split_local,
 };
 use crate::nir_arena::{
@@ -1792,35 +1792,41 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// The host's handle an affine resource's box holds, 0 where a guest value
-    /// backs it.
-    pub(super) fn handle_of(&self, resource: WirInstr) -> WirInstr {
+    /// Field `field` of an affine resource's box `resource`.
+    pub(super) fn resource_field(&self, resource: WirInstr, field: ResourceField) -> WirInstr {
         WirInstr::StructGet {
             type_id: self.ctx.handle_box().clone(),
-            field_name: RESOURCE_HANDLE_FIELD.to_string(),
+            field_name: field.name().to_string(),
             expr: Box::new(resource),
-            result_ty: WirType::I32,
+            result_ty: field.ty(),
         }
     }
 
-    /// The guest value backing an affine resource's box, null for the host's
-    /// object.
-    pub(super) fn backing_in(&self, resource: WirInstr) -> WirInstr {
-        WirInstr::StructGet {
+    /// Write `value` into field `field` of the box `resource`.
+    pub(super) fn set_resource_field(
+        &self,
+        resource: WirInstr,
+        field: ResourceField,
+        value: WirInstr,
+    ) -> WirInstr {
+        WirInstr::StructSet {
             type_id: self.ctx.handle_box().clone(),
-            field_name: RESOURCE_BACKING_FIELD.to_string(),
+            field_name: field.name().to_string(),
             expr: Box::new(resource),
-            result_ty: WirType::AbstractRef {
-                heap_type: WirAbstractHeapType::Eq,
-                nullable: true,
-            },
+            value: Box::new(value),
         }
+    }
+
+    /// The host's handle an affine resource's box holds, 0 where a guest value
+    /// backs it.
+    pub(super) fn handle_of(&self, resource: WirInstr) -> WirInstr {
+        self.resource_field(resource, ResourceField::Handle)
     }
 
     /// Whether a guest value backs the box `resource`.
     pub(super) fn is_backed_box(&self, resource: WirInstr) -> WirInstr {
         WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(Box::new(
-            self.backing_in(resource),
+            self.resource_field(resource, ResourceField::Backing),
         ))))
     }
 
@@ -1841,14 +1847,15 @@ impl FunctionTranslator<'_, '_> {
 
     /// The box `resource` as an instruction to read more than once: a local
     /// read as it is, so a store into it reaches the place it names, which
-    /// `unbox_handle` relies on, and anything else spilled.
+    /// `unbox_handle` relies on, and anything else spilled. The spill is
+    /// nullable, since a field holding a resource is null once moved out of.
     fn rereadable_box(&mut self, resource: WirInstr, what: &str) -> (Vec<WirInstr>, WirInstr) {
         if matches!(resource, WirInstr::LocalGet { .. }) {
             return (Vec::new(), resource);
         }
         let ty = WirType::Ref {
             type_id: self.ctx.handle_box().clone(),
-            nullable: false,
+            nullable: true,
         };
         self.spill(resource, ty, what)
     }
@@ -1857,12 +1864,7 @@ impl FunctionTranslator<'_, '_> {
     pub(super) fn handle_box_of(&self, handle: WirInstr) -> WirInstr {
         self.struct_new(
             self.ctx.handle_box().clone(),
-            vec![
-                handle,
-                WirInstr::RefNull {
-                    heap_type: WirAbstractHeapType::Eq,
-                },
-            ],
+            vec![handle, ResourceField::Backing.empty()],
         )
     }
 
@@ -1871,7 +1873,7 @@ impl FunctionTranslator<'_, '_> {
     pub(super) fn backed_box_of(&self, backing: WirInstr) -> WirInstr {
         self.struct_new(
             self.ctx.handle_box().clone(),
-            vec![WirInstr::I32Const(0), backing],
+            vec![ResourceField::Handle.empty(), backing],
         )
     }
 
@@ -1952,34 +1954,10 @@ impl FunctionTranslator<'_, '_> {
     /// handle (index 0 of a handle table is reserved), and no guest value.
     pub(super) fn zero_handle(&mut self, resource: WirInstr) -> WirInstr {
         let (mut seq, resource) = self.rereadable_box(resource, "zeroed");
-        seq.push(self.set_handle(resource.clone(), WirInstr::I32Const(0)));
-        seq.push(self.set_backing(
-            resource,
-            WirInstr::RefNull {
-                heap_type: WirAbstractHeapType::Eq,
-            },
-        ));
+        for field in [ResourceField::Handle, ResourceField::Backing] {
+            seq.push(self.set_resource_field(resource.clone(), field, field.empty()));
+        }
         WirInstr::Seq(seq)
-    }
-
-    /// Write `handle` into the box `resource`.
-    pub(super) fn set_handle(&self, resource: WirInstr, handle: WirInstr) -> WirInstr {
-        WirInstr::StructSet {
-            type_id: self.ctx.handle_box().clone(),
-            field_name: RESOURCE_HANDLE_FIELD.to_string(),
-            expr: Box::new(resource),
-            value: Box::new(handle),
-        }
-    }
-
-    /// Write `backing` into the box `resource`.
-    pub(super) fn set_backing(&self, resource: WirInstr, backing: WirInstr) -> WirInstr {
-        WirInstr::StructSet {
-            type_id: self.ctx.handle_box().clone(),
-            field_name: RESOURCE_BACKING_FIELD.to_string(),
-            expr: Box::new(resource),
-            value: Box::new(backing),
-        }
     }
 
     /// Translate `*r = v` for an in-place aggregate referent by copying `v` into

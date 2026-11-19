@@ -1049,8 +1049,7 @@ impl<'a> Reify<'a> {
                 }
                 Item::Resource(resource_decl) => {
                     tir_module.add_resource(self.reify_resource_decl(resource_decl));
-                    for method in
-                        default_impl_methods(&resource_decl.name, &resource_decl.methods)
+                    for method in default_impl_methods(&resource_decl.name, &resource_decl.methods)
                     {
                         tir_module.add_function(self.reify_function(&method));
                     }

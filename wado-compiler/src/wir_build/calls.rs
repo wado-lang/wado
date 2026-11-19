@@ -12,11 +12,12 @@ use crate::name::{BACKED_HANDLE_CLASS_FIELD, ExternHostQuery, MangledName, cm_im
 use crate::rarity::Mark;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
-use crate::wir::{WirAbstractHeapType, WirInstr, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
+use super::types::ResourceField;
 use crate::lower::plan::value_copy;
 use crate::lower::wide_int_literal::{WideIntCtor, classify_ctor};
 use crate::nir;
@@ -894,7 +895,7 @@ impl FunctionTranslator<'_, '_> {
                     return Some(WirInstr::RefTest {
                         type_id: backing,
                         nullable: false,
-                        expr: Box::new(self.backing_in(object)),
+                        expr: Box::new(self.resource_field(object, ResourceField::Backing)),
                     });
                 }
                 let handle = self.extern_handle_behind(args[0].expr);
@@ -914,7 +915,7 @@ impl FunctionTranslator<'_, '_> {
             "resource_backing" => {
                 let held = if !self.type_table.is_extern_handle(type_args[0]) {
                     let object = self.translate_operand(args[0].expr);
-                    self.backing_in(object)
+                    self.resource_field(object, ResourceField::Backing)
                 } else {
                     let handle = self.extern_handle_behind(args[0].expr);
                     self.backing_of(handle)
@@ -957,26 +958,24 @@ impl FunctionTranslator<'_, '_> {
             "swap_handles" => {
                 let box_ty = self.wir_type(self.operand_type_id(args[0].expr));
                 let (mut seq, [a, b]) = self.spill_operands(args, [box_ty.clone(), box_ty]);
-                let held = self.fresh_local("held");
-                seq.extend(declare_and_set_local(
-                    held.clone(),
-                    WirType::I32,
-                    self.handle_of(a.clone()),
-                ));
-                seq.push(self.set_handle(a.clone(), self.handle_of(b.clone())));
-                seq.push(self.set_handle(b.clone(), local_get(&held, &WirType::I32)));
-                let backing_ty = WirType::AbstractRef {
-                    heap_type: WirAbstractHeapType::Eq,
-                    nullable: true,
-                };
-                let held_backing = self.fresh_local("held_backing");
-                seq.extend(declare_and_set_local(
-                    held_backing.clone(),
-                    backing_ty.clone(),
-                    self.backing_in(a.clone()),
-                ));
-                seq.push(self.set_backing(a, self.backing_in(b.clone())));
-                seq.push(self.set_backing(b, local_get(&held_backing, &backing_ty)));
+                for field in [ResourceField::Handle, ResourceField::Backing] {
+                    let held = self.fresh_local("held");
+                    seq.extend(declare_and_set_local(
+                        held.clone(),
+                        field.ty(),
+                        self.resource_field(a.clone(), field),
+                    ));
+                    seq.push(self.set_resource_field(
+                        a.clone(),
+                        field,
+                        self.resource_field(b.clone(), field),
+                    ));
+                    seq.push(self.set_resource_field(
+                        b.clone(),
+                        field,
+                        local_get(&held, &field.ty()),
+                    ));
+                }
                 Some(WirInstr::Seq(seq))
             }
             "zero_handle" => {

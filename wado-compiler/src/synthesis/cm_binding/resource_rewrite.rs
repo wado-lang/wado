@@ -30,10 +30,9 @@ use crate::type_table::TypeTable;
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmStreamPayload};
 use crate::synthesis::common::{
     affine_handle, alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast,
-    cm_canonical_call,
-    entry_call, expr_stmt, i32_const, i64_const, if_stmt, internal_call, is_affine_resource,
-    let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt, option_none,
-    option_some, return_stmt, struct_literal, synth_span,
+    cm_canonical_call, entry_call, expr_stmt, i32_const, i64_const, if_stmt, internal_call,
+    is_affine_resource, let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt,
+    option_none, option_some, return_stmt, struct_literal, synth_span,
 };
 
 use super::synthesize_lift;

@@ -264,7 +264,7 @@ impl Scan<'_> {
                 }
             }
             WirInstr::StructNew { type_id, fields } if self.places.is_box(type_id) => {
-                for field in fields.iter() {
+                for field in fields {
                     self.consume(field, Sink::Escape);
                 }
                 if !is_unbacked(fields) {
@@ -281,8 +281,8 @@ impl Scan<'_> {
                 expr,
                 value,
             } if self.places.is_box(type_id) => {
-                let zeroes_place =
-                    is_empty_field(field_name, value) && matches!(**expr, WirInstr::LocalGet { .. });
+                let zeroes_place = is_empty_field(field_name, value)
+                    && matches!(**expr, WirInstr::LocalGet { .. });
                 self.consume(
                     expr,
                     if zeroes_place {

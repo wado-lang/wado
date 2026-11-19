@@ -21,8 +21,9 @@ use crate::name::{
     effect_default_impl_name, effect_namespace, mangle_generic_name, minted_name,
 };
 use crate::package::Package;
+use crate::synthesis::cm_binding::RESOURCE_DROP;
 use crate::synthesis::common::{
-    alloc_local, alloc_named_local, assign, builtin_call, expr_stmt, let_mut_stmt, local_ref, option_none,
+    alloc_local, alloc_named_local, assign, expr_stmt, let_mut_stmt, local_ref, option_none,
     option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
 use crate::tir::{
@@ -879,7 +880,14 @@ fn build_dispatch_wrapper_function(
                 span,
             ));
         }
-    } else if is_resource && let Some(cm_name) = &op.cm_name {
+    } else if is_resource
+        && let Some(cm_name) = op.cm_name.as_deref().or_else(|| {
+            // A drop of a resource no host implements binds no import, but
+            // `cm_binding` ends it with the guest value it holds.
+            (op_name == "drop" && type_table.borrow().is_hostless_resource(effect.def()))
+                .then_some(RESOURCE_DROP)
+        })
+    {
         let placeholder_call = build_resource_fallback_call(
             cm_name,
             effect,
@@ -929,21 +937,6 @@ fn build_dispatch_wrapper_function(
             },
             span,
         ));
-    } else if is_resource
-        && op_name == "drop"
-        && type_table.borrow().is_hostless_resource(effect.def())
-    {
-        // No host object stands behind a handle of a resource no host
-        // implements, so releasing it unhandled ends with the guest value it
-        // holds. `forget` keeps the drop of `this` from coming back here.
-        let [this] = arg_exprs.as_slice() else {
-            unreachable!("a `drop` takes its resource alone");
-        };
-        else_stmts.push(TirStmt::new(
-            TirStmtKind::Expr(builtin_call("forget", vec![this.clone()], TypeTable::UNIT)),
-            span,
-        ));
-        else_stmts.push(TirStmt::new(TirStmtKind::Return { value: None }, span));
     } else {
         // Nothing answers with no handler installed: an operation of a user
         // interface without a default, of a resource no host implements, or

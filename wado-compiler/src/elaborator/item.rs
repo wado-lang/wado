@@ -2397,8 +2397,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // An operation of a resource the host implements is a CM import in
             // every case; an effect operation only when it carries the
             // attribute.
-            let cm_backed =
-                host_resource || method.attrs.iter().any(|a| a.cm_boundary.is_some());
+            let cm_backed = host_resource || method.attrs.iter().any(|a| a.cm_boundary.is_some());
             // A resource method's `&self` becomes the CM adapter's first
             // parameter; an effect operation is called as `E::op(args)`.
             let receiver = (!is_resource)

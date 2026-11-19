@@ -12,7 +12,7 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin,
-    WirMeta, WirName, WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantCase,
+    WirInstr, WirMeta, WirName, WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantCase,
     WirVariantRepr, WirVariantType,
 };
 
@@ -22,8 +22,8 @@ use super::context::WirContext;
 use crate::name::{
     BACKED_HANDLE_CLASS_FIELD, BACKED_HANDLE_STRUCT, BACKED_HANDLE_VALUE_FIELD, CELL_FIELD,
     RESOURCE_BACKING_FIELD, RESOURCE_HANDLE_FIELD, RESOURCE_OBJECT_STRUCT,
-    mangle_builtin_array_type, mangle_generic_name,
-    wir_enum_type_key, wir_tuple_type_key, wir_type_key, wir_variant_case_key,
+    mangle_builtin_array_type, mangle_generic_name, wir_enum_type_key, wir_tuple_type_key,
+    wir_type_key, wir_variant_case_key,
 };
 
 /// What a concrete Wado type's WIR type is built from.
@@ -405,6 +405,45 @@ fn cell_field_type(ctx: &WirContext<'_>, type_table: &TypeTable, payload: TypeId
     ctx.unboxed_slot_type(type_table, payload, ty)
 }
 
+/// A field of `$Resource`, the struct an affine resource is. Each is mutable,
+/// since a store through a reference to the resource writes into the object.
+#[derive(Clone, Copy)]
+pub(super) enum ResourceField {
+    /// The host's handle, 0 where there is none.
+    Handle,
+    /// The guest value backing the resource, null for the host's object.
+    Backing,
+}
+
+impl ResourceField {
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            Self::Handle => RESOURCE_HANDLE_FIELD,
+            Self::Backing => RESOURCE_BACKING_FIELD,
+        }
+    }
+
+    pub(super) fn ty(self) -> WirType {
+        match self {
+            Self::Handle => WirType::I32,
+            Self::Backing => WirType::AbstractRef {
+                heap_type: WirAbstractHeapType::Eq,
+                nullable: true,
+            },
+        }
+    }
+
+    /// What the field holds in a box holding nothing.
+    pub(super) fn empty(self) -> WirInstr {
+        match self {
+            Self::Handle => WirInstr::I32Const(0),
+            Self::Backing => WirInstr::RefNull {
+                heap_type: WirAbstractHeapType::Eq,
+            },
+        }
+    }
+}
+
 /// The struct an affine resource is (WEP: Affine Types).
 fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
     let module_source = ModuleSource::prelude();
@@ -413,21 +452,14 @@ fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
             name: WirName { fq },
-            fields: vec![
-                WirField {
-                    name: RESOURCE_HANDLE_FIELD.to_string(),
-                    ty: WirType::I32,
+            fields: [ResourceField::Handle, ResourceField::Backing]
+                .into_iter()
+                .map(|field| WirField {
+                    name: field.name().to_string(),
+                    ty: field.ty(),
                     mutable: true,
-                },
-                WirField {
-                    name: RESOURCE_BACKING_FIELD.to_string(),
-                    ty: WirType::AbstractRef {
-                        heap_type: WirAbstractHeapType::Eq,
-                        nullable: true,
-                    },
-                    mutable: true,
-                },
-            ],
+                })
+                .collect(),
             meta: WirMeta {
                 module_source: Some(module_source),
                 ..WirMeta::default()

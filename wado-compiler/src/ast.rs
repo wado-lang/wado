@@ -2110,7 +2110,6 @@ pub fn declares_extern_handle(attrs: &[Attribute]) -> bool {
         .any(|a| a.name == CM && a.kv_value("repr") == Some(EXTERNREF_REPR))
 }
 
-
 /// The class numbers `#[cm(..., classes = "lo..=hi")]` gives a resource's
 /// handles: its own is `lo`, the rest belong to the resources extending it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
