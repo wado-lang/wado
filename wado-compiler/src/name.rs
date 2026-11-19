@@ -880,6 +880,10 @@ pub const BACKED_HANDLE_STRUCT: &str = "$BackedHandle";
 pub const BACKED_HANDLE_CLASS_FIELD: &str = "class";
 pub const BACKED_HANDLE_VALUE_FIELD: &str = "value";
 
+/// The WIR struct a resource declared without `#[cm(...)]` is: the object
+/// holding the guest value backing it, in its `value` field.
+pub const GUEST_RESOURCE_STRUCT: &str = "$GuestResource";
+
 /// The object of one field, `value`, that a reference to a primitive, an enum,
 /// a variant, a function or another reference points at.
 pub const CELL_STRUCT: &str = "$Cell";

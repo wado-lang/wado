@@ -65,6 +65,9 @@ pub struct WirContext<'a> {
     /// The struct behind an extern handle a guest value backs. Set beside
     /// `handle_box`.
     pub backed_handle: Option<WirTypeId>,
+    /// `$GuestResource`, the object a resource declared without `#[cm(...)]`
+    /// is. Set beside `handle_box`.
+    pub guest_resource: Option<WirTypeId>,
     /// Each cell struct by [`TypeTable::cell_struct_name`].
     pub cell_type_map: IndexMap<String, WirTypeId>,
     /// What [`TypeTable::holds_affine_resource`] has answered, by type.
@@ -309,6 +312,7 @@ impl<'a> WirContext<'a> {
             wado_types: IndexMap::default(),
             handle_box: None,
             backed_handle: None,
+            guest_resource: None,
             cell_type_map: IndexMap::default(),
             affine: TypeMemo::default(),
             variant_case_info: IndexMap::default(),
@@ -727,6 +731,12 @@ impl<'a> WirContext<'a> {
             .expect("`$BackedHandle` registers before any type is looked up")
     }
 
+    pub fn guest_resource(&self) -> &WirTypeId {
+        self.guest_resource
+            .as_ref()
+            .expect("`$GuestResource` registers before any type is looked up")
+    }
+
     /// Convert a TIR `TypeId` to a `WirType`. Registration reserves every
     /// concrete type before it defines any, so a miss is a type registration
     /// never saw.
@@ -863,8 +873,10 @@ impl<'a> WirContext<'a> {
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Resource { .. } => {
-                if type_table.is_backable_resource(type_id) {
+                if type_table.is_extern_handle(type_id) {
                     WirType::EXTERN
+                } else if type_table.is_guest_resource_type(type_id) {
+                    Self::ref_to(self.guest_resource())
                 } else {
                     Self::ref_to(self.handle_box())
                 }

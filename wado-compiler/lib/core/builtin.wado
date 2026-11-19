@@ -779,26 +779,27 @@ internal fn resource_handle<affine R>(r: &R) -> i32;
 #[side_effect(opaque)]
 internal fn zero_handle<R>(r: &R);
 
-/// The extern handle of type `R` that `value` backs, carrying `R`'s own class.
-/// The handle keeps the value itself, and may hand it to the host.
+/// The handle of the backable resource `R` that `value` backs. An extern
+/// handle carries `R`'s own class, and may be handed to the host.
 #[storage(opaque)]
 #[side_effect(none)]
-internal fn extern_handle_backed_by<R, T>(value: T) -> R;
+internal fn resource_backed_by<affine R, T>(value: T) -> R;
 
 /// Whether a guest value backs `handle`, rather than a host object.
 #[storage(none)]
 #[side_effect(none)]
 internal fn extern_handle_is_backed<R>(handle: R) -> bool;
 
-/// Whether a `T` backs `handle`.
+/// Whether a `T` backs the handle of the backable resource `R`.
 #[storage(none)]
 #[side_effect(none)]
-internal fn extern_handle_is_backed_by<R, T>(handle: R) -> bool;
+internal fn resource_is_backed_by<affine R, T>(handle: &R) -> bool;
 
-/// The `T` backing `handle`. Traps unless a `T` backs it.
+/// The `T` backing the handle of the backable resource `R`. Traps unless a `T`
+/// backs it.
 #[storage(opaque)]
 #[side_effect(trap)]
-internal fn extern_handle_backing<R, T>(handle: R) -> &mut T;
+internal fn resource_backing<affine R, T>(handle: &R) -> &mut T;
 
 /// The class a backed `handle` carries. Traps on a host object.
 #[storage(none)]

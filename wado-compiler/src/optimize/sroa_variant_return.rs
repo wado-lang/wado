@@ -938,9 +938,9 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
 }
 
 /// Whether a resource is a reference at Wasm level rather than an `i32`
-/// handle: a resource object, or one held as an `externref`.
+/// handle: a resource object, or an extern handle.
 fn is_reference_resource(type_id: TypeId, type_table: &TypeTable) -> bool {
-    type_table.is_resource_object(type_id) || type_table.is_backable_resource(type_id)
+    type_table.is_resource_object(type_id) || type_table.is_extern_handle(type_id)
 }
 
 /// Whether a type is a non-nullable GC reference at Wasm level — the payload

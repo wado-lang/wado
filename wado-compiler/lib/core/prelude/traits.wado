@@ -815,7 +815,7 @@ pub trait Backable: Resource with () {
 /// backed by a value of the guest. Only a `RefMut` type backs one: a reference
 /// to any other is a cell, which carries neither the value's identity nor its
 /// type.
-pub trait Backing with () {
+pub affine trait Backing with () {
     /// A new handle holding `value`, which only the handle reaches from here
     /// on. Each call makes a handle equal to no other.
     fn backed_by<T: RefMut>(value: T) -> Self;
@@ -826,14 +826,14 @@ pub trait Backing with () {
     fn backing<T: RefMut>(&self) -> Option<&mut T>;
 }
 
-impl<R: Backable> Backing for R {
+impl<affine R: Backable> Backing for R {
     fn backed_by<T: RefMut>(value: T) -> R {
-        return builtin::extern_handle_backed_by::<R, T>(value);
+        return builtin::resource_backed_by::<R, T>(value);
     }
 
     fn backing<T: RefMut>(&self) -> Option<&mut T> {
-        if builtin::extern_handle_is_backed_by::<R, T>(*self) {
-            return Option::Some(builtin::extern_handle_backing::<R, T>(*self));
+        if builtin::resource_is_backed_by::<R, T>(self) {
+            return Option::Some(builtin::resource_backing::<R, T>(self));
         }
         return null;
     }

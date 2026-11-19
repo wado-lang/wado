@@ -696,13 +696,13 @@ impl TypeTable {
             })
     }
 
-    /// Whether `ty` is an affine resource of the Component Model, which the
-    /// guest holds as a GC object boxing its `i32` handle.
+    /// Whether `ty` is an affine resource, which the guest holds as a GC object
+    /// boxing its `i32` handle, or the guest value backing it where no host
+    /// implements the resource.
     #[must_use]
     pub fn is_resource_object(&self, ty: TypeId) -> bool {
-        self.resource_def_of(ty).is_some_and(|def| {
-            !self.is_unrestricted_resource(def) && !self.is_guest_resource(def)
-        })
+        self.resource_def_of(ty)
+            .is_some_and(|def| !self.is_unrestricted_resource(def))
     }
 
     /// Whether `ty` is an extern handle: one `externref`, the host's object or
@@ -713,14 +713,12 @@ impl TypeTable {
             .is_some_and(|def| self.is_unrestricted_resource(def))
     }
 
-    /// Whether `ty` is a resource held as one `externref` of a backing struct
-    /// where it is not the host's object: an extern handle, or a resource
-    /// declared without `#[cm(...)]`, which only a guest value backs.
+    /// Whether `ty` is a resource declared without `#[cm(...)]`, whose object
+    /// boxes the guest value backing it.
     #[must_use]
-    pub fn is_backable_resource(&self, ty: TypeId) -> bool {
-        self.resource_def_of(ty).is_some_and(|def| {
-            self.is_unrestricted_resource(def) || self.is_guest_resource(def)
-        })
+    pub fn is_guest_resource_type(&self, ty: TypeId) -> bool {
+        self.resource_def_of(ty)
+            .is_some_and(|def| self.is_guest_resource(def))
     }
 
     /// Whether a value of `ty` is an `externref`: an extern handle, or a
@@ -730,7 +728,7 @@ impl TypeTable {
     pub fn is_externref(&self, ty: TypeId) -> bool {
         let head = self.representation_head(ty);
         let ResolvedType::Variant { def, type_args } = self.get(head) else {
-            return self.is_backable_resource(head);
+            return self.is_extern_handle(head);
         };
         let Some(payloads) = self.variant_instance_payloads(*def, type_args) else {
             return false;
@@ -738,7 +736,7 @@ impl TypeTable {
         let [a, b] = payloads[..] else {
             return false;
         };
-        let holds_handle = |ty| self.is_backable_resource(self.representation_head(ty));
+        let holds_handle = |ty| self.is_extern_handle(self.representation_head(ty));
         (a == Self::UNIT && holds_handle(b)) || (b == Self::UNIT && holds_handle(a))
     }
 
@@ -1045,9 +1043,7 @@ impl TypeTable {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => !self.is_stackless(ty),
             // An extern handle is an `externref`, which holds no place to
             // write. An affine resource is its own box.
-            ResolvedType::Resource { .. } => {
-                self.is_backable_resource(self.representation_head(ty))
-            }
+            ResolvedType::Resource { .. } => self.is_extern_handle(self.representation_head(ty)),
             _ => false,
         }
     }

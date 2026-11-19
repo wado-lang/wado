@@ -1849,6 +1849,35 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
+    /// The value a resource declared without `#[cm(...)]` holds, as the `eqref`
+    /// it is held as.
+    pub(super) fn guest_backing_of(&self, object: WirInstr) -> WirInstr {
+        WirInstr::StructGet {
+            type_id: self.ctx.guest_resource().clone(),
+            field_name: BACKED_HANDLE_VALUE_FIELD.to_string(),
+            expr: Box::new(object),
+            result_ty: WirType::AbstractRef {
+                heap_type: WirAbstractHeapType::Eq,
+                nullable: false,
+            },
+        }
+    }
+
+    /// The extern handle a reference to one, `reference`, reads: the cell
+    /// holding it, since an `externref` holds no place to write.
+    pub(super) fn extern_handle_behind(&mut self, reference: Operand) -> WirInstr {
+        let WirType::Ref { type_id: cell, .. } = self.wir_type(self.operand_type_id(reference))
+        else {
+            panic!("a reference to an extern handle is a cell");
+        };
+        WirInstr::StructGet {
+            type_id: cell,
+            field_name: CELL_FIELD.to_string(),
+            expr: Box::new(self.translate_operand(reference)),
+            result_ty: WirType::EXTERN,
+        }
+    }
+
     /// The struct a value of the `RefMut` type `backing` is.
     pub(super) fn backing_struct(&self, backing: TypeId) -> WirTypeId {
         match self.wir_type(backing) {
