@@ -178,12 +178,14 @@ fn "licm_reload_hoist_pays.wado/run"() with Stdout {
         is_negative_102 = is_negative_102 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($sroa_t_h1_256, $load_0, 0, is_negative_102);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h1_256);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h0_255);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_t_h1_256);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_255);
+    }
 }
 
 fn "licm_reload_hoist_pays.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

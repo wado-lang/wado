@@ -1012,25 +1012,25 @@ fn "result_unit_cm_variant_passthrough.wado/write_helper$spec0"(dir, path, conte
                 $vc_payload_36;
             } else {
                 path = ref.as_non_null($vc_payload_36);
-                struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = path.repr; $load_0 = path.used; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($load_0)), 0, $array_clone_src_4, 0, $load_0); $array_clone_dst_5, used: $load_0 };
+                struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_7: ref Array<u8>; $array_clone_src_7 = path.repr; $load_0 = path.used; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>($load_0)), 0, $array_clone_src_7, 0, $load_0); $array_clone_dst_8, used: $load_0 };
             }) };
         });
     } else {
         dir = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(opened).payload_0;
-        $array_clone_src_4 = content.repr;
+        $array_clone_src_7 = content.repr;
         $load_0 = 0;
-        $array_clone_dst_5 = local.tee result(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }).repr;
+        $array_clone_dst_8 = local.tee result(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }).repr;
         b106: block {
             l107: loop {
                 break_if b106 $load_0 >= 5;
-                byte = builtin::array_get_value<u8>($array_clone_src_4, $load_0);
+                byte = builtin::array_get_value<u8>($array_clone_src_7, $load_0);
                 $load_0 = $load_0 + 1;
-                if @unlikely(local.tee used_39(result.used) >= builtin::array_len($array_clone_dst_5)) {
+                if @unlikely(local.tee used_39(result.used) >= builtin::array_len($array_clone_dst_8)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(result);
-                    $array_clone_dst_5 = result.repr;
+                    $array_clone_dst_8 = result.repr;
                 }
-                builtin::array_set_u8($array_clone_dst_5, used_39, byte);
+                builtin::array_set_u8($array_clone_dst_8, used_39, byte);
                 result.used = used_39 + 1;
                 continue l107;
             };
@@ -1039,12 +1039,14 @@ fn "result_unit_cm_variant_passthrough.wado/write_helper$spec0"(dir, path, conte
         byte = builtin::i32_wrap_i64($cm_pair_17 >> 32_i64);
         $load_0 = "result_unit_cm_variant_passthrough.wado/$cm_binding__wasi:filesystem/types@0.3.0#[method]descriptor.write-via-stream"(dir, $load_0, 0_i64);
         drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(byte, result.repr, result.used));
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; byte);
-        "wasi/future-drop-readable:transmission-wasi:filesystem/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $load_0);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"(byte);
+        }
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/future-drop-readable:transmission-wasi:filesystem/types.wado#ErrorCode"($load_0);
+        }
         if ref.is_null(dir) == 0 {
             if ref.is_null(dir.backing) == 0 {
             } else {
@@ -1361,9 +1363,13 @@ fn "core:prelude/types.wado/drop_resolved"(subtask) {
         builtin::array_set<ref "core:prelude/types.wado//Resolution">($load_2, $mv$$match_7$0, ref.null none);
     } else {
     }
-    "wasi/subtask-drop"(if @unlikely(ref.is_null(subtask.backing) == 0) {
-        unreachable;
-    }; subtask.value);
+    if ref.is_null(subtask.backing) == 0 {
+    } else {
+        $mv$$match_7$0 = subtask.value;
+        subtask.value = 0;
+        subtask.backing = ref.null eq;
+        "wasi/subtask-drop"($mv$$match_7$0);
+    }
 }
 
 fn "core:prelude/types.wado/$template_segment$core:prelude/types.wado/$tmpl$ac8fec2d6428d13b"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, index) {
@@ -1492,9 +1498,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -1507,9 +1514,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -2807,9 +2815,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
             continue l369;
         };
     };
-    "wasi/waitable-set-drop"(if @unlikely(ref.is_null($mv$self$raw.backing) == 0) {
-        unreachable;
-    }; $mv$self$raw.value);
+    if ref.is_null($mv$self$raw.backing) == 0 {
+    } else {
+        $end_2_5 = $mv$self$raw.value;
+        $mv$self$raw.value = 0;
+        $mv$self$raw.backing = ref.null eq;
+        "wasi/waitable-set-drop"($end_2_5);
+    }
 }
 
 fn "result_unit_cm_variant_passthrough.wado/result_unit_cm_variant_passthrough.wado/$Closure_1::$call$dae[self]"($outptr) {

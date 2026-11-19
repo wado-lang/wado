@@ -78,17 +78,17 @@ global global:trait_generic_assoc_type_return.wado::$const_obj_1: ref Array<u8> 
 fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
     let is_negative_146: bool;
     let $sroa_slot_175: i32;
-    let start_309: i32;
+    let start_326: i32;
     let q: u64;
     let tens: i32;
-    let new_repr_627: ref Array<u8>;
-    let $deref_value_652: ref "core:prelude/string.wado//StrSlice";
-    let $sroa_out_repr_676: ref Array<u8>;
-    let $sroa_write_back_680: ref "core:prelude/string.wado//String";
-    $deref_value_652 = struct.new "core:prelude/string.wado//StrSlice" { repr: array.new_data<u8>("xyz123abc"), start: 3, end: 6 };
+    let new_repr_644: ref Array<u8>;
+    let $deref_value_655: ref "core:prelude/string.wado//StrSlice";
+    let $sroa_out_repr_677: ref Array<u8>;
+    let $sroa_write_back_681: ref "core:prelude/string.wado//String";
+    $deref_value_655 = struct.new "core:prelude/string.wado//StrSlice" { repr: array.new_data<u8>("xyz123abc"), start: 3, end: 6 };
     $inline_i32_core_prelude_traits_wado_FromStr__from_str__core_prelude_string_wado_StrSlice__sroa_return__17: block {
         $sroa_slot_175 = 0;
-        $mv$$vr_17$0 = builtin::i32_wrap_i64(let $mv$$vr_17$0: i32; let $mv$$vr_17$1: i64; let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$$vr_17$0, $mv$$vr_17$1, $mv$$vr_17$2] = "core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$dae[radix,max,min_abs]"($deref_value_652.repr, 3, 6); (if @likely($mv$$vr_17$0 == 0) -> i64 {
+        $mv$$vr_17$0 = builtin::i32_wrap_i64(let $mv$$vr_17$0: i32; let $mv$$vr_17$1: i64; let $mv$$vr_17$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$$vr_17$0, $mv$$vr_17$1, $mv$$vr_17$2] = "core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$dae[radix,max,min_abs]"($deref_value_655.repr, 3, 6); (if @likely($mv$$vr_17$0 == 0) -> i64 {
             $mv$$vr_17$1;
         } else if @likely($mv$$vr_17$0 == 1) -> i64 {
             cold_path;
@@ -102,9 +102,9 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         break $inline_i32_core_prelude_traits_wado_FromStr__from_str__core_prelude_string_wado_StrSlice__sroa_return__17;
     };
     if $sroa_slot_175 == 0 {
-        $sroa_out_repr_676 = builtin::array_new<u8>(20);
+        $sroa_out_repr_677 = builtin::array_new<u8>(20);
         $sroa_slot_175 = 4;
-        builtin::array_copy<u8>($sroa_out_repr_676, 0, global:trait_generic_assoc_type_return.wado::$const_obj_1, 0, 4);
+        builtin::array_copy<u8>($sroa_out_repr_677, 0, global:trait_generic_assoc_type_return.wado::$const_obj_1, 0, 4);
         is_negative_146 = $mv$$vr_17$0 < 0;
         $mv$$vr_17$1 = builtin::i64_extend_i32_s($mv$$vr_17$0);
         $mv$$vr_17$1 = select i64($mv$$vr_17$1 < 0_i64, 0_i64 - $mv$$vr_17$1, $mv$$vr_17$1);
@@ -170,31 +170,31 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         };
         if is_negative_146 {
             $sroa_slot_175 = 5;
-            builtin::array_set_u8($sroa_out_repr_676, 4, 45);
+            builtin::array_set_u8($sroa_out_repr_677, 4, 45);
         } else {
         }
         if @unlikely(local.tee is_negative_146($sroa_slot_175 + $mv$$vr_17$0) > 20) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_680(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_676, used: $sroa_slot_175 }), is_negative_146);
-            $sroa_out_repr_676 = $sroa_write_back_680.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_681(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_677, used: $sroa_slot_175 }), is_negative_146);
+            $sroa_out_repr_677 = $sroa_write_back_681.repr;
         }
-        start_309 = $sroa_slot_175;
+        start_326 = $sroa_slot_175;
         $sroa_slot_175 = is_negative_146;
-        $mv$$vr_17$0 = start_309 + $mv$$vr_17$0;
+        $mv$$vr_17$0 = start_326 + $mv$$vr_17$0;
         b24: block {
             l25: loop {
-                break_if b24 ($mv$$vr_17$0 - start_309) < 2;
+                break_if b24 ($mv$$vr_17$0 - start_326) < 2;
                 q = $mv$$vr_17$1 /u 100_i64;
                 tens = local.tee is_negative_146(builtin::i32_wrap_i64($mv$$vr_17$1 - (q * 100_i64))) / 10;
-                builtin::array_set_u8($sroa_out_repr_676, $mv$$vr_17$0 - 1, (48 + is_negative_146) - (tens * 10));
-                builtin::array_set_u8($sroa_out_repr_676, $mv$$vr_17$0 - 2, 48 + tens);
+                builtin::array_set_u8($sroa_out_repr_677, $mv$$vr_17$0 - 1, (48 + is_negative_146) - (tens * 10));
+                builtin::array_set_u8($sroa_out_repr_677, $mv$$vr_17$0 - 2, 48 + tens);
                 $mv$$vr_17$0 = $mv$$vr_17$0 - 2;
                 $mv$$vr_17$1 = q;
                 continue l25;
             };
         };
-        if $mv$$vr_17$0 > start_309 {
-            builtin::array_set_u8($sroa_out_repr_676, start_309, 48 + builtin::i32_wrap_i64($mv$$vr_17$1 %u 10_i64));
+        if $mv$$vr_17$0 > start_326 {
+            builtin::array_set_u8($sroa_out_repr_677, start_326, 48 + builtin::i32_wrap_i64($mv$$vr_17$1 %u 10_i64));
         }
         $inline_core_prelude_string_wado_String__internal_push_view_60: block {
             break $inline_core_prelude_string_wado_String__internal_push_view_60;
@@ -202,36 +202,40 @@ fn "trait_generic_assoc_type_return.wado/run"() with Stdout {
         $mv$$vr_17$0 = builtin::i32_wrap_i64(local.tee $mv$$vr_17$1("wasi/stream-new"()));
         is_negative_146 = builtin::i32_wrap_i64($mv$$vr_17$1 >> 32_i64);
         $mv$$vr_17$0 = "trait_generic_assoc_type_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$$vr_17$0);
-        builtin::array_copy<u8>(local.tee new_repr_627(builtin::array_new<u8>($sroa_slot_175 + 1)), 0, $sroa_out_repr_676, 0, $sroa_slot_175);
-        builtin::array_set_u8(new_repr_627, $sroa_slot_175, 10);
+        builtin::array_copy<u8>(local.tee new_repr_644(builtin::array_new<u8>($sroa_slot_175 + 1)), 0, $sroa_out_repr_677, 0, $sroa_slot_175);
+        builtin::array_set_u8(new_repr_644, $sroa_slot_175, 10);
         drop(block -> "core:prelude/types.wado//enum:CopyResult" {
             if @unlikely(ref.is_null(ref.null eq) == 0) {
                 unreachable;
             }
             $sroa_slot_175 = $sroa_slot_175 + 1;
-            "core:rt/cm_stream_write_raw_all_u8"(is_negative_146, new_repr_627, 0, $sroa_slot_175);
+            "core:rt/cm_stream_write_raw_all_u8"(is_negative_146, new_repr_644, 0, $sroa_slot_175);
         });
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; is_negative_146);
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $mv$$vr_17$0);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"(is_negative_146);
+        }
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$$vr_17$0);
+        }
     } else {
         $sroa_slot_175 = builtin::i32_wrap_i64(local.tee $mv$$vr_17$1("wasi/stream-new"()));
         $mv$$vr_17$0 = builtin::i32_wrap_i64($mv$$vr_17$1 >> 32_i64);
         $sroa_slot_175 = "trait_generic_assoc_type_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_175);
-        builtin::array_copy<u8>(local.tee $sroa_out_repr_676(builtin::array_new<u8>(4)), 0, global:trait_generic_assoc_type_return.wado::$const_obj_0, 0, 3);
-        builtin::array_set_u8($sroa_out_repr_676, 3, 10);
+        builtin::array_copy<u8>(local.tee $sroa_out_repr_677(builtin::array_new<u8>(4)), 0, global:trait_generic_assoc_type_return.wado::$const_obj_0, 0, 3);
+        builtin::array_set_u8($sroa_out_repr_677, 3, 10);
         drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
-        }; $mv$$vr_17$0, $sroa_out_repr_676));
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $mv$$vr_17$0);
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_slot_175);
+        }; $mv$$vr_17$0, $sroa_out_repr_677));
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($mv$$vr_17$0);
+        }
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_175);
+        }
     }
 }
 

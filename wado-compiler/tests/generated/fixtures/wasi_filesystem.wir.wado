@@ -338,9 +338,10 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     is_negative_74 = builtin::i32_wrap_i64(x >> 32_i64);
     $load_1 = "wasi_filesystem.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_1);
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_74, out_12.repr, out_12.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $load_1);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_1);
+    }
     if self_8 > 0 {
         out_12 = self_8 = dirs.used; if @unlikely(0 >= self_8) {
             cold_path;
@@ -355,12 +356,14 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }; $load_1, $load_2);
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $load_1);
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; self_8);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($load_1);
+        }
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_8);
+        }
         if out_12.used >= 0 {
             self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
             $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
@@ -370,12 +373,14 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
             "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
                 unreachable;
             }; $load_1, $load_2);
-            "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-                unreachable;
-            }; $load_1);
-            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-                unreachable;
-            }; self_8);
+            if ref.is_null(ref.null eq) == 0 {
+            } else {
+                "wasi/stream-drop-writable"($load_1);
+            }
+            if ref.is_null(ref.null eq) == 0 {
+            } else {
+                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_8);
+            }
         }
     } else {
         self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
@@ -386,12 +391,14 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
         "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }; $load_1, $load_2);
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $load_1);
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; self_8);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($load_1);
+        }
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_8);
+        }
     }
     self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $load_1 = builtin::i32_wrap_i64(x >> 32_i64);
@@ -401,12 +408,14 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
     "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; $load_1, $load_2);
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $load_1);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; self_8);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($load_1);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_8);
+    }
     if ref.is_null(dirs) == 0 {
         "wasi_filesystem.wado/$drop$core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>"(dirs.repr, dirs.used);
     }
@@ -671,9 +680,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -686,9 +696,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

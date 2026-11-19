@@ -117,12 +117,14 @@ fn "value_copy_callee_writes_handle_field.wado/run"() with Stdout {
         self_30 = self_30 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(digit_count_112, bytes, 0, self_30);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; digit_count_112);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $array_clone_len_3);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(digit_count_112);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($array_clone_len_3);
+    }
 }
 
 fn "value_copy_callee_writes_handle_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

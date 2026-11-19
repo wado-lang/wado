@@ -400,9 +400,13 @@ fn "http_loop_fresh_resource.wado/$cm_task_entry__handle"(request) with Response
         unreachable;
     }; scratch, global:http_loop_fresh_resource.wado::$const_obj_0));
     if ref.is_null(_tx_future) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null(_tx_future.backing) == 0) {
-            unreachable;
-        }; _tx_future.value);
+        if ref.is_null(_tx_future.backing) == 0 {
+        } else {
+            i = _tx_future.value;
+            _tx_future.value = 0;
+            _tx_future.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(i);
+        }
     }
     if (request == 0) == 0 {
         if ref.is_null(ref.null eq) == 0 {

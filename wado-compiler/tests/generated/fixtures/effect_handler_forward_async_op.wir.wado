@@ -1022,9 +1022,13 @@ fn "effect_handler_forward_async_op.wado/fetch_upstream"() with Client {
         }
     }
     if ref.is_null(_req_future) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null(_req_future.backing) == 0) {
-            unreachable;
-        }; _req_future.value);
+        if ref.is_null(_req_future.backing) == 0 {
+        } else {
+            headers = _req_future.value;
+            _req_future.value = 0;
+            _req_future.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(headers);
+        }
     }
     return req;
 }
@@ -1703,7 +1707,7 @@ fn "effect_handler_forward_async_op.wado/$cm_export__handle"($p_0) {
 
 fn "effect_handler_forward_async_op.wado/$cm_task_entry__handle"(request) with Response {
     let $load_13: ref Array<u8>;
-    let $load_36: ref null "core:prelude/list.wado//List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>";
+    let $load_40: ref null "core:prelude/list.wado//List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>";
     let mock: ref null "effect_handler_forward_async_op.wado//MockClient";
     let body_tx: i32;
     let _tx_future: ref null "core:prelude//$Resource";
@@ -1882,20 +1886,25 @@ mock.calls: "), used: 109 }, s1: struct.new "core:prelude/string.wado//String" {
         };
         "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(body_tx, result.repr, result.used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; body_tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(body_tx);
+    }
     drop("effect_handler_forward_async_op.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; $sroa_$pattern_temp_0_1_336, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//$Cell<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
     if ref.is_null(_tx_future) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null(_tx_future.backing) == 0) {
-            unreachable;
-        }; _tx_future.value);
+        if ref.is_null(_tx_future.backing) == 0 {
+        } else {
+            used_214 = _tx_future.value;
+            _tx_future.value = 0;
+            _tx_future.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(used_214);
+        }
     }
     if ref.is_null(mock) == 0 {
-        if ref.is_null(local.tee $load_36(mock.ends)) == 0 {
-            "effect_handler_forward_async_op.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>"($load_36.repr, $load_36.used);
+        if ref.is_null(local.tee $load_40(mock.ends)) == 0 {
+            "effect_handler_forward_async_op.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>"($load_40.repr, $load_40.used);
         }
         mock.ends = ref.null none;
     }
@@ -2430,9 +2439,13 @@ fn "core:prelude/types.wado/drop_resolved"(subtask) {
         builtin::array_set<ref "core:prelude/types.wado//Resolution">($load_2, $mv$$match_7$0, ref.null none);
     } else {
     }
-    "wasi/subtask-drop"(if @unlikely(ref.is_null(subtask.backing) == 0) {
-        unreachable;
-    }; subtask.value);
+    if ref.is_null(subtask.backing) == 0 {
+    } else {
+        $mv$$match_7$0 = subtask.value;
+        subtask.value = 0;
+        subtask.backing = ref.null eq;
+        "wasi/subtask-drop"($mv$$match_7$0);
+    }
 }
 
 fn "core:prelude/types.wado/$template_segment$core:prelude/types.wado/$tmpl$ac8fec2d6428d13b"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, index) {
@@ -2561,9 +2574,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -2576,9 +2590,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -3834,9 +3849,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
             continue l512;
         };
     };
-    "wasi/waitable-set-drop"(if @unlikely(ref.is_null($mv$self$raw.backing) == 0) {
-        unreachable;
-    }; $mv$self$raw.value);
+    if ref.is_null($mv$self$raw.backing) == 0 {
+    } else {
+        $end_2_5 = $mv$self$raw.value;
+        $mv$self$raw.value = 0;
+        $mv$self$raw.backing = ref.null eq;
+        "wasi/waitable-set-drop"($end_2_5);
+    }
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>^core:prelude/traits.wado/Drop::drop"($mv$self$buffer, $mv$self$data) {
@@ -3896,9 +3915,13 @@ fn "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/$C
     drop("effect_handler_forward_async_op.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.set-status-code"($sroa_$pattern_temp_0_1_18, 201));
     $drop_spill_9 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: $sroa_$pattern_temp_0_1_18 };
     if ref.is_null($held_7) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null($held_7.backing) == 0) {
-            unreachable;
-        }; $held_7.value);
+        if ref.is_null($held_7.backing) == 0 {
+        } else {
+            $sroa_$pattern_temp_0_0_17 = $held_7.value;
+            $held_7.value = 0;
+            $held_7.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_17);
+        }
     }
     if ref.is_null(request) == 0 {
         if ref.is_null(request.backing) == 0 {

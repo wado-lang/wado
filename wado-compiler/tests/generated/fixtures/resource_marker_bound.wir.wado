@@ -29,14 +29,16 @@ fn "resource_marker_bound.wado/$test_0_an_extern_handle_and_an_affine_resource_a
     let $sroa_$pattern_temp_0_1_18: i32;
     $sroa_$pattern_temp_0_0_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     if (local.tee $sroa_$pattern_temp_0_1_18(builtin::i32_wrap_i64($cm_pair_7 >> 32_i64)) == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_1_18);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_18);
+        }
     }
     if ($sroa_$pattern_temp_0_0_17 == 0) == 0 {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_17);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_17);
+        }
     }
 }
 

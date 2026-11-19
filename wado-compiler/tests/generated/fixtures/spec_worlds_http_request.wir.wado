@@ -1179,9 +1179,13 @@ greetings.len() == 1: "), used: 23 }, s6: struct.new "core:prelude/string.wado//
         };
         break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__4: default;
     };
-    "wasi/stream-drop-readable"(if @unlikely(ref.is_null(request_body.backing) == 0) {
-        unreachable;
-    }; request_body.value);
+    if ref.is_null(request_body.backing) == 0 {
+    } else {
+        request = request_body.value;
+        request_body.value = 0;
+        request_body.backing = ref.null eq;
+        "wasi/stream-drop-readable"(request);
+    }
     drop("spec_worlds_http_request.wado/$cm_future_write_core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; $v_1_seen, global:spec_worlds_http_request.wado::$const_obj_1));
@@ -1254,21 +1258,30 @@ greetings.len() == 1: "), used: 23 }, s6: struct.new "core:prelude/string.wado//
         };
         "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(request, bytes_264.repr, bytes_264.used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; request);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(request);
+    }
     drop("spec_worlds_http_request.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; $v_1_seen, global:spec_worlds_http_request.wado::$const_obj_0));
     if ref.is_null(_sent) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null(_sent.backing) == 0) {
-            unreachable;
-        }; _sent.value);
+        if ref.is_null(_sent.backing) == 0 {
+        } else {
+            request = _sent.value;
+            _sent.value = 0;
+            _sent.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(request);
+        }
     }
     if ref.is_null(_request_trailers) == 0 {
-        "wasi/future-drop-readable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"(if @unlikely(ref.is_null(_request_trailers.backing) == 0) {
-            unreachable;
-        }; _request_trailers.value);
+        if ref.is_null(_request_trailers.backing) == 0 {
+        } else {
+            request = _request_trailers.value;
+            _request_trailers.value = 0;
+            _request_trailers.backing = ref.null eq;
+            "wasi/future-drop-readable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"(request);
+        }
     }
     if (headers == 0) == 0 {
         if ref.is_null(ref.null eq) == 0 {
@@ -2749,9 +2762,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -2764,9 +2778,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

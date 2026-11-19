@@ -117,9 +117,10 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     start_76 = builtin::i32_wrap_i64($cm_pair_7_211 >> 32_i64);
     new_used_75 = "simd_v128_inspect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_75);
     "core:rt/write_string_to_stream$dae[add_newline]"(start_76, out_5.repr, out_5.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_75);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_75);
+    }
     out_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_76: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_76;
@@ -132,9 +133,10 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     start_76 = builtin::i32_wrap_i64($cm_pair_7_211 >> 32_i64);
     new_used_75 = "simd_v128_inspect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_75);
     "core:rt/write_string_to_stream$dae[add_newline]"(start_76, out_5.repr, out_5.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_75);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_75);
+    }
 }
 
 fn "simd_v128_inspect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -159,9 +161,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {

@@ -117,12 +117,14 @@ fn "niri_guard_binding_survives_fold.wado/run"() with Stdout {
         self_29 = self_29 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(y, new_repr, 0, self_29);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; y);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; x);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(y);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(x);
+    }
 }
 
 fn "niri_guard_binding_survives_fold.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

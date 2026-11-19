@@ -469,7 +469,6 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prel
 
 fn "affine_drop_on_break.wado/$test_0"() {
     let slot: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>";
-    let $v_0: "core:prelude/types.wado//enum:CopyResult";
     let $drop_v_12: ref null "core:prelude//$Resource";
     let $cm_pair_15: i64;
     let $sroa_$pattern_temp_0_0_19: ref null "core:prelude//$Resource";
@@ -489,49 +488,63 @@ fn "affine_drop_on_break.wado/$test_0"() {
             if ref.is_null(slot) == 0 {
                 if slot.discriminant == 0 {
                 } else {
-                    "wasi/stream-drop-readable"(if @unlikely(ref.is_null(local.tee $drop_v_12(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(slot).payload_0).backing) == 0) {
-                        unreachable;
-                    }; $drop_v_12.value);
+                    if ref.is_null(local.tee $drop_v_12(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(slot).payload_0).backing) == 0 {
+                    } else {
+                        let $cm_handle_2: i32;
+                        $cm_handle_2 = $drop_v_12.value;
+                        $drop_v_12.value = 0;
+                        $drop_v_12.backing = ref.null eq;
+                        "wasi/stream-drop-readable"($cm_handle_2);
+                    }
                 }
             }
             slot = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0;
             if ref.is_null($sroa_$pattern_temp_0_0_19) == 0 {
-                "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_19.backing) == 0) {
-                    unreachable;
-                }; $sroa_$pattern_temp_0_0_19.value);
+                if ref.is_null($sroa_$pattern_temp_0_0_19.backing) == 0 {
+                } else {
+                    $cm_handle_2 = $sroa_$pattern_temp_0_0_19.value;
+                    $sroa_$pattern_temp_0_0_19.value = 0;
+                    $sroa_$pattern_temp_0_0_19.backing = ref.null eq;
+                    "wasi/stream-drop-readable"($cm_handle_2);
+                }
             }
             break b0;
             continue l1;
         };
     };
-    if @unlikely(local.tee $v_0(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_2: ref Array<u8>;
-        $mv_field_2 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_20, $mv_field_2, 1);
+    if @unlikely(local.tee $cm_handle_2(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $mv_field_6: ref Array<u8>;
+        $mv_field_6 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_20, $mv_field_6, 1);
     }) != 1) {
         cold_path;
-        let $mv_arg_4: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_drop_on_break.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_drop_on_break.wado//$tmpl$dcb8672c2bf63b7c" { h0: $v_0, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at affine_drop_on_break.wado:11
+        let $mv_arg_8: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_drop_on_break.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_drop_on_break.wado//$tmpl$dcb8672c2bf63b7c" { h0: $cm_handle_2, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at affine_drop_on_break.wado:11
 condition: tx.write_all([1]) == CopyResult::Dropped
 tx.write_all([1]): "), used: 131 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at affine_drop_on_break.wado:11
 condition: tx.write_all([1]) == CopyResult::Dropped
 tx.write_all([1]): "), used: 131 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_4.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
         unreachable;
     }
     if ref.is_null(slot) == 0 {
         if slot.discriminant == 0 {
         } else {
-            "wasi/stream-drop-readable"(if @unlikely(ref.is_null(local.tee $sroa_$pattern_temp_0_0_19(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(slot).payload_0).backing) == 0) {
-                unreachable;
-            }; $sroa_$pattern_temp_0_0_19.value);
+            if ref.is_null(local.tee $sroa_$pattern_temp_0_0_19(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(slot).payload_0).backing) == 0 {
+            } else {
+                $cm_handle_2 = $sroa_$pattern_temp_0_0_19.value;
+                $sroa_$pattern_temp_0_0_19.value = 0;
+                $sroa_$pattern_temp_0_0_19.backing = ref.null eq;
+                "wasi/stream-drop-readable"($cm_handle_2);
+            }
         }
     }
     if ($sroa_$pattern_temp_0_1_20 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_1_20);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_20);
+        }
     }
 }
 
@@ -1038,9 +1051,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -1053,9 +1067,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

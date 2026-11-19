@@ -212,12 +212,14 @@ fn "array_bounds_elim_bool_false_conjunction.wado/run"() with Stdout {
         i_117 = i_117 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(s, arr, 0, i_117);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; s);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; n_1);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(s);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_1);
+    }
 }
 
 fn "array_bounds_elim_bool_false_conjunction.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

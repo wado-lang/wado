@@ -189,12 +189,14 @@ fn "closure_forwarded_param_devirtualized.wado/run"() with Stdout {
         start_178 = start_178 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(n_19, arr, 0, start_178);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; n_19);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; scale);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(n_19);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(scale);
+    }
 }
 
 fn "closure_forwarded_param_devirtualized.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

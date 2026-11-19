@@ -270,15 +270,16 @@ fn "resource_backed_wasi_double.wado/run"() with Stdout {
     $local_4_22 = builtin::i32_wrap_i64($cm_pair_7_129 >> 32_i64);
     $local_4_17 = "resource_backed_wasi_double.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_4_17);
     "core:rt/write_string_to_stream$dae[add_newline]"($local_4_22, name_14.repr, $sroa_out_used_726);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $local_4_17);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_4_17);
+    }
     if ref.is_null($local_2_10) == 0 {
         $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_2: block {
             if ref.is_null(local.tee $local_0(global:resource_backed_wasi_double.wado::$effect_wasi:http/types.wado/Fields)) == 0 {
                 global:resource_backed_wasi_double.wado::$effect_wasi:http/types.wado/Fields = local.tee $local_1_9(ref.as_non_null($local_0)).outer;
-                let $indirect_call_6: ref null "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_6.func, local.tee $indirect_call_6($local_1_9.op_drop).env, $local_2_10);
+                let $indirect_call_8: ref null "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_8.func, local.tee $indirect_call_8($local_1_9.op_drop).env, $local_2_10);
                 break $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_2: global:resource_backed_wasi_double.wado::$effect_wasi:http/types.wado/Fields = $local_0;
             } else {
                 if ref.is_null($local_2_10.backing) == 0 {
@@ -297,7 +298,7 @@ fn "resource_backed_wasi_double.wado/run"() with Stdout {
     $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_3: block {
         if ref.is_null(local.tee $save_wasi:http/types.wado/Fields(global:resource_backed_wasi_double.wado::$effect_wasi:http/types.wado/Fields)) == 0 {
             global:resource_backed_wasi_double.wado::$effect_wasi:http/types.wado/Fields = local.tee $local_1_9(ref.as_non_null($save_wasi:http/types.wado/Fields)).outer;
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_6.func, local.tee $indirect_call_6($local_1_9.op_drop).env, $local_2_10);
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_8.func, local.tee $indirect_call_8($local_1_9.op_drop).env, $local_2_10);
             break $inline__effect_dispatch__wasi_http_types_wado_Fields__drop_3: global:resource_backed_wasi_double.wado::$effect_wasi:http/types.wado/Fields = $save_wasi:http/types.wado/Fields;
         } else {
             if ref.is_null($local_2_10.backing) == 0 {
@@ -416,9 +417,10 @@ fn "resource_backed_wasi_double.wado/run"() with Stdout {
     $local_4_22 = builtin::i32_wrap_i64($cm_pair_7_129 >> 32_i64);
     $local_4_17 = "resource_backed_wasi_double.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_4_17);
     "core:rt/write_string_to_stream$dae[add_newline]"($local_4_22, name_14.repr, name_14.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $local_4_17);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_4_17);
+    }
 }
 
 fn "resource_backed_wasi_double.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -466,9 +468,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {

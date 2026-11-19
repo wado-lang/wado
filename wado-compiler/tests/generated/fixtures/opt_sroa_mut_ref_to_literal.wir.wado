@@ -120,12 +120,14 @@ fn "opt_sroa_mut_ref_to_literal.wado/run"() with Stdout {
         self_28 = self_28 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($mv_field_3, new_repr, 0, self_28);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $mv_field_3);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; n);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($mv_field_3);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n);
+    }
 }
 
 fn "opt_sroa_mut_ref_to_literal.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

@@ -155,9 +155,9 @@ global global:core:prelude/string.wado::$const_obj_4: ref Array<u8> = array.new_
 global global:core:prelude/string.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(44, 32);
 
 fn "affine_for_of_iterator.wado/run"() with Stdout {
-    let $load_31: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";
-    let $load_32: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";
-    let $load_49: ref Array<u8>;
+    let $load_37: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";
+    let $load_38: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";
+    let $load_55: ref Array<u8>;
     let $iter_0_0: ref null "affine_for_of_iterator.wado//Counter";
     let $iter_2: ref null "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>";
     let $iter_4: ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>";
@@ -185,9 +185,10 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
             $sroa_$pattern_temp_0_1_14_77 = builtin::i32_wrap_i64($cm_pair_7_70 >> 32_i64);
             $sroa_$pattern_temp_0_0_13_76 = "affine_for_of_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_76);
             "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_77, message_63.repr, message_63.used);
-            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-                unreachable;
-            }; $sroa_$pattern_temp_0_0_13_76);
+            if ref.is_null(ref.null eq) == 0 {
+            } else {
+                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_76);
+            }
             continue l1;
         };
     };
@@ -213,9 +214,9 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
                 }
                 break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_traits_wado_IterFilter_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__fn_mut_i32___bool___core_prelude_traits_wado_Iterator__next_9: ref.null none;
             })) == 0 {
-                let $variant_payload_1: ref "tuple//[i32, i32]";
-                $hfs_n_920 = local.tee $variant_payload_1(ref.as_non_null($match_19)).0;
-                $sroa_$pattern_temp_0_0_13_76 = $variant_payload_1.1;
+                let $variant_payload_3: ref "tuple//[i32, i32]";
+                $hfs_n_920 = local.tee $variant_payload_3(ref.as_non_null($match_19)).0;
+                $sroa_$pattern_temp_0_0_13_76 = $variant_payload_3.1;
                 message_63 = block -> ref "core:prelude/string.wado//String" {
                     "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_for_of_iterator.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($hfs_n_920, $sroa_$pattern_temp_0_0_13_76);
                 };
@@ -223,9 +224,10 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
                 $sroa_$pattern_temp_0_0_13_76 = builtin::i32_wrap_i64($cm_pair_7_70 >> 32_i64);
                 $hfs_n_920 = "affine_for_of_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_n_920);
                 "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_76, message_63.repr, message_63.used);
-                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-                    unreachable;
-                }; $hfs_n_920);
+                if ref.is_null(ref.null eq) == 0 {
+                } else {
+                    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($hfs_n_920);
+                }
             } else {
                 break b6;
             }
@@ -251,8 +253,8 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
     b17: block {
         l18: loop {
             if ref.is_null(local.tee $match_19("core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>^core:prelude/traits.wado/Iterator::next"($iter_4))) == 0 {
-                $hfs_n_920 = local.tee $variant_payload_1(ref.as_non_null($match_19)).0;
-                $sroa_$pattern_temp_0_0_13_76 = $variant_payload_1.1;
+                $hfs_n_920 = local.tee $variant_payload_3(ref.as_non_null($match_19)).0;
+                $sroa_$pattern_temp_0_0_13_76 = $variant_payload_3.1;
                 message_63 = block -> ref "core:prelude/string.wado//String" {
                     "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_for_of_iterator.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec1"($hfs_n_920, $sroa_$pattern_temp_0_0_13_76);
                 };
@@ -260,9 +262,10 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
                 $sroa_$pattern_temp_0_0_13_76 = builtin::i32_wrap_i64($cm_pair_7_70 >> 32_i64);
                 $hfs_n_920 = "affine_for_of_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_n_920);
                 "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_76, message_63.repr, message_63.used);
-                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-                    unreachable;
-                }; $hfs_n_920);
+                if ref.is_null(ref.null eq) == 0 {
+                } else {
+                    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($hfs_n_920);
+                }
             } else {
                 break b17;
             }
@@ -277,22 +280,22 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
             $iter_0_0.token = ref.null none;
         }
         $iter_4.first = ref.null none;
-        if ref.is_null(local.tee $load_31($iter_4.second)) == 0 {
-            if ref.is_null(local.tee $load_32($load_31.inner)) == 0 {
-                if ref.is_null(local.tee $iter_0_0($load_32.first)) == 0 {
+        if ref.is_null(local.tee $load_37($iter_4.second)) == 0 {
+            if ref.is_null(local.tee $load_38($load_37.inner)) == 0 {
+                if ref.is_null(local.tee $iter_0_0($load_38.first)) == 0 {
                     if ref.is_null($iter_0_0.token) == 0 {
                         global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
                     }
                     $iter_0_0.token = ref.null none;
                 }
-                $load_32.first = ref.null none;
-                if ref.is_null(local.tee $iter_0_0($load_32.second)) == 0 {
+                $load_38.first = ref.null none;
+                if ref.is_null(local.tee $iter_0_0($load_38.second)) == 0 {
                     if ref.is_null($iter_0_0.token) == 0 {
                         global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
                     }
                     $iter_0_0.token = ref.null none;
                 }
-                $load_32.second = ref.null none;
+                $load_38.second = ref.null none;
             }
             $iter_4.second.inner = ref.null none;
         }
@@ -340,8 +343,8 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_1_14_77 = $hfs_n_920 < 0;
     $hfs_n_920 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_70($cm_pair_7_70 = builtin::i64_extend_i32_s($hfs_n_920); select i64($cm_pair_7_70 < 0_i64, 0_i64 - $cm_pair_7_70, $cm_pair_7_70)));
     $sroa_$pattern_temp_0_1_14_77 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(message_63, $sroa_$pattern_temp_0_1_14_77, $hfs_n_920);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_49(message_63.repr), $sroa_$pattern_temp_0_1_14_77, $cm_pair_7_70, $hfs_n_920);
-    if @unlikely(local.tee $hfs_n_920(message_63.used + 1) > builtin::array_len($load_49)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_55(message_63.repr), $sroa_$pattern_temp_0_1_14_77, $cm_pair_7_70, $hfs_n_920);
+    if @unlikely(local.tee $hfs_n_920(message_63.used + 1) > builtin::array_len($load_55)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_63, $hfs_n_920);
     }
@@ -359,9 +362,10 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_76 = builtin::i32_wrap_i64($cm_pair_7_70 >> 32_i64);
     $hfs_n_920 = "affine_for_of_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_n_920);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_76, message_63.repr, message_63.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $hfs_n_920);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($hfs_n_920);
+    }
     if ref.is_null($iter_0_0) == 0 {
         if ref.is_null($iter_0_0.token) == 0 {
             global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
@@ -388,40 +392,41 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
     }
     $iter_0_0.token = ref.null none;
     $hfs_n_920 = global:affine_for_of_iterator.wado::DROPS;
-    $load_49 = builtin::array_new<u8>(22);
+    $load_55 = builtin::array_new<u8>(22);
     $sroa_$pattern_temp_0_0_13_76 = 6;
-    builtin::array_copy<u8>($load_49, 0, global:affine_for_of_iterator.wado::$const_obj_0, 0, 6);
+    builtin::array_copy<u8>($load_55, 0, global:affine_for_of_iterator.wado::$const_obj_0, 0, 6);
     $sroa_$pattern_temp_0_1_14_77 = $hfs_n_920 < 0;
     $hfs_n_920 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_70($cm_pair_7_70 = builtin::i64_extend_i32_s($hfs_n_920); select i64($cm_pair_7_70 < 0_i64, 0_i64 - $cm_pair_7_70, $cm_pair_7_70)));
     if $sroa_$pattern_temp_0_1_14_77 {
-        if @unlikely(7 > builtin::array_len($load_49)) {
+        if @unlikely(7 > builtin::array_len($load_55)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee message_63(struct.new "core:prelude/string.wado//String" { repr: $load_49, used: 6 }), 7);
-            $load_49 = message_63.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee message_63(struct.new "core:prelude/string.wado//String" { repr: $load_55, used: 6 }), 7);
+            $load_55 = message_63.repr;
         }
         $sroa_$pattern_temp_0_0_13_76 = 7;
-        builtin::array_set_u8($load_49, 6, 45);
+        builtin::array_set_u8($load_55, 6, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_77($sroa_$pattern_temp_0_0_13_76 + $hfs_n_920) > builtin::array_len($load_49)) {
+    if @unlikely(local.tee $sroa_$pattern_temp_0_1_14_77($sroa_$pattern_temp_0_0_13_76 + $hfs_n_920) > builtin::array_len($load_55)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee message_63(struct.new "core:prelude/string.wado//String" { repr: $load_49, used: $sroa_$pattern_temp_0_0_13_76 }), $sroa_$pattern_temp_0_1_14_77);
-        $load_49 = message_63.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee message_63(struct.new "core:prelude/string.wado//String" { repr: $load_55, used: $sroa_$pattern_temp_0_0_13_76 }), $sroa_$pattern_temp_0_1_14_77);
+        $load_55 = message_63.repr;
     }
     start_367 = $sroa_$pattern_temp_0_0_13_76;
     $sroa_$pattern_temp_0_0_13_76 = $sroa_$pattern_temp_0_1_14_77;
-    "core:prelude/primitive.wado/write_decimal_digits"($load_49, start_367, $cm_pair_7_70, $hfs_n_920);
+    "core:prelude/primitive.wado/write_decimal_digits"($load_55, start_367, $cm_pair_7_70, $hfs_n_920);
     $inline_core_prelude_string_wado_String__format_affine_for_of_iterator_wado__tmpl_fb51c04d54491732__i32___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_affine_for_of_iterator_wado__tmpl_fb51c04d54491732__i32___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
     };
-    message_63 = struct.new "core:prelude/string.wado//String" { repr: $load_49, used: $sroa_$pattern_temp_0_0_13_76 };
+    message_63 = struct.new "core:prelude/string.wado//String" { repr: $load_55, used: $sroa_$pattern_temp_0_0_13_76 };
     $hfs_n_920 = builtin::i32_wrap_i64(local.tee $cm_pair_7_70("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_77 = builtin::i32_wrap_i64($cm_pair_7_70 >> 32_i64);
     $hfs_n_920 = "affine_for_of_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_n_920);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_77, message_63.repr, $sroa_$pattern_temp_0_0_13_76);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $hfs_n_920);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($hfs_n_920);
+    }
 }
 
 fn "affine_for_of_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -529,9 +534,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {

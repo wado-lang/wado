@@ -277,12 +277,14 @@ fn "opt_value_copy_builtin_arg_is_confined.wado/run"() with Stdout {
         $licm_used_16 = $licm_used_16 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(i_141, $licm_repr_32, 0, $licm_used_16);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; i_141);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; sum);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(i_141);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);
+    }
 }
 
 fn "opt_value_copy_builtin_arg_is_confined.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

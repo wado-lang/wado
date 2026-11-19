@@ -114,12 +114,14 @@ fn "ctfe_fold_view_append_wir.wado/run"() with Stdout {
         start_233 = start_233 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(new_used_232, new_repr_644, 0, start_233);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_232);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; n_228);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(new_used_232);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_228);
+    }
     n_228 = builtin::i32_wrap_i64(local.tee $cm_pair_7_158("wasi/stream-new"()));
     new_used_232 = builtin::i32_wrap_i64($cm_pair_7_158 >> 32_i64);
     n_228 = "ctfe_fold_view_append_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_228);
@@ -128,12 +130,14 @@ fn "ctfe_fold_view_append_wir.wado/run"() with Stdout {
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; new_used_232, new_repr_644);
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_232);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; n_228);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(new_used_232);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_228);
+    }
 }
 
 fn "ctfe_fold_view_append_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

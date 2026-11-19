@@ -497,9 +497,13 @@ fn "resource_store_in_loop.wado/$cm_task_entry__handle"(request) with Response {
         unreachable;
     }; $sroa_$pattern_temp_0_1_183, global:resource_store_in_loop.wado::$const_obj_0));
     if ref.is_null(_sent) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null(_sent.backing) == 0) {
-            unreachable;
-        }; _sent.value);
+        if ref.is_null(_sent.backing) == 0 {
+        } else {
+            $cm_handle_2 = _sent.value;
+            _sent.value = 0;
+            _sent.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"($cm_handle_2);
+        }
     }
     if (request == 0) == 0 {
         if ref.is_null(ref.null eq) == 0 {

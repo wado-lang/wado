@@ -186,12 +186,14 @@ fn "contract_impl_clause_unchecked.wado/run"() with Stdout {
         start_180 = start_180 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(is_negative_78, arr, 0, start_180);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; is_negative_78);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; i_20);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(is_negative_78);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_20);
+    }
 }
 
 fn "contract_impl_clause_unchecked.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

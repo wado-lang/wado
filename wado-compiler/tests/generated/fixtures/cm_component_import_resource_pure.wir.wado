@@ -156,12 +156,14 @@ fn "cm_component_import_resource_pure.wado/run"() {
         y = y + 1;
         "core:rt/cm_stream_write_raw_all_u8"($drop_spill_4, $sroa_out_repr_993, 0, y);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $drop_spill_4);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; x);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($drop_spill_4);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(x);
+    }
 }
 
 fn "cm_component_import_resource_pure.wado/$cm_binding__wado:test-dependencyb4407fce12e7fc33/counters@0.1.0#[constructor]counter"(start) with Counters::Counter {

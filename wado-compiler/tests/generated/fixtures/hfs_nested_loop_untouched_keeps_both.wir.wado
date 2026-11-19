@@ -156,12 +156,14 @@ fn "hfs_nested_loop_untouched_keeps_both.wado/run"() with Stdout {
         $hfs_a_265 = $hfs_a_265 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(o, $load_4, 0, $hfs_a_265);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; o);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; sink);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(o);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sink);
+    }
 }
 
 fn "hfs_nested_loop_untouched_keeps_both.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

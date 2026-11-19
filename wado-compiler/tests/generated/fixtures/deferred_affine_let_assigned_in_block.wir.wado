@@ -138,12 +138,14 @@ fn "deferred_affine_let_assigned_in_block.wado/run"() with Stdout {
         is_negative_113 = is_negative_113 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($sroa_t_h1_267, $load_7, 0, is_negative_113);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h1_267);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; used);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_t_h1_267);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used);
+    }
 }
 
 fn "deferred_affine_let_assigned_in_block.wado/$drop$core:prelude/list.wado/List<deferred_affine_let_assigned_in_block.wado/Token>"($mv$value$repr, $mv$value$used) {

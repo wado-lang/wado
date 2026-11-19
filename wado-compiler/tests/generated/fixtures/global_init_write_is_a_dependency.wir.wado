@@ -130,12 +130,14 @@ fn "global_init_write_is_a_dependency.wado/run"() with Stdout {
         is_negative_102 = is_negative_102 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(self_10, $load_0, 0, is_negative_102);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; self_10);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $hole_0_0);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(self_10);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($hole_0_0);
+    }
 }
 
 fn "global_init_write_is_a_dependency.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

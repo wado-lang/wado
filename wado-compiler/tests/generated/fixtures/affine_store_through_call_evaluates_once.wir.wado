@@ -180,12 +180,14 @@ fn "affine_store_through_call_evaluates_once.wado/run"() with Stdout {
         self_56 = self_56 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(used_13, new_repr, 0, self_56);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; used_13);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; self_10);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(used_13);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_10);
+    }
     if ref.is_null(h_0) == 0 {
         if ref.is_null(local.tee $stored_1(h_0.tok)) == 0 {
             self_10 = $stored_1.id;

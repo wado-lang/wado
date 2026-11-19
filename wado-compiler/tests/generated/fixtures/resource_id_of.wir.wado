@@ -831,12 +831,20 @@ ResourceId::of(&tx): "), used: 22 }, r3: struct.new "core:prelude/string.wado//S
 ResourceId::of(&tx): "), used: 22 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_120.backing) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_120.value);
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_1_121.backing) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_121.value);
+    if ref.is_null($sroa_$pattern_temp_0_0_120.backing) == 0 {
+    } else {
+        $load_1 = $sroa_$pattern_temp_0_0_120.value;
+        $sroa_$pattern_temp_0_0_120.value = 0;
+        $sroa_$pattern_temp_0_0_120.backing = ref.null eq;
+        "wasi/stream-drop-readable"($load_1);
+    }
+    if ref.is_null($sroa_$pattern_temp_0_1_121.backing) == 0 {
+    } else {
+        $load_1 = $sroa_$pattern_temp_0_1_121.value;
+        $sroa_$pattern_temp_0_1_121.value = 0;
+        $sroa_$pattern_temp_0_1_121.backing = ref.null eq;
+        "wasi/stream-drop-writable"($load_1);
+    }
     if ref.is_null(b_1) == 0 {
         if ref.is_null(b_1.backing) == 0 {
         } else {
@@ -1535,9 +1543,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -1550,9 +1559,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

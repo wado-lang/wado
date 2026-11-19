@@ -284,17 +284,19 @@ fn "loop_unroll_step_mid_body.wado/run"() with Stdout {
     $sroa_text_used_128 = builtin::i32_wrap_i64($cm_pair_7_83 >> 32_i64);
     len_0 = "loop_unroll_step_mid_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(len_0);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_text_used_128, $sroa_write_back_136.repr, $sroa_write_back_136.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; len_0);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(len_0);
+    }
     $sroa_write_back_136 = "core:prelude/string.wado/core:prelude/string.wado/String::format<loop_unroll_step_mid_body.wado/$tmpl$7ab51489603b688b,[core:prelude/list.wado/List<i32>]>$spec0$spec0$sroa[t.h0]"(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_weights_repr_140, used: current_17 });
     len_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_83("wasi/stream-new"()));
     $sroa_text_used_128 = builtin::i32_wrap_i64($cm_pair_7_83 >> 32_i64);
     len_0 = "loop_unroll_step_mid_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(len_0);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_text_used_128, $sroa_write_back_136.repr, $sroa_write_back_136.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; len_0);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(len_0);
+    }
 }
 
 fn "loop_unroll_step_mid_body.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -319,9 +321,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {

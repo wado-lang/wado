@@ -198,12 +198,14 @@ fn "loop_unroll_search_wrapping_index.wado/run"() with Stdout {
         start_192 = start_192 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(i_32, a, 0, start_192);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; i_32);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; base_1);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(i_32);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(base_1);
+    }
 }
 
 fn "loop_unroll_search_wrapping_index.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

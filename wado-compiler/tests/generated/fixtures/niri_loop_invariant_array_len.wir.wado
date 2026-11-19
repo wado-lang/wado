@@ -195,12 +195,14 @@ fn "niri_loop_invariant_array_len.wado/run"() with Stdout {
         start_186 = start_186 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(i_114, arr_123, 0, start_186);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; i_114);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; acc);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(i_114);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(acc);
+    }
 }
 
 fn "niri_loop_invariant_array_len.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

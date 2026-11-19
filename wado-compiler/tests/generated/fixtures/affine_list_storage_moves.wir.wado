@@ -705,96 +705,111 @@ fn "affine_list_storage_moves.wado/$test_0_remove_leaves_no_copy_for_the_drop"()
     let $cm_pair_17: i64;
     let elements_27: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let used_28: i32;
-    let $sroa_$pattern_temp_0_0_36: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_37: i32;
-    let $sroa_$pattern_temp_1_0_38: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_1_1_39: i32;
-    let $held_7_52: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_36 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_17("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_0_1_37 = builtin::i32_wrap_i64($cm_pair_17 >> 32_i64);
-    $sroa_$pattern_temp_1_0_38 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_17("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_1_1_39 = builtin::i32_wrap_i64($cm_pair_17 >> 32_i64);
+    let $held_7_43: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_0_62: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_63: i32;
+    let $sroa_$pattern_temp_1_0_64: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_1_1_65: i32;
+    $sroa_$pattern_temp_0_0_62 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_17("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_0_1_63 = builtin::i32_wrap_i64($cm_pair_17 >> 32_i64);
+    $sroa_$pattern_temp_1_0_64 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_17("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_1_1_65 = builtin::i32_wrap_i64($cm_pair_17 >> 32_i64);
     used_28 = builtin::array_len(local.tee elements_27(array.new_fixed<ref null "core:prelude//$Resource">()));
     ends = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_27, used: used_28 };
     if @unlikely(used_28 >= builtin::array_len(ends.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
-    if ref.is_null(local.tee $held_7_52(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_27(ends.repr), used_28))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_27, used_28, $sroa_$pattern_temp_0_0_36);
+    if ref.is_null(local.tee $held_7_43(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_27(ends.repr), used_28))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_27, used_28, $sroa_$pattern_temp_0_0_62);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($held_7_52.backing) == 0) {
-            unreachable;
-        }; $held_7_52.value);
-        $held_7_52.value = $sroa_$pattern_temp_0_0_36.value;
-        $held_7_52.backing = $sroa_$pattern_temp_0_0_36.backing;
-        $sroa_$pattern_temp_0_0_36.value = 0;
-        $sroa_$pattern_temp_0_0_36.backing = ref.null eq;
+        if ref.is_null($held_7_43.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $held_7_43.value;
+            $held_7_43.value = 0;
+            $held_7_43.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $held_7_43.value = $sroa_$pattern_temp_0_0_62.value;
+        $held_7_43.backing = $sroa_$pattern_temp_0_0_62.backing;
+        $sroa_$pattern_temp_0_0_62.value = 0;
+        $sroa_$pattern_temp_0_0_62.backing = ref.null eq;
     }
     ends.used = local.tee used_28(used_28 + 1);
     if @unlikely(used_28 >= builtin::array_len(ends.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
-    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_36(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_27(ends.repr), used_28))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_27, used_28, $sroa_$pattern_temp_1_0_38);
+    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_62(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_27(ends.repr), used_28))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_27, used_28, $sroa_$pattern_temp_1_0_64);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_36.backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_36.value);
-        $sroa_$pattern_temp_0_0_36.value = $sroa_$pattern_temp_1_0_38.value;
-        $sroa_$pattern_temp_0_0_36.backing = $sroa_$pattern_temp_1_0_38.backing;
-        $sroa_$pattern_temp_1_0_38.value = 0;
-        $sroa_$pattern_temp_1_0_38.backing = ref.null eq;
+        if ref.is_null($sroa_$pattern_temp_0_0_62.backing) == 0 {
+        } else {
+            $cm_handle_2 = $sroa_$pattern_temp_0_0_62.value;
+            $sroa_$pattern_temp_0_0_62.value = 0;
+            $sroa_$pattern_temp_0_0_62.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $sroa_$pattern_temp_0_0_62.value = $sroa_$pattern_temp_1_0_64.value;
+        $sroa_$pattern_temp_0_0_62.backing = $sroa_$pattern_temp_1_0_64.backing;
+        $sroa_$pattern_temp_1_0_64.value = 0;
+        $sroa_$pattern_temp_1_0_64.backing = ref.null eq;
     }
     ends.used = local.tee used_28(used_28 + 1);
-    "wasi/stream-drop-readable"(if @unlikely(ref.is_null(local.tee $sroa_$pattern_temp_0_0_36("core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::remove$unchecked"(ends, if @unlikely(0 >= used_28) {
+    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_62("core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::remove$unchecked"(ends, if @unlikely(0 >= used_28) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::remove$contract_report0"(0, used_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("affine_list_storage_moves.wado:10"), used: 33 });
         unreachable;
-    }; 0)).backing) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_36.value);
+    }; 0)).backing) == 0 {
+    } else {
+        used_28 = $sroa_$pattern_temp_0_0_62.value;
+        $sroa_$pattern_temp_0_0_62.value = 0;
+        $sroa_$pattern_temp_0_0_62.backing = ref.null eq;
+        "wasi/stream-drop-readable"(used_28);
+    }
     if @unlikely(local.tee used_28(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_6: ref Array<u8>;
-        $mv_field_6 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_37, $mv_field_6, 1);
+        let $mv_field_12: ref Array<u8>;
+        $mv_field_12 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_63, $mv_field_12, 1);
     }) != 1) {
         cold_path;
-        let $mv_arg_8: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_28, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_remove_leaves_no_copy_for_the_drop at affine_list_storage_moves.wado:12
+        let $mv_arg_14: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_14("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_28, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_remove_leaves_no_copy_for_the_drop at affine_list_storage_moves.wado:12
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 171 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_remove_leaves_no_copy_for_the_drop at affine_list_storage_moves.wado:12
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 171 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_14.used);
         unreachable;
     }
     "affine_list_storage_moves.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(ends.repr, ends.used);
     if @unlikely(local.tee used_28(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv_field_6 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_39, $mv_field_6, 1);
+        $mv_field_12 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_65, $mv_field_12, 1);
     }) != 1) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_28, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_remove_leaves_no_copy_for_the_drop at affine_list_storage_moves.wado:14
+        "core:rt/panic"(local.tee $mv_arg_14("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_28, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_remove_leaves_no_copy_for_the_drop at affine_list_storage_moves.wado:14
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 171 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_remove_leaves_no_copy_for_the_drop at affine_list_storage_moves.wado:14
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 171 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_14.used);
         unreachable;
     }
-    if ($sroa_$pattern_temp_1_1_39 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_1_1_39);
+    if ($sroa_$pattern_temp_1_1_65 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_1_1_65);
+        }
     }
-    if ($sroa_$pattern_temp_0_1_37 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_1_37);
+    if ($sroa_$pattern_temp_0_1_63 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_63);
+        }
     }
 }
 
@@ -803,31 +818,36 @@ fn "affine_list_storage_moves.wado/$test_1_insert_shifts_without_a_copy"() {
     let $cm_pair_22: i64;
     let elements_32: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let used_33: i32;
-    let $sroa_$pattern_temp_0_0_60: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_61: i32;
-    let $sroa_$pattern_temp_1_0_62: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_1_1_63: i32;
-    let $held_7_76: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_60 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_22("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_0_1_61 = builtin::i32_wrap_i64($cm_pair_22 >> 32_i64);
-    $sroa_$pattern_temp_1_0_62 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_22("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_1_1_63 = builtin::i32_wrap_i64($cm_pair_22 >> 32_i64);
+    let $held_7_48: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_0_81: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_82: i32;
+    let $sroa_$pattern_temp_1_0_83: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_1_1_84: i32;
+    $sroa_$pattern_temp_0_0_81 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_22("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_0_1_82 = builtin::i32_wrap_i64($cm_pair_22 >> 32_i64);
+    $sroa_$pattern_temp_1_0_83 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_22("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_1_1_84 = builtin::i32_wrap_i64($cm_pair_22 >> 32_i64);
     used_33 = builtin::array_len(local.tee elements_32(array.new_fixed<ref null "core:prelude//$Resource">()));
     ends = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_32, used: used_33 };
     if @unlikely(used_33 >= builtin::array_len(ends.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
-    if ref.is_null(local.tee $held_7_76(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_32(ends.repr), used_33))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_32, used_33, $sroa_$pattern_temp_0_0_60);
+    if ref.is_null(local.tee $held_7_48(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_32(ends.repr), used_33))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_32, used_33, $sroa_$pattern_temp_0_0_81);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($held_7_76.backing) == 0) {
-            unreachable;
-        }; $held_7_76.value);
-        $held_7_76.value = $sroa_$pattern_temp_0_0_60.value;
-        $held_7_76.backing = $sroa_$pattern_temp_0_0_60.backing;
-        $sroa_$pattern_temp_0_0_60.value = 0;
-        $sroa_$pattern_temp_0_0_60.backing = ref.null eq;
+        if ref.is_null($held_7_48.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $held_7_48.value;
+            $held_7_48.value = 0;
+            $held_7_48.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $held_7_48.value = $sroa_$pattern_temp_0_0_81.value;
+        $held_7_48.backing = $sroa_$pattern_temp_0_0_81.backing;
+        $sroa_$pattern_temp_0_0_81.value = 0;
+        $sroa_$pattern_temp_0_0_81.backing = ref.null eq;
     }
     ends.used = local.tee used_33(used_33 + 1);
     if @unlikely(0 > used_33) {
@@ -847,16 +867,20 @@ fn "affine_list_storage_moves.wado/$test_1_insert_shifts_without_a_copy"() {
     } else {
         builtin::array_fill<ref null "core:prelude//$Resource">(elements_32, 0, ref.null none, used_33);
     }
-    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_60(builtin::array_get_value<ref null "core:prelude//$Resource">(elements_32, 0))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_32, 0, $sroa_$pattern_temp_1_0_62);
+    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_81(builtin::array_get_value<ref null "core:prelude//$Resource">(elements_32, 0))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_32, 0, $sroa_$pattern_temp_1_0_83);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_60.backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_60.value);
-        $sroa_$pattern_temp_0_0_60.value = $sroa_$pattern_temp_1_0_62.value;
-        $sroa_$pattern_temp_0_0_60.backing = $sroa_$pattern_temp_1_0_62.backing;
-        $sroa_$pattern_temp_1_0_62.value = 0;
-        $sroa_$pattern_temp_1_0_62.backing = ref.null eq;
+        if ref.is_null($sroa_$pattern_temp_0_0_81.backing) == 0 {
+        } else {
+            used_33 = $sroa_$pattern_temp_0_0_81.value;
+            $sroa_$pattern_temp_0_0_81.value = 0;
+            $sroa_$pattern_temp_0_0_81.backing = ref.null eq;
+            "wasi/stream-drop-readable"(used_33);
+        }
+        $sroa_$pattern_temp_0_0_81.value = $sroa_$pattern_temp_1_0_83.value;
+        $sroa_$pattern_temp_0_0_81.backing = $sroa_$pattern_temp_1_0_83.backing;
+        $sroa_$pattern_temp_1_0_83.value = 0;
+        $sroa_$pattern_temp_1_0_83.backing = ref.null eq;
     }
     ends.used = local.tee used_33(ends.used + 1);
     if @unlikely(used_33 != 2) {
@@ -864,56 +888,62 @@ fn "affine_list_storage_moves.wado/$test_1_insert_shifts_without_a_copy"() {
         "affine_list_storage_moves.wado/$test_1_insert_shifts_without_a_copy$cold0"(used_33);
         unreachable;
     }
-    $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_5: block {
-        break_if $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_5 used_33 == 0;
+    $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_9: block {
+        break_if $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_9 used_33 == 0;
         ends.used = local.tee used_33(used_33 - 1);
-        $sroa_$pattern_temp_0_0_60 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_32(ends.repr), used_33);
+        $sroa_$pattern_temp_0_0_81 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_32(ends.repr), used_33);
         builtin::array_set<ref null "core:prelude//$Resource">(elements_32, used_33, ref.null none);
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_60.backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_60.value);
-        break $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_5;
+        if ref.is_null($sroa_$pattern_temp_0_0_81.backing) == 0 {
+        } else {
+            used_33 = $sroa_$pattern_temp_0_0_81.value;
+            $sroa_$pattern_temp_0_0_81.value = 0;
+            $sroa_$pattern_temp_0_0_81.backing = ref.null eq;
+            "wasi/stream-drop-readable"(used_33);
+        }
+        break $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_9;
     };
     if @unlikely(local.tee used_33(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_6: ref Array<u8>;
-        $mv_field_6 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_61, $mv_field_6, 1);
+        let $mv_field_12: ref Array<u8>;
+        $mv_field_12 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_82, $mv_field_12, 1);
     }) != 1) {
         cold_path;
-        let $mv_arg_8: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_33, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_insert_shifts_without_a_copy at affine_list_storage_moves.wado:26
+        let $mv_arg_14: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_14("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_33, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_insert_shifts_without_a_copy at affine_list_storage_moves.wado:26
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 165 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_insert_shifts_without_a_copy at affine_list_storage_moves.wado:26
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 165 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_14.used);
         unreachable;
     }
     "affine_list_storage_moves.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(ends.repr, ends.used);
     if @unlikely(local.tee used_33(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv_field_6 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_63, $mv_field_6, 1);
+        $mv_field_12 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_84, $mv_field_12, 1);
     }) != 1) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_33, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_insert_shifts_without_a_copy at affine_list_storage_moves.wado:28
+        "core:rt/panic"(local.tee $mv_arg_14("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_33, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_insert_shifts_without_a_copy at affine_list_storage_moves.wado:28
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 165 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_insert_shifts_without_a_copy at affine_list_storage_moves.wado:28
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 165 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_14.used);
         unreachable;
     }
-    if ($sroa_$pattern_temp_1_1_63 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_1_1_63);
+    if ($sroa_$pattern_temp_1_1_84 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_1_1_84);
+        }
     }
-    if ($sroa_$pattern_temp_0_1_61 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_1_61);
+    if ($sroa_$pattern_temp_0_1_82 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_82);
+        }
     }
 }
 
@@ -922,93 +952,104 @@ fn "affine_list_storage_moves.wado/$test_2_truncate_drops_what_it_releases"() {
     let $cm_pair_13: i64;
     let elements_19: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let used_20: i32;
-    let $sroa_$pattern_temp_0_0_27: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_28: i32;
-    let $sroa_$pattern_temp_1_0_29: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_1_1_30: i32;
-    let $held_7_43: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_27 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_13("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_0_1_28 = builtin::i32_wrap_i64($cm_pair_13 >> 32_i64);
-    $sroa_$pattern_temp_1_0_29 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_13("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_1_1_30 = builtin::i32_wrap_i64($cm_pair_13 >> 32_i64);
+    let $held_7_35: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_0_53: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_54: i32;
+    let $sroa_$pattern_temp_1_0_55: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_1_1_56: i32;
+    $sroa_$pattern_temp_0_0_53 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_13("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_0_1_54 = builtin::i32_wrap_i64($cm_pair_13 >> 32_i64);
+    $sroa_$pattern_temp_1_0_55 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_13("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_1_1_56 = builtin::i32_wrap_i64($cm_pair_13 >> 32_i64);
     used_20 = builtin::array_len(local.tee elements_19(array.new_fixed<ref null "core:prelude//$Resource">()));
     ends = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_19, used: used_20 };
     if @unlikely(used_20 >= builtin::array_len(ends.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
-    if ref.is_null(local.tee $held_7_43(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, $sroa_$pattern_temp_0_0_27);
+    if ref.is_null(local.tee $held_7_35(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, $sroa_$pattern_temp_0_0_53);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($held_7_43.backing) == 0) {
-            unreachable;
-        }; $held_7_43.value);
-        $held_7_43.value = $sroa_$pattern_temp_0_0_27.value;
-        $held_7_43.backing = $sroa_$pattern_temp_0_0_27.backing;
-        $sroa_$pattern_temp_0_0_27.value = 0;
-        $sroa_$pattern_temp_0_0_27.backing = ref.null eq;
+        if ref.is_null($held_7_35.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $held_7_35.value;
+            $held_7_35.value = 0;
+            $held_7_35.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $held_7_35.value = $sroa_$pattern_temp_0_0_53.value;
+        $held_7_35.backing = $sroa_$pattern_temp_0_0_53.backing;
+        $sroa_$pattern_temp_0_0_53.value = 0;
+        $sroa_$pattern_temp_0_0_53.backing = ref.null eq;
     }
     ends.used = local.tee used_20(used_20 + 1);
     if @unlikely(used_20 >= builtin::array_len(ends.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
-    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_27(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, $sroa_$pattern_temp_1_0_29);
+    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_53(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, $sroa_$pattern_temp_1_0_55);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_27.backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_27.value);
-        $sroa_$pattern_temp_0_0_27.value = $sroa_$pattern_temp_1_0_29.value;
-        $sroa_$pattern_temp_0_0_27.backing = $sroa_$pattern_temp_1_0_29.backing;
-        $sroa_$pattern_temp_1_0_29.value = 0;
-        $sroa_$pattern_temp_1_0_29.backing = ref.null eq;
+        if ref.is_null($sroa_$pattern_temp_0_0_53.backing) == 0 {
+        } else {
+            $cm_handle_2 = $sroa_$pattern_temp_0_0_53.value;
+            $sroa_$pattern_temp_0_0_53.value = 0;
+            $sroa_$pattern_temp_0_0_53.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $sroa_$pattern_temp_0_0_53.value = $sroa_$pattern_temp_1_0_55.value;
+        $sroa_$pattern_temp_0_0_53.backing = $sroa_$pattern_temp_1_0_55.backing;
+        $sroa_$pattern_temp_1_0_55.value = 0;
+        $sroa_$pattern_temp_1_0_55.backing = ref.null eq;
     }
     ends.used = used_20 + 1;
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::truncate$unchecked$dae[len]"(ends);
     if @unlikely(local.tee used_20(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_6: ref Array<u8>;
-        $mv_field_6 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_30, $mv_field_6, 1);
+        let $mv_field_10: ref Array<u8>;
+        $mv_field_10 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_56, $mv_field_10, 1);
     }) != 1) {
         cold_path;
-        let $mv_arg_8: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_truncate_drops_what_it_releases at affine_list_storage_moves.wado:38
+        let $mv_arg_12: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_12("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_truncate_drops_what_it_releases at affine_list_storage_moves.wado:38
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 168 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_truncate_drops_what_it_releases at affine_list_storage_moves.wado:38
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 168 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_12.used);
         unreachable;
     }
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::clear"(ends);
     if @unlikely(local.tee used_20(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv_field_6 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_28, $mv_field_6, 1);
+        $mv_field_10 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_54, $mv_field_10, 1);
     }) != 1) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_truncate_drops_what_it_releases at affine_list_storage_moves.wado:40
+        "core:rt/panic"(local.tee $mv_arg_12("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_truncate_drops_what_it_releases at affine_list_storage_moves.wado:40
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 168 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_2_truncate_drops_what_it_releases at affine_list_storage_moves.wado:40
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 168 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_12.used);
         unreachable;
     }
     if ref.is_null(ends) == 0 {
         "affine_list_storage_moves.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(ends.repr, ends.used);
     }
-    if ($sroa_$pattern_temp_1_1_30 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_1_1_30);
+    if ($sroa_$pattern_temp_1_1_56 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_1_1_56);
+        }
     }
-    if ($sroa_$pattern_temp_0_1_28 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_1_28);
+    if ($sroa_$pattern_temp_0_1_54 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_54);
+        }
     }
 }
 
@@ -1017,31 +1058,36 @@ fn "affine_list_storage_moves.wado/$test_3_a_store_drops_what_the_slot_held"() {
     let $cm_pair_15: i64;
     let elements_19: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let used_20: i32;
-    let $sroa_$pattern_temp_0_0_35: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_36: i32;
-    let $sroa_$pattern_temp_1_0_37: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_1_1_38: i32;
-    let $held_7_51: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_35 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_15("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_0_1_36 = builtin::i32_wrap_i64($cm_pair_15 >> 32_i64);
-    $sroa_$pattern_temp_1_0_37 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_15("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_1_1_38 = builtin::i32_wrap_i64($cm_pair_15 >> 32_i64);
+    let $held_7_35: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_0_56: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_57: i32;
+    let $sroa_$pattern_temp_1_0_58: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_1_1_59: i32;
+    $sroa_$pattern_temp_0_0_56 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_15("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_0_1_57 = builtin::i32_wrap_i64($cm_pair_15 >> 32_i64);
+    $sroa_$pattern_temp_1_0_58 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_15("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_1_1_59 = builtin::i32_wrap_i64($cm_pair_15 >> 32_i64);
     used_20 = builtin::array_len(local.tee elements_19(array.new_fixed<ref null "core:prelude//$Resource">()));
     ends = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_19, used: used_20 };
     if @unlikely(used_20 >= builtin::array_len(ends.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
-    if ref.is_null(local.tee $held_7_51(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, $sroa_$pattern_temp_0_0_35);
+    if ref.is_null(local.tee $held_7_35(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, $sroa_$pattern_temp_0_0_56);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($held_7_51.backing) == 0) {
-            unreachable;
-        }; $held_7_51.value);
-        $held_7_51.value = $sroa_$pattern_temp_0_0_35.value;
-        $held_7_51.backing = $sroa_$pattern_temp_0_0_35.backing;
-        $sroa_$pattern_temp_0_0_35.value = 0;
-        $sroa_$pattern_temp_0_0_35.backing = ref.null eq;
+        if ref.is_null($held_7_35.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $held_7_35.value;
+            $held_7_35.value = 0;
+            $held_7_35.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $held_7_35.value = $sroa_$pattern_temp_0_0_56.value;
+        $held_7_35.backing = $sroa_$pattern_temp_0_0_56.backing;
+        $sroa_$pattern_temp_0_0_56.value = 0;
+        $sroa_$pattern_temp_0_0_56.backing = ref.null eq;
     }
     ends.used = local.tee used_20(used_20 + 1);
     if @unlikely(0 >= used_20) {
@@ -1049,191 +1095,219 @@ fn "affine_list_storage_moves.wado/$test_3_a_store_drops_what_the_slot_held"() {
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"(used_20);
         unreachable;
     }
-    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_35(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), 0))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, 0, $sroa_$pattern_temp_1_0_37);
+    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_56(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), 0))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, 0, $sroa_$pattern_temp_1_0_58);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_35.backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_35.value);
-        $sroa_$pattern_temp_0_0_35.value = $sroa_$pattern_temp_1_0_37.value;
-        $sroa_$pattern_temp_0_0_35.backing = $sroa_$pattern_temp_1_0_37.backing;
-        $sroa_$pattern_temp_1_0_37.value = 0;
-        $sroa_$pattern_temp_1_0_37.backing = ref.null eq;
+        if ref.is_null($sroa_$pattern_temp_0_0_56.backing) == 0 {
+        } else {
+            used_20 = $sroa_$pattern_temp_0_0_56.value;
+            $sroa_$pattern_temp_0_0_56.value = 0;
+            $sroa_$pattern_temp_0_0_56.backing = ref.null eq;
+            "wasi/stream-drop-readable"(used_20);
+        }
+        $sroa_$pattern_temp_0_0_56.value = $sroa_$pattern_temp_1_0_58.value;
+        $sroa_$pattern_temp_0_0_56.backing = $sroa_$pattern_temp_1_0_58.backing;
+        $sroa_$pattern_temp_1_0_58.value = 0;
+        $sroa_$pattern_temp_1_0_58.backing = ref.null eq;
     }
     if @unlikely(local.tee used_20(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_6: ref Array<u8>;
-        $mv_field_6 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_36, $mv_field_6, 1);
+        let $mv_field_10: ref Array<u8>;
+        $mv_field_10 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_57, $mv_field_10, 1);
     }) != 1) {
         cold_path;
-        let $mv_arg_8: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_store_drops_what_the_slot_held at affine_list_storage_moves.wado:49
+        let $mv_arg_12: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_12("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_store_drops_what_the_slot_held at affine_list_storage_moves.wado:49
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 169 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_store_drops_what_the_slot_held at affine_list_storage_moves.wado:49
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 169 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_12.used);
         unreachable;
     }
     "affine_list_storage_moves.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(ends.repr, ends.used);
     if @unlikely(local.tee used_20(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv_field_6 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_38, $mv_field_6, 1);
+        $mv_field_10 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_59, $mv_field_10, 1);
     }) != 1) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_store_drops_what_the_slot_held at affine_list_storage_moves.wado:51
+        "core:rt/panic"(local.tee $mv_arg_12("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_store_drops_what_the_slot_held at affine_list_storage_moves.wado:51
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 169 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_store_drops_what_the_slot_held at affine_list_storage_moves.wado:51
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 169 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_12.used);
         unreachable;
     }
-    if ($sroa_$pattern_temp_1_1_38 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_1_1_38);
+    if ($sroa_$pattern_temp_1_1_59 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_1_1_59);
+        }
     }
-    if ($sroa_$pattern_temp_0_1_36 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_1_36);
+    if ($sroa_$pattern_temp_0_1_57 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_57);
+        }
     }
 }
 
 fn "affine_list_storage_moves.wado/$test_4_swap_keeps_both"() {
     let ends: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>";
     let $cm_pair_20: i64;
-    let $v_2_27: bool;
     let elements_43: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let used_44: i32;
-    let $sroa_$pattern_temp_0_0_77: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_78: i32;
-    let $sroa_$pattern_temp_1_0_79: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_1_1_80: i32;
-    let $held_7_93: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_77 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_20("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_0_1_78 = builtin::i32_wrap_i64($cm_pair_20 >> 32_i64);
-    $sroa_$pattern_temp_1_0_79 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_20("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_1_1_80 = builtin::i32_wrap_i64($cm_pair_20 >> 32_i64);
+    let $held_7_59: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_0_103: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_104: i32;
+    let $sroa_$pattern_temp_1_0_105: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_1_1_106: i32;
+    $sroa_$pattern_temp_0_0_103 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_20("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_0_1_104 = builtin::i32_wrap_i64($cm_pair_20 >> 32_i64);
+    $sroa_$pattern_temp_1_0_105 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_20("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_1_1_106 = builtin::i32_wrap_i64($cm_pair_20 >> 32_i64);
     used_44 = builtin::array_len(local.tee elements_43(array.new_fixed<ref null "core:prelude//$Resource">()));
     ends = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_43, used: used_44 };
     if @unlikely(used_44 >= builtin::array_len(ends.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
-    if ref.is_null(local.tee $held_7_93(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_43(ends.repr), used_44))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_43, used_44, $sroa_$pattern_temp_0_0_77);
+    if ref.is_null(local.tee $held_7_59(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_43(ends.repr), used_44))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_43, used_44, $sroa_$pattern_temp_0_0_103);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($held_7_93.backing) == 0) {
-            unreachable;
-        }; $held_7_93.value);
-        $held_7_93.value = $sroa_$pattern_temp_0_0_77.value;
-        $held_7_93.backing = $sroa_$pattern_temp_0_0_77.backing;
-        $sroa_$pattern_temp_0_0_77.value = 0;
-        $sroa_$pattern_temp_0_0_77.backing = ref.null eq;
+        if ref.is_null($held_7_59.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $held_7_59.value;
+            $held_7_59.value = 0;
+            $held_7_59.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $held_7_59.value = $sroa_$pattern_temp_0_0_103.value;
+        $held_7_59.backing = $sroa_$pattern_temp_0_0_103.backing;
+        $sroa_$pattern_temp_0_0_103.value = 0;
+        $sroa_$pattern_temp_0_0_103.backing = ref.null eq;
     }
     ends.used = local.tee used_44(used_44 + 1);
     if @unlikely(used_44 >= builtin::array_len(ends.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
-    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_77(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_43(ends.repr), used_44))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_43, used_44, $sroa_$pattern_temp_1_0_79);
+    if ref.is_null(local.tee $sroa_$pattern_temp_0_0_103(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_43(ends.repr), used_44))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_43, used_44, $sroa_$pattern_temp_1_0_105);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_77.backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_77.value);
-        $sroa_$pattern_temp_0_0_77.value = $sroa_$pattern_temp_1_0_79.value;
-        $sroa_$pattern_temp_0_0_77.backing = $sroa_$pattern_temp_1_0_79.backing;
-        $sroa_$pattern_temp_1_0_79.value = 0;
-        $sroa_$pattern_temp_1_0_79.backing = ref.null eq;
+        if ref.is_null($sroa_$pattern_temp_0_0_103.backing) == 0 {
+        } else {
+            $cm_handle_2 = $sroa_$pattern_temp_0_0_103.value;
+            $sroa_$pattern_temp_0_0_103.value = 0;
+            $sroa_$pattern_temp_0_0_103.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $sroa_$pattern_temp_0_0_103.value = $sroa_$pattern_temp_1_0_105.value;
+        $sroa_$pattern_temp_0_0_103.backing = $sroa_$pattern_temp_1_0_105.backing;
+        $sroa_$pattern_temp_1_0_105.value = 0;
+        $sroa_$pattern_temp_1_0_105.backing = ref.null eq;
     }
     ends.used = local.tee used_44(used_44 + 1);
-    $v_2_27 = 0 < used_44;
-    if @unlikely(select i32($v_2_27, 1 < used_44, 0) == 0) {
+    $cm_handle_2 = 0 < used_44;
+    if @unlikely(select i32($cm_handle_2, 1 < used_44, 0) == 0) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::swap$contract_report0"($v_2_27, 1, ends, 0, used_44, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("affine_list_storage_moves.wado:60"), used: 33 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::swap$contract_report0"($cm_handle_2, 1, ends, 0, used_44, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("affine_list_storage_moves.wado:60"), used: 33 });
         unreachable;
     }
-    $sroa_$pattern_temp_0_0_77 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_43(ends.repr), 1);
+    $sroa_$pattern_temp_0_0_103 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_43(ends.repr), 1);
     builtin::array_set<ref null "core:prelude//$Resource">(elements_43, 1, ref.null none);
-    $sroa_$pattern_temp_1_0_79 = builtin::array_get_value<ref null "core:prelude//$Resource">(elements_43, 0);
+    $sroa_$pattern_temp_1_0_105 = builtin::array_get_value<ref null "core:prelude//$Resource">(elements_43, 0);
     builtin::array_set<ref null "core:prelude//$Resource">(elements_43, 0, ref.null none);
-    if ref.is_null(local.tee $held_7_93(builtin::array_get_value<ref null "core:prelude//$Resource">(elements_43, 1))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_43, 1, $sroa_$pattern_temp_1_0_79);
+    if ref.is_null(local.tee $held_7_59(builtin::array_get_value<ref null "core:prelude//$Resource">(elements_43, 1))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_43, 1, $sroa_$pattern_temp_1_0_105);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($held_7_93.backing) == 0) {
-            unreachable;
-        }; $held_7_93.value);
-        $held_7_93.value = $sroa_$pattern_temp_1_0_79.value;
-        $held_7_93.backing = $sroa_$pattern_temp_1_0_79.backing;
-        $sroa_$pattern_temp_1_0_79.value = 0;
-        $sroa_$pattern_temp_1_0_79.backing = ref.null eq;
+        if ref.is_null($held_7_59.backing) == 0 {
+        } else {
+            used_44 = $held_7_59.value;
+            $held_7_59.value = 0;
+            $held_7_59.backing = ref.null eq;
+            "wasi/stream-drop-readable"(used_44);
+        }
+        $held_7_59.value = $sroa_$pattern_temp_1_0_105.value;
+        $held_7_59.backing = $sroa_$pattern_temp_1_0_105.backing;
+        $sroa_$pattern_temp_1_0_105.value = 0;
+        $sroa_$pattern_temp_1_0_105.backing = ref.null eq;
     }
-    if ref.is_null(local.tee $sroa_$pattern_temp_1_0_79(builtin::array_get_value<ref null "core:prelude//$Resource">(elements_43, 0))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_43, 0, $sroa_$pattern_temp_0_0_77);
+    if ref.is_null(local.tee $sroa_$pattern_temp_1_0_105(builtin::array_get_value<ref null "core:prelude//$Resource">(elements_43, 0))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_43, 0, $sroa_$pattern_temp_0_0_103);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_1_0_79.backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_1_0_79.value);
-        $sroa_$pattern_temp_1_0_79.value = $sroa_$pattern_temp_0_0_77.value;
-        $sroa_$pattern_temp_1_0_79.backing = $sroa_$pattern_temp_0_0_77.backing;
-        $sroa_$pattern_temp_0_0_77.value = 0;
-        $sroa_$pattern_temp_0_0_77.backing = ref.null eq;
+        if ref.is_null($sroa_$pattern_temp_1_0_105.backing) == 0 {
+        } else {
+            used_44 = $sroa_$pattern_temp_1_0_105.value;
+            $sroa_$pattern_temp_1_0_105.value = 0;
+            $sroa_$pattern_temp_1_0_105.backing = ref.null eq;
+            "wasi/stream-drop-readable"(used_44);
+        }
+        $sroa_$pattern_temp_1_0_105.value = $sroa_$pattern_temp_0_0_103.value;
+        $sroa_$pattern_temp_1_0_105.backing = $sroa_$pattern_temp_0_0_103.backing;
+        $sroa_$pattern_temp_0_0_103.value = 0;
+        $sroa_$pattern_temp_0_0_103.backing = ref.null eq;
     }
-    $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_4: block {
-        break_if $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_4 local.tee used_44(ends.used) == 0;
+    $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_10: block {
+        break_if $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_10 local.tee used_44(ends.used) == 0;
         ends.used = local.tee used_44(used_44 - 1);
-        $sroa_$pattern_temp_0_0_77 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_43(ends.repr), used_44);
+        $sroa_$pattern_temp_0_0_103 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_43(ends.repr), used_44);
         builtin::array_set<ref null "core:prelude//$Resource">(elements_43, used_44, ref.null none);
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_77.backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_77.value);
-        break $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_4;
+        if ref.is_null($sroa_$pattern_temp_0_0_103.backing) == 0 {
+        } else {
+            used_44 = $sroa_$pattern_temp_0_0_103.value;
+            $sroa_$pattern_temp_0_0_103.value = 0;
+            $sroa_$pattern_temp_0_0_103.backing = ref.null eq;
+            "wasi/stream-drop-readable"(used_44);
+        }
+        break $thread_$inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_10;
     };
     if @unlikely(local.tee used_44(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_10: ref Array<u8>;
-        $mv_field_10 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_78, $mv_field_10, 1);
+        let $mv_field_20: ref Array<u8>;
+        $mv_field_20 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_104, $mv_field_20, 1);
     }) != 1) {
         cold_path;
-        let $mv_arg_12: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_12("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_44, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_swap_keeps_both at affine_list_storage_moves.wado:63
+        let $mv_arg_22: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_22("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_44, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_swap_keeps_both at affine_list_storage_moves.wado:63
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 152 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_swap_keeps_both at affine_list_storage_moves.wado:63
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 152 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_12.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_22.used);
         unreachable;
     }
     "affine_list_storage_moves.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(ends.repr, ends.used);
     if @unlikely(local.tee used_44(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv_field_10 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_80, $mv_field_10, 1);
+        $mv_field_20 = array.new_fixed<u8>(1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_1_1_106, $mv_field_20, 1);
     }) != 1) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_12("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_44, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_swap_keeps_both at affine_list_storage_moves.wado:65
+        "core:rt/panic"(local.tee $mv_arg_22("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_44, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_swap_keeps_both at affine_list_storage_moves.wado:65
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 152 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_4_swap_keeps_both at affine_list_storage_moves.wado:65
 condition: tb.write_all([1]) == CopyResult::Dropped
 tb.write_all([1]): "), used: 152 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_12.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_22.used);
         unreachable;
     }
-    if ($sroa_$pattern_temp_1_1_80 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_1_1_80);
+    if ($sroa_$pattern_temp_1_1_106 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_1_1_106);
+        }
     }
-    if ($sroa_$pattern_temp_0_1_78 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_1_78);
+    if ($sroa_$pattern_temp_0_1_104 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_104);
+        }
     }
 }
 
@@ -1243,14 +1317,14 @@ fn "affine_list_storage_moves.wado/$test_5_inspecting_reads_each_element_in_plac
     let $cm_pair_17: i64;
     let elements_19: ref null "Array<core:prelude/types.wado/Stream<u8>>";
     let used_20: i32;
-    let out_26: ref "core:prelude/string.wado//String";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_affine_list_storage_moves_wado__tmpl_5597cb3df90898aa_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8_____fmt_26_0: ref "core:prelude/format.wado//Formatter";
-    let $sroa_$pattern_temp_0_0_122: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_123: i32;
     let $held_7: ref null "core:prelude//$Resource";
+    let out_39: ref "core:prelude/string.wado//String";
+    let $temp_inline_core_prelude_traits_wado_TemplateHole_affine_list_storage_moves_wado__tmpl_5597cb3df90898aa_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8_____fmt_29_0: ref "core:prelude/format.wado//Formatter";
+    let $sroa_$pattern_temp_0_0_135: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_136: i32;
     let $licm_repr_188: ref Array<u8>;
-    $sroa_$pattern_temp_0_0_122 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_17("wasi/stream-new"())), backing: ref.null eq };
-    $sroa_$pattern_temp_0_1_123 = builtin::i32_wrap_i64($cm_pair_17 >> 32_i64);
+    $sroa_$pattern_temp_0_0_135 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_17("wasi/stream-new"())), backing: ref.null eq };
+    $sroa_$pattern_temp_0_1_136 = builtin::i32_wrap_i64($cm_pair_17 >> 32_i64);
     used_20 = builtin::array_len(local.tee elements_19(array.new_fixed<ref null "core:prelude//$Resource">()));
     ends = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_19, used: used_20 };
     if @unlikely(used_20 >= builtin::array_len(ends.repr)) {
@@ -1258,34 +1332,39 @@ fn "affine_list_storage_moves.wado/$test_5_inspecting_reads_each_element_in_plac
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(ends);
     }
     if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, $sroa_$pattern_temp_0_0_122);
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, $sroa_$pattern_temp_0_0_135);
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($held_7.backing) == 0) {
-            unreachable;
-        }; $held_7.value);
-        $held_7.value = $sroa_$pattern_temp_0_0_122.value;
-        $held_7.backing = $sroa_$pattern_temp_0_0_122.backing;
-        $sroa_$pattern_temp_0_0_122.value = 0;
-        $sroa_$pattern_temp_0_0_122.backing = ref.null eq;
+        if ref.is_null($held_7.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $held_7.value;
+            $held_7.value = 0;
+            $held_7.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
+        $held_7.value = $sroa_$pattern_temp_0_0_135.value;
+        $held_7.backing = $sroa_$pattern_temp_0_0_135.backing;
+        $sroa_$pattern_temp_0_0_135.value = 0;
+        $sroa_$pattern_temp_0_0_135.backing = ref.null eq;
     }
     ends.used = local.tee used_20(used_20 + 1);
-    out_26 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $inline_core_prelude_string_wado_String__internal_push_view_22: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_22;
+    out_39 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $inline_core_prelude_string_wado_String__internal_push_view_25: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_25;
     };
-    $temp_inline_core_prelude_traits_wado_TemplateHole_affine_list_storage_moves_wado__tmpl_5597cb3df90898aa_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8_____fmt_26_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_26 };
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelude/types.wado/Stream<u8>>$dae[start,marker]$spec0"(ends.repr, used_20, $temp_inline_core_prelude_traits_wado_TemplateHole_affine_list_storage_moves_wado__tmpl_5597cb3df90898aa_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8_____fmt_26_0, 256);
-    $inline_core_prelude_string_wado_String__internal_push_view_38: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_38;
+    $temp_inline_core_prelude_traits_wado_TemplateHole_affine_list_storage_moves_wado__tmpl_5597cb3df90898aa_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8_____fmt_29_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_39 };
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<core:prelude/types.wado/Stream<u8>>$dae[start,marker]$spec0"(ends.repr, used_20, $temp_inline_core_prelude_traits_wado_TemplateHole_affine_list_storage_moves_wado__tmpl_5597cb3df90898aa_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8_____fmt_29_0, 256);
+    $inline_core_prelude_string_wado_String__internal_push_view_41: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_41;
     };
-    used_20 = out_26.used;
+    used_20 = out_39.used;
     if @unlikely($inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_0: block -> bool {
         if 14 > used_20 {
             break $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_0: 0;
         }
         $inline_core_prelude_string_wado_StrSlice__starts_with_core_prelude_string_wado_String__spec0_spec0_0__$inline_bytes_match_at_5: block -> bool {
             used_20 = 0;
-            $licm_repr_188 = out_26.repr;
+            $licm_repr_188 = out_39.repr;
             b88: block {
                 l89: loop {
                     break_if b88 (builtin::i64_extend_i32_s(used_20) + 3_i64) >= builtin::i64_extend_i32_s(14);
@@ -1331,12 +1410,12 @@ fn "affine_list_storage_moves.wado/$test_5_inspecting_reads_each_element_in_plac
         "affine_list_storage_moves.wado/$test_5_inspecting_reads_each_element_in_place$cold1"(used_20);
         unreachable;
     }
-    if @unlikely(ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(local.tee kept($inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_47: block -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" {
+    if @unlikely(ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(local.tee kept($inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_50: block -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" {
         if used_20 == 0 {
-            break $inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_47: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0;
+            break $inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_50: global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0;
         }
         ends.used = local.tee used_20(used_20 - 1);
-        break $inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_47: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_0_0_122 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20); builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, ref.null none); $sroa_$pattern_temp_0_0_122 };
+        break $inline_core_prelude_list_wado_List_core_prelude_types_wado_Stream_u8____pop_50: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $sroa_$pattern_temp_0_0_135 = builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_19(ends.repr), used_20); builtin::array_set<ref null "core:prelude//$Resource">(elements_19, used_20, ref.null none); $sroa_$pattern_temp_0_0_135 };
     })) == 0) {
         cold_path;
         "affine_list_storage_moves.wado/$test_5_inspecting_reads_each_element_in_place$cold0"(kept);
@@ -1344,31 +1423,36 @@ fn "affine_list_storage_moves.wado/$test_5_inspecting_reads_each_element_in_plac
     }
     if kept.discriminant == 0 {
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null(local.tee $sroa_$pattern_temp_0_0_122(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(kept).payload_0).backing) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_0_122.value);
+        if ref.is_null(local.tee $sroa_$pattern_temp_0_0_135(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(kept).payload_0).backing) == 0 {
+        } else {
+            used_20 = $sroa_$pattern_temp_0_0_135.value;
+            $sroa_$pattern_temp_0_0_135.value = 0;
+            $sroa_$pattern_temp_0_0_135.backing = ref.null eq;
+            "wasi/stream-drop-readable"(used_20);
+        }
     }
     if @unlikely(local.tee used_20(block -> "core:prelude/types.wado//enum:CopyResult" {
         $licm_repr_188 = array.new_fixed<u8>(1);
-        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_123, $licm_repr_188, 1);
+        "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$spec0"($sroa_$pattern_temp_0_1_136, $licm_repr_188, 1);
     }) != 1) {
         cold_path;
-        "core:rt/panic"(local.tee out_26("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_inspecting_reads_each_element_in_place at affine_list_storage_moves.wado:78
+        "core:rt/panic"(local.tee out_39("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_list_storage_moves.wado/$tmpl$dcb8672c2bf63b7c,[core:prelude/types.wado/CopyResult,core:prelude/types.wado/CopyResult]>"(struct.new "affine_list_storage_moves.wado//$tmpl$dcb8672c2bf63b7c" { h0: used_20, h1: 1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_inspecting_reads_each_element_in_place at affine_list_storage_moves.wado:78
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 175 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_5_inspecting_reads_each_element_in_place at affine_list_storage_moves.wado:78
 condition: ta.write_all([1]) == CopyResult::Dropped
 ta.write_all([1]): "), used: 175 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 CopyResult::Dropped: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_26.used);
+CopyResult::Dropped: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, out_39.used);
         unreachable;
     }
     if ref.is_null(ends) == 0 {
         "affine_list_storage_moves.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(ends.repr, ends.used);
     }
-    if ($sroa_$pattern_temp_0_1_123 == 0) == 0 {
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$pattern_temp_0_1_123);
+    if ($sroa_$pattern_temp_0_1_136 == 0) == 0 {
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_136);
+        }
     }
 }
 
@@ -1416,9 +1500,14 @@ fn "affine_list_storage_moves.wado/$drop$core:prelude/list.wado/List<core:prelud
         l117: loop {
             break_if b116 $index_3 >= $mv$value$used;
             if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($mv$value$repr, $index_3))) == 0 {
-                "wasi/stream-drop-readable"(if @unlikely(ref.is_null($slot_4.backing) == 0) {
-                    unreachable;
-                }; $slot_4.value);
+                if ref.is_null($slot_4.backing) == 0 {
+                } else {
+                    let $cm_handle_2: i32;
+                    $cm_handle_2 = $slot_4.value;
+                    $slot_4.value = 0;
+                    $slot_4.backing = ref.null eq;
+                    "wasi/stream-drop-readable"($cm_handle_2);
+                }
             }
             $index_3 = $index_3 + 1;
             continue l117;
@@ -1496,9 +1585,14 @@ fn "affine_list_storage_moves.wado/$drop$Array<core:prelude/types.wado/Stream<u8
         l121: loop {
             break_if b120 $index_2 >= $end_1;
             if ref.is_null(local.tee $slot_3(builtin::array_get_value<ref null "core:prelude//$Resource">(value, $index_2))) == 0 {
-                "wasi/stream-drop-readable"(if @unlikely(ref.is_null($slot_3.backing) == 0) {
-                    unreachable;
-                }; $slot_3.value);
+                if ref.is_null($slot_3.backing) == 0 {
+                } else {
+                    let $cm_handle_2: i32;
+                    $cm_handle_2 = $slot_3.value;
+                    $slot_3.value = 0;
+                    $slot_3.backing = ref.null eq;
+                    "wasi/stream-drop-readable"($cm_handle_2);
+                }
             }
             $index_2 = $index_2 + 1;
             continue l121;
@@ -2173,9 +2267,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -2188,9 +2283,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -3873,9 +3969,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/S
         l547: loop {
             break_if b546 $index_5 >= $arg_3;
             if ref.is_null(local.tee $slot_6(builtin::array_get_value<ref null "core:prelude//$Resource">($arg_1, $index_5))) == 0 {
-                "wasi/stream-drop-readable"(if @unlikely(ref.is_null($slot_6.backing) == 0) {
-                    unreachable;
-                }; $slot_6.value);
+                if ref.is_null($slot_6.backing) == 0 {
+                } else {
+                    let $cm_handle_2: i32;
+                    $cm_handle_2 = $slot_6.value;
+                    $slot_6.value = 0;
+                    $slot_6.backing = ref.null eq;
+                    "wasi/stream-drop-readable"($cm_handle_2);
+                }
             }
             $index_5 = $index_5 + 1;
             continue l547;
@@ -3972,9 +4073,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/S
         l560: loop {
             break_if b559 $av_23 >= $arg_13;
             if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "core:prelude//$Resource">($load_0, $av_23))) == 0 {
-                "wasi/stream-drop-readable"(if @unlikely(ref.is_null($slot_20.backing) == 0) {
-                    unreachable;
-                }; $slot_20.value);
+                if ref.is_null($slot_20.backing) == 0 {
+                } else {
+                    $arg_14 = $slot_20.value;
+                    $slot_20.value = 0;
+                    $slot_20.backing = ref.null eq;
+                    "wasi/stream-drop-readable"($arg_14);
+                }
             }
             $av_23 = $av_23 + 1;
             continue l560;
@@ -4000,9 +4105,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/S
             l565: loop {
                 break_if b564 $index_7 >= $end_6;
                 if ref.is_null(local.tee $slot_8(builtin::array_get_value<ref null "core:prelude//$Resource">($arg_3, $index_7))) == 0 {
-                    "wasi/stream-drop-readable"(if @unlikely(ref.is_null($slot_8.backing) == 0) {
-                        unreachable;
-                    }; $slot_8.value);
+                    if ref.is_null($slot_8.backing) == 0 {
+                    } else {
+                        let $cm_handle_2: i32;
+                        $cm_handle_2 = $slot_8.value;
+                        $slot_8.value = 0;
+                        $slot_8.backing = ref.null eq;
+                        "wasi/stream-drop-readable"($cm_handle_2);
+                    }
                 }
                 $index_7 = $index_7 + 1;
                 continue l565;

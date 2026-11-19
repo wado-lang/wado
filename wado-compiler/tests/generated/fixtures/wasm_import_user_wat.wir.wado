@@ -314,9 +314,10 @@ fn "wasm_import_user_wat.wado/run"() with Stdout {
     $load_0 = builtin::i32_wrap_i64(x_69 >> 32_i64);
     $sroa_t_h0_222 = "wasm_import_user_wat.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_222);
     "core:rt/write_string_to_stream$dae[add_newline]"($load_0, out_3.repr, out_3.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h0_222);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_222);
+    }
     $sroa_t_h0_233 = "wasm:sub/wasm_import_user.wat/twice"(1.5);
     local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }).used = 13;
     builtin::array_copy<u8>(out_3.repr, 0, global:wasm_import_user_wat.wado::$const_obj_3, 0, 13);
@@ -350,9 +351,9 @@ fn "wasm_import_user_wat.wado/run"() with Stdout {
             break $inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__1__$inline_check_special_45;
         };
         if $sroa_t_h0_222 {
-            let $mv_arg_4: ref "core:prelude/string.wado//String";
-            $mv_arg_4 = global:wasm_import_user_wat.wado::$const_obj_2;
-            "core:prelude/primitive.wado/fmt_float_special$spec0$spec0$sroa[f.buf]"(out_3, $load_0, is_negative_65, $mv_arg_4.repr, $mv_arg_4.used);
+            let $mv_arg_6: ref "core:prelude/string.wado//String";
+            $mv_arg_6 = global:wasm_import_user_wat.wado::$const_obj_2;
+            "core:prelude/primitive.wado/fmt_float_special$spec0$spec0$sroa[f.buf]"(out_3, $load_0, is_negative_65, $mv_arg_6.repr, $mv_arg_6.used);
             break $inline_f64__fmt_into_sroa_self_value__spec0_sroa_f_buf__1;
         }
         multivalue_bind [x_69, $sroa_t_h0_222, is_negative_65] = "core:prelude/fpfmt.wado/short"(builtin::f64_abs($sroa_t_h0_233));
@@ -375,9 +376,10 @@ fn "wasm_import_user_wat.wado/run"() with Stdout {
     $load_0 = builtin::i32_wrap_i64(x_69 >> 32_i64);
     $sroa_t_h0_222 = "wasm_import_user_wat.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_222);
     "core:rt/write_string_to_stream$dae[add_newline]"($load_0, out_3.repr, out_3.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h0_222);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_222);
+    }
 }
 
 fn "wasm_import_user_wat.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -742,9 +744,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -757,9 +760,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

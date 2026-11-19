@@ -188,12 +188,14 @@ fn "global_dce_cross_module.wado/run"() with Stdout {
         is_negative_74 = is_negative_74 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($load_0, $load_1, 0, is_negative_74);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $load_0);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h0_136);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($load_0);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_136);
+    }
 }
 
 fn "global_dce_cross_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

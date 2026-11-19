@@ -96,15 +96,24 @@ fn "wasi_tls_send_done_future.wado/run"() with Stdout, Connector, Error {
     $sroa_$pattern_temp_0_1_26 = builtin::i32_wrap_i64($cm_pair_9 >> 32_i64);
     tls_rx = local.tee $pattern_temp_1("wasi_tls_send_done_future.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[method]connector.send"(conn, $sroa_$pattern_temp_0_0_25)).0;
     send_done = $pattern_temp_1.1;
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_26);
-    "wasi/stream-drop-readable"(if @unlikely(ref.is_null(tls_rx.backing) == 0) {
-        unreachable;
-    }; tls_rx.value);
-    "wasi/future-drop-readable:val-result<_,own<wasi:tls/types.wado#Error>>"(if @unlikely(ref.is_null(send_done.backing) == 0) {
-        unreachable;
-    }; send_done.value);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_26);
+    }
+    if ref.is_null(tls_rx.backing) == 0 {
+    } else {
+        $sroa_$pattern_temp_0_0_25 = tls_rx.value;
+        tls_rx.value = 0;
+        tls_rx.backing = ref.null eq;
+        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_25);
+    }
+    if ref.is_null(send_done.backing) == 0 {
+    } else {
+        $sroa_$pattern_temp_0_0_25 = send_done.value;
+        send_done.value = 0;
+        send_done.backing = ref.null eq;
+        "wasi/future-drop-readable:val-result<_,own<wasi:tls/types.wado#Error>>"($sroa_$pattern_temp_0_0_25);
+    }
     $sroa_$pattern_temp_0_0_25 = builtin::i32_wrap_i64(local.tee $cm_pair_9("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_26 = builtin::i32_wrap_i64($cm_pair_9 >> 32_i64);
     $sroa_$pattern_temp_0_0_25 = "wasi_tls_send_done_future.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_25);
@@ -113,12 +122,14 @@ fn "wasi_tls_send_done_future.wado/run"() with Stdout, Connector, Error {
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; $sroa_$pattern_temp_0_1_26, new_repr);
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_26);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_25);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_26);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_25);
+    }
     if (conn == 0) == 0 {
         if ref.is_null(ref.null eq) == 0 {
         } else {

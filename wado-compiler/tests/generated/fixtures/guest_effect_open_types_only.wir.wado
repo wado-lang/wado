@@ -178,12 +178,14 @@ fn "guest_effect_open_types_only.wado/run"() with Stdout, Tag {
         start_227 = start_227 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(new_used_226, arr, 0, start_227);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_226);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h0_134);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(new_used_226);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_134);
+    }
 }
 
 fn "guest_effect_open_types_only.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

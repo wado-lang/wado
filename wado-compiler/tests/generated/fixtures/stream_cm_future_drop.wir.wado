@@ -121,13 +121,18 @@ fn "stream_cm_future_drop.wado/$cm_task_entry__handle"(request) with Response {
     }
     $sroa_$pattern_temp_0_0_183 = response.value;
     "wasi/task-return:handle"(0, $sroa_$pattern_temp_0_0_183, 0, 0_i64, 0, 0, 0, 0);
-    "wasi/future-drop-writable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_184);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-writable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"($sroa_$pattern_temp_0_1_184);
+    }
     if ref.is_null(_tx_future) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null(_tx_future.backing) == 0) {
-            unreachable;
-        }; _tx_future.value);
+        if ref.is_null(_tx_future.backing) == 0 {
+        } else {
+            $sroa_$pattern_temp_0_0_183 = _tx_future.value;
+            _tx_future.value = 0;
+            _tx_future.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_183);
+        }
     }
     if (request == 0) == 0 {
         if ref.is_null(ref.null eq) == 0 {

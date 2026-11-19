@@ -218,12 +218,14 @@ fn "opt_inline_cycle_cut.wado/run"() with Stdout {
         $sroa_$iter_0_start_129 = $sroa_$iter_0_start_129 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($sroa_v_end_128, arr, 0, $sroa_$iter_0_start_129);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_v_end_128);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; total);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_v_end_128);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(total);
+    }
 }
 
 fn "opt_inline_cycle_cut.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

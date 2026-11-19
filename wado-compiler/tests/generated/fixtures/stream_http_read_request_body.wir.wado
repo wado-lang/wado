@@ -631,9 +631,13 @@ fn "stream_http_read_request_body.wado/$cm_task_entry__handle"(request) with Req
     _trailers = $local_200.1;
     let $mv_repr_1: ref Array<u8>;
     multivalue_bind [$mv_repr_1, request] = "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"(body_stream);
-    "wasi/stream-drop-readable"(if @unlikely(ref.is_null(body_stream.backing) == 0) {
-        unreachable;
-    }; body_stream.value);
+    if ref.is_null(body_stream.backing) == 0 {
+    } else {
+        $sroa_$pattern_temp_0_0_208 = body_stream.value;
+        body_stream.value = 0;
+        body_stream.backing = ref.null eq;
+        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_208);
+    }
     drop("stream_http_read_request_body.wado/$cm_future_write_core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; $sroa_$pattern_temp_0_1_209, global:stream_http_read_request_body.wado::$const_obj_1));
@@ -651,21 +655,30 @@ fn "stream_http_read_request_body.wado/$cm_task_entry__handle"(request) with Req
     request = builtin::array_len(local.tee $mv_repr_1(array.new_fixed<u8>((request + 48) & 255)));
     body_data = struct.new "core:prelude/list.wado//List<u8>" { repr: $mv_repr_1, used: request };
     drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(resp_body_tx, body_data.repr, request));
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; resp_body_tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(resp_body_tx);
+    }
     drop("stream_http_read_request_body.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; $sroa_$pattern_temp_0_1_209, global:stream_http_read_request_body.wado::$const_obj_0));
     if ref.is_null(_tx_future) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null(_tx_future.backing) == 0) {
-            unreachable;
-        }; _tx_future.value);
+        if ref.is_null(_tx_future.backing) == 0 {
+        } else {
+            request = _tx_future.value;
+            _tx_future.value = 0;
+            _tx_future.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(request);
+        }
     }
     if ref.is_null(_trailers) == 0 {
-        "wasi/future-drop-readable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"(if @unlikely(ref.is_null(_trailers.backing) == 0) {
-            unreachable;
-        }; _trailers.value);
+        if ref.is_null(_trailers.backing) == 0 {
+        } else {
+            request = _trailers.value;
+            _trailers.value = 0;
+            _trailers.backing = ref.null eq;
+            "wasi/future-drop-readable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"(request);
+        }
     }
 }
 
@@ -1565,9 +1578,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -1580,9 +1594,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

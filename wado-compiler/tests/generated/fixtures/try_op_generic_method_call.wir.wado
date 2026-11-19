@@ -110,12 +110,14 @@ fn "try_op_generic_method_call.wado/run"() with Stdout {
             self_25 = self_25 + 1;
             "core:rt/cm_stream_write_raw_all_u8"(item, new_repr, 0, self_25);
         });
-        "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; item);
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }; $sroa_$iter_0_index_20);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/stream-drop-writable"(item);
+        }
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_index_20);
+        }
         break $fused_$inline_write_values_spec0_0;
     };
 }

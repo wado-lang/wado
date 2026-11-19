@@ -112,12 +112,14 @@ fn "const_object_globalization_let_escape.wado/run"() with Stdout {
                 drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
                     unreachable;
                 }; $sroa_$pattern_temp_0_1_14, new_repr));
-                "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-                    unreachable;
-                }; $sroa_$pattern_temp_0_1_14);
-                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-                    unreachable;
-                }; $sroa_slot_41);
+                if ref.is_null(ref.null eq) == 0 {
+                } else {
+                    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
+                }
+                if ref.is_null(ref.null eq) == 0 {
+                } else {
+                    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_41);
+                }
             } else {
                 break b0;
             }

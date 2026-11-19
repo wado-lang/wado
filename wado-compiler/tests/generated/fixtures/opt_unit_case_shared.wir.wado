@@ -171,12 +171,14 @@ fn "opt_unit_case_shared.wado/run"() with Stdout {
         $sroa_slot_23 = $sroa_slot_23 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($sroa_slot_21, new_repr, 0, $sroa_slot_23);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_slot_21);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_slot_19);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_slot_21);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_19);
+    }
 }
 
 fn "opt_unit_case_shared.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

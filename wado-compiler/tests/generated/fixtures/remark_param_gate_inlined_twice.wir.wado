@@ -304,12 +304,14 @@ fn "remark_param_gate_inlined_twice.wado/run"() with Stdout {
         start_192 = start_192 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(i_30, $array_clone_src_1, 0, start_192);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; i_30);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $load_1);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(i_30);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_1);
+    }
 }
 
 fn "remark_param_gate_inlined_twice.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

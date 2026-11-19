@@ -117,9 +117,10 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     $sroa_$iter_0_index_80 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
     $sroa_c_total_78 = "ref_impl_dispatch_list_vs_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_c_total_78);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_index_80, message_46.repr, message_46.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_c_total_78);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_c_total_78);
+    }
     builtin::array_set<i32>(local.tee a(builtin::array_new<i32>(3)), 0, 10);
     builtin::array_set<i32>(a, 1, 20);
     builtin::array_set<i32>(a, 2, 30);
@@ -144,9 +145,10 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     $sroa_$iter_0_index_80 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
     $sroa_c_total_78 = "ref_impl_dispatch_list_vs_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_c_total_78);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_index_80, message_46.repr, message_46.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_c_total_78);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_c_total_78);
+    }
 }
 
 fn "ref_impl_dispatch_list_vs_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -171,9 +173,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {

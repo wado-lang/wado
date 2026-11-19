@@ -314,14 +314,14 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_0_10: i32;
-    let $sroa_$pattern_temp_0_1_11: i32;
     let new_repr: ref Array<u8>;
-    $sroa_$pattern_temp_0_0_10 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_11 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_10 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+    let $sroa_$pattern_temp_0_0_25: i32;
+    let $sroa_$pattern_temp_0_1_26: i32;
+    $sroa_$pattern_temp_0_0_25 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_26 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$pattern_temp_0_0_25 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; $sroa_$pattern_temp_0_0_10);
+    }; $sroa_$pattern_temp_0_0_25);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
@@ -329,14 +329,16 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
             unreachable;
         }
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_11, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_26, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_11);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_10);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_26);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_25);
+    }
     unreachable;
 }
 

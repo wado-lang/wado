@@ -358,9 +358,13 @@ fn "resource_variant_reference_payload_copies.wado/$cm_task_entry__handle"(reque
         unreachable;
     }; $sroa_$pattern_temp_0_1_190, global:resource_variant_reference_payload_copies.wado::$const_obj_0));
     if ref.is_null(_sent) == 0 {
-        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(if @unlikely(ref.is_null(_sent.backing) == 0) {
-            unreachable;
-        }; _sent.value);
+        if ref.is_null(_sent.backing) == 0 {
+        } else {
+            fields = _sent.value;
+            _sent.value = 0;
+            _sent.backing = ref.null eq;
+            "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(fields);
+        }
     }
     if (request == 0) == 0 {
         if ref.is_null(ref.null eq) == 0 {

@@ -426,12 +426,17 @@ fn "affine_inspect_by_reference.wado/$test_0"() {
     $sroa_$pattern_temp_0_0_102 = h_2.rx;
     block {
     };
-    "wasi/stream-drop-readable"(if @unlikely(ref.is_null($sroa_$pattern_temp_0_0_102.backing) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_102.value);
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_103);
+    if ref.is_null($sroa_$pattern_temp_0_0_102.backing) == 0 {
+    } else {
+        end_101 = $sroa_$pattern_temp_0_0_102.value;
+        $sroa_$pattern_temp_0_0_102.value = 0;
+        $sroa_$pattern_temp_0_0_102.backing = ref.null eq;
+        "wasi/stream-drop-readable"(end_101);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_103);
+    }
 }
 
 fn "affine_inspect_by_reference.wado/$cm_export__$test_0"() {
@@ -889,9 +894,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -904,9 +910,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

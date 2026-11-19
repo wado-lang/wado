@@ -115,12 +115,14 @@ fn "affine_drop_impl.wado/report"(what) with Stdout {
         self_22 = self_22 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($mv_field_3, new_repr, 0, self_22);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $mv_field_3);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $mv_field_2);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($mv_field_3);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_field_2);
+    }
     global:affine_drop_impl.wado::DROPS = 0;
     global:affine_drop_impl.wado::GIVEN = 0;
 }

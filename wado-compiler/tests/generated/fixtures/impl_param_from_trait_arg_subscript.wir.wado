@@ -92,17 +92,19 @@ fn "impl_param_from_trait_arg_subscript.wado/$cm_export__run"() {
     $sroa_$pattern_temp_0_1_14_43 = builtin::i32_wrap_i64($cm_pair_7_36 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_42 = "impl_param_from_trait_arg_subscript.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_42);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_43, message_29.repr, message_29.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_13_42);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_42);
+    }
     message_29 = "impl_param_from_trait_arg_subscript.wado/impl_param_from_trait_arg_subscript.wado/X^impl_param_from_trait_arg_subscript.wado/Put<i64>::put"(builtin::array_get_value<ref "impl_param_from_trait_arg_subscript.wado//X">(elements, 0), 8_i64);
     $sroa_$pattern_temp_0_0_13_42 = builtin::i32_wrap_i64(local.tee $cm_pair_7_36("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_43 = builtin::i32_wrap_i64($cm_pair_7_36 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_42 = "impl_param_from_trait_arg_subscript.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_42);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_43, message_29.repr, message_29.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_13_42);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_42);
+    }
     "wasi/task-return"(0);
 }
 
@@ -200,9 +202,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {

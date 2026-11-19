@@ -198,12 +198,14 @@ fn "prune_keeps_used_global_initializer.wado/run"() with Stdout {
         len_31 = len_31 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(len_19, $licm_repr_39, 0, len_31);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; len_19);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; b_end_18);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(len_19);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(b_end_18);
+    }
 }
 
 fn "prune_keeps_used_global_initializer.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

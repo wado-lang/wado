@@ -120,12 +120,14 @@ fn "pgo_cold_region_writes_kept_local.wado/run"() with Stdout {
         $sroa_acc_total_25 = $sroa_acc_total_25 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($sroa_acc_total_24, $load_0, 0, $sroa_acc_total_25);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_acc_total_24);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; n_0);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_acc_total_24);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_0);
+    }
 }
 
 fn "pgo_cold_region_writes_kept_local.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

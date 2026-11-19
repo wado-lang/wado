@@ -688,7 +688,7 @@ fn "spec_effects_signature_resources.wado/headers_to_map"(headers) with Fields {
 }
 
 fn "spec_effects_signature_resources.wado/$test_0"() {
-    let $load_8: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>";
+    let $load_16: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>";
     let $cm_pair_0: i64;
     let self_20: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>";
     let key_21: ref "core:prelude/string.wado//String";
@@ -697,52 +697,56 @@ fn "spec_effects_signature_resources.wado/$test_0"() {
     let $sroa_$pattern_temp_0_1_40: i32;
     $sroa_$pattern_temp_0_0_37 = builtin::i32_wrap_i64(local.tee $cm_pair_0("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_38 = builtin::i32_wrap_i64($cm_pair_0 >> 32_i64);
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_38);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_38);
+    }
     $sroa_$pattern_temp_0_1_38 = builtin::i32_wrap_i64(local.tee $cm_pair_0("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_40 = builtin::i32_wrap_i64($cm_pair_0 >> 32_i64);
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_40);
-    "wasi/stream-drop-readable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_38);
-    "wasi/stream-drop-readable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_37);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_40);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_1_38);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_37);
+    }
     drop("spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[method]fields.append$spec0"(local.tee $sroa_$pattern_temp_0_0_37("spec_effects_signature_resources.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:spec_effects_signature_resources.wado::$const_obj_1, global:spec_effects_signature_resources.wado::$const_obj_2));
     self_20 = "spec_effects_signature_resources.wado/headers_to_map"($sroa_$pattern_temp_0_0_37);
     key_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 105, 100), used: 4 };
-    if @unlikely(local.tee $sroa_$pattern_temp_0_1_38("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::find_index"(local.tee $load_8(self_20.log), self_20.slots, self_20.nkeys, self_20.kids, self_20.lens, self_20.root, self_20.height, key_21.repr, 4)) < 0) {
+    if @unlikely(local.tee $sroa_$pattern_temp_0_1_38("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::find_index"(local.tee $load_16(self_20.log), self_20.slots, self_20.nkeys, self_20.kids, self_20.lens, self_20.root, self_20.height, key_21.repr, 4)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>::found$cold0$dae[self,e]"(key_21);
         unreachable;
     }
-    $sroa_$pattern_temp_0_1_38 = local.tee key_21(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_8.values, $sroa_$pattern_temp_0_1_38)).used;
-    key_21 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = key_21.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($sroa_$pattern_temp_0_1_38)), 0, $array_clone_src_1, 0, $sroa_$pattern_temp_0_1_38); $array_clone_dst_2, used: $sroa_$pattern_temp_0_1_38 };
+    $sroa_$pattern_temp_0_1_38 = local.tee key_21(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_16.values, $sroa_$pattern_temp_0_1_38)).used;
+    key_21 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_9: ref Array<u8>; $array_clone_src_9 = key_21.repr; let $array_clone_dst_10: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_10(builtin::array_new<u8>($sroa_$pattern_temp_0_1_38)), 0, $array_clone_src_9, 0, $sroa_$pattern_temp_0_1_38); $array_clone_dst_10, used: $sroa_$pattern_temp_0_1_38 };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
         if $sroa_$pattern_temp_0_1_38 != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
         $sroa_$pattern_temp_0_1_40 = 0;
-        $array_clone_src_1 = key_21.repr;
+        $array_clone_src_9 = key_21.repr;
         b19: block {
             l20: loop {
                 break_if b19 (builtin::i64_extend_i32_s($sroa_$pattern_temp_0_1_40) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$pattern_temp_0_1_38);
-                if builtin::array_get_value<u8>($array_clone_src_1, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
+                if builtin::array_get_value<u8>($array_clone_src_9, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 $sroa_$pattern_temp_0_1_40 = $sroa_$pattern_temp_0_1_40 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
+                if builtin::array_get_value<u8>($array_clone_src_9, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 $sroa_$pattern_temp_0_1_40 = $sroa_$pattern_temp_0_1_40 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
+                if builtin::array_get_value<u8>($array_clone_src_9, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 $sroa_$pattern_temp_0_1_40 = $sroa_$pattern_temp_0_1_40 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
+                if builtin::array_get_value<u8>($array_clone_src_9, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 $sroa_$pattern_temp_0_1_40 = $sroa_$pattern_temp_0_1_40 + 1;
@@ -752,7 +756,7 @@ fn "spec_effects_signature_resources.wado/$test_0"() {
         b25: block {
             l26: loop {
                 break_if b25 $sroa_$pattern_temp_0_1_40 >= $sroa_$pattern_temp_0_1_38;
-                if builtin::array_get_value<u8>($array_clone_src_1, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
+                if builtin::array_get_value<u8>($array_clone_src_9, $sroa_$pattern_temp_0_1_40) != builtin::array_get_value<u8>(global:spec_effects_signature_resources.wado::$const_obj_0, $sroa_$pattern_temp_0_1_40) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 $sroa_$pattern_temp_0_1_40 = $sroa_$pattern_temp_0_1_40 + 1;
@@ -1569,9 +1573,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -1584,9 +1589,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

@@ -134,14 +134,12 @@ global mut global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelud
 global global:affine_drop_impl_drops_field_by_name.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 115, 61);
 
 fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
-    let $load_86: i32;
-    let $load_87: ref Array<u8>;
+    let $load_99: ref Array<u8>;
     let c_0: ref "affine_drop_impl_drops_field_by_name.wado//Counter";
     let items: ref null "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>";
     let _bag: ref null "affine_drop_impl_drops_field_by_name.wado//Bag<core:prelude/types.wado/Stream<u8>>";
     let _box: ref null "affine_drop_impl_drops_field_by_name.wado//Box1";
     let elements_16: ref null "Array<core:prelude/types.wado/Stream<u8>>";
-    let used_17: i32;
     let out_81: ref "core:prelude/string.wado//String";
     let is_negative_143: bool;
     let rx_178: ref null "core:prelude//$Resource";
@@ -170,9 +168,14 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         }
         unreachable;
     }).0;
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(local.tee tx_179($local_2_186.1).backing) == 0) {
-        unreachable;
-    }; tx_179.value);
+    if ref.is_null(local.tee tx_179($local_2_186.1).backing) == 0 {
+    } else {
+        let $cm_handle_3: i32;
+        $cm_handle_3 = tx_179.value;
+        tx_179.value = 0;
+        tx_179.backing = ref.null eq;
+        "wasi/stream-drop-writable"($cm_handle_3);
+    }
     tx_179 = local.tee $local_2_186($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_4: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         if ref.is_null(local.tee $local_0_184(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
             global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_185(ref.as_non_null($local_0_184)).outer;
@@ -186,9 +189,13 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         }
         unreachable;
     }).0;
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(local.tee tx_191($local_2_186.1).backing) == 0) {
-        unreachable;
-    }; tx_191.value);
+    if ref.is_null(local.tee tx_191($local_2_186.1).backing) == 0 {
+    } else {
+        $cm_handle_3 = tx_191.value;
+        tx_191.value = 0;
+        tx_191.backing = ref.null eq;
+        "wasi/stream-drop-writable"($cm_handle_3);
+    }
     tx_191 = local.tee $local_2_186($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_6: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         if ref.is_null(local.tee $local_0_184(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
             global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_185(ref.as_non_null($local_0_184)).outer;
@@ -202,29 +209,39 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         }
         unreachable;
     }).0;
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(local.tee tx_203($local_2_186.1).backing) == 0) {
-        unreachable;
-    }; tx_203.value);
+    if ref.is_null(local.tee tx_203($local_2_186.1).backing) == 0 {
+    } else {
+        $cm_handle_3 = tx_203.value;
+        tx_203.value = 0;
+        tx_203.backing = ref.null eq;
+        "wasi/stream-drop-writable"($cm_handle_3);
+    }
     global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = struct.new "affine_drop_impl_drops_field_by_name.wado//$Dispatch_core:prelude/types.wado/Stream<u8>" { outer: local.tee $local_0_184(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "affine_drop_impl_drops_field_by_name.wado//$Closure_0" {}, func: ref.func "closure/affine_drop_impl_drops_field_by_name.wado/$closure_wrapper_0" }, op_drop: struct.new "canonical//CanonicalClosure_1" { env: struct.new "affine_drop_impl_drops_field_by_name.wado//$Closure_3" { $capture_0: c_0 }, func: ref.func "closure/affine_drop_impl_drops_field_by_name.wado/$closure_wrapper_1" } };
-    used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref null "core:prelude//$Resource">()));
-    items = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_16, used: used_17 };
-    if @unlikely(used_17 >= builtin::array_len(items.repr)) {
+    $cm_handle_3 = builtin::array_len(local.tee elements_16(array.new_fixed<ref null "core:prelude//$Resource">()));
+    items = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_16, used: $cm_handle_3 };
+    if @unlikely($cm_handle_3 >= builtin::array_len(items.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(items);
     }
-    if ref.is_null(local.tee tx_203(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_16(items.repr), used_17))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_16, used_17, rx_178);
+    if ref.is_null(local.tee tx_203(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_16(items.repr), $cm_handle_3))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_16, $cm_handle_3, rx_178);
     } else {
         $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_7: block {
             if ref.is_null(local.tee $local_1_215(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
                 global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_185(ref.as_non_null($local_1_215)).outer;
-                let $indirect_call_4: ref null "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4($local_1_185.op_drop).env, tx_203);
+                let $indirect_call_12: ref null "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_12.func, local.tee $indirect_call_12($local_1_185.op_drop).env, tx_203);
                 break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_7: global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_1_215;
             } else {
-                "wasi/stream-drop-readable"(if @unlikely(ref.is_null(tx_203.backing) == 0) {
-                    unreachable;
-                }; tx_203.value);
+                let $cm_arg_10: ref null "core:prelude//$Resource";
+                if ref.is_null(local.tee $cm_arg_10(tx_203).backing) == 0 {
+                } else {
+                    let $cm_handle_11: i32;
+                    $cm_handle_11 = $cm_arg_10.value;
+                    $cm_arg_10.value = 0;
+                    $cm_arg_10.backing = ref.null eq;
+                    "wasi/stream-drop-readable"($cm_handle_11);
+                }
                 break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_7;
             }
         };
@@ -233,23 +250,27 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         rx_178.value = 0;
         rx_178.backing = ref.null eq;
     }
-    items.used = local.tee used_17(used_17 + 1);
-    if @unlikely(used_17 >= builtin::array_len(items.repr)) {
+    items.used = local.tee $cm_handle_3($cm_handle_3 + 1);
+    if @unlikely($cm_handle_3 >= builtin::array_len(items.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(items);
     }
-    if ref.is_null(local.tee rx_178(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_16(items.repr), used_17))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_16, used_17, tx_179);
+    if ref.is_null(local.tee rx_178(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_16(items.repr), $cm_handle_3))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_16, $cm_handle_3, tx_179);
     } else {
         $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_8: block {
             if ref.is_null(local.tee $local_1_215(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
                 global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_185(ref.as_non_null($local_1_215)).outer;
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4($local_1_185.op_drop).env, rx_178);
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_12.func, local.tee $indirect_call_12($local_1_185.op_drop).env, rx_178);
                 break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_8: global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_1_215;
             } else {
-                "wasi/stream-drop-readable"(if @unlikely(ref.is_null(rx_178.backing) == 0) {
-                    unreachable;
-                }; rx_178.value);
+                if ref.is_null(local.tee tx_203(rx_178).backing) == 0 {
+                } else {
+                    $cm_handle_11 = tx_203.value;
+                    tx_203.value = 0;
+                    tx_203.backing = ref.null eq;
+                    "wasi/stream-drop-readable"($cm_handle_11);
+                }
                 break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_8;
             }
         };
@@ -258,26 +279,30 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         tx_179.value = 0;
         tx_179.backing = ref.null eq;
     }
-    items.used = used_17 + 1;
+    items.used = $cm_handle_3 + 1;
     _bag = struct.new "affine_drop_impl_drops_field_by_name.wado//Bag<core:prelude/types.wado/Stream<u8>>" { items: items };
-    used_17 = builtin::array_len(local.tee elements_16(array.new_fixed<ref null "core:prelude//$Resource">()));
-    items = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_16, used: used_17 };
-    if @unlikely(used_17 >= builtin::array_len(items.repr)) {
+    $cm_handle_3 = builtin::array_len(local.tee elements_16(array.new_fixed<ref null "core:prelude//$Resource">()));
+    items = struct.new "core:prelude/list.wado//List<core:prelude/types.wado/Stream<u8>>" { repr: elements_16, used: $cm_handle_3 };
+    if @unlikely($cm_handle_3 >= builtin::array_len(items.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>::grow"(items);
     }
-    if ref.is_null(local.tee rx_178(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_16(items.repr), used_17))) {
-        builtin::array_set<ref null "core:prelude//$Resource">(elements_16, used_17, tx_191);
+    if ref.is_null(local.tee rx_178(builtin::array_get_value<ref null "core:prelude//$Resource">(local.tee elements_16(items.repr), $cm_handle_3))) {
+        builtin::array_set<ref null "core:prelude//$Resource">(elements_16, $cm_handle_3, tx_191);
     } else {
         $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_9: block {
             if ref.is_null(local.tee $local_1_215(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
                 global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_185(ref.as_non_null($local_1_215)).outer;
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4($local_1_185.op_drop).env, rx_178);
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_12.func, local.tee $indirect_call_12($local_1_185.op_drop).env, rx_178);
                 break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_9: global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_1_215;
             } else {
-                "wasi/stream-drop-readable"(if @unlikely(ref.is_null(rx_178.backing) == 0) {
-                    unreachable;
-                }; rx_178.value);
+                if ref.is_null(local.tee tx_179(rx_178).backing) == 0 {
+                } else {
+                    $cm_handle_11 = tx_179.value;
+                    tx_179.value = 0;
+                    tx_179.backing = ref.null eq;
+                    "wasi/stream-drop-readable"($cm_handle_11);
+                }
                 break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_9;
             }
         };
@@ -286,7 +311,7 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         tx_191.value = 0;
         tx_191.backing = ref.null eq;
     }
-    items.used = used_17 + 1;
+    items.used = $cm_handle_3 + 1;
     items = local.tee _box(struct.new "affine_drop_impl_drops_field_by_name.wado//Box1" { items: items }).items;
     _box.items = ref.null none;
     "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items.repr, items.used);
@@ -308,13 +333,13 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         }
     }
     global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_0_184;
-    used_17 = c_0.drops;
-    local.tee out_81(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }).used = local.tee $load_86(6);
-    builtin::array_copy<u8>(local.tee $load_87(out_81.repr), 0, global:affine_drop_impl_drops_field_by_name.wado::$const_obj_0, 0, 6);
-    is_negative_143 = used_17 < 0;
-    $cm_pair_5_189 = builtin::i64_extend_i32_s(used_17);
+    $cm_handle_3 = c_0.drops;
+    local.tee out_81(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }).used = local.tee $cm_handle_11(6);
+    builtin::array_copy<u8>(local.tee $load_99(out_81.repr), 0, global:affine_drop_impl_drops_field_by_name.wado::$const_obj_0, 0, 6);
+    is_negative_143 = $cm_handle_3 < 0;
+    $cm_pair_5_189 = builtin::i64_extend_i32_s($cm_handle_3);
     $cm_pair_5_189 = select i64($cm_pair_5_189 < 0_i64, 0_i64 - $cm_pair_5_189, $cm_pair_5_189);
-    used_17 = $inline_count_digits_u64_10: block -> i32 {
+    $cm_handle_3 = $inline_count_digits_u64_10: block -> i32 {
         if $cm_pair_5_189 <u 100000_i64 {
             if $cm_pair_5_189 <u 100_i64 {
                 if $cm_pair_5_189 <u 10_i64 {
@@ -375,37 +400,37 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         break $inline_count_digits_u64_10: 20;
     };
     if is_negative_143 {
-        if @unlikely(local.tee $load_86($load_86 + 1) > builtin::array_len($load_87)) {
+        if @unlikely(local.tee $cm_handle_11($cm_handle_11 + 1) > builtin::array_len($load_99)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_81, $load_86);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_81, $cm_handle_11);
         }
         is_negative_143 = out_81.used;
-        out_81.used = $load_86;
+        out_81.used = $cm_handle_11;
         builtin::array_set_u8(out_81.repr, is_negative_143, 45);
     } else {
     }
-    if @unlikely(local.tee $load_86(out_81.used + used_17) > builtin::array_len(out_81.repr)) {
+    if @unlikely(local.tee $cm_handle_11(out_81.used + $cm_handle_3) > builtin::array_len(out_81.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_81, $load_86);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_81, $cm_handle_11);
     }
     is_negative_143 = out_81.used;
-    out_81.used = $load_86;
-    $load_87 = out_81.repr;
-    used_17 = is_negative_143 + used_17;
+    out_81.used = $cm_handle_11;
+    $load_99 = out_81.repr;
+    $cm_handle_3 = is_negative_143 + $cm_handle_3;
     b48: block {
         l49: loop {
-            break_if b48 (used_17 - is_negative_143) < 2;
+            break_if b48 ($cm_handle_3 - is_negative_143) < 2;
             q = $cm_pair_5_189 /u 100_i64;
-            tens = local.tee $load_86(builtin::i32_wrap_i64($cm_pair_5_189 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_87, used_17 - 1, (48 + $load_86) - (tens * 10));
-            builtin::array_set_u8($load_87, used_17 - 2, 48 + tens);
-            used_17 = used_17 - 2;
+            tens = local.tee $cm_handle_11(builtin::i32_wrap_i64($cm_pair_5_189 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_99, $cm_handle_3 - 1, (48 + $cm_handle_11) - (tens * 10));
+            builtin::array_set_u8($load_99, $cm_handle_3 - 2, 48 + tens);
+            $cm_handle_3 = $cm_handle_3 - 2;
             $cm_pair_5_189 = q;
             continue l49;
         };
     };
-    if used_17 > is_negative_143 {
-        builtin::array_set_u8($load_87, is_negative_143, 48 + builtin::i32_wrap_i64($cm_pair_5_189 %u 10_i64));
+    if $cm_handle_3 > is_negative_143 {
+        builtin::array_set_u8($load_99, is_negative_143, 48 + builtin::i32_wrap_i64($cm_pair_5_189 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_56: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_56;
@@ -424,23 +449,28 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         unreachable;
     }).0;
     tx_179 = $local_2_186.1;
-    used_17 = "affine_drop_impl_drops_field_by_name.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_178);
-    builtin::array_copy<u8>(local.tee $load_87(builtin::array_new<u8>(local.tee $load_86(out_81.used) + 1)), 0, out_81.repr, 0, $load_86);
-    builtin::array_set_u8($load_87, $load_86, 10);
+    $cm_handle_3 = "affine_drop_impl_drops_field_by_name.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_178);
+    builtin::array_copy<u8>(local.tee $load_99(builtin::array_new<u8>(local.tee $cm_handle_11(out_81.used) + 1)), 0, out_81.repr, 0, $cm_handle_11);
+    builtin::array_set_u8($load_99, $cm_handle_11, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(tx_179.backing) == 0) {
             unreachable;
         }
         is_negative_143 = tx_179.value;
-        $load_86 = $load_86 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_143, $load_87, 0, $load_86);
+        $cm_handle_11 = $cm_handle_11 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_143, $load_99, 0, $cm_handle_11);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(tx_179.backing) == 0) {
-        unreachable;
-    }; tx_179.value);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; used_17);
+    if ref.is_null(tx_179.backing) == 0 {
+    } else {
+        $cm_handle_11 = tx_179.value;
+        tx_179.value = 0;
+        tx_179.backing = ref.null eq;
+        "wasi/stream-drop-writable"($cm_handle_11);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($cm_handle_3);
+    }
 }
 
 fn "affine_drop_impl_drops_field_by_name.wado/$effect_dispatch__core:prelude/types.wado/Stream<u8>__drop"(self) {
@@ -448,14 +478,19 @@ fn "affine_drop_impl_drops_field_by_name.wado/$effect_dispatch__core:prelude/typ
     let $local_2: ref "affine_drop_impl_drops_field_by_name.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     if ref.is_null(local.tee $saved(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
         global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_2(ref.as_non_null($saved)).outer;
-        let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2.op_drop).env, self);
+        let $indirect_call_3: ref null "canonical//CanonicalClosure_1";
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3($local_2.op_drop).env, self);
         global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = $saved;
         return;
     } else {
-        "wasi/stream-drop-readable"(if @unlikely(ref.is_null(self.backing) == 0) {
-            unreachable;
-        }; self.value);
+        if ref.is_null(self.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = self.value;
+            self.value = 0;
+            self.backing = ref.null eq;
+            "wasi/stream-drop-readable"($cm_handle_2);
+        }
         return nop;
     }
 }
@@ -473,13 +508,18 @@ fn "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<
                 $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_0: block {
                     if ref.is_null(local.tee $local_1(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
                         global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_2(ref.as_non_null($local_1)).outer;
-                        let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-                        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2.op_drop).env, $slot_4);
+                        let $indirect_call_3: ref null "canonical//CanonicalClosure_1";
+                        call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3($local_2.op_drop).env, $slot_4);
                         break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_0: global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_1;
                     } else {
-                        "wasi/stream-drop-readable"(if @unlikely(ref.is_null($slot_4.backing) == 0) {
-                            unreachable;
-                        }; $slot_4.value);
+                        if ref.is_null($slot_4.backing) == 0 {
+                        } else {
+                            let $cm_handle_2: i32;
+                            $cm_handle_2 = $slot_4.value;
+                            $slot_4.value = 0;
+                            $slot_4.backing = ref.null eq;
+                            "wasi/stream-drop-readable"($cm_handle_2);
+                        }
                         break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_0;
                     }
                 };

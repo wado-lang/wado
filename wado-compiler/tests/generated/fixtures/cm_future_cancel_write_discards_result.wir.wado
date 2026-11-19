@@ -91,18 +91,21 @@ fn "cm_future_cancel_write_discards_result.wado/run"() with Stdout {
     drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; $sroa_$pattern_temp_0_1_23, new_repr));
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_1_23);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_22);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_23);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_22);
+    }
     drop("wasi/future-cancel-write:u8"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; tx_1));
-    "wasi/future-drop-readable:u8"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_20);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:u8"($sroa_$pattern_temp_0_0_20);
+    }
     drop("cm_future_cancel_write_discards_result.wado/$cm_future_write_u8"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; tx_1, 1));

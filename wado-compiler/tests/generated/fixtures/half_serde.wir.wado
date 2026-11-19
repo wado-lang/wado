@@ -1126,9 +1126,10 @@ fn "half_serde.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_1_112 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $load_2 = "half_serde.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_2);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_112, buf_22.repr, buf_22.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $load_2);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_2);
+    }
     if @unlikely(local.tee $load_2(local.tee v_53($thread_$inline_core_json_from_bytes_half_serde_wado_Weights_core_prelude_bytes_wado_ByteSlice__11: block -> ref "half_serde.wado//Weights" {
         $load_2 = buf_22.used;
         de_50 = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: buf_22.repr, start: 0, end: $load_2 }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
@@ -1149,9 +1150,9 @@ fn "half_serde.wado/run"() with Stdout {
         });
         if @unlikely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de_50) >= 0) {
             cold_path;
-            let $mv_path_7: ref "core:prelude/string.wado//String";
-            multivalue_bind [$load_2, buf_22, $cm_pair_7, $mv_path_7] = "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de_50.pos));
-            $qm_e_52 = struct.new "core:serde//DeserializeError" { kind: $load_2, message: buf_22, offset: $cm_pair_7, path: $mv_path_7 };
+            let $mv_path_9: ref "core:prelude/string.wado//String";
+            multivalue_bind [$load_2, buf_22, $cm_pair_7, $mv_path_9] = "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de_50.pos));
+            $qm_e_52 = struct.new "core:serde//DeserializeError" { kind: $load_2, message: buf_22, offset: $cm_pair_7, path: $mv_path_9 };
             "core:prelude/types.wado/core:prelude/types.wado/unwrap_failed<core:serde/DeserializeError>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, $qm_e_52);
             unreachable;
             break $thread_$inline_core_json_from_bytes_half_serde_wado_Weights_core_prelude_bytes_wado_ByteSlice__11;
@@ -1244,8 +1245,8 @@ back.name: "), used: 90 }, s1: struct.new "core:prelude/string.wado//String" { r
         });
         if @unlikely(local.tee $load_2(de_98.pos) < local.tee self_108(de_98.input).end - self_108.start) {
             cold_path;
-            multivalue_bind [$load_2, buf_22, $cm_pair_7, $mv_path_7] = "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s($load_2));
-            $qm_e_52 = struct.new "core:serde//DeserializeError" { kind: $load_2, message: buf_22, offset: $cm_pair_7, path: $mv_path_7 };
+            multivalue_bind [$load_2, buf_22, $cm_pair_7, $mv_path_9] = "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s($load_2));
+            $qm_e_52 = struct.new "core:serde//DeserializeError" { kind: $load_2, message: buf_22, offset: $cm_pair_7, path: $mv_path_9 };
             "core:prelude/types.wado/core:prelude/types.wado/unwrap_failed<core:serde/DeserializeError>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, $qm_e_52);
             unreachable;
             break $thread_$inline_core_cbor_from_bytes_half_serde_wado_Weights_core_prelude_bytes_wado_ByteList__31;
@@ -2938,9 +2939,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
@@ -2953,9 +2955,10 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
         unreachable;
     }; $sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_$pattern_temp_0_0_9);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

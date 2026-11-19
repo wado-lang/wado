@@ -187,12 +187,14 @@ fn "cm_component_import_resource_host_effect.wado/run"() with Stdout, MonotonicC
         start_228 = start_228 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(new_used_227, arr, 0, start_228);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_227);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h0_135);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(new_used_227);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_135);
+    }
     if (t_0 == 0) == 0 {
         if ref.is_null(ref.null eq) == 0 {
         } else {

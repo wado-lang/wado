@@ -139,12 +139,14 @@ fn "bug_sroa_reference_arg_written_by_later_arg.wado/run"() with Stdout {
         is_negative_102 = is_negative_102 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(r, $load_1, 0, is_negative_102);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; r);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; $sroa_t_h0_255);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(r);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_255);
+    }
 }
 
 fn "bug_sroa_reference_arg_written_by_later_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

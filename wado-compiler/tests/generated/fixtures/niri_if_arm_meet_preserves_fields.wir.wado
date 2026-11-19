@@ -168,12 +168,14 @@ fn "niri_if_arm_meet_preserves_fields.wado/run"() with Stdout, MonotonicClock {
         c = c + 1;
         "core:rt/cm_stream_write_raw_all_u8"(b, new_repr, 0, c);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; b);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; a);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(b);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(a);
+    }
 }
 
 fn "niri_if_arm_meet_preserves_fields.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

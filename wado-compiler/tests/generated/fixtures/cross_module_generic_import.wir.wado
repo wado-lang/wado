@@ -104,9 +104,10 @@ fn "cross_module_generic_import.wado/run"() with Stdout {
     pair_968 = builtin::i32_wrap_i64(t_966 >> 32_i64);
     pos_965 = "cross_module_generic_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_965);
     "core:rt/write_string_to_stream$dae[add_newline]"(pair_968, out_6.repr, out_6.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; pos_965);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_965);
+    }
     out_6 = global:cross_module_generic_import.wado::$const_obj_2;
     local.tee out_101(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 }).used = 26;
     builtin::array_copy<u8>(out_101.repr, 0, global:cross_module_generic_import.wado::$const_obj_1, 0, 26);
@@ -133,9 +134,10 @@ fn "cross_module_generic_import.wado/run"() with Stdout {
     pair_968 = builtin::i32_wrap_i64(t_966 >> 32_i64);
     pos_965 = "cross_module_generic_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_965);
     "core:rt/write_string_to_stream$dae[add_newline]"(pair_968, out_101.repr, out_101.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; pos_965);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_965);
+    }
     pos_965 = builtin::i32_wrap_i64(local.tee t_966("wasi/stream-new"()));
     pair_968 = builtin::i32_wrap_i64(t_966 >> 32_i64);
     pos_965 = "cross_module_generic_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos_965);
@@ -144,12 +146,14 @@ fn "cross_module_generic_import.wado/run"() with Stdout {
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; pair_968, $load_1);
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; pair_968);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; pos_965);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(pair_968);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos_965);
+    }
 }
 
 fn "cross_module_generic_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -174,9 +178,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {

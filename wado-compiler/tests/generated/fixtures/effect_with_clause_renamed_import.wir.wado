@@ -243,12 +243,14 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
         start_184 = start_184 + 1;
         "core:rt/cm_stream_write_raw_all_u8"(is_negative_83, arr, 0, start_184);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; is_negative_83);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; self_22);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(is_negative_83);
+    }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_22);
+    }
     global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random;
 }
 

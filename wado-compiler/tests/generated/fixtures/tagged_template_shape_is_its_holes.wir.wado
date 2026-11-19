@@ -129,9 +129,10 @@ fn "tagged_template_shape_is_its_holes.wado/run"() with Stdout {
     b_1 = builtin::i32_wrap_i64(x_77 >> 32_i64);
     a_0 = "tagged_template_shape_is_its_holes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_0);
     "core:rt/write_string_to_stream$dae[add_newline]"(b_1, out_11.repr, out_11.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; a_0);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(a_0);
+    }
     $load_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     a_0 = local.tee out_11(a_4.r0).used;
     $sroa_view_repr_219 = out_11.repr;
@@ -165,9 +166,10 @@ fn "tagged_template_shape_is_its_holes.wado/run"() with Stdout {
     b_1 = builtin::i32_wrap_i64(x_77 >> 32_i64);
     a_0 = "tagged_template_shape_is_its_holes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_0);
     "core:rt/write_string_to_stream$dae[add_newline]"(b_1, $load_2.repr, $load_2.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; a_0);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(a_0);
+    }
 }
 
 fn "tagged_template_shape_is_its_holes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -275,9 +277,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {

@@ -116,7 +116,7 @@ global global:core:prelude/string.wado::$const_obj_121: ref Array<u8> = array.ne
 global global:core:prelude/string.wado::$const_obj_122: ref Array<u8> = array.new_fixed<u8>(32, 97, 115, 32);
 
 fn "inspect_ref_over_generic_pointee.wado/run"() with Stdout {
-    let $load_11: ref Array<u8>;
+    let $load_13: ref Array<u8>;
     let $cm_pair_7_21: i64;
     let out_77: ref "core:prelude/string.wado//String";
     let new_used_148: i32;
@@ -142,9 +142,10 @@ fn "inspect_ref_over_generic_pointee.wado/run"() with Stdout {
     start_149 = builtin::i32_wrap_i64($cm_pair_7_21 >> 32_i64);
     new_used_148 = "inspect_ref_over_generic_pointee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_148);
     "core:rt/write_string_to_stream$dae[add_newline]"(start_149, out_77.repr, out_77.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_148);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_148);
+    }
     out_77 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_inspect_ref_over_generic_pointee_wado__tmpl_8763646c026b3d68___core_prelude_types_wado_Option_i32____spec0_spec0_sroa_t_h0_value__1__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__format_inspect_ref_over_generic_pointee_wado__tmpl_8763646c026b3d68___core_prelude_types_wado_Option_i32____spec0_spec0_sroa_t_h0_value__1__$inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -155,29 +156,29 @@ fn "inspect_ref_over_generic_pointee.wado/run"() with Stdout {
     }
     start_149 = out_77.used;
     out_77.used = new_used_148;
-    builtin::array_copy<u8>(local.tee $load_11(out_77.repr), start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_1, 0, 1);
-    if @unlikely(local.tee new_used_148(new_used_148 + 6) > builtin::array_len($load_11)) {
+    builtin::array_copy<u8>(local.tee $load_13(out_77.repr), start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_1, 0, 1);
+    if @unlikely(local.tee new_used_148(new_used_148 + 6) > builtin::array_len($load_13)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_77, new_used_148);
     }
     start_149 = out_77.used;
     out_77.used = new_used_148;
-    builtin::array_copy<u8>(local.tee $load_11(out_77.repr), start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_5, 0, 6);
-    if @unlikely(local.tee new_used_148(new_used_148 + 2) > builtin::array_len($load_11)) {
+    builtin::array_copy<u8>(local.tee $load_13(out_77.repr), start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_5, 0, 6);
+    if @unlikely(local.tee new_used_148(new_used_148 + 2) > builtin::array_len($load_13)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_77, new_used_148);
     }
     start_149 = out_77.used;
     out_77.used = new_used_148;
-    builtin::array_copy<u8>(local.tee $load_11(out_77.repr), start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_4, 0, 2);
-    if @unlikely(local.tee new_used_148(new_used_148 + 4) > builtin::array_len($load_11)) {
+    builtin::array_copy<u8>(local.tee $load_13(out_77.repr), start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_4, 0, 2);
+    if @unlikely(local.tee new_used_148(new_used_148 + 4) > builtin::array_len($load_13)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_77, new_used_148);
     }
     start_149 = out_77.used;
     out_77.used = new_used_148;
-    builtin::array_copy<u8>(local.tee $load_11(out_77.repr), start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_6, 0, 4);
-    if @unlikely(local.tee new_used_148(new_used_148 + 1) > builtin::array_len($load_11)) {
+    builtin::array_copy<u8>(local.tee $load_13(out_77.repr), start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_6, 0, 4);
+    if @unlikely(local.tee new_used_148(new_used_148 + 1) > builtin::array_len($load_13)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_77, new_used_148);
     }
@@ -185,8 +186,8 @@ fn "inspect_ref_over_generic_pointee.wado/run"() with Stdout {
     out_77.used = new_used_148;
     builtin::array_copy<u8>(out_77.repr, start_149, global:inspect_ref_over_generic_pointee.wado::$const_obj_3, 0, 1);
     new_used_148 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_77, 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_11(out_77.repr), new_used_148, 2_i64, 1);
-    if @unlikely(local.tee new_used_148(out_77.used + 1) > builtin::array_len($load_11)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_13(out_77.repr), new_used_148, 2_i64, 1);
+    if @unlikely(local.tee new_used_148(out_77.used + 1) > builtin::array_len($load_13)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_77, new_used_148);
     }
@@ -200,9 +201,10 @@ fn "inspect_ref_over_generic_pointee.wado/run"() with Stdout {
     start_149 = builtin::i32_wrap_i64($cm_pair_7_21 >> 32_i64);
     new_used_148 = "inspect_ref_over_generic_pointee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_148);
     "core:rt/write_string_to_stream$dae[add_newline]"(start_149, out_77.repr, out_77.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_148);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_148);
+    }
     out_77 = block -> ref "core:prelude/string.wado//String" {
         out_77 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         $inline_core_prelude_string_wado_String__format_inspect_ref_over_generic_pointee_wado__tmpl_14cf4bfddb99c08e___core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__2__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
@@ -224,17 +226,18 @@ fn "inspect_ref_over_generic_pointee.wado/run"() with Stdout {
         $inline_core_prelude_string_wado_String__format_inspect_ref_over_generic_pointee_wado__tmpl_14cf4bfddb99c08e___core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__2__$inline_core_prelude_string_wado_String__internal_push_view_43: block {
             break $inline_core_prelude_string_wado_String__format_inspect_ref_over_generic_pointee_wado__tmpl_14cf4bfddb99c08e___core_prelude_list_wado_List_i32____spec0_spec0_sroa_t_h0__2__$inline_core_prelude_string_wado_String__internal_push_view_43;
         };
-        let $mv_field_2: ref "core:prelude/list.wado//List<i32>";
-        $mv_field_2 = global:inspect_ref_over_generic_pointee.wado::$const_obj_9;
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_ref_over_generic_pointee.wado/$tmpl$78c6cca1f7eb88ca,[core:prelude/string.wado/String,&core:prelude/list.wado/List<i32>]>$spec0$spec0"(out_77, $mv_field_2);
+        let $mv_field_6: ref "core:prelude/list.wado//List<i32>";
+        $mv_field_6 = global:inspect_ref_over_generic_pointee.wado::$const_obj_9;
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_ref_over_generic_pointee.wado/$tmpl$78c6cca1f7eb88ca,[core:prelude/string.wado/String,&core:prelude/list.wado/List<i32>]>$spec0$spec0"(out_77, $mv_field_6);
     };
     new_used_148 = builtin::i32_wrap_i64(local.tee $cm_pair_7_21("wasi/stream-new"()));
     start_149 = builtin::i32_wrap_i64($cm_pair_7_21 >> 32_i64);
     new_used_148 = "inspect_ref_over_generic_pointee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_148);
     "core:rt/write_string_to_stream$dae[add_newline]"(start_149, out_77.repr, out_77.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_148);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_148);
+    }
     if ref.is_null(global:inspect_ref_over_generic_pointee.wado::$const_obj_0) {
         global:inspect_ref_over_generic_pointee.wado::$const_obj_0 = "core:prelude/string.wado/core:prelude/string.wado/String::format<inspect_ref_over_generic_pointee.wado/$tmpl$a9a4baa08211911f,[&inspect_ref_over_generic_pointee.wado/Bag<i32>]>$spec0$spec0$sroa[t.h0]"(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(3), used: 1 });
     }
@@ -243,9 +246,10 @@ fn "inspect_ref_over_generic_pointee.wado/run"() with Stdout {
     new_used_148 = "inspect_ref_over_generic_pointee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_148);
     out_77 = global:inspect_ref_over_generic_pointee.wado::$const_obj_0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_149, out_77.repr, out_77.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; new_used_148);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_148);
+    }
 }
 
 fn "inspect_ref_over_generic_pointee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -292,9 +296,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }; tx);
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/stream-drop-writable"(tx);
+    }
 }
 
 fn "core:rt/unreachable"() {
