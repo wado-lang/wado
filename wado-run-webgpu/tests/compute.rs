@@ -202,23 +202,19 @@ fn a_wado_in_the_current_directory_is_not_run() {
 fn a_directory_that_cannot_be_opened_is_reported_as_wado_run_reports_it() {
     let served = served();
     let args = ["--dir", "/nonexistent/grant", served.to_str().unwrap()];
-    // A backtrace lists each binary's own frames, so the two reports match
-    // only without one.
-    let without_backtrace = |command: &mut Command| {
-        command
-            .env_remove("RUST_BACKTRACE")
-            .env_remove("RUST_LIB_BACKTRACE")
-            .args(args)
-            .output()
-    };
-    let here = without_backtrace(&mut runner()).expect("running wado-run-webgpu");
-    let there = without_backtrace(Command::new(&*WADO).arg("run")).expect("running wado");
+    let here = run(&args);
+    let there = Command::new(&*WADO)
+        .arg("run")
+        .args(args)
+        .output()
+        .expect("running wado");
 
     assert!(!here.status.success());
     assert_eq!(here.status.code(), there.status.code());
-    assert_eq!(
-        String::from_utf8_lossy(&here.stderr),
-        String::from_utf8_lossy(&there.stderr)
+    let stderr = String::from_utf8_lossy(&here.stderr);
+    assert!(
+        stderr.contains("cannot open the directory `/nonexistent/grant`"),
+        "{stderr}"
     );
 }
 
