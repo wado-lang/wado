@@ -348,7 +348,10 @@ fn assert_loam_conformance(program: &str) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "stderr: {stderr}");
-    assert!(!stdout.trim().is_empty(), "a conformance program prints a line a case");
+    assert!(
+        !stdout.trim().is_empty(),
+        "a conformance program prints a line a case"
+    );
     for line in stdout.lines() {
         let deviation: f32 = line
             .rsplit(' ')
