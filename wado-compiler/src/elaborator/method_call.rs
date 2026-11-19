@@ -1587,27 +1587,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The link of the spelled type's chain where trait impls answer
-    /// `method_name`, and those impls. The order asks the type itself, by
-    /// value and through each reference, so a blanket answers where its
-    /// bounds hold. A generic type spelled without its arguments names no one
-    /// instance, so the order is asked at each instance a trait impl is
-    /// written for, and the blocks written for its head answer besides.
+    /// `method_name`, and those impls. A spelling that writes every argument
+    /// names one instance, and the order asks it, by value and through each
+    /// reference, so a blanket answers where its bounds hold. One that omits
+    /// an argument names an instance the call has yet to infer, so every impl
+    /// that may answer it does: those written for a link of its chain, and
+    /// every blanket, whether or not its bounds will hold.
     fn trait_answer(
         &mut self,
         receiver: &ReceiverId,
         method_name: &str,
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
-        let mut types: IndexSet<TypeId> = self.spelled_type(receiver).into_iter().collect();
-        if receiver.ty().is_none() && self.receiver_generic_arity(receiver).is_some() {
-            types.extend(self.written_instances(receiver));
+        if !self.omits_type_args(receiver) {
+            let ty = self.spelled_type(receiver)?;
+            return self.ordered_impls(ty, method_name, reach);
         }
-        let mut found: Vec<(u32, Vec<DefId>)> = types
-            .into_iter()
-            .filter_map(|ty| self.ordered_impls(ty, method_name, reach))
+        let blankets: Vec<DefId> = self
+            .tysys
+            .trait_env
+            .blanket_impls
+            .values()
+            .flatten()
+            .map(|blanket| blanket.def)
+            .filter(|&block| {
+                self.block_takes_receiver(block, method_name).is_some()
+                    && self.block_in_reach(block, reach)
+            })
             .collect();
-        found.extend(self.written_impls(receiver, method_name, reach));
-        nearest_link(found)
+        let written = self.written_impls(receiver, method_name, reach);
+        if blankets.is_empty() {
+            return written;
+        }
+        let written = written.map(|(_, blocks)| blocks).unwrap_or_default();
+        Some((0, blankets.into_iter().chain(written).collect()))
+    }
+
+    /// Whether `receiver` spells a generic type without one of its arguments:
+    /// bare, or with `_` in its turbofish.
+    fn omits_type_args(&self, receiver: &ReceiverId) -> bool {
+        let Some(ty) = receiver.ty() else {
+            return self.receiver_generic_arity(receiver).is_some();
+        };
+        self.tysys
+            .type_table
+            .borrow()
+            .declared_type_args(ty)
+            .is_some_and(|args| args.contains(&TypeTable::UNKNOWN))
+    }
+
+    /// Whether the trait `block` implements is one the call site names, as
+    /// `reach` asks.
+    fn block_in_reach(&self, block: DefId, reach: Reach) -> bool {
+        let in_scope = self.tysys.signatures.impl_trait(block).is_some_and(|decl| {
+            self.tysys
+                .resolutions
+                .decl_in_scope(self.frame_module(), decl)
+        });
+        in_scope == (reach == Reach::InScope)
     }
 
     /// [`SolverBridge::nearest_impls`] at `ty`, by value and through each
@@ -1638,18 +1675,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The concrete instances of `receiver`'s type that a trait impl is
-    /// written for.
-    fn written_instances(&self, receiver: &ReceiverId) -> IndexSet<TypeId> {
-        let blocks = self.trait_impls_for_receiver(&receiver.at_type(None), &[]);
-        let table = self.tysys.type_table.borrow();
-        blocks
-            .into_iter()
-            .map(|block| table.impl_target_whole(block))
-            .filter(|&target| table.is_concrete(target))
-            .collect()
-    }
-
     /// The trait impls written for a link of `receiver`'s chain that declare
     /// `method_name`, among those `reach` names, at the nearest link any does.
     fn written_impls(
@@ -1658,14 +1683,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         reach: Reach,
     ) -> Option<(u32, Vec<DefId>)> {
-        let reached = |this: &Self, block: DefId| {
-            let in_scope = this.tysys.signatures.impl_trait(block).is_some_and(|decl| {
-                this.tysys
-                    .resolutions
-                    .decl_in_scope(this.frame_module(), decl)
-            });
-            in_scope == (reach == Reach::InScope)
-        };
         // A link keyed by no declaration (`&Point`) is told apart by its whole
         // type, which the chain declares.
         let (mut key, mut declared) = (receiver.key().clone(), receiver.ty());
@@ -1674,7 +1691,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .trait_impls_for_receiver(&ReceiverId::keyed(key.clone(), declared), &[])
                 .into_iter()
                 .filter(|&block| {
-                    self.block_takes_receiver(block, method_name).is_some() && reached(self, block)
+                    self.block_takes_receiver(block, method_name).is_some()
+                        && self.block_in_reach(block, reach)
                 })
                 .collect();
             if !blocks.is_empty() {
@@ -1721,8 +1739,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Which instance of the generic type `receiver` spells without arguments
     /// a call of a value blanket's static `method_name` means. The expected
-    /// type or an argument says, where the blanket's signature places `Self`;
-    /// else the one instance an impl is written for that a blanket answers at.
+    /// type or an argument says, where the blanket's signature places `Self`.
     pub(super) fn unapplied_static_instance(
         &mut self,
         receiver: &ReceiverId,
@@ -1773,17 +1790,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-        if instances.is_empty() {
-            instances = self
-                .written_instances(receiver)
-                .into_iter()
-                .filter(|&target| {
-                    !self
-                        .applicable_blanket_statics(target, method_name, NewtypePeel::Here)
-                        .is_empty()
-                })
-                .collect();
-        }
         if instances.len() == 1 {
             UnappliedStatic::Settled(instances[0])
         } else {
@@ -1801,16 +1807,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let pointee = table.peel_refs(receiver_type);
         if let (Some(sub), Some(sup)) = (table.nominal_def(pointee), spelled.key().decl()) {
             // Where the spelling writes the type's arguments, they are the
-            // receiver's too.
-            let writes_args = |ty| {
-                table
-                    .nominal_type_args(ty)
-                    .is_some_and(|args| !args.is_empty())
+            // receiver's too, but for one left to inference (`_`).
+            let args_agree = |ty| match (
+                table.declared_type_args(ty),
+                table.declared_type_args(pointee),
+            ) {
+                (Some(written), Some(held)) => {
+                    written.len() == held.len()
+                        && written
+                            .iter()
+                            .zip(held.iter())
+                            .all(|(&w, &h)| w == TypeTable::UNKNOWN || w == h)
+                }
+                (Some(written), None) => written.is_empty(),
+                (None, _) => true,
             };
             let instance_agrees = sub != sup
                 || spelled
                     .ty()
-                    .is_none_or(|ty| ty == pointee || !writes_args(ty));
+                    .is_none_or(|ty| ty == pointee || args_agree(ty));
             return table.is_resource_subtype(sub, sup) && instance_agrees;
         }
         drop(table);
