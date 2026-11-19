@@ -654,6 +654,45 @@ fn quantized_weight() -> [CpuTensor<f32, [A, B]>, CpuTensor<u8, [C, D, B]>, CpuT
     ];
 }
 
+test "a quantized product of one row sums as the same row among several does" {
+    // 18 inputs end in a block of their own past the last four `dot` sums.
+    let g = &mut Cpu {};
+    let k = 18;
+    let rows: List<f16> = (0..<2 * k).map(|i| f16::from_f32((i * 37 % 23) as f32 / 7.0 - 1.5)).collect();
+    let packed = cpu(Tensor::<u8, [C, D, B]> {
+        data: (0..<3 * 2 * 8).map(|i| (i * 89 % 256) as u8).collect(),
+        extents: [3, 2, 8],
+    });
+    let scales = cpu(Tensor::<f16, [C, D]> {
+        data: [0.37, -1.25, 0.0625, 2.5, -0.3, 0.9],
+        extents: [3, 2],
+    });
+    let quantized = Quantized { bits: 4, block: 16 };
+    let both = g.quantized_product::<f16, [A, B], C, D, B, D, [A, C]>(
+        &cpu(Tensor {
+            data: rows,
+            extents: [2, k],
+        }),
+        &packed,
+        &scales,
+        null,
+        &quantized,
+    );
+    for let r of 0..<2 {
+        let alone = g.quantized_product::<f16, [A, B], C, D, B, D, [A, C]>(
+            &cpu(Tensor {
+                data: rows[r * k..<(r + 1) * k].to_list(),
+                extents: [1, k],
+            }),
+            &packed,
+            &scales,
+            null,
+            &quantized,
+        );
+        assert alone.value().data == both.value().data[r * 3..<(r + 1) * 3].to_list();
+    }
+}
+
 test "a quantized product reads each block less its zero point, times its scale" {
     let g = &mut Cpu {};
     let [a, packed, scales] = quantized_weight();

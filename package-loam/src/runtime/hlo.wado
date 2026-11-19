@@ -1917,6 +1917,12 @@ impl Graph for Cpu {
         let mut weights = List::<f32>::filled(k, 0.0);
         let mut out = List::<E>::filled(rows * n, E::from_f32(0.0));
         for let c of 0..<n {
+            // A single row, as each step of a decode is, reads the weight as it
+            // sums; more rows unpack it once for all of them.
+            if rows == 1 {
+                out[c] = E::from_f32(unpacked_dot(&packed.data, bytes, scales, zero_points, quantized, c, &wide, 0, k));
+                continue;
+            }
             unpacked_row(&packed.data, bytes, scales, zero_points, quantized, c, &mut weights);
             for let r of 0..<rows {
                 out[r * n + c] = E::from_f32(dot(&wide, r * k, &weights, 0, k));
@@ -1975,30 +1981,122 @@ fn unpacked_row<E: Float, R, Blocks, Z>(
     row: i32,
     into: &mut List<f32>,
 ) {
-    let bits = quantized.bits;
-    assert bits == 1 || bits == 2 || bits == 4 || bits == 8;
-    let per = 8 / bits;
-    // `per` is a power of two, so a value's byte and place in it are shifts.
-    let places = i32::ctz(per);
-    let mask = (1 << bits) - 1;
-    let blocks = scales.extents[1];
-    let at = row * bytes;
-    assert at + (into.len() + per - 1) / per <= packed.len();
-    // A block's values take only `1 << bits` values, each rounded once here.
-    let mut rounded = List::<f32>::filled(1 << bits, 0.0);
-    for let b of 0..<(into.len() + quantized.block - 1) / quantized.block {
-        let zero = match zero_points {
-            Some(z) => z.data[row * z.extents[1] + b / per] as i32 >> b % per * bits & mask,
-            None => 1 << bits - 1,
-        };
-        let scale = scales.data[row * blocks + b].cast_to::<f32>();
-        for let q of 0..<rounded.len() {
-            rounded[q] = E::from_f32((q - zero) as f32 * scale).cast_to::<f32>();
-        }
+    let mut values = PackedRow::new(packed, bytes, scales, zero_points, quantized, row, into.len());
+    for let b of 0..<values.blocks(into.len()) {
+        values.enter(b);
         for let i of b * quantized.block..<i32::min(into.len(), (b + 1) * quantized.block) {
-            let q = (unchecked packed[at + (i >> places)]) as i32 >> (i & per - 1) * bits & mask;
-            into[i] = unchecked rounded[q];
+            into[i] = values.at(i);
         }
+    }
+}
+
+/// What `dot` sums of `a` from `a_at` and the first `k` values of row `row`
+/// of a packed weight, in the same order, each value as `unpacked_row` gives
+/// it but never written out.
+fn unpacked_dot<E: Float, R, Blocks, Z>(
+    packed: &List<u8>,
+    bytes: i32,
+    scales: &Tensor<E, [R, Blocks]>,
+    zero_points: Option<&Tensor<u8, [R, Z]>>,
+    quantized: &Quantized,
+    row: i32,
+    a: &List<f32>,
+    a_at: i32,
+    k: i32,
+) -> f32
+    contract a_at + k <= a.len() && quantized.block % 4 == 0
+{
+    let mut values = PackedRow::new(packed, bytes, scales, zero_points, quantized, row, k);
+    let quads = k - k % 4;
+    let [mut s0, mut s1, mut s2, mut s3]: [f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0];
+    for let b of 0..<values.blocks(k) {
+        values.enter(b);
+        let end = i32::min(k, (b + 1) * quantized.block);
+        // A block starts at a multiple of four, so its fours are `dot`'s.
+        let mut i = b * quantized.block;
+        while i + 4 <= i32::min(end, quads) {
+            s0 += unchecked a[a_at + i] * values.at(i);
+            s1 += unchecked a[a_at + i + 1] * values.at(i + 1);
+            s2 += unchecked a[a_at + i + 2] * values.at(i + 2);
+            s3 += unchecked a[a_at + i + 3] * values.at(i + 3);
+            i += 4;
+        }
+        for let j of i..<end {
+            s0 += unchecked a[a_at + j] * values.at(j);
+        }
+    }
+    return s0 + s1 + (s2 + s3);
+}
+
+/// One row of a packed weight read a block at a time: the `1 << bits` values
+/// a block's values take, each rounded to `E` as `dequantized` rounds it and
+/// held as an f32, rounded once as the block is entered.
+struct PackedRow<E, R, Blocks, Z> {
+    packed: &List<u8>,
+    scales: &Tensor<E, [R, Blocks]>,
+    zero_points: Option<&Tensor<u8, [R, Z]>>,
+    block: i32,
+    bits: i32,
+    /// How many bits a value's place in its byte takes: a byte holds a
+    /// power of two of them, so its byte and place are shifts.
+    places: i32,
+    mask: i32,
+    row: i32,
+    at: i32,
+    rounded: List<f32>,
+}
+
+impl<E: Float, R, Blocks, Z> PackedRow<E, R, Blocks, Z> {
+    fn new(
+        packed: &List<u8>,
+        bytes: i32,
+        scales: &Tensor<E, [R, Blocks]>,
+        zero_points: Option<&Tensor<u8, [R, Z]>>,
+        quantized: &Quantized,
+        row: i32,
+        count: i32,
+    ) -> PackedRow<E, R, Blocks, Z> {
+        let bits = quantized.bits;
+        assert bits == 1 || bits == 2 || bits == 4 || bits == 8;
+        let per = 8 / bits;
+        let at = row * bytes;
+        assert at + (count + per - 1) / per <= packed.len();
+        return PackedRow {
+            packed,
+            scales,
+            zero_points,
+            block: quantized.block,
+            bits,
+            places: i32::ctz(per),
+            mask: (1 << bits) - 1,
+            row,
+            at,
+            rounded: List::<f32>::filled(1 << bits, 0.0),
+        };
+    }
+
+    /// How many blocks the first `count` values span.
+    fn blocks(&self, count: i32) -> i32 {
+        return (count + self.block - 1) / self.block;
+    }
+
+    /// Rounds the values block `b` takes.
+    fn enter(&mut self, b: i32) {
+        let per = 8 / self.bits;
+        let zero = match self.zero_points {
+            Some(z) => z.data[self.row * z.extents[1] + b / per] as i32 >> b % per * self.bits & self.mask,
+            None => 1 << self.bits - 1,
+        };
+        let scale = self.scales.data[self.row * self.scales.extents[1] + b].cast_to::<f32>();
+        for let q of 0..<self.rounded.len() {
+            self.rounded[q] = E::from_f32((q - zero) as f32 * scale).cast_to::<f32>();
+        }
+    }
+
+    /// Value `i` of the row, which must be in the block last entered.
+    fn at(&self, i: i32) -> f32 {
+        let byte = unchecked self.packed[self.at + (i >> self.places)] as i32;
+        return unchecked self.rounded[byte >> (i & (1 << self.places) - 1) * self.bits & self.mask];
     }
 }
 
