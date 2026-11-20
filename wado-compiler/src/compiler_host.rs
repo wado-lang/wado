@@ -732,6 +732,251 @@ pub trait CompilerHost: Send + Sync {
     fn stdlib_module_read(&self, import_path: &str);
 }
 
+pub use erased::ErasedHost;
+pub(crate) use erased::LocalBoxFuture;
+
+// A module of its own, so `DynCompilerHost`'s methods, which every host has,
+// are in scope nowhere but here.
+mod erased {
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    use super::{
+        CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
+        GeneratorRunnerError, ModuleDir, ProbeRequest, SourceError, SourceReader,
+    };
+    use crate::remote::Integrity;
+
+    type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+    /// A compile's future behind a pointer. An `async fn`'s body is generated in
+    /// the crate that awaits it, so an entry point hands its body out as this,
+    /// which is generated where it is boxed. A compile holds `Rc`s across its
+    /// awaits, so this one is not `Send`.
+    pub(crate) type LocalBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
+
+    /// [`CompilerHost`] with its futures boxed, so one trait object stands for any
+    /// host.
+    trait DynCompilerHost: Send + Sync {
+        fn load_source<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<Vec<u8>, SourceError>>;
+        fn source_exists<'a>(&'a self, path: &'a str) -> BoxFuture<'a, bool>;
+        fn open_source<'a>(
+            &'a self,
+            path: &'a str,
+            integrity: Option<Integrity>,
+        ) -> BoxFuture<'a, Result<Arc<dyn SourceReader>, SourceError>>;
+        fn load_source_prefix<'a>(
+            &'a self,
+            path: &'a str,
+            extent: Option<u64>,
+        ) -> BoxFuture<'a, Result<Vec<u8>, SourceError>>;
+        fn load_remote<'a>(
+            &'a self,
+            url: &'a str,
+            extent: Option<u64>,
+            integrity: Option<Integrity>,
+        ) -> BoxFuture<'a, Result<Vec<u8>, SourceError>>;
+        fn load_file<'a>(
+            &'a self,
+            path: &'a str,
+            extent: Option<u64>,
+            integrity: Option<Integrity>,
+        ) -> BoxFuture<'a, Result<Vec<u8>, SourceError>>;
+        fn emit_diagnostic(&self, diagnostic: Diagnostic);
+        fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String>;
+        fn run_generator<'a>(
+            &'a self,
+            component_wasm: &'a [u8],
+            request: GeneratorRequest,
+        ) -> BoxFuture<'a, Result<GeneratorResponse, GeneratorRunnerError>>;
+        fn probe_generator<'a>(
+            &'a self,
+            component_wasm: &'a [u8],
+            request: &'a ProbeRequest,
+        ) -> BoxFuture<'a, Result<Vec<Option<u64>>, GeneratorRunnerError>>;
+        fn dependency_index(&self) -> DependencyIndex;
+        fn serves_core(&self) -> bool;
+        fn module_dir(&self, path: &str) -> ModuleDir;
+        fn package_index(&self, root: &str) -> DependencyIndex;
+        fn env_var(&self, name: &str) -> Option<String>;
+        fn stdlib_module_read(&self, import_path: &str);
+    }
+
+    impl<H: CompilerHost> DynCompilerHost for H {
+        fn load_source<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<Vec<u8>, SourceError>> {
+            Box::pin(CompilerHost::load_source(self, path))
+        }
+        fn source_exists<'a>(&'a self, path: &'a str) -> BoxFuture<'a, bool> {
+            Box::pin(CompilerHost::source_exists(self, path))
+        }
+        fn open_source<'a>(
+            &'a self,
+            path: &'a str,
+            integrity: Option<Integrity>,
+        ) -> BoxFuture<'a, Result<Arc<dyn SourceReader>, SourceError>> {
+            Box::pin(CompilerHost::open_source(self, path, integrity))
+        }
+        fn load_source_prefix<'a>(
+            &'a self,
+            path: &'a str,
+            extent: Option<u64>,
+        ) -> BoxFuture<'a, Result<Vec<u8>, SourceError>> {
+            Box::pin(CompilerHost::load_source_prefix(self, path, extent))
+        }
+        fn load_remote<'a>(
+            &'a self,
+            url: &'a str,
+            extent: Option<u64>,
+            integrity: Option<Integrity>,
+        ) -> BoxFuture<'a, Result<Vec<u8>, SourceError>> {
+            Box::pin(CompilerHost::load_remote(self, url, extent, integrity))
+        }
+        fn load_file<'a>(
+            &'a self,
+            path: &'a str,
+            extent: Option<u64>,
+            integrity: Option<Integrity>,
+        ) -> BoxFuture<'a, Result<Vec<u8>, SourceError>> {
+            Box::pin(CompilerHost::load_file(self, path, extent, integrity))
+        }
+        fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+            CompilerHost::emit_diagnostic(self, diagnostic);
+        }
+        fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+            CompilerHost::save_internal_artifact(self, file_stem, bytes)
+        }
+        fn run_generator<'a>(
+            &'a self,
+            component_wasm: &'a [u8],
+            request: GeneratorRequest,
+        ) -> BoxFuture<'a, Result<GeneratorResponse, GeneratorRunnerError>> {
+            Box::pin(CompilerHost::run_generator(self, component_wasm, request))
+        }
+        fn probe_generator<'a>(
+            &'a self,
+            component_wasm: &'a [u8],
+            request: &'a ProbeRequest,
+        ) -> BoxFuture<'a, Result<Vec<Option<u64>>, GeneratorRunnerError>> {
+            Box::pin(CompilerHost::probe_generator(self, component_wasm, request))
+        }
+        fn dependency_index(&self) -> DependencyIndex {
+            CompilerHost::dependency_index(self)
+        }
+        fn serves_core(&self) -> bool {
+            CompilerHost::serves_core(self)
+        }
+        fn module_dir(&self, path: &str) -> ModuleDir {
+            CompilerHost::module_dir(self, path)
+        }
+        fn package_index(&self, root: &str) -> DependencyIndex {
+            CompilerHost::package_index(self, root)
+        }
+        fn env_var(&self, name: &str) -> Option<String> {
+            CompilerHost::env_var(self, name)
+        }
+        fn stdlib_module_read(&self, import_path: &str) {
+            CompilerHost::stdlib_module_read(self, import_path);
+        }
+    }
+
+    /// Any host, as one type. The compiler is generic over its host, and a crate
+    /// instantiating it for a host of its own generates the whole compiler again:
+    /// each public entry point takes the host as this instead, so the compiler is
+    /// generated once, here, whatever host calls it.
+    #[derive(Clone, Copy)]
+    pub struct ErasedHost<'a>(&'a dyn DynCompilerHost);
+
+    impl<'a> ErasedHost<'a> {
+        pub fn new<H: CompilerHost>(host: &'a H) -> Self {
+            Self(host)
+        }
+    }
+
+    // Each future is an `async` block, which names every lifetime it borrows; the
+    // boxed future alone borrows the shorter of the host's and an argument's, which
+    // an opaque return type cannot name.
+    impl CompilerHost for ErasedHost<'_> {
+        fn load_source(
+            &self,
+            path: &str,
+        ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+            async move { self.0.load_source(path).await }
+        }
+        fn source_exists(&self, path: &str) -> impl Future<Output = bool> + Send {
+            async move { self.0.source_exists(path).await }
+        }
+        fn open_source(
+            &self,
+            path: &str,
+            integrity: Option<Integrity>,
+        ) -> impl Future<Output = Result<Arc<dyn SourceReader>, SourceError>> + Send {
+            async move { self.0.open_source(path, integrity).await }
+        }
+        fn load_source_prefix(
+            &self,
+            path: &str,
+            extent: Option<u64>,
+        ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+            async move { self.0.load_source_prefix(path, extent).await }
+        }
+        fn load_remote(
+            &self,
+            url: &str,
+            extent: Option<u64>,
+            integrity: Option<Integrity>,
+        ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+            async move { self.0.load_remote(url, extent, integrity).await }
+        }
+        fn load_file(
+            &self,
+            path: &str,
+            extent: Option<u64>,
+            integrity: Option<Integrity>,
+        ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+            async move { self.0.load_file(path, extent, integrity).await }
+        }
+        fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+            self.0.emit_diagnostic(diagnostic);
+        }
+        fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+            self.0.save_internal_artifact(file_stem, bytes)
+        }
+        fn run_generator(
+            &self,
+            component_wasm: &[u8],
+            request: GeneratorRequest,
+        ) -> impl Future<Output = Result<GeneratorResponse, GeneratorRunnerError>> + Send {
+            async move { self.0.run_generator(component_wasm, request).await }
+        }
+        fn probe_generator(
+            &self,
+            component_wasm: &[u8],
+            request: &ProbeRequest,
+        ) -> impl Future<Output = Result<Vec<Option<u64>>, GeneratorRunnerError>> + Send {
+            async move { self.0.probe_generator(component_wasm, request).await }
+        }
+        fn dependency_index(&self) -> DependencyIndex {
+            self.0.dependency_index()
+        }
+        fn serves_core(&self) -> bool {
+            self.0.serves_core()
+        }
+        fn module_dir(&self, path: &str) -> ModuleDir {
+            self.0.module_dir(path)
+        }
+        fn package_index(&self, root: &str) -> DependencyIndex {
+            self.0.package_index(root)
+        }
+        fn env_var(&self, name: &str) -> Option<String> {
+            self.0.env_var(name)
+        }
+        fn stdlib_module_read(&self, import_path: &str) {
+            self.0.stdlib_module_read(import_path);
+        }
+    }
+}
+
 /// Where a module's directory lies, as [`CompilerHost::module_dir`] answers it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleDir {

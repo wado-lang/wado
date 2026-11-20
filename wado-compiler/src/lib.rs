@@ -133,11 +133,12 @@ pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
+use compiler_host::LocalBoxFuture;
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
-    GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir, ProbeInput,
-    ProbeRequest, Severity, SourceError, SourceReader,
+    ErasedHost, GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorRequest,
+    GeneratorResponse, GeneratorRunnerError, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir,
+    ProbeInput, ProbeRequest, Severity, SourceError, SourceReader,
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{
@@ -756,6 +757,39 @@ impl PackageSources {
 /// elaborate; its errors reach `host`.
 pub async fn package_unused_diagnostics<H: CompilerHost>(
     host: &H,
+    package: &PackageSources,
+    invocations: kiln::InvocationIndex,
+    lints: Lints,
+    log_level: LogLevel,
+) -> Option<Vec<Diagnostic>> {
+    package_unused_diagnostics_erased(
+        &ErasedHost::new(host),
+        package,
+        invocations,
+        lints,
+        log_level,
+    )
+    .await
+}
+
+fn package_unused_diagnostics_erased<'a>(
+    host: &'a ErasedHost<'a>,
+    package: &'a PackageSources,
+    invocations: kiln::InvocationIndex,
+    lints: Lints,
+    log_level: LogLevel,
+) -> LocalBoxFuture<'a, Option<Vec<Diagnostic>>> {
+    Box::pin(package_unused_diagnostics_body(
+        host,
+        package,
+        invocations,
+        lints,
+        log_level,
+    ))
+}
+
+async fn package_unused_diagnostics_body(
+    host: &ErasedHost<'_>,
     package: &PackageSources,
     invocations: kiln::InvocationIndex,
     lints: Lints,
@@ -1478,6 +1512,24 @@ fn select_allocator<H: CompilerHost>(
 pub async fn compile_with_options<H: CompilerHost>(
     source: &str,
     host: &H,
+    filename: Option<&str>,
+    options: CompilerOptions,
+) -> Result<CompileResult, CompileFailure> {
+    compile_erased(source, &ErasedHost::new(host), filename, options).await
+}
+
+fn compile_erased<'a>(
+    source: &'a str,
+    host: &'a ErasedHost<'a>,
+    filename: Option<&'a str>,
+    options: CompilerOptions,
+) -> LocalBoxFuture<'a, Result<CompileResult, CompileFailure>> {
+    Box::pin(compile_body(source, host, filename, options))
+}
+
+async fn compile_body(
+    source: &str,
+    host: &ErasedHost<'_>,
     filename: Option<&str>,
     mut options: CompilerOptions,
 ) -> Result<CompileResult, CompileFailure> {
@@ -2767,6 +2819,33 @@ pub async fn dump_with_options<H: CompilerHost>(
     options: CompilerOptions,
     inline_decisions: Option<&str>,
 ) -> Result<DumpResult, Bail> {
+    dump_erased(
+        source,
+        &ErasedHost::new(host),
+        filename,
+        options,
+        inline_decisions,
+    )
+    .await
+}
+
+fn dump_erased<'a>(
+    source: &'a str,
+    host: &'a ErasedHost<'a>,
+    filename: Option<&'a str>,
+    options: CompilerOptions,
+    inline_decisions: Option<&'a str>,
+) -> LocalBoxFuture<'a, Result<DumpResult, Bail>> {
+    Box::pin(dump_body(source, host, filename, options, inline_decisions))
+}
+
+async fn dump_body(
+    source: &str,
+    host: &ErasedHost<'_>,
+    filename: Option<&str>,
+    options: CompilerOptions,
+    inline_decisions: Option<&str>,
+) -> Result<DumpResult, Bail> {
     let log_level = options.log_level.unwrap_or_default();
     let logger = Logger::new(host, log_level);
     let filename = filename.map(String::from);
@@ -3012,6 +3091,33 @@ pub async fn load<H: CompilerHost>(
     parsed: ParseResult,
     filename: Option<&str>,
     host: &H,
+    invocations: kiln::InvocationIndex,
+    log_level: LogLevel,
+) -> Result<LoadResult, LoadError> {
+    load_erased(
+        parsed,
+        filename,
+        &ErasedHost::new(host),
+        invocations,
+        log_level,
+    )
+    .await
+}
+
+fn load_erased<'a>(
+    parsed: ParseResult,
+    filename: Option<&'a str>,
+    host: &'a ErasedHost<'a>,
+    invocations: kiln::InvocationIndex,
+    log_level: LogLevel,
+) -> LocalBoxFuture<'a, Result<LoadResult, LoadError>> {
+    Box::pin(load_body(parsed, filename, host, invocations, log_level))
+}
+
+async fn load_body(
+    parsed: ParseResult,
+    filename: Option<&str>,
+    host: &ErasedHost<'_>,
     invocations: kiln::InvocationIndex,
     log_level: LogLevel,
 ) -> Result<LoadResult, LoadError> {

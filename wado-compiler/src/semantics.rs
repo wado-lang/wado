@@ -13,7 +13,7 @@ use crate::ast::{
     AstId, AstVisitor, Expr, IdCollector, ImplBlock, Item, Module, SelfKind, Visibility,
 };
 use crate::ast_index::{AstIndex, FunctionLocation};
-use crate::compiler_host::{Code, CompilerHost, LogLevel};
+use crate::compiler_host::{Code, CompilerHost, ErasedHost, LocalBoxFuture, LogLevel};
 use crate::compiler_trace;
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
@@ -1484,6 +1484,44 @@ pub async fn semantics_for_world<H: CompilerHost>(
     invocations: InvocationIndex,
     build_tir: bool,
 ) -> Semantics {
+    let host = ErasedHost::new(host);
+    semantics_for_world_erased(
+        source,
+        &host,
+        filename,
+        target_world,
+        invocations,
+        build_tir,
+    )
+    .await
+}
+
+fn semantics_for_world_erased<'a>(
+    source: &'a str,
+    host: &'a ErasedHost<'a>,
+    filename: Option<&'a str>,
+    target_world: Option<&'a str>,
+    invocations: InvocationIndex,
+    build_tir: bool,
+) -> LocalBoxFuture<'a, Semantics> {
+    Box::pin(semantics_for_world_body(
+        source,
+        host,
+        filename,
+        target_world,
+        invocations,
+        build_tir,
+    ))
+}
+
+async fn semantics_for_world_body(
+    source: &str,
+    host: &ErasedHost<'_>,
+    filename: Option<&str>,
+    target_world: Option<&str>,
+    invocations: InvocationIndex,
+    build_tir: bool,
+) -> Semantics {
     let parsed = parse(source);
     // Surface every recovered lex/parse error, then analyze the partial AST
     // so queries still resolve in the regions outside the error. If load/bind
@@ -1548,6 +1586,15 @@ impl Semantics {
 pub fn semantics_of<H: CompilerHost>(
     loaded: loader::LoadResult,
     host: &H,
+    log_level: LogLevel,
+    build_tir: bool,
+) -> Semantics {
+    semantics_of_erased(loaded, &ErasedHost::new(host), log_level, build_tir)
+}
+
+fn semantics_of_erased(
+    loaded: loader::LoadResult,
+    host: &ErasedHost<'_>,
     log_level: LogLevel,
     build_tir: bool,
 ) -> Semantics {
