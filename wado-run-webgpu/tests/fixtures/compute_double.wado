@@ -113,10 +113,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     queue.submit([&commands]);
     queue.on_submitted_work_done().wait();
 
-    let Ok(_) = readback.map_async(GpuMapMode::Read, null, null).wait() else {
+    if readback.map_async(GpuMapMode::Read, null, null).wait().is_err() {
         println("map failed");
         return;
-    };
+    }
     let Ok(out) = readback.get_mapped_range_get_with_copy(null, null) else {
         println("get_mapped_range failed");
         return;

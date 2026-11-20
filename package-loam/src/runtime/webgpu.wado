@@ -873,16 +873,16 @@ impl WebGpuBackend {
         encoder.copy_buffer_to_buffer(&p.resolved, null, &p.readable, null, Option::Some(size));
         let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
         self.queue.submit([&commands]);
-        let Ok(_) = p.readable.map_async(GpuMapMode::Read, null, Option::Some(size)).wait() else {
+        if p.readable.map_async(GpuMapMode::Read, null, Option::Some(size)).wait().is_err() {
             panic("loam: a profile's timestamps did not map for reading");
-        };
+        }
         let Ok(bytes) = p.readable.get_mapped_range_get_with_copy(null, Option::Some(size)) else {
             panic("loam: a profile's mapped timestamps gave no bytes");
         };
         let stamps = List::<u64>::from_le_bytes(bytes as ByteList);
-        let Ok(_) = p.readable.unmap() else {
+        if p.readable.unmap().is_err() {
             panic("loam: a profile's timestamps did not unmap");
-        };
+        }
         for let i of 0..<count {
             // A device may reset its counter between two stamps, and WebGPU
             // lets such a pass be ignored.
@@ -1263,15 +1263,17 @@ impl WebGpuBackend {
                 words[i - at] = word(i);
             }
             let bytes = words.cast::<u8>();
-            let Ok(_) = self.queue.write_buffer_with_copy(
-                self.buffer(slot),
-                (at * 4) as u64 as GpuSize64,
-                &bytes,
-                null,
-                null,
-            ) else {
+            if self.queue
+                .write_buffer_with_copy(
+                    self.buffer(slot),
+                    (at * 4) as u64 as GpuSize64,
+                    &bytes,
+                    null,
+                    null,
+                )
+                .is_err() {
                 panic("loam: a host tensor did not write to the device");
-            };
+            }
         }
     }
 
@@ -1308,15 +1310,17 @@ impl WebGpuBackend {
             if c.from >= c.to {
                 continue;
             }
-            let Ok(_) = self.queue.write_buffer_with_copy(
-                self.buffer(c.slot),
-                (c.from * 4) as u64 as GpuSize64,
-                &c.bytes,
-                Option::Some((c.from * 4) as u64 as GpuSize64),
-                Option::Some(((c.to - c.from) * 4) as u64 as GpuSize64),
-            ) else {
+            if self.queue
+                .write_buffer_with_copy(
+                    self.buffer(c.slot),
+                    (c.from * 4) as u64 as GpuSize64,
+                    &c.bytes,
+                    Option::Some((c.from * 4) as u64 as GpuSize64),
+                    Option::Some(((c.to - c.from) * 4) as u64 as GpuSize64),
+                )
+                .is_err() {
                 panic("loam: a launch's parameters did not write to the device");
-            };
+            }
             c.from = PARAMETER_WORDS;
             c.to = 0;
         }
@@ -1555,9 +1559,9 @@ impl WebGpuBackend {
         let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
         self.queue.submit([&commands]);
         self.queue.on_submitted_work_done().wait();
-        let Ok(_) = readback.map_async(GpuMapMode::Read, null, null).wait() else {
+        if readback.map_async(GpuMapMode::Read, null, null).wait().is_err() {
             panic("loam: a device buffer did not map for reading");
-        };
+        }
         let Ok(bytes) = readback.get_mapped_range_get_with_copy(null, null) else {
             panic("loam: a mapped device buffer gave no bytes");
         };
@@ -1772,9 +1776,9 @@ impl WebGpuBackend {
         }
         let pass = &self.recording[0].pass;
         pass.set_pipeline(&self.pipelines[pipeline].compiled);
-        let Ok(_) = pass.set_bind_group(0, Option::Some(&cached.group), null, null, null) else {
+        if pass.set_bind_group(0, Option::Some(&cached.group), null, null, null).is_err() {
             panic("loam: a kernel's buffers did not bind");
-        };
+        }
         pass.dispatch_workgroups(
             x as u32 as GpuSize32,
             Option::Some(y as u32 as GpuSize32),
