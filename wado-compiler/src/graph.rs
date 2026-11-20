@@ -69,16 +69,10 @@ pub fn ranks_within_components(successors: &[Vec<usize>], component_of: &[usize]
         Open,
         Done,
     }
-    let within = |n: usize| {
-        successors[n]
-            .iter()
-            .copied()
-            .filter(move |&s| component_of[s] == component_of[n])
-    };
     let mut rank = vec![0; successors.len()];
     let mut visit = vec![Visit::New; successors.len()];
-    // An explicit stack of (node, next successor), as in
-    // `strongly_connected_components`.
+    // An explicit stack of (node, next successor): a call graph is deep enough
+    // to overflow a recursive walk.
     let mut work: Vec<(usize, usize)> = Vec::new();
     for root in 0..successors.len() {
         if visit[root] != Visit::New {
@@ -100,9 +94,10 @@ pub fn ranks_within_components(successors: &[Vec<usize>], component_of: &[usize]
                 continue;
             }
             work.pop();
-            rank[n] = within(n)
-                .filter(|&s| visit[s] == Visit::Done)
-                .map(|s| rank[s] + 1)
+            rank[n] = successors[n]
+                .iter()
+                .filter(|&&s| component_of[s] == component_of[n] && visit[s] == Visit::Done)
+                .map(|&s| rank[s] + 1)
                 .max()
                 .unwrap_or(0);
             visit[n] = Visit::Done;
