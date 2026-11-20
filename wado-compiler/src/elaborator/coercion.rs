@@ -3,7 +3,6 @@
 use super::Elaborator;
 use super::call::DefaultWalk;
 use super::infer::{infer_var_answers, unify};
-use super::infer_hole::says_nothing;
 use super::scope::Scope;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
@@ -328,31 +327,21 @@ pub(super) struct ExpectedReturn {
 /// variable: `f64` if one is a float, else `i32` unless every one is a byte
 /// literal.
 fn shared_literal_default(literals: &[Expr]) -> TypeId {
+    // Least to most general.
+    const RANK: [TypeId; 3] = [TypeTable::U8, TypeTable::I32, TypeTable::F64];
     literals
         .iter()
         .flat_map(|expr| literal_operands(expr).expect("only literal operations are deferred"))
         .map(|expr| {
-            literal_default(&classify_numeric_literal(expr).expect("an operand is a numeric literal"))
+            let literal = classify_numeric_literal(expr).expect("an operand is a numeric literal");
+            match literal.kind {
+                NumericLiteralKind::Number(repr) if defaults_to_float(repr) => TypeTable::F64,
+                NumericLiteralKind::Number(_) => TypeTable::I32,
+                NumericLiteralKind::Byte(_) => TypeTable::U8,
+            }
         })
-        .reduce(more_general_default)
+        .max_by_key(|t| RANK.iter().position(|r| r == t))
         .expect("a variable is pending only with a literal")
-}
-
-/// The type `literal` takes where nothing answers it.
-pub(super) fn literal_default(literal: &NumericLiteral<'_>) -> TypeId {
-    match literal.kind {
-        NumericLiteralKind::Number(repr) if defaults_to_float(repr) => TypeTable::F64,
-        NumericLiteralKind::Number(_) => TypeTable::I32,
-        NumericLiteralKind::Byte(_) => TypeTable::U8,
-    }
-}
-
-/// The more general of two literal defaults: each takes the other's type.
-pub(super) fn more_general_default(a: TypeId, b: TypeId) -> TypeId {
-    // Least to most general.
-    const RANK: [TypeId; 3] = [TypeTable::U8, TypeTable::I32, TypeTable::F64];
-    let rank = |t: TypeId| RANK.iter().position(|&r| r == t).expect("a literal default");
-    if rank(a) < rank(b) { b } else { a }
 }
 
 /// Whether `expr` is built from numeric literals ([`is_literal_arithmetic`]),
@@ -500,15 +489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type: TypeId,
     ) -> Option<TypeId> {
         let literal = classify_numeric_literal(expr)?;
-        let target_type = self.apply_infer_holes(target_type);
-        // A variable nothing has settled is typed by what settles it later, the
-        // literal's default only where nothing does.
-        let coerced = if self.is_open_var(target_type) {
-            self.literal_meets_var(expr, target_type, literal_default(&literal));
-            target_type
-        } else {
-            self.try_coerce_numeric_literal_inner(literal, target_type)?
-        };
+        let coerced = self.try_coerce_numeric_literal_inner(literal, target_type)?;
         self.record_coercion(expr.id(), CoercionKind::NumericLiteral, target_type);
         self.record_expression_type(expr.id(), target_type);
         // `-NUM` consumes both the outer Unary node and the inner Literal
@@ -521,28 +502,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_expression_type(inner_lit.id, target_type);
         }
         Some(coerced)
-    }
-
-    /// Report the numeric literal `expr` where it does not fit `target`, the
-    /// type the variable it met settled to.
-    pub(super) fn check_literal_fits(&mut self, expr: &Expr, target: TypeId) {
-        if says_nothing(target) {
-            return;
-        }
-        let literal = classify_numeric_literal(expr).expect("a literal obligation holds a literal");
-        let default = literal_default(&literal);
-        if self.try_coerce_numeric_literal_inner(literal, target).is_none() {
-            let (expected, found) = self
-                .tysys
-                .type_table
-                .borrow()
-                .names_for_mismatch(target, default);
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected,
-                found,
-                span: expr.span(),
-            });
-        }
     }
 
     fn try_coerce_numeric_literal_inner(
@@ -986,7 +945,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | Expr::StructLiteral(_)
         ) {
             let receiver_type = self.resolve_expr(receiver, ctx, None);
-            let receiver_type = self.literal_head(receiver_type);
             return project(self, receiver_type, ctx);
         }
         let collection = PendingLiterals::of_projection();
@@ -1006,8 +964,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !waits(this, receiver_type, ctx) {
                     this.settle_receiver(ctx);
                 }
+                receiver_type = this.apply_infer_holes(receiver_type);
             }
-            let receiver_type = this.literal_head(receiver_type);
             project(this, receiver_type, ctx)
         });
         if !pending.is_empty() {
@@ -1120,6 +1078,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_arg = |expr: &Expr| args.iter().any(|arg| arg.id() == expr.id());
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {
+            let default = shared_literal_default(&literals);
             let open = self.tysys.type_table.borrow().is_infer_var(var);
             let hint = hints.get(&var).copied();
             if open && hint.is_none() && self.enclosing_takes_over(var) {
@@ -1141,12 +1100,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && literals
                     .iter()
                     .all(|expr| is_arg(expr) && is_numeric_literal_expr(expr));
-            // A bare literal leaves an open variable for a later use to settle;
-            // an operation over literals needs its operands' type to dispatch.
-            let operates = !literals.iter().all(is_numeric_literal_expr);
             let mut answer = var;
-            if open && (hint.is_some() || operates) {
-                answer = hint.unwrap_or_else(|| shared_literal_default(&literals));
+            if open && !yields_to_return {
+                answer = hint.unwrap_or(default);
                 self.equate(var, answer);
             }
             for expr in &literals {
@@ -1164,6 +1120,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
                 settled.insert(expr.id(), ty);
+            }
+            if yields_to_return {
+                self.equate(var, default);
             }
         }
         for walk in pending.walks {

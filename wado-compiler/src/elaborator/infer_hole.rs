@@ -14,14 +14,13 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::assoc_target_slot;
-use super::coercion::more_general_default;
 use super::scope::{ParamRef, ScopeParams};
 use super::solver_bridge::Commitment;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
-use crate::ast::{AssocTypeBound, AstId, Expr, GenericParam};
+use crate::ast::{AssocTypeBound, AstId, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
     BodyFacts, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
@@ -78,9 +77,6 @@ pub(super) enum Obligation {
     /// A type check that admitted a value while a variable on either side
     /// left it undecided.
     Check(DeferredCheck),
-    /// A numeric literal whose type is `var`: it must fit the type `var`
-    /// settles to, as it would have fit that type written as its slot.
-    Literal { expr: Expr, var: TypeId },
 }
 
 /// A type check a variable left undecided, and how its mismatch is worded.
@@ -192,9 +188,6 @@ struct VarStore {
     /// The variables standing for a pack: a list of types, spliced where a
     /// tuple holds it, so never one element's type.
     packs: IndexSet<TypeId>,
-    /// A root a numeric literal met, with the type it takes where nothing
-    /// else settles it: `i32`, or `f64` once a float literal joined it.
-    literal_defaults: IndexMap<usize, TypeId>,
 }
 
 impl VarStore {
@@ -272,28 +265,9 @@ impl VarStore {
                 let root = self.root(j);
                 assert_ne!(root, i, "the occurs check keeps a variable off itself");
                 self.parent[i] = root;
-                if let Some(default) = self.literal_defaults.shift_remove(&i) {
-                    self.add_literal_default(root, default);
-                }
             }
             None => self.binding[i] = Some(answer),
         }
-    }
-
-    /// Record that a literal defaulting to `default` met root `root`; the
-    /// class takes the more general of its literals' defaults.
-    fn add_literal_default(&mut self, root: usize, default: TypeId) {
-        let held = self.literal_defaults.entry(root).or_insert(default);
-        *held = more_general_default(*held, default);
-    }
-
-    /// The default of `hole`'s class while it is unbound and a literal met it.
-    fn literal_default(&self, hole: TypeId) -> Option<TypeId> {
-        let root = self.root(*self.index.get(&hole)?);
-        if self.binding[root].is_some() {
-            return None;
-        }
-        self.literal_defaults.get(&root).copied()
     }
 }
 
@@ -858,11 +832,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.infer_holes.is_empty() {
             return;
         }
-        // A variable only literals met takes their default, and what that
-        // settles is asked before anything left open is reported.
-        for hole in self.infer_holes.vars.holes.clone() {
-            self.literal_head(hole);
-        }
         let mismatches = self.infer_holes.mismatches.take();
         let covered: IndexSet<TypeId> = self
             .infer_holes
@@ -1049,58 +1018,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 None
             }
-            Obligation::Literal { expr, var } => {
-                let answer = self.apply_infer_holes(var);
-                if self.tysys.type_table.borrow().is_infer_var(answer) {
-                    return Some(Obligation::Literal { expr, var });
-                }
-                self.check_literal_fits(&expr, answer);
-                None
-            }
         }
-    }
-
-    /// Type the numeric literal `expr` by the open variable `var` it meets,
-    /// which then takes the literal's default where nothing else settles it.
-    pub(super) fn literal_meets_var(&mut self, expr: &Expr, var: TypeId, default: TypeId) {
-        let i = self.infer_holes.vars.index[&var];
-        let root = self.infer_holes.vars.root(i);
-        self.infer_holes.vars.add_literal_default(root, default);
-        self.infer_holes.require(Obligation::Literal {
-            expr: expr.clone(),
-            var,
-        });
-    }
-
-    /// Whether `ty` is a variable of this module nothing has settled yet.
-    pub(super) fn is_open_var(&self, ty: TypeId) -> bool {
-        self.tysys.type_table.borrow().is_infer_var(ty) && self.infer_holes.vars.is_unanswered(ty)
-    }
-
-    /// `ty` with its head settled where a site cannot go on without one: a
-    /// variable only a literal met takes the literal's default here. One a
-    /// pending call is still to answer waits for that call instead.
-    pub(super) fn literal_head(&mut self, ty: TypeId) -> TypeId {
-        let ty = self.apply_infer_holes(ty);
-        if !self.is_open_pending_var(ty)
-            && let Some(default) = self.infer_holes.vars.literal_default(ty)
-        {
-            self.answer_infer_var(ty, default);
-            return self.apply_infer_holes(ty);
-        }
-        ty
-    }
-
-    /// `ty` with every variable only a literal met given that literal's
-    /// default, for a selection that cannot go on while its arguments are
-    /// open (`for i of 0..<n`).
-    pub(super) fn literal_defaults_in(&mut self, ty: TypeId) -> TypeId {
-        let ty = self.apply_infer_holes(ty);
-        let vars = self.tysys.type_table.borrow().infer_vars_in(ty);
-        for var in vars {
-            self.literal_head(var);
-        }
-        self.apply_infer_holes(ty)
     }
 
     /// Whether every variable `ty` names is answered. An anonymous shape keeps
@@ -1214,8 +1132,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Obligation::Selection(commitment) => Some(commitment),
                 // An owner closed behind a report has no projection to give.
                 Obligation::Projection(_) => None,
-                Obligation::Bound { .. } | Obligation::Check(_) | Obligation::Literal { .. } => {
-                    unreachable!("a settled variable decides a bound, a check or a literal")
+                Obligation::Bound { .. } | Obligation::Check(_) => {
+                    unreachable!("a settled variable decides a bound or a check")
                 }
             })
             .collect();

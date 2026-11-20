@@ -128,14 +128,16 @@ Each step keeps every fixture passing and deletes what it replaces.
   selection not yet known stays queued until `resolve_head` or the body's end.
   Until then, a selection admits a variable awaiting its report as meeting
   every bound, and each selection site requires the committed impl's bounds
-  itself (`defer_awaited_impl_bounds`); this step deletes both. Until then, a
-  for-of that cannot select a walk while a literal's variable is open gives
-  that variable its default (`for i of 0..<n`), where a later use could have
-  settled it.
+  itself (`defer_awaited_impl_bounds`); this step deletes both.
 - [ ] A numeric literal's variable has a kind and a default. The open item of
   [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
   closes with it, and so does `Settles::Nothing`, which until then keeps a
-  literal's default type from settling a variable.
+  literal's default type from settling a variable. It needs the step before:
+  a literal's variable left open past its call meets every selection the call
+  and its later uses make (a bound's impl, a tagged template's hole types, a
+  method on `Box<_>`), and a selection that cannot wait reports it. Done, a
+  later use settles it: `put(none(), 5)` then an `i64` use, `xs.push(5)` on
+  `empty()` then a `List<i64>` use.
 - [ ] A `_` the source writes in an expression's types is a variable. No
   inference path reads `unknown` for it.
 - [ ] The context is per body rather than per module.
