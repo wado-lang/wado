@@ -468,7 +468,8 @@ fn an_unknown_option_is_refused_before_anything_is_compiled() {
 
 /// With no driver to load, wgpu finds no adapter, and the guest would only see
 /// `request-adapter` answer `none`. `VK_DRIVER_FILES` is how a Linux machine
-/// can be put in that state on purpose.
+/// can be put in that state on purpose, and a driver the user chose is never
+/// replaced by `SwiftShader`.
 #[test]
 #[cfg(target_os = "linux")]
 fn a_machine_without_an_adapter_is_told_what_to_install() {
@@ -480,7 +481,7 @@ fn a_machine_without_an_adapter_is_told_what_to_install() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
     assert!(stderr.contains("no GPU adapter found"), "stderr: {stderr}");
-    assert!(stderr.contains("mesa-vulkan-drivers"), "stderr: {stderr}");
+    assert!(stderr.contains("SwiftShader"), "stderr: {stderr}");
 }
 
 /// The names of this machine's adapters, in index order, as the refusal of a

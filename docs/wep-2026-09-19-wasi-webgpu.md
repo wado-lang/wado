@@ -153,9 +153,14 @@ binding is covered end to end and not only to the point of compiling.
   that weight, reached through
   [External Subcommands](./wep-2026-09-19-external-subcommands.md).
 - A machine with no GPU has no adapter, and wgpu's `noop` backend is opt-in and
-  computes nothing. `mesa-vulkan-drivers` supplies a software adapter
-  (lavapipe), a 98.5 MB install, and that is what `test-webgpu` runs on. A
-  developer machine without it gets the runner's diagnostic and no run.
+  computes nothing. On x86-64 Linux the runner then fetches SwiftShader, the
+  software Vulkan driver Chrome ships. It needs nothing but glibc, and its
+  pinned files, the Vulkan loader among them, are a 2 MB ranged read out of a
+  Chrome for Testing archive. `test-webgpu` runs on lavapipe from
+  `mesa-vulkan-drivers`, a 98.5 MB system install, because SwiftShader takes
+  several times lavapipe's memory on Loam's graph conformance program and runs
+  out of it. A machine elsewhere with no adapter gets the runner's diagnostic
+  and no run.
 - The runner defines `request-adapter` itself, over the one `wasi-webgpu-wasmtime`
   links. The host crate has no hook for choosing an adapter or reporting the one
   it chose, and the runner needs both: `--gpu-adapter` hands the guest the one

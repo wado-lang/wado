@@ -150,8 +150,10 @@ jobs:
       # fail a change that has nothing to do with them.
       - uses: actions/cache@v6
         with:
-          path: ~/.cache/wado/pjrt
-          key: pjrt-plugins-${{ hashFiles('scripts/fetch-pjrt-plugin.sh') }}
+          path: |
+            ~/.cache/wado/pjrt
+            ~/.cache/wado/pinned
+          key: pjrt-plugins-${{ hashFiles('scripts/fetch-pjrt-plugin.sh', 'wado-run-pjrt/src/main.rs') }}
       - run: mise run test-pjrt
       # tidy's `clippy-fix` applies what clippy can fix but fails on nothing, so
       # a lint with no automatic fix reaches main unless this step fails on it.
@@ -343,7 +345,9 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # A runner has no GPU, and wgpu needs a driver to find any adapter at all.
-      # mesa-vulkan-drivers supplies lavapipe, which answers in software.
+      # mesa-vulkan-drivers supplies lavapipe, which answers in software. The
+      # SwiftShader the runner would fetch instead runs out of memory on Loam's
+      # graph conformance program.
       - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
 
       - name: Build and test the runner
