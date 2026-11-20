@@ -872,7 +872,7 @@ impl Program {
 
     /// The impls of `trait_` whose target could match `ty`, in the order they
     /// were added: a target naming a declaration matches only that one, or an
-    /// open row.
+    /// open row. An impl coherence rejected answers nothing.
     pub fn impls_for(
         &self,
         trait_: TraitDeclId,
@@ -883,11 +883,11 @@ impl Program {
             || self.impls_of(trait_).map(|(id, _)| id),
             |head| self.impls_by_target.get(&(trait_, head)),
         );
-        ids.map(|id| (id, &self.impls[&id]))
+        self.accepted(ids)
     }
 
     /// The trait impls whose target could match `ty`, of any trait, in the
-    /// order they were added.
+    /// order they were added. An impl coherence rejected answers nothing.
     pub fn trait_impls_for(&self, ty: &SolverType) -> impl Iterator<Item = (ImplId, &ImplDef)> {
         let ids = matching(
             ty,
@@ -897,7 +897,15 @@ impl Program {
             },
             |head| self.trait_impls_by_head.get(&head),
         );
-        ids.map(|id| (id, &self.impls[&id]))
+        self.accepted(ids)
+    }
+
+    fn accepted(
+        &self,
+        ids: impl Iterator<Item = ImplId>,
+    ) -> impl Iterator<Item = (ImplId, &ImplDef)> {
+        ids.filter(|id| !self.rejected.contains(id))
+            .map(|id| (id, &self.impls[&id]))
     }
 
     /// `given`, one entry per `trait_` parameter, with each it leaves unsaid

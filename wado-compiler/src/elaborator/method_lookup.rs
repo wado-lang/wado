@@ -1615,23 +1615,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("the receiver and the trait arguments fill every slot")
     }
 
-    /// Whether a match's trait arguments, their open slots solved against
-    /// `pinned`, are `pinned`. Judged before anything is solved, since a
-    /// variable the receiver holds is shared by every match.
+    /// Whether a match's trait arguments and `pinned`, the open slots of each
+    /// solved against the other, are one list. Judged before anything is
+    /// solved, since a variable the receiver holds is shared by every match.
     fn trait_args_settle_to(&mut self, trait_args: &[TypeId], pinned: &[TypeId]) -> bool {
         if trait_args.len() != pinned.len() {
             return false;
         }
         let args = self.apply_infer_holes_each(trait_args);
+        let pinned = self.apply_infer_holes_each(pinned);
         let mut bindings = IndexMap::default();
-        for (&arg, &want) in args.iter().zip(pinned) {
+        for (&arg, &want) in args.iter().zip(&pinned) {
             unify(&self.tysys.type_table, arg, want, &mut bindings);
+            unify(&self.tysys.type_table, want, arg, &mut bindings);
         }
         let mut table = self.tysys.type_table.borrow_mut();
         let answers = infer_var_answers(&table, bindings);
-        args.iter()
-            .zip(pinned)
-            .all(|(&arg, &want)| table.substitute_infer_vars(arg, &answers) == want)
+        args.iter().zip(&pinned).all(|(&arg, &want)| {
+            table.substitute_infer_vars(arg, &answers) == table.substitute_infer_vars(want, &answers)
+        })
     }
 
     /// The inherent impls that may answer `method_name` on `receiver` while

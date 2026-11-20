@@ -2647,17 +2647,16 @@ impl SolverBridge {
         };
         let scope = self.lowering.known_module(module)?;
         // The arguments only bind what the impl leaves to its trait reference,
-        // so a list the lowering cannot say is asked as none, as an unqualified
-        // call asks.
+        // so one the lowering cannot say, a `_` among them, is asked as none,
+        // as an unqualified call asks, and the rest still are.
         let binders = binder_types(ctx);
-        let asked: Vec<SolverType> = {
+        let asked: Vec<Option<SolverType>> = {
             let table = tysys.type_table.borrow();
             let place = place_binder(&binders, &table);
             required_args
                 .iter()
-                .map(|&arg| self.lowering.type_id(&table, arg, &place))
-                .collect::<Result<_, _>>()
-                .unwrap_or_default()
+                .map(|&arg| self.lowering.type_id(&table, arg, &place).ok())
+                .collect()
         };
         Some(CallQuestion {
             env,
@@ -2966,7 +2965,7 @@ struct CallQuestion {
     scope: ModuleId,
     module: ModuleSource,
     required: Option<TraitDeclId>,
-    asked: Vec<SolverType>,
+    asked: Vec<Option<SolverType>>,
     through_ref: Option<bool>,
 }
 

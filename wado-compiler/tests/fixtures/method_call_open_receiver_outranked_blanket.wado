@@ -1,0 +1,23 @@
+// The head impl applies at every instance of `Box<_>` (`affine T` admits even
+// an affine one) and outranks the blanket wherever the blanket's bound holds,
+// so the call commits to it before `b` settles. The blanket's open `A`
+// decides nothing.
+
+struct Box<affine T> { v: Option<T> }
+
+fn mk<T>() -> Box<T> {
+    return Box { v: null };
+}
+
+affine trait Cap with () { fn cap(&self) -> i32; }
+impl Cap for Box<i32> { fn cap(&self) -> i32 { return 1; } }
+
+affine trait Tag<A> with () { fn tag(&self) -> String; }
+impl<affine T> Tag<i32> for Box<T> { fn tag(&self) -> String { return "head"; } }
+impl<A, T: Cap> Tag<A> for T { fn tag(&self) -> String { return "blanket"; } }
+
+test {
+    let b = mk();
+    assert b.tag() == "head";
+    let _c: Box<i32> = b;
+}

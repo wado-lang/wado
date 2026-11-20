@@ -25,7 +25,8 @@ pub struct Candidates {
 }
 
 /// Every impl that could answer a call of `method` on `receiver` made in
-/// `scope`, a trait-qualified call naming the trait's arguments `asked`.
+/// `scope`, a trait-qualified call naming the trait's arguments `asked`, `None`
+/// at one it leaves open.
 #[must_use]
 pub fn candidates(
     program: &Program,
@@ -33,15 +34,14 @@ pub fn candidates(
     receiver: &SolverType,
     method: MethodId,
     scope: ModuleId,
-    asked: &[SolverType],
+    asked: &[Option<SolverType>],
 ) -> Candidates {
     let in_scope: &[TraitDeclId] = program
         .scopes
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
     let decl = |trait_: TraitDeclId| program.traits.get(&trait_);
-    let asked: Vec<Option<SolverType>> = asked.iter().cloned().map(Some).collect();
-    let answered = collect(program, env, receiver, in_scope, &asked, |trait_, own| {
+    let answered = collect(program, env, receiver, in_scope, asked, |trait_, own| {
         decl(trait_).is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
     if !answered.in_scope.is_empty() {
@@ -49,7 +49,7 @@ pub fn candidates(
     }
     // A method the call site cannot name answers nothing, so an imported
     // reservation speaks before the "not imported" hint does.
-    let reserved = collect(program, env, receiver, in_scope, &asked, |trait_, _| {
+    let reserved = collect(program, env, receiver, in_scope, asked, |trait_, _| {
         decl(trait_).is_some_and(|d| d.reserved.contains(&method))
     });
     if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
@@ -199,9 +199,7 @@ fn collect(
             let Some(trait_) = def.trait_ else {
                 continue;
             };
-            if program.rejected.contains(&impl_)
-                || (depth >= own_levels && program.not_inherited.contains(&impl_))
-            {
+            if depth >= own_levels && program.not_inherited.contains(&impl_) {
                 continue;
             }
             let own = program
@@ -245,10 +243,11 @@ fn collect(
         );
     }
     // A marker asks for a body, which any other impl answering at its level
-    // already gives: beside one it is a no-op.
+    // at every instance already gives: beside one it is a no-op.
     let answered_besides = |c: &Candidate, all: &[Candidate]| {
-        all.iter()
-            .any(|o| o.trait_ == c.trait_ && o.depth == c.depth && !is_marker(program, o))
+        all.iter().any(|o| {
+            o.known && o.trait_ == c.trait_ && o.depth == c.depth && !is_marker(program, o)
+        })
     };
     for list in [&mut found.in_scope, &mut found.out_of_scope] {
         let all = list.clone();

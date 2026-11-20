@@ -3155,10 +3155,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|&(_, var)| var)
                 .chain(required_args.iter().copied())
                 .filter(|&var| {
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .is_infer_var(self.apply_infer_holes(var))
+                    let answered = self.apply_infer_holes(var);
+                    self.tysys.type_table.borrow().is_infer_var(answered)
                 })
                 .collect();
             if !open.is_empty()
