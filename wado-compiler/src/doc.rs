@@ -100,11 +100,17 @@ pub struct DocTrait {
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
-    /// Each associated type as declared, parameters and bounds included:
-    /// `Buf<E: Elem>: Len`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub associated_types: Vec<String>,
+    pub associated_types: Vec<DocAssocType>,
     pub methods: Vec<DocFunction>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DocAssocType {
+    /// As declared, parameters and bounds included: `Buf<E: Elem>: Len`.
+    pub signature: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -438,10 +444,13 @@ fn dedent_synopsis(body: &str) -> String {
 fn build_doc_trait(t: &TraitDecl) -> DocTrait {
     let sig = unparse_trait_header(t);
 
-    let associated_types: Vec<String> = t
+    let associated_types = t
         .associated_types
         .iter()
-        .map(unparse_assoc_type_decl)
+        .map(|assoc| DocAssocType {
+            signature: unparse_assoc_type_decl(assoc),
+            doc: assoc.doc.clone(),
+        })
         .collect();
 
     let methods: Vec<DocFunction> = t

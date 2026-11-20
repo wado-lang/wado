@@ -171,6 +171,14 @@ else the type's `name_policy` applies, else identity.
 
 ### `pub trait Serializer with ()`
 
+#### `type SeqSerializer: SerializeSeq`
+
+#### `type MapSerializer: SerializeMap`
+
+#### `type StructSerializer: SerializeStruct`
+
+#### `type VariantSerializer: SerializeVariant`
+
 #### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
 
 #### `fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError>`
@@ -342,6 +350,8 @@ wrong case.
 
 ### `pub trait Visitor with ()`
 
+#### `type Value`
+
 #### `fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>`
 
 #### `fn visit_bool(&mut self, v: bool) -> Result<Self::Value, DeserializeError>`
@@ -385,6 +395,14 @@ arm. The default collapses it to `null` so visitors that do not model
 the distinction (e.g. JSON) keep working.
 
 ### `pub trait Deserializer with ()`
+
+#### `type SeqAccess: DeserializeSeq`
+
+#### `type MapAccess: DeserializeMap`
+
+#### `type StructAccess: DeserializeStruct`
+
+#### `type VariantAccess: DeserializeVariant`
 
 #### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
 

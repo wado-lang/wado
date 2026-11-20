@@ -824,6 +824,19 @@ mod format_contract_tests {
         );
     }
 
+    /// An impl owes each associated type as a method, so the reference lists
+    /// it with its doc comment.
+    #[test]
+    fn a_trait_documents_its_associated_types() {
+        let out = markdown_of(
+            "//! Demo.\n\npub trait Len {}\n\npub trait Store {\n    /// What it holds.\n    type Buf<E>: Len;\n}\n",
+        );
+        assert!(
+            out.contains("#### `type Buf<E>: Len`\n\nWhat it holds.\n"),
+            "an associated type must be documented:\n{out}"
+        );
+    }
+
     /// The `export(…)` targets parse ahead of the `fn`, yet the doc comment
     /// above them is the function's.
     #[test]
@@ -1332,6 +1345,10 @@ fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
         out.push('\n');
         render_md_doc(out, d);
     }
+    for assoc in &t.associated_types {
+        let sig = format!("type {}", assoc.signature);
+        render_md_entity(out, &sig, assoc.doc.as_deref(), h4);
+    }
     for m in &t.methods {
         render_md_function(out, m, h4);
     }
@@ -1803,7 +1820,7 @@ fn render_simple_traits_section(out: &mut String, doc: &DocModule, h2: &str) {
         }
         writeln!(out, "{} {{", t.signature).unwrap();
         for assoc in &t.associated_types {
-            writeln!(out, "    type {assoc};").unwrap();
+            writeln!(out, "    type {};", assoc.signature).unwrap();
         }
         for m in &t.methods {
             write_simple_decl(out, m, "    ");

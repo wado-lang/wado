@@ -7029,6 +7029,7 @@ impl Parser {
                     is_affine: assoc_is_affine,
                     type_params,
                     bounds,
+                    doc,
                     span: type_span.merge(&end),
                 });
             } else {
