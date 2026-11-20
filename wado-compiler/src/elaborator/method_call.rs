@@ -1322,12 +1322,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &trait_args,
                         &mut self.tysys.type_table.borrow_mut(),
                     );
-                    match args {
-                        Some(args) => args,
-                        None => {
-                            self.close_open_trait_args(&trait_args);
-                            Vec::new()
-                        }
+                    if let Some(args) = args {
+                        args
+                    } else {
+                        self.close_open_trait_args(&trait_args);
+                        Vec::new()
                     }
                 }
                 _ => vec![base_type_id],
