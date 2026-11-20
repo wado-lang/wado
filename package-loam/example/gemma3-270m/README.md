@@ -34,16 +34,16 @@ runs and read backs a token takes:
 
 ## On a PJRT plugin
 
-`pjrt.wado` does the same on `PjrtBackend`. The `wado-run-pjrt` that mise
-puts on `PATH` runs on XLA's CPU plugin unless `--plugin` names another;
-elsewhere, `--plugin "$(scripts/fetch-pjrt-plugin.sh)"` names it:
+`pjrt.wado` does the same on `PjrtBackend`. `wado run-pjrt` runs on XLA's CPU
+plugin unless `--plugin` or `WADO_PJRT_PLUGIN` names another. On x86-64 Linux
+it fetches that plugin the first time; elsewhere, one of the two must name it:
 
     cd package-loam/example/gemma3-270m
     wado run-pjrt pjrt.wado
 
 `analyzed.wado` compiles the model's programs for a TPU topology, which needs
 no TPU, and prints the weights' bytes and what `libtpu.so` reports of each
-program (`scripts/fetch-pjrt-plugin.sh tpu` prints its path):
+program (`scripts/fetch-pjrt-plugin.sh` prints its path):
 
     TPU_SKIP_MDS_QUERY=1 wado run-pjrt --plugin libtpu.so analyzed.wado
 
