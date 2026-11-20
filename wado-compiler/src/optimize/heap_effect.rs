@@ -3,6 +3,7 @@
 
 use std::borrow::Cow;
 use std::cell::OnceCell;
+use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -369,9 +370,10 @@ impl HeapEffectsCache {
 
     /// The least fixpoint over the call graph, callees first; a component whose
     /// inputs all stand is the fixpoint already. Components no path joins are
-    /// solved together, and each round re-summarizes every queued node against
-    /// the summaries the round began with, so a round runs in parallel and its
-    /// outcome does not depend on the thread count.
+    /// solved together: a cycle's members in place, the rest in rounds that
+    /// re-summarize every queued node against the summaries the round began
+    /// with, so a round runs in parallel and its outcome does not depend on the
+    /// thread count.
     fn solve(
         &mut self,
         functions: &[FuncRef],
@@ -433,6 +435,11 @@ impl HeapEffectsCache {
                 .iter()
                 .map(|&n| (n, std::mem::take(self.summary_mut(n))))
                 .collect();
+            let (cyclic, acyclic): (Vec<usize>, Vec<usize>) = pending
+                .into_iter()
+                .partition(|&n| components[component_of[n]].len() > 1);
+            self.solve_in_place(functions, type_table, cyclic, &callers_within, &mut queued);
+            pending = acyclic;
             while !pending.is_empty() {
                 let this = &*self;
                 let fresh = exec.map(&pending, |&n| {
@@ -458,6 +465,38 @@ impl HeapEffectsCache {
             }
             for (n, before) in before {
                 moved[n] |= *self.summary_mut(n) != before;
+            }
+        }
+    }
+
+    /// The members of cycles, solved one summary at a time against the latest
+    /// of the others. A round reads only the summaries it began with, so a
+    /// change crosses one call per round and a cycle of hundreds takes as many
+    /// rounds; the fixpoint is the least either way.
+    fn solve_in_place(
+        &mut self,
+        functions: &[FuncRef],
+        type_table: &TypeTable,
+        members: Vec<usize>,
+        callers_within: &[Vec<usize>],
+        queued: &mut [bool],
+    ) {
+        for &n in &members {
+            queued[n] = true;
+        }
+        let mut worklist: VecDeque<usize> = members.into();
+        while let Some(n) = worklist.pop_front() {
+            queued[n] = false;
+            let summary = self.summarize(functions, type_table, n, true);
+            if summary == *self.summary_mut(n) {
+                continue;
+            }
+            *self.summary_mut(n) = summary;
+            for &m in &callers_within[n] {
+                if !queued[m] {
+                    queued[m] = true;
+                    worklist.push_back(m);
+                }
             }
         }
     }
