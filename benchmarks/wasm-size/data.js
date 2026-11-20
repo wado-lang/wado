@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795144883693,
+  "lastUpdate": 1795154808072,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79961,6 +79961,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/067d1ab5cfc479d2af77191fd72732b4ca1e2c7e"
         },
         "date": 1795144882708,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353636,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b2738fe1a74a7d80f26313757fac80af285a2c1b",
+          "message": "Merge pull request #2695 from wado-lang/claude/wado-run-pjrt-so-deps-ejr1ii\n\nfeat(wado-run-pjrt): run on XLA's CPU plugin with no setup",
+          "timestamp": "2026-11-20T14:42:37+09:00",
+          "tree_id": "48a5518c18d22fed021bd0bf0550f56cbb215e02",
+          "url": "https://github.com/wado-lang/wado/commit/b2738fe1a74a7d80f26313757fac80af285a2c1b"
+        },
+        "date": 1795154806949,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
