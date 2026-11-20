@@ -1,6 +1,7 @@
 // A comparison is a `bool` whatever its operands are, so the `bool` its site
 // expects answers neither operand: `mk`'s `C` stays unanswered here, as in
-// Rust, rather than becoming `bool`.
+// Rust, rather than becoming `bool`. The operands share one type, so the two
+// calls' variables are one, reported once.
 
 fn mk<C: Default>(v: i64) -> C {
     return C::default();
@@ -12,6 +13,6 @@ export fn run() {
 
 __DATA__
 {
-    "compile_error": "cannot infer type parameter `C` of function `mk`",
-    "compile_error_count": 2
+    "compile_error": ":10:19: analysis error: cannot infer type parameter `C` of function `mk`",
+    "compile_error_count": 1
 }
