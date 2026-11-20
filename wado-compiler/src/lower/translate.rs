@@ -1868,9 +1868,7 @@ impl FunctionTranslator<'_, '_> {
                         && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                         && self.should_wrap_value_copy(value);
                     assert!(
-                        needs_value_copy_wrap
-                            || storage.skips_copy()
-                            || !self.owned_lets.contains(local_index),
+                        needs_value_copy_wrap || !self.owned_lets.contains(local_index),
                         "the return conventions count `{name}` owned, so its `let` must copy",
                     );
                     let value_op = self.convert_operand(value);
