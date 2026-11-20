@@ -101,8 +101,9 @@ candidates that hold or are not yet known, and drops those that do not hold.
   annotation.
 - Several are left: the call asks for a turbofish or an annotation.
 
-So the impl committed to settles nothing of the variables. Under `impl Me for Bx<u64>` alone, `mk().me()` with `mk<T>() -> Bx<T>` asks for an annotation, and
-`mk::<u64>().me()` resolves. Inferring `T` from the one impl would let an impl
+So the impl committed to settles nothing of the variables. Under
+`impl Me for Bx<u64>` alone, `mk().me()` with `mk<T>() -> Bx<T>` asks for an
+annotation, and `mk::<u64>().me()` resolves. Inferring `T` from the one impl would let an impl
 written anywhere else later turn the call into an error, the action at a
 distance this WEP removes from statics. Asking at the call, rather than waiting
 for something later to settle `T`, keeps every commitment true at every
@@ -110,7 +111,7 @@ instance, so only its bounds are left to check.
 
 A numeric literal's variable is the exception, as it is in Rust: where one impl
 alone could answer a method on a receiver holding it, that impl settles it
-(`wrap(1).tag()` under `impl Tag for Box<u64>` takes `1` as `u64`). The
+(`wrap(1).tag()` under `impl Tag for Bx<u64>` takes `1` as `u64`). The
 literal's type is a default left to settle last, and the impl only chooses it
 earlier.
 
