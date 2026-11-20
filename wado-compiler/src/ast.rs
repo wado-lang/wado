@@ -5117,6 +5117,7 @@ pub struct BuiltinTypeDecl {
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeDecl {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub name_span: Span,
     /// `affine type Item;`: an impl may bind an affine type.

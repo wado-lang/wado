@@ -61,8 +61,7 @@ impl Member<'_> {
 
     fn attrs(&self) -> &[Attribute] {
         match self {
-            // A trait's associated type takes no attribute.
-            Member::Declared(_) => &[],
+            Member::Declared(m) => &m.attrs,
             Member::Bound(m) => &m.attrs,
             Member::Const(m) => &m.attrs,
             Member::Method(m) => &m.attrs,
