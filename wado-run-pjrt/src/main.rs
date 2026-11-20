@@ -20,7 +20,7 @@ const PLUGIN_SPEC: OptSpec = OptSpec {
     long: Some("plugin"),
     short: None,
     value: Some("<path>"),
-    desc: "The PJRT plugin to load (default: $WADO_PJRT_PLUGIN,\nelse XLA's CPU plugin, fetched once)",
+    desc: "The PJRT plugin to load (default: $WADO_PJRT_PLUGIN,\nelse XLA's CPU plugin, fetched once on x86-64 Linux)",
 };
 
 fn help() -> String {

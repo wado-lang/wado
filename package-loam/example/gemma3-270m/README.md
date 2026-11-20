@@ -35,7 +35,8 @@ runs and read backs a token takes:
 ## On a PJRT plugin
 
 `pjrt.wado` does the same on `PjrtBackend`. `wado run-pjrt` runs on XLA's CPU
-plugin unless `--plugin` names another, and fetches it the first time:
+plugin unless `--plugin` names another, and on x86-64 Linux fetches it the
+first time. Elsewhere, `--plugin` or `WADO_PJRT_PLUGIN` names it:
 
     cd package-loam/example/gemma3-270m
     wado run-pjrt pjrt.wado

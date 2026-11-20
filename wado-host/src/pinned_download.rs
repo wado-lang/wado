@@ -169,7 +169,13 @@ async fn get(client: &Client, url: &str, part: Part) -> Result<Fetched> {
         }
     };
     match (status, total) {
-        (StatusCode::PARTIAL_CONTENT, Some(total)) => Ok(Fetched { bytes, total }),
+        (StatusCode::PARTIAL_CONTENT, Some(total)) => {
+            ensure!(
+                bytes.len() as u64 <= total,
+                "cannot fetch {url}: the server sent more than the file it names"
+            );
+            Ok(Fetched { bytes, total })
+        }
         (StatusCode::OK, _) => Ok(Fetched {
             total: bytes.len() as u64,
             bytes: part.of(&bytes),
@@ -343,13 +349,15 @@ const ZIP_LOCAL_FIXED: u64 = 30;
 /// on, or else the span of the archive it is at.
 fn zip_directory_in(tail: &[u8], tail_at: u64) -> Result<Result<&[u8], Range<u64>>> {
     const END_SIGNATURE: &[u8] = b"PK\x05\x06";
-    let end = tail
-        .windows(END_SIGNATURE.len())
-        .rposition(|window| window == END_SIGNATURE)
+    // The record is the one whose comment ends the archive: a comment may hold
+    // the signature's bytes too.
+    let record = (0..tail.len().saturating_sub(ZIP_END_LEN - 1))
+        .rev()
+        .map(|end| &tail[end..])
+        .find(|rest| {
+            rest.starts_with(END_SIGNATURE) && ZIP_END_LEN + u16_at(rest, 20) == rest.len()
+        })
         .context("the archive has no zip end record")?;
-    let record = tail
-        .get(end..end + ZIP_END_LEN)
-        .context("the zip end record is cut short")?;
     let len = u32_at(record, 12);
     let at = u32_at(record, 16);
     ensure!(len > 0, "the zip archive holds no files");
@@ -410,6 +418,11 @@ fn zip_data(local: &[u8], entry: &ZipEntry) -> Result<Vec<u8>> {
     match entry.method {
         STORED => Ok(data.to_vec()),
         DEFLATED => {
+            // Deflate expands a byte to at most 1032.
+            ensure!(
+                entry.size <= entry.compressed.saturating_mul(1032),
+                "a zip member claims more than deflate can expand to"
+            );
             let mut out = vec![0; usize::try_from(entry.size)?];
             inflate(data, &mut out, RAW_WINDOW_BITS)?;
             Ok(out)
@@ -595,6 +608,27 @@ mod tests {
     fn a_zip_with_an_empty_directory_holds_no_files() {
         let error = zip_directory_in(&zip(&[]), 0).unwrap_err().to_string();
         assert!(error.contains("holds no files"), "{error}");
+    }
+
+    #[test]
+    fn a_zip_comment_holding_the_end_signature_is_not_the_end_record() {
+        let mut archive = zip(&[("lib/a.so", b"lib")]);
+        let comment = b"PK\x05\x06 a comment";
+        let len_at = archive.len() - 2;
+        archive[len_at..].copy_from_slice(&(comment.len() as u16).to_le_bytes());
+        archive.extend_from_slice(comment);
+        let directory = zip_directory_in(&archive, 0).unwrap().unwrap();
+        assert_eq!(zip_directory(directory).unwrap()[0].0, "lib/a.so");
+    }
+
+    #[test]
+    fn a_zip_member_claiming_more_than_deflate_expands_to_is_refused() {
+        let archive = zip(&[("lib/a.so", b"lib")]);
+        let directory = zip_directory_in(&archive, 0).unwrap().unwrap();
+        let (_, mut entry) = zip_directory(directory).unwrap().remove(0);
+        entry.size = entry.compressed * 1032 + 1;
+        let error = zip_data(&archive, &entry).unwrap_err().to_string();
+        assert!(error.contains("deflate"), "{error}");
     }
 
     #[test]

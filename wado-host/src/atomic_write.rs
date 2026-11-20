@@ -1,7 +1,7 @@
 //! Writing a file so no reader ever sees it half-written, and holding a lock
 //! file so writers take turns.
 
-use std::io;
+use std::io::{self, Write as _};
 use std::path::Path;
 
 const STAGING_INFIX: &str = ".tmp-wado-";
@@ -39,14 +39,17 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let tmp = path.with_file_name(staging_file_name(
         &path.file_name().unwrap_or_default().to_string_lossy(),
     ));
-    std::fs::write(&tmp, bytes)?;
-    match std::fs::rename(&tmp, path) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            let _ = std::fs::remove_file(&tmp);
-            Err(e)
-        }
+    // Synced first, so a crash never leaves the rename without the data.
+    let staged = std::fs::File::create(&tmp)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&tmp, path));
+    if staged.is_err() {
+        let _ = std::fs::remove_file(&tmp);
     }
+    staged
 }
 
 /// Hold the file at `path` against every other holder, in this process or
