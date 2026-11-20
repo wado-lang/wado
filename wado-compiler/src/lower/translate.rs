@@ -455,6 +455,8 @@ struct FunctionTranslator<'a, 'p> {
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
     share_eligible_locals: IndexSet<u32>,
+    /// [`value_copy::last_use::Ownership::escaped_storage`].
+    escaped_storage: IndexSet<u32>,
     /// The root each reference local is taken over, so an immutable-root rule
     /// asks about the place that owns it rather than the reference.
     ref_targets: value_copy::last_use::RefTargets,
@@ -581,6 +583,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 .is_some()
         });
         let share_eligible_locals = ownership.share_eligible;
+        let escaped_storage = ownership.escaped_storage;
         let moves = ownership.move_eligible;
         let moved_roots = if needs_copy_analysis {
             moves.roots(func)
@@ -605,6 +608,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             moves,
             hands_out_payload,
             share_eligible_locals,
+            escaped_storage,
             ref_targets,
             moved_roots,
             args_checked: analyzed,
@@ -636,6 +640,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             moves: value_copy::last_use::MoveEligible::default(),
             hands_out_payload: false,
             share_eligible_locals: IndexSet::default(),
+            escaped_storage: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
             args_checked: false,
@@ -2860,7 +2865,7 @@ impl FunctionTranslator<'_, '_> {
             payload: Some(payload),
         } = &value.kind
         else {
-            return self.convert_operand(value);
+            return self.convert_returned_place(value);
         };
         if !self.hands_out_payload {
             return self.convert_operand(value);
@@ -2872,6 +2877,20 @@ impl FunctionTranslator<'_, '_> {
             payload: self.convert_returned_operand(payload),
         };
         self.alloc_expr(kind, value.type_id, value.span).into()
+    }
+
+    /// A returned place goes out uncopied, unless a reference outliving the
+    /// frame still reads its storage.
+    fn convert_returned_place(&self, value: &TirExpr) -> Operand {
+        let operand = self.convert_operand(value);
+        let escaped = value_copy::last_use::alias_root(value)
+            .is_some_and(|root| self.escaped_storage.contains(&root))
+            && value_copy::needs_value_copy(value.type_id, &self.base.type_table.borrow());
+        if escaped {
+            self.wrap_value_copy_operand(operand, value.type_id)
+        } else {
+            operand
+        }
     }
 
     /// The single `Array<u8>` type every `String` / `List<u8>` literal uses for

@@ -50,6 +50,11 @@ pub struct Ownership {
     /// Locals whose binding copy is elided by sharing the source storage:
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
+    /// Locals whose storage a reference outliving the frame reads, directly or
+    /// through the binding a share aliases. Returned, such storage still has
+    /// that reader, so the result owes a copy whatever the return conventions
+    /// say.
+    pub escaped_storage: IndexSet<u32>,
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
@@ -214,9 +219,33 @@ pub fn analyze_ownership(
         }
     }
 
+    let share_eligible = a.share_eligible(body, &paths, &place_move_bases);
+    // A reference local's referent is not the frame's storage: the return
+    // conventions already copy a place read through it.
+    let mut escaped_storage: IndexSet<u32> = a
+        .ref_escaped
+        .keys()
+        .copied()
+        .filter(|l| !is_reference_local(func, *l, type_table))
+        .collect();
+    loop {
+        let sharing_escaped: Vec<u32> = share_eligible
+            .iter()
+            .copied()
+            .filter(|l| {
+                !escaped_storage.contains(l)
+                    && escaped_storage.contains(&a.share_sources[l].path.root)
+            })
+            .collect();
+        if sharing_escaped.is_empty() {
+            break;
+        }
+        escaped_storage.extend(sharing_escaped);
+    }
     Ownership {
         move_eligible: MoveEligible { locals: owned },
-        share_eligible: a.share_eligible(body, &paths, &place_move_bases),
+        share_eligible,
+        escaped_storage,
     }
 }
 
@@ -2251,10 +2280,7 @@ impl<'a> Analyzer<'a> {
                     self.confined_params.is_confined(c, position as usize)
                 })
             {
-                if record {
-                    self.hand_on(arg, kept);
-                }
-                self.read_taking(*index, arg, false, live, record);
+                self.hand_on_place(*index, arg, kept, live, record);
                 return;
             }
             self.walk_kept(arg, kept, ref_receiver, live, record);
@@ -2277,6 +2303,22 @@ impl<'a> Analyzer<'a> {
                 .contains(&c.module_source, &c.name);
         let op = if handed_back { TirUnaryOp::Ref } else { *op };
         self.hold_ref(op, place, kept, live, record);
+    }
+
+    /// A local handed on whole without leaving its binding: returned, or passed
+    /// to a confined parameter.
+    fn hand_on_place(
+        &mut self,
+        index: u32,
+        place: &'a TirExpr,
+        kept: &Kept,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        if record {
+            self.hand_on(place, kept);
+        }
+        self.read_taking(index, place, false, live, record);
     }
 
     /// A value handed to a position that keeps it as `kept` says. A reference
@@ -2978,23 +3020,17 @@ impl<'a> Analyzer<'a> {
             TirStmtKind::Expr(e) => self.walk_expr(e, live, record),
             TirStmtKind::Return { value } => {
                 live.clear();
-                match value {
-                    // A sharing `r` hands the caller the place it aliases, as
-                    // `return` of that place would, for the return conventions
-                    // to judge.
-                    Some(
-                        v @ TirExpr {
-                            kind: TirExprKind::Local { index, .. },
-                            ..
-                        },
-                    ) => {
-                        if record {
-                            self.hand_on(v, &Kept::Frame);
+                // A sharing `r` hands the caller the place it aliases, as
+                // `return` of that place would, for the return conventions
+                // to judge.
+                if let Some(v) = value {
+                    let place = strip_casts(v);
+                    match &place.kind {
+                        TirExprKind::Local { index, .. } => {
+                            self.hand_on_place(*index, place, &Kept::Frame, live, record);
                         }
-                        self.read_taking(*index, v, false, live, record);
+                        _ => self.walk_persisting(v, live, record),
                     }
-                    Some(v) => self.walk_persisting(v, live, record),
-                    None => {}
                 }
             }
             TirStmtKind::If {

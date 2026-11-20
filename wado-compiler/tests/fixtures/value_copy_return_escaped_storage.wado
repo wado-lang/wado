@@ -1,0 +1,52 @@
+// A returned local whose reference outlives the frame still has a reader: the
+// caller's writes to the result must not reach it. Returning the local itself
+// and returning a binding that shares it both copy at the `return`.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn direct(sink: &mut List<&List<i32>>) -> List<i32> {
+    let a: List<i32> = [1];
+    sink.push(&a);
+    return a;
+}
+
+#[inline(never)]
+fn via_share(sink: &mut List<&List<i32>>) -> List<i32> {
+    let a: List<i32> = [1];
+    sink.push(&a);
+    let r = a;
+    return r;
+}
+
+// Storage behind a parameter is the caller's, which copies the result itself.
+#[inline(never)]
+fn through_param(sink: &mut List<&List<i32>>, p: &List<i32>) -> List<i32> {
+    sink.push(p);
+    return *p;
+}
+
+export fn run() with Stdout {
+    let l: List<i32> = builtin::black_box([1]);
+    let mut u: List<&List<i32>> = [];
+    let mut z = through_param(&mut u, &l);
+    z.push(2);
+    assert l.len() == 1 && u[0].len() == 1 && z.len() == 2;
+    let mut s: List<&List<i32>> = [];
+    let mut x = direct(&mut s);
+    x.push(2);
+    let mut t: List<&List<i32>> = [];
+    let mut y = via_share(&mut t);
+    y.push(2);
+    println(`${s[0].len()} ${t[0].len()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1\n",
+    "wir_scope": "value_copy_return_escaped_storage.wado/through_param\"",
+    "wir_not_expect:O2": ["array_copy"],
+    "wir_contrast": {"O2": [
+        {"    sink.push(p);\n    return *p;": "    let a = *p;\n    sink.push(&a);\n    return a;"}
+    ]}
+}
