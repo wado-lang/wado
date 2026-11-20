@@ -1,0 +1,39 @@
+// `p` is `T::Item` while `T` is open: any impl of `show` may be the one it
+// projects to, so the call cannot choose before `T` settles a line later.
+
+trait Src with () { type Item; }
+
+struct SrcBox<T> { v: T }
+
+impl<T> Src for SrcBox<T> { type Item = Point; }
+
+struct Point { x: i32 }
+
+trait Show with () { fn show(&self) -> String; }
+
+impl Show for Point {
+    fn show(&self) -> String {
+        return `p${self.x}`;
+    }
+}
+
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn item<T: Src>(_t: Option<T>, i: T::Item) -> T::Item {
+    return i;
+}
+
+test {
+    let n = none();
+    let p = item(n, Point { x: 1 });
+    assert p.show() == "p1";
+    let _t: Option<SrcBox<i32>> = n;
+}
+
+__DATA__
+{
+    "compile_error": ":31:12: analysis error: cannot infer `T::Item` far enough to choose which `show` this calls; annotate it",
+    "compile_errors_not_contains": ["no method 'show'"]
+}

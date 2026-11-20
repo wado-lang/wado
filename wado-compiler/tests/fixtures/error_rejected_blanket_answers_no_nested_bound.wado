@@ -1,0 +1,31 @@
+// Coherence rejects the unbounded blanket `impl<T> Limit for T`, so it answers
+// nothing: not `Box<T>: Show`'s own bound `T: Limit` at `i32` either.
+
+struct Box<T> { v: T }
+
+trait Limit with () { fn lim(&self) -> i32; }
+
+impl<T> Limit for T {
+    fn lim(&self) -> i32 {
+        return 1;
+    }
+}
+
+trait Show with () { fn show(&self) -> String; }
+
+impl<T: Limit> Show for Box<T> {
+    fn show(&self) -> String {
+        return "shown";
+    }
+}
+
+test {
+    let b = Box { v: 1 };
+    assert b.show() == "shown";
+}
+
+__DATA__
+{
+    "compile_error": ":8:1: analysis error: blanket impl of `Limit` for `T` states no bound",
+    "compile_errors_contains": [":24:12: type 'i32' does not implement trait 'Limit' required by bound on 'T'"]
+}

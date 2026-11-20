@@ -1161,9 +1161,10 @@ pub(super) fn impl_applies(
 
 /// Whether `def`'s target meets `ty` at every instance of `ty`'s variables, so
 /// that committing to `def` settles none of them. A literal's variable may be
-/// settled: its type is a default the one impl that could answer chooses.
+/// settled, to a type a literal may be: its type is a default the one impl
+/// that could answer chooses.
 #[must_use]
-pub(super) fn settles_nothing(def: &ImplDef, ty: &SolverType) -> bool {
+pub(super) fn settles_nothing(program: &Program, def: &ImplDef, ty: &SolverType) -> bool {
     // A variable may yet be a reference, which a value blanket answers not.
     if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Var(_)) {
         return false;
@@ -1177,7 +1178,33 @@ pub(super) fn settles_nothing(def: &ImplDef, ty: &SolverType) -> bool {
         && unifier
             .subst
             .iter()
-            .all(|&(var, _)| unifier.is_own(var) || matches!(var, Var::Infer { literal: true, .. }))
+            .all(|(var, value)| {
+                unifier.is_own(*var)
+                    || matches!(var, Var::Infer { literal: true, .. })
+                        && may_be_literal(program, value)
+            })
+}
+
+/// Whether `ty` may be a numeric literal's type: one of the program's literal
+/// types, a newtype over one, or a variable that may yet be one.
+fn may_be_literal(program: &Program, ty: &SolverType) -> bool {
+    match ty {
+        SolverType::Var(_) => true,
+        SolverType::Decl(head, _) => {
+            program.literal_types.contains(head)
+                || program
+                    .types
+                    .get(head)
+                    .and_then(|def| def.newtype_base.as_ref())
+                    .is_some_and(|base| may_be_literal(program, base))
+        }
+        SolverType::Param(_)
+        | SolverType::Pack(_)
+        | SolverType::Ref { .. }
+        | SolverType::Tuple(_)
+        | SolverType::Projection { .. }
+        | SolverType::AnyRow => false,
+    }
 }
 
 /// Whether `source`'s bounds hold of `ty`, its pins met by one binding
@@ -1247,7 +1274,7 @@ fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
 /// Whether `ty` names no type of its own until inference settles it: a
 /// variable, or a projection off one. No rule refutes a trait of such a type,
 /// since `!` holds every trait.
-fn is_opaque(ty: &SolverType) -> bool {
+pub(super) fn is_opaque(ty: &SolverType) -> bool {
     matches!(ty, SolverType::Var(_) | SolverType::Projection { .. }) && ty.is_open()
 }
 
@@ -1969,29 +1996,32 @@ mod tests {
     }
 
     /// Committing to an impl settles a variable where its target meets the
-    /// receiver only at some instances of it; a literal's may be settled.
+    /// receiver only at some instances of it; a literal's may be settled, to a
+    /// type a literal may be.
     #[test]
     fn an_impl_settles_a_variable_its_target_writes_a_type_at() {
-        let written = Builder::default()
+        let mut written = Builder::default()
             .concrete(ALPHA, list_of(decl(I32)))
             .build();
         let literal = SolverType::Var(Var::Infer {
             id: 0,
             literal: true,
         });
-        assert!(!settles_nothing(only_impl(&written), &list_of(var(0))));
-        assert!(settles_nothing(only_impl(&written), &list_of(literal)));
+        assert!(!settles_nothing(&written, only_impl(&written), &list_of(var(0))));
+        assert!(!settles_nothing(&written, only_impl(&written), &list_of(literal.clone())));
+        written.literal_types.insert(I32);
+        assert!(settles_nothing(&written, only_impl(&written), &list_of(literal)));
         let over_any = Builder::default()
             .impl_(generic(1, concrete(ALPHA, list_of(SolverType::Param(0)))))
             .build();
-        assert!(settles_nothing(only_impl(&over_any), &list_of(var(0))));
+        assert!(settles_nothing(&over_any, only_impl(&over_any), &list_of(var(0))));
         let twin = Builder::default()
             .impl_(generic(
                 1,
                 concrete(ALPHA, pair(SolverType::Param(0), SolverType::Param(0))),
             ))
             .build();
-        assert!(!settles_nothing(only_impl(&twin), &pair(var(0), var(1))));
+        assert!(!settles_nothing(&twin, only_impl(&twin), &pair(var(0), var(1))));
     }
 
     /// `impl<T: Alpha> Alpha for List<T>` asks of `?0` what it asks of `T`,

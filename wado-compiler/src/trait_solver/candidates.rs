@@ -227,7 +227,7 @@ fn collect(
                     .any(|arg| arg.mentions(&|p| !def.target.binds(&|q| q == p))),
                 is_variadic: is_variadic(&def.target),
                 known: applies_everywhere && !maybe_withheld.contains(&trait_),
-                settles_nothing: applies_everywhere || settles_nothing(def, ty),
+                settles_nothing: applies_everywhere || settles_nothing(program, def, ty),
             };
             if in_scope.contains(&trait_) {
                 found.in_scope.push(candidate);

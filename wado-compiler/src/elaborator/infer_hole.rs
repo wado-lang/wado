@@ -96,18 +96,18 @@ struct UnwalkedDefaults {
 /// (`S: ReflectStruct<FieldTypes = [..F]>`, `H: Holder<Item = i32>`): once the
 /// owner is answered, its projection answers the right side, or is held to it.
 pub(super) struct ProjectionLink {
-    owner: TypeId,
+    pub(super) owner: TypeId,
     /// A pack's bound holds of each element of the tuple the pack answers.
-    each_element: bool,
+    pub(super) each_element: bool,
     /// The right side at the call: the slot it names, or the type it spells.
-    target: TypeId,
-    trait_: DefId,
+    pub(super) target: TypeId,
+    pub(super) trait_: DefId,
     /// The bound's own arguments as the call read them, `None` where it
     /// writes none.
-    written: Option<Vec<TypeId>>,
-    assoc: AssocTypeBound,
-    trait_name: String,
-    span: Span,
+    pub(super) written: Option<Vec<TypeId>>,
+    pub(super) assoc: AssocTypeBound,
+    pub(super) trait_name: String,
+    pub(super) span: Span,
 }
 
 impl InferHoleTable {
@@ -1069,8 +1069,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Whether `link`'s owner is answered, the link then settled for it, or
-    /// for each element where the owner is a pack.
+    /// Whether `link` is decided: its owner answered, and the link settled
+    /// for it, or for each element where the owner is a pack, with nothing of
+    /// a target left open.
     fn settle_projection_link(&mut self, link: &ProjectionLink) -> bool {
         let owner = self.apply_infer_holes(link.owner);
         if !self.tysys.is_usable_answer(owner) {
@@ -1086,21 +1087,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }) {
             return false;
         }
+        let mut decided = true;
         for subject in self.tysys.bound_subjects(link.each_element, owner) {
-            self.settle_projection_of(link, subject, written.as_deref());
+            decided &= self.settle_projection_of(link, subject, written.as_deref());
         }
-        true
+        decided
     }
 
     /// `link` at the answered `owner`: the target is answered by the owner's
-    /// projection or held to it. A projection that is not there, or not a
-    /// tuple a pack takes, leaves the target to its own report.
+    /// projection or held to it, and whether that is decided. A projection
+    /// that is not there, or not a tuple a pack takes, leaves the target to
+    /// its own report.
     fn settle_projection_of(
         &mut self,
         link: &ProjectionLink,
         owner: TypeId,
         written: Option<&[TypeId]>,
-    ) {
+    ) -> bool {
         let trait_args =
             written.and_then(|written| self.trait_args_at(link.trait_, owner, written));
         let forwarded = self
@@ -1109,15 +1112,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(answer) =
             self.bound_projection(owner, forwarded, link.trait_, trait_args, &link.assoc)
         else {
-            return;
+            return true;
         };
         self.equate(answer, link.target);
         // Solving fills the holes and leaves the rest of the target as
         // written, which the answer must still match: `[i32, U]` against
-        // `[bool, String]` settles `U` and misses at `i32`.
+        // `[bool, String]` settles `U` and misses at `i32`. A target still
+        // open there (`[String, Box<U>]` against `[i32, bool]`) is held to it
+        // once it settles.
         let target = self.apply_infer_holes(link.target);
+        if self.tysys.type_table.borrow().contains_undecided(target) {
+            return false;
+        }
         if target == answer || says_nothing(target) || !self.decides_equality(target, answer) {
-            return;
+            return true;
         }
         let tt = self.tysys.type_table.borrow();
         let (type_name, expected, actual) = (tt.name(owner), tt.name(target), tt.name(answer));
@@ -1130,6 +1138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual,
             span: link.span,
         });
+        true
     }
 
     /// Ask each commitment again at what its variables settled to; nothing

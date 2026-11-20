@@ -1227,7 +1227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
                 for (&hole, &arg) in holes.iter().zip(&args) {
-                    self.equate(hole, arg);
+                    self.settle_as_written(hole, arg);
                 }
                 // An argument the turbofish left open is the construction's to infer.
                 Some(

@@ -1073,6 +1073,29 @@ impl SolverBridge {
         CompilerItem::Shr,
     ];
 
+    /// The declarations a numeric literal may be: the numeric primitives,
+    /// the halves, and the wide integers.
+    fn literal_types(table: &TypeTable, lowering: &mut Lowering) -> IndexSet<TypeDeclId> {
+        let primitives = PrimitiveType::all_primitive_names()
+            .into_iter()
+            .filter(|name| {
+                PrimitiveType::from_name(name).is_some_and(|p| {
+                    !matches!(
+                        p,
+                        PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128
+                    )
+                })
+            })
+            .map(|name| lowering.builtin(name))
+            .collect::<Vec<_>>();
+        let wide = [CompilerItem::I128, CompilerItem::U128]
+            .into_iter()
+            .filter_map(|item| table.compiler_item_def(item))
+            .map(|def| lowering.type_decl(def))
+            .collect::<Vec<_>>();
+        primitives.into_iter().chain(wide).collect()
+    }
+
     pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
         let mut lowering = Lowering::over(&tysys.resolutions);
         let mut program = Program::default();
@@ -1082,6 +1105,7 @@ impl SolverBridge {
         Self::intern_declarations(tysys, modules, &mut lowering);
         program.copyable = Self::derived_trait(tysys, &mut lowering, CompilerItem::Copyable);
         program.never = Some(lowering.builtin(NEVER_TYPE_NAME));
+        program.literal_types = Self::literal_types(&table, &mut lowering);
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
             let header = &tysys.trait_env.impl_headers[&def];

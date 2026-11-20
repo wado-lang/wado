@@ -656,6 +656,8 @@ pub struct Program {
     pub declarations: IndexMap<TypeDeclId, Declaration>,
     /// The declarations [`SolverType::projects_param`] holds of a member of.
     pub projecting: IndexSet<TypeDeclId>,
+    /// The types a numeric literal may be, past the newtypes over them.
+    pub literal_types: IndexSet<TypeDeclId>,
     /// The sources of each structural trait's derived bodies, one per
     /// reflection kind. A derived impl stands for its source, so
     /// [`super::derive`] admits only a declaration one of them holds of
@@ -697,7 +699,7 @@ fn matching<'p, A: Iterator<Item = ImplId>>(
     all: impl FnOnce() -> A,
     by_head: impl Fn(Option<TypeDeclId>) -> Option<&'p Vec<ImplId>>,
 ) -> Matching<'p, A> {
-    if matches!(ty, SolverType::AnyRow | SolverType::Var(_)) {
+    if matches!(ty, SolverType::AnyRow) || super::holds::is_opaque(ty) {
         return Matching::All(all());
     }
     let ids = |head| by_head(head).map_or(&[][..], Vec::as_slice);
