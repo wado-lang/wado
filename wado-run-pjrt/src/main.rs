@@ -88,7 +88,7 @@ async fn plugin_path(named: Option<PathBuf>) -> Result<PathBuf, CliExit> {
             "{e:#}\nPass --plugin or set {PLUGIN_VARIABLE} to use a plugin at hand"
         ))
     })?;
-    Ok(dir.join(pinned.members[0].path))
+    Ok(dir.join(pinned.members[0].file_name()))
 }
 
 async fn run(options: RunOptions, plugin: Option<PathBuf>) -> Result<(), CliExit> {

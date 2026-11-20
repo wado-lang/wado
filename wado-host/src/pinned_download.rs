@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use reqwest::header::{CONTENT_RANGE, RANGE};
-use reqwest::{Certificate, Client, StatusCode};
+use reqwest::{Client, StatusCode};
 use sha2::{Digest, Sha256};
 
 use crate::atomic_write::write_atomic;
-use crate::tls_trust::extra_ca_certs;
+use crate::tls_trust::reqwest_client;
 use crate::user_config::xdg_base_dir;
 
 /// An archive, and the files a runner takes out of it.
@@ -39,7 +39,8 @@ pub struct Member {
 }
 
 impl Member {
-    fn file_name(&self) -> &'static str {
+    /// What [`Pinned::dir`] keeps the member under.
+    pub fn file_name(&self) -> &'static str {
         self.path.rsplit('/').next().unwrap_or(self.path)
     }
 }
@@ -62,7 +63,7 @@ impl Pinned {
             dir.display(),
             self.url
         );
-        let client = client()?;
+        let client = reqwest_client()?.build()?;
         let files = match self.archive {
             Archive::TarGz => {
                 let gzip = get(&client, self.url, Part::Whole).await?.bytes;
@@ -85,7 +86,7 @@ impl Pinned {
     }
 
     /// The directory [`Self::dir`] answers, where an earlier fetch filled it.
-    pub fn cached(&self) -> Option<PathBuf> {
+    fn cached(&self) -> Option<PathBuf> {
         let dir = self.cache_dir().ok()?;
         self.members
             .iter()
@@ -116,17 +117,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
         })
 }
 
-/// Trusts what `wado run` does beyond the platform's roots, so a host behind
-/// an intercepting proxy is reached as a guest's HTTPS reaches it.
-fn client() -> Result<Client> {
-    let certs = extra_ca_certs()
-        .map(|der| Certificate::from_der(der))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(Client::builder().tls_certs_merge(certs).build()?)
-}
-
 /// What part of a file a GET asks for.
-#[derive(Clone)]
 enum Part {
     Whole,
     /// The last bytes, as many as the file has up to this.

@@ -1,7 +1,8 @@
 //! Shared rustls trust-anchor configuration for the CLI's outbound TLS:
 //! the guest's high-level `wasi:http` client ([`crate::http_hooks`]), its raw
-//! `wasi:tls` connector ([`crate::guest`]), and `wado-cli`'s OCI registry client
-//! (its `oci`).
+//! `wasi:tls` connector ([`crate::guest`]), and the reqwest clients of
+//! `wado-cli`'s OCI registry and remote modules and of
+//! [`crate::pinned_download`].
 //!
 //! `webpki-roots` (Mozilla's curated list) is the baseline. On top of
 //! that we honour the same env-var conventions OpenSSL/curl use so a
@@ -69,6 +70,16 @@ pub fn build_root_cert_store() -> RootCertStore {
 /// a self-signed server certificate in it is an anchor too.
 pub fn extra_ca_certs() -> impl Iterator<Item = &'static CertificateDer<'static>> {
     EXTRA_CAS.iter().map(|(der, _)| der)
+}
+
+/// A reqwest client trusting [`extra_ca_certs`] beyond the platform's roots,
+/// so a host behind an intercepting proxy is reached as a guest's HTTPS
+/// reaches it.
+pub fn reqwest_client() -> Result<reqwest::ClientBuilder, reqwest::Error> {
+    let certs = extra_ca_certs()
+        .map(|der| reqwest::Certificate::from_der(der))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(reqwest::Client::builder().tls_certs_merge(certs))
 }
 
 fn bundle_paths() -> Vec<PathBuf> {

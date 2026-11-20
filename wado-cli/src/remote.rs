@@ -19,13 +19,13 @@ use std::time::Duration;
 
 use reqwest::header::{CONTENT_RANGE, RANGE};
 use reqwest::redirect::Policy;
-use reqwest::{Certificate, Client, Response, StatusCode, Url};
+use reqwest::{Client, Response, StatusCode, Url};
 use wado_compiler::hashmap::IndexMap;
 use wado_compiler::remote::{Integrity, PinnedBy, check_digest, url_fault};
 use wado_compiler::{SourceError, SourceReader};
 use wado_host::atomic_write::write_atomic;
 use wado_host::sync::{joined, lock};
-use wado_host::tls_trust::extra_ca_certs;
+use wado_host::tls_trust::reqwest_client;
 use wado_lsp::host::FileReader;
 use wado_lsp::host::discovery::{Disk, PackageFiles};
 use wado_manifest::{LOCK_FILENAME, LockFile, LockFileError, LockedRemote};
@@ -50,15 +50,9 @@ static RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
         .expect("the remote fetch runtime starts")
 });
 
-/// Trusts the CAs `wado run` does beyond the platform's, so a host behind a
-/// custom or intercepting CA is reached the way a guest's HTTPS is.
 static CLIENT: LazyLock<Result<Client, String>> = LazyLock::new(|| {
-    let certs = extra_ca_certs()
-        .map(|der| Certificate::from_der(der))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-    Client::builder()
-        .tls_certs_merge(certs)
+    reqwest_client()
+        .map_err(|e| e.to_string())?
         .redirect(Policy::custom(|attempt| {
             let from = attempt
                 .previous()
