@@ -645,12 +645,12 @@ pub fn owned_lets(func: &TirFunction, type_table: &TypeTable) -> IndexSet<u32> {
     let mut scan = OwnedLetScan {
         params: &func.params,
         type_table,
-        copied: IndexSet::default(),
+        through_ref: IndexSet::default(),
         other: IndexSet::default(),
         written: IndexSet::default(),
     };
     scan.visit_block(body);
-    scan.copied
+    scan.through_ref
         .into_iter()
         .filter(|l| !scan.other.contains(l) && scan.written.contains(l))
         .collect()
@@ -660,7 +660,7 @@ struct OwnedLetScan<'a> {
     params: &'a [TirParam],
     type_table: &'a TypeTable,
     /// Locals with a `let` reading through a reference parameter.
-    copied: IndexSet<u32>,
+    through_ref: IndexSet<u32>,
     /// Locals with any other `let`.
     other: IndexSet<u32>,
     /// The locals a write lands in: an assignment into a projection of one, or
@@ -699,10 +699,15 @@ impl TirRefVisitor for OwnedLetScan<'_> {
             ..
         } = &stmt.kind
         {
-            let copied = *storage == LetStorage::Planned
+            let through_ref = *storage == LetStorage::Planned
                 && needs_value_copy(value.type_id, self.type_table)
                 && self.reads_through_reference_param(value);
-            if copied { &mut self.copied } else { &mut self.other }.insert(*local_index);
+            if through_ref {
+                &mut self.through_ref
+            } else {
+                &mut self.other
+            }
+            .insert(*local_index);
         }
         self.walk_stmt(stmt);
     }
