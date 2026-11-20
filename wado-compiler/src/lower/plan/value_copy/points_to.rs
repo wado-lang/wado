@@ -336,7 +336,8 @@ impl PointsTo {
     }
 
     /// The functions a call through the function value in `node` may run, or
-    /// `None` where one is code the analysis cannot see.
+    /// `None` where one is code the analysis cannot see. A value naming no
+    /// function is a flow the analysis missed, not a call that runs nothing.
     fn run_through(&self, node: u32, targets: &IndexMap<u32, Option<Frame>>) -> Option<Vec<Frame>> {
         let mut frames = Vec::new();
         for loc in self.set(node).iter() {
@@ -346,7 +347,7 @@ impl PointsTo {
                 None => {}
             }
         }
-        Some(frames)
+        (!frames.is_empty()).then_some(frames)
     }
 
     /// What `writes` names of [`Self::global_reach`], before the calls it
@@ -360,14 +361,16 @@ impl PointsTo {
         for &place in &writes.places {
             locations.extend(self.set(place).iter().filter(held));
         }
-        // What a global reaches is closed under reach, so the walk stays in it.
         let seeds: Vec<u32> = writes
             .handed
             .iter()
             .flat_map(|&node| self.set(node).iter())
-            .filter(held)
             .collect();
-        locations.extend(self.reach_until(seeds, &IndexSet::default()));
+        locations.extend(
+            self.reach_until(seeds, &IndexSet::default())
+                .into_iter()
+                .filter(held),
+        );
         Mod {
             all: false,
             locations,
