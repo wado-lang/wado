@@ -735,8 +735,7 @@ chain rooted at a parameter. Returned as written, such a chain is handed out as
 a reference, inside a variant construction too: `return Option::Some(h.item)`
 copies nothing. Bound by a `let` that the body returns bare, the binding shares
 the place and the caller copies it, as for `return h.item`. Wrapped in a variant
-construction first, it is not recognized: `let item = h.item;
-return Option::Some(item);` copies `h.item` inside the callee, because which
+construction first, it is not recognized: `let item = h.item; return Option::Some(item);` copies `h.item` inside the callee, because which
 payload a construction hands out is settled before the share is.
 
 `SliceValueIter<T>::next` has that shape:
