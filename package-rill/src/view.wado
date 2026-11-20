@@ -2,6 +2,7 @@
 //! so a write to a signal touches the nodes that show it and no others.
 
 use { Track, flush, observe, on_cleanup, scope, untracked } from "./signals.wado";
+use { TreeMap } from "core:collections";
 use { Dom, Element, Event, EventTarget, Node } from "wado-lang:web";
 
 /// An element as it is to be built. Each method returns the view with one more
@@ -48,27 +49,66 @@ pub fn hydrate(view: View) -> Element with (Track, Dom) {
     return node;
 }
 
-/// The element being built, and the point among its children that the build
-/// has reached: before `next`, or at the end for `None`. While claiming, `next`
-/// is the first served child not yet claimed.
+/// The element being built, and how far the build has come through it.
+///
+/// While claiming, `served` holds the children the element was served with, in
+/// order, and the build has passed the first `passed` of them. It is taken
+/// before any step runs, since a callback may move a child the build already
+/// claimed. `attributes` holds the value each static attribute is left at,
+/// `None` for one a binding writes, checked once every step has run.
 struct Build {
     node: Element,
     claiming: bool,
-    next: Option<Node>,
+    served: List<Node>,
+    passed: i32,
+    attributes: TreeMap<String, Option<String>>,
 }
 
 impl Build {
+    fn new(node: Element, claiming: bool) -> Build with Dom {
+        let mut served: List<Node> = [];
+        if claiming {
+            let mut child = node.first_child();
+            while let Some(current) = child {
+                served.push(current);
+                child = current.next_sibling();
+            }
+        }
+        return Build { node, claiming, served, passed: 0, attributes: TreeMap::new() };
+    }
+
+    /// The first served child not yet passed, passing those a callback took
+    /// out of the element.
+    fn ahead(&mut self) -> Option<Node> with Dom {
+        while self.passed < self.served.len() {
+            let served = self.served[self.passed];
+            if served.parent_node() == Option::Some(self.node as Node) {
+                return Option::Some(served);
+            }
+            self.passed += 1;
+        }
+        return null;
+    }
+
+    fn next_served(&mut self) -> Option<Node> with Dom {
+        let served = self.ahead();
+        if served matches { Some(_) } {
+            self.passed += 1;
+        }
+        return served;
+    }
+
+    /// Puts `node` at the point the build has reached.
     fn insert(&mut self, node: Node) with Dom {
-        self.node.insert_before(node, self.next);
+        self.node.insert_before(node, self.ahead());
     }
 
     /// Takes the next served element, and out the served text before it.
     fn claim(&mut self) -> Element with Dom {
         loop {
-            let Some(served) = self.next else {
+            let Some(served) = self.next_served() else {
                 panic(`hydrate: <${self.node.local_name()}> was served with fewer elements than its view builds`);
             };
-            self.next = served.next_sibling();
             if let claimed: Element = served {
                 return claimed;
             }
@@ -78,24 +118,32 @@ impl Build {
 
     /// Takes out the served text after the last element claimed.
     fn finish(&mut self) with Dom {
-        while let Some(served) = self.next {
-            self.next = served.next_sibling();
+        while let Some(served) = self.next_served() {
             if served matches { _: Element } {
                 panic(`hydrate: <${self.node.local_name()}> was served with more elements than its view builds`);
             }
             self.node.remove_child(served);
         }
     }
+
+    fn check_attributes(&self) with Dom {
+        for let [name, value] of self.attributes.entries() {
+            if let Some(expected) = value {
+                assert self.node.get_attribute(*name) == Option::Some(*expected), "hydrate: a served attribute must hold what its view leaves";
+            }
+        }
+    }
 }
 
 fn run_steps(node: Element, claiming: bool, steps: List<fn mut(&mut Build) with (Track, Dom)>) with (Track, Dom) {
-    let mut at = Build { node, claiming, next: if claiming { node.first_child() } else { null } };
+    let mut at = Build::new(node, claiming);
     for let step of steps {
         let mut step = step;
         step(&mut at);
     }
     if claiming {
         at.finish();
+        at.check_attributes();
     }
 }
 
@@ -137,7 +185,7 @@ impl View {
         return self.then(
             |at: &mut Build| {
                 if at.claiming {
-                    assert at.node.get_attribute(name) == Option::Some(value), "hydrate: a served attribute must hold what its view sets";
+                    at.attributes[name] = Option::Some(value);
                 } else {
                     at.node.set_attribute(name, value);
                 }
@@ -149,6 +197,7 @@ impl View {
     pub fn bind_attribute(&self, name: String, value: fn mut() -> Option<String> with Track) -> View {
         let mut value = value;
         return self.then(|at: &mut Build| {
+            at.attributes[name] = null;
             let target = at.node;
             observe(|| {
                 match value() {

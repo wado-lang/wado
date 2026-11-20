@@ -68,7 +68,9 @@ at all.
 So claim mode claims elements and builds text afresh.
 
 - An element claims the next element child and checks its tag. Its static
-  attributes are checked against what was served, a mismatch like any other.
+  attributes are checked against what was served, once its steps have run, at
+  the value the view leaves each at. One a binding writes is not checked.
+  A mismatch is like any other.
 - A `text` or `bind_text`, and the anchor of a `show` or `switch`, creates its
   node. The served text between two elements is removed once the elements
   around it are claimed.

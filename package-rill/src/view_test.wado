@@ -825,6 +825,62 @@ test "a hydrated each moves none of the rows it claimed" {
     };
 }
 
+test "hydrate checks the attribute value the view leaves, not one it overwrites" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let view = || View::of(root).child(
+            element("p")
+                .attribute("class", "base")
+                .attribute("class", "final")
+                .attribute("title", "a")
+                .bind_attribute("title", || Option::Some("b")),
+        );
+        let _built = scope(|| {
+            build(view());
+        });
+        let _hydrated = scope(|| {
+            hydrate(view());
+        });
+        assert root.get_html() == "<p class=\"final\" title=\"b\"></p>";
+    };
+}
+
+#[expect_trap]
+test "hydrate traps on a served attribute the view does not leave" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let served = new_element("p");
+        served.set_attribute("class", "other");
+        root.append_child(served);
+        let _hydrated = scope(|| {
+            hydrate(View::of(root).child(element("p").attribute("class", "final")));
+        });
+    };
+}
+
+test "a hydrated each restores its order after render moved a claimed row" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        let _built = scope(|| {
+            build(View::of(list).each(|| [1, 2, 3] as List<i32>, item));
+        });
+        let rows = elements_in(list);
+        let _hydrated = scope(|| {
+            hydrate(View::of(list).each(|| [1, 2, 3] as List<i32>, |value: i32| {
+                if value == 3 {
+                    list.append_child(list.first_child().unwrap());
+                }
+                return item(value);
+            }));
+        });
+        assert children_text(list) == "123";
+        assert elements_in(list) == rows;
+    };
+}
+
 test "a hydrated show hides and shows again where it stands" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
