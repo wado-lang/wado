@@ -1,0 +1,33 @@
+// A closure literal that performs an effect has the function type its body
+// makes it, effects included, so a bound finds the impl for that type.
+
+use { println, Stdout } from "core:cli";
+
+trait Apply with _ {
+    fn apply0(&self) -> i32;
+}
+
+impl Apply for fn() -> i32 with Stdout {
+    fn apply0(&self) -> i32 with Stdout {
+        return self();
+    }
+}
+
+fn through<T: Apply>(t: &T) -> i32 with _ {
+    return t.apply0();
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    let h = || loud();
+    println(`${through(&h)}`);
+}
+
+__DATA__
+{
+    "stdout": "loud\n7\n"
+}
