@@ -440,7 +440,6 @@ fn function_return_convention(
             fresh: &fresh,
             oracle,
             type_table,
-            params: &func.params,
         },
         hands_out_payload,
         all_owned: true,
@@ -510,7 +509,6 @@ struct Projector<'a> {
     fresh: &'a IndexSet<u32>,
     oracle: &'a OwnedCalls<'a>,
     type_table: &'a TypeTable,
-    params: &'a [TirParam],
 }
 
 impl Projector<'_> {
@@ -529,8 +527,9 @@ impl Projector<'_> {
         if is_owned_value(expr, self.fresh, self.oracle, self.type_table) {
             return Some(IndexSet::default());
         }
-        let param =
-            |index: u32| param_position(self.params, index).map(|p| std::iter::once(p).collect());
+        let param = |index: u32| {
+            param_position(self.bindings.params, index).map(|p| std::iter::once(p).collect())
+        };
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 if let Some(p) = param(*index) {
@@ -672,7 +671,11 @@ impl<'a> BindingCollector<'a> {
             if collector.written.contains(&local) {
                 collector.owned_lets.insert(local);
             } else {
-                collector.let_sources.entry(local).or_default().extend(sources);
+                collector
+                    .let_sources
+                    .entry(local)
+                    .or_default()
+                    .extend(sources);
             }
         }
         collector
@@ -680,6 +683,27 @@ impl<'a> BindingCollector<'a> {
 
     fn n_params(&self) -> u32 {
         u32::try_from(self.params.len()).expect("a parameter count fits in u32")
+    }
+
+    /// `*p`, or a field chain over `*p` or `p`, `p` an immutable reference
+    /// parameter: a place whose storage the caller owns, so nothing in the
+    /// body moves out of it.
+    fn reads_through_reference_param(&self, expr: &TirExpr) -> bool {
+        let is_reference_param = |e: &TirExpr| {
+            matches!(e.kind, TirExprKind::Local { index, .. }
+                if self.params.iter().any(|p| p.local_index == index && !p.is_mut))
+                && self.type_table.is_reference(e.type_id)
+        };
+        match &expr.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } => is_reference_param(inner),
+            TirExprKind::FieldAccess { expr: inner, .. } => {
+                is_reference_param(inner) || self.reads_through_reference_param(inner)
+            }
+            _ => false,
+        }
     }
 
     /// Every value `local` is bound from.
@@ -711,11 +735,7 @@ impl TirRefVisitor for BindingCollector<'_> {
                 }
                 LetStorage::Planned
                     if needs_value_copy(value.type_id, self.type_table)
-                        && analyze::reads_through_reference_param(
-                            value,
-                            self.params,
-                            self.type_table,
-                        ) =>
+                        && self.reads_through_reference_param(value) =>
                 {
                     Some(&mut self.through_ref_lets)
                 }
@@ -730,7 +750,9 @@ impl TirRefVisitor for BindingCollector<'_> {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         let written = match &expr.kind {
-            TirExprKind::Assign { target, .. } if !matches!(target.kind, TirExprKind::Local { .. }) => {
+            TirExprKind::Assign { target, .. }
+                if !matches!(target.kind, TirExprKind::Local { .. }) =>
+            {
                 place_root(target)
             }
             TirExprKind::Unary {

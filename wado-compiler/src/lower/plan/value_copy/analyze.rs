@@ -12,7 +12,7 @@ use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_ar
 use crate::optimize::pass_dump;
 use crate::tir::{
     BuiltinDeclarations, FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirMatchArm,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -94,31 +94,6 @@ pub fn should_wrap(
     value_copy::needs_value_copy(expr.type_id, type_table)
         && !is_copy_value_call(expr)
         && !is_owned_value(expr, fresh_locals, oracle, type_table)
-}
-
-/// `*p`, or a field chain over `*p` or `p`, `p` an immutable reference
-/// parameter: a place whose storage the caller owns, so nothing in the body
-/// moves out of it.
-pub fn reads_through_reference_param(
-    expr: &TirExpr,
-    params: &[TirParam],
-    type_table: &TypeTable,
-) -> bool {
-    let is_reference_param = |e: &TirExpr| {
-        matches!(e.kind, TirExprKind::Local { index, .. }
-            if params.iter().any(|p| p.local_index == index && !p.is_mut))
-            && type_table.is_reference(e.type_id)
-    };
-    match &expr.kind {
-        TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: inner,
-        } => is_reference_param(inner),
-        TirExprKind::FieldAccess { expr: inner, .. } => {
-            is_reference_param(inner) || reads_through_reference_param(inner, params, type_table)
-        }
-        _ => false,
-    }
 }
 
 /// Avoid re-wrapping the `copy_value::<NestedT>(...)` markers
