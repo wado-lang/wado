@@ -888,8 +888,8 @@ fn f(p: P) -> i32 {
             let d = doc("enum Color { Red, Blue }
 global LIMIT: i32 = 3;
 fn f(c: Color, n: i32) -> i32 {
-    let a = match c { Red => 1, Blue => 2 };
-    return match n { LIMIT => a, m => m };
+    let a = match c { _::Red => 1, _::Blue => 2 };
+    return match n { == LIMIT => a, m => m };
 }
 ")
             .await;

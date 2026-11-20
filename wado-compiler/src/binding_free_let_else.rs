@@ -4,8 +4,8 @@
 
 use crate::Lints;
 use crate::ast::{
-    AstVisitor, Attribute, Pattern, Stmt, attrs_allow, inner_attrs_allow, lint, walk_pattern,
-    walk_stmt,
+    AstVisitor, Attribute, Pattern, Stmt, attrs_allow, for_each_pattern_name, inner_attrs_allow,
+    lint, walk_stmt,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::semantics::Semantics;
@@ -63,20 +63,7 @@ impl AstVisitor<'_> for Tests {
 }
 
 fn binds_a_name(pattern: &Pattern) -> bool {
-    struct Binds(bool);
-
-    impl AstVisitor<'_> for Binds {
-        fn visit_pattern(&mut self, pat: &Pattern) {
-            match pat {
-                Pattern::Ident { .. } | Pattern::MutIdent { .. } => self.0 = true,
-                // A bound and an `==` operand name a constant.
-                Pattern::Range { .. } | Pattern::Equal { .. } => {}
-                _ => walk_pattern(self, pat),
-            }
-        }
-    }
-
-    let mut binds = Binds(false);
-    binds.visit_pattern(pattern);
-    binds.0
+    let mut binds = false;
+    for_each_pattern_name(pattern, &mut |_, _| binds = true);
+    binds
 }

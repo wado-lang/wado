@@ -3459,6 +3459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: c.name.clone(),
                     has_payload: false,
                     inhabited: true,
+                    is_null: false,
                 })
                 .collect();
             let index = cases.iter().position(|c| c.name == name)?;
@@ -3471,6 +3472,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let variant_info = self.tysys.variant_of_type(scrutinee_type).cloned()?;
         let (index, _) = variant_info.case_named(name)?;
         let payload_types = self.tysys.case_payload_types(scrutinee_type)?;
+        let is_option = self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(scrutinee_type)
+            .is_some();
         let cases: Rc<[Case]> = variant_info
             .cases
             .iter()
@@ -3481,6 +3488,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: c.name.clone(),
                     has_payload,
                     inhabited: !self.is_uninhabited(payload_type),
+                    is_null: is_option && !has_payload,
                 }
             })
             .collect();
@@ -5269,7 +5277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// success case and returns early on failure: `Result<T, E>` in a function
     /// returning `Result<U, F>` becomes
     /// `match expr { Ok(v) => v, Err(e) => return Result::Err(F::from(e)) }`,
-    /// and `Option<T>` becomes `match expr { Some(v) => v, None => return null }`.
+    /// and `Option<T>` becomes `match expr { Some(v) => v, null => return null }`.
     pub(super) fn resolve_question_mark(
         &mut self,
         qm: &ast::TryOpExpr,

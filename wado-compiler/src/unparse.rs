@@ -2697,7 +2697,10 @@ impl<'a> Unparser<'a> {
                     self.output.push_str("_::");
                 }
                 self.output.push_str(variant_name);
-                if !bindings.is_empty() {
+                // Unqualified, only the parentheses keep `Red()` from binding.
+                if !bindings.is_empty()
+                    || (variant_qualifier.is_none() && inferred_qualifier.is_none())
+                {
                     self.delimited("(", ")", bindings, Unparser::unparse_pattern);
                 }
             }
@@ -4848,17 +4851,33 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(']');
             }
+            // A bare case name would bind, so a case without a payload is
+            // written `_::Case`, or `null` for an `Option`'s.
             TirPattern::Variant {
+                enum_type,
                 variant_name,
                 bindings,
+                payload_type,
                 ..
             } => {
-                self.output.push_str(variant_name);
-                if !bindings.is_empty() {
-                    self.delimited("(", ")", bindings, TirUnparser::unparse_tir_pattern);
+                if *payload_type != TypeTable::UNIT {
+                    self.output.push_str(variant_name);
+                    if bindings.is_empty() {
+                        self.output.push_str("(_)");
+                    } else {
+                        self.delimited("(", ")", bindings, TirUnparser::unparse_tir_pattern);
+                    }
+                } else if self.type_table.as_option(*enum_type).is_some() {
+                    self.output.push_str("null");
+                } else {
+                    self.output.push_str("_::");
+                    self.output.push_str(variant_name);
                 }
             }
-            TirPattern::Enum { case_name, .. } => self.output.push_str(case_name),
+            TirPattern::Enum { case_name, .. } => {
+                self.output.push_str("_::");
+                self.output.push_str(case_name);
+            }
             TirPattern::Struct { fields, .. } => {
                 self.braced(fields, |s, field| {
                     s.output.push_str(&field.field_name);
@@ -4873,7 +4892,13 @@ impl<'a> TirUnparser<'a> {
             TirPattern::Or(alternatives) => {
                 self.comma_sep_with(" | ", alternatives, TirUnparser::unparse_tir_pattern);
             }
-            TirPattern::ConstantValue { expr } => self.unparse_expr(expr),
+            TirPattern::ConstantValue { expr } => {
+                // A global's bare name would bind.
+                if matches!(expr.kind, TirExprKind::GlobalVarGet { .. }) {
+                    self.output.push_str("== ");
+                }
+                self.unparse_expr(expr);
+            }
             TirPattern::Narrow { shown, .. } if self.source_form => self.output.push_str(shown),
             TirPattern::Narrow {
                 name,

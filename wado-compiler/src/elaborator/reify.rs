@@ -5660,7 +5660,7 @@ impl<'a> Reify<'a> {
     }
 
     /// Reify the `?` postfix operator into the `Match` its operand type calls
-    /// for: `match expr { Some(v) => v, None => return null }` for `Option<T>`,
+    /// for: `match expr { Some(v) => v, null => return null }` for `Option<T>`,
     /// `match expr { Ok(v) => v, Err(e) => return Err(From::from(e)) }` for
     /// `Result<T, E>`. Annotate has already validated both the operand and the
     /// function's return type.
@@ -8986,7 +8986,7 @@ impl<'a> Reify<'a> {
     /// Discriminant index of `case_name` when `scrutinee_type` is an enum that
     /// declares it. Drives lowering an enum-case pattern to `TirPattern::Enum`.
     fn scrutinee_enum_case_index(&self, scrutinee_type: TypeId, case_name: &str) -> Option<u32> {
-        // Peel references for match ergonomics: `match &c { Red => … }`
+        // Peel references for match ergonomics: `match &c { _::Red => … }`
         // presents the scrutinee as `&Color`.
         let peeled = self
             .tysys
@@ -9025,10 +9025,9 @@ impl<'a> Reify<'a> {
             .is_some_and(|info| info.case_named(case_name).is_some())
     }
 
-    /// Lower a nullary variant-case pattern (e.g. `None`) to
+    /// Lower a nullary variant-case pattern (e.g. `null`) to
     /// `TirPattern::Variant` with no bindings, resolving the case's
-    /// payload type from the scrutinee's variant decl. Shared by the
-    /// bare-ident and qualified-`Variant` arms.
+    /// payload type from the scrutinee's variant decl.
     fn reify_nullary_variant_case(
         &mut self,
         scrutinee_type: TypeId,
@@ -9107,7 +9106,11 @@ impl<'a> Reify<'a> {
             local_index,
             type_id: scrutinee_type,
             test: Box::new(test),
-            shown: unparse_pattern_source(written),
+            // A bare name would bind, so it shows as the `==` it was written as.
+            shown: match written {
+                ast::Pattern::Ident { name, .. } => format!("== {name}"),
+                _ => unparse_pattern_source(written),
+            },
         }
     }
 

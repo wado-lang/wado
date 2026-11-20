@@ -805,7 +805,8 @@ struct Resolver<'a> {
     locals: Vec<IndexMap<String, DefId>>,
     /// Value bindings in scope — parameters and `let`s, innermost scope last —
     /// each with where it was bound. Held for the shadowing lint, for the
-    /// redeclaration check, and for deciding what a bare name in a pattern is:
+    /// redeclaration check, and for deciding whether an `==` operand or a range
+    /// bound reaches a global:
     /// an expression's reference to a local resolves through the elaborator,
     /// not here.
     bindings: Vec<IndexMap<String, Span>>,

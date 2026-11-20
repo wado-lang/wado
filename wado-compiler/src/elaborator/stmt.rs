@@ -15,6 +15,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::{unparse_instance_pattern, unparse_pattern_source};
 
+use super::exhaustiveness;
 use super::method_call::MethodCallInput;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
 use super::type_resolution::slot_type_ids;
@@ -1019,6 +1020,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `case_name`, written under `qualifier`, is a case the scrutinee
     /// offers. A newtype's cases are its base's.
+    /// The pattern that tests the case `name` of `type_id`, where it has one.
+    fn case_pattern_of_type(&self, type_id: TypeId, name: &str) -> Option<String> {
+        let tt = self.tysys.type_table.borrow();
+        let head = tt.scrutinee_structure_head(type_id);
+        if let Some(info) = self.tysys.enum_of_type(head) {
+            return info
+                .cases
+                .iter()
+                .any(|c| c.name == name)
+                .then(|| exhaustiveness::case_pattern_head(name, false, false));
+        }
+        let (_, case) = self.tysys.variant_of_type(head)?.case_named(name)?;
+        let has_payload = case.has_payload(&tt);
+        let head = exhaustiveness::case_pattern_head(
+            name,
+            has_payload,
+            !has_payload && tt.as_option(head).is_some(),
+        );
+        Some(if has_payload {
+            format!("{head}(_)")
+        } else {
+            head
+        })
+    }
+
     pub(super) fn is_known_case_of_type(
         &mut self,
         type_id: TypeId,
@@ -1221,8 +1247,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a pattern that must bind: a `let`'s, or a `for`'s. A bare name
-    /// there is a case of its type or a binding, never a global.
+    /// Resolve a pattern that must bind: a `let`'s, or a `for`'s.
     pub(super) fn resolve_let_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -1683,11 +1708,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let is_mut = matches!(pattern, Pattern::MutIdent { .. });
                 // `Red =>` meant as the case would bind and match every value.
-                if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
+                if let Some(case) = self.case_pattern_of_type(scrutinee_type, name) {
                     let _ = self.emit(TypeError::InvalidPattern {
                         message: format!(
                             "`{name}` binds a new name, and the case of that name is never \
-                             tested; write `_::{name}` to match the case"
+                             tested; write `{case}` to match the case"
                         ),
                         span: *name_span,
                     });

@@ -1227,10 +1227,14 @@ pub fn for_each_pattern_name(pat: &Pattern, f: &mut impl FnMut(&str, Span)) {
 
     impl<F: FnMut(&str, Span)> AstVisitor<'_> for Names<'_, F> {
         fn visit_pattern(&mut self, pat: &Pattern) {
-            if let Pattern::Ident { name, span, .. } | Pattern::MutIdent { name, span, .. } = pat {
-                (self.0)(name, *span);
+            match pat {
+                Pattern::Ident { name, span, .. } | Pattern::MutIdent { name, span, .. } => {
+                    (self.0)(name, *span);
+                }
+                // A bound names a constant and binds nothing.
+                Pattern::Range { .. } => {}
+                _ => walk_pattern(self, pat),
             }
-            walk_pattern(self, pat);
         }
     }
 

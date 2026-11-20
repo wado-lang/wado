@@ -578,7 +578,7 @@ mod tests {
                 "fn f(opt: Option<i32>) -> i32 {\n",
                 "    return match opt {\n",
                 "        Some(v) => v,\n",
-                "        None => 0,\n",
+                "        null => 0,\n",
                 "    };\n",
                 "}\n",
             );

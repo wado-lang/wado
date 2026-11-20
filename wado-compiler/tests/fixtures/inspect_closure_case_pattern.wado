@@ -1,0 +1,34 @@
+// A closure's `:#?` source spells each pattern so it reads back with the same
+// meaning: a bare name would bind, so a case shows as `_::Case` or `null`, a
+// payload left unnamed as `Case(_)`, and a global as `== NAME`.
+enum Color { Red, Green }
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+global LIMIT: i32 = 3;
+
+fn fmt_color(f: fn(Color) -> bool) -> String {
+    return `${f:#?}`;
+}
+
+fn fmt_shape(f: fn(Shape) -> bool) -> String {
+    return `${f:#?}`;
+}
+
+fn fmt_option(f: fn(Option<i32>) -> bool) -> String {
+    return `${f:#?}`;
+}
+
+fn fmt_int(f: fn(i32) -> bool) -> String {
+    return `${f:#?}`;
+}
+
+test "a case and a constant show as patterns that test them" {
+    assert fmt_color(|c| c matches { _::Red }) == "|c: Color| match c {\n    _::Red => true,\n    _ => false,\n}";
+    assert fmt_shape(|s| s matches { _::Point | Circle(_) }) == "|s: Shape| match s {\n    _::Point | Circle(_) => true,\n    _ => false,\n}";
+    assert fmt_option(|o| o matches { null }) == "|o: Option<i32>| match o {\n    null => true,\n    _ => false,\n}";
+    assert fmt_int(|n| n matches { == LIMIT }) == "|n: i32| match n {\n    == LIMIT => true,\n    _ => false,\n}";
+}

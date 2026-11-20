@@ -78,8 +78,8 @@ fn an_upcast_is_a_no_op() {
 fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
     let wat = compile_to_wat(&on_an_element(
         "Dom",
-        "assert doc.get_element_by_id(\"app\") matches { None };\n\
-         assert el.parent_node() matches { None };",
+        "assert doc.get_element_by_id(\"app\") matches { null };\n\
+         assert el.parent_node() matches { null };",
     ));
     assert!(
         wat.contains(&web_import("document")) && wat.contains(&web_import("node")),

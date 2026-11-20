@@ -3962,8 +3962,6 @@ impl Parser {
             })
         } else if let Some(name) = self.peek_kind().as_ident_name() {
             // Accept identifiers and contextual keywords (flags, type) as pattern names.
-            // Case does NOT affect parsing: disambiguation between variant cases and
-            // variable bindings is deferred to the elaborator using type information.
             let name = name.to_string();
             let start_span = self.peek().span;
             self.mark_keyword_name();
@@ -3978,8 +3976,6 @@ impl Parser {
                 // Named struct pattern: Point { x, y }
                 self.parse_struct_pattern_fields(Some(name))
             } else {
-                // Bare identifier: could be a variable binding or a variant/enum case
-                // without payload. The elaborator disambiguates using type information.
                 Ok(Pattern::Ident {
                     id: self.alloc_ast_id(),
                     name,
@@ -9678,8 +9674,7 @@ line 2
 
     #[test]
     fn test_pattern_bare_identifier_always_ident() {
-        // Bare identifiers (no parens, no braces) are always Pattern::Ident
-        // regardless of case — the elaborator disambiguates
+        // A bare identifier binds, whatever its case.
         let upper = parse_pattern_from("None");
         let lower = parse_pattern_from("none");
         assert_matches!(&upper, Pattern::Ident { name, .. } if name == "None");
