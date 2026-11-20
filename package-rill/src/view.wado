@@ -55,26 +55,32 @@ pub fn hydrate(view: View) -> Element with (Track, Dom) {
 /// order, and the build has passed the first `passed` of them. It is taken
 /// before any step runs, since a callback may move a child the build already
 /// claimed. `attributes` holds the value each static attribute is left at,
-/// `None` for one a binding writes, checked once every step has run.
+/// `None` for one a binding writes, checked once every step has run against
+/// `served_attributes`, taken before any step runs since a binding writes one.
 struct Build {
     node: Element,
     claiming: bool,
     served: List<Node>,
     passed: i32,
     attributes: TreeMap<String, Option<String>>,
+    served_attributes: TreeMap<String, String>,
 }
 
 impl Build {
     fn new(node: Element, claiming: bool) -> Build with Dom {
         let mut served: List<Node> = [];
+        let mut served_attributes = TreeMap::<String, String>::new();
         if claiming {
             let mut child = node.first_child();
             while let Some(current) = child {
                 served.push(current);
                 child = current.next_sibling();
             }
+            for let name of node.get_attribute_names() {
+                served_attributes[name] = node.get_attribute(name).unwrap();
+            }
         }
-        return Build { node, claiming, served, passed: 0, attributes: TreeMap::new() };
+        return Build { node, claiming, served, passed: 0, attributes: TreeMap::new(), served_attributes };
     }
 
     /// The first served child not yet passed, passing those a callback took
@@ -129,7 +135,7 @@ impl Build {
     fn check_attributes(&self) with Dom {
         for let [name, value] of self.attributes.entries() {
             if let Some(expected) = value {
-                assert self.node.get_attribute(*name) == Option::Some(*expected), "hydrate: a served attribute must hold what its view leaves";
+                assert self.served_attributes.get(*name) == Option::Some(*expected), "hydrate: a served attribute must hold what its view leaves";
             }
         }
     }
@@ -186,9 +192,8 @@ impl View {
             |at: &mut Build| {
                 if at.claiming {
                     at.attributes[name] = Option::Some(value);
-                } else {
-                    at.node.set_attribute(name, value);
                 }
+                at.node.set_attribute(name, value);
             },
         );
     }

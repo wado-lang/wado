@@ -834,15 +834,19 @@ test "hydrate checks the attribute value the view leaves, not one it overwrites"
                 .attribute("class", "base")
                 .attribute("class", "final")
                 .attribute("title", "a")
-                .bind_attribute("title", || Option::Some("b")),
+                .bind_attribute("title", || Option::Some("b"))
+                .bind_attribute("lang", || Option::Some("bound"))
+                .attribute("lang", "static"),
         );
         let _built = scope(|| {
             build(view());
         });
+        let built = root.get_html();
         let _hydrated = scope(|| {
             hydrate(view());
         });
-        assert root.get_html() == "<p class=\"final\" title=\"b\"></p>";
+        assert root.get_html() == built;
+        assert built == "<p class=\"final\" title=\"b\" lang=\"static\"></p>";
     };
 }
 
