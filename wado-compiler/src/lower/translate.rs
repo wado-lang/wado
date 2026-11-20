@@ -472,6 +472,9 @@ struct FunctionTranslator<'a, 'p> {
     guarded_locals: IndexSet<u32>,
     /// The flag local of each guarded local, minted at its declaration.
     assigned_flags: RefCell<IndexMap<u32, u32>>,
+    /// Locals whose `let` the return conventions count owned
+    /// ([`value_copy::ownership::owned_lets`]).
+    owned_lets: IndexSet<u32>,
     /// The arena every converter pushes nodes into. `convert_function` takes it
     /// (`into_inner`) as the function's `Body`; `convert_global` wraps the
     /// initializer it builds into a single-statement global-init `Body`.
@@ -607,6 +610,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             args_checked: analyzed,
             guarded_locals,
             assigned_flags: RefCell::new(IndexMap::default()),
+            owned_lets: if needs_copy_analysis {
+                value_copy::ownership::owned_lets(func, &base.type_table.borrow())
+            } else {
+                IndexSet::default()
+            },
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -633,6 +641,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             args_checked: false,
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
+            owned_lets: IndexSet::default(),
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -1858,6 +1867,12 @@ impl FunctionTranslator<'_, '_> {
                         && !shares_value
                         && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                         && self.should_wrap_value_copy(value);
+                    assert!(
+                        needs_value_copy_wrap
+                            || storage.skips_copy()
+                            || !self.owned_lets.contains(local_index),
+                        "the return conventions count `{name}` owned, so its `let` must copy",
+                    );
                     let value_op = self.convert_operand(value);
                     let value_op = if needs_value_copy_wrap {
                         self.wrap_value_copy_operand(value_op, *type_id)

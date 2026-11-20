@@ -11,7 +11,8 @@
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{arg_at, carries_storage, param_position, unwrap_ref};
+use super::needs_value_copy;
+use super::place::{arg_at, carries_storage, param_position, place_root, unwrap_ref};
 use super::retention::CallRetention;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -19,8 +20,8 @@ use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
-    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, LetStorage, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -431,8 +432,8 @@ fn function_return_convention(
     hands_out_payload: bool,
 ) -> (bool, Option<Vec<usize>>) {
     let body = func.body.as_ref().expect("members have bodies");
-    let bindings = BindingCollector::collect(body, func.params.len());
-    let fresh = compute_fresh_locals(&bindings, &func.params, shared, oracle, type_table);
+    let bindings = BindingCollector::collect(body, &func.params, type_table);
+    let fresh = compute_fresh_locals(&bindings, shared, oracle, type_table);
     let mut walker = ReturnWalker {
         projector: Projector {
             bindings: &bindings,
@@ -452,6 +453,14 @@ fn function_return_convention(
         ps
     });
     (walker.all_owned, projected)
+}
+
+/// The locals the return conventions count owned by their `let` alone, whatever
+/// its value: the translator must not elide those `let`s' copies.
+pub fn owned_lets(func: &TirFunction, type_table: &TypeTable) -> IndexSet<u32> {
+    func.body.as_ref().map_or_else(IndexSet::default, |body| {
+        BindingCollector::collect(body, &func.params, type_table).owned_lets
+    })
 }
 
 /// Walk every `return value` and classify its operand: owned, or a projection of
@@ -497,7 +506,7 @@ impl TirRefVisitor for ReturnWalker<'_> {
 /// Which parameters a value is a projection of, so it is fresh exactly when
 /// those arguments are.
 struct Projector<'a> {
-    bindings: &'a BindingCollector,
+    bindings: &'a BindingCollector<'a>,
     fresh: &'a IndexSet<u32>,
     oracle: &'a OwnedCalls<'a>,
     type_table: &'a TypeTable,
@@ -574,25 +583,29 @@ impl Projector<'_> {
     }
 }
 
-/// Fresh (owned-rooted) non-parameter locals: a `let` bound to an owned value,
-/// or a match-arm binding that destructures an owned scrutinee. Optimistic least
-/// fixpoint — every bound local starts owned and is dropped once a source proves
-/// shared (a source may reference another local whose ownership is still
-/// shrinking).
+/// Fresh (owned-rooted) locals: a `let` bound to an owned value or binding
+/// storage of its own, or a match-arm binding that destructures an owned
+/// scrutinee. Optimistic least fixpoint — every bound local starts owned and is
+/// dropped once a source proves shared (a source may reference another local
+/// whose ownership is still shrinking).
 fn compute_fresh_locals(
-    collector: &BindingCollector,
-    params: &[TirParam],
+    collector: &BindingCollector<'_>,
     shared: &IndexSet<u32>,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
-    let mut fresh: IndexSet<u32> = collector.let_sources.keys().copied().collect();
+    let mut fresh: IndexSet<u32> = collector
+        .let_sources
+        .keys()
+        .chain(&collector.owned_lets)
+        .copied()
+        .collect();
     for (local, _) in &collector.match_sources {
         fresh.insert(*local);
     }
     // A by-value parameter is owned, the caller having copied or moved it in,
     // unless the caller passes it uncopied.
-    for p in params {
+    for p in collector.params {
         if !type_table.is_reference(p.type_id) && !shared.contains(&p.local_index) {
             fresh.insert(p.local_index);
         }
@@ -623,24 +636,50 @@ fn compute_fresh_locals(
 
 /// Collects, per non-parameter local, the value expressions it is bound from:
 /// `let` initializers and — for a match-arm binding — the scrutinee it
-/// destructures (fresh iff the scrutinee is). The `TirRefVisitor` trait borrows
-/// nodes for less than the body's lifetime, so the sources are cloned; this is a
-/// one-time analysis pass.
-struct BindingCollector {
-    n_params: u32,
+/// destructures (fresh iff the scrutinee is). A `let` binding storage of its own
+/// leaves no source to judge: a `Taken` one, and one the body writes into after
+/// reading it through a reference parameter, which the translator copies
+/// because a written binding shares nothing and a caller's storage moves
+/// nowhere. The `TirRefVisitor` trait borrows nodes for less than the body's
+/// lifetime, so the sources are cloned; this is a one-time analysis pass.
+struct BindingCollector<'a> {
+    params: &'a [TirParam],
+    type_table: &'a TypeTable,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
+    owned_lets: IndexSet<u32>,
+    /// The `let`s reading through a reference parameter, settled once every
+    /// write is seen.
+    through_ref_lets: IndexMap<u32, Vec<TirExpr>>,
+    /// The locals a write lands in: an assignment into a projection of one, or
+    /// a `&mut` of one or of its projection.
+    written: IndexSet<u32>,
     match_sources: Vec<(u32, TirExpr)>,
 }
 
-impl BindingCollector {
-    fn collect(body: &TirBlock, n_params: usize) -> Self {
+impl<'a> BindingCollector<'a> {
+    fn collect(body: &TirBlock, params: &'a [TirParam], type_table: &'a TypeTable) -> Self {
         let mut collector = Self {
-            n_params: u32::try_from(n_params).expect("a parameter count fits in u32"),
+            params,
+            type_table,
             let_sources: IndexMap::default(),
+            owned_lets: IndexSet::default(),
+            through_ref_lets: IndexMap::default(),
+            written: IndexSet::default(),
             match_sources: Vec::new(),
         };
         collector.visit_block(body);
+        for (local, sources) in std::mem::take(&mut collector.through_ref_lets) {
+            if collector.written.contains(&local) {
+                collector.owned_lets.insert(local);
+            } else {
+                collector.let_sources.entry(local).or_default().extend(sources);
+            }
+        }
         collector
+    }
+
+    fn n_params(&self) -> u32 {
+        u32::try_from(self.params.len()).expect("a parameter count fits in u32")
     }
 
     /// Every value `local` is bound from.
@@ -655,35 +694,63 @@ impl BindingCollector {
     }
 }
 
-impl TirRefVisitor for BindingCollector {
+impl TirRefVisitor for BindingCollector<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Let {
             local_index,
             value: Some(value),
+            storage,
             ..
         } = &stmt.kind
-            && *local_index >= self.n_params
+            && *local_index >= self.n_params()
         {
-            self.let_sources
-                .entry(*local_index)
-                .or_default()
-                .push(value.clone());
+            let sources = match storage {
+                LetStorage::Taken => {
+                    self.owned_lets.insert(*local_index);
+                    None
+                }
+                LetStorage::Planned
+                    if needs_value_copy(value.type_id, self.type_table)
+                        && analyze::reads_through_reference_param(
+                            value,
+                            self.params,
+                            self.type_table,
+                        ) =>
+                {
+                    Some(&mut self.through_ref_lets)
+                }
+                LetStorage::Planned | LetStorage::Aliased => Some(&mut self.let_sources),
+            };
+            if let Some(sources) = sources {
+                sources.entry(*local_index).or_default().push(value.clone());
+            }
         }
         self.walk_stmt(stmt);
     }
 
     fn visit_expr(&mut self, expr: &TirExpr) {
+        let written = match &expr.kind {
+            TirExprKind::Assign { target, .. } if !matches!(target.kind, TirExprKind::Local { .. }) => {
+                place_root(target)
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: inner,
+            } => place_root(inner),
+            _ => None,
+        };
+        self.written.extend(written);
         if let TirExprKind::Match { expr: scrut, arms } = &expr.kind {
             for arm in arms {
                 let mut binds: IndexSet<u32> = IndexSet::default();
                 analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
                 for b in binds {
-                    if b >= self.n_params {
+                    if b >= self.n_params() {
                         self.match_sources.push((b, (**scrut).clone()));
                     }
                 }
             }
         }
-        self.walk_expr(expr);
+        self.walk_expr_in_frame(expr);
     }
 }
