@@ -35,7 +35,7 @@ that must be one type stay two.
 ## Decision
 
 Each body is elaborated against one inference context. A site reaches the
-context through three operations only, and the context, not the site, decides
+context through four operations only, and the context, not the site, decides
 what is known.
 
 ### Variables
@@ -49,7 +49,8 @@ the root carries both origins. A variable is settled once; settling it again to
 another type is a mismatch at the second cause.
 
 A numeric literal's variable has a kind, integer or float. It joins only a
-variable of its kind or a type of its kind. One left unsettled when the body
+variable of its kind or a type of its kind. Joined with a variable that has no
+kind, the root takes the literal's kind. One left unsettled when the body
 ends takes its kind's default type, `i32` or `f64`, as an unannotated literal
 does today.
 
@@ -128,7 +129,11 @@ Each step keeps every fixture passing and deletes what it replaces.
   selection not yet known stays queued until `resolve_head` or the body's end.
   Until then, a selection admits a variable awaiting its report as meeting
   every bound, and each selection site requires the committed impl's bounds
-  itself (`defer_awaited_impl_bounds`); this step deletes both.
+  itself (`defer_awaited_impl_bounds`); this step deletes both. An operator
+  (`==`) still selects its impl by the receiver's head
+  (`resolve_trait_method_for_op`), apart from the solver, so a marker trait
+  beside a conditional impl decides it at an open receiver where `a.eq(&a)`
+  reports it cannot choose; this step makes the two one.
 - [ ] A numeric literal's variable has a kind and a default. The open item of
   [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
   closes with it, and so does `Settles::Nothing`, which until then keeps a

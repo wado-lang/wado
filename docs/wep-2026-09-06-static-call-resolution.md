@@ -217,8 +217,9 @@ the call, and a name some trait declared without one kept a blanket's instance
 method out of reach. Asking the type itself removes both classes.
 
 [WEP: Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md)
-replaces the listed instances in this passage and the next with inference
-variables.
+replaces the listed instances in this passage and the three after it with
+inference variables. What they say a sole written impl settles is history: an
+impl settles no omitted argument, a literal's aside.
 
 A generic type spelled without its arguments (`Pair::span(&p)`) names no one
 instance, so the question is what its instances answer the name with. The
