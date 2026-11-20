@@ -424,7 +424,6 @@ impl HeapEffectsCache {
                 .iter()
                 .map(|&n| (n, std::mem::take(self.summary_mut(n))))
                 .collect();
-            // A batch runs in parallel against the summaries it began with.
             sweep.solve(&pending, |batch| {
                 let this = &*self;
                 let fresh = exec.map(batch, |&n| this.summarize(functions, type_table, n, true));

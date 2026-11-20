@@ -1,5 +1,6 @@
 //! Algorithms over a graph: components of a directed one given as successor
-//! lists, and of an undirected one built edge by edge.
+//! lists and a least fixpoint over them, and components of an undirected one
+//! built edge by edge.
 
 /// The strongly connected components of `successors`, each after every
 /// component it reaches, so a callee's component comes before its callers'.
@@ -313,6 +314,16 @@ mod tests {
             });
         }
         let cycle = vec![0, 1, 2, 3];
-        assert_eq!(values, [cycle.clone(), cycle.clone(), cycle.clone(), cycle, vec![4], vec![0, 1, 2, 3, 5]]);
+        assert_eq!(
+            values,
+            [
+                cycle.clone(),
+                cycle.clone(),
+                cycle.clone(),
+                cycle,
+                vec![4],
+                vec![0, 1, 2, 3, 5]
+            ]
+        );
     }
 }
