@@ -2625,6 +2625,12 @@ impl EffectIndex<'_> {
                             .extend(blanket.declared.iter().filter(|e| !e.is_param()).cloned());
                         self.bring(&blanket.bounds, arg, brought);
                     }
+                    // A function type is concrete, and the elaborator left its
+                    // bound to be checked once its row was solved: no impl is
+                    // the bound unmet, which the WIR build reports.
+                    None if arg
+                        .first()
+                        .is_some_and(|(head, _)| matches!(head.head(), TypeHead::Function { .. })) => {}
                     None => brought.open = true,
                 },
             }

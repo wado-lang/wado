@@ -1,0 +1,34 @@
+// A closure literal whose body performs an effect has that effect in its type,
+// so an impl for the pure function type does not answer its bound: the
+// bound is decided once the effect check has solved the closure's row.
+
+use { println, Stdout } from "core:cli";
+
+trait Apply with _ {
+    fn apply0(&self) -> i32;
+}
+
+impl Apply for fn() -> i32 {
+    fn apply0(&self) -> i32 {
+        return self();
+    }
+}
+
+fn through<T: Apply>(t: &T) -> i32 with _ {
+    return t.apply0();
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    let h = || loud();
+    println(`${through(&h)}`);
+}
+
+__DATA__
+{
+    "compile_error": "type `fn() -> i32 with Stdout` does not implement trait `Apply`"
+}

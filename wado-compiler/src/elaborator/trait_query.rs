@@ -3157,6 +3157,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.report_tied_impls(&tied, trait_, type_arg, span);
             return true;
         }
+        // The solver reads an unsolved row as empty, so an impl for the row
+        // a closure's body performs is not found yet. The instance is checked
+        // once the effect check has solved it.
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .contains_effect_var(type_arg)
+        {
+            return true;
+        }
         let type_name = self.tysys.type_id_to_string(type_arg);
         let reason = trait_
             .canonical()

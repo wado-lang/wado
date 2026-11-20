@@ -6040,6 +6040,17 @@ impl TypeTable {
         self.any_infer_var(id, &mut |_| true)
     }
 
+    /// Whether a function type in `id` carries a row the effect check has yet
+    /// to solve, as a closure literal's does until then.
+    pub fn contains_effect_var(&self, id: TypeId) -> bool {
+        if let ResolvedType::Function { effects, .. } = self.get(id)
+            && effects.iter().any(EffectRef::is_var)
+        {
+            return true;
+        }
+        self.any_constituent(id, &mut |t| self.contains_effect_var(t))
+    }
+
     /// Whether `id` is an inference variable itself, not a type naming one.
     pub fn is_infer_var(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::InferVar(_))
