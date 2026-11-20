@@ -1379,14 +1379,18 @@ impl LoopSeed {
     fn below(&self, exit_live: &IndexSet<u32>, exits: &[Exit]) -> bool {
         self.exit_live.is_subset(exit_live)
             && self.enclosing.len() == exits.len()
-            && self.enclosing.iter().zip(exits).all(|((live, cont), exit)| {
-                live.is_subset(&exit.live)
-                    && match (cont, &exit.continue_live) {
-                        (None, None) => true,
-                        (Some(seed), Some(now)) => seed.is_subset(now),
-                        _ => false,
-                    }
-            })
+            && self
+                .enclosing
+                .iter()
+                .zip(exits)
+                .all(|((live, cont), exit)| {
+                    live.is_subset(&exit.live)
+                        && match (cont, &exit.continue_live) {
+                            (None, None) => true,
+                            (Some(seed), Some(now)) => seed.is_subset(now),
+                            _ => false,
+                        }
+                })
     }
 }
 

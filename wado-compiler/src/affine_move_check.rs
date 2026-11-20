@@ -2405,7 +2405,10 @@ impl MoveWalker<'_, '_> {
                 let formed_before: IndexSet<AstId> = start.formed.keys().copied().collect();
                 walker.flow = end.unwrap_or(start);
                 // An iteration's value is never read.
-                walker.flow.formed.retain(|id, _| formed_before.contains(id));
+                walker
+                    .flow
+                    .formed
+                    .retain(|id, _| formed_before.contains(id));
                 if let Some(update) = update {
                     walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
                 }
