@@ -81,12 +81,12 @@ pub enum JwtError {
 impl Display for JwtError {
     fn fmt(&self, f: &mut Formatter) {
         let message: String = match *self {
-            Malformed => "malformed token",
-            AlgMismatch => "algorithm does not match the key",
-            CriticalHeader => "unsupported critical header",
-            InvalidSignature => "invalid signature",
-            Expired => "token has expired",
-            NotYetValid => "token is not yet valid",
+            _::Malformed => "malformed token",
+            _::AlgMismatch => "algorithm does not match the key",
+            _::CriticalHeader => "unsupported critical header",
+            _::InvalidSignature => "invalid signature",
+            _::Expired => "token has expired",
+            _::NotYetValid => "token is not yet valid",
         };
         f.write_str(&message);
     }

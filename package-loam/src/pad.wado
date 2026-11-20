@@ -47,14 +47,14 @@ pub enum Why {
 impl Display for Why {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(match self {
-            MergedBehind => "it merges behind an axis before it",
-            Unaligned => "the regrouping lines up with it at no axis",
-            SplitAlong => "it splits along it",
-            Window => "a window reads across it",
-            Shrinks => "an extent may fall as it rises",
-            Acausal => "a non-causal attention reads every key",
-            Tied => "it must equal a sum of lengths, one refused there",
-            ReadsMerged => "it reads rows a regrouping merged",
+            _::MergedBehind => "it merges behind an axis before it",
+            _::Unaligned => "the regrouping lines up with it at no axis",
+            _::SplitAlong => "it splits along it",
+            _::Window => "a window reads across it",
+            _::Shrinks => "an extent may fall as it rises",
+            _::Acausal => "a non-causal attention reads every key",
+            _::Tied => "it must equal a sum of lengths, one refused there",
+            _::ReadsMerged => "it reads rows a regrouping merged",
         });
     }
 }
@@ -76,7 +76,7 @@ pub struct Judged {
 impl Display for Judged {
     fn fmt(&self, f: &mut Formatter) {
         match &self.refused {
-            None => f.write_str(`${self.symbol}: padded`),
+            null => f.write_str(`${self.symbol}: padded`),
             Some(r) => f.write_str(`${self.symbol}: refused at ${r.node} = ${r.op}: ${r.why}`),
         }
     }
@@ -263,7 +263,7 @@ fn carried(
                 }
                 let own = match merged.get(*t) {
                     Some(m) => m.merges[at],
-                    None => null,
+                    null => null,
                 };
                 if agreed matches { Some(a) && a != own } {
                     return reads();
@@ -285,7 +285,7 @@ fn carried(
         }
         let own = |at: i32, k: i32| match merged.get(node.inputs[at]) {
             Some(m) => m.merges[k],
-            None => null,
+            null => null,
         };
         for let k of 0..<x.rank() - 1 {
             if own(0, k) != own(1, k) {

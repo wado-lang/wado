@@ -369,7 +369,7 @@ test "decode: indefinite-length text struct key" {
 test "decode: null wrapped in a non-preferred self-described tag" {
     // tag 55799 in 4-byte form (0xda 0x0000d9f7) wrapping null — every other
     // path unwraps non-preferred tag encodings, so Option must too.
-    assert dec::<Option<i32>>("da0000d9f7f6") matches { None };
+    assert dec::<Option<i32>>("da0000d9f7f6") matches { null };
     assert dec::<Option<i32>>("da0000d9f701") matches { Some(1) };
 }
 
@@ -477,7 +477,7 @@ test "passthrough tags unwrap for every scalar shape" {
     assert dec::<f64>("d9d9f7fb3ff0000000000000") == 1.0;
     assert dec::<f32>("d9d9f7fa3fc00000") == 1.5;
     assert dec::<bool>("d9d9f7f5");
-    assert dec::<Option<i32>>("d9d9f7f6") matches { None };
+    assert dec::<Option<i32>>("d9d9f7f6") matches { null };
     assert dec::<Option<i32>>("d9d9f701") matches { Some(1) };
     // Epoch time (tag 1, §3.4.2) is content-passthrough for numbers
     // (Appendix A: 1(1363896240) and 1(1363896240.5)).

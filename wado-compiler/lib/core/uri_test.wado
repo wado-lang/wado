@@ -40,7 +40,7 @@ test "the scheme is folded to lowercase" {
 test "a fragment is read apart from the rest" {
     assert uri("http://a/b#c").fragment() matches { Some("c") };
     assert uri("http://a/b#").fragment() matches { Some("") };
-    assert uri("http://a/b").fragment() matches { None };
+    assert uri("http://a/b").fragment() matches { null };
     assert uri("http://a/b?q#c").without_fragment().to_string() == "http://a/b?q";
 }
 
@@ -162,7 +162,7 @@ test "a URI or a reference keys a map by its components" {
     let mut names = HashMap::<Uri, i32>::new();
     names[uri("http://a/b")] = 1;
     assert names.get(uri("http://a/b")) matches { Some(1) };
-    assert names.get(uri("http://a/b#")) matches { None };
+    assert names.get(uri("http://a/b#")) matches { null };
     assert uri("HTTP://a/b") == uri("http://a/b");
     let mut refs = HashMap::<UriReference, i32>::new();
     refs[reference("../b")] = 1;

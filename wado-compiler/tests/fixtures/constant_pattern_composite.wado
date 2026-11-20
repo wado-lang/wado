@@ -19,45 +19,45 @@ impl K {
 
 fn string(x: String) -> i32 {
     return match x {
-        S => 1,
+        == S => 1,
         _ => 0,
     };
 }
 
 fn structure(p: P) -> i32 {
     return match p {
-        Q => 1,
+        == Q => 1,
         _ => 0,
     };
 }
 
 fn option(o: Option<i32>) -> i32 {
     return match o {
-        O => 1,
+        == O => 1,
         _ => 0,
     };
 }
 
 fn tuple(t: [i32, String]) -> i32 {
     return match t {
-        T => 1,
+        == T => 1,
         _ => 0,
     };
 }
 
 fn sub_pattern(t: [String, i32]) -> i32 {
     return match t {
-        [S, 1] => 1,
-        [S, n] => n,
+        [== S, 1] => 1,
+        [== S, n] => n,
         _ => 0,
     };
 }
 
 fn nested_variant(o: Option<String>) -> i32 {
     return match o {
-        Some(S) => 1,
+        Some(== S) => 1,
         Some(_) => 2,
-        None => 0,
+        null => 0,
     };
 }
 
@@ -70,13 +70,13 @@ fn associated(x: String) -> i32 {
 
 fn through_reference(x: &String) -> i32 {
     return match x {
-        S => 1,
+        == S => 1,
         _ => 0,
     };
 }
 
 fn in_matches(p: P) -> bool {
-    return p matches { Q };
+    return p matches { == Q };
 }
 
 export fn run() {

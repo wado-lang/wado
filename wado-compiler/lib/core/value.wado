@@ -142,7 +142,7 @@ impl From<String> for Value {
 impl Eq for Value {
     fn eq(&self, other: &Value) -> bool {
         return match [*self, *other] {
-            [Null, Null] => true,
+            [_::Null, _::Null] => true,
             [Bool(a), Bool(b)] => a == b,
             [Int(a), Int(b)] => a == b,
             [UInt(a), UInt(b)] => a == b,
@@ -179,7 +179,7 @@ impl Eq for Value {
                 }
                 true;
             },
-            [Undefined, Undefined] => true,
+            [_::Undefined, _::Undefined] => true,
             [Unknown(a), Unknown(b)] => a == b,
             _ => false,
         };
@@ -189,7 +189,7 @@ impl Eq for Value {
 impl Serialize for Value {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return match self {
-            Null => s.serialize_null(),
+            _::Null => s.serialize_null(),
             Bool(b) => s.serialize_bool(*b),
             Int(n) => s.serialize_i64(*n),
             UInt(n) => s.serialize_u64(*n),
@@ -217,7 +217,7 @@ impl Serialize for Value {
             // raw format-specific bytes that only the originating format can
             // splice back. Neither is expressible through the generic
             // `Serializer`, so serialization errors by default (RFC 8949 §6).
-            Undefined => Result::Err(SerializeError::unsupported_value("Value::Undefined cannot be serialized")),
+            _::Undefined => Result::Err(SerializeError::unsupported_value("Value::Undefined cannot be serialized")),
             Unknown(_) => Result::Err(SerializeError::unsupported_value(
                 "Value::Unknown cannot be re-serialized through a generic Serializer",
             )),
@@ -291,7 +291,7 @@ impl Visitor for ValueVisitor {
                 Some(item) => {
                     items.push(item);
                 },
-                None => {
+                null => {
                     seq.end()?;
                     return Result::Ok(Value::List(items));
                 },
@@ -322,7 +322,7 @@ impl Visitor for ValueVisitor {
 impl Inspect for Value {
     pub fn inspect(&self, f: &mut Formatter) {
         match self {
-            Null => f.write_str("null"),
+            _::Null => f.write_str("null"),
             Bool(b) => (*b).inspect(f),
             Int(n) => (*n).inspect(f),
             UInt(n) => (*n).inspect(f),
@@ -336,7 +336,7 @@ impl Inspect for Value {
             },
             List(arr) => arr.inspect(f),
             Object(map) => map.inspect(f),
-            Undefined => f.write_str("undefined"),
+            _::Undefined => f.write_str("undefined"),
             Unknown(b) => {
                 f.write_str("unknown(0x");
                 f.write_str(&b.to_hex());
@@ -833,7 +833,7 @@ impl DeserializeVariant for ValueVariantAccess {
     }
 
     fn is_unit(&mut self) -> Result<bool, DeserializeError> {
-        return Result::Ok(self.payload matches { None });
+        return Result::Ok(self.payload matches { null });
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
@@ -925,7 +925,7 @@ impl Deserializer for ValueDeserializer {
     }
 
     fn is_null(&mut self) -> Result<bool, DeserializeError> {
-        return Result::Ok(self.value matches { Null | Undefined });
+        return Result::Ok(self.value matches { _::Null | _::Undefined });
     }
 
     fn begin_seq(&mut self) -> Result<ValueSeqAccess, DeserializeError> {
@@ -964,7 +964,7 @@ impl Deserializer for ValueDeserializer {
 
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
         return match self.value {
-            Null => visitor.visit_null(),
+            _::Null => visitor.visit_null(),
             Bool(b) => visitor.visit_bool(*b),
             Int(n) => visitor.visit_i64(*n),
             UInt(n) => visitor.visit_u64(*n),
@@ -981,7 +981,7 @@ impl Deserializer for ValueDeserializer {
                 let mut map = object_access(fields);
                 visitor.visit_map(&mut map);
             },
-            Undefined => visitor.visit_undefined(),
+            _::Undefined => visitor.visit_undefined(),
             Unknown(raw) => visitor.visit_unknown(*raw),
         };
     }

@@ -1,0 +1,24 @@
+// A bare name binds even where an immutable global of that name is in scope,
+// in `let` and `let … else` alike; `== NAME` compares with the global.
+
+global LIMIT: i32 = 3;
+
+#[allow(shadowed_name)]
+fn classify(v: i32) -> i32 {
+    return match v {
+        == LIMIT => 0,
+        LIMIT => LIMIT + 100,
+    };
+}
+
+#[allow(shadowed_name)]
+fn rebind(v: Option<i32>) -> i32 {
+    let _::Some(LIMIT) = v else { return -1; };
+    return LIMIT;
+}
+
+test {
+    assert classify(builtin::black_box(3)) == 0;
+    assert classify(builtin::black_box(5)) == 105;
+    assert rebind(builtin::black_box(Option::Some(7))) == 7;
+}

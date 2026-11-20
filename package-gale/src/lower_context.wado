@@ -157,7 +157,7 @@ impl LowerContext {
     pub fn mark_asks_simulator<S: AsStrSlice>(&mut self, what: S) {
         let idx = self.current_rule_index();
         self.marks.mark_asks_simulator(idx);
-        if self.settings.prediction matches { Longest } {
+        if self.settings.prediction matches { _::Longest } {
             self.diagnostics.warn(
                 &DiagnosticOwner::rule_dispatch(self.current_rule_name()),
                 DiagnosticKind::SimulatorRequired,

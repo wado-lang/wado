@@ -98,14 +98,14 @@ internal fn find_jdk() -> Result<(), JdkProblem> with Process {
         if let Err(e) = Command::new(tool).arg("-version").output() {
             return Err(
                 match e.kind {
-                    Spawn(NotFound) => JdkProblem::Missing(
+                    Spawn(_::NotFound) => JdkProblem::Missing(
                         if tool == "javac" {
                             "'javac' not on PATH (need a JDK, not just a JRE)";
                         } else {
                             "'java' not on PATH";
                         },
                     ),
-                    Spawn(NotPermitted) => JdkProblem::Unreachable(
+                    Spawn(_::NotPermitted) => JdkProblem::Unreachable(
                         `'${tool}' lies outside what a spawned child may read: add its JDK to \`[process] read\` in ~/.config/wado/config.toml, or pass --process-read`,
                     ),
                     _ => JdkProblem::Unreachable(`${e}`),
@@ -224,7 +224,7 @@ fn resolve_latest_version() -> Result<String, String> with (Process, Preopens, S
 fn verify_jar_checksum(jar: String, version: String) -> Result<(), String> with (Process, Stderr) {
     let actual = match sha1_of(jar)? {
         Some(digest) => digest,
-        None => {
+        null => {
             return Err("no sha1 tool (sha1sum/shasum) on PATH to verify the jar with");
         },
     };
@@ -257,7 +257,7 @@ fn sha1_of(path: String) -> Result<Option<String>, String> with Process {
             Ok(out) => {
                 return Ok(Some(first_field_lowercase(String::from_utf8_lossy(&out))));
             },
-            Err(e) && e.kind matches { Spawn(NotFound) } => {
+            Err(e) && e.kind matches { Spawn(_::NotFound) } => {
                 continue;
             },
             Err(e) => {
@@ -271,7 +271,7 @@ fn sha1_of(path: String) -> Result<Option<String>, String> with Process {
 fn first_field_lowercase(text: String) -> String {
     return match text.split_whitespace().next() {
         Some(field) => field.to_string().to_ascii_lowercase(),
-        None => "",
+        null => "",
     };
 }
 
@@ -320,7 +320,7 @@ fn find_from(s: &String, pattern: String, from: i32) -> Option<i32> {
     }
     return match s.substr_bytes(from, s.len()).find(pattern) {
         Some(at) => Some(from + at),
-        None => null,
+        null => null,
     };
 }
 
@@ -529,7 +529,7 @@ internal fn parse_request(arguments: List<String>) -> Result<Request, String> wi
         }
         lexer = Some(lex);
     }
-    if probe_super && grammar.super_class matches { None } {
+    if probe_super && grammar.super_class matches { null } {
         return Err(`oracle: --probe-super given but ${grammar.name} declares no superClass\n`);
     }
     return Ok(Request { mode, probe_super, grammar, lexer, supers, testrig_name });
@@ -559,7 +559,7 @@ internal fn run_request<T: AsByteSlice>(
     let recognizer = Recognizer::new(jar, request);
     let mut ran = match compile(&recognizer) {
         Some(failure) => failure,
-        None => parse(&recognizer, input),
+        null => parse(&recognizer, input),
     };
     ran.stderr = `${discard(&recognizer, keep)}${ran.stderr}`;
     return ran;
@@ -689,7 +689,7 @@ internal fn parse<T: AsByteSlice>(recognizer: &Recognizer, input: &T) -> Ran wit
     let testrig = |props: List<String>| -> Result<Output, String> {
         let [start, flag] = match request.mode {
             Tree(rule) => [rule, "-tree"],
-            Tokens => ["tokens", "-tokens"],
+            _::Tokens => ["tokens", "-tokens"],
         };
         let classpath = `${jar.path}:${*work}`;
         return match Command::new("java")
@@ -903,7 +903,7 @@ fn literal_type(arg: String) -> String {
     }
     let digits = match arg.strip_prefix("-") {
         Some(rest) => rest.to_string(),
-        None => arg,
+        null => arg,
     };
     if !digits.is_empty() && digits.byte_at(0).is_ascii_digit() {
         return "int";

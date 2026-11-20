@@ -140,7 +140,7 @@ impl SymbolIndex {
             let [start, extent] = place_of(o);
             let end = match &extent {
                 Some([_, last]) => last.line,
-                None => start.line,
+                null => start.line,
             };
             let site = Site { file, line: start.line, column: start.column, end };
             if o.symbol_roles & 1 != 0 {
@@ -194,7 +194,7 @@ impl SymbolIndex {
         let s = &self.syms[id];
         return match self.ids.get(s.enclosing) {
             Some(owner) => self.syms[owner].name,
-            None => owner_in_symbol(&s.symbol, &s.name),
+            null => owner_in_symbol(&s.symbol, &s.name),
         };
     }
 
@@ -254,7 +254,7 @@ impl SymbolIndex {
                 let text = if r.line < lines.len() { lines[r.line].trim().to_string() } else { "" };
                 let inside = match scope {
                     Some(holder) => ` in ${self.qualified(holder)}`,
-                    None => "",
+                    null => "",
                 };
                 out.push(`${*file}:${r.line + 1}${inside}: ${text}`);
             }
@@ -305,7 +305,7 @@ fn owner_in_symbol(symbol: &String, name: &String) -> String {
     if let Some([_, imp]) = before.rsplit_once("impl#[") {
         return match imp.split_once("]") {
             Some([ty, _]) => ty.to_string(),
-            None => "",
+            null => "",
         };
     }
     let Some(head) = before.strip_suffix("#") else {
@@ -334,12 +334,12 @@ fn place_of(o: &scip::Occurrence) -> [Pos, Option<[Pos, Pos]>]
     let range = match &o.typed_range {
         Some(SingleLineRange(r)) => single_line(r),
         Some(MultiLineRange(r)) => multi_line(r),
-        None => packed(&o.range).unwrap(),
+        null => packed(&o.range).unwrap(),
     };
     let extent: Option<[Pos, Pos]> = match &o.typed_enclosing_range {
         Some(SingleLineEnclosingRange(r)) => Some(single_line(r)),
         Some(MultiLineEnclosingRange(r)) => Some(multi_line(r)),
-        None => packed(&o.enclosing_range),
+        null => packed(&o.enclosing_range),
     };
     return [range.0, extent];
 }
@@ -380,7 +380,7 @@ fn kind_name(kind: &scip::SymbolInformationKind) -> String {
     let full = `${*kind:?}`;
     let short = match full.split_once("::") {
         Some([_, rest]) => rest.to_string(),
-        None => full,
+        null => full,
     };
     return short.to_ascii_lowercase();
 }
@@ -392,7 +392,7 @@ fn split_query(query: &String) -> [String, String] {
         if let Some([owner, name]) = query.rsplit_once(sep) {
             let short = match owner.rsplit_once(sep) {
                 Some([_, last]) => last.to_string(),
-                None => owner.to_string(),
+                null => owner.to_string(),
             };
             return [short, name.to_string()];
         }

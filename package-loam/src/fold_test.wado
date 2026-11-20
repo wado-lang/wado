@@ -223,8 +223,8 @@ test "a Range or Slice bound only the run knows leaves the node to the run" {
         ["Starts", ints([1], [0])],
         ["M", ints([4], [1, 2, 3, 4])],
     ]);
-    assert fold(&node("Range", ["Zero", "N", "One"], []), &k, &runtime([])).unwrap() matches { None };
-    assert fold(&node("Slice", ["M", "Starts", "Ends"], []), &k, &runtime([])).unwrap() matches { None };
+    assert fold(&node("Range", ["Zero", "N", "One"], []), &k, &runtime([])).unwrap() matches { null };
+    assert fold(&node("Slice", ["M", "Starts", "Ends"], []), &k, &runtime([])).unwrap() matches { null };
 }
 
 test "a known tensor read through numbers only the run knows is left to the run" {
@@ -255,9 +255,9 @@ test "a known tensor read through numbers only the run knows is left to the run"
             Known { extents: [], elements: Elements::integers([Poly::symbol(&"N")]) },
         ],
     ]);
-    assert fold(&node("Expand", ["C", "S"], []), &k, &runtime([])).unwrap() matches { None };
-    assert fold(&node("Reshape", ["C", "R"], []), &k, &runtime([])).unwrap() matches { None };
-    assert fold(&node("Gather", ["C", "I"], [attr("axis", ["1"])]), &k, &runtime([])).unwrap() matches { None };
+    assert fold(&node("Expand", ["C", "S"], []), &k, &runtime([])).unwrap() matches { null };
+    assert fold(&node("Reshape", ["C", "R"], []), &k, &runtime([])).unwrap() matches { null };
+    assert fold(&node("Gather", ["C", "I"], [attr("axis", ["1"])]), &k, &runtime([])).unwrap() matches { null };
 }
 
 test "Gather with a scalar index drops the axis" {
@@ -280,7 +280,7 @@ test "Gather reading a runtime tensor is left to the run" {
     let k = knowns([
         ["I", ints([1], [0])],
     ]);
-    assert fold(&node("Gather", ["X", "I"], []), &k, &runtime([2, 3, 4])).unwrap() matches { None };
+    assert fold(&node("Gather", ["X", "I"], []), &k, &runtime([2, 3, 4])).unwrap() matches { null };
 }
 
 test "Unsqueeze and Squeeze move extent-1 axes" {
@@ -509,7 +509,7 @@ test "an operator the build does not evaluate is left to the run" {
     let k = knowns([
         ["A", floats([1], [1.0])],
     ]);
-    assert fold(&node("Relu", ["A"], []), &k, &runtime([2])).unwrap() matches { None };
+    assert fold(&node("Relu", ["A"], []), &k, &runtime([2])).unwrap() matches { null };
 }
 
 test "an integer cast to a half is left to the run, which rounds it once" {
@@ -517,5 +517,5 @@ test "an integer cast to a half is left to the run, which rounds it once" {
     let k = knowns([
         ["D", ints([1], [16842753])],
     ]);
-    assert fold(&node("Cast", ["D"], [attr("to", ["16"])]), &k, &runtime([2])).unwrap() matches { None };
+    assert fold(&node("Cast", ["D"], [attr("to", ["16"])]), &k, &runtime([2])).unwrap() matches { null };
 }

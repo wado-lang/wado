@@ -31,6 +31,7 @@ The lints are:
 | [`arithmetic_overflow`](#the-arithmetic_overflow-lint)     | constant integer arithmetic that wraps, or a constant shift amount out of range |
 | [`unconditional_trap`](#the-unconditional_trap-lint)       | an integer division or remainder that always traps                              |
 | [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint)   | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
+| [`binding_free_let_else`](#the-binding_free_let_else-lint) | a `let … else` whose pattern binds no name                                      |
 | [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
 | [`undeclared_effects`](#the-undeclared_effects-lint)       | an `#[ambient]` in a program                                                    |
 | [`unhandled_operation`](#the-unhandled_operation-lint)     | a handler scope that leaves out part of a resource family its body reaches      |
@@ -71,11 +72,9 @@ test {
 }
 ```
 
-Only a name that binds counts, as for
-[redeclaration](./spec-expressions.md#variable-scoping).
-[Patterns](./spec-patterns.md#patterns-that-cannot-fail) says which reading a
-bare name takes. In a `let` or `for` binding a name reaching a `global` binds,
-so the lint reports it.
+A bare name in a pattern always binds
+([Patterns](./spec-patterns.md#pattern-syntax)), so a pattern binding that takes
+the name of a `global` warns like any other binder.
 
 The derivation is read off the binder's own source, not off the `let` keyword,
 and holds at any scope. `let x = x + 1` under an `if`, `if let Some(x) = x` and
@@ -196,6 +195,25 @@ test "a hex literal ending in a float type name warns" {
     assert 0xff_f16 == 0xFFF16;
     assert 0x1_F32 == 0x1F32;
     assert 0x2_bf16 == 0x2BF16;
+}
+```
+
+## The `binding_free_let_else` Lint
+
+The `binding_free_let_else` lint warns about a `let … else` whose pattern binds
+no name. Such a statement only tests its value, and an `if` says that plainly:
+`if v != LIMIT { … }` rather than `let == LIMIT = v else { … }`.
+
+<!-- {"fixture":"lint_binding_free_let_else.wado"} -->
+
+```wado
+fn at_limit(v: i32) -> bool {
+    let == LIMIT = v else { return false; };
+    return true;
+}
+
+test {
+    assert at_limit(builtin::black_box(3)) && !at_limit(builtin::black_box(4));
 }
 ```
 

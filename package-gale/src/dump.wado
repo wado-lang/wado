@@ -243,7 +243,7 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
     let surface = grammar.parser_rules.iter_ref().find(|r| r.name == header.name);
     let surface = match surface {
         Some(r) => r,
-        None => {
+        null => {
             return;
         },
     };
@@ -338,13 +338,13 @@ fn prediction_element_label(elem: &Element) -> String {
 /// `AmbiguityReason` doc comments in prediction.wado.
 fn ambiguity_reason_label(reason: &AmbiguityReason) -> String {
     return match *reason {
-        MaxDepth => "branch-depth limit (5) reached: needs unbounded lookahead",
-        ConfigExplosion => "config-set explosion (>200)",
-        OpaqueRuleRef => "opaque rule-ref prefix: shared sub-rule hides the disambiguating tokens",
-        AtEndConflict => "at-end vs branch conflict: an alt returns while another continues (adaptive prediction)",
-        MultiAtEnd => "multiple alts end together: true ambiguity",
-        NoViableAlt => "no viable alt",
-        OpenEnded => "no token named: an alt admits every one (`.` / `~X`)",
+        _::MaxDepth => "branch-depth limit (5) reached: needs unbounded lookahead",
+        _::ConfigExplosion => "config-set explosion (>200)",
+        _::OpaqueRuleRef => "opaque rule-ref prefix: shared sub-rule hides the disambiguating tokens",
+        _::AtEndConflict => "at-end vs branch conflict: an alt returns while another continues (adaptive prediction)",
+        _::MultiAtEnd => "multiple alts end together: true ambiguity",
+        _::NoViableAlt => "no viable alt",
+        _::OpenEnded => "no token named: an alt admits every one (`.` / `~X`)",
     };
 }
 
@@ -431,19 +431,19 @@ fn repeat_line(rep: &RepeatOp) -> String {
 
 fn repeat_kind_label(kind: &RepeatKind) -> String {
     return match *kind {
-        Star => "*",
-        Plus => "+",
-        Optional => "?",
+        _::Star => "*",
+        _::Plus => "+",
+        _::Optional => "?",
     };
 }
 
 fn repeat_strategy_label(strategy: &RepeatStrategy) -> String {
     return match strategy {
-        Plain => "Plain",
+        _::Plain => "Plain",
         NonGreedy(_) => "NonGreedy",
         OptionalLookahead(_) => "OptionalLookahead",
         OptionalShapeLookahead(_) => "OptionalShapeLookahead",
-        OptionalScanGuard => "OptionalScanGuard",
+        _::OptionalScanGuard => "OptionalScanGuard",
     };
 }
 
@@ -471,13 +471,13 @@ fn render_rule_diagnostics<S: AsStrSlice>(out: &mut String, rule_name: S, lowere
 
 fn diagnostic_kind_label(kind: &DiagnosticKind) -> String {
     return match *kind {
-        OverlapTournament => "overlap-tournament",
-        OptionalScanGuardFallback => "optional-scan-guard-fallback",
-        UnsupportedAction => "unsupported-action",
-        HighlightQuery => "highlight-query",
-        FragmentEntry => "fragment-entry",
-        SimulatorRequired => "simulator-required",
-        CaseMixedRange => "case-mixed-range",
+        _::OverlapTournament => "overlap-tournament",
+        _::OptionalScanGuardFallback => "optional-scan-guard-fallback",
+        _::UnsupportedAction => "unsupported-action",
+        _::HighlightQuery => "highlight-query",
+        _::FragmentEntry => "fragment-entry",
+        _::SimulatorRequired => "simulator-required",
+        _::CaseMixedRange => "case-mixed-range",
     };
 }
 

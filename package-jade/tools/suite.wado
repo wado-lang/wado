@@ -184,7 +184,7 @@ use { ${self.harnesses.join(", ")} } from "../suite.wado";
 /// f64 holds.
 fn json(node: &Node) -> String {
     return match node.kind() {
-        Number => {
+        _::Number => {
             let n = node.as_number().unwrap();
             if n.is_f64() {
                 to_string(&n).unwrap();
@@ -192,15 +192,15 @@ fn json(node: &Node) -> String {
                 `${n}`;
             }
         },
-        Array => {
+        _::Array => {
             let items: List<String> = node.items().map(|v| json(&v)).collect();
             `[${items.join(",")}]`;
         },
-        Object => {
+        _::Object => {
             let members: List<String> = node.entries().map(|m| `${to_string(&m.0).unwrap()}:${json(&m.1)}`).collect();
             `{${members.join(",")}}`;
         },
-        Null | Bool | String => to_string(node).unwrap(),
+        _::Null | _::Bool | _::String => to_string(node).unwrap(),
     };
 }
 

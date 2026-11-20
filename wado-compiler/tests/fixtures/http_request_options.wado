@@ -9,13 +9,13 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Re
 
     // Get default timeout (should be None)
     let connect = opts.get_connect_timeout();
-    assert connect matches { None };
+    assert connect matches { null };
 
     let first_byte = opts.get_first_byte_timeout();
-    assert first_byte matches { None };
+    assert first_byte matches { null };
 
     let between = opts.get_between_bytes_timeout();
-    assert between matches { None };
+    assert between matches { null };
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Headers::new();

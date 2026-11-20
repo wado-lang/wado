@@ -451,9 +451,9 @@ test "every kind reaches its generator through a blanket" {
     let perms = Perms::arbitrary(&mut g);
     let event = Event::arbitrary(&mut g);
     assert account.tags.len() <= 6;
-    assert plan matches { Free | Pro | Enterprise };
+    assert plan matches { _::Free | _::Pro | _::Enterprise };
     assert perms as u32 <= 7;
-    assert event matches { Created(_) | Renamed(_) | Deleted };
+    assert event matches { Created(_) | Renamed(_) | _::Deleted };
 }
 
 test "json round-trips every generated event" {

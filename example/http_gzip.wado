@@ -41,7 +41,7 @@ pub fn worth_gzip(content_type: &String, size: u64) -> bool {
     }
     let media = match content_type.split_once(";") {
         Some([media, _]) => media.trim_ascii().to_ascii_lowercase(),
-        None => content_type.trim_ascii().to_ascii_lowercase(),
+        null => content_type.trim_ascii().to_ascii_lowercase(),
     };
     return media.starts_with("text/")
         || media matches { "application/json" | "application/javascript" | "application/wasm" | "image/svg+xml" };

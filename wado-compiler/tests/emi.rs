@@ -721,27 +721,19 @@ fn let_bindings(stmt: &Stmt) -> Vec<Binding> {
     // `let mut x` carries the `mut` on the statement; `MutIdent` is what a
     // nested pattern binds.
     let mut bindings = Vec::new();
-    let refutable = let_stmt.else_block.is_some();
-    pattern_bindings(&let_stmt.pattern, let_stmt.is_mut, refutable, &mut bindings);
+    pattern_bindings(&let_stmt.pattern, let_stmt.is_mut, &mut bindings);
     bindings
 }
 
-/// A plain name in a refutable pattern is either a binding or a unit variant
-/// and the parser cannot tell, so an initial capital is read as the variant
-/// Wado spells that way: naming one costs the payload the whole fixture.
-fn pattern_bindings(pattern: &Pattern, is_mut: bool, refutable: bool, out: &mut Vec<Binding>) {
+fn pattern_bindings(pattern: &Pattern, is_mut: bool, out: &mut Vec<Binding>) {
     let recurse = |pattern, out: &mut Vec<Binding>| {
-        pattern_bindings(pattern, is_mut, refutable, out);
+        pattern_bindings(pattern, is_mut, out);
     };
     match pattern {
-        Pattern::Ident { name, .. } => {
-            if !refutable || !name.starts_with(char::is_uppercase) {
-                out.push(Binding {
-                    name: name.clone(),
-                    is_mut,
-                });
-            }
-        }
+        Pattern::Ident { name, .. } => out.push(Binding {
+            name: name.clone(),
+            is_mut,
+        }),
         Pattern::MutIdent { name, .. } => out.push(Binding {
             name: name.clone(),
             is_mut: true,

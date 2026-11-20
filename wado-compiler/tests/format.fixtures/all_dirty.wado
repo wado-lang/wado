@@ -259,7 +259,7 @@ fn match_shape(shape: Shape) -> f64 {
     return match shape {
         Circle(r) => 3.14159 * r * r,
         Rectangle([w, h]) => w * h,
-        Point => 0.0,
+        _::Point => 0.0,
     };
 }
 
@@ -269,15 +269,15 @@ fn match_with_guard(opt: Option<i32>) -> String {
         Some(x) && x > 100 => "large",
         Some(x) && x > 10 => "medium",
         Some(_) => "small",
-        None => "none",
+        null => "none",
     };
 }
 
 /// Match with wildcard and block body
 fn match_wildcard(color: Color) -> String {
     return match color {
-        Red => "red",
-        Green => "green",
+        _::Red => "red",
+        _::Green => "green",
         _ => "other",
     };
 }
@@ -313,7 +313,7 @@ fn inline_if_expr(upper: bool) -> String {
 /// Inline match expression (single-line when short enough)
 fn inline_match_expr(color: Color) -> String {
     let name = match color {
-        Red => "red",
+        _::Red => "red",
         _ => "other",
     };
     return name;
@@ -425,12 +425,12 @@ fn destructuring_examples() {
 /// Match used as a statement: trailing semicolon should be removed
 fn match_as_stmt(color: Color, opt: Option<i32>) {
     match color {
-        Red => { let _ = 1; },
+        _::Red => { let _ = 1; },
         _ => { let _ = 2; },
     };
     match opt {
         Some(x) => { let _ = x; },
-        None => {},
+        null => {},
     };
 }
 

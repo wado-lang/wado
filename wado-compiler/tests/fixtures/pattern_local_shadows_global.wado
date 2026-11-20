@@ -34,7 +34,7 @@ fn let_else_after_local(o: Option<i32>) -> i32 {
 
 fn earlier_in_pattern(p: [i32, i32]) -> i32 {
     return match p {
-        [mut limit, limit] => limit,
+        [mut limit, == limit] => limit,
         _ => -1,
     };
 }
@@ -70,11 +70,11 @@ test "a name the pattern bound earlier still reads the global" {
 
 test "an unshadowed name still reads the global" {
     let hit = match 5 {
-        limit => true,
+        == limit => true,
         _ => false,
     };
     assert hit;
-    assert !(4 matches { limit });
+    assert !(4 matches { == limit });
 }
 
 __DATA__

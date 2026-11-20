@@ -74,7 +74,7 @@ fn less<T: Ord>(a: &T, b: &T) -> bool {
 test "== agrees with a cmp written for the instance" {
     let a = Ranked { rank: 1, tag: 10 };
     let b = Ranked { rank: 1, tag: 20 };
-    assert a.cmp(&b) matches { Equal };
+    assert a.cmp(&b) matches { _::Equal };
     assert a == b && !(a != b) && same(&a, &b) && a.eq(&b);
     let ranked: List<Ranked<i32>> = [b];
     assert ranked.contains(&a);

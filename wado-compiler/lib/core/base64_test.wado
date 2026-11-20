@@ -103,7 +103,7 @@ test "decode standard" {
 }
 
 test "decode invalid chars" {
-    assert decode(&"!!!") matches { None };
+    assert decode(&"!!!") matches { null };
 }
 
 test "decode mixed alphabets" {
@@ -111,11 +111,11 @@ test "decode mixed alphabets" {
 }
 
 test "decode structurally invalid length" {
-    assert decode(&"A") matches { None };
+    assert decode(&"A") matches { null };
 }
 
 test "decode control chars" {
-    assert decode(&"SGVs\nbG8=") matches { None };
+    assert decode(&"SGVs\nbG8=") matches { null };
 }
 
 test "round-trip standard" {
@@ -194,21 +194,21 @@ test "decode_url_strict rejects what encode_url never writes" {
     // Padding, the standard alphabet, and a stray character: `decode` takes
     // all three, so one byte string would have several spellings.
     assert decode(&"SGVsbG8=") matches { Some(_) };
-    assert decode_url_strict(&"SGVsbG8=") matches { None };
+    assert decode_url_strict(&"SGVsbG8=") matches { null };
     assert decode(&"++//") matches { Some(_) };
-    assert decode_url_strict(&"++//") matches { None };
-    assert decode_url_strict(&"SGVsb G8") matches { None };
+    assert decode_url_strict(&"++//") matches { null };
+    assert decode_url_strict(&"SGVsb G8") matches { null };
 }
 
 test "decode_url_strict rejects a non-canonical final group" {
     // `Zg` and `Zh` both carry 'f' in their first 8 bits; only the spelling
     // whose unused bits are zero is accepted.
     assert decode_url_strict(&"Zg") matches { Some(f) && f == b"f" };
-    assert decode_url_strict(&"Zh") matches { None };
+    assert decode_url_strict(&"Zh") matches { null };
     assert decode_url_strict(&"Zm8") matches { Some(fo) && fo == b"fo" };
-    assert decode_url_strict(&"Zm9") matches { None };
+    assert decode_url_strict(&"Zm9") matches { null };
     // A lone character cannot carry a byte.
-    assert decode_url_strict(&"Z") matches { None };
+    assert decode_url_strict(&"Z") matches { null };
 }
 
 test "decode_url_strict accepts the URL-safe alphabet" {

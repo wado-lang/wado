@@ -31,8 +31,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Pr
     let target = request.get_path_with_query().unwrap_or("/");
     let accepts_gzip = request_accepts_gzip(&request.get_headers());
     let reply = match method {
-        Get => serve(target, true, accepts_gzip),
-        Head => serve(target, false, accepts_gzip),
+        _::Get => serve(target, true, accepts_gzip),
+        _::Head => serve(target, false, accepts_gzip),
         _ => {
             let mut reply = text(405, "method not allowed");
             reply.headers.push(["allow", "GET, HEAD"]);
@@ -68,9 +68,9 @@ fn serve(target: String, with_body: bool, accepts_gzip: bool) -> Reply with Preo
         },
     };
     match meta.type {
-        File => {
+        _::File => {
         },
-        Directory => {
+        _::Directory => {
             return Reply {
                 status: 301,
                 headers: [
@@ -79,7 +79,7 @@ fn serve(target: String, with_body: bool, accepts_gzip: bool) -> Reply with Preo
                 body: [],
             };
         },
-        Other => {
+        _::Other => {
             return text(404, "not found");
         },
     }
@@ -111,7 +111,7 @@ fn serve(target: String, with_body: bool, accepts_gzip: bool) -> Reply with Preo
 }
 
 fn failure(e: fs::FsError) -> Reply {
-    if e.kind matches { NotFound } {
+    if e.kind matches { _::NotFound } {
         return text(404, "not found");
     }
     log_stderr(`${e}`);
@@ -123,7 +123,7 @@ fn failure(e: fs::FsError) -> Reply {
 fn file_path(target: String) -> Option<String> {
     let path = match target.split_once("?") {
         Some([path, _]) => path.to_string(),
-        None => target,
+        null => target,
     };
     let Ok(decoded) = percent_decode(&path) else {
         return null;

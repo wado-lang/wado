@@ -32,17 +32,17 @@ test "a slot carries its field's declared default" {
     } else {
         assert false;
     }
-    assert ReflectStruct::<Config>::default_slot(2).2 matches { None };
+    assert ReflectStruct::<Config>::default_slot(2).2 matches { null };
 }
 
 test "every other slot is empty" {
     let slots = ReflectStruct::<Config>::default_slot(1);
-    assert slots.0 matches { None };
-    assert slots.2 matches { None };
+    assert slots.0 matches { null };
+    assert slots.2 matches { null };
 }
 
 test "a field without a default has an empty slot" {
-    assert ReflectStruct::<NoDefaults>::default_slot(0).0 matches { None };
+    assert ReflectStruct::<NoDefaults>::default_slot(0).0 matches { null };
 }
 
 test "only the named field's default is evaluated" {

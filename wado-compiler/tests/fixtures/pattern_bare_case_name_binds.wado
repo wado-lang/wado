@@ -1,0 +1,18 @@
+// A bare name binds in every pattern. One named after a case of the type it
+// matches is an error, since the case it reads as is never tested.
+
+enum Color { Red, Green }
+
+fn name(c: Color) -> String {
+    return match c {
+        Red => "red",
+        _ => "other",
+    };
+}
+
+test {
+    assert name(Color::Green) == "other";
+}
+
+__DATA__
+{"compile_error": ":8:9: analysis error: invalid pattern: `Red` binds a new name, and the case of that name is never tested; write `_::Red` to match the case"}

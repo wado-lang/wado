@@ -128,7 +128,7 @@ struct WalkField {
 
 fn gen_walk_field(w: &mut Writer, field: &WalkField, var: &String) {
     match &field.action {
-        VisitToken => w.line(&`v.visit_token(&${*var}.${field.name});`),
+        _::VisitToken => w.line(&`v.visit_token(&${*var}.${field.name});`),
         WalkRule(rn) => w.line(&`walk_${*rn}(v, &${*var}.${field.name});`),
     };
 }

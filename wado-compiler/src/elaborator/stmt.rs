@@ -13,7 +13,7 @@ use crate::tir::{InstancePattern, ResolvedType, TirPattern, TypeId};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 use crate::type_table::TypeTable;
-use crate::unparse::unparse_instance_pattern;
+use crate::unparse::{unparse_instance_pattern, unparse_pattern_source};
 
 use super::method_call::MethodCallInput;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
@@ -742,8 +742,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
     ) -> bool {
         match pattern {
-            Pattern::Wildcard | Pattern::MutIdent { .. } => true,
-            Pattern::Ident { id, .. } => self.pattern_name_bound(*id),
+            Pattern::Wildcard | Pattern::Ident { .. } | Pattern::MutIdent { .. } => true,
             Pattern::Typed { pattern, ty, .. } => {
                 let target = self.resolve_type(ty);
                 !self
@@ -1501,11 +1500,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 id,
                 name,
                 span: name_span,
-            }
-            | Pattern::MutIdent {
-                id,
-                name,
-                span: name_span,
             } => {
                 let global = self.tysys.resolutions.declared_if_walked(*id)?;
                 let ty = self
@@ -1559,9 +1553,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolves.
     pub(super) fn names_pattern_constant(&self, pattern: &Pattern) -> bool {
         match pattern {
-            Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } => {
-                self.tysys.resolutions.declared_if_walked(*id).is_some()
-            }
+            Pattern::Ident { id, .. } => self.tysys.resolutions.declared_if_walked(*id).is_some(),
             Pattern::Variant {
                 variant_name,
                 variant_qualifier,
@@ -1576,12 +1568,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => false,
         }
-    }
-
-    /// Whether resolving the pattern made the bare name at `id` a binding,
-    /// rather than a case or a constant.
-    pub(super) fn pattern_name_bound(&self, id: AstId) -> bool {
-        self.sem.types.local_types.contains_key(&id)
     }
 
     /// The type of the immutable global `name` refers to (defined here or
@@ -1696,47 +1682,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: name_span,
             } => {
                 let is_mut = matches!(pattern, Pattern::MutIdent { .. });
-                // A bare identifier in a pattern context could be a variant/enum case
-                // (e.g., `None`, `Red`) or a variable binding (e.g., `x`, `val`).
-                // The parser does not use case to disambiguate; instead, we check
-                // whether the name is a known case of the scrutinee type.
+                // A habit from the reading this replaced: such a binding would
+                // match every value.
                 if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
-                    // Delegate to the Variant branch with empty bindings.
-                    // Preserve the identifier's AstId/span as name_id/name_span so
-                    // LSP jump-to-def on `None`/`Red` still resolves to the case decl.
-                    return self.resolve_if_pattern_inner(
-                        &Pattern::Variant {
-                            variant_name: name.clone(),
-                            variant_qualifier: None,
-                            inferred_qualifier: None,
-                            name_id: *id,
-                            name_span: *name_span,
-                            bindings: vec![],
-                            span,
-                        },
-                        scrutinee_type,
-                        ctx,
-                        span,
-                        site,
-                        ref_binding,
-                    );
-                }
-                if let Some(constant) = self.resolve_pattern_constant(pattern, ctx) {
-                    assert!(
-                        ctx.must_bind.is_none(),
-                        "the resolver reads a global only in a refutable pattern"
-                    );
-                    let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                    self.typecheck(constant.ty, peeled, *name_span);
-                    self.resolve_constant_pattern(
-                        *id,
-                        &constant,
-                        scrutinee_type,
-                        ctx,
-                        *name_span,
-                        site,
-                    );
-                    return Vec::new();
+                    let _ = self.emit(TypeError::InvalidPattern {
+                        message: format!(
+                            "`{name}` binds a new name, and the case of that name is never \
+                             tested; write `_::{name}` to match the case"
+                        ),
+                        span: *name_span,
+                    });
                 }
                 let is_mut = is_mut || ctx.must_bind.is_some_and(|m| m.is_mut);
                 let binding_type =
@@ -2199,7 +2154,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.emit(TypeError::InvalidPattern {
                         message: format!(
                             "`==` takes a constant, and `{}` names none",
-                            crate::unparse::unparse_pattern_source(operand)
+                            unparse_pattern_source(operand)
                         ),
                         span: *equal_span,
                     });
@@ -3329,6 +3284,7 @@ impl TypeSystem {
 /// Why a pattern that tests its value can fail, read off its shape alone.
 fn refutable_shape(pattern: &Pattern) -> Option<String> {
     match pattern {
+        Pattern::Literal(ast::Literal::Null) => Some("`null` may not match".to_string()),
         Pattern::Literal(_) => Some("literal patterns may not match".to_string()),
         Pattern::Variant { variant_name, .. } => Some(format!("`{variant_name}` may not match")),
         Pattern::Or(_) => Some("or-patterns may not match".to_string()),

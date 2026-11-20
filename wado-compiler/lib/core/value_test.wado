@@ -514,7 +514,7 @@ test "to_value on scalars" {
     assert to_value(&true) matches { Ok(Bool(true)) };
     assert to_value(&"hi") matches { Ok(String(_)) };
     let n: Option<i32> = null;
-    assert to_value(&n) matches { Ok(Null) };
+    assert to_value(&n) matches { Ok(_::Null) };
 }
 
 test "to_value on a list" {
@@ -548,7 +548,7 @@ test "Value::from picks the arm of the source type" {
 
 test "to_value of a Value returns every representable arm unchanged" {
     for let v of every_arm() {
-        if v matches { Undefined | Unknown(_) } {
+        if v matches { _::Undefined | Unknown(_) } {
             continue;
         }
         assert to_value(&v) matches { Ok(back) && back == v };
@@ -607,7 +607,7 @@ test "from_value reads a struct" {
 test "from_value fills field defaults" {
     let v: Value = { host: "h" };
     let r: Result<Endpoint, DeserializeError> = from_value(&v);
-    assert r matches { Ok(e) && e.port == 80 && e.tags.is_empty() && e.timeout matches { None } };
+    assert r matches { Ok(e) && e.port == 80 && e.tags.is_empty() && e.timeout matches { null } };
 }
 
 test "from_value reports a missing field" {
@@ -637,7 +637,7 @@ test "from_value reads nested structs and variants" {
 test "from_value reads a unit variant from its name" {
     let v = Value::String("Dot");
     let r: Result<ToValueShape, DeserializeError> = from_value(&v);
-    assert r matches { Ok(Dot) };
+    assert r matches { Ok(_::Dot) };
 }
 
 test "from_value reads what core:json produced" {
@@ -784,8 +784,8 @@ test "from_value rejects bytes that are neither Bytes nor base64" {
 }
 
 test "from_value reads Null and Undefined as an absent Option" {
-    assert from_value::<Option<i32>>(&Value::Null) matches { Ok(None) };
-    assert from_value::<Option<i32>>(&Value::Undefined) matches { Ok(None) };
+    assert from_value::<Option<i32>>(&Value::Null) matches { Ok(null) };
+    assert from_value::<Option<i32>>(&Value::Undefined) matches { Ok(null) };
     assert from_value::<Option<i32>>(&Value::Int(3)) matches { Ok(Some(3)) };
 }
 

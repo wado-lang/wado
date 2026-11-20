@@ -251,7 +251,7 @@ fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
             }
             ok;
         },
-        AnyChar | RuleRef(_) | Repeat(_) | Not(_) => false,
+        _::AnyChar | RuleRef(_) | Repeat(_) | Not(_) => false,
     };
 }
 
@@ -392,7 +392,7 @@ impl G4Parser {
             let rule_name_span = rule_name_tok.span;
 
             let is_lexer_rule = is_frag || is_lexer_rule_name(&rule_name);
-            if misplaced_rule matches { None } {
+            if misplaced_rule matches { null } {
                 if is_parser_grammar && is_lexer_rule {
                     misplaced_rule = Option::Some(
                         ParseError::new(
@@ -956,7 +956,7 @@ impl G4Parser {
             return Result::Err(ParseError::new(`expected ${what}`, self.peek().span, [what.to_string()]));
         }
         return Result::Ok(
-            if kind matches { CharClass } { self.extract_action(b'[', b']') } else { self.extract_action(b'{', b'}') },
+            if kind matches { _::CharClass } { self.extract_action(b'[', b']') } else { self.extract_action(b'{', b'}') },
         );
     }
 
@@ -977,7 +977,7 @@ impl G4Parser {
             if of_rule {
                 for let label of &self.alt_labels {
                     if let Some(prev) = self.rule_labels.iter_ref().find(|l| l.name == label.name) {
-                        if conflict matches { None } && prev.mismatch(label) {
+                        if conflict matches { null } && prev.mismatch(label) {
                             conflict = Option::Some(label_mismatch_error(label));
                         }
                     } else {
@@ -1242,7 +1242,7 @@ impl G4Parser {
             Some(rep) => Result::<Element, ParseError>::Ok(
                 Element::Repeat(RepeatElement { kind: rep.0, element: elem, non_greedy: rep.1 }),
             ),
-            None => Result::<Element, ParseError>::Ok(elem),
+            null => Result::<Element, ParseError>::Ok(elem),
         };
     }
 
@@ -1537,7 +1537,7 @@ impl G4Parser {
             Some(rep) => Result::<LexerElement, ParseError>::Ok(
                 LexerElement::Repeat(LexerRepeatElement { kind: rep.0, element: elem, non_greedy: rep.1 }),
             ),
-            None => Result::<LexerElement, ParseError>::Ok(elem),
+            null => Result::<LexerElement, ParseError>::Ok(elem),
         };
     }
 }
@@ -1803,13 +1803,13 @@ pub fn parse_checked<S: AsStrSlice>(input: S) -> Result<Grammar, ParseError> {
 fn check_admission(grammars: &List<Grammar>) -> Result<(), [i32, ParseError]> {
     let mut under_combined: List<String> = [];
     for let g of grammars {
-        if g.kind matches { Combined } {
+        if g.kind matches { _::Combined } {
             mark_imports(&g.imports, grammars, &mut under_combined);
         }
     }
     for let mut i = 0; i < grammars.len(); i += 1 {
         let g = &grammars[i];
-        if !g.kind matches { Combined } {
+        if !g.kind matches { _::Combined } {
             for let name of &g.imports {
                 if let Some(d) = grammars.iter_ref().find(|d| d.name == *name) && d.kind != g.kind {
                     let msg = `${kind_word(&g.kind)} grammar ${g.name} cannot import ${kind_word(&d.kind)} grammar ${d.name}`;
@@ -1838,9 +1838,9 @@ fn mark_imports(imports: &List<String>, grammars: &List<Grammar>, marked: &mut L
 
 fn kind_word(kind: &GrammarKind) -> String {
     return match kind {
-        Combined => "combined",
-        Lexer => "lexer",
-        Parser => "parser",
+        _::Combined => "combined",
+        _::Lexer => "lexer",
+        _::Parser => "parser",
     };
 }
 

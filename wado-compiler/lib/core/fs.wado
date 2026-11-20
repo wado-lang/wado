@@ -18,7 +18,7 @@
 //! fs::write("build/spec.txt", &source).unwrap();
 //!
 //! for let entry of fs::read_dir("src")? {
-//!     if entry.type matches { Directory } {
+//!     if entry.type matches { _::Directory } {
 //!         continue;
 //!     }
 //! }
@@ -105,10 +105,10 @@ impl Error for FsError {
 impl FsErrorKind {
     fn message(&self) -> String {
         return match *self {
-            NoPreopen => "no preopened directory available",
-            NotFound => "no such file or directory",
+            _::NoPreopen => "no preopened directory available",
+            _::NotFound => "no such file or directory",
             NotUtf8(e) => `not valid UTF-8: ${e}`,
-            PastEnd => "the file ends before the bytes asked for",
+            _::PastEnd => "the file ends before the bytes asked for",
             Io(code) => `${code:?}`,
         };
     }
@@ -213,8 +213,8 @@ fn open_regular<S: AsStrSlice>(path: S) -> Result<Descriptor, FsError> with Preo
     // No open flag says "a regular file", and `read_via_stream` traps rather
     // than failing on anything else, so the kind is checked here instead.
     match file.get_type().wait() {
-        Ok(RegularFile) => (),
-        Ok(Directory) => {
+        Ok(_::RegularFile) => (),
+        Ok(_::Directory) => {
             return Result::Err(failure(path, ErrorCode::IsDirectory));
         },
         Ok(_) => {
@@ -266,17 +266,17 @@ fn replace_file<S: AsStrSlice>(temp: &String, path: S) -> Result<(), FsError> wi
     match metadata(path) {
         Ok(found) => {
             match found.type {
-                File => (),
-                Directory => {
+                _::File => (),
+                _::Directory => {
                     return Result::Err(failure(path, ErrorCode::IsDirectory));
                 },
-                Other => {
+                _::Other => {
                     return Result::Err(failure(path, ErrorCode::Loop));
                 },
             }
         },
         Err(e) => {
-            if !e.kind matches { NotFound } {
+            if !e.kind matches { _::NotFound } {
                 return Result::Err(e);
             }
         },
@@ -328,7 +328,7 @@ pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preope
     let entries = match read_dir(path) {
         Ok(entries) => entries,
         Err(e) => {
-            if e.kind matches { NotFound } {
+            if e.kind matches { _::NotFound } {
                 return Result::Ok(());
             }
             return Result::Err(e);
@@ -337,7 +337,7 @@ pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preope
     let base = path.to_string();
     for let entry of entries {
         let child = join(&base, &entry.name);
-        if entry.type matches { Directory } {
+        if entry.type matches { _::Directory } {
             remove_dir_all(&child)?;
         } else {
             remove_file(&child)?;
@@ -424,7 +424,7 @@ pub fn normalize<S: AsStrSlice>(path: S) -> Result<String, FsError> {
         let rest = view.slice(start, view.len());
         let end = match rest.find("/") {
             Some(at) => start + at,
-            None => view.len(),
+            null => view.len(),
         };
         let part = view.slice(start, end);
         start = end + 1;
@@ -482,7 +482,7 @@ pub fn try_exists<S: AsStrSlice>(path: S) -> Result<bool, FsError> with Preopens
     let Err(e) = metadata(path) else {
         return Result::Ok(true);
     };
-    if e.kind matches { NotFound } {
+    if e.kind matches { _::NotFound } {
         return Result::Ok(false);
     }
     return Result::Err(e);
@@ -562,7 +562,7 @@ impl<effect E, F: fn mut(&WalkEntry) -> bool with E> Iterator for Walk<F> {
         let Some(here) = self.ahead.pop() else {
             return null;
         };
-        if here.type matches { Directory } && (self.descend)(&here) {
+        if here.type matches { _::Directory } && (self.descend)(&here) {
             if let Err(e) = self.list(&here.path) {
                 self.failed = Option::Some(e);
             }
@@ -653,14 +653,14 @@ fn open_temp<S: AsStrSlice>(target: S) -> Result<[Descriptor, String], FsError> 
                 // `Exist` says another writer holds the name; take the next.
                 // `NameTooLong` says the suffix outgrew what the host accepts,
                 // so the next name drops the target's and keeps its directory.
-                if e matches { NameTooLong } && named_after_target {
+                if e matches { _::NameTooLong } && named_after_target {
                     named_after_target = false;
                     base = match parent(target) {
                         Some(holder) => join(holder, ".wado-tmp"),
-                        None => ".wado-tmp",
+                        null => ".wado-tmp",
                     };
                     taken = 0;
-                } else if !e matches { Exist } {
+                } else if !e matches { _::Exist } {
                     return Result::Err(failure(target, e));
                 }
             },
@@ -699,11 +699,11 @@ fn ensure_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
     let Err(e) = create_dir(path) else {
         return Result::Ok(());
     };
-    if !e.kind matches { Io(Exist) } {
+    if !e.kind matches { Io(_::Exist) } {
         return Result::Err(e);
     }
     // `Exist` says something is at the path, not that it is a directory.
-    if metadata(path)?.type matches { Directory } {
+    if metadata(path)?.type matches { _::Directory } {
         return Result::Ok(());
     }
     return Result::Err(failure(path, ErrorCode::NotDirectory));
@@ -748,7 +748,7 @@ fn settle<S: AsStrSlice>(path: S, answer: Result<(), ErrorCode>) -> Result<(), F
 
 fn failure<S: AsStrSlice>(path: S, code: ErrorCode) -> FsError {
     let kind = match code {
-        NoEntry => FsErrorKind::NotFound,
+        _::NoEntry => FsErrorKind::NotFound,
         _ => FsErrorKind::Io(code),
     };
     return FsError { path: path.to_string(), kind };
@@ -756,8 +756,8 @@ fn failure<S: AsStrSlice>(path: S, code: ErrorCode) -> FsError {
 
 fn file_type(type: DescriptorType) -> FileType {
     return match type {
-        RegularFile => FileType::File,
-        Directory => FileType::Directory,
+        _::RegularFile => FileType::File,
+        _::Directory => FileType::Directory,
         _ => FileType::Other,
     };
 }

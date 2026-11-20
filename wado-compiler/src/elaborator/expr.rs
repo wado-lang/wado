@@ -3178,15 +3178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(match pattern {
             ast::Pattern::Error(_) => return None,
             ast::Pattern::Wildcard => Pat::Wild,
-            ast::Pattern::Ident { id, name, .. } | ast::Pattern::MutIdent { id, name, .. } => {
-                if self.pattern_name_bound(*id) {
-                    Pat::Wild
-                } else if self.is_known_case_of_type(scrutinee_type, name, None) {
-                    return self.exh_case(scrutinee_type, name, None);
-                } else {
-                    Pat::Opaque
-                }
-            }
+            ast::Pattern::Ident { .. } | ast::Pattern::MutIdent { .. } => Pat::Wild,
             ast::Pattern::Literal(lit) => return self.exh_literal(lit, scrutinee_type),
             ast::Pattern::Variant {
                 variant_name,
@@ -3210,7 +3202,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Range {
                 start, end, kind, ..
             } => return self.exh_range(start, end, *kind, scrutinee_type),
-            ast::Pattern::Equal { operand, .. } => return self.exh_pattern(operand, written_type),
+            // A global shows its value only when the match runs.
+            ast::Pattern::Equal { operand, .. } => match &**operand {
+                ast::Pattern::Ident { .. } => Pat::Opaque,
+                _ => return self.exh_pattern(operand, written_type),
+            },
             ast::Pattern::Tuple(patterns, _) => {
                 let types = self
                     .tysys

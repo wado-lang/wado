@@ -160,7 +160,7 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
 fn is_local_decl(tokens: &List<JToken>, pos: i32) -> bool {
     return match ident_at(tokens, pos) {
         Some(name) => is_type_keyword(&name) && ident_at(tokens, pos + 1) matches { Some(_) },
-        None => false,
+        null => false,
     };
 }
 
@@ -327,7 +327,7 @@ fn parse_primary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> 
                     *pos += 2;
                     atom = JExpr::Member(JMember { recv: atom, name });
                 },
-                None => {
+                null => {
                     return Result::Err("java2wado: expected identifier after '.'");
                 },
             }
@@ -401,7 +401,7 @@ fn parse_atom(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
 /// `( Ident )` followed by an operand-starting token — a cast `(BinaryContext)$ctx`
 /// rather than a parenthesized group `(a) + b` (where an operator follows `)`).
 fn looks_like_cast(tokens: &List<JToken>, pos: i32) -> bool {
-    if ident_at(tokens, pos + 1) matches { None } {
+    if ident_at(tokens, pos + 1) matches { null } {
         return false;
     }
     if !punct_is(tokens, pos + 2, ")") {

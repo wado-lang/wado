@@ -214,7 +214,7 @@ test "fused computes an expression over its operands" {
 
 test "an input the graph's extents describe passes" {
     let t = tensor::<[Batch, Row]>([2, 3], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
-    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) matches { None };
+    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) matches { null };
 }
 
 test "an input's extent that disagrees with the graph names the axis" {
@@ -255,27 +255,27 @@ test "an input whose extents multiply past what a list holds says so, even where
 }
 
 test "every partial product of the extents is checked, since a kernel counts a sub-shape" {
-    assert checked_element_count(&[46341, 46341]) matches { None };
-    assert checked_element_count(&[65536, 65536, 0]) matches { None };
+    assert checked_element_count(&[46341, 46341]) matches { null };
+    assert checked_element_count(&[65536, 65536, 0]) matches { null };
     assert checked_element_count(&[65536, 0]) == Option::Some(0);
     assert checked_element_count(&[2, 3]) == Option::Some(6);
     assert checked_element_count(&[]) == Option::Some(1);
 }
 
 test "two inputs that disagree on one symbol name both" {
-    assert axis_mismatch("N", "B", "Batch", 2, "A", 2) matches { None };
+    assert axis_mismatch("N", "B", "Batch", 2, "A", 2) matches { null };
     assert axis_mismatch("N", "B", "Batch", 3, "A", 2) == Option::Some(
         "B: axis Batch is 3 in the tensor and 2 in A, and the graph makes both N",
     );
 }
 
 test "an input axis the graph spells over other inputs' lengths names both" {
-    assert extent_mismatch("mask", "Total", 4, "past + 1", 4) matches { None };
+    assert extent_mismatch("mask", "Total", 4, "past + 1", 4) matches { null };
     assert extent_mismatch("mask", "Total", 3, "past + 1", 4).unwrap() == "mask: axis Total is 3 in the tensor, and the graph makes it past + 1, which the inputs make 4";
 }
 
 test "a condition the build owed is met with slack to spare, and missed by how much" {
-    assert unmet(0, "Y = Slice: N must be at most 8") matches { None };
+    assert unmet(0, "Y = Slice: N must be at most 8") matches { null };
     assert unmet(-3, "Y = Slice: N must be at most 8") == Option::Some(
         "Y = Slice: N must be at most 8, and the inputs miss it by 3",
     );

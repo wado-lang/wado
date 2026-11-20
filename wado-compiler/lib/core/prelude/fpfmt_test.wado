@@ -432,14 +432,14 @@ test "check_special zero" {
     let [is_special, is_neg, kind] = check_special(0.0);
     assert is_special;
     assert !is_neg;
-    assert kind matches { Zero };
+    assert kind matches { _::Zero };
 }
 
 test "check_special negative zero" {
     let [is_special, is_neg, kind] = check_special(-0.0);
     assert is_special;
     assert is_neg;
-    assert kind matches { Zero };
+    assert kind matches { _::Zero };
 }
 
 test "check_special infinity" {
@@ -447,27 +447,27 @@ test "check_special infinity" {
     let [is_special, is_neg, kind] = check_special(inf);
     assert is_special;
     assert !is_neg;
-    assert kind matches { Inf };
+    assert kind matches { _::Inf };
 
     let neg_inf: f64 = -1.0 / 0.0;
     let [is_special2, is_neg2, kind2] = check_special(neg_inf);
     assert is_special2;
     assert is_neg2;
-    assert kind2 matches { Inf };
+    assert kind2 matches { _::Inf };
 }
 
 test "check_special NaN" {
     let nan: f64 = 0.0 / 0.0;
     let [is_special, _, kind] = check_special(nan);
     assert is_special;
-    assert kind matches { NaN };
+    assert kind matches { _::NaN };
 }
 
 test "check_special normal" {
     let [is_special, is_neg, kind] = check_special(3.14);
     assert !is_special;
     assert !is_neg;
-    assert kind matches { NotSpecial };
+    assert kind matches { _::NotSpecial };
 
     let [is_special2, is_neg2, _] = check_special(-2.5);
     assert !is_special2;

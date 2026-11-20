@@ -57,7 +57,7 @@ test "captures message, level, and caller location" {
         assert sink.events.len() == 1;
         let e = sink.events[0];
         assert e.message == "hello";
-        assert e.meta.level matches { Error };
+        assert e.meta.level matches { _::Error };
         assert e.meta.line == expected_line;
         assert e.meta.file.contains("log_test.wado");
 
@@ -87,7 +87,7 @@ test "the raw event emitter takes a run-time level" {
         event(level, `dynamic`);
     };
     assert sink.events.len() == 1;
-    assert sink.events[0].meta.level matches { Error };
+    assert sink.events[0].meta.level matches { _::Error };
 }
 
 test "generic field accepts any Serialize value, preserving the data model" {
@@ -119,11 +119,11 @@ test "an event with no fields carries an empty object" {
 test "level names round-trip through the lenient parser" {
     assert Level::Trace.name() == "trace";
     assert Level::Error.label() == "ERROR";
-    assert Level::from_str_lenient("WARN") matches { Ok(Warn) };
+    assert Level::from_str_lenient("WARN") matches { Ok(_::Warn) };
     assert Level::from_str_lenient("nope") matches { Err(_) };
     // The infallible wrapper widens rather than silences.
-    assert level_from_str("nope") matches { Trace };
-    assert level_from_str("info") matches { Info };
+    assert level_from_str("nope") matches { _::Trace };
+    assert level_from_str("info") matches { _::Info };
 }
 
 test "levels are ordered by declaration" {
@@ -141,7 +141,7 @@ test "levels are ordered by declaration" {
 test "tier 2 reports the level it was set to" {
     let prev = log_level();
     set_log_level(Level::Error);
-    assert log_level() matches { Error };
+    assert log_level() matches { _::Error };
     set_log_level(prev);
     assert log_level() == prev;
 }
@@ -165,7 +165,7 @@ test "span lifecycle fires and events parent to the current span" {
     assert sink.events[0].message == "inside";
     assert sink.events[0].parent matches { Some(1) };
     assert sink.events[1].message == "outside";
-    assert sink.events[1].parent matches { None };
+    assert sink.events[1].parent matches { null };
 }
 
 test "in_span returns the body value and runs exit on an early return" {
@@ -206,11 +206,11 @@ test "nested spans parent to the innermost span" {
 test "current() reports the active span and null outside" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        assert current() matches { None };
+        assert current() matches { null };
         in_span(&span(Level::Info, `s`), || {
             assert current() matches { Some(_) };
         });
-        assert current() matches { None };
+        assert current() matches { null };
     };
 }
 
@@ -235,7 +235,7 @@ test "span attributes carry name, level and fields" {
     };
     let attrs = sink.spans[0];
     assert attrs.meta.name == "job";
-    assert attrs.meta.level matches { Warn };
+    assert attrs.meta.level matches { _::Warn };
     assert attrs.fields matches { Object(map) && map.len() == 1 };
 }
 
@@ -301,29 +301,29 @@ test "a forwarding layer passes span operations through untouched" {
 
 test "a filter's per-target directive overrides its default" {
     let filt = Filter { directives: parse_directives("info,core:json=error,app=debug") };
-    assert filt.threshold("other") matches { Info };
-    assert filt.threshold("core:json") matches { Error };
-    assert filt.threshold("app::db") matches { Debug };
+    assert filt.threshold("other") matches { _::Info };
+    assert filt.threshold("core:json") matches { _::Error };
+    assert filt.threshold("app::db") matches { _::Debug };
     // The level-only gate is the floor over every directive, so it admits what
     // the per-target pass would go on to admit.
-    assert filt.floor() matches { Debug };
+    assert filt.floor() matches { _::Debug };
 }
 
 test "a filter with no directives admits everything" {
     let filt = Filter {};
-    assert filt.threshold("anything") matches { Trace };
-    assert filt.floor() matches { Trace };
+    assert filt.threshold("anything") matches { _::Trace };
+    assert filt.floor() matches { _::Trace };
 }
 
 test "parse_directives skips malformed entries" {
     let ds = parse_directives("info, ,app=debug,bogus=nope,=warn,app::db=trace,");
     assert ds.len() == 3;
     assert ds[0].target == "";
-    assert ds[0].level matches { Info };
+    assert ds[0].level matches { _::Info };
     assert ds[1].target == "app";
-    assert ds[1].level matches { Debug };
+    assert ds[1].level matches { _::Debug };
     assert ds[2].target == "app::db";
-    assert ds[2].level matches { Trace };
+    assert ds[2].level matches { _::Trace };
 }
 
 test "a directive list is also buildable by hand" {
@@ -333,8 +333,8 @@ test "a directive list is also buildable by hand" {
             Directive { target: "app", level: Level::Trace },
         ],
     };
-    assert filt.threshold("other") matches { Warn };
-    assert filt.threshold("app") matches { Trace };
+    assert filt.threshold("other") matches { _::Warn };
+    assert filt.threshold("app") matches { _::Trace };
 }
 
 // === Sinks ===
@@ -417,7 +417,7 @@ test "the writing sinks track spans like any subscriber" {
         in_span(&s, || {
             assert current() matches { Some(_) };
         });
-        assert current() matches { None };
+        assert current() matches { null };
     };
 }
 
@@ -436,13 +436,13 @@ test "logging with no sink installed neither traps nor is silent" {
 }
 
 test "spans work against the default subscriber" {
-    assert current() matches { None };
+    assert current() matches { null };
     let n = in_span(&span(Level::Info, `default span`), || {
         assert current() matches { Some(_) };
         return 5;
     });
     assert n == 5;
-    assert current() matches { None };
+    assert current() matches { null };
 }
 
 test "NopSink is how a program asks for silence" {
@@ -586,7 +586,7 @@ test "a handler that logs into itself stops at the depth limit" {
 
 // Every operation a sink answers, each once.
 fn exercise_sink() -> bool with Log {
-    assert current() matches { None };
+    assert current() matches { null };
     let s = span(Level::Info, `s`);
     s.record({ k: 1 });
     s.follows_from(&s);

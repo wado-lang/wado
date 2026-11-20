@@ -3711,8 +3711,8 @@ condition: json::to_string(&b) matches { Ok(s) && s == `\\{\"type\":\"byte_level
 
 fn "serde_internal_tag.wado/$test_1_the_tag_is_read_wherever_it_stands$cold0"() {
     "core:rt/panic"(array.new_data<u8>("Assertion failed in $test_1_the_tag_is_read_wherever_it_stands at serde_internal_tag.wado:45
-condition: read(`\\{\"extra\":[1,\\{\"type\":\"ws\"\\}],\"type\":\"ws\"\\}`) matches { Ok(Whitespace) }
-"), 183);
+condition: read(`\\{\"extra\":[1,\\{\"type\":\"ws\"\\}],\"type\":\"ws\"\\}`) matches { Ok(_::Whitespace) }
+"), 186);
     unreachable;
 }
 
@@ -3739,8 +3739,8 @@ condition: read(`\\{\"type\":\"split\",\"pattern\":\"x\"\\}`) matches { Ok(Split
 
 fn "serde_internal_tag.wado/$test_2_a_payload_s_missing_fields_take_their_defaults__and_unknown_keys_are_skipped$cold0"() {
     "core:rt/panic"(array.new_data<u8>("Assertion failed in $test_2_a_payload_s_missing_fields_take_their_defaults__and_unknown_keys_are_skipped at serde_internal_tag.wado:52
-condition: read(`\\{\"type\":\"split\"\\}`) matches { Err(MissingField) }
-"), 203);
+condition: read(`\\{\"type\":\"split\"\\}`) matches { Err(_::MissingField) }
+"), 206);
     unreachable;
 }
 
@@ -3760,15 +3760,15 @@ condition: read(`\"ws\"`) matches { Err(_) }
 
 fn "serde_internal_tag.wado/$test_3_an_unknown_or_a_missing_tag_is_refused$cold1"() {
     "core:rt/panic"(array.new_data<u8>("Assertion failed in $test_3_an_unknown_or_a_missing_tag_is_refused at serde_internal_tag.wado:57
-condition: read(`\\{\"pattern\":\"x\"\\}`) matches { Err(MissingField) }
-"), 164);
+condition: read(`\\{\"pattern\":\"x\"\\}`) matches { Err(_::MissingField) }
+"), 167);
     unreachable;
 }
 
 fn "serde_internal_tag.wado/$test_3_an_unknown_or_a_missing_tag_is_refused$cold2"() {
     "core:rt/panic"(array.new_data<u8>("Assertion failed in $test_3_an_unknown_or_a_missing_tag_is_refused at serde_internal_tag.wado:56
-condition: read(`\\{\"type\":\"Split\",\"pattern\":\"x\"\\}`) matches { Err(UnknownVariant) }
-"), 181);
+condition: read(`\\{\"type\":\"Split\",\"pattern\":\"x\"\\}`) matches { Err(_::UnknownVariant) }
+"), 184);
     unreachable;
 }
 

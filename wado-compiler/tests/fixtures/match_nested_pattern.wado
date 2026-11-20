@@ -57,7 +57,7 @@ fn figure_pairs(s: Figure) -> List<Pair> {
             }
         },
         Rect(dims) => [Pair { a: dims.0, b: dims.1 }],
-        Point => [],
+        _::Point => [],
     };
 }
 
@@ -67,17 +67,17 @@ test "a variant inside a tuple pattern" {
     let pair = [a, b];
     assert match pair {
         [Some(a), Some(b)] => `both: ${a},${b}`,
-        [Some(a), None] => `left: ${a}`,
-        [None, Some(b)] => `right: ${b}`,
-        [None, None] => "neither",
+        [Some(a), null] => `left: ${a}`,
+        [null, Some(b)] => `right: ${b}`,
+        [null, null] => "neither",
     } == "left: 10";
 
     let pair2 = [Option::Some(3), Option::Some(7)];
     assert match pair2 {
         [Some(a), Some(b)] => `both: ${a},${b}`,
-        [Some(a), None] => `left: ${a}`,
-        [None, Some(b)] => `right: ${b}`,
-        [None, None] => "neither",
+        [Some(a), null] => `left: ${a}`,
+        [null, Some(b)] => `right: ${b}`,
+        [null, null] => "neither",
     } == "both: 3,7";
 }
 
@@ -97,7 +97,7 @@ test "a tuple inside a variant pattern" {
         Circle(r) => `circle r=${r}`,
         Rect([w, h]) => `rect ${w}x${h}`,
         Labeled(_) => "labeled",
-        Point => "point",
+        _::Point => "point",
     } == "rect 3x4";
 
     let s2 = Shape::Labeled(["origin", Point { x: 0, y: 0 }]);
@@ -105,7 +105,7 @@ test "a tuple inside a variant pattern" {
         Circle(_) => "circle",
         Rect(_) => "rect",
         Labeled([name, { x, y }]) => `${name}: ${x},${y}`,
-        Point => "point",
+        _::Point => "point",
     } == "origin: 0,0";
 }
 
@@ -114,7 +114,7 @@ test "a struct inside a variant pattern" {
     let opt = Option::Some(Point { x: 5, y: 10 });
     assert match opt {
         Some({ x, y }) => `point: ${x},${y}`,
-        None => "none",
+        null => "none",
     } == "point: 5,10";
 }
 
@@ -122,7 +122,7 @@ test "a variant inside a struct pattern" {
     let t = Tagged { label: "test", value: Option::Some(99) };
     assert match t {
         { value: Some(n), .. } => `has: ${n}`,
-        { value: None, .. } => "empty",
+        { value: null, .. } => "empty",
     } == "has: 99";
 }
 
@@ -131,22 +131,22 @@ test "a variant inside a variant pattern" {
     let nested = Option::Some(Option::Some(42));
     assert match nested {
         Some(Some(n)) => `inner: ${n}`,
-        Some(None) => "some-none",
-        None => "none",
+        Some(null) => "some-none",
+        null => "none",
     } == "inner: 42";
 
     let inner: Option<i32> = null;
     assert match Option::Some(inner) {
         Some(Some(n)) => `inner: ${n}`,
-        Some(None) => "some-none",
-        None => "none",
+        Some(null) => "some-none",
+        null => "none",
     } == "some-none";
 
     let outer_none: Option<Option<i32>> = null;
     assert match outer_none {
         Some(Some(n)) => `inner: ${n}`,
-        Some(None) => "some-none",
-        None => "none",
+        Some(null) => "some-none",
+        null => "none",
     } == "none";
 }
 
@@ -156,7 +156,7 @@ test "a variant inside a tuple payload of a variant" {
         Leaf(n) => `leaf:${n}`,
         Branch([Leaf(a), Leaf(b)]) => `branch:${a},${b}`,
         Branch(_) => "branch:other",
-        Empty => "empty",
+        _::Empty => "empty",
     } == "branch:10,20";
 
     let tree2 = Tree::Branch([Tree::Branch([Tree::Leaf(1), Tree::Empty]), Tree::Leaf(2)]);
@@ -171,7 +171,7 @@ test "three levels: struct inside tuple inside variant" {
     let data = Option::Some([Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]);
     assert match data {
         Some([{ x: x1, y: y1 }, { x: x2, y: y2 }]) => `(${x1},${y1})->(${x2},${y2})`,
-        None => "none",
+        null => "none",
     } == "(1,2)->(3,4)";
 }
 
@@ -196,9 +196,9 @@ test "literal sub-patterns inside a tuple" {
 test "an enum inside a tuple pattern" {
     let pair = [Color::Red, 100];
     assert match pair {
-        [Red, n] => `red: ${n}`,
-        [Green, n] => `green: ${n}`,
-        [Blue, n] => `blue: ${n}`,
+        [_::Red, n] => `red: ${n}`,
+        [_::Green, n] => `green: ${n}`,
+        [_::Blue, n] => `blue: ${n}`,
     } == "red: 100";
 }
 
@@ -206,7 +206,7 @@ test "an or-pattern over nested variant cases" {
     let mut out: List<String> = [];
     for let s of [Shape::Circle(1.0), Shape::Point, Shape::Rect([2, 3])] {
         out.push(match s {
-            Circle(_) | Point => "simple",
+            Circle(_) | _::Point => "simple",
             Rect(_) | Labeled(_) => "complex",
         });
     }
@@ -264,9 +264,9 @@ test "a tuple pattern in a for-of binding, matched inside" {
     let mut out: List<String> = [];
     for let [color, n] of items {
         out.push(match color {
-            Red => `R:${n}`,
-            Green => `G:${n}`,
-            Blue => `B:${n}`,
+            _::Red => `R:${n}`,
+            _::Green => `G:${n}`,
+            _::Blue => `B:${n}`,
         });
     }
     assert out == ["R:1", "G:2", "B:3"];

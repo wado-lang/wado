@@ -295,14 +295,14 @@ test "an Option global declared null keeps its None, whatever it wraps" {
     // to every `Option`, so a read of a scalar one trapped asking which case it
     // is. `Option::Some` in the same position always worked, which is what made
     // this look like nullable-reference handling.
-    assert SCALAR_NONE matches { None };
-    assert SCALAR_NONE_MUT matches { None };
-    assert VARIANT_NONE matches { None };
-    assert STRUCT_NONE matches { None };
-    assert STRING_NONE matches { None };
+    assert SCALAR_NONE matches { null };
+    assert SCALAR_NONE_MUT matches { null };
+    assert VARIANT_NONE matches { null };
+    assert STRUCT_NONE matches { null };
+    assert STRING_NONE matches { null };
     assert SCALAR_SOME matches { Some(7) };
     SCALAR_NONE_MUT = Option::Some(true);
     assert SCALAR_NONE_MUT matches { Some(true) };
     SCALAR_NONE_MUT = null;
-    assert SCALAR_NONE_MUT matches { None };
+    assert SCALAR_NONE_MUT matches { null };
 }

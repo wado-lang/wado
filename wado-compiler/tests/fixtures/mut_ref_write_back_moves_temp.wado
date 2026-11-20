@@ -15,7 +15,7 @@ struct Reader {
 
 impl Reader {
     fn optional<M: Message + Default>(&mut self, slot: &mut Option<M>) -> Result<bool, String> {
-        if *slot matches { None } {
+        if *slot matches { null } {
             *slot = Option::Some(M::default());
         }
         if let Some(m) = slot {

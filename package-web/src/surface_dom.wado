@@ -191,7 +191,7 @@ fn insert(parent: Node, child: Node, next: Option<Node>) {
     let into = surface_node(parent);
     let previous = match next {
         Some(after) => surface_node(after).previous_sibling,
-        None => into.last_child,
+        null => into.last_child,
     };
     if let Some(before) = previous {
         surface_node(before).next_sibling = Option::Some(child);
@@ -233,7 +233,7 @@ fn is_element(node: &SurfaceNode) -> bool {
 }
 
 fn is_doctype(node: &SurfaceNode) -> bool {
-    return node.content matches { Doctype };
+    return node.content matches { _::Doctype };
 }
 
 fn any_sibling(start: Option<Node>, step: fn(&SurfaceNode) -> Option<Node>, accept: fn(&SurfaceNode) -> bool) -> bool {
@@ -257,18 +257,18 @@ fn assert_insertable(parent: Node, node: Node, child: Option<Node>, replacing: b
     let other_child = |accept: fn(&SurfaceNode) -> bool| children(parent).find(
         |c| Option::Some(c) != replaced && accept(surface_node(c)),
     );
-    let into_document = surface_node(parent).content matches { Document };
+    let into_document = surface_node(parent).content matches { _::Document };
     assert into_document || is_element(surface_node(parent)), "HierarchyRequestError: only a document or an element holds children";
     assert !is_inclusive_ancestor(node, parent), "HierarchyRequestError: a node cannot be inserted into itself or its descendant";
     if let Some(reference) = child {
         assert surface_node(reference).parent == Option::Some(parent), "NotFoundError: the reference node is a child";
     }
     match surface_node(node).content {
-        Document | Window => panic("HierarchyRequestError: a document or a window is never a child"),
+        _::Document | _::Window => panic("HierarchyRequestError: a document or a window is never a child"),
         Text(_) => {
             assert !into_document, "HierarchyRequestError: a document holds no text";
         },
-        Doctype => {
+        _::Doctype => {
             assert into_document, "HierarchyRequestError: only a document holds a doctype";
         },
         Element(_) => {
@@ -287,7 +287,7 @@ fn assert_insertable(parent: Node, node: Node, child: Option<Node>, replacing: b
         assert other_child(is_doctype) == null, "HierarchyRequestError: a document holds one doctype";
         let ahead = match child {
             Some(reference) => surface_node(reference).previous_sibling,
-            None => surface_node(parent).last_child,
+            null => surface_node(parent).last_child,
         };
         assert !any_sibling(ahead, |n| n.previous_sibling, is_element), "HierarchyRequestError: the doctype precedes the element";
     }
@@ -320,8 +320,8 @@ fn serialize_children(parent: Node, out: &mut String) {
     for let child of children(parent) {
         let node = surface_node(child);
         match node.content {
-            Document | Window => unreachable(),
-            Doctype => out.push_str("<!DOCTYPE html>"),
+            _::Document | _::Window => unreachable(),
+            _::Doctype => out.push_str("<!DOCTYPE html>"),
             Text(text) => {
                 if raw_text {
                     out.push_str(&text);
@@ -747,9 +747,9 @@ impl Node for SurfaceDom {
         resume match self.own(*this).content {
             Element(_) => 1,
             Text(_) => 3,
-            Document => 9,
-            Doctype => 10,
-            Window => unreachable(),
+            _::Document => 9,
+            _::Doctype => 10,
+            _::Window => unreachable(),
         };
     }
 
@@ -757,9 +757,9 @@ impl Node for SurfaceDom {
         resume match self.own(*this).content {
             Element(name) => name.to_ascii_uppercase(),
             Text(_) => "#text",
-            Document => "#document",
-            Doctype => "html",
-            Window => unreachable(),
+            _::Document => "#document",
+            _::Doctype => "html",
+            _::Window => unreachable(),
         };
     }
 
@@ -792,7 +792,7 @@ impl Node for SurfaceDom {
     }
 
     fn text_content(&mut self, this: &Node) -> Option<String> {
-        if self.own(*this).content matches { Document | Doctype } {
+        if self.own(*this).content matches { _::Document | _::Doctype } {
             resume null;
         } else {
             let mut text = "";
@@ -805,7 +805,7 @@ impl Node for SurfaceDom {
         let node = self.own(*this);
         let text = value.unwrap_or("");
         match node.content {
-            Document | Window | Doctype => {
+            _::Document | _::Window | _::Doctype => {
             },
             Text(_) => node.content = Content::Text(text),
             Element(_) => self.replace_all_text(*this, text),

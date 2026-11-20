@@ -47,7 +47,7 @@ fn send<B: AsByteSlice>(
             options.set_between_bytes_timeout(Some(t)).unwrap();
             Some(options);
         },
-        None => null,
+        null => null,
     };
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

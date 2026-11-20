@@ -474,7 +474,7 @@ test "gzip member cannot refer into the member before it" {
         multi.push((crc >> shift) as u8);
     }
     multi.extend(&b"\x03\x00\x00\x00");
-    assert inflate_gzip(&multi) matches { Err(InvalidDeflateData) };
+    assert inflate_gzip(&multi) matches { Err(_::InvalidDeflateData) };
 }
 
 test "DeflateStream one-shot" {

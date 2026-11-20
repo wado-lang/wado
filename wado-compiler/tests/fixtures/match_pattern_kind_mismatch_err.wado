@@ -3,7 +3,7 @@
 enum Color { Red, Green }
 
 fn case_column(c: Color) -> i32 {
-    return match c { Red => 1, 0 => 2, _ => 3 };
+    return match c { _::Red => 1, 0 => 2, _ => 3 };
 }
 
 fn bool_column(b: bool) -> i32 {
@@ -37,7 +37,7 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":6:32: analysis error: pattern mismatch: expected 'an integer type', found 'Color'",
+  "compile_error": ":6:35: analysis error: pattern mismatch: expected 'an integer type', found 'Color'",
   "compile_errors_contains": [
     "expected 'char', found 'bool'",
     "expected 'an integer type', found '[i32, i32]'",

@@ -95,7 +95,7 @@ fn seq_contains(
 }
 
 fn skippable(e: &Element) -> bool {
-    return peel(e) matches { Repeat(r) && r.kind matches { Star | Optional } };
+    return peel(e) matches { Repeat(r) && r.kind matches { _::Star | _::Optional } };
 }
 
 fn peel(e: &Element) -> &Element {
@@ -110,9 +110,9 @@ fn peel(e: &Element) -> &Element {
 /// `+` within `+` or `*`, `*` within `*`.
 fn count_within(b: RepeatKind, a: RepeatKind) -> bool {
     return match a {
-        Star => true,
-        Plus => b matches { Plus },
-        Optional => b matches { Optional },
+        _::Star => true,
+        _::Plus => b matches { _::Plus },
+        _::Optional => b matches { _::Optional },
     };
 }
 
@@ -155,7 +155,7 @@ fn elem_contains(
         },
         TokenRef(_) | Literal(_) => match b {
             TokenRef(_) | Literal(_) => analysis.terminal_kind(a) == analysis.terminal_kind(b),
-            RuleRef(rb) && rb.arg_action matches { None } => unfolded_contained(a, &rb.name, analysis, assumed, depth),
+            RuleRef(rb) && rb.arg_action matches { null } => unfolded_contained(a, &rb.name, analysis, assumed, depth),
             _ => false,
         },
         _ => false,

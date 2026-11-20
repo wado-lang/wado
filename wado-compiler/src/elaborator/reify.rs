@@ -2484,7 +2484,7 @@ impl<'a> Reify<'a> {
                 id,
                 name,
                 span: binding_span,
-            } if self.ann_local_type(*id).is_some() => {
+            } => {
                 // `let mut x = …` carries the mutability on `LetStmt`,
                 // not on the `Ident` pattern.
                 let is_mut =
@@ -2507,13 +2507,9 @@ impl<'a> Reify<'a> {
                 // `let _ = expr;` discards. Lower as an Expr stmt.
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            ast::Pattern::Ident { .. }
-            | ast::Pattern::MutIdent { .. }
-            | ast::Pattern::Tuple(_, _)
-            | ast::Pattern::Struct { .. }
-            | ast::Pattern::Variant { .. } => {
+            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } | ast::Pattern::Variant { .. } => {
                 // Destructuring `let [a, b] = …;` / `let Point { x, y }
-                // = …;` / `let A(x) = …;` or `let A = …;` of a one-case
+                // = …;` / `let A(x) = …;` or `let _::A = …;` of a one-case
                 // variant. The TIR uses
                 // `TirStmtKind::LetDestructure` rather than `Let`. The
                 // shared `reify_pattern` adds the sub-pattern bindings
@@ -9143,36 +9139,6 @@ impl<'a> Reify<'a> {
         match pattern {
             ast::Pattern::Wildcard => TirPattern::Wildcard,
             ast::Pattern::Ident { id, name, span } => {
-                // A bare ident in a pattern is ambiguous: a nullary
-                // enum/variant case (`None`, `Red`), an immutable global
-                // constant, or a fresh binding. A name annotate bound is a
-                // binding; otherwise disambiguate in the same order as
-                // `Elaborator::resolve_if_pattern_inner`.
-                if self.ann_local_type(*id).is_none() {
-                    if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
-                        return TirPattern::Enum {
-                            enum_type: self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .scrutinee_structure_head(scrutinee_type),
-                            case_name: name.clone(),
-                            case_index,
-                        };
-                    }
-                    if self.scrutinee_has_variant_case(scrutinee_type, name) {
-                        return self.reify_nullary_variant_case(scrutinee_type, name);
-                    }
-                    if let Some(constant) = self.reify_pattern_constant(pattern, ctx) {
-                        let const_pat = self.constant_value_pattern(constant, scrutinee_type);
-                        return self.compare_constant_by_eq(
-                            pattern,
-                            const_pat,
-                            scrutinee_type,
-                            ctx,
-                        );
-                    }
-                }
                 let local_index = ctx.add_local_at(
                     name.clone(),
                     scrutinee_type,

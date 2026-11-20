@@ -3,6 +3,7 @@
 //! shape alone (`null`, `_::Case`, `== NAME`). The edits land where the
 //! analysis resolved the name, never where the text matches.
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -11,6 +12,7 @@ use std::thread;
 use lexopt::Arg::{Long, Value as Positional};
 use wado_cli::discover;
 use wado_cli::query_adapter::pattern_name_rewrites;
+use wado_compiler::ast::{AstVisitor, Item, Pattern, walk_item, walk_pattern};
 use wado_lsp::pattern_names::PatternNameRewrite;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -33,36 +35,40 @@ pub fn run(mut parser: lexopt::Parser) {
         !roots.is_empty(),
         "usage: migrate-pattern-names [--dry-run] PATH..."
     );
-    let files = Arc::new(Mutex::new(collect_files(&roots)));
+    let files = collect_files(&roots);
+    eprintln!("analyzing {} files", files.len());
+    let files = Arc::new(Mutex::new(files));
     let workers = thread::available_parallelism().map_or(1, usize::from);
     let handles: Vec<_> = (0..workers)
         .map(|_| {
             let files = Arc::clone(&files);
-            thread::spawn(move || {
-                let runtime = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("a migration runtime");
-                let mut lines = Vec::new();
-                loop {
-                    let Some(file) = files.lock().expect("the file queue").pop() else {
-                        return lines;
-                    };
-                    lines.extend(runtime.block_on(migrate(&file, mode)));
-                }
-            })
+            thread::Builder::new()
+                .stack_size(wado_cli::COMPILER_STACK_SIZE)
+                .spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("a migration runtime");
+                    loop {
+                        let Some(file) = files.lock().expect("the file queue").pop() else {
+                            return;
+                        };
+                        for line in runtime.block_on(migrate(&file, mode)) {
+                            println!("{line}");
+                        }
+                    }
+                })
+                .expect("a migration worker")
         })
         .collect();
-    let mut lines: Vec<String> = handles
-        .into_iter()
-        .flat_map(|h| h.join().expect("a migration worker panicked"))
-        .collect();
-    lines.sort();
-    for line in lines {
-        println!("{line}");
+    for handle in handles {
+        handle.join().expect("a migration worker panicked");
     }
 }
 
+/// The files to analyze: those whose patterns hold a bare name that some case
+/// or global under the roots is named, since no other bare name can resolve to
+/// one. A parse is far cheaper than the analysis, which runs Kiln generators.
 fn collect_files(roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for root in roots {
@@ -76,7 +82,77 @@ fn collect_files(roots: &[PathBuf]) -> Vec<PathBuf> {
     }
     files.sort();
     files.dedup();
+    let mut declared = HashSet::new();
+    for root in roots {
+        declared_names(root, &mut declared);
+    }
+    // A golden is regenerated from its fixture, not migrated.
+    files.retain(|file| !file.to_string_lossy().contains("/tests/generated/"));
+    files.retain(|file| {
+        fs::read_to_string(file).is_ok_and(|source| {
+            let mut names = PatternNames(Vec::new());
+            for item in &wado_compiler::parse(&source).ast.items {
+                names.visit_item(item);
+            }
+            names.0.iter().any(|name| declared.contains(name))
+        })
+    });
     files
+}
+
+/// Every case and global a `.wado` file under `path` declares, gitignored
+/// generator output included.
+fn declared_names(path: &Path, out: &mut HashSet<String>) {
+    if path.is_dir() {
+        let skipped = path
+            .file_name()
+            .is_some_and(|n| n == "target" || n == ".git" || n == "node_modules");
+        if skipped {
+            return;
+        }
+        for entry in fs::read_dir(path).into_iter().flatten().flatten() {
+            declared_names(&entry.path(), out);
+        }
+        return;
+    }
+    if path.extension().is_none_or(|e| e != "wado") {
+        return;
+    }
+    let Ok(source) = fs::read_to_string(path) else {
+        return;
+    };
+    let mut decls = Declared(out);
+    for item in &wado_compiler::parse(&source).ast.items {
+        decls.visit_item(item);
+    }
+}
+
+struct Declared<'a>(&'a mut HashSet<String>);
+
+impl AstVisitor<'_> for Declared<'_> {
+    fn visit_item(&mut self, item: &Item) {
+        match item {
+            Item::Enum(e) => self.0.extend(e.cases.iter().map(|c| c.name.clone())),
+            Item::Variant(v) => self.0.extend(v.cases.iter().map(|c| c.name.clone())),
+            Item::Global(g) => {
+                self.0.insert(g.name.clone());
+            }
+            _ => {}
+        }
+        walk_item(self, item);
+    }
+}
+
+/// The bare names a module's patterns hold.
+struct PatternNames(Vec<String>);
+
+impl AstVisitor<'_> for PatternNames {
+    fn visit_pattern(&mut self, pat: &Pattern) {
+        if let Pattern::Ident { name, .. } = pat {
+            self.0.push(name.clone());
+        }
+        walk_pattern(self, pat);
+    }
 }
 
 /// One report line per rewrite, or per file the analysis could not load.

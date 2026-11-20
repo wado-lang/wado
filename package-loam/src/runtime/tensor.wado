@@ -36,7 +36,7 @@ pub fn checked_element_count(extents: &List<i32>) -> Option<i32> {
 pub fn optional<T>(t: &Option<T>) -> Option<&T> {
     return match t {
         Some(held) => Option::Some(held),
-        None => null,
+        null => null,
     };
 }
 
@@ -718,7 +718,7 @@ pub trait Element with () {
     /// Whether arithmetic on this is a float's: computed in f32 and rounded
     /// once to this. An integer's is computed in i64 and wraps to it.
     fn is_float() -> bool {
-        return Self::kind() matches { F32 | F16 | BF16 };
+        return Self::kind() matches { _::F32 | _::F16 | _::BF16 };
     }
 }
 
@@ -985,8 +985,8 @@ impl HalfFloat {
     /// The element of `kind` where it is one.
     pub fn of(kind: ElementKind) -> Option<HalfFloat> {
         return match kind {
-            F16 => Option::Some(HalfFloat::F16),
-            BF16 => Option::Some(HalfFloat::BF16),
+            _::F16 => Option::Some(HalfFloat::F16),
+            _::BF16 => Option::Some(HalfFloat::BF16),
             _ => null,
         };
     }
@@ -994,8 +994,8 @@ impl HalfFloat {
     /// The nearest value of this to `v`, ties to even, as an f32.
     pub fn rounded(&self, v: f32) -> f32 {
         return match *self {
-            F16 => f32::from(f16::from_f32(v)),
-            BF16 => f32::from(bf16::from_f32(v)),
+            _::F16 => f32::from(f16::from_f32(v)),
+            _::BF16 => f32::from(bf16::from_f32(v)),
         };
     }
 }
@@ -1117,7 +1117,7 @@ impl Expr {
     pub fn stored_as(&self, kind: ElementKind) -> Expr {
         return match HalfFloat::of(kind) {
             Some(to) => self.rounded(to),
-            None => *self,
+            null => *self,
         };
     }
 
@@ -1134,7 +1134,7 @@ impl Expr {
         let sum = self.row(RowOp::Sum);
         return match count {
             Some(n) => sum.binary(BinaryOp::Div, &constant(n)),
-            None => sum,
+            null => sum,
         };
     }
 
@@ -1150,7 +1150,7 @@ impl Expr {
                 Constant(c) => Option::Some(c),
                 Unary([op, a]) => match values[a] {
                     Some(v) => Option::Some(unary_over(op, &whole([v]))[0]),
-                    None => null,
+                    null => null,
                 },
                 Rounded([to, a]) => values[a].map(|v: f32| to.rounded(v)),
                 Binary([op, a, b]) => match [values[a], values[b]] {
@@ -1304,14 +1304,14 @@ fn value_at(v: &Slice<f32>, j: i32) -> f32 {
 /// `v`'s `n` elements folded by `op`.
 fn folded(op: RowOp, v: &Slice<f32>, n: i32) -> f32 {
     return match op {
-        Sum => {
+        _::Sum => {
             let mut sum: f32 = 0.0;
             for let j of 0..<n {
                 sum += value_at(v, j);
             }
             sum;
         },
-        Max => {
+        _::Max => {
             let mut max = -f32::INFINITY;
             for let j of 0..<n {
                 max = f32::ieee754_max(max, value_at(v, j));
@@ -1363,33 +1363,33 @@ fn run_of(values: &List<f32>, start: i32, n: i32) -> Slice<f32> {
 
 fn unary_over(op: UnaryOp, v: &Slice<f32>) -> List<f32> {
     return match op {
-        Relu => each(v, |e| f32::ieee754_max(e, 0.0)),
-        Sigmoid => each(v, |e| sigmoid_f32(e)),
-        Tanh => each(v, |e| f32::tanh(e)),
-        Erf => each(v, |e| f32::erf(e)),
-        Exp => each(v, |e| f32::exp(e)),
-        Log => each(v, |e| f32::ln(e)),
-        Sqrt => each(v, |e| f32::sqrt(e)),
-        Neg => each(v, |e| -e),
-        Abs => each(v, |e| f32::abs(e)),
+        _::Relu => each(v, |e| f32::ieee754_max(e, 0.0)),
+        _::Sigmoid => each(v, |e| sigmoid_f32(e)),
+        _::Tanh => each(v, |e| f32::tanh(e)),
+        _::Erf => each(v, |e| f32::erf(e)),
+        _::Exp => each(v, |e| f32::exp(e)),
+        _::Log => each(v, |e| f32::ln(e)),
+        _::Sqrt => each(v, |e| f32::sqrt(e)),
+        _::Neg => each(v, |e| -e),
+        _::Abs => each(v, |e| f32::abs(e)),
     };
 }
 
 fn binary_over(op: BinaryOp, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
     return match op {
-        Add => pairwise(a, b, |x, y| x + y),
-        Sub => pairwise(a, b, |x, y| x - y),
-        Mul => pairwise(a, b, |x, y| x * y),
-        Div => pairwise(a, b, |x, y| x / y),
-        Pow => pairwise(a, b, |x, y| f32::pow(x, y)),
-        Maximum => pairwise(a, b, |x, y| f32::ieee754_max(x, y)),
-        Minimum => pairwise(a, b, |x, y| f32::ieee754_min(x, y)),
-        Eq => pairwise(a, b, |x, y| holds(x.ieee754_eq(y))),
-        Ne => pairwise(a, b, |x, y| holds(!x.ieee754_eq(y))),
-        Lt => pairwise(a, b, |x, y| holds(x.ieee754_lt(y))),
-        Le => pairwise(a, b, |x, y| holds(x.ieee754_le(y))),
-        Gt => pairwise(a, b, |x, y| holds(x.ieee754_gt(y))),
-        Ge => pairwise(a, b, |x, y| holds(x.ieee754_ge(y))),
+        _::Add => pairwise(a, b, |x, y| x + y),
+        _::Sub => pairwise(a, b, |x, y| x - y),
+        _::Mul => pairwise(a, b, |x, y| x * y),
+        _::Div => pairwise(a, b, |x, y| x / y),
+        _::Pow => pairwise(a, b, |x, y| f32::pow(x, y)),
+        _::Maximum => pairwise(a, b, |x, y| f32::ieee754_max(x, y)),
+        _::Minimum => pairwise(a, b, |x, y| f32::ieee754_min(x, y)),
+        _::Eq => pairwise(a, b, |x, y| holds(x.ieee754_eq(y))),
+        _::Ne => pairwise(a, b, |x, y| holds(!x.ieee754_eq(y))),
+        _::Lt => pairwise(a, b, |x, y| holds(x.ieee754_lt(y))),
+        _::Le => pairwise(a, b, |x, y| holds(x.ieee754_le(y))),
+        _::Gt => pairwise(a, b, |x, y| holds(x.ieee754_gt(y))),
+        _::Ge => pairwise(a, b, |x, y| holds(x.ieee754_ge(y))),
     };
 }
 

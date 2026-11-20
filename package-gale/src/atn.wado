@@ -490,7 +490,7 @@ fn guard_with(b: &mut AtnBuilder, guards: &List<AltAction>, rule: i32, entry: i3
     let mut at = entry;
     for let mut k = guards.len() - 1; k >= 0; k -= 1 {
         let g = &guards[k];
-        let label = if g.kind matches { Action } { ATN_ACTION_EDGE } else { g.source.action_id };
+        let label = if g.kind matches { _::Action } { ATN_ACTION_EDGE } else { g.source.action_id };
         assert g.source.action_id < ATN_ACTION_EDGE, "an action id must not collide with the action edge's label";
         let s = b.new_state(ATN_BASIC, rule);
         b.add_trans(s, AtnTransition { kind: ATN_TR_EPSILON, target: at, label });
@@ -636,7 +636,7 @@ fn build_repeat(
     rule_index: &HashMap<String, i32>,
 ) -> [i32, i32] {
     return match kind {
-        Optional => {
+        _::Optional => {
             let start = b.new_state(ATN_BLOCK_START, rule);
             let end = b.new_state(ATN_BLOCK_END, rule);
             b.mark_decision_for_site(start, site);
@@ -651,7 +651,7 @@ fn build_repeat(
             b.add_eps(seg.1, end);
             [start, end];
         },
-        Star => {
+        _::Star => {
             let entry = b.new_state(ATN_STAR_LOOP_ENTRY, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
             b.mark_decision_for_site(entry, site);
@@ -668,7 +668,7 @@ fn build_repeat(
             b.add_eps(back, entry);
             [entry, end];
         },
-        Plus => {
+        _::Plus => {
             let seg = build_element(b, inner, rule, rule_index);
             let back = b.new_state(ATN_PLUS_LOOP_BACK, rule);
             let end = b.new_state(ATN_LOOP_END, rule);

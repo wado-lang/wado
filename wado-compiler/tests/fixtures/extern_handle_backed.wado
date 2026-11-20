@@ -31,8 +31,8 @@ test "backing reaches the value the handle holds" {
 
 test "a value of another type is not the backing" {
     let element = Element::backed_by(Tag { name: "div", uses: 0 });
-    assert element.backing::<Other>() matches { None };
-    assert element.backing::<String>() matches { None };
+    assert element.backing::<Other>() matches { null };
+    assert element.backing::<String>() matches { null };
 }
 
 #[inline("never")]
@@ -172,10 +172,10 @@ test "two instances of one generic struct are two types" {
     let inner = Node::backed_by(Tag { name: "div", uses: 0 });
     let node = Node::backed_by(Held { value: inner });
     assert node.backing::<Held<Node>>() matches { Some(_) };
-    assert node.backing::<Held<Element>>() matches { None };
+    assert node.backing::<Held<Element>>() matches { null };
     let of_pair = Node::backed_by([inner, 1]);
     assert of_pair.backing::<[Node, i32]>() matches { Some(_) };
-    assert of_pair.backing::<[Element, i32]>() matches { None };
+    assert of_pair.backing::<[Element, i32]>() matches { null };
 }
 
 test "a list and a string back a handle" {

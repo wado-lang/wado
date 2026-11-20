@@ -80,19 +80,19 @@ pub enum ZlibError {
 impl Display for ZlibError {
     fn fmt(&self, f: &mut Formatter) {
         let message: String = match *self {
-            DataTooShort => "input is shorter than the smallest valid stream",
-            InvalidHeader => "invalid header",
-            InvalidMagicNumber => "invalid magic number",
-            UnsupportedCompressionMethod => "unsupported compression method",
-            PresetDictionaryNotSupported => "preset dictionary is not supported",
-            Adler32Mismatch => "Adler-32 checksum mismatch",
-            Crc32Mismatch => "CRC-32 checksum mismatch",
-            TruncatedExtraField => "truncated extra field",
-            HeaderExtendsPastEnd => "header extends past the end of the input",
-            TruncatedTrailer => "truncated trailer",
-            IsizeMismatch => "uncompressed size does not match the trailer",
-            OutputExceedsMax => "output exceeds the maximum size",
-            InvalidDeflateData => "malformed DEFLATE stream",
+            _::DataTooShort => "input is shorter than the smallest valid stream",
+            _::InvalidHeader => "invalid header",
+            _::InvalidMagicNumber => "invalid magic number",
+            _::UnsupportedCompressionMethod => "unsupported compression method",
+            _::PresetDictionaryNotSupported => "preset dictionary is not supported",
+            _::Adler32Mismatch => "Adler-32 checksum mismatch",
+            _::Crc32Mismatch => "CRC-32 checksum mismatch",
+            _::TruncatedExtraField => "truncated extra field",
+            _::HeaderExtendsPastEnd => "header extends past the end of the input",
+            _::TruncatedTrailer => "truncated trailer",
+            _::IsizeMismatch => "uncompressed size does not match the trailer",
+            _::OutputExceedsMax => "output exceeds the maximum size",
+            _::InvalidDeflateData => "malformed DEFLATE stream",
         };
         f.write_str(&message);
     }

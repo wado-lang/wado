@@ -69,7 +69,7 @@ impl Locale {
     /// letters is refused: BCP 47 reserves the length, and no language has one.
     pub fn is_well_formed<S: AsStrSlice>(tag: S) -> bool {
         let mut s = Scanner::new(tag.as_str_slice());
-        if s.take(is_language) matches { None } || !s.language_tail() {
+        if s.take(is_language) matches { null } || !s.language_tail() {
             return false;
         }
         let mut singletons: List<u8> = [];
@@ -85,7 +85,7 @@ impl Locale {
             s.advance();
             let complete = match singleton {
                 b'x' => {
-                    return s.take_all(|p| is_alnum_of(p, 1, 8)) && s.current matches { None };
+                    return s.take_all(|p| is_alnum_of(p, 1, 8)) && s.current matches { null };
                 },
                 b'u' => s.take_all(|p| is_key(p) || is_alnum_of(p, 3, 8)),
                 b't' => s.transformed_extension(),
@@ -348,9 +348,9 @@ impl Collator {
     /// How `left` sorts against `right`.
     pub fn compare(&self, left: String, right: String) -> Ordering {
         return match self.inner.compare(left, right) {
-            Less => Ordering::Less,
-            Equal => Ordering::Equal,
-            Greater => Ordering::Greater,
+            _::Less => Ordering::Less,
+            _::Equal => Ordering::Equal,
+            _::Greater => Ordering::Greater,
         };
     }
 }

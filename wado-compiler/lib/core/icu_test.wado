@@ -295,7 +295,7 @@ test "graphemes are what a reader counts as characters" {
 
 test "an empty string has no graphemes" {
     let mut none = icu::graphemes("");
-    assert none.next() matches { None };
+    assert none.next() matches { null };
     assert icu::grapheme_count("") == 0;
 }
 
@@ -303,9 +303,9 @@ test "a collator sorts as its locale does" {
     let german = icu::Collator::new(&Locale::from("de"));
     let swedish = icu::Collator::new(&Locale::from("sv"));
     // German sorts `ä` with `a`; Swedish sorts it after `z`.
-    assert german.compare("ä", "z") matches { Less };
-    assert swedish.compare("ä", "z") matches { Greater };
-    assert german.compare("a", "a") matches { Equal };
+    assert german.compare("ä", "z") matches { _::Less };
+    assert swedish.compare("ä", "z") matches { _::Greater };
+    assert german.compare("a", "a") matches { _::Equal };
 }
 
 test "a locale CLDR tailors nothing for sorts as its fallback does" {
@@ -318,6 +318,6 @@ test "a locale CLDR tailors nothing for sorts as its fallback does" {
     ];
     for let [tag, sorts_after_z] of cases {
         let collator = icu::Collator::new(&Locale::from(tag));
-        assert collator.compare("ä", "z") matches { Greater } == sorts_after_z, tag;
+        assert collator.compare("ä", "z") matches { _::Greater } == sorts_after_z, tag;
     }
 }

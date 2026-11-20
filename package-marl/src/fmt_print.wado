@@ -275,7 +275,7 @@ fn print_item<S: AsStrSlice>(item: &MdItem, marker: S, out: &mut String) {
         Some(m) => {
             out.push_str(&if m.checked { "[x] " } else { "[ ] " });
         },
-        None => {
+        null => {
         },
     }
     let mut body = String::new();
@@ -337,7 +337,7 @@ fn row_texts(row: &MdTableRow, ncol: i32) -> List<String> {
 fn align_at(align: &List<ColumnAlign>, idx: i32) -> ColumnAlign {
     return match align.get(idx) {
         Some(a) => a,
-        None => ColumnAlign::None,
+        null => ColumnAlign::None,
     };
 }
 

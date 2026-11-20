@@ -43,7 +43,7 @@ fn is_fix_title(title: &String) -> bool {
 fn is_test(path: &String) -> bool {
     let name = match path.rfind("/") {
         Some(slash) => path.substr_bytes(slash + 1, path.len()),
-        None => *path,
+        null => *path,
     };
     return path.starts_with("wado-compiler/tests/")
         || path.ends_with("_test.wado")
@@ -98,7 +98,7 @@ fn old_ranges(diff: &String) -> List<[i32, i32]> {
                 i32::from_str(s).unwrap(),
                 i32::from_str(c).unwrap(),
             ],
-            None => [i32::from_str(old).unwrap(), 1],
+            null => [i32::from_str(old).unwrap(), 1],
         };
         if count > 0 {
             ranges.push([start, start + count - 1]);

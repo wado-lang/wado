@@ -745,12 +745,12 @@ impl ZonedDateTime {
     ) -> ZonedDateTime {
         let z = self.checked();
         validate_time_or_day_rounding(smallest_unit, increment);
-        if smallest_unit matches { Nanosecond } && increment == 1 {
+        if smallest_unit matches { _::Nanosecond } && increment == 1 {
             return z;
         }
         let offset = z.offset_seconds();
         let [days, time_of_day] = z.local();
-        if smallest_unit matches { Day } {
+        if smallest_unit matches { _::Day } {
             let start = local_instant(days, 0, offset);
             let end = local_instant(days + 1, 0, offset);
             let progress = instant_difference(start, z.instant);
@@ -1085,15 +1085,15 @@ enum UnsignedRoundingMode {
 /// Temporal's `GetUnsignedRoundingMode`.
 fn unsigned_rounding_mode(mode: RoundingMode, negative: bool) -> UnsignedRoundingMode {
     return match mode {
-        Ceil => if negative { UnsignedRoundingMode::Zero } else { UnsignedRoundingMode::Infinity },
-        Floor => if negative { UnsignedRoundingMode::Infinity } else { UnsignedRoundingMode::Zero },
-        Expand => UnsignedRoundingMode::Infinity,
-        Trunc => UnsignedRoundingMode::Zero,
-        HalfCeil => if negative { UnsignedRoundingMode::HalfZero } else { UnsignedRoundingMode::HalfInfinity },
-        HalfFloor => if negative { UnsignedRoundingMode::HalfInfinity } else { UnsignedRoundingMode::HalfZero },
-        HalfExpand => UnsignedRoundingMode::HalfInfinity,
-        HalfTrunc => UnsignedRoundingMode::HalfZero,
-        HalfEven => UnsignedRoundingMode::HalfEven,
+        _::Ceil => if negative { UnsignedRoundingMode::Zero } else { UnsignedRoundingMode::Infinity },
+        _::Floor => if negative { UnsignedRoundingMode::Infinity } else { UnsignedRoundingMode::Zero },
+        _::Expand => UnsignedRoundingMode::Infinity,
+        _::Trunc => UnsignedRoundingMode::Zero,
+        _::HalfCeil => if negative { UnsignedRoundingMode::HalfZero } else { UnsignedRoundingMode::HalfInfinity },
+        _::HalfFloor => if negative { UnsignedRoundingMode::HalfInfinity } else { UnsignedRoundingMode::HalfZero },
+        _::HalfExpand => UnsignedRoundingMode::HalfInfinity,
+        _::HalfTrunc => UnsignedRoundingMode::HalfZero,
+        _::HalfEven => UnsignedRoundingMode::HalfEven,
     };
 }
 
@@ -1102,11 +1102,11 @@ fn unsigned_rounding_mode(mode: RoundingMode, negative: bool) -> UnsignedRoundin
 /// distance to the lower multiple with the distance to the upper one.
 fn rounds_away(mode: UnsignedRoundingMode, half_comparison: i32, lower_is_odd: bool) -> bool {
     return match mode {
-        Zero => false,
-        Infinity => true,
-        HalfZero => half_comparison > 0,
-        HalfInfinity => half_comparison >= 0,
-        HalfEven => half_comparison > 0 || half_comparison == 0 && lower_is_odd,
+        _::Zero => false,
+        _::Infinity => true,
+        _::HalfZero => half_comparison > 0,
+        _::HalfInfinity => half_comparison >= 0,
+        _::HalfEven => half_comparison > 0 || half_comparison == 0 && lower_is_odd,
     };
 }
 
@@ -1124,16 +1124,16 @@ fn compare_i64(a: i64, b: i64) -> i32 {
 /// `Nanosecond`. Smaller is larger.
 fn unit_rank(unit: Unit) -> i32 {
     return match unit {
-        Year => 0,
-        Month => 1,
-        Week => 2,
-        Day => 3,
-        Hour => 4,
-        Minute => 5,
-        Second => 6,
-        Millisecond => 7,
-        Microsecond => 8,
-        Nanosecond => 9,
+        _::Year => 0,
+        _::Month => 1,
+        _::Week => 2,
+        _::Day => 3,
+        _::Hour => 4,
+        _::Minute => 5,
+        _::Second => 6,
+        _::Millisecond => 7,
+        _::Microsecond => 8,
+        _::Nanosecond => 9,
     };
 }
 
@@ -1175,13 +1175,13 @@ fn is_calendar_unit(unit: Unit) -> bool {
 /// length.
 fn unit_nanoseconds(unit: Unit) -> i64 {
     return match unit {
-        Day => NANOSECONDS_PER_DAY,
-        Hour => 3_600_000_000_000,
-        Minute => 60_000_000_000,
-        Second => NANOSECONDS_PER_SECOND,
-        Millisecond => 1_000_000,
-        Microsecond => 1000,
-        Nanosecond => 1,
+        _::Day => NANOSECONDS_PER_DAY,
+        _::Hour => 3_600_000_000_000,
+        _::Minute => 60_000_000_000,
+        _::Second => NANOSECONDS_PER_SECOND,
+        _::Millisecond => 1_000_000,
+        _::Microsecond => 1000,
+        _::Nanosecond => 1,
         _ => panic(`core:temporal: a ${unit} has no fixed length without a calendar`),
     };
 }
@@ -1190,12 +1190,12 @@ fn unit_nanoseconds(unit: Unit) -> i64 {
 /// unset.
 fn maximum_rounding_increment(unit: Unit) -> i64 {
     return match unit {
-        Hour => 24,
-        Minute => 60,
-        Second => 60,
-        Millisecond => 1000,
-        Microsecond => 1000,
-        Nanosecond => 1000,
+        _::Hour => 24,
+        _::Minute => 60,
+        _::Second => 60,
+        _::Millisecond => 1000,
+        _::Microsecond => 1000,
+        _::Nanosecond => 1000,
         _ => 0,
     };
 }
@@ -1220,7 +1220,7 @@ fn require_increment_range(increment: i64) {
 /// The increment check of a `round` that takes a time unit or a day: a day
 /// takes no increment but `1`, a time unit one that divides the next unit.
 fn validate_time_or_day_rounding(unit: Unit, increment: i64) {
-    if unit matches { Day } {
+    if unit matches { _::Day } {
         validate_rounding_increment(increment, 1, true);
         return;
     }
@@ -1397,7 +1397,7 @@ fn round_time_duration(t: TimeDuration, increment: i64, unit: Unit, mode: Roundi
 /// the rounded time of day. The quantity rounded is measured within the next
 /// larger unit, so a half-even tie looks at the parity within that unit.
 fn round_time(time_of_day: i64, increment: i64, unit: Unit, mode: RoundingMode) -> [i64, i64] {
-    let parent = if unit matches { Day } {
+    let parent = if unit matches { _::Day } {
         NANOSECONDS_PER_DAY;
     } else {
         unit_nanoseconds(unit) * maximum_rounding_increment(unit);
@@ -2218,7 +2218,7 @@ fn calendar_date_until(one: &IsoDate, two: &IsoDate, largest_unit: Unit) -> Date
     }
     let sign = -order as i64;
     let mut years: i64 = 0;
-    if largest_unit matches { Year } {
+    if largest_unit matches { _::Year } {
         years = two.year - one.year;
         if surpasses(sign, one.year + years, one.month, one.day, two) {
             years -= sign;
@@ -2226,7 +2226,7 @@ fn calendar_date_until(one: &IsoDate, two: &IsoDate, largest_unit: Unit) -> Date
     }
     let start_year = one.year + years;
     let mut months: i64 = 0;
-    if largest_unit matches { Year | Month } {
+    if largest_unit matches { _::Year | _::Month } {
         months = (two.year - start_year) * 12 + two.month - one.month;
         let total = one.month - 1 + months;
         if months != 0 && surpasses(sign, start_year + total.div_floor(12), floor_mod(total, 12) + 1, one.day, two) {
@@ -2238,7 +2238,7 @@ fn calendar_date_until(one: &IsoDate, two: &IsoDate, largest_unit: Unit) -> Date
     let base_month = floor_mod(total, 12) + 1;
     let base = epoch_days_of(base_year, base_month, i64::min(one.day, iso_days_in_month(base_year, base_month)));
     let remaining = epoch_days_of(two.year, two.month, two.day) - base;
-    let weeks = if largest_unit matches { Week } { remaining / 7 } else { 0 };
+    let weeks = if largest_unit matches { _::Week } { remaining / 7 } else { 0 };
     return DateDuration { years: years, months: months, weeks: weeks, days: remaining - weeks * 7 };
 }
 
@@ -2647,7 +2647,7 @@ fn parse_date_time_prefix(
     if require_time && !p.has_time {
         return Result::Err(DeserializeError::malformed("expected a time", i as i64));
     }
-    if require_offset && !p.utc_designator && p.offset matches { None } {
+    if require_offset && !p.utc_designator && p.offset matches { null } {
         return Result::Err(DeserializeError::malformed("expected Z or a UTC offset", i as i64));
     }
     return Result::Ok(i);
@@ -2680,7 +2680,7 @@ fn parse_annotations(text: &StrSlice, start: i32, p: &mut ParsedIso) -> Result<(
                 return Result::Err(DeserializeError::malformed("malformed annotation", i as i64));
             }
             if key == "u-ca" {
-                if p.calendar matches { None } {
+                if p.calendar matches { null } {
                     p.calendar = Option::Some(value.to_string());
                     p.calendar_critical = critical;
                 } else if critical || p.calendar_critical {
@@ -2760,7 +2760,7 @@ fn parse_zoned_string(text: &StrSlice) -> Result<ParsedIso, DeserializeError> {
     let mut p = ParsedIso {};
     let i = parse_date_time_prefix(text, &mut p, true, false, false)?;
     parse_annotations(text, i, &mut p)?;
-    if p.zone matches { None } {
+    if p.zone matches { null } {
         return Result::Err(DeserializeError::malformed("expected a time zone annotation", i as i64));
     }
     return Result::Ok(p);
@@ -3572,7 +3572,7 @@ impl PlainYearMonth {
     pub fn until(&self, other: &PlainYearMonth, largest_unit: Unit = Unit::Year) -> Duration {
         let one = self.checked();
         let two = other.checked();
-        if !largest_unit matches { Year | Month } {
+        if !largest_unit matches { _::Year | _::Month } {
             panic("core:temporal: a PlainYearMonth difference is measured in years or months");
         }
         if one == two {
@@ -3583,7 +3583,7 @@ impl PlainYearMonth {
         let _ = one.first_day();
         let _ = two.first_day();
         let months = (two.year as i64 - one.year as i64) * 12 + two.month as i64 - one.month as i64;
-        if largest_unit matches { Month } {
+        if largest_unit matches { _::Month } {
             return Duration { months: months as f64 };
         }
         return Duration { years: (months / 12) as f64, months: (months % 12) as f64 };

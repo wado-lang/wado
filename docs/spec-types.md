@@ -585,7 +585,7 @@ mismatch:
 let opt: Option<i32> = Option::<i32>::Some(5);
 let x = match opt {
     Some(v) => v,
-    None => panic("unexpected none"),
+    null => panic("unexpected none"),
 };
 assert x == 5;
 
@@ -718,7 +718,7 @@ impl Percent {
 
 test {
     assert Percent::new(50) matches { Some(_) };
-    assert Percent::new(150) matches { None };
+    assert Percent::new(150) matches { null };
 }
 ```
 
@@ -1597,14 +1597,14 @@ test {
     assert c == d;
 
     let name = match c {
-        Red => "red",
-        Green => "green",
-        Blue => "blue",
+        _::Red => "red",
+        _::Green => "green",
+        _::Blue => "blue",
     };
     assert name == "red";
 
-    assert c matches { Red };
-    assert !(c matches { Green | Blue });
+    assert c matches { _::Red };
+    assert !(c matches { _::Green | _::Blue });
 }
 ```
 
@@ -1624,7 +1624,7 @@ An enum may have `impl` blocks:
 impl Color {
     fn is_warm(&self) -> bool {
         return match *self {
-            Red => true,
+            _::Red => true,
             _ => false,
         };
     }
@@ -1653,7 +1653,7 @@ fn area(s: Shape) -> f64 {
     return match s {
         Circle(r) => 3.0 * r * r,
         Rectangle([w, h]) => w * h,
-        Point => 0.0,
+        _::Point => 0.0,
     };
 }
 

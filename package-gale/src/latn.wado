@@ -225,7 +225,7 @@ fn scan_undecidable_arms_elem(
 ) -> bool {
     match *elem {
         Repeat(rep) => {
-            if !rep.non_greedy && rep.kind matches { Star | Plus } {
+            if !rep.non_greedy && rep.kind matches { _::Star | _::Plus } {
                 if let Group(inner) = &rep.element {
                     if lexer_alts_contested(inner, all_rules, casing) {
                         return true;
@@ -255,7 +255,7 @@ fn scan_undecidable_arms_elem(
             visiting.pop();
             return found;
         },
-        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => {
+        Literal(_) | CharRange(_) | CharClass(_) | _::AnyChar => {
             return false;
         },
     }
@@ -386,7 +386,7 @@ fn collect_reachable<S: AsStrSlice>(
     }
     seen.push(name.to_string());
     let rule = find_lexer_rule(all_rules, name);
-    if rule matches { None } {
+    if rule matches { null } {
         return;
     }
     incl.push(name.to_string());
@@ -448,7 +448,7 @@ fn build_element(b: &mut LatnBuilder, elem: &LexerElement) -> [i32, i32] {
         Literal(s) => build_literal(b, &s),
         CharRange(r) => ranges_segment(b, &ci_ranges(b.ci, r.0, r.1)),
         CharClass(cc) => ranges_segment(b, &class_ranges(&cc, b.ci)),
-        AnyChar => ranges_segment(b, &[
+        _::AnyChar => ranges_segment(b, &[
             [0, CODE_POINT_MAX],
         ]),
         Not(n) => {
@@ -526,7 +526,7 @@ fn rule_segment<S: AsStrSlice>(b: &mut LatnBuilder, name: S) -> [i32, i32] {
 /// greedy puts enter/loop first and non-greedy puts exit first.
 fn build_repeat(b: &mut LatnBuilder, kind: RepeatKind, non_greedy: bool, inner: &LexerElement) -> [i32, i32] {
     return match kind {
-        Optional => {
+        _::Optional => {
             let start = b.new_state(ATN_BLOCK_START);
             let end = b.new_state(ATN_BLOCK_END);
             let seg = build_element(b, inner);
@@ -540,7 +540,7 @@ fn build_repeat(b: &mut LatnBuilder, kind: RepeatKind, non_greedy: bool, inner: 
             b.add_eps(seg.1, end);
             [start, end];
         },
-        Star => {
+        _::Star => {
             let entry = b.new_state(ATN_STAR_LOOP_ENTRY);
             let end = b.new_state(ATN_LOOP_END);
             let seg = build_element(b, inner);
@@ -556,7 +556,7 @@ fn build_repeat(b: &mut LatnBuilder, kind: RepeatKind, non_greedy: bool, inner: 
             b.add_eps(back, entry);
             [entry, end];
         },
-        Plus => {
+        _::Plus => {
             let seg = build_element(b, inner);
             let back = b.new_state(ATN_PLUS_LOOP_BACK);
             let end = b.new_state(ATN_LOOP_END);
@@ -591,7 +591,7 @@ fn positive_ranges(elem: &LexerElement, ci: bool) -> List<[i32, i32]> {
             }
             out;
         },
-        AnyChar | RuleRef(_) | Repeat(_) | Not(_) => panic("the g4 parser admits only a set under `~`"),
+        _::AnyChar | RuleRef(_) | Repeat(_) | Not(_) => panic("the g4 parser admits only a set under `~`"),
     };
 }
 

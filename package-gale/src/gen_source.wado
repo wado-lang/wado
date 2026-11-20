@@ -48,7 +48,7 @@ internal fn gen_source(
     for let d of &generated.diagnostics {
         if let Some(level) = diagnostic_level(&d.kind) {
             event(level, d.message, { owner: d.owner.label() });
-            refused = refused || level matches { Error };
+            refused = refused || level matches { _::Error };
         }
     }
     if refused {
@@ -101,7 +101,7 @@ fn open_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preop
                 return Result::Ok(file);
             },
             Err(e) => {
-                if !e matches { NoEntry } {
+                if !e matches { _::NoEntry } {
                     denied = true;
                 }
             },

@@ -20,7 +20,7 @@ test "Option of a fn type" {
     let Some(g) = o else { unreachable(); };
     assert g('b') && !g('a');
     let none: Option<fn(char) -> bool> = null;
-    assert none matches { None };
+    assert none matches { null };
 }
 
 test "Result of a fn type" {
@@ -40,5 +40,5 @@ test "user generics over a fn type" {
 test "List of Option of a fn type" {
     let fs: List<Option<fn(char) -> bool>> = [Some(is_b), null];
     assert fs[0].unwrap()('b');
-    assert fs[1] matches { None };
+    assert fs[1] matches { null };
 }

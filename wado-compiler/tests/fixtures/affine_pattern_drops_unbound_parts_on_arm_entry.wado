@@ -100,7 +100,7 @@ test "an or-pattern drops what its matching alternative leaves out" {
             assert DROPS - d == 1;
             assert eat(t) == 2;
         },
-        Empty => {},
+        _::Empty => {},
     }
     assert DROPS - d == 2;
 }
@@ -150,7 +150,7 @@ test "a constant pattern drops the whole scrutinee" {
     let d = DROPS;
     let t = Tok { id: 0 };
     match t {
-        ZERO => {
+        == ZERO => {
             assert DROPS - d == 1;
         },
         _ => {},

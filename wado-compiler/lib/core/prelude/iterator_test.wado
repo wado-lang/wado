@@ -7,13 +7,13 @@ test "find returns first matching element" {
 test "find returns null when no match" {
     let arr: List<i32> = [1, 2, 3];
     let found = arr.iter_value().find(|x: i32| x > 10);
-    assert found matches { None };
+    assert found matches { null };
 }
 
 test "find on empty array" {
     let arr: List<i32> = [];
     let found = arr.iter_value().find(|x: i32| x == 1);
-    assert found matches { None };
+    assert found matches { null };
 }
 
 test "any returns true when predicate matches" {
@@ -60,7 +60,7 @@ test "last on single element" {
 
 test "last on empty array" {
     let arr: List<i32> = [];
-    assert arr.iter_value().last() matches { None };
+    assert arr.iter_value().last() matches { null };
 }
 
 test "nth returns nth element" {
@@ -77,7 +77,7 @@ test "nth 0 returns first element" {
 
 test "nth out of bounds returns null" {
     let arr: List<i32> = [10, 20, 30];
-    assert arr.iter_value().nth(10) matches { None };
+    assert arr.iter_value().nth(10) matches { null };
 }
 
 test "position returns index of first match" {
@@ -88,12 +88,12 @@ test "position returns index of first match" {
 
 test "position returns null when not found" {
     let arr: List<i32> = [10, 20, 30];
-    assert arr.iter_value().position(|x: i32| x == 99) matches { None };
+    assert arr.iter_value().position(|x: i32| x == 99) matches { null };
 }
 
 test "position on empty array" {
     let arr: List<i32> = [];
-    assert arr.iter_value().position(|x: i32| x == 1) matches { None };
+    assert arr.iter_value().position(|x: i32| x == 1) matches { null };
 }
 
 test "reduce with addition" {
@@ -110,7 +110,7 @@ test "reduce on single element" {
 
 test "reduce on empty array" {
     let arr: List<i32> = [];
-    assert arr.iter_value().reduce(|a: i32, b: i32| a + b) matches { None };
+    assert arr.iter_value().reduce(|a: i32, b: i32| a + b) matches { null };
 }
 
 test "take first n elements" {
@@ -133,8 +133,8 @@ test "take more than available returns None idempotently" {
     let mut iter = arr.iter_value().take(5);
     assert iter.next() matches { Some(v) && v == 1 };
     assert iter.next() matches { Some(v) && v == 2 };
-    assert iter.next() matches { None };
-    assert iter.next() matches { None };
+    assert iter.next() matches { null };
+    assert iter.next() matches { null };
 }
 
 test "take 0 yields empty" {
@@ -186,8 +186,8 @@ test "step_by stays exhausted" {
     let mut it = (0..<3).step_by(2);
     assert it.next() matches { Some(0) };
     assert it.next() matches { Some(2) };
-    assert it.next() matches { None };
-    assert it.next() matches { None };
+    assert it.next() matches { null };
+    assert it.next() matches { null };
 }
 
 #[expect_trap]
@@ -230,7 +230,7 @@ test "zip pairs elements" {
     let third = iter.next();
     assert third matches { Some(pair) && pair.0 == 3 && pair.1 == 30 };
 
-    assert iter.next() matches { None };
+    assert iter.next() matches { null };
 }
 
 test "zip stops at shorter" {
@@ -254,7 +254,7 @@ test "sum of single element" {
 
 test "sum of empty array" {
     let arr: List<i32> = [];
-    assert arr.iter_value().sum() matches { None };
+    assert arr.iter_value().sum() matches { null };
 }
 
 test "min of integers" {
@@ -281,12 +281,12 @@ test "max of single element" {
 
 test "min of empty array" {
     let arr: List<i32> = [];
-    assert arr.iter_value().min() matches { None };
+    assert arr.iter_value().min() matches { null };
 }
 
 test "max of empty array" {
     let arr: List<i32> = [];
-    assert arr.iter_value().max() matches { None };
+    assert arr.iter_value().max() matches { null };
 }
 
 test "sum of f64" {
@@ -308,7 +308,7 @@ test "product of integers" {
 
 test "product of empty array" {
     let arr: List<i32> = [];
-    assert arr.iter_value().product() matches { None };
+    assert arr.iter_value().product() matches { null };
 }
 
 test "sum, product, min and max over an adapter" {
@@ -336,8 +336,8 @@ test "min_by and max_by" {
 
 test "min_by and max_by of empty array" {
     let arr: List<i32> = [];
-    assert arr.iter_value().min_by(|a: &i32, b: &i32| a.cmp(b)) matches { None };
-    assert arr.iter_value().max_by(|a: &i32, b: &i32| a.cmp(b)) matches { None };
+    assert arr.iter_value().min_by(|a: &i32, b: &i32| a.cmp(b)) matches { null };
+    assert arr.iter_value().max_by(|a: &i32, b: &i32| a.cmp(b)) matches { null };
 }
 
 test "min_by_key and max_by_key" {
@@ -455,7 +455,7 @@ test "enumerate yields index-value pairs" {
     let third = iter.next();
     assert third matches { Some(pair) && pair.0 == 2 };
 
-    assert iter.next() matches { None };
+    assert iter.next() matches { null };
 }
 
 test "filter then map chain" {

@@ -238,7 +238,7 @@ test "index into recursive &mut children" {
 
 test "index a None element with a heap payload" {
     let v: List<Option<List<String>>> = [null, Option::Some(["a"])];
-    assert v[0] matches { None };
+    assert v[0] matches { null };
     let mut n = 0;
     if let Some(inner) = v[1] {
         n = inner.len();
@@ -264,7 +264,7 @@ test "by-ref iteration over None elements" {
 test "assign into a None slot then read it back" {
     let mut w: List<Option<List<String>>> = [null, null];
     w[0] = Option::Some(["z"]);
-    assert w[1] matches { None };
+    assert w[1] matches { null };
     let mut n = 0;
     if let Some(inner) = w[0] {
         n = inner.len();

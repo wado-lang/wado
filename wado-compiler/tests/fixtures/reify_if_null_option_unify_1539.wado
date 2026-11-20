@@ -39,13 +39,13 @@ fn classify_match(s: String) -> Option<Kind> {
 test "unannotated let over if/else unifies Option::Some and null (#1539)" {
     assert classify_if("---") matches { Some(Kind::Yaml) };
     assert classify_if("+++") matches { Some(Kind::Toml) };
-    assert classify_if("other") matches { None };
+    assert classify_if("other") matches { null };
 }
 
 test "unannotated let over match unifies Option::Some and null (#1539)" {
     assert classify_match("---") matches { Some(Kind::Yaml) };
     assert classify_match("+++") matches { Some(Kind::Toml) };
-    assert classify_match("other") matches { None };
+    assert classify_match("other") matches { null };
 }
 
 __DATA__

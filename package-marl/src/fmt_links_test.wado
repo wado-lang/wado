@@ -19,7 +19,7 @@ test "ref_table_insert and ref_table_get round-trip by normalized label" {
     if let Some(def) = found {
         assert def.url == "https://dprint.dev";
     }
-    assert ref_table_get(&table, "missing") matches { None };
+    assert ref_table_get(&table, "missing") matches { null };
 }
 
 test "ref_table_insert keeps the first definition for a duplicate label" {
@@ -65,12 +65,12 @@ test "parse_dest_and_title keeps an escaped quote in a title" {
 }
 
 test "parse_dest_and_title rejects what is not a destination and an optional title" {
-    assert parse_dest_and_title("https://example.com not a title") matches { None };
-    assert parse_dest_and_title("https://example.com \"unclosed") matches { None };
-    assert parse_dest_and_title("https://example.com \"title\" trailing") matches { None };
-    assert parse_dest_and_title("<https://example.com") matches { None };
-    assert parse_dest_and_title("/url \"abc\\\"") matches { None };
-    assert parse_dest_and_title("<bar>(baz)") matches { None };
-    assert parse_dest_and_title("/url (a (b)") matches { None };
-    assert parse_dest_and_title("a\\ b") matches { None };
+    assert parse_dest_and_title("https://example.com not a title") matches { null };
+    assert parse_dest_and_title("https://example.com \"unclosed") matches { null };
+    assert parse_dest_and_title("https://example.com \"title\" trailing") matches { null };
+    assert parse_dest_and_title("<https://example.com") matches { null };
+    assert parse_dest_and_title("/url \"abc\\\"") matches { null };
+    assert parse_dest_and_title("<bar>(baz)") matches { null };
+    assert parse_dest_and_title("/url (a (b)") matches { null };
+    assert parse_dest_and_title("a\\ b") matches { null };
 }

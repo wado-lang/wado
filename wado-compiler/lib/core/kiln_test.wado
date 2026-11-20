@@ -75,12 +75,12 @@ test "KilnLogSink takes info and above" {
 }
 
 test "KilnLogSink writes info to stdout, and a warning or an error to stderr" {
-    assert kiln_line(&event_at(Level::Debug, "noisy")) matches { None };
-    assert kiln_line(&event_at(Level::Info, "generating")) matches { Some([Stdout, "gen: generating"]) };
+    assert kiln_line(&event_at(Level::Debug, "noisy")) matches { null };
+    assert kiln_line(&event_at(Level::Info, "generating")) matches { Some([_::Stdout, "gen: generating"]) };
     let mut careful = event_at(Level::Warn, "careful");
     careful.fields = to_value(&{ path: "a.schema" }).unwrap();
-    assert kiln_line(&careful) matches { Some([Stderr, "gen: careful path=a.schema"]) };
-    assert kiln_line(&event_at(Level::Error, "broken")) matches { Some([Stderr, "gen: broken"]) };
+    assert kiln_line(&careful) matches { Some([_::Stderr, "gen: careful path=a.schema"]) };
+    assert kiln_line(&event_at(Level::Error, "broken")) matches { Some([_::Stderr, "gen: broken"]) };
 }
 
 /// An input stream that hands over its chunks one read at a time, the last

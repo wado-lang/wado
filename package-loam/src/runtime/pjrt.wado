@@ -114,13 +114,13 @@ fn done<affine T>(outcome: Result<T, String>) -> T {
 
 fn element_type(kind: ElementKind) -> ElementType {
     return match kind {
-        F32 => ElementType::Float32,
-        F16 => ElementType::Float16,
-        BF16 => ElementType::Bfloat16,
-        U8 => ElementType::Uint8,
-        I64 => ElementType::Int64,
-        I32 => ElementType::Int32,
-        Bool => ElementType::Pred,
+        _::F32 => ElementType::Float32,
+        _::F16 => ElementType::Float16,
+        _::BF16 => ElementType::Bfloat16,
+        _::U8 => ElementType::Uint8,
+        _::I64 => ElementType::Int64,
+        _::I32 => ElementType::Int32,
+        _::Bool => ElementType::Pred,
     };
 }
 
@@ -132,13 +132,13 @@ fn buffer_extents(extents: &List<i32>) -> List<i64> {
 /// The `E`s `bytes` holds, as `le_bytes` lays them out.
 fn elements_of<E: Element>(bytes: ByteList) -> List<E> {
     return match E::kind() {
-        F32 => List::<f32>::from_le_bytes(bytes).into_iter().map(|v| E::from_f32(v)).collect(),
-        F16 => List::<u16>::from_le_bytes(bytes).into_iter().map(|bits| f16::from_bits(bits).cast_to::<E>()).collect(),
-        BF16 => widened(bytes),
-        U8 => bytes.into_iter().map(|b| b.cast_to::<E>()).collect(),
-        I64 => List::<i64>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v)).collect(),
-        I32 => List::<i32>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v as i64)).collect(),
-        Bool => bytes.into_iter().map(|b| E::from_bool(b != 0)).collect(),
+        _::F32 => List::<f32>::from_le_bytes(bytes).into_iter().map(|v| E::from_f32(v)).collect(),
+        _::F16 => List::<u16>::from_le_bytes(bytes).into_iter().map(|bits| f16::from_bits(bits).cast_to::<E>()).collect(),
+        _::BF16 => widened(bytes),
+        _::U8 => bytes.into_iter().map(|b| b.cast_to::<E>()).collect(),
+        _::I64 => List::<i64>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v)).collect(),
+        _::I32 => List::<i32>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v as i64)).collect(),
+        _::Bool => bytes.into_iter().map(|b| E::from_bool(b != 0)).collect(),
     };
 }
 
@@ -165,13 +165,13 @@ pub fn summary(analysis: &Analysis) -> String {
 /// The buffer `slot` holds as a program returned it, of an element of `kind`.
 fn returned_at(kind: ElementKind, on: DeviceBuffer) -> Any<PjrtBackend> {
     return match kind {
-        F32 => Any::F32(Located::Device(on)),
-        F16 => Any::F16(Located::Device(on)),
-        BF16 => Any::BF16(Located::Device(on)),
-        U8 => Any::U8(Located::Device(on)),
-        I64 => Any::I64(Located::Device(on)),
-        I32 => Any::I32(Located::Device(on)),
-        Bool => Any::Bool(Located::Device(on)),
+        _::F32 => Any::F32(Located::Device(on)),
+        _::F16 => Any::F16(Located::Device(on)),
+        _::BF16 => Any::BF16(Located::Device(on)),
+        _::U8 => Any::U8(Located::Device(on)),
+        _::I64 => Any::I64(Located::Device(on)),
+        _::I32 => Any::I32(Located::Device(on)),
+        _::Bool => Any::Bool(Located::Device(on)),
     };
 }
 
@@ -275,7 +275,7 @@ impl PjrtBackend {
     /// `w`, a weight of f32s: in bf16 where that loses nothing, an f32 whose
     /// low half is zero, and as stored otherwise.
     fn kept_weight(&mut self, w: &HostWeight) -> DeviceBuffer with PjrtHost
-        contract w.kind matches { F32 }
+        contract w.kind matches { _::F32 }
     {
         let count = w.count();
         let mut halves = LinearArray::<u16>::filled(count, 0);
@@ -312,13 +312,13 @@ impl PjrtBackend {
         let buffer = done(PjrtHost::upload(element_type(w.kind), buffer_extents(&w.extents), w.bytes()));
         let d = self.device_buffer(self.stored(buffer), w.extents, false);
         return match w.kind {
-            F32 => Any::F32(Located::Device(d)),
-            F16 => Any::F16(Located::Device(d)),
-            BF16 => Any::BF16(Located::Device(d)),
-            U8 => Any::U8(Located::Device(d)),
-            I64 => Any::I64(Located::Device(d)),
-            I32 => Any::I32(Located::Device(d)),
-            Bool => Any::Bool(Located::Device(d)),
+            _::F32 => Any::F32(Located::Device(d)),
+            _::F16 => Any::F16(Located::Device(d)),
+            _::BF16 => Any::BF16(Located::Device(d)),
+            _::U8 => Any::U8(Located::Device(d)),
+            _::I64 => Any::I64(Located::Device(d)),
+            _::I32 => Any::I32(Located::Device(d)),
+            _::Bool => Any::Bool(Located::Device(d)),
         };
     }
 
@@ -479,11 +479,11 @@ impl Backend for PjrtBackend {
         let mut kept: List<Any<PjrtBackend>> = [];
         for let at of 0..<count {
             let w = load(at)?;
-            if w.kind matches { F32 } {
+            if w.kind matches { _::F32 } {
                 kept.push(Any::F32(Located::Device(self.kept_weight(&w))));
                 continue;
             }
-            if w.kind matches { F16 | BF16 } {
+            if w.kind matches { _::F16 | _::BF16 } {
                 self.halved_bytes += w.bytes().len() as i64;
             }
             kept.push(self.kept_stored(&w));
@@ -568,13 +568,13 @@ impl Backend for PjrtBackend {
 /// A pass of no parameters that returns zeros of `kind` and `extents`.
 fn zeros_pass(kind: ElementKind, extents: List<i32>) -> Recorded {
     return match kind {
-        F32 => zeros_of::<f32>(extents),
-        F16 => zeros_of::<f16>(extents),
-        BF16 => zeros_of::<bf16>(extents),
-        U8 => zeros_of::<u8>(extents),
-        I64 => zeros_of::<i64>(extents),
-        I32 => zeros_of::<i32>(extents),
-        Bool => zeros_of::<bool>(extents),
+        _::F32 => zeros_of::<f32>(extents),
+        _::F16 => zeros_of::<f16>(extents),
+        _::BF16 => zeros_of::<bf16>(extents),
+        _::U8 => zeros_of::<u8>(extents),
+        _::I64 => zeros_of::<i64>(extents),
+        _::I32 => zeros_of::<i32>(extents),
+        _::Bool => zeros_of::<bool>(extents),
     };
 }
 
@@ -589,13 +589,13 @@ fn zeros_of<E: Element>(extents: List<i32>) -> Recorded {
 /// pool its first holds, which becomes the result.
 fn slot_pass(kind: ElementKind, extents: List<i32>) -> Recorded {
     return match kind {
-        F32 => slot_of::<f32>(extents),
-        F16 => slot_of::<f16>(extents),
-        BF16 => slot_of::<bf16>(extents),
-        U8 => slot_of::<u8>(extents),
-        I64 => slot_of::<i64>(extents),
-        I32 => slot_of::<i32>(extents),
-        Bool => slot_of::<bool>(extents),
+        _::F32 => slot_of::<f32>(extents),
+        _::F16 => slot_of::<f16>(extents),
+        _::BF16 => slot_of::<bf16>(extents),
+        _::U8 => slot_of::<u8>(extents),
+        _::I64 => slot_of::<i64>(extents),
+        _::I32 => slot_of::<i32>(extents),
+        _::Bool => slot_of::<bool>(extents),
     };
 }
 
