@@ -1682,8 +1682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: name_span,
             } => {
                 let is_mut = matches!(pattern, Pattern::MutIdent { .. });
-                // A habit from the reading this replaced: such a binding would
-                // match every value.
+                // `Red =>` meant as the case would bind and match every value.
                 if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
                     let _ = self.emit(TypeError::InvalidPattern {
                         message: format!(
