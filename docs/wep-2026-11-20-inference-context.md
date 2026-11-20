@@ -117,17 +117,19 @@ argument. `unknown` remains only as error recovery.
 
 Each step keeps every fixture passing and deletes what it replaces.
 
-- [ ] The union-find variable store with origins, behind the current API.
-- [ ] `equate` and `coerce` at every site that checks a value against a slot.
-  `DeferredCheck` and the `solve_*` family are deleted. Two variables found
-  equal report once.
-- [ ] The obligation queue holds bounds, projection links and commitments, and
-  `resolve_head` runs it. The deferred impl bound paths are deleted.
+- [x] The union-find variable store with origins, behind the current API.
+- [x] `equate` at every site that checks a value against a slot. Two variables
+  found equal report once.
+- [ ] `equate` in place of the `solve_*` family.
+- [ ] The obligation queue holds bounds, projection links, commitments and the
+  checks `equate` leaves undecided, and `resolve_head` runs it.
+  `DeferredCheck` and the deferred impl bound paths are deleted.
 - [ ] Method, static, subscript and operator selection are obligations; a
   selection not yet known stays queued until `resolve_head` or the body's end.
 - [ ] A numeric literal's variable has a kind and a default. The open item of
   [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
-  closes with it.
+  closes with it, and so does `Settles::Nothing`, which until then keeps a
+  literal's default type from settling a variable.
 - [ ] A `_` the source writes in an expression's types is a variable. No
   inference path reads `unknown` for it.
 - [ ] The context is per body rather than per module.

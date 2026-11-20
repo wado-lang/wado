@@ -1,0 +1,14 @@
+// Each `Tree::Empty` leaves `Tree`'s parameter open, and the call's argument
+// check makes both the receiver's: one unknown, reported once.
+
+variant Tree<T> { Leaf(T), Empty }
+
+test {
+    assert Tree::eq(&Tree::Empty, &Tree::Empty);
+}
+
+__DATA__
+{
+    "compile_error": "cannot infer type parameter of variant `Tree`",
+    "compile_error_count": 1
+}

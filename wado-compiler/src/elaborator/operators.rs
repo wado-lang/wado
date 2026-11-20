@@ -24,7 +24,7 @@ use super::scope::ScopedBound;
 use super::synth::KeyedAccess;
 use super::trait_query::primitive_has_operator;
 use super::transposition::{Clean, Path, Reading, Step, Transposition, field_path, target_reads};
-use super::typecheck::widens;
+use super::typecheck::{Settles, widens};
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
@@ -2488,7 +2488,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 referent
             };
-            self.typecheck_into_callee(arg, expected, arg_span);
+            self.typecheck_into_callee(arg, expected, arg_span, Settles::Variables);
             wrap_flags.push(wrap);
         }
 

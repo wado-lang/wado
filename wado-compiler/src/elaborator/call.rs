@@ -37,7 +37,7 @@ use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::DerivedAt;
 use super::type_resolution::ParamSpace;
-use super::typecheck::{TypeCheckResult, check_assignable};
+use super::typecheck::{Settles, TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
@@ -186,7 +186,11 @@ pub(super) struct InheritedStatic {
 /// template's argument is the template itself, which no source spells.
 #[derive(Clone, Copy)]
 pub(super) enum ArgSite {
-    Written { span: Span, value: AstId },
+    Written {
+        span: Span,
+        value: AstId,
+        settles: Settles,
+    },
     Template(Span),
 }
 
@@ -202,6 +206,15 @@ impl ArgSite {
         Self::Written {
             span: value.span(),
             value: value.id(),
+            settles: Settles::of(value),
+        }
+    }
+
+    /// What the argument settles where it meets its parameter.
+    pub(super) fn settles(self) -> Settles {
+        match self {
+            Self::Written { settles, .. } => settles,
+            Self::Template(_) => Settles::Variables,
         }
     }
 
@@ -3348,7 +3361,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let expected = s.apply_infer_holes(default.expected);
                         let resolved = s.resolve_expr(&default.expr, ctx, Some(expected));
                         if let Some(span) = default.check_at {
-                            s.typecheck_into_callee(resolved, expected, span);
+                            let settles = Settles::of(&default.expr);
+                            s.typecheck_into_callee(resolved, expected, span, settles);
                         }
                         if let Some(name) = &default.binds {
                             bind(ctx, name, resolved);
@@ -3920,7 +3934,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     let bounds =
                         param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
-                    self.defer_slot(inferred, span, message.clone(), name.clone(), bounds)
+                    let var =
+                        self.defer_slot(inferred, span, message.clone(), name.clone(), bounds);
+                    if param.is_some_and(|p| p.is_pack) {
+                        self.mark_pack_var(var);
+                    }
+                    var
                 } else {
                     TypeTable::ERROR
                 };
@@ -4199,6 +4218,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 p.name.clone(),
                 bounds,
             );
+            if p.is_pack {
+                self.mark_pack_var(stand_in);
+            }
             new_args.push(stand_in);
         }
         *type_args = new_args;

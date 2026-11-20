@@ -1,8 +1,10 @@
-// An argument answers only the callee's own slots. A hole someone else
-// deferred has its own sink.
+// A numeric literal argument settles no variable: its `i32` is a default a
+// later coercion may replace.
 //
 // `make()` defers `T`. Answering it from `push(1)` would fix the list to
-// `List<i32>` and then push an `i64` into it.
+// `List<i32>` and then push an `i64` into it; `push(y)` answers it instead.
+// The literal is then reported, since it is not yet a variable of its own
+// that `i64` could answer.
 
 fn make<T>() -> List<T> {
     return [];
@@ -17,4 +19,4 @@ test "an argument does not answer a hole the receiver deferred" {
 }
 
 __DATA__
-{"test": {}, "compile_error": "cannot infer type parameter `T` of function `make`"}
+{"test": {}, "compile_error": ":15:13: analysis error: type mismatch: expected 'i64', found 'i32'"}

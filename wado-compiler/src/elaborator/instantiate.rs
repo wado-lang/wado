@@ -386,6 +386,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 let var = self.mint_infer_var_named(&pack.name);
+                self.mark_pack_var(var);
                 self.attach_infer_var_blame(var, span, pack.name.clone(), owner.clone());
                 let bounds = self.declared_bounds(pack, self_binding, impl_args);
                 self.attach_infer_var_bounds(var, pack.name.clone(), bounds, span);

@@ -21,13 +21,7 @@ test "an instance withholding the derivation has no method" {
     assert Pair::cmp(&p, &p) == Ordering::Equal;
 }
 
-variant Tree<T> { Leaf(T), Empty }
-
-test "a receiver settling no parameter asks for a turbofish" {
-    assert Tree::eq(&Tree::Empty, &Tree::Empty);
-}
-
 __DATA__
 {
-    "compile_error": ":12:28: analysis error: type mismatch: expected 'Pair<i32>', found 'Pair<i64>'; 16:21: type mismatch: expected 'Pair', found 'i32'; 21:12: unknown function 'Pair::cmp'; 27:22: cannot infer type parameter of variant `Tree`; add a turbofish (`Tree::<...>::…`) or a type annotation; 27:36: cannot infer type parameter of variant `Tree`; add a turbofish (`Tree::<...>::…`) or a type annotation"
+    "compile_error": ":12:28: analysis error: type mismatch: expected 'Pair<i32>', found 'Pair<i64>'; 16:21: type mismatch: expected 'Pair', found 'i32'; 21:12: unknown function 'Pair::cmp'"
 }

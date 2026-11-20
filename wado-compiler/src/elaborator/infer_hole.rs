@@ -27,7 +27,7 @@ use crate::elaborator::sem::types::{
     LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch, SequenceCoercionFacts,
     StaticMethodDispatch,
 };
-use crate::elaborator::typecheck::TypeMismatchPayload;
+use crate::elaborator::typecheck::{TypeMismatchPayload, meetings};
 use crate::elaborator::types::VariantInfo;
 use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name, written_param_name};
 use crate::tir;
@@ -35,8 +35,7 @@ use crate::tir;
 /// Per-module registry of inference holes and their (eventual) solutions.
 #[derive(Default)]
 pub(crate) struct InferHoleTable {
-    /// Hole `TypeId` → solution (`None` until solved).
-    solutions: IndexMap<TypeId, Option<TypeId>>,
+    vars: VarStore,
     /// Hole `TypeId` → what it says if it is never solved.
     diags: IndexMap<TypeId, Blame>,
     /// Hole `TypeId` → originating parameter's `(name, bounds, span)`,
@@ -165,7 +164,103 @@ impl Blame {
 
 impl InferHoleTable {
     pub(super) fn is_empty(&self) -> bool {
-        self.solutions.is_empty() && self.commitments.borrow().is_empty()
+        self.vars.is_empty() && self.commitments.borrow().is_empty()
+    }
+}
+
+/// The module's inference variables, as a union-find: a variable answered by
+/// another follows it, and only a root holds a binding.
+#[derive(Default)]
+struct VarStore {
+    /// Each variable's type, in mint order.
+    holes: Vec<TypeId>,
+    index: IndexMap<TypeId, usize>,
+    parent: Vec<usize>,
+    /// A root's answer, `None` while it has none.
+    binding: Vec<Option<TypeId>>,
+    /// The variables standing for a pack: a list of types, spliced where a
+    /// tuple holds it, so never one element's type.
+    packs: IndexSet<TypeId>,
+}
+
+impl VarStore {
+    fn is_empty(&self) -> bool {
+        self.holes.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.holes.len()
+    }
+
+    fn mint(&mut self, hole: TypeId) {
+        let i = self.holes.len();
+        assert!(
+            self.index.insert(hole, i).is_none(),
+            "inference variable {hole:?} minted twice"
+        );
+        self.holes.push(hole);
+        self.parent.push(i);
+        self.binding.push(None);
+    }
+
+    fn contains(&self, hole: TypeId) -> bool {
+        self.index.contains_key(&hole)
+    }
+
+    fn root(&self, mut i: usize) -> usize {
+        while self.parent[i] != i {
+            i = self.parent[i];
+        }
+        i
+    }
+
+    /// Whether `t` is a variable whose class a pack variable joined.
+    fn is_pack(&self, t: TypeId) -> bool {
+        let Some(class) = self.root_of(t) else {
+            return false;
+        };
+        self.packs.iter().any(|&p| self.root_of(p) == Some(class))
+    }
+
+    /// The variable standing for `hole`'s class, `None` for a variable this
+    /// module did not mint.
+    fn root_of(&self, hole: TypeId) -> Option<TypeId> {
+        let &i = self.index.get(&hole)?;
+        Some(self.holes[self.root(i)])
+    }
+
+    /// Whether `hole`'s class is not bound to a type. A variable this module
+    /// did not mint has no class to bind.
+    fn is_unanswered(&self, hole: TypeId) -> bool {
+        self.index
+            .get(&hole)
+            .is_some_and(|&i| self.binding[self.root(i)].is_none())
+    }
+
+    /// What `hole` answers to one step on: the variable standing for its
+    /// class, or the class's binding.
+    fn answer(&self, hole: TypeId) -> Option<TypeId> {
+        let &i = self.index.get(&hole)?;
+        if self.parent[i] != i {
+            return Some(self.holes[self.root(i)]);
+        }
+        self.binding[i]
+    }
+
+    /// Answer `hole`'s unbound class with `answer`: it joins `answer`'s class
+    /// where that is another of the module's variables, and is bound to it
+    /// otherwise.
+    fn answer_with(&mut self, hole: TypeId, answer: TypeId) {
+        assert!(self.is_unanswered(hole), "a class is bound once");
+        let i = self.root(self.index[&hole]);
+        match self.index.get(&answer) {
+            Some(&j) => {
+                let root = self.root(j);
+                assert_ne!(root, i, "the occurs check keeps a variable off itself");
+                self.parent[i] = root;
+            }
+            None => self.binding[i] = Some(answer),
+        }
     }
 }
 
@@ -188,6 +283,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(hole, (param_name, bounds, span));
         }
         hole
+    }
+
+    /// Mark `var` as standing for a pack: it is answered by a tuple, never by
+    /// the type of one element of the tuple holding it.
+    pub(super) fn mark_pack_var(&mut self, var: TypeId) {
+        assert!(
+            self.infer_holes.vars.contains(var),
+            "a pack variable is minted here"
+        );
+        self.infer_holes.vars.packs.insert(var);
     }
 
     /// [`Self::mint_infer_hole`] for a call's type argument `slot`. A variable
@@ -268,17 +373,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn mint_infer_var_for(&mut self, slot_name: Option<&str>) -> TypeId {
-        let var = InferVarId(self.infer_holes.solutions.len() as u32);
+        let var = InferVarId(self.infer_holes.vars.len() as u32);
         let hole = {
             let mut tt = self.tysys.type_table.borrow_mut();
             let hole = tt.make_infer_var(var);
             tt.set_infer_var_name(var, slot_name.map(str::to_string));
             hole
         };
-        assert!(
-            self.infer_holes.solutions.insert(hole, None).is_none(),
-            "inference variable {var} minted twice"
-        );
+        self.infer_holes.vars.mint(hole);
         hole
     }
 
@@ -355,7 +457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assert!(
             holes
                 .iter()
-                .all(|hole| self.infer_holes.solutions.contains_key(hole)),
+                .all(|&hole| self.infer_holes.vars.contains(hole)),
             "a struct literal's open slot is a hole finalize settles"
         );
         self.infer_holes.unwalked_defaults.push(UnwalkedDefaults {
@@ -372,7 +474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         !vars.is_empty()
             && vars.iter().all(|var| {
                 self.infer_holes.diags.contains_key(var)
-                    && self.infer_holes.solutions.get(var) == Some(&None)
+                    && self.infer_holes.vars.is_unanswered(*var)
             })
     }
 
@@ -525,29 +627,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Record `answer` for `var` unless it has one, which every other answer
     /// goes through: a target its owner's projection answers is answered
     /// with it here, before anything reads the target.
-    fn answer_infer_var(&mut self, var: TypeId, answer: TypeId) {
-        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
-            *slot = Some(answer);
-            self.settle_projection_links();
+    ///
+    /// Refused where `answer` names `var`'s own class: one of its variables is
+    /// already `var`, and a type holding one is no type at all.
+    fn answer_infer_var(&mut self, var: TypeId, answer: TypeId) -> bool {
+        if !self.infer_holes.vars.is_unanswered(var) {
+            return false;
+        }
+        let answer = self.apply_infer_holes(answer);
+        let class = self.infer_holes.vars.root_of(var);
+        let occurs = self
+            .tysys
+            .type_table
+            .borrow()
+            .infer_vars_in(answer)
+            .into_iter()
+            .any(|v| self.infer_holes.vars.root_of(v) == class);
+        if occurs {
+            return false;
+        }
+        self.infer_holes.vars.answer_with(var, answer);
+        self.settle_projection_links();
+        true
+    }
+
+    /// Make a value's type `actual` one with its slot's `expected` wherever a
+    /// variable on either side is what leaves the check undecided: the
+    /// variable is bound to the other side, or joins it where that is a
+    /// variable too. A side naming a callee's own parameter binds nothing,
+    /// since the callee's solve answers it.
+    pub(super) fn equate(&mut self, actual: TypeId, expected: TypeId) {
+        if !self.type_has_infer_hole(actual) && !self.type_has_infer_hole(expected) {
+            return;
+        }
+        let scope = self.scope_type_param_ids();
+        loop {
+            let mut pairs = Vec::new();
+            meetings(
+                self.apply_infer_holes(actual),
+                self.apply_infer_holes(expected),
+                &self.tysys.type_table.borrow(),
+                &|t| self.infer_holes.vars.is_pack(t),
+                &mut pairs,
+            );
+            if !pairs
+                .into_iter()
+                .any(|(a, e)| self.settle_meeting(a, e, &scope))
+            {
+                return;
+            }
+        }
+    }
+
+    /// Bind or join the unanswered variable of `a` and `e`; whether it did.
+    fn settle_meeting(&mut self, a: TypeId, e: TypeId, scope: &ScopeParams) -> bool {
+        let vars = &self.infer_holes.vars;
+        let (var, other) = if vars.is_unanswered(a) {
+            (a, e)
+        } else if vars.is_unanswered(e) {
+            (e, a)
+        } else {
+            return false;
+        };
+        let tt = self.tysys.type_table.borrow();
+        if names_foreign_param(&tt, other, scope) {
+            return false;
+        }
+        // The variable an enclosing call's literals answer stays the one
+        // they read.
+        let joins_waiting = tt.is_infer_var(other) && self.annotate_ctx.literals_wait_at(var);
+        drop(tt);
+        if joins_waiting {
+            self.answer_infer_var(other, var)
+        } else {
+            self.answer_infer_var(var, other)
         }
     }
 
     /// Record `answer` as the solution of the unsolved `var` even where it
     /// still names other variables, which then answer for `var` once solved.
-    /// Refused where `answer` reaches `var` itself, which no type satisfies.
     pub(super) fn chain_infer_var(&mut self, var: TypeId, answer: TypeId) {
-        let answer = self.apply_infer_holes(answer);
-        if says_nothing(answer)
-            || self
-                .tysys
-                .type_table
-                .borrow()
-                .infer_vars_in(answer)
-                .contains(&var)
-        {
-            return;
+        if !says_nothing(self.apply_infer_holes(answer)) {
+            self.answer_infer_var(var, answer);
         }
-        self.answer_infer_var(var, answer);
     }
 
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
@@ -644,7 +806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if subst.contains_key(&var) {
                 continue;
             }
-            let Some(&Some(answer)) = self.infer_holes.solutions.get(&hole) else {
+            let Some(answer) = self.infer_holes.vars.answer(hole) else {
                 continue;
             };
             // The occurs check keeps chains acyclic, so this recursion ends.
@@ -661,7 +823,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The final `variable → replacement` map over every variable, an
     /// unsolved one standing for `error` so nothing leaks past finalize.
     fn pinned_hole_subst(&self) -> IndexMap<InferVarId, TypeId> {
-        let holes: Vec<TypeId> = self.infer_holes.solutions.keys().copied().collect();
+        let holes: Vec<TypeId> = self.infer_holes.vars.holes.clone();
         let mut subst = IndexMap::default();
         for &hole in &holes {
             self.reached_answers(hole, &mut subst);
@@ -707,13 +869,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Take the blames of `classes`, each by the earliest variable joined
+    /// into it that carries one, so a class reports once.
+    fn class_blames(&mut self, classes: &IndexSet<TypeId>) -> Vec<Blame> {
+        let picked: Vec<(TypeId, TypeId)> = self
+            .infer_holes
+            .diags
+            .keys()
+            .map(|&hole| {
+                let root = self.infer_holes.vars.root_of(hole);
+                (hole, root.expect("a blamed variable is minted here"))
+            })
+            .filter(|(_, root)| classes.contains(root))
+            .collect();
+        let mut reported: IndexSet<TypeId> = IndexSet::default();
+        let mut blames = Vec::new();
+        for (hole, root) in picked {
+            let blame = self.infer_holes.diags.shift_remove(&hole).unwrap();
+            if reported.insert(root) {
+                blames.push(blame);
+            }
+        }
+        blames
+    }
+
     /// Report `vars` as never answered now, then pin each to the error type so
     /// nothing later settles them.
     pub(super) fn close_uninferred(&mut self, vars: &[TypeId]) {
-        let blames = vars
+        let classes: IndexSet<TypeId> = vars
             .iter()
-            .filter_map(|var| self.infer_holes.diags.shift_remove(var))
+            .filter_map(|&var| self.infer_holes.vars.root_of(var))
             .collect();
+        let blames = self.class_blames(&classes);
         self.report_uninferred(blames);
         for &var in vars {
             self.close_infer_var(var);
@@ -727,27 +914,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.infer_holes.is_empty() {
             return;
         }
-        let diags = std::mem::take(&mut self.infer_holes.diags);
         let mismatches = self.infer_holes.mismatches.take();
-        let unsolved: Vec<Blame> = diags
-            .into_iter()
-            .filter(|(hole, blame)| {
-                self.infer_holes
-                    .solutions
-                    .get(hole)
-                    .is_some_and(Option::is_none)
-                    && !mismatches.iter().any(|outer| covers(outer, &blame.span))
-            })
-            .map(|(_, blame)| blame)
+        let covered: IndexSet<TypeId> = self
+            .infer_holes
+            .diags
+            .iter()
+            .filter(|(_, blame)| mismatches.iter().any(|outer| covers(outer, &blame.span)))
+            .filter_map(|(&hole, _)| self.infer_holes.vars.root_of(hole))
             .collect();
-        self.report_uninferred(unsolved);
+        let unsolved: IndexSet<TypeId> = self
+            .infer_holes
+            .diags
+            .keys()
+            .filter(|&&hole| self.infer_holes.vars.is_unanswered(hole))
+            .filter_map(|&hole| self.infer_holes.vars.root_of(hole))
+            .filter(|root| !covered.contains(root))
+            .collect();
+        let blames = self.class_blames(&unsolved);
+        self.report_uninferred(blames);
         for unwalked in std::mem::take(&mut self.infer_holes.unwalked_defaults) {
-            let solved = unwalked.holes.iter().all(|hole| {
-                self.infer_holes
-                    .solutions
-                    .get(hole)
-                    .is_some_and(Option::is_some)
-            });
+            let solved = unwalked
+                .holes
+                .iter()
+                .all(|&hole| !self.infer_holes.vars.is_unanswered(hole));
             if solved {
                 let _ = self.emit(TypeError::CannotInferType {
                     message: unwalked.message,
@@ -1111,9 +1300,19 @@ impl TypeSystem {
     }
 }
 
+/// Whether `t` names a type parameter `scope` does not own.
+fn names_foreign_param(tt: &TypeTable, t: TypeId, scope: &ScopeParams) -> bool {
+    match tt.get(t) {
+        ResolvedType::TypeParam { id, .. } | ResolvedType::TypePack { id, .. } => {
+            !scope.ids().contains(id)
+        }
+        _ => tt.any_constituent(t, &mut |c| names_foreign_param(tt, c, scope)),
+    }
+}
+
 /// Whether `answer` is `never` / `unknown` / `error`, which every check
 /// accepts anywhere, so it answers no variable.
-fn says_nothing(answer: TypeId) -> bool {
+pub(super) fn says_nothing(answer: TypeId) -> bool {
     matches!(
         answer,
         TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR

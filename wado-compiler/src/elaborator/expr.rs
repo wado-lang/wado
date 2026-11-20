@@ -643,6 +643,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_none_or(|home| *home == self.home_module(ast_id)),
             "a node written in another module reached a travelled walk"
         );
+        let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
         let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
         self.record_expression_type(ast_id, type_id);
         type_id

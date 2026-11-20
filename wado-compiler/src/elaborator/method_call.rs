@@ -38,6 +38,7 @@ use super::solver_bridge::Reach;
 use super::static_call::{ReceiverId, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::trait_query::{NewtypePeel, OnBoundTrait, SelfBinding};
+use super::typecheck::Settles;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TraitLookup, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator, util};
@@ -1159,10 +1160,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = substituted_param_types.get(i) {
+                let value = args_ast.get(i);
                 self.typecheck_into_callee(
                     *arg,
                     expected,
-                    args_ast.get(i).map_or(span, Expr::span),
+                    value.map_or(span, Expr::span),
+                    value.map_or(Settles::Variables, Settles::of),
                 );
                 if let Some(value) = args_ast.get(i) {
                     self.record_widening(value.id(), *arg, expected);
