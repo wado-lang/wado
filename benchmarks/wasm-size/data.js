@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795172384825,
+  "lastUpdate": 1795176728567,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80137,6 +80137,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4477722bf2dfbe1f0d6b4a2441542f3fe87a1725"
         },
         "date": 1795172383716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c9447dd21fd1f495f8d9ff1b3f8a1b776b367e25",
+          "message": "Merge pull request #2699 from wado-lang/ci/packages-faster\n\nperf(compiler): check and lower a loop nest in linear time",
+          "timestamp": "2026-11-20T20:53:42+09:00",
+          "tree_id": "c7a89e86f92cb1050cebf9111edf0249fae36268",
+          "url": "https://github.com/wado-lang/wado/commit/c9447dd21fd1f495f8d9ff1b3f8a1b776b367e25"
+        },
+        "date": 1795176727769,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
