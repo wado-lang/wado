@@ -129,60 +129,26 @@ fn "serde_serialize_struct.wado/$cm_export__run"() {
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_13 = "serde_serialize_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
-<<<<<<< HEAD
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_23(message_2.used) + 1)), 0, message_2.repr, 0, self_23);
     builtin::array_set_u8(new_repr, self_23, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        self_23 = self_23 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14, new_repr, 0, self_23);
-    });
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
-||||||| b4a0bd57c41
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_2.repr, message_2.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
-=======
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_2.repr, message_2.used);
-    if ref.is_null(ref.null eq) == 0 {
-    } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
-    }
->>>>>>> origin/main
-    "wasi/task-return"(0);
-}
-
-<<<<<<< HEAD
-||||||| b4a0bd57c41
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
-=======
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
+        self_23 = self_23 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14, new_repr, 0, self_23);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"(tx);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
     }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
+    }
+    "wasi/task-return"(0);
 }
 
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;
@@ -394,16 +360,16 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/User^serde_serialize
         };
         new_used_21 = 2;
         t_1022 = 30_i64;
-        b30: block {
-            l31: loop {
-                break_if b30 new_used_21 < 2;
+        b34: block {
+            l35: loop {
+                break_if b34 new_used_21 < 2;
                 q = t_1022 /u 100_i64;
                 start_450 = local.tee start_22(builtin::i32_wrap_i64(t_1022 - (q * 100_i64))) / 10;
                 builtin::array_set_u8($sroa_out_repr_1050, new_used_21 - 1, (48 + start_22) - (start_450 * 10));
                 builtin::array_set_u8($sroa_out_repr_1050, new_used_21 - 2, 48 + start_450);
                 new_used_21 = new_used_21 - 2;
                 t_1022 = q;
-                continue l31;
+                continue l35;
             };
         };
         if new_used_21 > 0 {

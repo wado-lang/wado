@@ -347,30 +347,12 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
     $load_0 = self.repr;
     $sroa_out_repr_11 = array.new_fixed<i64>();
     $sroa_out_used_12 = 0;
-<<<<<<< HEAD
     $hfs_pos_36 = self.pos;
-    b43: block {
-        l44: loop {
-            if $hfs_pos_36 >= 4 {
-                self.pos = $hfs_pos_36;
-                break b43;
-||||||| b4a0bd57c41
-    $licm_repr_14 = self.repr;
-    $hfs_pos_15 = self.pos;
-    b43: block {
-        l44: loop {
-            if $hfs_pos_15 >= 4 {
-                self.pos = $hfs_pos_15;
-                break b43;
-=======
-    $licm_repr_14 = self.repr;
-    $hfs_pos_15 = self.pos;
     b47: block {
         l48: loop {
-            if $hfs_pos_15 >= 4 {
-                self.pos = $hfs_pos_15;
+            if $hfs_pos_36 >= 4 {
+                self.pos = $hfs_pos_36;
                 break b47;
->>>>>>> origin/main
             }
             value_21 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_0, $hfs_pos_36));
             if @unlikely($sroa_out_used_12 >= builtin::array_len($sroa_out_repr_11)) {
@@ -380,127 +362,37 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
             }
             builtin::array_set<i64>($sroa_out_repr_11, $sroa_out_used_12, value_21);
             $sroa_out_used_12 = $sroa_out_used_12 + 1;
-<<<<<<< HEAD
             $hfs_pos_36 = $hfs_pos_36 + 1;
-            continue l44;
-||||||| b4a0bd57c41
-            $hfs_pos_15 = $hfs_pos_15 + 1;
-            continue l44;
-=======
-            $hfs_pos_15 = $hfs_pos_15 + 1;
             continue l48;
->>>>>>> origin/main
         };
     };
-<<<<<<< HEAD
     value_21 = 0_i64;
     $hfs_pos_36 = 0;
-    b47: block {
-        l48: loop {
-            break_if b47 (builtin::i64_extend_i32_s($hfs_pos_36) + 3_i64) >= builtin::i64_extend_i32_s($sroa_out_used_12);
-            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
-            $hfs_pos_36 = $hfs_pos_36 + 1;
-            value_21 = value_21 + item;
-            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
-            $hfs_pos_36 = $hfs_pos_36 + 1;
-            value_21 = value_21 + item;
-            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
-            $hfs_pos_36 = $hfs_pos_36 + 1;
-            value_21 = value_21 + item;
-            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
-            $hfs_pos_36 = $hfs_pos_36 + 1;
-            value_21 = value_21 + item;
-            continue l48;
-||||||| b4a0bd57c41
-    return $sroa_out_repr_11, $sroa_out_used_12;
-}
-
-fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::scan"(self) {
-    let raw: ref Array<u8>;
-    let sum: i64;
-    let item: i64;
-    let $sroa_$iter_0_index_17: i32;
-    raw = self.repr;
-    let $mv$digits$repr: ref Array<i64>;
-    let $mv$digits$used: i32;
-    multivalue_bind [$mv$digits$repr, $mv$digits$used] = "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::take_digits"(self);
-    sum = 0_i64;
-    $sroa_$iter_0_index_17 = 0;
-    b47: block {
-        l48: loop {
-            break_if b47 (builtin::i64_extend_i32_s($sroa_$iter_0_index_17) + 3_i64) >= builtin::i64_extend_i32_s($mv$digits$used);
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            continue l48;
-=======
-    return $sroa_out_repr_11, $sroa_out_used_12;
-}
-
-fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::scan"(self) {
-    let raw: ref Array<u8>;
-    let sum: i64;
-    let item: i64;
-    let $sroa_$iter_0_index_17: i32;
-    raw = self.repr;
-    let $mv$digits$repr: ref Array<i64>;
-    let $mv$digits$used: i32;
-    multivalue_bind [$mv$digits$repr, $mv$digits$used] = "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::take_digits"(self);
-    sum = 0_i64;
-    $sroa_$iter_0_index_17 = 0;
     b51: block {
         l52: loop {
-            break_if b51 (builtin::i64_extend_i32_s($sroa_$iter_0_index_17) + 3_i64) >= builtin::i64_extend_i32_s($mv$digits$used);
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            continue l52;
->>>>>>> origin/main
-        };
-    };
-<<<<<<< HEAD
-    b49: block {
-        l50: loop {
-            break_if b49 $hfs_pos_36 >= $sroa_out_used_12;
+            break_if b51 (builtin::i64_extend_i32_s($hfs_pos_36) + 3_i64) >= builtin::i64_extend_i32_s($sroa_out_used_12);
             item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
             $hfs_pos_36 = $hfs_pos_36 + 1;
             value_21 = value_21 + item;
-            continue l50;
-||||||| b4a0bd57c41
-    b49: block {
-        l50: loop {
-            break_if b49 $sroa_$iter_0_index_17 >= $mv$digits$used;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
-            continue l50;
-=======
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
+            continue l52;
+        };
+    };
     b53: block {
         l54: loop {
-            break_if b53 $sroa_$iter_0_index_17 >= $mv$digits$used;
-            item = builtin::array_get_value<i64>($mv$digits$repr, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            sum = sum + item;
+            break_if b53 $hfs_pos_36 >= $sroa_out_used_12;
+            item = builtin::array_get_value<i64>($sroa_out_repr_11, $hfs_pos_36);
+            $hfs_pos_36 = $hfs_pos_36 + 1;
+            value_21 = value_21 + item;
             continue l54;
->>>>>>> origin/main
         };
     };
     return value_21 + builtin::i64_extend_i32_u(builtin::array_get_value_u8($load_0, 0));

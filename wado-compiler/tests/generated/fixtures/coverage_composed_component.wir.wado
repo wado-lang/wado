@@ -302,46 +302,6 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     unreachable;
 }
 
-<<<<<<< HEAD
-||||||| b4a0bd57c41
-fn "core:rt/coverage_report"() {
-    let len: i32;
-    let id: i32;
-    let runs: i64;
-    len = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
-    id = 0;
-    b16: block {
-        l17: loop {
-            break_if b16 id >= len;
-            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
-                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
-            }
-            id = id + 1;
-            continue l17;
-        };
-    };
-}
-
-=======
-fn "core:rt/coverage_report"() {
-    let len: i32;
-    let id: i32;
-    let runs: i64;
-    len = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
-    id = 0;
-    b20: block {
-        l21: loop {
-            break_if b20 id >= len;
-            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
-                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
-            }
-            id = id + 1;
-            continue l21;
-        };
-    };
-}
-
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;

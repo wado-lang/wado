@@ -1251,234 +1251,28 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"($mv$self$
     return $mv$self$repr, $mv$self$end, $mv$self$start;
 }
 
-<<<<<<< HEAD
-||||||| b4a0bd57c41
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"($mv$self$repr, $mv$self$start, $mv$self$end) {
-    let b0: u32;
-    let b2_14: u32;
-    let b3: u32;
-    let $sroa_slot_37: i32;
-    b154: block {
-        l155: loop {
-            break_if b154 $mv$self$start >= $mv$self$end;
-            $inline_decode_char_at_0: block {
-                if local.tee b0(builtin::array_get_value<u8>($mv$self$repr, $mv$self$start)) <u 128 {
-                    $sroa_slot_37 = 1;
-                    break $inline_decode_char_at_0;
-                }
-                if b0 <u 224 {
-                    $sroa_slot_37 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 1);
-                    b0 = ((b0 & 31) << 6) | ($sroa_slot_37 & 63);
-                    $sroa_slot_37 = 2;
-                    break $inline_decode_char_at_0;
-                }
-                if b0 <u 240 {
-                    $sroa_slot_37 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 1);
-                    b2_14 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 2);
-                    b0 = (((b0 & 15) << 12) | (($sroa_slot_37 & 63) << 6)) | (b2_14 & 63);
-                    $sroa_slot_37 = 3;
-                    break $inline_decode_char_at_0;
-                }
-                $sroa_slot_37 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 1);
-                b2_14 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 2);
-                b3 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 3);
-                b0 = ((((b0 & 7) << 18) | (($sroa_slot_37 & 63) << 12)) | ((b2_14 & 63) << 6)) | (b3 & 63);
-                $sroa_slot_37 = 4;
-                break $inline_decode_char_at_0;
-            };
-            break_if b154 $inline_char__is_whitespace_sroa_self_value__1: block -> bool {
-                if (local.tee b2_14(b0 - 9) <u 24) & (((8388639_i64 >>u builtin::i64_extend_i32_u(b2_14)) & 1_i64) != 0_i64) {
-                    break $inline_char__is_whitespace_sroa_self_value__1: 1;
-                }
-                if b0 == 133 -> bool {
-                    1;
-                } else if b0 == 160 -> bool {
-                    1;
-                } else if b0 == 5760 -> bool {
-                    1;
-                } else if b0 == 8192 -> bool {
-                    1;
-                } else if b0 == 8193 -> bool {
-                    1;
-                } else if b0 == 8194 -> bool {
-                    1;
-                } else if b0 == 8195 -> bool {
-                    1;
-                } else if b0 == 8196 -> bool {
-                    1;
-                } else if b0 == 8197 -> bool {
-                    1;
-                } else if b0 == 8198 -> bool {
-                    1;
-                } else if b0 == 8199 -> bool {
-                    1;
-                } else if b0 == 8200 -> bool {
-                    1;
-                } else if b0 == 8201 -> bool {
-                    1;
-                } else if b0 == 8202 -> bool {
-                    1;
-                } else if b0 == 8232 -> bool {
-                    1;
-                } else if b0 == 8233 -> bool {
-                    1;
-                } else if b0 == 8239 -> bool {
-                    1;
-                } else if b0 == 8287 -> bool {
-                    1;
-                } else {
-                    b0 == 12288;
-                }
-                break $inline_char__is_whitespace_sroa_self_value__1;
-            } == 0;
-            $mv$self$start = $mv$self$start + $sroa_slot_37;
-            continue l155;
-        };
-    };
-    return $mv$self$repr, $mv$self$start, $mv$self$end;
-}
-
-=======
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"($mv$self$repr, $mv$self$start, $mv$self$end) {
-    let b0: u32;
-    let b2_14: u32;
-    let b3: u32;
-    let $sroa_slot_37: i32;
-    b158: block {
-        l159: loop {
-            break_if b158 $mv$self$start >= $mv$self$end;
-            $inline_decode_char_at_0: block {
-                if local.tee b0(builtin::array_get_value<u8>($mv$self$repr, $mv$self$start)) <u 128 {
-                    $sroa_slot_37 = 1;
-                    break $inline_decode_char_at_0;
-                }
-                if b0 <u 224 {
-                    $sroa_slot_37 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 1);
-                    b0 = ((b0 & 31) << 6) | ($sroa_slot_37 & 63);
-                    $sroa_slot_37 = 2;
-                    break $inline_decode_char_at_0;
-                }
-                if b0 <u 240 {
-                    $sroa_slot_37 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 1);
-                    b2_14 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 2);
-                    b0 = (((b0 & 15) << 12) | (($sroa_slot_37 & 63) << 6)) | (b2_14 & 63);
-                    $sroa_slot_37 = 3;
-                    break $inline_decode_char_at_0;
-                }
-                $sroa_slot_37 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 1);
-                b2_14 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 2);
-                b3 = builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + 3);
-                b0 = ((((b0 & 7) << 18) | (($sroa_slot_37 & 63) << 12)) | ((b2_14 & 63) << 6)) | (b3 & 63);
-                $sroa_slot_37 = 4;
-                break $inline_decode_char_at_0;
-            };
-            break_if b158 $inline_char__is_whitespace_sroa_self_value__1: block -> bool {
-                if (local.tee b2_14(b0 - 9) <u 24) & (((8388639_i64 >>u builtin::i64_extend_i32_u(b2_14)) & 1_i64) != 0_i64) {
-                    break $inline_char__is_whitespace_sroa_self_value__1: 1;
-                }
-                if b0 == 133 -> bool {
-                    1;
-                } else if b0 == 160 -> bool {
-                    1;
-                } else if b0 == 5760 -> bool {
-                    1;
-                } else if b0 == 8192 -> bool {
-                    1;
-                } else if b0 == 8193 -> bool {
-                    1;
-                } else if b0 == 8194 -> bool {
-                    1;
-                } else if b0 == 8195 -> bool {
-                    1;
-                } else if b0 == 8196 -> bool {
-                    1;
-                } else if b0 == 8197 -> bool {
-                    1;
-                } else if b0 == 8198 -> bool {
-                    1;
-                } else if b0 == 8199 -> bool {
-                    1;
-                } else if b0 == 8200 -> bool {
-                    1;
-                } else if b0 == 8201 -> bool {
-                    1;
-                } else if b0 == 8202 -> bool {
-                    1;
-                } else if b0 == 8232 -> bool {
-                    1;
-                } else if b0 == 8233 -> bool {
-                    1;
-                } else if b0 == 8239 -> bool {
-                    1;
-                } else if b0 == 8287 -> bool {
-                    1;
-                } else {
-                    b0 == 12288;
-                }
-                break $inline_char__is_whitespace_sroa_self_value__1;
-            } == 0;
-            $mv$self$start = $mv$self$start + $sroa_slot_37;
-            continue l159;
-        };
-    };
-    return $mv$self$repr, $mv$self$start, $mv$self$end;
-}
-
->>>>>>> origin/main
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$self$repr, $mv$self$start, $mv$self$end) {
     let p: i32;
     let b0: u32;
     let b1_20: u32;
     let b2_22: u32;
     let b3: u32;
-<<<<<<< HEAD
-    b154: block {
-        l155: loop {
-            break_if b154 $mv$self$end <= $mv$self$start;
-||||||| b4a0bd57c41
-    b178: block {
-        l179: loop {
-            break_if b178 $mv$self$end <= $mv$self$start;
-=======
-    b182: block {
-        l183: loop {
-            break_if b182 $mv$self$end <= $mv$self$start;
->>>>>>> origin/main
+    b158: block {
+        l159: loop {
+            break_if b158 $mv$self$end <= $mv$self$start;
             p = $mv$self$end - 1;
-<<<<<<< HEAD
-            b156: block {
-                l157: loop {
-                    break_if b156 (if p > 0 -> i32 {
-||||||| b4a0bd57c41
-            b180: block {
-                l181: loop {
-                    break_if b180 (if p > 0 -> i32 {
-=======
-            b184: block {
-                l185: loop {
-                    break_if b184 (if p > 0 -> i32 {
->>>>>>> origin/main
+            b160: block {
+                l161: loop {
+                    break_if b160 (if p > 0 -> i32 {
                         (builtin::array_get_value<u8>($mv$self$repr, p) & 192) != 128 == 0;
                     } else {
                         0;
                     }) == 0;
                     p = p - 1;
-<<<<<<< HEAD
-                    continue l157;
-||||||| b4a0bd57c41
-                    continue l181;
-=======
-                    continue l185;
->>>>>>> origin/main
+                    continue l161;
                 };
             };
-<<<<<<< HEAD
-            break_if b154 $inline_char__is_whitespace_sroa_self_value__0: block -> bool {
-||||||| b4a0bd57c41
-            break_if b178 $inline_char__is_whitespace_sroa_self_value__0: block -> bool {
-=======
-            break_if b182 $inline_char__is_whitespace_sroa_self_value__0: block -> bool {
->>>>>>> origin/main
+            break_if b158 $inline_char__is_whitespace_sroa_self_value__0: block -> bool {
                 if (local.tee b1_20(local.tee b0($inline_decode_char_at_1: block -> ref "tuple//[u32, i32]" {
                     if local.tee b0(builtin::array_get_value<u8>($mv$self$repr, p)) <u 128 {
                         break $inline_decode_char_at_1: struct.new "tuple//[u32, i32]" { 0: b0, 1: 1 };
@@ -1541,13 +1335,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$se
                 break $inline_char__is_whitespace_sroa_self_value__0;
             } == 0;
             $mv$self$end = p;
-<<<<<<< HEAD
-            continue l155;
-||||||| b4a0bd57c41
-            continue l179;
-=======
-            continue l183;
->>>>>>> origin/main
+            continue l159;
         };
     };
     return $mv$self$repr, $mv$self$start, $mv$self$end;
@@ -1558,9 +1346,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim"($mv$self$r
     let b2_15: u32;
     let b3: u32;
     let $sroa_slot_38: i32;
-    b181: block {
-        l182: loop {
-            break_if b181 $mv$self$start >= $mv$self$end;
+    b185: block {
+        l186: loop {
+            break_if b185 $mv$self$start >= $mv$self$end;
             $inline_decode_char_at_1: block {
                 if local.tee b0(builtin::array_get_value<u8>($mv$self$repr, $mv$self$start)) <u 128 {
                     $sroa_slot_38 = 1;
@@ -1586,7 +1374,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim"($mv$self$r
                 $sroa_slot_38 = 4;
                 break $inline_decode_char_at_1;
             };
-            break_if b181 $inline_char__is_whitespace_sroa_self_value__2: block -> bool {
+            break_if b185 $inline_char__is_whitespace_sroa_self_value__2: block -> bool {
                 if (local.tee b2_15(b0 - 9) <u 24) & (((8388639_i64 >>u builtin::i64_extend_i32_u(b2_15)) & 1_i64) != 0_i64) {
                     break $inline_char__is_whitespace_sroa_self_value__2: 1;
                 }
@@ -1632,7 +1420,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim"($mv$self$r
                 break $inline_char__is_whitespace_sroa_self_value__2;
             } == 0;
             $mv$self$start = $mv$self$start + $sroa_slot_38;
-            continue l182;
+            continue l186;
         };
     };
     return "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$self$repr, $mv$self$start, $mv$self$end);

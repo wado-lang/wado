@@ -92,7 +92,7 @@ fn "remark_param_derived_global.wado/$cm_export__run"() {
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
     let new_repr: ref Array<u8>;
-    let $sroa_message_repr_30: ref Array<u8>;
+    let $sroa_message_repr_29: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:remark_param_derived_global.wado::$modules_initialized);
         cold_path;
@@ -104,23 +104,11 @@ fn "remark_param_derived_global.wado/$cm_export__run"() {
         "remark_param_derived_global.wado/$initialize_modules$cold0"();
     };
     if global:remark_param_derived_global.wado::STATIC_LEVEL < 2 {
-<<<<<<< HEAD
         $sroa_message_repr_29 = array.new_data<u8>("tracing");
-||||||| b4a0bd57c41
-=======
-        $sroa_message_repr_30 = array.new_data<u8>("tracing");
->>>>>>> origin/main
         $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
         $sroa_$pattern_temp_0_0_13 = "remark_param_derived_global.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
-<<<<<<< HEAD
         builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, $sroa_message_repr_29, 0, 7);
-||||||| b4a0bd57c41
-        $sroa_message_repr_29 = array.new_data<u8>("tracing");
-        builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, $sroa_message_repr_29, 0, 7);
-=======
-        builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, $sroa_message_repr_30, 0, 7);
->>>>>>> origin/main
         builtin::array_set_u8(new_repr, 7, 10);
         "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
@@ -236,28 +224,12 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
     }; builtin::i64_extend_i32_u(ptr_13) | 34359738368_i64);
     i = 0;
     block {
-<<<<<<< HEAD
-        l20: loop {
+        l24: loop {
             ptr_18 = ptr_13 + i;
             count_19 = 8 - i;
             count_19 = local.tee ptr_18($inline_cm_await_blocked_5: block -> i32 {
                 if local.tee ptr_18("wasi/stream-write"(handle, ptr_18, select i32(count_19 < 268435455, count_19, 268435455))) != -1 {
                     break $inline_cm_await_blocked_5: ptr_18;
-||||||| b4a0bd57c41
-        l20: loop {
-            ptr_19 = ptr_13 + i;
-            count_20 = 8 - i;
-            count_20 = local.tee ptr_19($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee ptr_19("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: ptr_19;
-=======
-        l24: loop {
-            ptr_19 = ptr_13 + i;
-            count_20 = 8 - i;
-            count_20 = local.tee ptr_19($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee ptr_19("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: ptr_19;
->>>>>>> origin/main
                 }
                 ptr_18 = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ptr_18);

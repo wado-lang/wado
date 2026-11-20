@@ -119,28 +119,24 @@ fn "ctfe_view_local_reassigned.wado/run"() with Stdout {
     multivalue_bind [$mv$message_22$repr, self_13] = "core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_view_local_reassigned.wado/$tmpl$746b3bd30636aac0,[i32,i32,i32,i32]>"(struct.new "ctfe_view_local_reassigned.wado//$tmpl$746b3bd30636aac0" { h0: self_13, h1: 1, h2: 2, h3: builtin::array_get_value<i32>(r.repr, 0), s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     $sroa_$pattern_temp_0_0_44 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_45 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_44 = "ctfe_view_local_reassigned.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_44);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(self_13 + 1)), 0, $mv$message_22$repr, 0, self_13);
     builtin::array_set_u8(new_repr, self_13, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        if @unlikely(ref.is_null(ref.null eq) == 0) {
+            unreachable;
+        }
         self_13 = self_13 + 1;
         "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_45, new_repr, 0, self_13);
     });
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_45);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_44);
-||||||| b4a0bd57c41
-    self_13 = "ctfe_view_local_reassigned.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_13);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_45, message_22.repr, message_22.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_13);
-=======
-    self_13 = "ctfe_view_local_reassigned.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_13);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_45, message_22.repr, message_22.used);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(self_13);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_45);
     }
->>>>>>> origin/main
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_44);
+    }
 }
 
 fn "ctfe_view_local_reassigned.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -159,32 +155,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-<<<<<<< HEAD
-    b2: block {
-        l3: loop {
-            break_if b2 (digit_count - offset) < 2;
-||||||| b4a0bd57c41
-    b1: block {
-        l2: loop {
-            break_if b1 (digit_count - offset) < 2;
-=======
-    b3: block {
-        l4: loop {
-            break_if b3 (digit_count - offset) < 2;
->>>>>>> origin/main
+    b6: block {
+        l7: loop {
+            break_if b6 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-<<<<<<< HEAD
-            continue l3;
-||||||| b4a0bd57c41
-            continue l2;
-=======
-            continue l4;
->>>>>>> origin/main
+            continue l7;
         };
     };
     if digit_count > offset {
@@ -253,38 +233,6 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-<<<<<<< HEAD
-||||||| b4a0bd57c41
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
-=======
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        if @unlikely(ref.is_null(ref.null eq) == 0) {
-            unreachable;
-        }
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    if ref.is_null(ref.null eq) == 0 {
-    } else {
-        "wasi/stream-drop-writable"(tx);
-    }
-}
-
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;

@@ -70,7 +70,9 @@ fn "cse_short_circuit_no_trap.wado/opaque"(v) {
 }
 
 fn "cse_short_circuit_no_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
+    return if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }, , "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "cse_short_circuit_no_trap.wado/$cm_export__run"() {
@@ -80,16 +82,16 @@ fn "cse_short_circuit_no_trap.wado/$cm_export__run"() {
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
     let $mv$message_4$repr: ref Array<u8>;
-    multivalue_bind [$mv$message_4$repr, n] = "core:prelude/string.wado/core:prelude/string.wado/String::format<cse_short_circuit_no_trap.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(n = "cse_short_circuit_no_trap.wado/opaque"(5); i = 0; sum = 0; b1: block {
-        l2: loop {
-            break_if b1 (if i < n -> i32 {
+    multivalue_bind [$mv$message_4$repr, n] = "core:prelude/string.wado/core:prelude/string.wado/String::format<cse_short_circuit_no_trap.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(n = "cse_short_circuit_no_trap.wado/opaque"(5); i = 0; sum = 0; b2: block {
+        l3: loop {
+            break_if b2 (if i < n -> i32 {
                 (sum / i) > 1;
             } else {
                 0;
             }) == 0;
             sum = sum + (sum / i);
             i = i + 1;
-            continue l2;
+            continue l3;
         };
     }; sum);
     i = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
@@ -104,21 +106,6 @@ fn "cse_short_circuit_no_trap.wado/$cm_export__run"() {
         n = n + 1;
         "core:rt/cm_stream_write_raw_all_u8"(sum, new_repr, 0, n);
     });
-<<<<<<< HEAD
-    "wasi/stream-drop-writable"(sum);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i);
-||||||| b4a0bd57c41
-    "wasi/stream-drop-writable"(sum);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i);
-}
-
-fn "cse_short_circuit_no_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
-}
-
-fn "cse_short_circuit_no_trap.wado/$cm_export__run"() {
-    "cse_short_circuit_no_trap.wado/run"();
-=======
     if ref.is_null(ref.null eq) == 0 {
     } else {
         "wasi/stream-drop-writable"(sum);
@@ -127,17 +114,6 @@ fn "cse_short_circuit_no_trap.wado/$cm_export__run"() {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i);
     }
-}
-
-fn "cse_short_circuit_no_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }, , "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
-}
-
-fn "cse_short_circuit_no_trap.wado/$cm_export__run"() {
-    "cse_short_circuit_no_trap.wado/run"();
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 
@@ -339,28 +315,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<cse_short_c
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_311(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_301, used: $sroa_out_used_302 }), is_negative_65);
         $sroa_out_repr_301 = $sroa_write_back_311.repr;
     }
-<<<<<<< HEAD
     start_137 = $sroa_out_used_302;
     $sroa_out_used_302 = is_negative_65;
     t = start_137 + t;
-    b43: block {
-        l44: loop {
-            break_if b43 (t - start_137) < 2;
-||||||| b4a0bd57c41
-    start_181 = $sroa_out_used_498;
-    $sroa_out_used_498 = is_negative_65;
-    t = start_181 + t;
-    b43: block {
-        l44: loop {
-            break_if b43 (t - start_181) < 2;
-=======
-    start_181 = $sroa_out_used_498;
-    $sroa_out_used_498 = is_negative_65;
-    t = start_181 + t;
     b47: block {
         l48: loop {
-            break_if b47 (t - start_181) < 2;
->>>>>>> origin/main
+            break_if b47 (t - start_137) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($sroa_out_repr_301, t - 1, (48 + is_negative_65) - (tens * 10));

@@ -494,13 +494,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-<<<<<<< HEAD
-        l49: loop {
-||||||| b4a0bd57c41
-        l46: loop {
-=======
-        l50: loop {
->>>>>>> origin/main
+        l53: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -508,67 +502,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return written;
             }
-<<<<<<< HEAD
-            continue l49;
-||||||| b4a0bd57c41
-            continue l46;
-        };
-    };
-}
-
-fn "sub/cross_module_type_identity_util.wado/sum_shapes$spec0"(shapes) {
-    let total: i32;
-    let c: ref "cross_module_type_identity.wado//CircleData";
-    let r: ref "cross_module_type_identity.wado//RectData";
-    let ref_val: ref "cross_module_type_identity.wado//Shape";
-    let $sroa_$iter_0_repr_16: ref "Array<cross_module_type_identity.wado/Shape>";
-    let $sroa_$iter_0_index_17: i32;
-    total = 0;
-    $sroa_$iter_0_repr_16 = shapes.repr;
-    $sroa_$iter_0_index_17 = 0;
-    b48: block {
-        l49: loop {
-            break_if b48 $sroa_$iter_0_index_17 >= 2;
-            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
-                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
-                total = total + c.radius;
-            } else {
-                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
-                total = total + r.width;
-            }
-            continue l49;
-=======
-            continue l50;
-        };
-    };
-}
-
-fn "sub/cross_module_type_identity_util.wado/sum_shapes$spec0"(shapes) {
-    let total: i32;
-    let c: ref "cross_module_type_identity.wado//CircleData";
-    let r: ref "cross_module_type_identity.wado//RectData";
-    let ref_val: ref "cross_module_type_identity.wado//Shape";
-    let $sroa_$iter_0_repr_16: ref "Array<cross_module_type_identity.wado/Shape>";
-    let $sroa_$iter_0_index_17: i32;
-    total = 0;
-    $sroa_$iter_0_repr_16 = shapes.repr;
-    $sroa_$iter_0_index_17 = 0;
-    b52: block {
-        l53: loop {
-            break_if b52 $sroa_$iter_0_index_17 >= 2;
-            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
-                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
-                total = total + c.radius;
-            } else {
-                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
-                total = total + r.width;
-            }
             continue l53;
->>>>>>> origin/main
         };
     };
 }

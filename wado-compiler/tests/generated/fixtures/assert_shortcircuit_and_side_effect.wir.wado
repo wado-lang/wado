@@ -195,28 +195,12 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); "core:rt/gc_array_to_memory"($mv$data$repr, $mv$data$start, ptr_13, $mv$data$end); builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     ptr_13 = 0;
     block {
-<<<<<<< HEAD
-        l12: loop {
+        l16: loop {
             ptr_18 = $mv$data$start + ptr_13;
             count_19 = $mv$data$end - ptr_13;
             count_19 = local.tee ptr_18($inline_cm_await_blocked_5: block -> i32 {
                 if local.tee ptr_18("wasi/stream-write"(handle, ptr_18, select i32(count_19 < 268435455, count_19, 268435455))) != -1 {
                     break $inline_cm_await_blocked_5: ptr_18;
-||||||| b4a0bd57c41
-        l12: loop {
-            ptr_19 = $mv$data$start + ptr_13;
-            count_20 = $mv$data$end - ptr_13;
-            count_20 = local.tee ptr_19($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee ptr_19("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: ptr_19;
-=======
-        l16: loop {
-            ptr_19 = $mv$data$start + ptr_13;
-            count_20 = $mv$data$end - ptr_13;
-            count_20 = local.tee ptr_19($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee ptr_19("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: ptr_19;
->>>>>>> origin/main
                 }
                 ptr_18 = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ptr_18);

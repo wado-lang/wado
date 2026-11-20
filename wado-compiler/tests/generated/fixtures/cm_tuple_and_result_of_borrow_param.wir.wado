@@ -55,44 +55,6 @@ import memory (1) from "mem/memory";
 import fn wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#Item from "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#Item";
 import fn wasi/task-return from "wasi/task-return";
 
-<<<<<<< HEAD
-||||||| b4a0bd57c41
-global global:cm_tuple_and_result_of_borrow_param.wado::$const_obj_0: ref "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>" = struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Err" { discriminant: 1, payload_0: 1 };
-
-fn "cm_tuple_and_result_of_borrow_param.wado/run"() with Api, Item {
-    let a: ref null "core:prelude//$Resource";
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#label"(struct.new "tuple//[&cm_tuple_and_result_of_borrow_param.wado/Item, u32]" { 0: ref.as_non_null(local.tee a("cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-item"())), 1: 7 });
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Ok" { discriminant: 0, payload_0: a });
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(global:cm_tuple_and_result_of_borrow_param.wado::$const_obj_0);
-    if ref.is_null(a) == 0 {
-        let $cm_handle_2: i32;
-        $cm_handle_2 = a.value;
-        a.value = 0;
-        "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#Item"($cm_handle_2);
-    }
-}
-
-=======
-global global:cm_tuple_and_result_of_borrow_param.wado::$const_obj_0: ref "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>" = struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Err" { discriminant: 1, payload_0: 1 };
-
-fn "cm_tuple_and_result_of_borrow_param.wado/run"() with Api, Item {
-    let a: ref null "core:prelude//$Resource";
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#label"(struct.new "tuple//[&cm_tuple_and_result_of_borrow_param.wado/Item, u32]" { 0: ref.as_non_null(local.tee a("cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-item"())), 1: 7 });
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Ok" { discriminant: 0, payload_0: a });
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(global:cm_tuple_and_result_of_borrow_param.wado::$const_obj_0);
-    if ref.is_null(a) == 0 {
-        if ref.is_null(a.backing) == 0 {
-        } else {
-            let $cm_handle_2: i32;
-            $cm_handle_2 = a.value;
-            a.value = 0;
-            a.backing = ref.null eq;
-            "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#Item"($cm_handle_2);
-        }
-    }
-}
-
->>>>>>> origin/main
 fn "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-item"() with Api {
     return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-item"(), backing: ref.null eq };
 }
@@ -125,10 +87,14 @@ fn "cm_tuple_and_result_of_borrow_param.wado/$cm_export__run"() {
     "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Ok" { discriminant: 0, payload_0: a });
     "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Err" { discriminant: 1, payload_0: 1 });
     if ref.is_null(a) == 0 {
-        let $cm_handle_2: i32;
-        $cm_handle_2 = a.value;
-        a.value = 0;
-        "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#Item"($cm_handle_2);
+        if ref.is_null(a.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = a.value;
+            a.value = 0;
+            a.backing = ref.null eq;
+            "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#Item"($cm_handle_2);
+        }
     }
     "wasi/task-return"(0);
 }

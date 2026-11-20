@@ -4,17 +4,15 @@
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
-type "functype//resource_marker_bound.wado/$test_0_an_extern_handle_and_an_affine_resource_are_each_a_resource" = fn();  // TypeId(1)
+type "functype//resource_marker_bound.wado/$cm_export__$test_0_an_extern_handle_and_an_affine_resource_are_each_a_resource" = fn();  // TypeId(1)
 
-type "functype//resource_marker_bound.wado/$cm_export__$test_0_an_extern_handle_and_an_affine_resource_are_each_a_resource" = fn();  // TypeId(2)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(2)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(3)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(3)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(4)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(5)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
@@ -23,7 +21,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "resource_marker_bound.wado/$test_0_an_extern_handle_and_an_affine_resource_are_each_a_resource"() {
+fn "resource_marker_bound.wado/$cm_export__$test_0_an_extern_handle_and_an_affine_resource_are_each_a_resource"() {
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_17: i32;
     let $sroa_$pattern_temp_0_1_18: i32;
@@ -40,10 +38,6 @@ fn "resource_marker_bound.wado/$test_0_an_extern_handle_and_an_affine_resource_a
             "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_17);
         }
     }
-}
-
-fn "resource_marker_bound.wado/$cm_export__$test_0_an_extern_handle_and_an_affine_resource_are_each_a_resource"() {
-    "resource_marker_bound.wado/$test_0_an_extern_handle_and_an_affine_resource_are_each_a_resource"();
     "wasi/task-return"(0);
 }
 

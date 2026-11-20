@@ -888,7 +888,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l100: loop {
+        l104: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -896,7 +896,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return written;
             }
-            continue l100;
+            continue l104;
         };
     };
 }
@@ -916,12 +916,12 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[st
     truncated = 0;
     i = 0;
     $licm_arith_36 = limit >= 0;
-    b103: block {
-        l104: loop {
-            break_if b103 i >= end;
+    b107: block {
+        l108: loop {
+            break_if b107 i >= end;
             if select i32($licm_arith_36, shown >= limit, 0) {
                 truncated = 1;
-                break b103;
+                break b107;
             }
             if shown > 0 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/array.wado::$const_obj_3);
@@ -929,7 +929,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<u8>$dae[st
             "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<u8>(repr, i), f);
             shown = shown + 1;
             i = i + 1;
-            continue l104;
+            continue l108;
         };
     };
     if truncated {
@@ -974,19 +974,19 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect_alt<u8>$da
     i = 0;
     $load_1 = f.buf;
     $licm_arith_28 = limit >= 0;
-    b112: block {
-        l113: loop {
-            break_if b112 i >= end;
+    b116: block {
+        l117: loop {
+            break_if b116 i >= end;
             if select i32($licm_arith_28, shown >= limit, 0) {
                 truncated = 1;
-                break b112;
+                break b116;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<u8>(repr, i), f);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"($load_1, 44);
             shown = shown + 1;
             i = i + 1;
-            continue l113;
+            continue l117;
         };
     };
     if truncated {
@@ -1041,12 +1041,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent"(s
     i = 0;
     $licm_indent_8 = self.indent;
     $licm_buf_9 = self.buf;
-    b120: block {
-        l121: loop {
-            break_if b120 i >= $licm_indent_8;
+    b124: block {
+        l125: loop {
+            break_if b124 i >= $licm_indent_8;
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($licm_buf_9, global:core:prelude/format.wado::$const_obj_0);
             i = i + 1;
-            continue l121;
+            continue l125;
         };
     };
 }
@@ -1082,17 +1082,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(self) {
     let n: i32;
     n = 0;
-    b124: block {
-        l125: loop {
+    b128: block {
+        l129: loop {
             let $mv$$match_2$0: i32;
             let $mv$$match_2$1: char;
             multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(self);
             if $mv$$match_2$0 == 1 {
                 n = n + 1;
             } else {
-                break b124;
+                break b128;
             }
-            continue l125;
+            continue l129;
         };
     };
     return n;
@@ -1443,12 +1443,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b163: block {
-        l164: loop {
-            break_if b163 i >= n;
+    b167: block {
+        l168: loop {
+            break_if b167 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l164;
+            continue l168;
         };
     };
 }

@@ -70,63 +70,25 @@ fn "reflect_pack_bound_fn_param.wado/$cm_export__run"() {
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_13 = "reflect_pack_bound_fn_param.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
-<<<<<<< HEAD
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(7)), 0, message_0.repr, 0, 6);
     builtin::array_set_u8(new_repr, 6, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14, new_repr, 0, 7);
-    });
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
-||||||| b4a0bd57c41
-    let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_data<u8>("2:i3i4");
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_field_2, 6);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
-=======
-    let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_data<u8>("2:i3i4");
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_field_2, 6);
-    if ref.is_null(ref.null eq) == 0 {
-    } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
-    }
->>>>>>> origin/main
-    "wasi/task-return"(0);
-}
-
-<<<<<<< HEAD
-||||||| b4a0bd57c41
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
-=======
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) with StreamWritable {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14, new_repr, 0, 7);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"(tx);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
     }
+    if ref.is_null(ref.null eq) == 0 {
+    } else {
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
+    }
+    "wasi/task-return"(0);
 }
 
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;

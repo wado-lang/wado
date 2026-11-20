@@ -45,50 +45,6 @@ import fn wasi/task-return from "wasi/task-return";
 
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0: ref "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" { 0 };
 
-<<<<<<< HEAD
-||||||| b4a0bd57c41
-fn "cm_optional_resource_return.wado/run"() with Gfx, Device {
-    let device: i32;
-    let $discarded_1: ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
-    let $drop_v_2: ref null "core:prelude//$Resource";
-    if local.tee $discarded_1("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter"(local.tee device("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"()))).discriminant == 0 {
-    } else {
-        $drop_v_2 = ref.cast "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some"($discarded_1).payload_0;
-        let $cm_handle_2: i32;
-        $cm_handle_2 = $drop_v_2.value;
-        $drop_v_2.value = 0;
-        "wasi/resource-drop:cm_optional_resource_return.wado#Adapter"($cm_handle_2);
-    }
-    if (device == 0) == 0 {
-        "wasi/resource-drop:cm_optional_resource_return.wado#Device"(device);
-    }
-}
-
-=======
-fn "cm_optional_resource_return.wado/run"() with Gfx, Device {
-    let device: i32;
-    let $discarded_1: ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
-    let $drop_v_2: ref null "core:prelude//$Resource";
-    if local.tee $discarded_1("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter"(local.tee device("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"()))).discriminant == 0 {
-    } else {
-        if ref.is_null(local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some"($discarded_1).payload_0).backing) == 0 {
-        } else {
-            let $cm_handle_2: i32;
-            $cm_handle_2 = $drop_v_2.value;
-            $drop_v_2.value = 0;
-            $drop_v_2.backing = ref.null eq;
-            "wasi/resource-drop:cm_optional_resource_return.wado#Adapter"($cm_handle_2);
-        }
-    }
-    if (device == 0) == 0 {
-        if ref.is_null(ref.null eq) == 0 {
-        } else {
-            "wasi/resource-drop:cm_optional_resource_return.wado#Device"(device);
-        }
-    }
-}
-
->>>>>>> origin/main
 fn "cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
     return "wasi/$wasi:demo/gfx@0.1.0#get-device"();
 }
@@ -115,14 +71,20 @@ fn "cm_optional_resource_return.wado/$cm_export__run"() {
     let $drop_v_2: ref null "core:prelude//$Resource";
     if local.tee $discarded_1("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter"(local.tee device("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"()))).discriminant == 0 {
     } else {
-        $drop_v_2 = ref.cast "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some"($discarded_1).payload_0;
-        let $cm_handle_2: i32;
-        $cm_handle_2 = $drop_v_2.value;
-        $drop_v_2.value = 0;
-        "wasi/resource-drop:cm_optional_resource_return.wado#Adapter"($cm_handle_2);
+        if ref.is_null(local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some"($discarded_1).payload_0).backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $drop_v_2.value;
+            $drop_v_2.value = 0;
+            $drop_v_2.backing = ref.null eq;
+            "wasi/resource-drop:cm_optional_resource_return.wado#Adapter"($cm_handle_2);
+        }
     }
     if (device == 0) == 0 {
-        "wasi/resource-drop:cm_optional_resource_return.wado#Device"(device);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/resource-drop:cm_optional_resource_return.wado#Device"(device);
+        }
     }
     "wasi/task-return"(0);
 }

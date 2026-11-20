@@ -413,52 +413,6 @@ fn "resource_extraction_result_owned.wado/drain"(list) {
     };
 }
 
-<<<<<<< HEAD
-||||||| b4a0bd57c41
-fn "resource_extraction_result_owned.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"($mv$value$repr, $mv$value$used) {
-    let $index_3: i32;
-    let $slot_4: ref null "core:prelude//$Resource";
-    $index_3 = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 $index_3 >= $mv$value$used;
-            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($mv$value$repr, $index_3))) == 0 {
-                let $cm_handle_2: i32;
-                $cm_handle_2 = $slot_4.value;
-                $slot_4.value = 0;
-                "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
-            }
-            $index_3 = $index_3 + 1;
-            continue l10;
-        };
-    };
-}
-
-=======
-fn "resource_extraction_result_owned.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"($mv$value$repr, $mv$value$used) {
-    let $index_3: i32;
-    let $slot_4: ref null "core:prelude//$Resource";
-    $index_3 = 0;
-    b12: block {
-        l13: loop {
-            break_if b12 $index_3 >= $mv$value$used;
-            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($mv$value$repr, $index_3))) == 0 {
-                if ref.is_null($slot_4.backing) == 0 {
-                } else {
-                    let $cm_handle_2: i32;
-                    $cm_handle_2 = $slot_4.value;
-                    $slot_4.value = 0;
-                    $slot_4.backing = ref.null eq;
-                    "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
-                }
-            }
-            $index_3 = $index_3 + 1;
-            continue l13;
-        };
-    };
-}
-
->>>>>>> origin/main
 fn "resource_extraction_result_owned.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
     return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"(), backing: ref.null eq };
 }
@@ -526,15 +480,9 @@ condition: list.is_empty()
     }
     used = response.value;
     "wasi/task-return:handle"(0, used, 0, 0_i64, 0, 0, 0, 0);
-<<<<<<< HEAD
-    drop("resource_extraction_result_owned.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_199, global:resource_extraction_result_owned.wado::$const_obj_0));
-||||||| b4a0bd57c41
-    drop("resource_extraction_result_owned.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_190, global:resource_extraction_result_owned.wado::$const_obj_0));
-=======
     drop("resource_extraction_result_owned.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; $sroa_$pattern_temp_0_1_190, global:resource_extraction_result_owned.wado::$const_obj_0));
->>>>>>> origin/main
+    }; $sroa_$pattern_temp_0_1_199, global:resource_extraction_result_owned.wado::$const_obj_0));
     if ref.is_null(_sent) == 0 {
         if ref.is_null(_sent.backing) == 0 {
         } else {
@@ -548,17 +496,21 @@ condition: list.is_empty()
         elements = list.repr;
         used = list.used;
         $sroa_$pattern_temp_0_1_199 = 0;
-        b13: block {
-            l14: loop {
-                break_if b13 $sroa_$pattern_temp_0_1_199 >= used;
+        b22: block {
+            l23: loop {
+                break_if b22 $sroa_$pattern_temp_0_1_199 >= used;
                 if ref.is_null(local.tee response(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, $sroa_$pattern_temp_0_1_199))) == 0 {
-                    let $cm_handle_4: i32;
-                    $cm_handle_4 = response.value;
-                    response.value = 0;
-                    "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_4);
+                    if ref.is_null(response.backing) == 0 {
+                    } else {
+                        let $cm_handle_6: i32;
+                        $cm_handle_6 = response.value;
+                        response.value = 0;
+                        response.backing = ref.null eq;
+                        "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_6);
+                    }
                 }
                 $sroa_$pattern_temp_0_1_199 = $sroa_$pattern_temp_0_1_199 + 1;
-                continue l14;
+                continue l23;
             };
         };
     }
