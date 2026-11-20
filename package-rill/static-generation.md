@@ -50,6 +50,16 @@ traps, naming the node. A production build discards the subtree that differs
 and builds it anew. A mismatch is a bug in the app or the build, so
 development reports it, and production keeps the page working.
 
+Contract checks tell the two builds apart: `hydrate` meets a mismatch as a
+contract that fails. A test checks contracts at every optimization level, and
+any other build checks them at `-O0` and `-O1` or with `-f contract-checks`.
+So the browser program is compiled at `-O2` or `-Os`.
+
+- A served element of another tag is replaced by one built anew.
+- An element the page was served without is built where it belongs.
+- A served element the view does not build is taken out.
+- A static attribute served at another value takes the view's.
+
 ### The site build is a Wado program
 
 A Wado program run with `wado run` builds the site: it renders the page on
@@ -69,7 +79,9 @@ So claim mode claims elements and builds text afresh.
 
 - An element claims the next element child and checks its tag. Its static
   attributes are checked against what was served, once its steps have run, at
-  the value the view leaves each at. One a binding writes is not checked.
+  the value the view leaves each at. One a binding writes is not checked, and
+  neither is one the view does not set: a browser or its extensions add
+  attributes of their own.
   A mismatch is like any other.
 - A `text` or `bind_text`, and the anchor of a `show` or `switch`, creates its
   node. The served text between two elements is removed once the elements
@@ -86,15 +98,17 @@ Hydration is tested on `SurfaceDom` alone. Build the page, join and drop its
 text as the HTML parser would, then hydrate it with signals of its own. Claim
 mode must create no element and keep every element's identity, and a later
 write to a signal must reach the claimed node. `SurfaceDom` parses no HTML, so
-a test builds the served tree by hand.
+a test builds the served tree by hand. A test always checks contracts, so a test
+of the rebuild hands each mismatch to a report of its own instead of trapping.
 
 ## GitHub Pages
 
 - Pages serves no custom headers. Rill runs on one thread, so it needs none
   (no COOP or COEP).
-- This repository already serves the `gh-pages` branch, for the benchmarks.
-  The app goes in a directory of it, deployed in the same concurrency group,
-  so every URL the page uses is relative.
+- The app is hosted on wado-lang.org, the site
+  [`wado-lang/wado-lang.github.io`](https://github.com/wado-lang/wado-lang.github.io)
+  builds. It goes in a directory of that site, so every URL the page uses is
+  relative.
 - The branch needs `.nojekyll`, or files whose names start with `_` are not
   served.
 - A single page needs no `404.html`. A router would, to serve its paths.
@@ -108,16 +122,13 @@ HTML; only the bindings are missing.
 
 ## Roadmap
 
-- [ ] Deploy the to-do example as a client-rendered app: a workflow compiles it
-  for the browser, as [`example/web-browser/build.sh`](../example/web-browser/build.sh) does, and publishes it to
-  `gh-pages`.
-- [ ] Render the initial page at build time, and have the browser program
-  replace it with a fresh `mount`. The page shows before the Wasm loads.
 - [x] Make `View` describe the tree, and build it in one pass in document
   order.
 - [x] Add claim mode to that pass.
-- [ ] Hydrate the deployed page instead of replacing it.
-- [ ] Apply the mismatch policy. A mismatch traps in every build so far.
+- [x] Apply the mismatch policy.
+- [x] Render the to-do example's initial page at build time, and hydrate it
+  in the browser: [`example/todo/site.wado`](./example/todo/site.wado).
+- [ ] Host it on wado-lang.org.
 
 ## Known gaps
 
@@ -125,3 +136,5 @@ HTML; only the bindings are missing.
   page would need to carry it, serialized, for `mount` to start from it.
 - A page with more than one route needs a page per path, or a `404.html` that
   serves the app.
+- No test runs the built site in a browser. `SurfaceDom` stands in for the DOM,
+  and the browser's own HTML parser is checked by hand.

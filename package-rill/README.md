@@ -42,9 +42,11 @@ with &mut dom do {
   conditional `show` and `switch` keep it current, `on` listens on it, and
   `with_node` hands it over. `build` builds a view; `hydrate` builds one on the
   served HTML, as [`static-generation.md`](./static-generation.md) describes.
-- `example/todo/` — a to-do list. `wado run` there prints the page after a
-  short session, and `wado test` runs the session against `SurfaceDom`, built
-  and hydrated.
+- `example/todo/` — a to-do list, published as a static site. `site.wado`
+  renders its initial page and bundles `src/main.wado`, the browser program
+  that hydrates it; `mise run rill-todo-site` builds the site into
+  `build/rill-todo`, and `mise run rill-todo-demo` serves it as well.
+  `wado test` runs a session against `SurfaceDom`, built and hydrated.
 
 ## How it works
 

@@ -1,0 +1,190 @@
+:root {
+  --bg: #f4f1ea;
+  --card: #fffdf8;
+  --ink: #2b2a27;
+  --muted: #6b665c;
+  --line: #e4ded1;
+  --accent: #3d6b5a;
+  --accent-ink: #ffffff;
+  --shadow: rgb(0 0 0 / 0.06);
+  color-scheme: light;
+}
+
+/* A host may choose the theme with data-theme; without one, the OS does. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1c1a;
+    --card: #252723;
+    --ink: #ecebe6;
+    --muted: #9a978d;
+    --line: #3a3c37;
+    --accent: #7fb39d;
+    --accent-ink: #14211b;
+    --shadow: rgb(0 0 0 / 0.3);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1b1c1a;
+  --card: #252723;
+  --ink: #ecebe6;
+  --muted: #9a978d;
+  --line: #3a3c37;
+  --accent: #7fb39d;
+  --accent-ink: #14211b;
+  --shadow: rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding-block: 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header,
+main {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+header p {
+  margin: 4px 0 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+input {
+  min-width: 0;
+  padding: 10px 12px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+#add {
+  padding: 0 18px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#add:focus-visible,
+li button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+ul,
+main > p {
+  grid-column: 1 / -1;
+}
+
+ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 4px;
+  border-top: 1px solid var(--line);
+}
+
+li button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.toggle {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.toggle::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 10px;
+  vertical-align: -2px;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+}
+
+li.done .toggle {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+li.done .toggle::before {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.remove {
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.remove:hover {
+  color: var(--ink);
+  background: var(--line);
+}
+
+main > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
