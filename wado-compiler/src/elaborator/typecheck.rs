@@ -444,9 +444,6 @@ fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
     fixed && actual == TypeTable::NEVER && expected != TypeTable::NEVER
 }
 
-/// The declaration `id` instantiates and its type arguments, where it is a
-/// generic struct, resource or variant, or a newtype; a non-generic one has
-/// none.
 /// The arguments of `actual` and `expected` where both are one constructor
 /// at their own arguments: two tuples, two arrays, or two instances of one
 /// declaration.
@@ -470,6 +467,9 @@ fn same_constructor_args<'t>(
     }
 }
 
+/// The declaration `id` instantiates and its type arguments, where it is a
+/// generic struct, resource or variant, or a newtype; a non-generic one has
+/// none.
 fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
     match type_table.get(id) {
         ResolvedType::Struct {

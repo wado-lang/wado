@@ -1632,7 +1632,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut table = self.tysys.type_table.borrow_mut();
         let answers = infer_var_answers(&table, bindings);
         args.iter().zip(&pinned).all(|(&arg, &want)| {
-            table.substitute_infer_vars(arg, &answers) == table.substitute_infer_vars(want, &answers)
+            table.substitute_infer_vars(arg, &answers)
+                == table.substitute_infer_vars(want, &answers)
         })
     }
 

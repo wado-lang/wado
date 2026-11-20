@@ -1175,14 +1175,10 @@ pub(super) fn settles_nothing(program: &Program, def: &ImplDef, ty: &SolverType)
     match_target(&def.target, ty, &mut bindings, &mut deferred, &mut unifier)
         && !unifier.undecided
         && (deferred.is_empty() || !ty.is_open())
-        && unifier
-            .subst
-            .iter()
-            .all(|(var, value)| {
-                unifier.is_own(*var)
-                    || matches!(var, Var::Infer { literal: true, .. })
-                        && may_be_literal(program, value)
-            })
+        && unifier.subst.iter().all(|(var, value)| {
+            unifier.is_own(*var)
+                || matches!(var, Var::Infer { literal: true, .. }) && may_be_literal(program, value)
+        })
 }
 
 /// Whether `ty` may be a numeric literal's type: one of the program's literal
@@ -2007,21 +2003,41 @@ mod tests {
             id: 0,
             literal: true,
         });
-        assert!(!settles_nothing(&written, only_impl(&written), &list_of(var(0))));
-        assert!(!settles_nothing(&written, only_impl(&written), &list_of(literal.clone())));
+        assert!(!settles_nothing(
+            &written,
+            only_impl(&written),
+            &list_of(var(0))
+        ));
+        assert!(!settles_nothing(
+            &written,
+            only_impl(&written),
+            &list_of(literal.clone())
+        ));
         written.literal_types.insert(I32);
-        assert!(settles_nothing(&written, only_impl(&written), &list_of(literal)));
+        assert!(settles_nothing(
+            &written,
+            only_impl(&written),
+            &list_of(literal)
+        ));
         let over_any = Builder::default()
             .impl_(generic(1, concrete(ALPHA, list_of(SolverType::Param(0)))))
             .build();
-        assert!(settles_nothing(&over_any, only_impl(&over_any), &list_of(var(0))));
+        assert!(settles_nothing(
+            &over_any,
+            only_impl(&over_any),
+            &list_of(var(0))
+        ));
         let twin = Builder::default()
             .impl_(generic(
                 1,
                 concrete(ALPHA, pair(SolverType::Param(0), SolverType::Param(0))),
             ))
             .build();
-        assert!(!settles_nothing(&twin, only_impl(&twin), &pair(var(0), var(1))));
+        assert!(!settles_nothing(
+            &twin,
+            only_impl(&twin),
+            &pair(var(0), var(1))
+        ));
     }
 
     /// `impl<T: Alpha> Alpha for List<T>` asks of `?0` what it asks of `T`,

@@ -131,9 +131,9 @@ Each step keeps every fixture passing and deletes what it replaces.
   every bound, and each selection site requires the committed impl's bounds
   itself (`defer_awaited_impl_bounds`); this step deletes both. An operator
   (`==`) still selects its impl by the receiver's head
-  (`resolve_trait_method_for_op`), apart from the solver, so a marker trait
-  beside a conditional impl decides it at an open receiver where `a.eq(&a)`
-  reports it cannot choose; this step makes the two one.
+  (`resolve_trait_method_for_op`), apart from the solver. So a marker trait
+  beside a conditional impl decides `==` at an open receiver, where `a.eq(&a)`
+  reports it cannot choose. This step makes the two one.
 - [ ] A numeric literal's variable has a kind and a default. The open item of
   [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
   closes with it, and so does `Settles::Nothing`, which until then keeps a

@@ -1076,7 +1076,7 @@ impl SolverBridge {
     /// The declarations a numeric literal may be: the numeric primitives,
     /// the halves, and the wide integers.
     fn literal_types(table: &TypeTable, lowering: &mut Lowering) -> IndexSet<TypeDeclId> {
-        let primitives = PrimitiveType::all_primitive_names()
+        let mut types: IndexSet<TypeDeclId> = PrimitiveType::all_primitive_names()
             .into_iter()
             .filter(|name| {
                 PrimitiveType::from_name(name).is_some_and(|p| {
@@ -1087,13 +1087,14 @@ impl SolverBridge {
                 })
             })
             .map(|name| lowering.builtin(name))
-            .collect::<Vec<_>>();
-        let wide = [CompilerItem::I128, CompilerItem::U128]
-            .into_iter()
-            .filter_map(|item| table.compiler_item_def(item))
-            .map(|def| lowering.type_decl(def))
-            .collect::<Vec<_>>();
-        primitives.into_iter().chain(wide).collect()
+            .collect();
+        types.extend(
+            [CompilerItem::I128, CompilerItem::U128]
+                .into_iter()
+                .filter_map(|item| table.compiler_item_def(item))
+                .map(|def| lowering.type_decl(def)),
+        );
+        types
     }
 
     pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
