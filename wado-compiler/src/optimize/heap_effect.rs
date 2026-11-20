@@ -10,7 +10,7 @@ use cranelift_entity::EntityRef;
 
 use crate::builtin_facts::{SideEffect, Storage};
 use crate::defs::DefId;
-use crate::graph::{DisjointSets, ranks_within_components, strongly_connected_components};
+use crate::graph::{DisjointSets, RankedSweep, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::RefKind;
 use crate::nir::StructFieldTypes;
@@ -295,54 +295,6 @@ impl Layouts {
     }
 }
 
-/// What [`HeapEffectsCache::sweep`] orders a component's nodes by, and which of
-/// them it has yet to summarize again.
-struct Sweep {
-    rank: Vec<usize>,
-    /// Each node's callers in its own component.
-    callers_within: Vec<Vec<usize>>,
-    /// The stale nodes, by rank.
-    by_rank: Vec<Vec<usize>>,
-    stale: Vec<bool>,
-    count: usize,
-    /// The nodes of the components being swept.
-    swept: Vec<bool>,
-}
-
-impl Sweep {
-    fn new(successors: &[Vec<usize>], component_of: &[usize]) -> Self {
-        let mut callers_within: Vec<Vec<usize>> = vec![Vec::new(); successors.len()];
-        for (n, callees) in successors.iter().enumerate() {
-            for &s in callees {
-                if component_of[s] == component_of[n] {
-                    callers_within[s].push(n);
-                }
-            }
-        }
-        Self {
-            rank: ranks_within_components(successors, component_of),
-            callers_within,
-            by_rank: Vec::new(),
-            stale: vec![false; successors.len()],
-            count: 0,
-            swept: vec![false; successors.len()],
-        }
-    }
-
-    fn mark(&mut self, n: usize) {
-        if self.stale[n] {
-            return;
-        }
-        self.stale[n] = true;
-        let rank = self.rank[n];
-        if self.by_rank.len() <= rank {
-            self.by_rank.resize_with(rank + 1, Vec::new);
-        }
-        self.by_rank[rank].push(n);
-        self.count += 1;
-    }
-}
-
 /// The call-graph-wide summaries, kept across passes no DCE separates and
 /// re-solved only where a function's write count moved since. A DCE removes
 /// types, and the summaries read the type table as only growing.
@@ -417,9 +369,8 @@ impl HeapEffectsCache {
 
     /// The least fixpoint over the call graph, callees first; a component whose
     /// inputs all stand is the fixpoint already. Components no path joins are
-    /// solved together, in sweeps whose batches each run in parallel against
-    /// the summaries the batch began with, so the outcome does not depend on
-    /// the thread count.
+    /// solved together, in ranked sweeps whose batches each run in parallel,
+    /// so the outcome does not depend on the thread count.
     fn solve(
         &mut self,
         functions: &[FuncRef],
@@ -437,7 +388,7 @@ impl HeapEffectsCache {
                 component_of[n] = c;
             }
         }
-        let mut sweep = Sweep::new(&successors, &component_of);
+        let mut sweep = RankedSweep::new(&successors, &component_of);
         // A component's depth is one past its deepest callee component's, so
         // one depth's components reach none of each other.
         let mut depth = vec![0; components.len()];
@@ -473,56 +424,22 @@ impl HeapEffectsCache {
                 .iter()
                 .map(|&n| (n, std::mem::take(self.summary_mut(n))))
                 .collect();
-            self.sweep(functions, type_table, exec, &pending, &mut sweep);
+            // A batch runs in parallel against the summaries it began with.
+            sweep.solve(&pending, |batch| {
+                let this = &*self;
+                let fresh = exec.map(batch, |&n| this.summarize(functions, type_table, n, true));
+                let mut changed = Vec::new();
+                for (&n, summary) in batch.iter().zip(fresh) {
+                    if summary != *self.summary_mut(n) {
+                        *self.summary_mut(n) = summary;
+                        changed.push(n);
+                    }
+                }
+                changed
+            });
             for (n, before) in before {
                 moved[n] |= *self.summary_mut(n) != before;
             }
-        }
-    }
-
-    /// `nodes` solved in sweeps: each sweep summarizes the stale nodes rank by
-    /// rank, a rank's nodes in parallel against the summaries as the rank
-    /// began, so a change reaches every caller above it in the same sweep and
-    /// only one along a back edge waits for the next.
-    fn sweep(
-        &mut self,
-        functions: &[FuncRef],
-        type_table: &TypeTable,
-        exec: &Executor,
-        nodes: &[usize],
-        sweep: &mut Sweep,
-    ) {
-        for &n in nodes {
-            sweep.swept[n] = true;
-            sweep.mark(n);
-        }
-        while sweep.count > 0 {
-            for at in 0..sweep.by_rank.len() {
-                let batch = std::mem::take(&mut sweep.by_rank[at]);
-                if batch.is_empty() {
-                    continue;
-                }
-                sweep.count -= batch.len();
-                for &n in &batch {
-                    sweep.stale[n] = false;
-                }
-                let this = &*self;
-                let fresh = exec.map(&batch, |&n| this.summarize(functions, type_table, n, true));
-                for (n, summary) in batch.into_iter().zip(fresh) {
-                    if summary == *self.summary_mut(n) {
-                        continue;
-                    }
-                    *self.summary_mut(n) = summary;
-                    for i in 0..sweep.callers_within[n].len() {
-                        let caller = sweep.callers_within[n][i];
-                        assert!(sweep.swept[caller], "a component is swept whole");
-                        sweep.mark(caller);
-                    }
-                }
-            }
-        }
-        for &n in nodes {
-            sweep.swept[n] = false;
         }
     }
 
