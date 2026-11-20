@@ -419,6 +419,11 @@ it. Two reads are such a move: a value read of the binding, and a place-level
 move of a field out of it. A binding with neither is handed nowhere, so refusing
 it a share on move-eligibility alone costs a copy that defends nothing.
 
+`return b` is not such a read. It delivers what returning the place `b` was read
+out of delivers, and `return` of a place hands the place out uncopied for the
+return conventions to judge. So `let r = *self; return r;` shares, and its caller
+copies the result as it would for `return *self`.
+
 A share licenses the binding and nothing built out of it. `let mut b = a` and
 `Wrapper { inner: a }` mint a second owner, which outlives the binding and may be
 written through, so each owes its copy though `a` shares. Only a move exempts
@@ -749,18 +754,6 @@ element in place under the read-only share.
 Neither the inliner nor any NIR pass can stand in: the copy is chosen before NIR
 exists, and `#[inline(always)]` on `next` leaves the expanded clone in the
 caller's loop untouched even with the cloned array provably unread.
-
-### A copied `let` through a reference the body never writes
-
-`let r = *self; return r;` copies at the `let` when the share rule turns the
-binding down, yet the return conventions still read `r` as a projection of
-`self`, so the caller copies the result again. They run before the share rule
-and cannot read its answer, so `ownership::owned_lets` counts owned only the
-through-reference bindings the body writes, which never share.
-
-- [ ] Decide the share of each through-reference `let` once, before the return
-  conventions, from what does not depend on them (the writes and the live
-  ranges), and have both the conventions and the translator read it.
 
 ### A field moved out of a live aggregate
 

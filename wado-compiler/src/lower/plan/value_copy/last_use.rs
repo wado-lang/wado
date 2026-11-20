@@ -2978,8 +2978,23 @@ impl<'a> Analyzer<'a> {
             TirStmtKind::Expr(e) => self.walk_expr(e, live, record),
             TirStmtKind::Return { value } => {
                 live.clear();
-                if let Some(v) = value {
-                    self.walk_persisting(v, live, record);
+                match value {
+                    // `return r` delivers the storage `r` holds as `return` of
+                    // the place `r` was read from would, so `r` sharing that
+                    // place hands the caller nothing more than the place.
+                    Some(
+                        v @ TirExpr {
+                            kind: TirExprKind::Local { index, .. },
+                            ..
+                        },
+                    ) => {
+                        if record {
+                            self.hand_on(v, &Kept::Frame);
+                        }
+                        self.read_taking(*index, v, false, live, record);
+                    }
+                    Some(v) => self.walk_persisting(v, live, record),
+                    None => {}
                 }
             }
             TirStmtKind::If {
