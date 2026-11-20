@@ -170,8 +170,7 @@ jobs:
 
       # What each ci.yml job that compiles runs. `mise run check-unit-graph`
       # holds the e2e and test builds to the feature resolution of the `wado`
-      # build, but a crate only a build script or a proc macro of the e2e build
-      # uses is compiled for it alone.
+      # build.
       - name: Build what ci.yml builds
         run: |
           # build-wado
@@ -179,8 +178,6 @@ jobs:
           node scripts/prebuilt.ts build e2e
           # test-core
           node scripts/prebuilt.ts build test
-          cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
-          cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
-          cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
+          cargo check --locked -p wado-compiler -p wado-lsp -p wado-manifest --target wasm32-unknown-unknown
           cargo clippy --locked --all --all-features --all-targets
           df -h /
