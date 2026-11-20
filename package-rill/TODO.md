@@ -23,3 +23,10 @@ already measured, not how to close it. Closed work belongs in commit history.
   what is decided about one.
 - [ ] `show` and `switch` render a subtree anew each time they show it. A
   subtree that is costly to build has no way to be kept while hidden.
+
+## Static generation
+
+- [ ] No app is published. [`static-generation.md`](./static-generation.md)
+  holds the design and its roadmap.
+- [ ] `View` creates each child before its parent, so a build cannot walk
+  served HTML in document order to hydrate it.
