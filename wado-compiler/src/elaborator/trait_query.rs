@@ -983,11 +983,12 @@ impl TypeSystem {
     pub(crate) fn unmet_deferred_bounds(&self, rows: &EffectRows) -> Vec<TypeError> {
         let deferred = std::mem::take(&mut *self.deferred_bounds.borrow_mut());
         let mut unmet = Vec::new();
-        for mut bound in deferred {
-            let closed = self.type_table.borrow_mut().close_type(bound.type_arg, rows);
-            let answer = self
-                .solver()
-                .answer_deferred(self, &mut bound.question, closed);
+        for bound in deferred {
+            let closed = self
+                .type_table
+                .borrow_mut()
+                .close_type(bound.type_arg, rows);
+            let answer = self.solver().answer_deferred(self, bound.question, closed);
             match answer {
                 Some(bodies) => self.record_owed(bodies),
                 None => unmet.push(TypeError::TraitBoundNotSatisfied {
@@ -3169,6 +3170,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Keeps the bound to be asked again once its rows are solved, answering
+    /// whether it was kept.
+    fn defer_bound(
+        &self,
+        type_arg: TypeId,
+        trait_name: &str,
+        trait_: &FqTraitName,
+        param_name: &str,
+        span: Span,
+    ) -> bool {
+        let Some(question) =
+            self.tysys
+                .solver()
+                .deferred(&self.tysys, &self.annotate_ctx, type_arg, trait_)
+        else {
+            return false;
+        };
+        self.tysys.deferred_bounds.borrow_mut().push(DeferredBound {
+            question,
+            type_arg,
+            trait_name: bound_as_written(trait_name, trait_),
+            param_name: param_name.to_string(),
+            span,
+        });
+        true
+    }
+
     /// Whether one concrete type argument meets one trait bound — the primitive
     /// every enforcement path funnels through. Registers the associated types on
     /// success, raises `TraitBoundNotSatisfied` on failure.
@@ -3188,24 +3216,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The solver reads an unsolved row as empty, so for a type carrying
         // one, such as a closure literal's, neither answer it gives now is
         // final. The bound is asked again once the effect check has solved it.
-        let carries_row = self.tysys.type_table.borrow().contains_effect_var(type_arg);
-        let deferred = carries_row
-            .then(|| {
-                self.tysys
-                    .solver()
-                    .deferred(&self.tysys, &self.annotate_ctx, type_arg, trait_)
-            })
-            .flatten();
-        let was_deferred = deferred.is_some();
-        if let Some(question) = deferred {
-            self.tysys.deferred_bounds.borrow_mut().push(DeferredBound {
-                question,
-                type_arg,
-                trait_name: bound_as_written(trait_name, trait_),
-                param_name: param_name.to_string(),
-                span,
-            });
-        }
+        let deferred = self.tysys.type_table.borrow().contains_effect_var(type_arg)
+            && self.defer_bound(type_arg, trait_name, trait_, param_name, span);
         if self.check_and_register_bound(type_arg, trait_) {
             let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
                 bridge.borrow().tied_through_bound(
@@ -3218,7 +3230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.report_tied_impls(&tied, trait_, type_arg, span);
             return true;
         }
-        if was_deferred {
+        if deferred {
             return true;
         }
         let type_name = self.tysys.type_id_to_string(type_arg);

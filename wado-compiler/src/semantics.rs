@@ -18,7 +18,6 @@ use crate::compiler_trace;
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
 use crate::defs::DefId;
-use crate::elaborator::{Elaborator, TypeError};
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
@@ -26,6 +25,7 @@ use crate::elaborator::sem::types::{
     CoercionKind, DesugarKind, FallbackSite, MethodDispatch, TypeAnnotations,
 };
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
+use crate::elaborator::{Elaborator, TypeError};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;

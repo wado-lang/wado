@@ -2236,17 +2236,20 @@ impl SolverBridge {
     pub(super) fn answer_deferred(
         &self,
         tysys: &TypeSystem,
-        deferred: &mut DeferredQuestion,
+        deferred: DeferredQuestion,
         closed: TypeId,
     ) -> Option<Vec<OwedBody>> {
-        let binders = &deferred.binders;
-        deferred.question.ty = {
+        let DeferredQuestion {
+            mut question,
+            binders,
+        } = deferred;
+        question.ty = {
             let table = tysys.type_table.borrow();
             self.lowering
-                .type_id(&table, closed, &place_binder(binders, &table))
+                .type_id(&table, closed, &place_binder(&binders, &table))
                 .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"))
         };
-        self.answer(tysys, || binders.clone(), closed, &deferred.question)
+        self.answer(tysys, || binders, closed, &question)
     }
 
     /// Whether `q` holds, with the bodies the answer owes. `binders` are the
