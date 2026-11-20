@@ -58,9 +58,10 @@ pub struct WirContext<'a> {
     /// The WIR type each concrete struct, tuple, variant, enum and array type
     /// lowers to, by its id.
     pub wado_types: IndexMap<TypeId, WirTypeId>,
-    /// `$Resource`, the object an affine resource is: its handle, mutable in
-    /// place, so a reference to the resource sees a store through another
-    /// (WEP: Affine Types). Set while types register, before any is looked up.
+    /// `$Resource`, the object an affine resource is: its handle or the guest
+    /// value backing it, mutable in place, so a reference to the resource sees
+    /// a store through another (WEP: Affine Types). Set while types register,
+    /// before any is looked up.
     pub handle_box: Option<WirTypeId>,
     /// The struct behind an extern handle a guest value backs. Set beside
     /// `handle_box`.

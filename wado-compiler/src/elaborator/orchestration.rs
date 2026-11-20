@@ -641,6 +641,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 def,
                                 declared_handle_classes(&resource_decl.attrs),
                             );
+                        } else if !resource_decl.has_host() {
+                            type_table
+                                .borrow_mut()
+                                .mark_hostless_resource(def, resource_decl.droppable());
                         }
                         // A static is not inherited, so it shadows nothing.
                         resource_method_names.insert(

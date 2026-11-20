@@ -1,0 +1,20 @@
+// An operation of a resource declared without `#[cm(...)]` has no host import
+// to fall back on, so with no handler installed it traps, as an interface
+// operation without a default does (issue #2533).
+use { println, Stdout } from "core:cli";
+
+resource Tally {
+    fn add(value: i32);
+}
+
+export fn run() with (Stdout, Tally) {
+    println("before");
+    Tally::add(7);
+    println("unreachable");
+}
+
+__DATA__
+{
+    "stdout": "before\n",
+    "trapped": true
+}

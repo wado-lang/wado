@@ -1,0 +1,38 @@
+// A static operation of a generic resource reaches the handler of its own
+// instantiation when handlers for two instantiations are installed.
+use { println, Stdout } from "core:cli";
+
+resource Tally<T> {
+    fn add(value: T) -> i32;
+}
+
+struct Narrow {}
+
+impl Tally<i32> for Narrow {
+    fn add(&mut self, value: i32) -> i32 {
+        resume value + 1;
+    }
+
+    ..trap
+}
+
+struct Wide {}
+
+impl Tally<i64> for Wide {
+    fn add(&mut self, value: i64) -> i32 {
+        resume (value * 10) as i32;
+    }
+
+    ..trap
+}
+
+export fn run() with Stdout {
+    let mut narrow = Narrow {};
+    let mut wide = Wide {};
+    with Tally<i32> => &mut narrow, Tally<i64> => &mut wide do {
+        println(`${Tally::<i32>::add(7)} ${Tally::<i64>::add(3)}`);
+    }
+}
+
+__DATA__
+{"stdout": "8 30\n"}

@@ -188,7 +188,7 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
         let saved = self.signatures_imposed;
         self.signatures_imposed = match item {
             Item::Impl(i) => i.trait_type.is_some(),
-            Item::Trait(_) | Item::Interface(_) => true,
+            Item::Trait(_) | Item::Interface(_) | Item::Resource(_) => true,
             Item::Use(_)
             | Item::Function(_)
             | Item::Struct(_)
@@ -198,7 +198,6 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
             | Item::Newtype(_)
             | Item::TupleTypeDecl(_)
             | Item::BuiltinTypeDecl(_)
-            | Item::Resource(_)
             | Item::World(_)
             | Item::Test(_)
             | Item::Global(_)

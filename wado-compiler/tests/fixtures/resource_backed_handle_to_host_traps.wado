@@ -1,0 +1,22 @@
+// A backed handle is no object of the host's, so handing one to a host call
+// traps at the call, before the host sees it.
+
+use { println, Stdout } from "core:cli";
+use { Fields } from "wasi:http";
+
+struct Names {
+    names: List<String>,
+}
+
+export fn run() with (Stdout, Fields) {
+    let f = Fields::backed_by(Names { names: [] });
+    println("before");
+    let _ = f.has("host");
+    println("unreachable");
+}
+
+__DATA__
+{
+    "stdout": "before\n",
+    "trapped": true
+}

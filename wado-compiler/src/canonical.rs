@@ -316,6 +316,39 @@ impl CanonicalIntrinsic {
         matches!(self, Self::FutureCancelWrite(_))
     }
 
+    /// Whether the intrinsic ends the handle it takes.
+    #[must_use]
+    pub fn ends_handle(&self) -> bool {
+        match self {
+            Self::StreamDropReadable(_)
+            | Self::StreamDropWritable(_)
+            | Self::FutureDropReadable(_)
+            | Self::FutureDropWritable(_)
+            | Self::WaitableSetDrop
+            | Self::SubtaskDrop
+            | Self::ErrorContextDrop
+            | Self::ResourceDrop(_) => true,
+            Self::StreamNew(_)
+            | Self::StreamRead(_)
+            | Self::StreamWrite(_)
+            | Self::StreamCancelRead(_)
+            | Self::StreamCancelWrite(_)
+            | Self::FutureNew(_)
+            | Self::FutureRead(_)
+            | Self::FutureWrite(_)
+            | Self::FutureCancelRead(_)
+            | Self::FutureCancelWrite(_)
+            | Self::WaitableSetNew
+            | Self::WaitableSetWait
+            | Self::WaitableSetPoll
+            | Self::WaitableJoin
+            | Self::SubtaskCancel
+            | Self::ErrorContextNew
+            | Self::ErrorContextDebugMessage
+            | Self::TaskReturn(_) => false,
+        }
+    }
+
     /// Whether the intrinsic creates both ends of a stream or future, packed in
     /// one `i64` as `readable | writable << 32`.
     #[must_use]

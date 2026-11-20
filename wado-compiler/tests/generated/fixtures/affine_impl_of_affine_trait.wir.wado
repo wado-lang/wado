@@ -4,6 +4,7 @@
 
 struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
+    mut backing: ref null eq,
 }
 
 struct affine_impl_of_affine_trait.wado//Holder {  // TypeId(1)
@@ -29,17 +30,37 @@ import fn wasi/resource-drop:wasi:http/types.wado#Fields from "wasi/resource-dro
 import fn wasi/task-return from "wasi/task-return";
 
 fn "affine_impl_of_affine_trait.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() with Fields {
-    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"() };
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:http/types@0.3.0#[constructor]fields"(), backing: ref.null eq };
 }
 
 fn "affine_impl_of_affine_trait.wado/$cm_export__$test_0"() {
     let $load_0: ref null "core:prelude//$Resource";
+<<<<<<< HEAD
     let h_0: ref null "affine_impl_of_affine_trait.wado//Holder";
     if ref.is_null(local.tee $load_0(local.tee h_0(struct.new "affine_impl_of_affine_trait.wado//Holder" { f: "affine_impl_of_affine_trait.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() }).f)) == 0 {
         let $cm_handle_2: i32;
         $cm_handle_2 = $load_0.value;
         $load_0.value = 0;
         "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+||||||| b4a0bd57c41
+    let h: ref null "affine_impl_of_affine_trait.wado//Holder";
+    if ref.is_null(local.tee $load_0(local.tee h(struct.new "affine_impl_of_affine_trait.wado//Holder" { f: "affine_impl_of_affine_trait.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() }).f)) == 0 {
+        let $cm_handle_2: i32;
+        $cm_handle_2 = $load_0.value;
+        $load_0.value = 0;
+        "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+=======
+    let h: ref null "affine_impl_of_affine_trait.wado//Holder";
+    if ref.is_null(local.tee $load_0(local.tee h(struct.new "affine_impl_of_affine_trait.wado//Holder" { f: "affine_impl_of_affine_trait.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"() }).f)) == 0 {
+        if ref.is_null($load_0.backing) == 0 {
+        } else {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $load_0.value;
+            $load_0.value = 0;
+            $load_0.backing = ref.null eq;
+            "wasi/resource-drop:wasi:http/types.wado#Fields"($cm_handle_2);
+        }
+>>>>>>> origin/main
     }
     h_0.f = ref.null none;
     "wasi/task-return"(0);

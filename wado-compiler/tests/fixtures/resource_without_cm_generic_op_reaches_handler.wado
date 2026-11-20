@@ -1,0 +1,31 @@
+// The handler installed for `Tally<i32>` answers `Tally::<i32>::add`: no
+// instantiation without type arguments is minted beside it to take the call.
+use { println, Stdout } from "core:cli";
+
+resource Tally<T> {
+    fn add(value: T);
+}
+
+struct Ctx {
+    seen: i32 = 0,
+}
+
+impl Tally<i32> for Ctx {
+    fn add(&mut self, value: i32) {
+        self.seen += value;
+        resume ();
+    }
+
+    ..trap
+}
+
+export fn run() with Stdout {
+    let mut c = Ctx {};
+    with Tally<i32> => &mut c do {
+        Tally::<i32>::add(7);
+    }
+    println(`${c.seen}`);
+}
+
+__DATA__
+{"stdout": "7\n"}

@@ -308,8 +308,8 @@ pub enum CompilerItem {
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
-    /// `ExternHandle` — sealed marker every extern handle holds, whose
-    /// methods back a handle with a guest value (WEP: Extern Handles).
+    /// `ExternHandle` — sealed marker every extern handle holds (WEP: Extern
+    /// Handles).
     ExternHandle,
     /// `AnyBits` — sealed marker of a type every bit pattern of its width is a
     /// value of, so `builtin::load` may read one from any bytes.

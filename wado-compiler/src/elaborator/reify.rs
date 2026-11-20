@@ -48,7 +48,7 @@ use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
 use super::util::{self, enumerate_index_local, split_enumerate};
 use crate::ast::RangeKind;
-use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
+use crate::ast::{AttrArg, Attribute, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
@@ -1043,12 +1043,16 @@ impl<'a> Reify<'a> {
                     // a synthesized name; the dispatch wrapper's no-handler
                     // branch calls it. Never dead-item-filtered: the only call
                     // to it is synthesized after liveness ran.
-                    for method in default_impl_methods(effect_decl) {
+                    for method in default_impl_methods(&effect_decl.name, &effect_decl.methods) {
                         tir_module.add_function(self.reify_function(&method));
                     }
                 }
                 Item::Resource(resource_decl) => {
                     tir_module.add_resource(self.reify_resource_decl(resource_decl));
+                    for method in default_impl_methods(&resource_decl.name, &resource_decl.methods)
+                    {
+                        tir_module.add_function(self.reify_function(&method));
+                    }
                 }
                 _ => {}
             }
@@ -10376,19 +10380,21 @@ fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
     })
 }
 
-/// The operations an interface declares a default implementation for, each
-/// renamed to its synthesized function name.
+/// The operations an interface or a resource named `owner` declares a default
+/// implementation for, each renamed to its synthesized function name. A
+/// resource operation's default keeps its receiver, whose `Self` is the
+/// resource.
 ///
 /// The rename is what keeps a default out of the module's own namespace: an
 /// operation and a facade function that wraps it share a name by design
 /// (`core:log`'s `Log::event` and `event`), and every fact either pass records
 /// is keyed by the unchanged `AstId`, so resolve and reify still agree.
-pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
-    decl.methods
+pub(crate) fn default_impl_methods(owner: &str, methods: &[ast::Function]) -> Vec<ast::Function> {
+    methods
         .iter()
         .filter(|method| method.body.is_some())
         .map(|method| ast::Function {
-            name: effect_default_impl_name(&decl.name, &method.name),
+            name: effect_default_impl_name(owner, &method.name),
             ..method.clone()
         })
         .collect()

@@ -2305,12 +2305,43 @@ pub struct ResourceDecl {
     /// See `docs/wep-2026-04-28-resource-inheritance.md`.
     pub parent: Option<Type>,
     pub attrs: Vec<Attribute>,
-    /// Methods declared within the resource block. Each is a signature only:
-    /// a resource operation is backed by a CM import, so it has no body to
-    /// declare.
+    /// Methods declared within the resource block. An operation of a resource
+    /// with a host is a signature only, since a CM import backs it; one of a
+    /// resource with none may carry a default implementation.
     pub methods: Vec<Function>,
     pub doc: Option<String>,
     pub span: Span,
+}
+
+impl ResourceDecl {
+    /// Whether the host implements this resource: `#[cm]` on it or on any of
+    /// its operations. `Stream<T>` and its kin declare none of their own, but
+    /// their operations bind the canonical built-ins. A resource with no host
+    /// is the program's own, and a guest value backs every handle of it (WEP:
+    /// Guest-Backed Resources).
+    #[must_use]
+    pub fn has_host(&self) -> bool {
+        let binds_cm = |attrs: &[Attribute]| attrs.iter().any(|a| a.name == CM);
+        binds_cm(&self.attrs) || self.methods.iter().any(|m| binds_cm(&m.attrs))
+    }
+
+    /// Whether this resource declares a `drop` operation, which releases a
+    /// handle of it.
+    #[must_use]
+    pub fn droppable(&self) -> Droppable {
+        if self.methods.iter().any(|m| m.name == "drop") {
+            Droppable::Yes
+        } else {
+            Droppable::No
+        }
+    }
+}
+
+/// Whether a resource declares a `drop` operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Droppable {
+    Yes,
+    No,
 }
 
 /// World declaration

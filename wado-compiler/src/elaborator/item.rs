@@ -25,7 +25,7 @@ use super::infer_hole::InferHoleTable;
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig, own_effect_params};
 use super::trait_query::SelfBinding;
-use super::types::{FunctionContext, TypeError};
+use super::types::{ComponentLocalResource, FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
 use super::{AbstractSelections, Elaborator};
@@ -1479,12 +1479,35 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         .is_some()
     }
 
-    /// Whether `type_id` is or holds an extern handle anywhere within it.
-    fn type_contains_extern_handle(&self, type_id: TypeId) -> bool {
-        self.first_type_within(type_id, true, &|scope: &Self, t| {
-            scope.tysys.type_table.borrow().is_extern_handle(t)
-        })
-        .is_some()
+    /// Reject a resource no other component can hold, anywhere within
+    /// `type_id`, the type of `position` in the `export` `func`.
+    fn check_export_resources(
+        &mut self,
+        func: &ast::Function,
+        position: String,
+        type_id: TypeId,
+        span: Span,
+    ) {
+        let Some(found) = self.first_type_within(type_id, true, &|scope: &Self, t| {
+            let tt = scope.tysys.type_table.borrow();
+            tt.is_extern_handle(t) || tt.is_hostless_resource_type(t)
+        }) else {
+            return;
+        };
+        let resource = {
+            let tt = self.tysys.type_table.borrow();
+            if tt.is_extern_handle(found) {
+                ComponentLocalResource::ExternHandle
+            } else {
+                ComponentLocalResource::Hostless(tt.name(found))
+            }
+        };
+        let _ = self.emit(TypeError::ComponentLocalResourceAtExport {
+            function: func.name.clone(),
+            position,
+            resource,
+            span,
+        });
     }
 
     /// The first reference `type_id` is or holds anywhere within it, as the
@@ -2367,11 +2390,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         methods: &[ast::Function],
         kind: OperationOwner,
     ) {
-        let is_resource = matches!(kind, OperationOwner::Resource);
+        let is_resource = matches!(kind, OperationOwner::Resource { .. });
+        let host_resource = matches!(kind, OperationOwner::Resource { has_host: true, .. });
+        let generic_resource = matches!(kind, OperationOwner::Resource { generic: true, .. });
         for method in methods {
-            // A resource operation is a CM import in every case; an effect
-            // operation only when it carries the attribute.
-            let cm_backed = is_resource || method.attrs.iter().any(|a| a.cm_boundary.is_some());
+            // An operation of a resource the host implements is a CM import in
+            // every case; an effect operation only when it carries the
+            // attribute.
+            let cm_backed = host_resource || method.attrs.iter().any(|a| a.cm_boundary.is_some());
             // A resource method's `&self` becomes the CM adapter's first
             // parameter; an effect operation is called as `E::op(args)`.
             let receiver = (!is_resource)
@@ -2382,11 +2408,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .find(|p| p.self_kind != ast::SelfKind::None)
                 })
                 .flatten();
-            let rejections: [(Option<Span>, &'static str); 5] = [
+            let rejections: [(Option<Span>, &'static str); 7] = [
                 (
                     method.body.as_ref().filter(|_| cm_backed).map(|b| b.span),
                     "cannot carry a default implementation: a Component Model import backs it, \
                      so it has no no-handler case for a default to serve",
+                ),
+                (
+                    method
+                        .body
+                        .as_ref()
+                        .filter(|_| generic_resource && !cm_backed)
+                        .map(|b| b.span),
+                    "cannot carry a default implementation: one on an operation of a generic \
+                     resource is not supported yet",
+                ),
+                (
+                    method
+                        .body
+                        .as_ref()
+                        .filter(|_| is_resource && !cm_backed && method.name == "drop")
+                        .map(|b| b.span),
+                    "cannot carry a default implementation: one on `drop` is not supported yet",
                 ),
                 (
                     (method.is_async && method.body.is_some()).then_some(method.span),
@@ -2616,7 +2659,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Resolve a function for its facts.
     pub(super) fn resolve_function(&mut self, func: &Function) {
+        self.resolve_function_with_self(func, None);
+    }
+
+    /// [`Self::resolve_function`] on a resource operation's default, where
+    /// `Self` is the resource of type `resource`.
+    pub(super) fn resolve_resource_default(&mut self, func: &Function, resource: TypeId) {
+        self.resolve_function_with_self(
+            func,
+            Some(SelfBinding {
+                type_id: resource,
+                declaring_trait: None,
+            }),
+        );
+    }
+
+    fn resolve_function_with_self(&mut self, func: &Function, self_binding: Option<SelfBinding>) {
         let mut scope = self.enter_inherited_type_param_scope();
+        if let Some(binding) = self_binding {
+            scope.set_self_binding(binding);
+        }
         scope.annotate_ctx.trait_ctx.clear_binders();
         scope.annotate_ctx.trait_ctx.clear_bounds();
         scope.sem.decls.clear_fn_local_items();
@@ -2690,12 +2752,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: param.span,
                 });
             }
-            if func.is_export && scope.type_contains_extern_handle(type_id) {
-                let _ = scope.emit(TypeError::ExternHandleAtExport {
-                    function: func.name.clone(),
-                    position: format!("parameter '{}'", param.name),
-                    span: param.span,
-                });
+            if func.is_export {
+                scope.check_export_resources(
+                    func,
+                    format!("parameter '{}'", param.name),
+                    type_id,
+                    param.span,
+                );
             }
             // A reference or a view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
@@ -2744,13 +2807,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         if func.is_export {
             scope.check_published(func, "return type", return_type, func.span);
-            if scope.type_contains_extern_handle(return_type) {
-                let _ = scope.emit(TypeError::ExternHandleAtExport {
-                    function: func.name.clone(),
-                    position: "return type".to_string(),
-                    span: func.span,
-                });
-            }
+            scope.check_export_resources(func, "return type".to_string(), return_type, func.span);
         }
         if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(return_type) {
             let _ = scope.emit(TypeError::RefAtCmBoundary {
@@ -3094,10 +3151,11 @@ fn declares_a_default(methods: &[ast::Function]) -> bool {
         .any(|m| m.params.iter().any(|p| p.default.is_some()))
 }
 
-/// Which declaration an operation belongs to. A resource's operations are
-/// Component Model imports with a `&self` receiver; an effect's are neither.
+/// Which declaration an operation belongs to. A resource's operations take a
+/// `&self` receiver, and are Component Model imports where the host implements
+/// the resource; an effect's are neither.
 #[derive(Clone, Copy)]
 pub(super) enum OperationOwner {
     Interface,
-    Resource,
+    Resource { has_host: bool, generic: bool },
 }
