@@ -706,6 +706,24 @@ impl Flow {
             .collect()
     }
 
+    /// Whether this is `entry`, apart from the moves and holdings of
+    /// `rebound`, which binding them again clears.
+    fn settled(&self, entry: &Flow, rebound: &IndexSet<AstId>) -> bool {
+        fn same<K: Eq + std::hash::Hash, V: PartialEq>(
+            a: &IndexMap<K, V>,
+            b: &IndexMap<K, V>,
+            kept: impl Fn(&K) -> bool,
+        ) -> bool {
+            let a_kept = a.iter().filter(|(key, _)| kept(key));
+            a_kept.clone().count() == b.keys().filter(|key| kept(key)).count()
+                && a_kept.into_iter().all(|(key, value)| b.get(key) == Some(value))
+        }
+        same(&self.moved, &entry.moved, |(def, _)| !rebound.contains(def))
+            && same(&self.holders, &entry.holders, |def| !rebound.contains(def))
+            && self.disturbances == entry.disturbances
+            && self.formed == entry.formed
+    }
+
     /// The serials of the moves of `def` and the `&mut` uses of it here.
     fn events(&self, def: AstId) -> IndexSet<u32> {
         let moves = self
@@ -821,6 +839,8 @@ struct MoveWalker<'a, 'c> {
     captures: IndexMap<AstId, String>,
     /// How many times each binding was bound.
     instances: IndexMap<AstId, u32>,
+    /// Each binding as it was bound, in order.
+    bound: Vec<AstId>,
     /// The instance of each local at the end of its scope.
     ended: IndexMap<AstId, u32>,
     /// The bindings each open scope declares, innermost last.
@@ -882,6 +902,7 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             closure_locals: None,
             captures: IndexMap::default(),
             instances: IndexMap::default(),
+            bound: Vec::new(),
             ended: IndexMap::default(),
             scopes: Vec::new(),
             regions: Vec::new(),
@@ -2194,6 +2215,14 @@ impl MoveWalker<'_, '_> {
         result
     }
 
+    /// Runs `walk`, whose values nothing reads once it ends.
+    fn forming_nothing<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
+        let before: IndexSet<AstId> = self.flow.formed.keys().copied().collect();
+        let result = walk(self);
+        self.flow.formed.retain(|id, _| before.contains(id));
+        result
+    }
+
     fn visit_block(&mut self, block: &Block) -> bool {
         self.in_scope(|walker| {
             let mut stmts = block.stmts.iter();
@@ -2204,10 +2233,7 @@ impl MoveWalker<'_, '_> {
                 }
                 // What a statement forms is read by the end of it, except the
                 // tail's, which is the block's value.
-                let before: IndexSet<AstId> = walker.flow.formed.keys().copied().collect();
-                let diverged = walker.visit_stmt(stmt);
-                walker.flow.formed.retain(|id, _| before.contains(id));
-                diverged
+                walker.forming_nothing(|walker| walker.visit_stmt(stmt))
             });
             if diverged {
                 walker.visit_unreachable(|dead| {
@@ -2349,15 +2375,16 @@ impl MoveWalker<'_, '_> {
         }
     }
 
-    /// A loop as two iterations: the first records what it moves, and the
-    /// second, starting where the loop entered or the first left, reports.
-    /// Two suffice: an iteration's effect on what is moved or held is the same
+    /// A loop as at most two iterations. The second starts where the loop
+    /// entered or the first left, and its reports replace the first's. Two
+    /// suffice: an iteration's effect on what is moved or held is the same
     /// from any start, so a third adds nothing the second did not see. A first
-    /// iteration that leaves the state it entered with is the second already,
-    /// so its reports stand; walking a nest twice at every level would cost
-    /// two to the power of its depth. Each
-    /// iteration runs the head, the body, then `update`, as a C-style `for`
-    /// does.
+    /// iteration that leaves the state it entered with, apart from what it
+    /// knows of the bindings it bound, is the second already: a second
+    /// rebinds them before reading what is known of them. Walking every level
+    /// of a nest twice would cost two to the power of its depth.
+    /// Each iteration runs the head, the body, then `update`, as a C-style
+    /// `for` does.
     /// A loop whose head can end it may also run no iteration, so it ends
     /// where its head does, in the state it entered with or any an iteration
     /// left; every loop ends where each `break` lands.
@@ -2365,9 +2392,11 @@ impl MoveWalker<'_, '_> {
         let entry = self.flow.clone();
         self.loops.push(LoopJumps::default());
         let reported = self.checker.out.len();
+        let bound_from = self.bound.len();
         self.visit_iteration(head, body, update);
         self.flow.merge(entry.clone());
-        if self.flow != entry {
+        let rebound: IndexSet<AstId> = self.bound[bound_from..].iter().copied().collect();
+        if !self.flow.settled(&entry, &rebound) {
             self.checker.out.truncate(reported);
             self.visit_iteration(head, body, update);
         }
@@ -2387,6 +2416,8 @@ impl MoveWalker<'_, '_> {
         let start = self.flow.clone();
         self.in_region(RegionKind::Iteration, |walker| {
             walker.in_scope(|walker| {
+                // An iteration's value is never read.
+                walker.forming_nothing(|walker| {
                 match head {
                     LoopHead::None => {}
                     LoopHead::Condition(condition) => walker.visit_condition(condition),
@@ -2402,13 +2433,8 @@ impl MoveWalker<'_, '_> {
                 if let Some(continued) = jumps.continues.take() {
                     reach(&mut end, continued);
                 }
-                let formed_before: IndexSet<AstId> = start.formed.keys().copied().collect();
                 walker.flow = end.unwrap_or(start);
-                // An iteration's value is never read.
-                walker
-                    .flow
-                    .formed
-                    .retain(|id, _| formed_before.contains(id));
+                });
                 if let Some(update) = update {
                     walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
                 }
@@ -2451,6 +2477,7 @@ impl MoveWalker<'_, '_> {
             self.flow.moved.retain(|(def, _), _| *def != id);
             self.flow.holders.shift_remove(&id);
             *self.instances.entry(id).or_default() += 1;
+            self.bound.push(id);
             if let Some(scope) = self.scopes.last_mut() {
                 scope.push(id);
             }
