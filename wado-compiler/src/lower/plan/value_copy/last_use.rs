@@ -1599,7 +1599,7 @@ impl<'a> Analyzer<'a> {
 
     /// [`Analyzer::read`], where `takes` says whether the value leaves this
     /// binding. One handed to a confined parameter does not: the callee holds it
-    /// shared and copies before any write.
+    /// shared and copies before any write. Nor does one returned whole.
     fn read_taking(
         &mut self,
         index: u32,
@@ -2979,9 +2979,9 @@ impl<'a> Analyzer<'a> {
             TirStmtKind::Return { value } => {
                 live.clear();
                 match value {
-                    // `return r` delivers the storage `r` holds as `return` of
-                    // the place `r` was read from would, so `r` sharing that
-                    // place hands the caller nothing more than the place.
+                    // A sharing `r` hands the caller the place it aliases, as
+                    // `return` of that place would, for the return conventions
+                    // to judge.
                     Some(
                         v @ TirExpr {
                             kind: TirExprKind::Local { index, .. },
