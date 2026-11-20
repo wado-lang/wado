@@ -52,6 +52,9 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, the runners, and
   ignored whole when another user could have written it.
 - `path_search.rs` — finding a program on `PATH`, for `wado <name>`,
   `core:process`, and a runner started without `WADO`.
+- `pinned_download.rs` — a native library a runner fetches on first use: XLA's
+  CPU PJRT plugin and SwiftShader. Each file taken out of the archive is held to
+  its sha256 pin and kept in the user cache.
 - `ticker.rs` — `Ticker`, a thread on an interval that dropping stops and joins.
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
   so the e2e harness runs a program as `wado` does, and the fuel-metered engine
