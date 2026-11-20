@@ -11,7 +11,8 @@
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{arg_at, carries_storage, param_position, unwrap_ref};
+use super::needs_value_copy;
+use super::place::{arg_at, carries_storage, param_position, place_root, unwrap_ref};
 use super::retention::CallRetention;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -19,8 +20,8 @@ use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
-    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, LetStorage, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -197,6 +198,10 @@ fn function_returns_receiver_alias(
                 }
             }
             self.walk_stmt(stmt);
+        }
+
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            self.walk_expr_in_frame(expr);
         }
     }
     let mut w = W {
@@ -431,15 +436,14 @@ fn function_return_convention(
     hands_out_payload: bool,
 ) -> (bool, Option<Vec<usize>>) {
     let body = func.body.as_ref().expect("members have bodies");
-    let bindings = BindingCollector::collect(body, func.params.len());
-    let fresh = compute_fresh_locals(&bindings, &func.params, shared, oracle, type_table);
+    let bindings = BindingCollector::collect(func, type_table);
+    let fresh = compute_fresh_locals(&bindings, shared, oracle, type_table);
     let mut walker = ReturnWalker {
         projector: Projector {
             bindings: &bindings,
             fresh: &fresh,
             oracle,
             type_table,
-            params: &func.params,
         },
         hands_out_payload,
         all_owned: true,
@@ -492,16 +496,20 @@ impl TirRefVisitor for ReturnWalker<'_> {
         }
         self.walk_stmt(stmt);
     }
+
+    /// A closure's `return`s deliver its own result, not this function's.
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        self.walk_expr_in_frame(expr);
+    }
 }
 
 /// Which parameters a value is a projection of, so it is fresh exactly when
 /// those arguments are.
 struct Projector<'a> {
-    bindings: &'a BindingCollector,
+    bindings: &'a BindingCollector<'a>,
     fresh: &'a IndexSet<u32>,
     oracle: &'a OwnedCalls<'a>,
     type_table: &'a TypeTable,
-    params: &'a [TirParam],
 }
 
 impl Projector<'_> {
@@ -520,8 +528,9 @@ impl Projector<'_> {
         if is_owned_value(expr, self.fresh, self.oracle, self.type_table) {
             return Some(IndexSet::default());
         }
-        let param =
-            |index: u32| param_position(self.params, index).map(|p| std::iter::once(p).collect());
+        let param = |index: u32| {
+            param_position(self.bindings.params, index).map(|p| std::iter::once(p).collect())
+        };
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 if let Some(p) = param(*index) {
@@ -574,25 +583,29 @@ impl Projector<'_> {
     }
 }
 
-/// Fresh (owned-rooted) non-parameter locals: a `let` bound to an owned value,
-/// or a match-arm binding that destructures an owned scrutinee. Optimistic least
-/// fixpoint — every bound local starts owned and is dropped once a source proves
-/// shared (a source may reference another local whose ownership is still
-/// shrinking).
+/// Fresh (owned-rooted) locals: a `let` bound to an owned value or binding
+/// storage of its own, or a match-arm binding that destructures an owned
+/// scrutinee. Optimistic least fixpoint — every bound local starts owned and is
+/// dropped once a source proves shared (a source may reference another local
+/// whose ownership is still shrinking).
 fn compute_fresh_locals(
-    collector: &BindingCollector,
-    params: &[TirParam],
+    collector: &BindingCollector<'_>,
     shared: &IndexSet<u32>,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
-    let mut fresh: IndexSet<u32> = collector.let_sources.keys().copied().collect();
+    let mut fresh: IndexSet<u32> = collector
+        .let_sources
+        .keys()
+        .chain(&collector.owned_lets)
+        .copied()
+        .collect();
     for (local, _) in &collector.match_sources {
         fresh.insert(*local);
     }
     // A by-value parameter is owned, the caller having copied or moved it in,
     // unless the caller passes it uncopied.
-    for p in params {
+    for p in collector.params {
         if !type_table.is_reference(p.type_id) && !shared.contains(&p.local_index) {
             fresh.insert(p.local_index);
         }
@@ -621,26 +634,129 @@ fn compute_fresh_locals(
     fresh
 }
 
+/// The locals whose every `let` reads through an immutable reference parameter
+/// into a binding the body then writes. The translator copies each such `let`:
+/// a written binding shares nothing, and nothing moves out of a caller's
+/// storage. So the binding owns its value, whatever the value is.
+pub fn owned_lets(func: &TirFunction, type_table: &TypeTable) -> IndexSet<u32> {
+    let Some(body) = &func.body else {
+        return IndexSet::default();
+    };
+    let mut scan = OwnedLetScan {
+        params: &func.params,
+        type_table,
+        through_ref: IndexSet::default(),
+        other: IndexSet::default(),
+        written: IndexSet::default(),
+    };
+    scan.visit_block(body);
+    scan.through_ref
+        .into_iter()
+        .filter(|l| !scan.other.contains(l) && scan.written.contains(l))
+        .collect()
+}
+
+struct OwnedLetScan<'a> {
+    params: &'a [TirParam],
+    type_table: &'a TypeTable,
+    /// Locals with a `let` reading through a reference parameter.
+    through_ref: IndexSet<u32>,
+    /// Locals with any other `let`.
+    other: IndexSet<u32>,
+    /// The locals a write lands in: an assignment into a projection of one, or
+    /// a `&mut` of one or of its projection.
+    written: IndexSet<u32>,
+}
+
+impl OwnedLetScan<'_> {
+    /// `*p`, or a field chain over `*p` or `p`, `p` an immutable reference
+    /// parameter.
+    fn reads_through_reference_param(&self, expr: &TirExpr) -> bool {
+        let is_reference_param = |e: &TirExpr| {
+            matches!(e.kind, TirExprKind::Local { index, .. }
+                if self.params.iter().any(|p| p.local_index == index && !p.is_mut))
+                && self.type_table.is_reference(e.type_id)
+        };
+        match &expr.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } => is_reference_param(inner),
+            TirExprKind::FieldAccess { expr: inner, .. } => {
+                is_reference_param(inner) || self.reads_through_reference_param(inner)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl TirRefVisitor for OwnedLetScan<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let {
+            local_index,
+            value: Some(value),
+            storage,
+            ..
+        } = &stmt.kind
+        {
+            let through_ref = *storage == LetStorage::Planned
+                && needs_value_copy(value.type_id, self.type_table)
+                && self.reads_through_reference_param(value);
+            if through_ref {
+                &mut self.through_ref
+            } else {
+                &mut self.other
+            }
+            .insert(*local_index);
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        let written = match &expr.kind {
+            TirExprKind::Assign { target, .. }
+                if !matches!(target.kind, TirExprKind::Local { .. }) =>
+            {
+                place_root(target)
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: inner,
+            } => place_root(inner),
+            _ => None,
+        };
+        self.written.extend(written);
+        self.walk_expr_in_frame(expr);
+    }
+}
+
 /// Collects, per non-parameter local, the value expressions it is bound from:
 /// `let` initializers and — for a match-arm binding — the scrutinee it
-/// destructures (fresh iff the scrutinee is). The `TirRefVisitor` trait borrows
-/// nodes for less than the body's lifetime, so the sources are cloned; this is a
-/// one-time analysis pass.
-struct BindingCollector {
-    n_params: u32,
+/// destructures (fresh iff the scrutinee is). An [`owned_lets`] binding leaves
+/// no source to judge. The `TirRefVisitor` trait borrows nodes for less than
+/// the body's lifetime, so the sources are cloned; this is a one-time analysis
+/// pass.
+struct BindingCollector<'a> {
+    params: &'a [TirParam],
     let_sources: IndexMap<u32, Vec<TirExpr>>,
+    owned_lets: IndexSet<u32>,
     match_sources: Vec<(u32, TirExpr)>,
 }
 
-impl BindingCollector {
-    fn collect(body: &TirBlock, n_params: usize) -> Self {
+impl<'a> BindingCollector<'a> {
+    fn collect(func: &'a TirFunction, type_table: &TypeTable) -> Self {
         let mut collector = Self {
-            n_params: u32::try_from(n_params).expect("a parameter count fits in u32"),
+            params: &func.params,
             let_sources: IndexMap::default(),
+            owned_lets: owned_lets(func, type_table),
             match_sources: Vec::new(),
         };
-        collector.visit_block(body);
+        collector.visit_block(func.body.as_ref().expect("members have bodies"));
         collector
+    }
+
+    fn n_params(&self) -> u32 {
+        u32::try_from(self.params.len()).expect("a parameter count fits in u32")
     }
 
     /// Every value `local` is bound from.
@@ -655,14 +771,15 @@ impl BindingCollector {
     }
 }
 
-impl TirRefVisitor for BindingCollector {
+impl TirRefVisitor for BindingCollector<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Let {
             local_index,
             value: Some(value),
             ..
         } = &stmt.kind
-            && *local_index >= self.n_params
+            && *local_index >= self.n_params()
+            && !self.owned_lets.contains(local_index)
         {
             self.let_sources
                 .entry(*local_index)
@@ -678,12 +795,12 @@ impl TirRefVisitor for BindingCollector {
                 let mut binds: IndexSet<u32> = IndexSet::default();
                 analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
                 for b in binds {
-                    if b >= self.n_params {
+                    if b >= self.n_params() {
                         self.match_sources.push((b, (**scrut).clone()));
                     }
                 }
             }
         }
-        self.walk_expr(expr);
+        self.walk_expr_in_frame(expr);
     }
 }
