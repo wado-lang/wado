@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795176728567,
+  "lastUpdate": 1795184417994,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80181,6 +80181,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c9447dd21fd1f495f8d9ff1b3f8a1b776b367e25"
         },
         "date": 1795176727769,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "704ce17a01b81bd6b5e2b62cdadbe5ad90dff675",
+          "message": "Merge pull request #2700 from wado-lang/ccr-d1308813-ffc0ha\n\nfix(format): keep an attribute on a trait's associated type",
+          "timestamp": "2026-11-20T22:57:21+09:00",
+          "tree_id": "e8389527535093138c6804223d82f0436bdd1bc8",
+          "url": "https://github.com/wado-lang/wado/commit/704ce17a01b81bd6b5e2b62cdadbe5ad90dff675"
+        },
+        "date": 1795184417427,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
