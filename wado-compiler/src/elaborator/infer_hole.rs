@@ -1,8 +1,9 @@
-//! Deferred type-argument inference via inference holes. Where a generic call's
-//! type parameter appears only in its return type and the call site has no
-//! expected type yet — `p.get()` in `p.get().unwrap()` — the elaborator mints a
-//! *flexible* [`ResolvedType::InferVar`] and lets the holey type flow up until
-//! one solves it; the module-end sweep substitutes it or errors.
+//! The module's inference context. A type the source leaves to inference —
+//! `p.get()` in `p.get().unwrap()` — is an [`ResolvedType::InferVar`] that flows
+//! on until a check [`Elaborator::equate`]s it with a type. What a variable
+//! leaves undecided (a bound, a projection, a selection, a check) waits as an
+//! [`Obligation`], asked again as variables settle. The module-end sweep reports
+//! what nothing settled and substitutes the rest.
 
 use crate::compiler_host::{CompilerHost, DiagnosticSpan};
 use crate::defs::DefId;
@@ -111,6 +112,8 @@ impl InferHoleTable {
         self.mismatches.borrow_mut().push(span);
     }
 
+    /// Queue `obligation`. A bound already required of the same variable is
+    /// not queued again: a slot reached by two calls reports once.
     pub(super) fn require(&self, obligation: Obligation) {
         let mut queue = self.obligations.borrow_mut();
         if let Obligation::Bound { var, bound, .. } = &obligation
@@ -400,6 +403,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bounds: Vec<DeclaredBound>,
         span: Span,
     ) {
+        if bounds.is_empty() {
+            return;
+        }
         for bound in bounds {
             self.infer_holes.require(Obligation::Bound {
                 var,
@@ -980,12 +986,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let solution = self.apply_infer_holes(var);
                 // A still-parametric answer (a forwarded parameter) is checked
                 // where its owner is monomorphized.
-                if !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_param(solution)
-                {
+                if !self.tysys.type_table.borrow().contains_type_param(solution) {
                     for subject in self.tysys.bound_subjects(bound.each_element, solution) {
                         self.enforce_single_bound_args(
                             subject,

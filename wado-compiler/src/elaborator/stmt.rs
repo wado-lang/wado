@@ -1370,21 +1370,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.typecheck_returned(expr, value_type, return_type, ret_stmt.span);
     }
 
-    /// Check a returned value against the type it must have, first pinning a
-    /// deferred hole that rode a prior binding into it
+    /// Check a returned value against the type it must have, which settles a
+    /// variable that rode a prior binding into it
     /// (`let v = gen()?; return Ok(v)`).
     fn typecheck_returned(
         &mut self,
         value: &Expr,
-        mut value_type: TypeId,
+        value_type: TypeId,
         expected: TypeId,
         span: Span,
     ) {
-        if self.type_has_infer_hole(value_type) {
-            self.equate(value_type, expected);
-            value_type = self.apply_infer_holes(value_type);
-        }
         self.typecheck(value_type, expected, span);
+        let value_type = self.apply_infer_holes(value_type);
         self.record_widening(value.id(), value_type, expected);
     }
 

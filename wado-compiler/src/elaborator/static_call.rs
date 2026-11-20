@@ -13,8 +13,8 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::infer_hole::Obligation;
 use super::callee::StaticMethodRef;
+use super::infer_hole::Obligation;
 use super::method_call::{MethodSignatureFacts, StaticReceiver, primitive_receiver_type};
 use super::method_lookup::narrow_to_reaching;
 use super::sem::types::CalleeParams;

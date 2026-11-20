@@ -1033,19 +1033,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn defer_awaited_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
         // As the block reads them, which for a newtype is at its base where
         // the block is the base's.
-        let Some(type_args) = self
+        if let Some(type_args) = self
             .tysys
             .receiver_args_at_impl(Some(receiver), &[], Some(def))
-        else {
-            return;
-        };
+        {
+            self.defer_awaited_bounds_at(def, &type_args, span);
+        }
+    }
+
+    /// [`Self::defer_awaited_impl_bounds`] at `type_args`, block `def`'s
+    /// arguments as it reads them.
+    fn defer_awaited_bounds_at(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
         let binding = {
             let tt = self.tysys.type_table.borrow();
             if !type_args.iter().any(|&arg| self.awaits_report(&tt, arg)) {
                 return;
             }
             let open = |ty: TypeId| self.awaits_report(&tt, ty);
-            tt.open_impl_target_binding(tt.impl_target_args(def), &type_args, &open)
+            tt.open_impl_target_binding(tt.impl_target_args(def), type_args, &open)
         };
         if let Some(binding) = binding {
             let binding = self.tysys.type_table.borrow_mut().settle_runs(binding);
@@ -1152,17 +1157,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Enforce the bounds of the impl block a static call selected at the
-    /// receiver arguments it names, which no lookup filtered the block by.
+    /// receiver arguments it names, which no lookup filtered the block by:
+    /// now where they are decided, and once answered where an argument awaits
+    /// its report.
     pub(super) fn enforce_static_block_bounds(
         &mut self,
         block: Option<DefId>,
         receiver_args: &[TypeId],
         span: Span,
     ) {
-        let receiver_args = self.bounded_at_answer(receiver_args);
         let Some(block) = block else {
             return;
         };
+        self.defer_awaited_bounds_at(block, receiver_args, span);
+        let receiver_args = self.bounded_at_answer(receiver_args);
         let unmet = self
             .tysys
             .unmet_impl_bound(&self.annotate_ctx, block, None, Some(&receiver_args))

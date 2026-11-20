@@ -270,9 +270,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// gives up should raise the diagnostic.
     pub(super) fn record_instantiation(&mut self, inst: &Instantiated, solved: &[TypeId]) {
         for (&var, &answer) in inst.vars.iter().zip(solved.iter()) {
-            if var != answer {
-                self.equate(var, answer);
-            }
+            self.equate(var, answer);
         }
     }
 

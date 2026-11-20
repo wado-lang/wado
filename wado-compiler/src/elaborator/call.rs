@@ -679,15 +679,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 let param = answered.map(|a| this.standing_in_open_packs(a, &mut stand_ins));
-                resolved[i] =
-                    Some(this.resolve_arg_against_param(arg, ctx, param, &hints));
+                resolved[i] = Some(this.resolve_arg_against_param(arg, ctx, param, &hints));
             }
             for i in deferred {
                 let param = this
                     .packs_answered(&packs, param_types, &resolved, i)
                     .map(|a| this.standing_in_open_packs(a, &mut stand_ins));
-                resolved[i] =
-                    Some(this.resolve_arg_against_param(&args[i], ctx, param, &hints));
+                resolved[i] = Some(this.resolve_arg_against_param(&args[i], ctx, param, &hints));
             }
             resolved
                 .into_iter()

@@ -2892,9 +2892,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_sites: Vec<ArgSite> = static_call.args.iter().map(ArgSite::written).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
-        if let Some(def) = declaring_impl {
-            self.defer_awaited_impl_bounds(def, target_type_id, static_call.span);
-        }
         // The declaring block's type parameters, as the receiver settles them.
         let declaring_args = self
             .tysys
