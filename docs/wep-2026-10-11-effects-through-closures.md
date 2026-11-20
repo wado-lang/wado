@@ -64,7 +64,9 @@ effect row is not yet known, and the effect check solves it.
 - The type check and impl target matching let a row holding an effect
   parameter or a variable meet any row. The trait solver does so for a
   parameter, and reads a variable as the empty row, so a closure literal
-  selects one impl rather than every impl of its signature.
+  selects one impl rather than every impl of its signature. A bound asked of a
+  type holding a variable is asked again once the effect check has solved it,
+  and is unmet if no impl answers the solved row.
 - Where the type check admits a value into a slot and either's row holds a
   variable, it records the move as a flow: the value's row beside the slot's.
   A binding, an argument, a cast, an element, a branch's value are all slots.
@@ -131,3 +133,7 @@ effect row is not yet known, and the effect check solves it.
   reads the one its row names. A bound naming an effect outright
   (`G: fn() with Stderr`) rejects a closure literal that performs it: only a
   value annotated with that row meets it.
+- An associated type a bound reaches through a closure literal's impl is
+  resolved from the empty row too. Where only an impl for an effectful
+  signature answers, `T::Out` stays unresolved, and only an annotation on the
+  result (`let x: i32 = go(&h)`) lets the call compile.
