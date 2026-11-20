@@ -3827,6 +3827,20 @@ fn chain_operand_needs_parens(expr: &Expr) -> bool {
     needs_parens(expr, BinaryOp::And, false)
 }
 
+/// How a pattern names the case `name` before its payload, if any: a bare name
+/// would bind, so a case without a payload is `_::Case`, and `null` for an
+/// `Option`'s `None`.
+#[must_use]
+pub fn case_pattern_head(name: &str, has_payload: bool, is_null: bool) -> String {
+    if is_null {
+        "null".to_string()
+    } else if has_payload {
+        name.to_string()
+    } else {
+        format!("_::{name}")
+    }
+}
+
 /// One pattern as source.
 #[must_use]
 pub fn unparse_pattern_source(pattern: &Pattern) -> String {
@@ -4851,8 +4865,6 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(']');
             }
-            // A bare case name would bind, so a case without a payload is
-            // written `_::Case`, or `null` for an `Option`'s.
             TirPattern::Variant {
                 enum_type,
                 variant_name,
@@ -4860,23 +4872,19 @@ impl<'a> TirUnparser<'a> {
                 payload_type,
                 ..
             } => {
-                if *payload_type != TypeTable::UNIT {
-                    self.output.push_str(variant_name);
-                    if bindings.is_empty() {
-                        self.output.push_str("(_)");
-                    } else {
-                        self.delimited("(", ")", bindings, TirUnparser::unparse_tir_pattern);
-                    }
-                } else if self.type_table.as_option(*enum_type).is_some() {
-                    self.output.push_str("null");
-                } else {
-                    self.output.push_str("_::");
-                    self.output.push_str(variant_name);
+                let has_payload = *payload_type != TypeTable::UNIT;
+                let is_null = !has_payload && self.type_table.as_option(*enum_type).is_some();
+                self.output
+                    .push_str(&case_pattern_head(variant_name, has_payload, is_null));
+                if has_payload && bindings.is_empty() {
+                    self.output.push_str("(_)");
+                } else if has_payload {
+                    self.delimited("(", ")", bindings, TirUnparser::unparse_tir_pattern);
                 }
             }
             TirPattern::Enum { case_name, .. } => {
-                self.output.push_str("_::");
-                self.output.push_str(case_name);
+                self.output
+                    .push_str(&case_pattern_head(case_name, false, false));
             }
             TirPattern::Struct { fields, .. } => {
                 self.braced(fields, |s, field| {

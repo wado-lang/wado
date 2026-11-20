@@ -13,9 +13,8 @@ use crate::tir::{InstancePattern, ResolvedType, TirPattern, TypeId};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 use crate::type_table::TypeTable;
-use crate::unparse::{unparse_instance_pattern, unparse_pattern_source};
+use crate::unparse::{case_pattern_head, unparse_instance_pattern, unparse_pattern_source};
 
-use super::exhaustiveness;
 use super::method_call::MethodCallInput;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
 use super::type_resolution::slot_type_ids;
@@ -1018,8 +1017,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Whether `case_name`, written under `qualifier`, is a case the scrutinee
-    /// offers. A newtype's cases are its base's.
     /// The pattern that tests the case `name` of `type_id`, where it has one.
     fn case_pattern_of_type(&self, type_id: TypeId, name: &str) -> Option<String> {
         let tt = self.tysys.type_table.borrow();
@@ -1029,22 +1026,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cases
                 .iter()
                 .any(|c| c.name == name)
-                .then(|| exhaustiveness::case_pattern_head(name, false, false));
+                .then(|| case_pattern_head(name, false, false));
         }
         let (_, case) = self.tysys.variant_of_type(head)?.case_named(name)?;
         let has_payload = case.has_payload(&tt);
-        let head = exhaustiveness::case_pattern_head(
+        let pattern = case_pattern_head(
             name,
             has_payload,
             !has_payload && tt.as_option(head).is_some(),
         );
         Some(if has_payload {
-            format!("{head}(_)")
+            format!("{pattern}(_)")
         } else {
-            head
+            pattern
         })
     }
 
+    /// Whether `case_name`, written under `qualifier`, is a case the scrutinee
+    /// offers. A newtype's cases are its base's.
     pub(super) fn is_known_case_of_type(
         &mut self,
         type_id: TypeId,

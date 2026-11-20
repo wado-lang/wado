@@ -6,6 +6,7 @@ use std::rc::Rc;
 use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::util::{float_infinity_key, float_of_order_key};
 use crate::tir::TypeId;
+use crate::unparse::case_pattern_head;
 
 /// An arm pattern as coverage reads it. A constructor carries the set its
 /// column draws from, so the check reads no types.
@@ -43,18 +44,6 @@ pub(super) struct Case {
     pub(super) inhabited: bool,
     /// The `None` of an `Option`, which a pattern writes `null`.
     pub(super) is_null: bool,
-}
-
-/// How a pattern names the case `name` before its payload, if any: a bare
-/// name would bind.
-pub(super) fn case_pattern_head(name: &str, has_payload: bool, is_null: bool) -> String {
-    if is_null {
-        "null".to_string()
-    } else if has_payload {
-        name.to_string()
-    } else {
-        format!("_::{name}")
-    }
 }
 
 #[derive(Clone, Copy)]
