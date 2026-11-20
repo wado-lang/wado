@@ -220,13 +220,9 @@
 - [Extern Handles — Resources the Collector Reclaims (`externref`)](./wep-2026-11-14-extern-handles.md)
 - [Resources Are Held Only by `with`](./wep-2026-11-17-resources-held-by-with.md)
 - [The `spec` Command and Reference Search](./wep-2026-11-17-spec-command.md)
-<<<<<<< HEAD
+- [Every Resource Can Be Backed by a Guest Value](./wep-2026-11-19-guest-backed-resources.md)
 - [Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md)
 - [One Inference Context: Equations and Obligations](./wep-2026-11-20-inference-context.md)
-||||||| 43441c48636
-=======
-- [Every Resource Can Be Backed by a Guest Value](./wep-2026-11-19-guest-backed-resources.md)
->>>>>>> origin/main
 
 ## Standard Library
 
