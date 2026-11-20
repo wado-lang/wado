@@ -986,6 +986,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | Expr::StructLiteral(_)
         ) {
             let receiver_type = self.resolve_expr(receiver, ctx, None);
+            let receiver_type = self.literal_head(receiver_type);
             return project(self, receiver_type, ctx);
         }
         let collection = PendingLiterals::of_projection();
@@ -1005,8 +1006,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !waits(this, receiver_type, ctx) {
                     this.settle_receiver(ctx);
                 }
-                receiver_type = this.apply_infer_holes(receiver_type);
             }
+            let receiver_type = this.literal_head(receiver_type);
             project(this, receiver_type, ctx)
         });
         if !pending.is_empty() {

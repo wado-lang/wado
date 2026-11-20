@@ -1078,14 +1078,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// `ty` with its head settled where a site cannot go on without one: a
-    /// variable only a literal met takes the literal's default here.
+    /// variable only a literal met takes the literal's default here. One a
+    /// pending call is still to answer waits for that call instead.
     pub(super) fn literal_head(&mut self, ty: TypeId) -> TypeId {
         let ty = self.apply_infer_holes(ty);
-        if let Some(default) = self.infer_holes.vars.literal_default(ty) {
+        if !self.is_open_pending_var(ty)
+            && let Some(default) = self.infer_holes.vars.literal_default(ty)
+        {
             self.answer_infer_var(ty, default);
             return self.apply_infer_holes(ty);
         }
         ty
+    }
+
+    /// `ty` with every variable only a literal met given that literal's
+    /// default, for a selection that cannot go on while its arguments are
+    /// open (`for i of 0..<n`).
+    pub(super) fn literal_defaults_in(&mut self, ty: TypeId) -> TypeId {
+        let ty = self.apply_infer_holes(ty);
+        let vars = self.tysys.type_table.borrow().infer_vars_in(ty);
+        for var in vars {
+            self.literal_head(var);
+        }
+        self.apply_infer_holes(ty)
     }
 
     /// Whether every variable `ty` names is answered. An anonymous shape keeps

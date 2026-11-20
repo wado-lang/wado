@@ -1050,6 +1050,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if matches!(unary.op, UnaryOp::Neg | UnaryOp::BitNot) {
+            let expr_type = self.literal_head(expr_type);
             // An operand that is still a bare variable a pending call answers
             // has no head to dispatch on until it is answered.
             let dispatched = if self.is_open_pending_var(expr_type) {

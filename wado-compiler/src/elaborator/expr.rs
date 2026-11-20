@@ -2257,6 +2257,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .and_then(|(i, _)| i.index_type)
                 });
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
+            if let Some(key) = expected_key
+                && self.is_open_var(index_type)
+            {
+                self.equate(index_type, key);
+            }
+            let index_type = self.apply_infer_holes(index_type);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
             if let Some(expected) = self.tysys.pointee_of(index_type) {

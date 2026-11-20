@@ -2665,30 +2665,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
         } else {
-            // Check that the iterable type implements IntoIterator
-            let mut inner_type_id = iterable_type_id;
-            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                self.tysys.type_table.borrow().get(inner_type_id).clone()
-            {
-                inner_type_id = t;
+            let mut iterable_type_id = iterable_type_id;
+            let mut implements_into_iter = self.walks(iterable_type_id);
+            if !implements_into_iter {
+                let defaulted = self.literal_defaults_in(iterable_type_id);
+                if defaulted != iterable_type_id {
+                    iterable_type_id = defaulted;
+                    implements_into_iter = self.walks(iterable_type_id);
+                }
             }
-            // An affine operand walks `ForOf`, which `IntoIterator`'s
-            // unmarked impls do not reach (WEP: Affine Types).
-            let walkable = [CompilerItem::IntoIterator, CompilerItem::ForOf];
-            let implements_into_iter = walkable.into_iter().any(|item| {
-                self.tysys.compiler_trait(item).is_some_and(|trait_| {
-                    self.tysys
-                        .type_implements_trait(&self.annotate_ctx, iterable_type_id, &trait_)
-                        || self.tysys.type_implements_trait(
-                            &self.annotate_ctx,
-                            inner_type_id,
-                            &trait_,
-                        )
-                })
-            }) || matches!(
-                self.tysys.type_table.borrow().get(iterable_type_id),
-                ResolvedType::Unknown | ResolvedType::TypeParam { .. }
-            );
             let into_iter_receiver = if implements_into_iter {
                 // Reify expands the tag, so only an iterable that supports
                 // iteration carries one.
@@ -2718,6 +2703,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             self.resolve_iterator_for_of(for_of, into_iter_receiver, ctx);
         }
+    }
+
+    /// Whether a for-of can walk `iterable`, itself or behind its references.
+    /// An affine operand walks `ForOf`, which `IntoIterator`'s unmarked impls
+    /// do not reach (WEP: Affine Types).
+    fn walks(&self, iterable: TypeId) -> bool {
+        let pointee = self.tysys.type_table.borrow().peel_refs(iterable);
+        let walkable = [CompilerItem::IntoIterator, CompilerItem::ForOf];
+        walkable.into_iter().any(|item| {
+            self.tysys.compiler_trait(item).is_some_and(|trait_| {
+                [iterable, pointee].into_iter().any(|ty| {
+                    self.tysys
+                        .type_implements_trait(&self.annotate_ctx, ty, &trait_)
+                })
+            })
+        }) || matches!(
+            self.tysys.type_table.borrow().get(iterable),
+            ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+        )
     }
 
     /// What a for-of binds per element: the element, or `[i32, element]` under

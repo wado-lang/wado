@@ -1,0 +1,44 @@
+// A variable only a numeric literal met has no type until something settles
+// it. A site that dispatches on it cannot wait, so it takes the literal's
+// default there.
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+test "a method receiver" {
+    let n = id(-7);
+    assert n.div_floor(2) == -4;
+}
+
+test "a unary operand" {
+    let n = id(3);
+    assert -n == -3;
+}
+
+test "a range walked by for-of" {
+    let n = id(4);
+    let mut s = 0;
+    for let i of 0..<n {
+        s += i;
+    }
+    assert s == 6;
+}
+
+test "a subscript key" {
+    let xs: List<i32> = [1, 2];
+    let i = id(1);
+    assert xs[i] == 2;
+}
+
+test "a template hole" {
+    let n = id(3);
+    assert `${n}` == "3";
+}
+
+test "a binary operand" {
+    let n = id(3);
+    let m = id(4);
+    assert n + m == 7;
+    assert n < m;
+}
