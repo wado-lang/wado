@@ -1,0 +1,67 @@
+//! Builds the to-do list as a static site: the page rendered at its initial
+//! state, and the browser program that hydrates it, bundled with jco's
+//! browser shims. Run from the repository root, it takes the `wado` binary to
+//! compile with and the directory to write the site to.
+//!
+//!     wado run --dir . package-rill/example/todo/site.wado <wado> <out>
+
+use { page } from "./src/app.wado";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Environment, Exit, Stderr, args, eprintln, exit } from "core:cli";
+use { Command, Process, cmd } from "core:process";
+
+global PROGRAM: String = "package-rill/example/todo/src/main.wado";
+global JCO: String = "scripts/jco";
+
+export fn run() with (Environment, Exit, Preopens, Process, Stderr) {
+    let given = args();
+    if given.len() != 2 {
+        eprintln("usage: site.wado <wado> <out>");
+        exit(2);
+    }
+    let wado = given[0];
+    let out = given[1];
+    // What only the build reads goes beside the site, not in it.
+    let work = `${out}-work`;
+    for let dir of [out, work] {
+        fs::remove_dir_all(dir).unwrap();
+        fs::create_dir_all(dir).unwrap();
+    }
+    fs::write(fs::join(out, "index.html"), &page("app.js")).unwrap();
+    fs::write(fs::join(out, ".nojekyll"), &"").unwrap();
+
+    let program = fs::join(work, "main.wasm");
+    // V8 has no wide-arithmetic, which float formatting emits.
+    step(cmd`${wado} compile -f no-wide-arithmetic -Os -o ${program} ${PROGRAM}`);
+    step(cmd`node ${fs::join(JCO, "transpile-released.mjs")} ${program} ${work}`);
+    let boot = fs::join(work, "boot.js");
+    fs::write(boot, &"import { run } from \"./main.js\"; await run.run();\n").unwrap();
+    // jco reads the core modules with node:fs only under Node, so the browser
+    // never loads that import. It fetches them relative to the bundle instead.
+    let esbuild = fs::join(JCO, "node_modules/.bin/esbuild");
+    let bundle = fs::join(out, "app.js");
+    step(
+        cmd`${esbuild} ${boot} --bundle --format=esm --platform=browser ${"--external:node:*"} --outfile=${bundle} --log-level=error`,
+    );
+    for let entry of fs::read_dir(work).unwrap() {
+        if entry.name.ends_with(".wasm") && entry.name.contains(".core") {
+            fs::write(fs::join(out, entry.name), &fs::read(fs::join(work, entry.name)).unwrap()).unwrap();
+        }
+    }
+}
+
+fn step(command: Command) with (Exit, Process, Stderr) {
+    match command.inherit_stderr().status() {
+        Ok(Exited(0)) => {
+        },
+        Ok(status) => {
+            eprintln(`site.wado: a step ended with ${status:?}`);
+            exit(1);
+        },
+        Err(error) => {
+            eprintln(`site.wado: ${error}`);
+            exit(1);
+        },
+    }
+}

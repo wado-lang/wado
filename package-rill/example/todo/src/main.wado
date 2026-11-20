@@ -1,6 +1,9 @@
-use { render_html } from "./app.wado";
-use { println, Stdout } from "core:cli";
+//! The browser program: it hydrates the page `site.wado` rendered.
 
-export fn run() with Stdout {
-    println(render_html());
+use { mount } from "./app.wado";
+use { hydrate } from "wado-lang:rill";
+use { Dom } from "wado-lang:web";
+
+export fn run() with Dom {
+    mount(Dom::document().body().unwrap(), hydrate);
 }

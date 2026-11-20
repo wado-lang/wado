@@ -1,7 +1,7 @@
 //! A to-do list. `mount` runs once and builds the page; after that only the
 //! bindings run, each when a signal it read was written.
 
-use { Memo, Signal, Track, View, build, element, hydrate, memo, scope, signal } from "wado-lang:rill";
+use { Memo, Signal, Track, View, build, element, memo, scope, signal } from "wado-lang:rill";
 use { Dom, Element, Event, HtmlInputElement, SurfaceDom } from "wado-lang:web";
 
 struct Todo {
@@ -57,7 +57,7 @@ pub fn mount(root: Element, attach: fn(View) -> Element with (Track, Dom)) -> fn
         });
 
         let mut field: Option<HtmlInputElement> = null;
-        let page = View::of(root)
+        let view = View::of(root)
             .children([
                 element("input").attribute("id", "title").with_node(|node| {
                     let input: HtmlInputElement = node else {
@@ -85,96 +85,33 @@ pub fn mount(root: Element, attach: fn(View) -> Element with (Track, Dom)) -> fn
                 }
                 return element("p").bind_text(|| `${remaining.get()} left`);
             });
-        attach(page);
+        attach(view);
     });
 }
 
-fn click(id: String) with Dom {
-    Dom::document().get_element_by_id(id).unwrap().dispatch_event(Event::new("click"));
-}
-
-fn add_todo(title: String) with Dom {
-    let Some(input: HtmlInputElement) = Dom::document().get_element_by_id("title") else {
-        unreachable();
-    };
-    input.set_value(title);
-    click("add");
-}
-
-/// The page after a short session, as a server would send it.
-pub fn render_html() -> String {
+/// The page as served: the list's initial state, and the browser program that
+/// hydrates it, at `script` beside the page.
+pub fn page(script: String) -> String {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        mount(Dom::document().body().unwrap(), build);
-        add_todo("write the signals");
-        add_todo("bind them to the DOM");
-        Dom::document().get_element_by_id("todo-1").unwrap().first_child().unwrap().dispatch_event(Event::new("click"));
+        let doc = Dom::document();
+        doc.set_title("Rill to-do");
+        let Some(head: Element) = doc.document_element().unwrap().first_child() else {
+            unreachable();
+        };
+        let charset = doc.create_element("meta");
+        charset.set_attribute("charset", "utf-8");
+        head.insert_before(charset, head.first_child());
+        let style = doc.create_element("style");
+        style.set_text_content(Option::Some(
+            "li.done span { text-decoration: line-through; } li span { cursor: pointer; }",
+        ));
+        head.append_child(style);
+        let program = doc.create_element("script");
+        program.set_attribute("type", "module");
+        program.set_attribute("src", script);
+        head.append_child(program);
+        mount(doc.body().unwrap(), build);
     };
     return dom.to_html();
-}
-
-test "the list follows what the user does" {
-    let mut dom = SurfaceDom::new();
-    with &mut dom do {
-        let body = Dom::document().body().unwrap();
-        let mut unmount = mount(body, build);
-        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p>Nothing to do.</p>";
-
-        add_todo("one");
-        add_todo("two");
-        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul><li id=\"todo-1\"><span>one</span><button>×</button></li><li id=\"todo-2\"><span>two</span><button>×</button></li></ul><p>2 left</p>";
-
-        let first = Dom::document().get_element_by_id("todo-1").unwrap();
-        first.first_child().unwrap().dispatch_event(Event::new("click"));
-        assert first.get_attribute("class") == Option::Some("done");
-        assert body.text_content() == Option::Some("Addone×two×1 left");
-
-        first.last_child().unwrap().dispatch_event(Event::new("click"));
-        assert Dom::document().get_element_by_id("todo-1") == null;
-        assert body.text_content() == Option::Some("Addtwo×1 left");
-
-        Dom::document().get_element_by_id("todo-2").unwrap().last_child().unwrap().dispatch_event(Event::new("click"));
-        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul><p>Nothing to do.</p>";
-
-        unmount();
-        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul></ul>";
-    };
-}
-
-test "a row that stays keeps its node" {
-    let mut dom = SurfaceDom::new();
-    with &mut dom do {
-        mount(Dom::document().body().unwrap(), build);
-        add_todo("one");
-        let before = Dom::document().get_element_by_id("todo-1").unwrap();
-        add_todo("two");
-        assert Dom::document().get_element_by_id("todo-1").unwrap() == before;
-    };
-}
-
-test "the served page hydrates in place and then follows what the user does" {
-    let mut dom = SurfaceDom::new();
-    with &mut dom do {
-        // The tree a browser parses the served page into.
-        let doc = Dom::document();
-        let body = doc.body().unwrap();
-        let field = doc.create_element("input");
-        field.set_attribute("id", "title");
-        let add = doc.create_element("button");
-        add.set_attribute("id", "add");
-        add.append_child(doc.create_text_node("Add"));
-        let summary = doc.create_element("p");
-        summary.append_child(doc.create_text_node("Nothing to do."));
-        for let served of [field, add, doc.create_element("ul"), summary] as List<Element> {
-            body.append_child(served);
-        }
-        let served = body.get_html();
-
-        mount(body, hydrate);
-        assert body.get_html() == served;
-        assert Dom::document().get_element_by_id("title") == Option::Some(field);
-
-        add_todo("one");
-        assert body.get_html() == "<input id=\"title\"><button id=\"add\">Add</button><ul><li id=\"todo-1\"><span>one</span><button>×</button></li></ul><p>1 left</p>";
-    };
 }

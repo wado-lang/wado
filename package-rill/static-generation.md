@@ -123,9 +123,8 @@ HTML; only the bindings are missing.
   order.
 - [x] Add claim mode to that pass.
 - [x] Apply the mismatch policy.
-- [ ] Render the to-do example's initial page at build time, and hydrate it
-  in the browser, compiled as
-  [`example/web-browser/build.sh`](../example/web-browser/build.sh) does.
+- [x] Render the to-do example's initial page at build time, and hydrate it
+  in the browser: [`example/todo/site.wado`](./example/todo/site.wado).
 - [ ] Host it on wado-lang.org.
 
 ## Known gaps
@@ -134,3 +133,5 @@ HTML; only the bindings are missing.
   page would need to carry it, serialized, for `mount` to start from it.
 - A page with more than one route needs a page per path, or a `404.html` that
   serves the app.
+- No test runs the built site in a browser. `SurfaceDom` stands in for the DOM,
+  and the browser's own HTML parser is checked by hand.
