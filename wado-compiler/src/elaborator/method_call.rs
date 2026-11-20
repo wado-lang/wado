@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::trait_env::{ImplTargetKey, written_arg_nodes};
+use super::trait_env::{BlanketImpl, ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
@@ -3114,7 +3114,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let selected = resolution.selected;
         let declaration = resolution.declaration;
-        let declared = selected.is_some() || declaration.is_some() || resolution.blanket.is_some();
         let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
         let mangled_func_name = MethodName::format_local(
@@ -3162,7 +3161,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .is_infer_var(self.apply_infer_holes(var))
                 })
                 .collect();
-            if declared && !open.is_empty() {
+            if !open.is_empty()
+                && self.static_name_declared(target_type_id, &static_call.method, required_trait)
+            {
                 self.close_uninferred(&open);
                 return TypeTable::ERROR;
             }
@@ -3616,16 +3617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .blanket_impls
             .iter()
             .flat_map(|(trait_name, impls)| impls.iter().map(move |b| (trait_name, b)))
-            .filter(|(_, b)| b.receiver == BlanketReceiver::Value)
-            .filter(|(_, b)| {
-                let target = ImplTargetKey::TypeParam {
-                    owner: b.def,
-                    name: b.param.clone(),
-                };
-                self.static_method_entries(&target, method_name)
-                    .next()
-                    .is_some()
-            })
+            .filter(|(_, b)| self.blanket_offers_static(b, method_name))
             // The trait comes off the impl's own header, so the blanket
             // index's bare-name key never reaches a mangled name.
             .filter_map(|(_, b)| {
@@ -3667,6 +3659,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .map(|(blanket, _)| blanket)
             .collect()
+    }
+
+    /// Whether the value blanket `b` supplies a static `method_name`.
+    fn blanket_offers_static(&self, b: &BlanketImpl, method_name: &str) -> bool {
+        let target = ImplTargetKey::TypeParam {
+            owner: b.def,
+            name: b.param.clone(),
+        };
+        b.receiver == BlanketReceiver::Value
+            && self
+                .static_method_entries(&target, method_name)
+                .next()
+                .is_some()
+    }
+
+    /// Whether some declaration offers `target` a static `method_name` at
+    /// some arguments: a block on its head, a value blanket, or the trait the
+    /// call names. Where none does, no answer to an open `_` could make the
+    /// call resolve.
+    fn static_name_declared(
+        &self,
+        target: TypeId,
+        method_name: &str,
+        required_trait: Option<DefId>,
+    ) -> bool {
+        self.tysys
+            .trait_declares_method(required_trait, method_name, |_| true)
+            || self
+                .tysys
+                .static_receiver_key(target)
+                .is_some_and(|key| self.static_method_entries(&key, method_name).next().is_some())
+            || self
+                .tysys
+                .trait_env
+                .blanket_impls
+                .values()
+                .flatten()
+                .any(|b| self.blanket_offers_static(b, method_name))
     }
 
     /// The signature of the declaration a static resolution selected, read in
