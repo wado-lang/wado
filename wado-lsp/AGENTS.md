@@ -17,8 +17,10 @@ the LSP specification at
 - A query degrades to no answer on a partial `Semantics`, never fails: the
   frontend always produces one, and batch compilation alone checks
   `Semantics::is_complete()`.
-- A `CompilerHost` wrapper delegates every capability. A trait default in its
-  place drops the wrapped host's dependency index (`DiagnosticCollector`).
+- A `CompilerHost` wrapper delegates every capability, and
+  `#[deny(clippy::missing_trait_methods)]` on its impl holds it to that. A
+  trait default in its place drops the wrapped host's dependency index
+  (`DiagnosticCollector`).
 - A `file:` URI is percent-decoded on the way in (`Uri::to_filename`) and
   re-encoded on the way out (`location::filename_to_uri`). Clients key
   documents by URI string, so a path that skips either names a different

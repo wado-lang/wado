@@ -18,7 +18,7 @@ use crate::analyze::Analyzer;
 use crate::ast;
 use crate::cm_type_decls::CmTypeDecls;
 use crate::compiler_host::{
-    CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
+    CompilerHost, DependencyIndex, Diagnostic, ErasedHost, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, LogLevel, ModuleDir, SourceError,
 };
 use crate::coverage::CoverageScope;
@@ -163,7 +163,7 @@ pub fn prelude_names() -> Vec<(String, DefKind)> {
 /// probes a compile measuring it would, and under `profile` the cold markers a
 /// compile applying it would.
 fn build_snapshot(coverage: Option<CoverageScope>, profile: Option<Applied<'_>>) -> Semantics {
-    let host = SnapshotHost;
+    let host = ErasedHost::new(&SnapshotHost);
     let logger = Logger::new(&host, LogLevel::Error);
 
     // `wado-compiler` has no async runtime dependency (it must compile
@@ -351,7 +351,7 @@ fn resolve_stdlib_bindings() -> StdlibBindings {
     for (i, path) in paths.iter().enumerate() {
         writeln!(entry, "use binding{i} from \"{path}\";").expect("writing to a String");
     }
-    let host = SnapshotHost;
+    let host = ErasedHost::new(&SnapshotHost);
     let logger = Logger::new(&host, LogLevel::Error);
     let load = poll_to_completion(async {
         ModuleLoader::new(&host, LogLevel::Off)

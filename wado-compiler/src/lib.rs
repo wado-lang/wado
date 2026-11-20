@@ -133,10 +133,10 @@ pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
-use compiler_host::LocalBoxFuture;
+use compiler_host::{ErasedHost, LocalBoxFuture};
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
-    ErasedHost, GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorRequest,
+    GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorRequest,
     GeneratorResponse, GeneratorRunnerError, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir,
     ProbeInput, ProbeRequest, Severity, SourceError, SourceReader,
 };
@@ -1543,8 +1543,8 @@ async fn compile_body(
     let mut load_result = {
         let module_loader = loader::ModuleLoader::new(host, log_level)
             .with_invocations(options.invocations.clone());
-        // Boxed: inline, the load is most of every caller's future.
-        Box::pin(module_loader.load_all(source, filename.as_deref()))
+        module_loader
+            .load_all(source, filename.as_deref())
             .await
             .map_err(|e| {
                 let _ = logger.error(e);
@@ -1586,16 +1586,15 @@ async fn compile_body(
 /// The dependency snapshot a compile under `options` seeds from. A probed or
 /// profiled compile marks what it reifies, which a snapshot built unmarked
 /// would not.
-async fn dependency_seed<H: CompilerHost>(
+async fn dependency_seed(
     load: &loader::LoadResult,
-    host: &H,
+    host: &ErasedHost<'_>,
     options: &CompilerOptions,
 ) -> Option<Rc<semantics::Semantics>> {
     if options.coverage.is_some() || options.profile.is_some() {
         return None;
     }
-    // Boxed: the build's load would otherwise inline into every compile's future.
-    Box::pin(dependency_snapshot::dependency_snapshot(load, host)).await
+    dependency_snapshot::dependency_snapshot(load, host).await
 }
 
 /// Compile each `with { provider: "./p.wado" }` directive into a provider
@@ -3099,7 +3098,7 @@ pub async fn load<H: CompilerHost>(
     .await
 }
 
-fn load_erased<'a>(
+pub(crate) fn load_erased<'a>(
     parsed: ParseResult,
     filename: Option<&'a str>,
     host: &'a ErasedHost<'a>,

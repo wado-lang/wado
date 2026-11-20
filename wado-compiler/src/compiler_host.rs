@@ -732,8 +732,7 @@ pub trait CompilerHost: Send + Sync {
     fn stdlib_module_read(&self, import_path: &str);
 }
 
-pub use erased::ErasedHost;
-pub(crate) use erased::LocalBoxFuture;
+pub(crate) use erased::{ErasedHost, LocalBoxFuture};
 
 // A module of its own, so `DynCompilerHost`'s methods, which every host has,
 // are in scope nowhere but here.
@@ -885,56 +884,51 @@ mod erased {
     /// each public entry point takes the host as this instead, so the compiler is
     /// generated once, here, whatever host calls it.
     #[derive(Clone, Copy)]
-    pub struct ErasedHost<'a>(&'a dyn DynCompilerHost);
+    pub(crate) struct ErasedHost<'a>(&'a dyn DynCompilerHost);
 
     impl<'a> ErasedHost<'a> {
-        pub fn new<H: CompilerHost>(host: &'a H) -> Self {
+        pub(crate) fn new<H: CompilerHost>(host: &'a H) -> Self {
             Self(host)
         }
     }
 
-    // Each future is an `async` block, which names every lifetime it borrows; the
-    // boxed future alone borrows the shorter of the host's and an argument's, which
-    // an opaque return type cannot name.
+    #[deny(clippy::missing_trait_methods)]
     impl CompilerHost for ErasedHost<'_> {
-        fn load_source(
-            &self,
-            path: &str,
-        ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
-            async move { self.0.load_source(path).await }
+        async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+            self.0.load_source(path).await
         }
-        fn source_exists(&self, path: &str) -> impl Future<Output = bool> + Send {
-            async move { self.0.source_exists(path).await }
+        async fn source_exists(&self, path: &str) -> bool {
+            self.0.source_exists(path).await
         }
-        fn open_source(
+        async fn open_source(
             &self,
             path: &str,
             integrity: Option<Integrity>,
-        ) -> impl Future<Output = Result<Arc<dyn SourceReader>, SourceError>> + Send {
-            async move { self.0.open_source(path, integrity).await }
+        ) -> Result<Arc<dyn SourceReader>, SourceError> {
+            self.0.open_source(path, integrity).await
         }
-        fn load_source_prefix(
+        async fn load_source_prefix(
             &self,
             path: &str,
             extent: Option<u64>,
-        ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
-            async move { self.0.load_source_prefix(path, extent).await }
+        ) -> Result<Vec<u8>, SourceError> {
+            self.0.load_source_prefix(path, extent).await
         }
-        fn load_remote(
+        async fn load_remote(
             &self,
             url: &str,
             extent: Option<u64>,
             integrity: Option<Integrity>,
-        ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
-            async move { self.0.load_remote(url, extent, integrity).await }
+        ) -> Result<Vec<u8>, SourceError> {
+            self.0.load_remote(url, extent, integrity).await
         }
-        fn load_file(
+        async fn load_file(
             &self,
             path: &str,
             extent: Option<u64>,
             integrity: Option<Integrity>,
-        ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
-            async move { self.0.load_file(path, extent, integrity).await }
+        ) -> Result<Vec<u8>, SourceError> {
+            self.0.load_file(path, extent, integrity).await
         }
         fn emit_diagnostic(&self, diagnostic: Diagnostic) {
             self.0.emit_diagnostic(diagnostic);
@@ -942,19 +936,19 @@ mod erased {
         fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
             self.0.save_internal_artifact(file_stem, bytes)
         }
-        fn run_generator(
+        async fn run_generator(
             &self,
             component_wasm: &[u8],
             request: GeneratorRequest,
-        ) -> impl Future<Output = Result<GeneratorResponse, GeneratorRunnerError>> + Send {
-            async move { self.0.run_generator(component_wasm, request).await }
+        ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+            self.0.run_generator(component_wasm, request).await
         }
-        fn probe_generator(
+        async fn probe_generator(
             &self,
             component_wasm: &[u8],
             request: &ProbeRequest,
-        ) -> impl Future<Output = Result<Vec<Option<u64>>, GeneratorRunnerError>> + Send {
-            async move { self.0.probe_generator(component_wasm, request).await }
+        ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+            self.0.probe_generator(component_wasm, request).await
         }
         fn dependency_index(&self) -> DependencyIndex {
             self.0.dependency_index()

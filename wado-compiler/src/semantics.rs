@@ -45,7 +45,7 @@ use crate::type_table::TypeTable;
 use crate::unparse::unparse_contract_clause_renamed;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::{ExportMapping, ExportMappings, WorldRegistry, world_key};
-use crate::{ast, load, loader, parse, report_without_span, symbol_notation};
+use crate::{ast, load_erased, loader, parse, report_without_span, symbol_notation};
 
 /// A ready-to-query analysis result.
 ///
@@ -1532,7 +1532,7 @@ async fn semantics_for_world_body(
     for d in parsed.diagnostics(filename) {
         host.emit_diagnostic(d);
     }
-    match load(parsed, filename, host, invocations, LogLevel::default()).await {
+    match load_erased(parsed, filename, host, invocations, LogLevel::default()).await {
         Ok(mut loaded) => {
             inject_kiln_request_adapter(
                 target_world,
@@ -1540,7 +1540,7 @@ async fn semantics_for_world_body(
                 &mut loaded.modules,
                 &mut loaded.cm_source_interfaces,
             );
-            semantics_of(loaded, host, LogLevel::default(), build_tir)
+            semantics_of_erased(loaded, host, LogLevel::default(), build_tir)
         }
         Err(e) => {
             let logger = Logger::new(host, LogLevel::default());
@@ -1928,6 +1928,7 @@ mod tests {
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
     use crate::hashmap;
+    use crate::load;
     use crate::pgo;
     use crate::rarity::Mark;
     use crate::tir::{TirExpr, TirExprKind};
