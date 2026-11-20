@@ -1059,6 +1059,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A newtype reaches itself through its base, so no type is at its root.
+    /// `chain` is the path back to it, starting and ending at it.
+    CircularNewtype {
+        name: String,
+        chain: Vec<String>,
+        span: Span,
+    },
+
     /// A trait reaches itself through its supertrait clause, so no type could
     /// ever satisfy the obligation. `chain` is the path back to the trait,
     /// starting and ending at it (`A -> B -> A`).
@@ -2541,6 +2549,14 @@ impl TypeError {
             TypeError::UnknownBound { name, span } => (
                 Code::UnknownType,
                 format!("'{}' is not a declared trait", unalias_namespace_member(name)),
+                *span,
+            ),
+            TypeError::CircularNewtype { name, chain, span } => (
+                Code::UnknownType,
+                format!(
+                    "circular newtype: '{name}' is its own base via {}",
+                    chain.join(" -> ")
+                ),
                 *span,
             ),
             TypeError::CircularSupertrait {

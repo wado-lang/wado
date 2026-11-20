@@ -188,6 +188,8 @@ struct VarStore {
     /// The variables standing for a pack: a list of types, spliced where a
     /// tuple holds it, so never one element's type.
     packs: IndexSet<TypeId>,
+    /// How many answers the store has taken; each leaves one class fewer open.
+    answers: usize,
 }
 
 impl VarStore {
@@ -268,6 +270,7 @@ impl VarStore {
             }
             None => self.binding[i] = Some(answer),
         }
+        self.answers += 1;
     }
 }
 
@@ -949,18 +952,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Ask each obligation again until none progresses: discharging one may
-    /// settle a variable another reads. What stays keeps its place ahead of
-    /// what the asking queued.
+    /// Ask each obligation again until none progresses: asking one may settle
+    /// a variable another reads, whether it is discharged or stays. What stays
+    /// keeps its place ahead of what the asking queued.
     pub(super) fn run_obligations(&mut self) {
         let mut pending = self.infer_holes.obligations.take();
         loop {
-            let before = pending.len();
+            let before = (pending.len(), self.infer_holes.vars.answers);
             pending = pending
                 .into_iter()
                 .filter_map(|obligation| self.ask(obligation))
                 .collect();
-            if pending.len() == before {
+            if (pending.len(), self.infer_holes.vars.answers) == before {
                 break;
             }
         }

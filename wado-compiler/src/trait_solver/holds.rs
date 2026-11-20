@@ -1184,16 +1184,9 @@ pub(super) fn settles_nothing(program: &Program, def: &ImplDef, ty: &SolverType)
 /// Whether `ty` may be a numeric literal's type: one of the program's literal
 /// types, a newtype over one, or a variable that may yet be one.
 fn may_be_literal(program: &Program, ty: &SolverType) -> bool {
-    match ty {
+    match peel_newtypes(program, ty) {
         SolverType::Var(_) => true,
-        SolverType::Decl(head, _) => {
-            program.literal_types.contains(head)
-                || program
-                    .types
-                    .get(head)
-                    .and_then(|def| def.newtype_base.as_ref())
-                    .is_some_and(|base| may_be_literal(program, base))
-        }
+        SolverType::Decl(head, _) => program.literal_types.contains(&head),
         SolverType::Param(_)
         | SolverType::Pack(_)
         | SolverType::Ref { .. }
