@@ -28,7 +28,8 @@ export fn run() with (Environment, Exit, Preopens, Process, Stderr) {
         fs::remove_dir_all(dir).unwrap();
         fs::create_dir_all(dir).unwrap();
     }
-    fs::write(fs::join(out, "index.html"), &page("app.js")).unwrap();
+    let bundle = "app.js";
+    fs::write(fs::join(out, "index.html"), &page(bundle)).unwrap();
     fs::write(fs::join(out, ".nojekyll"), &"").unwrap();
 
     let program = fs::join(work, "main.wasm");
@@ -40,9 +41,9 @@ export fn run() with (Environment, Exit, Preopens, Process, Stderr) {
     // jco reads the core modules with node:fs only under Node, so the browser
     // never loads that import. It fetches them relative to the bundle instead.
     let esbuild = fs::join(JCO, "node_modules/.bin/esbuild");
-    let bundle = fs::join(out, "app.js");
+    let outfile = fs::join(out, bundle);
     step(
-        cmd`${esbuild} ${boot} --bundle --format=esm --platform=browser ${"--external:node:*"} --outfile=${bundle} --log-level=error`,
+        cmd`${esbuild} ${boot} --bundle --format=esm --platform=browser ${"--external:node:*"} --outfile=${outfile} --log-level=error`,
     );
     for let entry of fs::read_dir(work).unwrap() {
         if entry.name.ends_with(".wasm") && entry.name.contains(".core") {
