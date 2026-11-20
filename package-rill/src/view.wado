@@ -25,12 +25,16 @@ pub fn element(tag: String) -> View {
 
 /// Builds `view` anew, inside the computation that owns its bindings.
 pub fn build(view: View) -> Element with (Track, Dom) {
-    let node = match view.origin {
+    let node = make(view.origin);
+    run_steps(node, false, view.steps);
+    return node;
+}
+
+fn make(origin: Origin) -> Element with Dom {
+    return match origin {
         Tag(tag) => Dom::document().create_element(tag),
         Adopted(node) => node,
     };
-    run_steps(node, false, view.steps);
-    return node;
 }
 
 /// Builds `view` on the served element it adopts, taking each element it would
@@ -109,10 +113,7 @@ fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
         }
         served;
     } else {
-        let made = match view.origin {
-            Tag(tag) => Dom::document().create_element(tag),
-            Adopted(node) => node,
-        };
+        let made = make(view.origin);
         parent.insert(made);
         made;
     };
@@ -258,10 +259,15 @@ struct Rendered {
     dispose: fn mut() with Dom,
 }
 
-fn render_owned(make: fn mut() -> Element with (Track, Dom)) -> Rendered with Dom {
-    let mut make = make;
+/// Builds what `render` makes in a scope of its own: at the point `at` has
+/// reached while `in_place`, so a claiming build claims it, and anew otherwise.
+fn render_owned(at: &mut Build, in_place: bool, render: fn mut() -> View with (Track, Dom)) -> Rendered with Dom {
+    let mut render = render;
     let mut node: Option<Element> = null;
-    let dispose = scope(|| node = Option::Some(make()));
+    let dispose = scope(|| {
+        let view = render();
+        node = Option::Some(if in_place { build_in(at, view) } else { build(view) });
+    });
     return Rendered { node: node.unwrap(), dispose };
 }
 
@@ -282,8 +288,7 @@ fn hide(shown: &mut Option<Rendered>) with Dom {
 }
 
 /// Shows what `render` makes for the key, for a key `shows` admits, at the
-/// point `at` has reached. The first subtree is built in place, so a claiming
-/// build claims it; a later one is built anew and moved in.
+/// point `at` has reached.
 fn place<K: Eq>(
     at: &mut Build,
     key: fn mut() -> K with Track,
@@ -325,13 +330,7 @@ fn place<K: Eq>(
         if !shows(current) {
             return;
         }
-        let made = render_owned(|| {
-            let view = render(current);
-            if in_place {
-                return build_in(at, view);
-            }
-            return build(view);
-        });
+        let made = render_owned(at, in_place, || render(current));
         // So may `render`.
         if disposed {
             remove(made);
@@ -366,8 +365,6 @@ fn clear_rows<T>(rows: &mut List<Row<T>>) with Dom {
     remove_rows(leaving);
 }
 
-/// The first rows are built in place, so a claiming build claims them; later
-/// rows are built anew and moved in.
 fn each<T: Eq>(
     at: &mut Build,
     items: fn mut() -> List<T> with Track,
@@ -404,14 +401,7 @@ fn each<T: Eq>(
             if found {
                 continue;
             }
-            let rendered = render_owned(|| {
-                let view = render(item);
-                if in_place {
-                    return build_in(at, view);
-                }
-                return build(view);
-            });
-            kept.push(Row { item, rendered });
+            kept.push(Row { item, rendered: render_owned(at, in_place, || render(item)) });
             was.push(-1);
             if disposed {
                 break;

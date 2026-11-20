@@ -18,7 +18,9 @@ with &mut dom do {
     let count = signal(0);
     let mut button: Option<Element> = null;
     let mut dispose = scope(|| {
-        let view = element("button").bind_text(|| `clicked ${count.get()} times`).on("click", |_event: Event| count.set(count.get() + 1));
+        let view = element("button")
+            .bind_text(|| `clicked ${count.get()} times`)
+            .on("click", |_event: Event| count.set(count.get() + 1));
         button = Option::Some(build(view));
     });
     assert button.unwrap().text_content() == Option::Some("clicked 0 times");
