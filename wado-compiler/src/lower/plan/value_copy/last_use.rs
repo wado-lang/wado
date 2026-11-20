@@ -50,10 +50,10 @@ pub struct Ownership {
     /// Locals whose binding copy is elided by sharing the source storage:
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
-    /// Locals whose storage a reference outliving the frame reads, directly or
-    /// through the binding a share aliases. Returned, such storage still has
-    /// that reader, so the result owes a copy whatever the return conventions
-    /// say.
+    /// Locals whose storage a persisting reference reads, directly or through
+    /// the binding a share aliases. The walk cannot say whether that reference
+    /// dies before the `return`, so a returned one owes a copy whatever the
+    /// return conventions say.
     pub escaped_storage: IndexSet<u32>,
 }
 

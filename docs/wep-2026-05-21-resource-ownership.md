@@ -756,6 +756,16 @@ Neither the inliner nor any NIR pass can stand in: the copy is chosen before NIR
 exists, and `#[inline(always)]` on `next` leaves the expanded clone in the
 caller's loop untouched even with the cloned array provably unread.
 
+### A reference that dies before the `return`
+
+A returned local whose `&` persists in the frame is copied at the `return`, since
+the reference may still read it once the caller writes the result. The walk
+records that a reference persists, not until when, so one that dies first costs
+the copy too. A `with Sink => &mut sink do { … }` block is that case: the
+dispatch closure capturing `sink` is uninstalled when the block ends, yet
+`return sink.lines;` after it deep-copies the list
+(`effect_handler_open_method_install`).
+
 ### A field moved out of a live aggregate
 
 A place-level move out of an aggregate happens at a struct or tuple literal,

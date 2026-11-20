@@ -280,162 +280,167 @@ global global:serde_full_json_serialize.wado::$const_obj_133: ref Array<u8> = ar
 global global:serde_full_json_serialize.wado::$const_obj_135: ref Array<u8> = array.new_fixed<u8>(91);
 
 fn "serde_full_json_serialize.wado/run"() with Stdout {
-    let writer_54: ref "serde_full_json_serialize.wado//JsonWriter";
-    let $cm_pair_7_76: i64;
-    let $sroa_$pattern_temp_0_0_13_82: i32;
-    let $sroa_$pattern_temp_0_1_14_83: i32;
-    let new_repr_88: ref Array<u8>;
-    let st_131: ref "tuple//[i32, core:prelude/types.wado/Option<serde_full_json_serialize.wado/JsonStructSerializer>, core:prelude/types.wado/Option<serde_full_json_serialize.wado/SerializeError>]";
+    let writer_56: ref "serde_full_json_serialize.wado//JsonWriter";
+    let $cm_pair_7_81: i64;
+    let $sroa_$pattern_temp_0_0_13_87: i32;
+    let $sroa_$pattern_temp_0_1_14_88: i32;
+    let st_136: ref "tuple//[i32, core:prelude/types.wado/Option<serde_full_json_serialize.wado/JsonStructSerializer>, core:prelude/types.wado/Option<serde_full_json_serialize.wado/SerializeError>]";
     let $local_4: ref "serde_full_json_serialize.wado//JsonStructSerializer";
     let $local_5: ref "core:prelude/types.wado//Result<serde_full_json_serialize.wado/JsonStructSerializer,serde_full_json_serialize.wado/SerializeError>";
-    let self_202: i32;
-    let $sroa_$sroa_writer_buf_263_repr_270: ref Array<u8>;
-    let $sroa_write_back_274: ref "core:prelude/string.wado//String";
-    $sroa_$sroa_writer_buf_263_repr_270 = builtin::array_new<u8>(0);
-    if @unlikely(2 > builtin::array_len($sroa_$sroa_writer_buf_263_repr_270)) {
+    let $sroa_$pattern_temp_0_1_14_192: i32;
+    let $sroa_$sroa_writer_buf_268_repr_285: ref Array<u8>;
+    let $sroa_write_back_289: ref "core:prelude/string.wado//String";
+    $sroa_$sroa_writer_buf_268_repr_285 = builtin::array_new<u8>(0);
+    if @unlikely(2 > builtin::array_len($sroa_$sroa_writer_buf_268_repr_285)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_274(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_writer_buf_263_repr_270, used: 0 }), 2);
-        $sroa_$sroa_writer_buf_263_repr_270 = $sroa_write_back_274.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_289(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_writer_buf_268_repr_285, used: 0 }), 2);
+        $sroa_$sroa_writer_buf_268_repr_285 = $sroa_write_back_289.repr;
     }
-    builtin::array_copy<u8>($sroa_$sroa_writer_buf_263_repr_270, 0, global:serde_full_json_serialize.wado::$const_obj_8, 0, 2);
-    $sroa_$pattern_temp_0_0_13_82 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_83 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_82 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_82);
-    builtin::array_copy<u8>(local.tee new_repr_88(builtin::array_new<u8>(3)), 0, $sroa_$sroa_writer_buf_263_repr_270, 0, 2);
-    builtin::array_set_u8(new_repr_88, 2, 10);
+    builtin::array_copy<u8>($sroa_$sroa_writer_buf_268_repr_285, 0, global:serde_full_json_serialize.wado::$const_obj_8, 0, 2);
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(2)), 0, $sroa_$sroa_writer_buf_268_repr_285, 0, 2);
+    $sroa_$pattern_temp_0_0_13_87 = builtin::i32_wrap_i64(local.tee $cm_pair_7_81("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_88 = builtin::i32_wrap_i64($cm_pair_7_81 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_87 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_87);
+    builtin::array_copy<u8>(local.tee $sroa_$sroa_writer_buf_268_repr_285(builtin::array_new<u8>(3)), 0, $array_clone_dst_2, 0, 2);
+    builtin::array_set_u8($sroa_$sroa_writer_buf_268_repr_285, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; $sroa_$pattern_temp_0_1_14_83, new_repr_88);
+    }; $sroa_$pattern_temp_0_1_14_88, $sroa_$sroa_writer_buf_268_repr_285);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_83);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_88);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_82);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_87);
     }
-    $sroa_$sroa_writer_buf_263_repr_270 = builtin::array_new<u8>(0);
-    if @unlikely(7 > builtin::array_len($sroa_$sroa_writer_buf_263_repr_270)) {
+    $sroa_$sroa_writer_buf_268_repr_285 = builtin::array_new<u8>(0);
+    if @unlikely(7 > builtin::array_len($sroa_$sroa_writer_buf_268_repr_285)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_274(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_writer_buf_263_repr_270, used: 0 }), 7);
-        $sroa_$sroa_writer_buf_263_repr_270 = $sroa_write_back_274.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_289(struct.new "core:prelude/string.wado//String" { repr: $sroa_$sroa_writer_buf_268_repr_285, used: 0 }), 7);
+        $sroa_$sroa_writer_buf_268_repr_285 = $sroa_write_back_289.repr;
     }
-    builtin::array_copy<u8>($sroa_$sroa_writer_buf_263_repr_270, 0, global:serde_full_json_serialize.wado::$const_obj_7, 0, 7);
-    $sroa_$pattern_temp_0_0_13_82 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_83 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_82 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_82);
-    builtin::array_copy<u8>(local.tee new_repr_88(builtin::array_new<u8>(8)), 0, $sroa_$sroa_writer_buf_263_repr_270, 0, 7);
-    builtin::array_set_u8(new_repr_88, 7, 10);
+    builtin::array_copy<u8>($sroa_$sroa_writer_buf_268_repr_285, 0, global:serde_full_json_serialize.wado::$const_obj_7, 0, 7);
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(7)), 0, $sroa_$sroa_writer_buf_268_repr_285, 0, 7);
+    $sroa_$pattern_temp_0_0_13_87 = builtin::i32_wrap_i64(local.tee $cm_pair_7_81("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_88 = builtin::i32_wrap_i64($cm_pair_7_81 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_87 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_87);
+    builtin::array_copy<u8>(local.tee $sroa_$sroa_writer_buf_268_repr_285(builtin::array_new<u8>(8)), 0, $array_clone_dst_2, 0, 7);
+    builtin::array_set_u8($sroa_$sroa_writer_buf_268_repr_285, 7, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; $sroa_$pattern_temp_0_1_14_83, new_repr_88);
+    }; $sroa_$pattern_temp_0_1_14_88, $sroa_$sroa_writer_buf_268_repr_285);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_83);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_88);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_82);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_87);
     }
-    writer_54 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+    writer_56 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop($inline_serde_full_json_serialize_wado_Point_serde_full_json_serialize_wado_Serialize__serialize_serde_full_json_serialize_wado_JsonSerializer__spec0_sroa_s_w__6: block -> ref null "serde_full_json_serialize.wado//SerializeError" {
-        if @unlikely(local.tee $sroa_$pattern_temp_0_0_13_82(local.tee $sroa_write_back_274(writer_54.buf).used + 1) > builtin::array_len($sroa_write_back_274.repr)) {
+        if @unlikely(local.tee $sroa_$pattern_temp_0_0_13_87(local.tee $sroa_write_back_289(writer_56.buf).used + 1) > builtin::array_len($sroa_write_back_289.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_write_back_274, $sroa_$pattern_temp_0_0_13_82);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_write_back_289, $sroa_$pattern_temp_0_0_13_87);
         }
-        $sroa_$pattern_temp_0_1_14_83 = $sroa_write_back_274.used;
-        $sroa_write_back_274.used = $sroa_$pattern_temp_0_0_13_82;
-        builtin::array_copy<u8>($sroa_write_back_274.repr, $sroa_$pattern_temp_0_1_14_83, global:serde_full_json_serialize.wado::$const_obj_6, 0, 1);
-        st_131 = struct.new "tuple//[i32, core:prelude/types.wado/Option<serde_full_json_serialize.wado/JsonStructSerializer>, core:prelude/types.wado/Option<serde_full_json_serialize.wado/SerializeError>]" { 0: 0, 1: struct.new "serde_full_json_serialize.wado//JsonStructSerializer" { w: writer_54, count: 0 }, 2: ref.null none };
+        $sroa_$pattern_temp_0_1_14_88 = $sroa_write_back_289.used;
+        $sroa_write_back_289.used = $sroa_$pattern_temp_0_0_13_87;
+        builtin::array_copy<u8>($sroa_write_back_289.repr, $sroa_$pattern_temp_0_1_14_88, global:serde_full_json_serialize.wado::$const_obj_6, 0, 1);
+        st_136 = struct.new "tuple//[i32, core:prelude/types.wado/Option<serde_full_json_serialize.wado/JsonStructSerializer>, core:prelude/types.wado/Option<serde_full_json_serialize.wado/SerializeError>]" { 0: 0, 1: struct.new "serde_full_json_serialize.wado//JsonStructSerializer" { w: writer_56, count: 0 }, 2: ref.null none };
         if ref.test "core:prelude/types.wado//Result<serde_full_json_serialize.wado/JsonStructSerializer,serde_full_json_serialize.wado/SerializeError>::Ok"(local.tee $local_5(block -> ref "core:prelude/types.wado//Result<serde_full_json_serialize.wado/JsonStructSerializer,serde_full_json_serialize.wado/SerializeError>" {
-            struct.new "core:prelude/types.wado//Result<serde_full_json_serialize.wado/JsonStructSerializer,serde_full_json_serialize.wado/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null(st_131.1) };
+            struct.new "core:prelude/types.wado//Result<serde_full_json_serialize.wado/JsonStructSerializer,serde_full_json_serialize.wado/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null(st_136.1) };
         })) {
             drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonStructSerializer^serde_full_json_serialize.wado/SerializeStruct::field<f64>$sroa[value.value]"(local.tee $local_4(ref.cast "core:prelude/types.wado//Result<serde_full_json_serialize.wado/JsonStructSerializer,serde_full_json_serialize.wado/SerializeError>::Ok"($local_5).payload_0), global:serde_full_json_serialize.wado::$const_obj_5, 1.5));
             drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonStructSerializer^serde_full_json_serialize.wado/SerializeStruct::field<f64>$sroa[value.value]"($local_4, global:serde_full_json_serialize.wado::$const_obj_4, 2.5));
-            if @unlikely(local.tee $sroa_$pattern_temp_0_0_13_82(local.tee $sroa_write_back_274($local_4.w.buf).used + 1) > builtin::array_len($sroa_write_back_274.repr)) {
+            if @unlikely(local.tee $sroa_$pattern_temp_0_0_13_87(local.tee $sroa_write_back_289($local_4.w.buf).used + 1) > builtin::array_len($sroa_write_back_289.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_write_back_274, $sroa_$pattern_temp_0_0_13_82);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_write_back_289, $sroa_$pattern_temp_0_0_13_87);
             }
-            $sroa_$pattern_temp_0_1_14_83 = $sroa_write_back_274.used;
-            $sroa_write_back_274.used = $sroa_$pattern_temp_0_0_13_82;
-            builtin::array_copy<u8>($sroa_write_back_274.repr, $sroa_$pattern_temp_0_1_14_83, global:serde_full_json_serialize.wado::$const_obj_3, 0, 1);
+            $sroa_$pattern_temp_0_1_14_88 = $sroa_write_back_289.used;
+            $sroa_write_back_289.used = $sroa_$pattern_temp_0_0_13_87;
+            builtin::array_copy<u8>($sroa_write_back_289.repr, $sroa_$pattern_temp_0_1_14_88, global:serde_full_json_serialize.wado::$const_obj_3, 0, 1);
             ref.null none;
             break $inline_serde_full_json_serialize_wado_Point_serde_full_json_serialize_wado_Serialize__serialize_serde_full_json_serialize_wado_JsonSerializer__spec0_sroa_s_w__6;
         } else {
         }
         break $inline_serde_full_json_serialize_wado_Point_serde_full_json_serialize_wado_Serialize__serialize_serde_full_json_serialize_wado_JsonSerializer__spec0_sroa_s_w__6: struct.new "serde_full_json_serialize.wado//SerializeError" {};
     });
-    $sroa_write_back_274 = writer_54.buf;
-    $sroa_$pattern_temp_0_0_13_82 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_83 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_82 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_82);
-    builtin::array_copy<u8>(local.tee $sroa_$sroa_writer_buf_263_repr_270(builtin::array_new<u8>(local.tee self_202($sroa_write_back_274.used) + 1)), 0, $sroa_write_back_274.repr, 0, self_202);
-    builtin::array_set_u8($sroa_$sroa_writer_buf_263_repr_270, self_202, 10);
+    $sroa_$sroa_writer_buf_268_repr_285 = local.tee $sroa_write_back_289(writer_56.buf).repr;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $sroa_$pattern_temp_0_0_13_87($sroa_write_back_289.used))), 0, $sroa_$sroa_writer_buf_268_repr_285, 0, $sroa_$pattern_temp_0_0_13_87);
+    $sroa_$pattern_temp_0_1_14_88 = builtin::i32_wrap_i64(local.tee $cm_pair_7_81("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_192 = builtin::i32_wrap_i64($cm_pair_7_81 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_88 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_88);
+    builtin::array_copy<u8>(local.tee $sroa_$sroa_writer_buf_268_repr_285(builtin::array_new<u8>($sroa_$pattern_temp_0_0_13_87 + 1)), 0, $array_clone_dst_2, 0, $sroa_$pattern_temp_0_0_13_87);
+    builtin::array_set_u8($sroa_$sroa_writer_buf_268_repr_285, $sroa_$pattern_temp_0_0_13_87, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        self_202 = self_202 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_83, $sroa_$sroa_writer_buf_263_repr_270, 0, self_202);
+        $sroa_$pattern_temp_0_0_13_87 = $sroa_$pattern_temp_0_0_13_87 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_192, $sroa_$sroa_writer_buf_268_repr_285, 0, $sroa_$pattern_temp_0_0_13_87);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_83);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_192);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_82);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_88);
     }
-    writer_54 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+    writer_56 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop(block -> ref null "serde_full_json_serialize.wado//SerializeError" {
-        let $mv_arg_17: ref "serde_full_json_serialize.wado//User";
-        "serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$sroa[s.w]"(local.tee $mv_arg_17(global:serde_full_json_serialize.wado::$const_obj_2).name, $mv_arg_17.location, $mv_arg_17.tags, writer_54);
+        let $mv_arg_26: ref "serde_full_json_serialize.wado//User";
+        "serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$sroa[s.w]"(local.tee $mv_arg_26(global:serde_full_json_serialize.wado::$const_obj_2).name, $mv_arg_26.location, $mv_arg_26.tags, writer_56);
     });
-    $sroa_write_back_274 = writer_54.buf;
-    $sroa_$pattern_temp_0_0_13_82 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_83 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_82 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_82);
-    builtin::array_copy<u8>(local.tee $sroa_$sroa_writer_buf_263_repr_270(builtin::array_new<u8>(local.tee self_202($sroa_write_back_274.used) + 1)), 0, $sroa_write_back_274.repr, 0, self_202);
-    builtin::array_set_u8($sroa_$sroa_writer_buf_263_repr_270, self_202, 10);
+    $sroa_$sroa_writer_buf_268_repr_285 = local.tee $sroa_write_back_289(writer_56.buf).repr;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $sroa_$pattern_temp_0_0_13_87($sroa_write_back_289.used))), 0, $sroa_$sroa_writer_buf_268_repr_285, 0, $sroa_$pattern_temp_0_0_13_87);
+    $sroa_$pattern_temp_0_1_14_88 = builtin::i32_wrap_i64(local.tee $cm_pair_7_81("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_192 = builtin::i32_wrap_i64($cm_pair_7_81 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_88 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_88);
+    builtin::array_copy<u8>(local.tee $sroa_$sroa_writer_buf_268_repr_285(builtin::array_new<u8>($sroa_$pattern_temp_0_0_13_87 + 1)), 0, $array_clone_dst_2, 0, $sroa_$pattern_temp_0_0_13_87);
+    builtin::array_set_u8($sroa_$sroa_writer_buf_268_repr_285, $sroa_$pattern_temp_0_0_13_87, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        self_202 = self_202 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_83, $sroa_$sroa_writer_buf_263_repr_270, 0, self_202);
+        $sroa_$pattern_temp_0_0_13_87 = $sroa_$pattern_temp_0_0_13_87 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_192, $sroa_$sroa_writer_buf_268_repr_285, 0, $sroa_$pattern_temp_0_0_13_87);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_83);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_192);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_82);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_88);
     }
-    writer_54 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+    writer_56 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop(block -> ref null "serde_full_json_serialize.wado//SerializeError" {
-        "serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$sroa[s.w]"(local.tee $mv_arg_17(global:serde_full_json_serialize.wado::$const_obj_1).name, $mv_arg_17.location, $mv_arg_17.tags, writer_54);
+        "serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$sroa[s.w]"(local.tee $mv_arg_26(global:serde_full_json_serialize.wado::$const_obj_1).name, $mv_arg_26.location, $mv_arg_26.tags, writer_56);
     });
-    $sroa_write_back_274 = writer_54.buf;
-    $sroa_$pattern_temp_0_0_13_82 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_83 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_82 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_82);
-    builtin::array_copy<u8>(local.tee $sroa_$sroa_writer_buf_263_repr_270(builtin::array_new<u8>(local.tee self_202($sroa_write_back_274.used) + 1)), 0, $sroa_write_back_274.repr, 0, self_202);
-    builtin::array_set_u8($sroa_$sroa_writer_buf_263_repr_270, self_202, 10);
+    $sroa_$sroa_writer_buf_268_repr_285 = local.tee $sroa_write_back_289(writer_56.buf).repr;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $sroa_$pattern_temp_0_0_13_87($sroa_write_back_289.used))), 0, $sroa_$sroa_writer_buf_268_repr_285, 0, $sroa_$pattern_temp_0_0_13_87);
+    $sroa_$pattern_temp_0_1_14_88 = builtin::i32_wrap_i64(local.tee $cm_pair_7_81("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_192 = builtin::i32_wrap_i64($cm_pair_7_81 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_88 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_88);
+    builtin::array_copy<u8>(local.tee $sroa_$sroa_writer_buf_268_repr_285(builtin::array_new<u8>($sroa_$pattern_temp_0_0_13_87 + 1)), 0, $array_clone_dst_2, 0, $sroa_$pattern_temp_0_0_13_87);
+    builtin::array_set_u8($sroa_$sroa_writer_buf_268_repr_285, $sroa_$pattern_temp_0_0_13_87, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        self_202 = self_202 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_83, $sroa_$sroa_writer_buf_263_repr_270, 0, self_202);
+        $sroa_$pattern_temp_0_0_13_87 = $sroa_$pattern_temp_0_0_13_87 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_192, $sroa_$sroa_writer_buf_268_repr_285, 0, $sroa_$pattern_temp_0_0_13_87);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_83);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_192);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_82);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_88);
     }
 }
 
