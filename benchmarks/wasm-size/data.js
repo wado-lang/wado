@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795170002606,
+  "lastUpdate": 1795172384825,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80113,6 +80113,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 353636,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4477722bf2dfbe1f0d6b4a2441542f3fe87a1725",
+          "message": "Merge pull request #2698 from wado-lang/gfx/points-to-field-sensitive\n\nperf(value_copy): stop copying TreeMap keys and serde error paths twice",
+          "timestamp": "2026-11-20T19:35:37+09:00",
+          "tree_id": "ffb80df1e11b8dd3471bf8933becee8bb9c993f0",
+          "url": "https://github.com/wado-lang/wado/commit/4477722bf2dfbe1f0d6b4a2441542f3fe87a1725"
+        },
+        "date": 1795172383716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
             "unit": "bytes"
           }
         ]
