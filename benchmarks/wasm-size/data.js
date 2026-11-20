@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795154808072,
+  "lastUpdate": 1795156727015,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80005,6 +80005,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b2738fe1a74a7d80f26313757fac80af285a2c1b"
         },
         "date": 1795154806949,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353636,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b208ba07ad63d97628ffa6993540f29bc89c6212",
+          "message": "Merge pull request #2696 from wado-lang/rill-github-pages\n\nfeat(rill): hydrate served HTML, toward publishing apps as static pages",
+          "timestamp": "2026-11-20T14:42:54+09:00",
+          "tree_id": "ee72afeb8a87a903ca1ee2316c91d2208498c919",
+          "url": "https://github.com/wado-lang/wado/commit/b208ba07ad63d97628ffa6993540f29bc89c6212"
+        },
+        "date": 1795156725977,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
