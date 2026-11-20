@@ -816,23 +816,23 @@ mod format_contract_tests {
     #[test]
     fn an_associated_type_keeps_its_parameters_and_bounds() {
         let out = simple_all_of(
-            "//! Demo.\n\npub trait Elem {}\n\npub trait Len {}\n\npub trait Store {\n    type Buf<E: Elem>: Len;\n    type Plain;\n}\n",
+            "//! Demo.\n\npub trait Elem {}\n\npub trait Len {}\n\npub trait Store {\n    type Buf<E: Elem>: Len;\n    affine type Plain;\n}\n",
         );
         assert!(
-            out.contains("    type Buf<E: Elem>: Len;\n    type Plain;\n"),
+            out.contains("    type Buf<E: Elem>: Len;\n    affine type Plain;\n"),
             "an associated type must be listed as declared:\n{out}"
         );
     }
 
-    /// An impl owes each associated type as a method, so the reference lists
-    /// it with its doc comment.
+    /// An impl owes each associated type as it owes each method, so the
+    /// reference documents both, `affine` included.
     #[test]
     fn a_trait_documents_its_associated_types() {
         let out = markdown_of(
-            "//! Demo.\n\npub trait Len {}\n\npub trait Store {\n    /// What it holds.\n    type Buf<E>: Len;\n}\n",
+            "//! Demo.\n\npub trait Len {}\n\npub trait Store {\n    /// What it holds.\n    affine type Buf<E>: Len;\n}\n",
         );
         assert!(
-            out.contains("#### `type Buf<E>: Len`\n\nWhat it holds.\n"),
+            out.contains("#### `affine type Buf<E>: Len`\n\nWhat it holds.\n"),
             "an associated type must be documented:\n{out}"
         );
     }
@@ -1346,8 +1346,7 @@ fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for assoc in &t.associated_types {
-        let sig = format!("type {}", assoc.signature);
-        render_md_entity(out, &sig, assoc.doc.as_deref(), h4);
+        render_md_entity(out, &assoc.signature, assoc.doc.as_deref(), h4);
     }
     for m in &t.methods {
         render_md_function(out, m, h4);
@@ -1820,7 +1819,7 @@ fn render_simple_traits_section(out: &mut String, doc: &DocModule, h2: &str) {
         }
         writeln!(out, "{} {{", t.signature).unwrap();
         for assoc in &t.associated_types {
-            writeln!(out, "    type {};", assoc.signature).unwrap();
+            writeln!(out, "    {};", assoc.signature).unwrap();
         }
         for m in &t.methods {
             write_simple_decl(out, m, "    ");

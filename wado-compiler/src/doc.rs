@@ -107,7 +107,7 @@ pub struct DocTrait {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocAssocType {
-    /// As declared, parameters and bounds included: `Buf<E: Elem>: Len`.
+    /// As declared: `affine type Buf<E: Elem>: Len`.
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,

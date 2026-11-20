@@ -152,7 +152,7 @@ every struct; it cannot be implemented in user code and is callable only in
 monomorphized contexts (`T` a concrete struct).
 See WEP 2026-06-13.
 
-#### `type FieldTypes`
+#### `affine type FieldTypes`
 
 The field types as a tuple `[F_0, F_1, ...]`.
 
@@ -160,12 +160,12 @@ The field types as a tuple `[F_0, F_1, ...]`.
 
 The per-field member tuple `[StructField<Self, F_0>, ...]`.
 
-#### `type FieldSlots`
+#### `affine type FieldSlots`
 
 The field slots `[Option<F_0>, ...]` — the value-level companion of
 `FieldTypes`. A filled slot is one the wire wrote.
 
-#### `type FieldInputs`
+#### `affine type FieldInputs`
 
 What `from_fields` takes: `FieldTypes` when the struct is open (no
 field reaches less far than the struct), `!` when it is closed, so a
@@ -221,7 +221,7 @@ every variant; it cannot be implemented in user code and is callable only
 in monomorphized contexts (`T` a concrete variant).
 See WEP 2026-06-13 §3.
 
-#### `type CasePayloads`
+#### `affine type CasePayloads`
 
 The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
 
@@ -319,7 +319,7 @@ it inherits from that base — `ReflectStruct::<T>` on a newtype over a
 struct walks the struct's fields — so only the base is stated here.
 See WEP 2026-06-13.
 
-#### `type Base`
+#### `affine type Base`
 
 The type this newtype wraps: `type UserName = String` → `String`.
 
@@ -330,7 +330,7 @@ compiler synthesizes an impl per shape; it cannot be implemented in user
 code and is callable only in monomorphized contexts (`T` the anonymous
 type a template literal denotes). See WEP 2026-01-10.
 
-#### `type Holes`
+#### `affine type Holes`
 
 The hole types as a tuple `[V_0, V_1, ...]`.
 
@@ -426,7 +426,7 @@ Immutable reference indexing: `&container[i]` reads through this.
 `Output: Ref` — only a reference element can be handed out by reference; a
 value element is read through `IndexValue`.
 
-#### `type Output: Ref`
+#### `affine type Output: Ref`
 
 #### `fn index_ref(&self, index: IndexType) -> &Self::Output`
 
@@ -438,7 +438,7 @@ Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 element (`variant`, `fn`) cannot be handed out mutably by reference.
 
-#### `type Output: RefMut`
+#### `affine type Output: RefMut`
 
 #### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output`
 
@@ -450,7 +450,7 @@ Value-assignment indexing: `container[i] = value`.
 Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 writing it by value is a distinct operation from handing out a `&mut`.
 
-#### `type Output`
+#### `affine type Output`
 
 #### `fn index_assign(&mut self, index: IndexType, value: Self::Output)`
 
@@ -836,9 +836,9 @@ the loop passes `e` to `start` and calls the state's
 what it walks, so an affine element moves into the binding once. Any other
 iterable is walked through its `IntoIterator`.
 
-#### `type Item`
+#### `affine type Item`
 
-#### `type State`
+#### `affine type State`
 
 #### `fn start(self) -> Self::State`
 
