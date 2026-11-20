@@ -182,22 +182,9 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    // Two instances of one declaration, or two tuples, compare by their
-    // arguments (Rule 8), whatever their slots.
-    let same_declaration = match (type_table.get(actual_inner), type_table.get(expected_inner)) {
-        (ResolvedType::Tuple(actual_elems), ResolvedType::Tuple(expected_elems)) => {
-            Some((actual_elems.as_slice(), expected_elems.as_slice()))
-        }
-        _ => match (
-            declaration_instance(actual_inner, type_table),
-            declaration_instance(expected_inner, type_table),
-        ) {
-            (Some((a, actual_args)), Some((e, expected_args))) if a == e => {
-                Some((actual_args, expected_args))
-            }
-            _ => None,
-        },
-    };
+    // Two instances of one declaration, two arrays or two tuples, compare by
+    // their arguments (Rule 8), whatever their slots.
+    let same_declaration = same_constructor_args(actual_inner, expected_inner, type_table);
 
     // Rule 5: Newtype/flags distinctness, but for two instances of one newtype.
     let actual_is_newtype = matches!(
@@ -400,11 +387,7 @@ pub(super) fn meetings(
             }
         }
         _ => {
-            if let (Some((a, a_args)), Some((e, e_args))) = (
-                declaration_instance(actual, type_table),
-                declaration_instance(expected, type_table),
-            ) && a == e
-            {
+            if let Some((a_args, e_args)) = same_constructor_args(actual, expected, type_table) {
                 pairwise(a_args, e_args, out);
             }
         }
@@ -464,6 +447,29 @@ fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
 /// The declaration `id` instantiates and its type arguments, where it is a
 /// generic struct, resource or variant, or a newtype; a non-generic one has
 /// none.
+/// The arguments of `actual` and `expected` where both are one constructor
+/// at their own arguments: two tuples, two arrays, or two instances of one
+/// declaration.
+fn same_constructor_args<'t>(
+    actual: TypeId,
+    expected: TypeId,
+    type_table: &'t TypeTable,
+) -> Option<(&'t [TypeId], &'t [TypeId])> {
+    match (type_table.get(actual), type_table.get(expected)) {
+        (ResolvedType::Tuple(a), ResolvedType::Tuple(e)) => Some((a.as_slice(), e.as_slice())),
+        (ResolvedType::BuiltinArray(a), ResolvedType::BuiltinArray(e)) => {
+            Some((std::slice::from_ref(a), std::slice::from_ref(e)))
+        }
+        _ => match (
+            declaration_instance(actual, type_table),
+            declaration_instance(expected, type_table),
+        ) {
+            (Some((a, a_args)), Some((e, e_args))) if a == e => Some((a_args, e_args)),
+            _ => None,
+        },
+    }
+}
+
 fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
     match type_table.get(id) {
         ResolvedType::Struct {

@@ -137,7 +137,9 @@ Each step keeps every fixture passing and deletes what it replaces.
   and its later uses make (a bound's impl, a tagged template's hole types, a
   method on `Box<_>`), and a selection that cannot wait reports it. Done, a
   later use settles it: `put(none(), 5)` then an `i64` use, `xs.push(5)` on
-  `empty()` then a `List<i64>` use.
+  `empty()` then a `List<i64>` use, and `f(1, 2)` for
+  `fn f<A: Src<Item = B>, B>(a: A, b: B)`, where `i32`'s `Src::Item` settles
+  `B` (until then the second literal defaults to `i32` and fails the bound).
 - [ ] A `_` the source writes in an expression's types is a variable. No
   inference path reads `unknown` for it.
 - [ ] The context is per body rather than per module.
