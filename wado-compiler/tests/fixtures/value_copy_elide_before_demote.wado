@@ -13,9 +13,14 @@
 
 use { println, Stdout } from "core:cli";
 
+// A call, so `println`'s copy of `message` is one the passes must remove.
+#[inline("never")]
+fn shout(message: String) with Stdout {
+    println(message);
+}
+
 export fn run() with Stdout {
-    let a: List<i32> = [] as List<i32>;
-    println("ok");
+    shout("ok");
 }
 
 __DATA__

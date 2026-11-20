@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use wado_host::options::{CliExit, OptSpec, require_value};
+use wado_host::pinned_download::Pinned;
 use wado_host::runner::{Invocation, RunOptions, command_line, program_for, usage};
 
 /// The variable that names the plugin `--plugin` does not.
@@ -19,7 +20,7 @@ const PLUGIN_SPEC: OptSpec = OptSpec {
     long: Some("plugin"),
     short: None,
     value: Some("<path>"),
-    desc: "The PJRT plugin to load (default: $WADO_PJRT_PLUGIN)",
+    desc: "The PJRT plugin to load (default: $WADO_PJRT_PLUGIN,\nelse XLA's CPU plugin, fetched once on x86-64 Linux)",
 };
 
 fn help() -> String {
@@ -58,13 +59,42 @@ async fn main() -> ExitCode {
     .await
 }
 
-async fn run(options: RunOptions, plugin: Option<PathBuf>) -> Result<(), CliExit> {
-    let Some(plugin) = plugin.or_else(|| std::env::var_os(PLUGIN_VARIABLE).map(PathBuf::from))
-    else {
+/// XLA's CPU plugin, the default where one is pinned for the platform.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const CPU_PLUGIN: Option<Pinned> = Some(Pinned {
+    name: "XLA's CPU PJRT plugin",
+    url: "https://github.com/zml/pjrt-artifacts/releases/download/v18.0.0/pjrt-cpu_linux-amd64.tar.gz",
+    archive: wado_host::pinned_download::Archive::TarGz {
+        sha256: "6fbaa0cd1ff4d84fa7000ce5acc00e817bdf74c85cef1cc42c7cccc376c56431",
+    },
+    members: &[wado_host::pinned_download::Member {
+        path: "libpjrt_cpu.so",
+        sha256: "edc5ecc1b13eceeba4b0c312a05efbfdd9bd0732040990024beacb64cc9c4569",
+    }],
+});
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+const CPU_PLUGIN: Option<Pinned> = None;
+
+/// The plugin `--plugin` or the variable names, else the pinned CPU plugin.
+async fn plugin_path(named: Option<PathBuf>) -> Result<PathBuf, CliExit> {
+    if let Some(path) = named.or_else(|| std::env::var_os(PLUGIN_VARIABLE).map(PathBuf::from)) {
+        return Ok(path);
+    }
+    let Some(pinned) = CPU_PLUGIN else {
         return Err(CliExit::error(format!(
-            "no PJRT plugin: pass --plugin or set {PLUGIN_VARIABLE}"
+            "no PJRT plugin is pinned for this platform: pass --plugin or set {PLUGIN_VARIABLE}"
         )));
     };
+    let dir = pinned.dir().await.map_err(|e| {
+        CliExit::error(format!(
+            "{e:#}\nPass --plugin or set {PLUGIN_VARIABLE} to use a plugin at hand"
+        ))
+    })?;
+    Ok(dir.join(pinned.members[0].file_name()))
+}
+
+async fn run(options: RunOptions, plugin: Option<PathBuf>) -> Result<(), CliExit> {
+    let plugin = plugin_path(plugin).await?;
     // The plugin first: a missing one is better said before the compile.
     let plugin = plugin::Plugin::open(&plugin)?;
     let program = program_for(&options)?;

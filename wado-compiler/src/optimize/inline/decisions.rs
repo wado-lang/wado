@@ -239,6 +239,7 @@ fn refusal_text(refusal: Refusal) -> &'static str {
         Refusal::Glue => "the caller is CM binding or dispatch glue",
         Refusal::NotTheSoleSite => "admitted at its one site, and this site came with a splice",
         Refusal::LeftToEngine => "left to the compile-time engine to fold",
+        Refusal::AwaitingConstant => "waits for the constants a site may still hand it",
         Refusal::InLoop => "admitted outside loops only",
         Refusal::OutsideLoop => "admitted in loops only",
         Refusal::OtherHeat => "admitted only at sites the profile heats otherwise",

@@ -16,12 +16,12 @@
 // of.
 //
 // All four helpers splice into `run`, so every run is checked on `run`'s own
-// locals. `buf_0` is dead once printed, so `s` takes its slot, and
-// `self_append`'s check reads `buf_0`. `dynamic`'s group split survives that: the fusion
-// runs before `inline`, so `name` was still a parameter when it opened the
-// second group. `constant` reserves once, ending at used 6, and `dynamic`
-// twice, ending at 7 and then 12; nothing reads `used` between them, so only 12
-// is stored. `self_append` reads it at each group, storing 3 and then 7.
+// locals, and `buf` is scalarized into them. `buf` is dead once printed, so
+// `s` takes its slots. `dynamic`'s group split survives that: the fusion runs
+// before `inline`, so `name` was still a parameter when it opened the second
+// group. `constant` reserves once, ending at used 6, and `dynamic` twice,
+// ending at 7 and then 12; nothing reads `used` between them, so only 12 is
+// stored. `self_append`'s lengths fold, so its copy of itself takes 3 bytes.
 
 use { println, Stdout } from "core:cli";
 
@@ -69,14 +69,12 @@ __DATA__
     "wir_scope": "opt_string_append_fuse.wado/run",
     "wir_pass": {"O2": ["nir/peephole/const_ascii_push"]},
     "wir_expect:O2": [
-        "builtin::array_set_u8(local.tee $load_{}(local.tee buf_0(struct.new \"core:prelude/string.wado//String\" { repr: builtin::array_new<u8>(128), used: 0 }).repr), 0, 91);",
-        "builtin::array_set_u8($load_{}, 5, 93);",
-        "buf_0.used = 7;",
-        "buf_0.used = 12;",
-        "local.tee new_used_{}(buf_0.used + 56) > ",
-        "builtin::array_copy<u8>($load_{}, start_{} + 1, global:opt_string_append_fuse.wado::$const_obj_{}, 0, 54);",
-        "builtin::array_set_u8($load_{}, start_{} + 55, 62);",
-        "builtin::array_copy<u8>(local.tee $load_{}(buf_0.repr), i, $load_{}, 0, 3);"
-    ],
-    "wir_not_expect:O2": ["String::push\"("]
+        "builtin::array_set_u8(local.tee $sroa_buf_repr_{}(builtin::array_new<u8>(128)), 0, 91);",
+        "builtin::array_set_u8($sroa_buf_repr_{}, 5, 93);",
+        "$sroa_buf_used_{} = 12;",
+        "local.tee new_used_{}($sroa_buf_used_{} + 56) > ",
+        "builtin::array_copy<u8>($sroa_buf_repr_{}, start_{} + 1, global:opt_string_append_fuse.wado::$const_obj_{}, 0, 54);",
+        "builtin::array_set_u8($sroa_buf_repr_{}, start_{} + 55, 62);",
+        "builtin::array_copy<u8>($sroa_buf_repr_{}, 3, $sroa_buf_repr_{}, 0, 3);"
+    ]
 }

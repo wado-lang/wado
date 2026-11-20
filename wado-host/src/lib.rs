@@ -14,6 +14,7 @@ pub mod http_hooks;
 pub mod kiln;
 pub mod options;
 pub mod path_search;
+pub mod pinned_download;
 pub mod process_host;
 pub mod random;
 pub mod runner;

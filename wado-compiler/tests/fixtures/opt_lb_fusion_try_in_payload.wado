@@ -4,7 +4,8 @@
 // the `[tag, slots…]` tuple `sroa_variant_return` hands one over as.
 use { println, Stdout } from "core:cli";
 
-// The loop keeps `trailing_zeros` out of line, as `parse_float_bits` is.
+// Out of line, as `parse_float_bits` is: its result crosses a return.
+#[inline("never")]
 fn trailing_zeros(n: i32) -> Result<i32, String> {
     if n == 0 {
         return Result::Err("zero");

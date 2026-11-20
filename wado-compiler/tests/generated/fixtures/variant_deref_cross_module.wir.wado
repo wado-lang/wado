@@ -470,24 +470,24 @@ global global:core:prelude/primitive.wado::$const_obj_5: ref "core:prelude/strin
 
 fn "variant_deref_cross_module.wado/$test_0_recursive_variant_deref_from_another_module"() {
     let out_1: ref "core:prelude/string.wado//String";
+    let i: i32;
+    let $licm_repr_16: ref Array<u8>;
     let $match_4: ref null "sub/variant_deref_helper.wado//Elem";
     let item: ref "sub/variant_deref_helper.wado//Elem";
-    let i: i32;
-    let $licm_repr_31: ref Array<u8>;
-    let $sroa_$sroa_alt_elements_28_repr_32: ref "Array<sub/variant_deref_helper.wado/Elem>";
-    let $sroa_$iter_0_index_35: i32;
-    $sroa_$sroa_alt_elements_28_repr_32 = array.new_fixed<ref "sub/variant_deref_helper.wado//Elem">(struct.new "sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } }, struct.new "sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "sub/variant_deref_helper.wado//RepeatElem" { element: struct.new "sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" world"), used: 6 } } } });
+    let $sroa_$iter_0_index_14: i32;
+    let $sroa_alt_repr_35: ref "Array<sub/variant_deref_helper.wado/Elem>";
     out_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
-    $sroa_$iter_0_index_35 = 0;
+    $sroa_alt_repr_35 = array.new_fixed<ref "sub/variant_deref_helper.wado//Elem">(struct.new "sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } }, struct.new "sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "sub/variant_deref_helper.wado//RepeatElem" { element: struct.new "sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" world"), used: 6 } } } });
+    $sroa_$iter_0_index_14 = 0;
     b0: block {
         l1: loop {
-            if ref.is_null(local.tee $match_4($inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_5: block -> ref null "sub/variant_deref_helper.wado//Elem" {
-                if $sroa_$iter_0_index_35 >= 2 {
-                    break $inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_5: ref.null none;
+            if ref.is_null(local.tee $match_4($inline_process_all_sroa_alt_elements__spec0_0__$inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_2: block -> ref null "sub/variant_deref_helper.wado//Elem" {
+                if $sroa_$iter_0_index_14 >= 2 {
+                    break $inline_process_all_sroa_alt_elements__spec0_0__$inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_2: ref.null none;
                 }
-                item = "variant_deref_cross_module.wado/$value_copy$sub/variant_deref_helper.wado/Elem"(builtin::array_get_value<ref "sub/variant_deref_helper.wado//Elem">($sroa_$sroa_alt_elements_28_repr_32, $sroa_$iter_0_index_35));
-                $sroa_$iter_0_index_35 = $sroa_$iter_0_index_35 + 1;
-                break $inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_5: item;
+                item = "variant_deref_cross_module.wado/$value_copy$sub/variant_deref_helper.wado/Elem"(builtin::array_get_value<ref "sub/variant_deref_helper.wado//Elem">($sroa_alt_repr_35, $sroa_$iter_0_index_14));
+                $sroa_$iter_0_index_14 = $sroa_$iter_0_index_14 + 1;
+                break $inline_process_all_sroa_alt_elements__spec0_0__$inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_2: item;
             })) == 0 {
                 "variant_deref_cross_module.wado/process$sroa[elem.value]"(ref.as_non_null($match_4), out_1);
             } else {
@@ -496,29 +496,29 @@ fn "variant_deref_cross_module.wado/$test_0_recursive_variant_deref_from_another
             continue l1;
         };
     };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
-        if local.tee $sroa_$iter_0_index_35(out_1.used) != 11 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        if local.tee $sroa_$iter_0_index_14(out_1.used) != 11 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
         i = 0;
-        $licm_repr_31 = out_1.repr;
+        $licm_repr_16 = out_1.repr;
         b6: block {
             l7: loop {
-                break_if b6 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$iter_0_index_35);
-                if builtin::array_get_value<u8>($licm_repr_31, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                break_if b6 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($sroa_$iter_0_index_14);
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_31, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_31, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($licm_repr_31, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
                 continue l7;
@@ -526,15 +526,15 @@ fn "variant_deref_cross_module.wado/$test_0_recursive_variant_deref_from_another
         };
         b12: block {
             l13: loop {
-                break_if b12 i >= $sroa_$iter_0_index_35;
-                if builtin::array_get_value<u8>($licm_repr_31, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                break_if b12 i >= $sroa_$iter_0_index_14;
+                if builtin::array_get_value<u8>($licm_repr_16, i) != builtin::array_get_value<u8>(global:variant_deref_cross_module.wado::$const_obj_0, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
                 continue l13;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     } == 0) {
         cold_path;
         "core:rt/panic"(local.tee out_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variant_deref_cross_module.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "variant_deref_cross_module.wado//$tmpl$d48748ffcad618c0" { h0: out_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_recursive_variant_deref_from_another_module at variant_deref_cross_module.wado:50
@@ -646,7 +646,7 @@ fn "variant_deref_cross_module.wado/process$sroa[elem.value]"(elem, out) {
     let v_68: ref "sub/variant_deref_helper.wado//Alt";
     let v_69: ref null "core:prelude/string.wado//String";
     let v_72: ref "core:prelude/list.wado//List<sub/variant_deref_helper.wado/Elem>";
-    let $sroa_$iter_0_repr_90: ref "Array<sub/variant_deref_helper.wado/Alt>";
+    let $sroa_$iter_0_repr_75: ref "Array<sub/variant_deref_helper.wado/Alt>";
     if ref.test "sub/variant_deref_helper.wado//Elem::TokenRef"(elem) {
         name_2 = ref.cast "sub/variant_deref_helper.wado//Elem::TokenRef"(elem).payload_0;
         $inline_core_prelude_string_wado_String__internal_push_string_3: block {
@@ -699,12 +699,12 @@ fn "variant_deref_cross_module.wado/process$sroa[elem.value]"(elem, out) {
     }
     if ref.test "sub/variant_deref_helper.wado//Elem::Group"(elem) {
         n_25 = local.tee alts(ref.cast "sub/variant_deref_helper.wado//Elem::Group"(elem).payload_0).used;
-        $sroa_$iter_0_repr_90 = alts.repr;
+        $sroa_$iter_0_repr_75 = alts.repr;
         new_used_29 = 0;
         b38: block {
             l39: loop {
                 break_if b38 new_used_29 >= n_25;
-                drop((if ref.is_null(local.tee v_69(local.tee v_68(builtin::array_get_value<ref "sub/variant_deref_helper.wado//Alt">($sroa_$iter_0_repr_90, new_used_29)).label)) -> ref null "core:prelude/string.wado//String" {
+                drop((if ref.is_null(local.tee v_69(local.tee v_68(builtin::array_get_value<ref "sub/variant_deref_helper.wado//Alt">($sroa_$iter_0_repr_75, new_used_29)).label)) -> ref null "core:prelude/string.wado//String" {
                     v_69;
                 } else {
                     name_2 = ref.as_non_null(v_69);
@@ -736,13 +736,13 @@ fn "variant_deref_cross_module.wado/process$sroa[elem.value]"(elem, out) {
                 $array_clone_i_7 = 0;
                 b43: block {
                     l44: loop {
-                        if ref.is_null(local.tee $array_clone_elem_8($inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_28: block -> ref null "sub/variant_deref_helper.wado//Elem" {
+                        if ref.is_null(local.tee $array_clone_elem_8($inline_process_all_sroa_alt_elements__0__$inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_2: block -> ref null "sub/variant_deref_helper.wado//Elem" {
                             if $array_clone_i_7 >= start_30 {
-                                break $inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_28: ref.null none;
+                                break $inline_process_all_sroa_alt_elements__0__$inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_2: ref.null none;
                             }
                             elem = "variant_deref_cross_module.wado/$value_copy$sub/variant_deref_helper.wado/Elem"(builtin::array_get_value<ref "sub/variant_deref_helper.wado//Elem">($array_clone_dst_5, $array_clone_i_7));
                             $array_clone_i_7 = $array_clone_i_7 + 1;
-                            break $inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_28: elem;
+                            break $inline_process_all_sroa_alt_elements__0__$inline_core_prelude_slice_wado_SliceValueIter_sub_variant_deref_helper_wado_Elem__core_prelude_traits_wado_Iterator__next_2: elem;
                         })) == 0 {
                             "variant_deref_cross_module.wado/process$sroa[elem.value]"(ref.as_non_null($array_clone_elem_8), out);
                         } else {

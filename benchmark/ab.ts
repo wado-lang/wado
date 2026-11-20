@@ -77,8 +77,8 @@ function main(): void {
       label: labelOf(rows[0]),
       b,
       h,
-      // Positive is faster: the row spends less time per iteration.
-      delta: ((b.min - h.min) / b.min) * 100,
+      // A speedup: positive is faster.
+      delta: (b.min / h.min - 1) * 100,
       real: sampled && (h.min > b.max || b.min > h.max),
       sampled,
     });

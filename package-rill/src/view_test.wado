@@ -1,6 +1,6 @@
 use { Signal, flush, observe, on_cleanup, scope, signal } from "./signals.wado";
-use { View, element } from "./view.wado";
-use { Dom, Element, Event, Node, SurfaceDom } from "wado-lang:web";
+use { View, build, element, hydrate } from "./view.wado";
+use { Dom, Element, Event, Node, SurfaceDom, Text } from "wado-lang:web";
 
 fn children_text(parent: Element) -> String with Dom {
     let mut out = "";
@@ -12,8 +12,12 @@ fn children_text(parent: Element) -> String with Dom {
     return out;
 }
 
-fn item(value: i32) -> View with Dom {
+fn item(value: i32) -> View {
     return element("li").text(`${value}`);
+}
+
+fn new_element(tag: String) -> Element with Dom {
+    return Dom::document().create_element(tag);
 }
 
 test "a view builds its element's attributes, text and children in call order" {
@@ -21,92 +25,112 @@ test "a view builds its element's attributes, text and children in call order" {
     with &mut dom do {
         let count = signal(1);
         let mut clicks = 0;
-        let card = element("div").attribute("class", "card");
+        let card = new_element("div");
         let _dispose = scope(|| {
-            card
-                .children([
-                    element("h2").text("Title"),
-                    element("p").text("Count: ").bind_text(|| `${count.get()}`),
-                    element("button").text("+").on("click", |_: Event| clicks += 1),
-                ])
-                .child(element("footer").bind_attribute("title", || Option::Some(`${count.get()}`)));
+            build(
+                View::of(card)
+                    .attribute("class", "card")
+                    .children([
+                        element("h2").text("Title"),
+                        element("p").text("Count: ").bind_text(|| `${count.get()}`),
+                        element("button").text("+").on("click", |_: Event| clicks += 1),
+                    ])
+                    .child(element("footer").bind_attribute("title", || Option::Some(`${count.get()}`))),
+            );
         });
-        assert card.node.get_attribute("class") == Option::Some("card");
-        assert card.node.get_html() == "<h2>Title</h2><p>Count: 1</p><button>+</button><footer title=\"1\"></footer>";
+        assert card.get_attribute("class") == Option::Some("card");
+        assert card.get_html() == "<h2>Title</h2><p>Count: 1</p><button>+</button><footer title=\"1\"></footer>";
 
         count.set(2);
         flush();
-        assert card.node.get_html() == "<h2>Title</h2><p>Count: 2</p><button>+</button><footer title=\"2\"></footer>";
+        assert card.get_html() == "<h2>Title</h2><p>Count: 2</p><button>+</button><footer title=\"2\"></footer>";
 
-        card.node.last_child().unwrap().previous_sibling().unwrap().dispatch_event(Event::new("click"));
+        card.last_child().unwrap().previous_sibling().unwrap().dispatch_event(Event::new("click"));
         assert clicks == 1;
     };
 }
 
-test "a view of an element made elsewhere builds on that element" {
+test "a view builds nothing until it is built" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let root = Dom::document().create_element("main");
-        View::of(root).child(element("h1").text("Todos"));
+        let root = new_element("main");
+        let view = View::of(root).child(element("h1").text("Todos"));
+        assert root.get_html() == "";
+
+        let _dispose = scope(|| {
+            build(view);
+        });
         assert root.get_html() == "<h1>Todos</h1>";
+    };
+}
+
+test "with_node hands over the element the view built" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let mut made: Option<Element> = null;
+        let mut built: Option<Element> = null;
+        let _dispose = scope(|| {
+            built = Option::Some(build(element("p").with_node(|node| made = Option::Some(node))));
+        });
+        assert made == built;
     };
 }
 
 test "show puts its subtree where it stands in the chain while the condition holds" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let empty = signal(true);
         let _dispose = scope(|| {
-            list.child(item(1)).show(|| empty.get(), || element("li").text("none")).child(item(2));
+            build(View::of(list).child(item(1)).show(|| empty.get(), || element("li").text("none")).child(item(2)));
         });
-        assert list.node.get_html() == "<li>1</li><li>none</li><li>2</li>";
+        assert list.get_html() == "<li>1</li><li>none</li><li>2</li>";
 
         empty.set(false);
         flush();
-        assert list.node.get_html() == "<li>1</li><li>2</li>";
+        assert list.get_html() == "<li>1</li><li>2</li>";
 
         empty.set(true);
         flush();
-        assert list.node.get_html() == "<li>1</li><li>none</li><li>2</li>";
+        assert list.get_html() == "<li>1</li><li>none</li><li>2</li>";
     };
 }
 
 test "show keeps its subtree while the condition stays true" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div");
+        let box = new_element("div");
         let count = signal(1);
         let mut renders = 0;
         let _dispose = scope(|| {
-            box.show(|| count.get() > 0, || {
+            build(View::of(box).show(|| count.get() > 0, || {
                 renders += 1;
                 return element("p");
-            });
+            }));
         });
-        let shown = box.node.first_child().unwrap();
+        let shown = box.first_child().unwrap();
 
         count.set(2);
         flush();
         assert renders == 1;
-        assert box.node.first_child().unwrap() == shown;
+        assert box.first_child().unwrap() == shown;
     };
 }
 
 test "show disposes of its subtree when it hides it" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div");
+        let box = new_element("div");
         let visible = signal(true);
         let label = signal("a");
         let mut cleanups = 0;
         let _dispose = scope(|| {
-            box.show(|| visible.get(), || {
+            build(View::of(box).show(|| visible.get(), || {
                 on_cleanup(|| cleanups += 1);
                 return element("p").bind_attribute("title", || Option::Some(label.get()));
-            });
+            }));
         });
-        let shown: Element = box.node.first_child().unwrap() else {
+        let shown: Element = box.first_child().unwrap() else {
             unreachable();
         };
 
@@ -122,55 +146,55 @@ test "show disposes of its subtree when it hides it" {
 test "show takes its subtree out when its owner is disposed of" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div").text("x");
+        let box = new_element("div");
         let mut dispose = scope(|| {
-            box.show(|| true, || element("p"));
+            build(View::of(box).text("x").show(|| true, || element("p")));
         });
-        assert box.node.get_html() == "x<p></p>";
+        assert box.get_html() == "x<p></p>";
 
         dispose();
-        assert box.node.get_html() == "x";
-        assert box.node.first_child() == box.node.last_child();
+        assert box.get_html() == "x";
+        assert box.first_child() == box.last_child();
     };
 }
 
 test "show survives a cleanup in its subtree disposing of its owner" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div");
+        let box = new_element("div");
         let visible = signal(true);
         let mut dispose_owner: fn mut() with Dom = || {
         };
         dispose_owner = scope(|| {
-            box.show(|| visible.get(), || {
+            build(View::of(box).show(|| visible.get(), || {
                 on_cleanup(|| dispose_owner());
                 return element("p");
-            });
+            }));
         });
 
         visible.set(false);
         flush();
-        assert box.node.get_html() == "";
-        assert !box.node.has_child_nodes();
+        assert box.get_html() == "";
+        assert !box.has_child_nodes();
     };
 }
 
 test "show disposes of what render made after render disposed of its owner" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div");
+        let box = new_element("div");
         let visible = signal(false);
         let label = signal("a");
         let mut dispose_owner: fn mut() with Dom = || {
         };
         let mut made: Option<Element> = null;
         dispose_owner = scope(|| {
-            box.show(|| visible.get(), || {
+            build(View::of(box).show(|| visible.get(), || {
                 dispose_owner();
-                let p = element("p").bind_attribute("title", || Option::Some(label.get()));
-                made = Option::Some(p.node);
-                return p;
-            });
+                return element("p")
+                    .bind_attribute("title", || Option::Some(label.get()))
+                    .with_node(|node| made = Option::Some(node));
+            }));
         });
 
         visible.set(true);
@@ -178,26 +202,26 @@ test "show disposes of what render made after render disposed of its owner" {
         label.set("b");
         flush();
         assert made.unwrap().get_attribute("title") == Option::Some("a");
-        assert !box.node.has_child_nodes();
+        assert !box.has_child_nodes();
     };
 }
 
 test "each renders no further once render disposed of its owner, and disposes of what it made" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([]);
         let label = signal("a");
         let mut dispose_owner: fn mut() with Dom = || {
         };
         let mut made: List<Element> = [];
         dispose_owner = scope(|| {
-            list.each(|| items.get(), |value: i32| {
+            build(View::of(list).each(|| items.get(), |value: i32| {
                 dispose_owner();
-                let row = item(value).bind_attribute("title", || Option::Some(label.get()));
-                made.push(row.node);
-                return row;
-            });
+                return item(value)
+                    .bind_attribute("title", || Option::Some(label.get()))
+                    .with_node(|node| made.push(node));
+            }));
         });
 
         items.set([1, 2]);
@@ -208,14 +232,14 @@ test "each renders no further once render disposed of its owner, and disposes of
         for let row of made {
             assert row.get_attribute("title") == Option::Some("a");
         }
-        assert !list.node.has_child_nodes();
+        assert !list.has_child_nodes();
     };
 }
 
 test "each keeps no rows once a removed row's cleanup disposed of its owner" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([1]);
         let label = signal("a");
         let mut dispose_owner: fn mut() with Dom = || {
@@ -223,17 +247,17 @@ test "each keeps no rows once a removed row's cleanup disposed of its owner" {
         let mut made: List<Element> = [];
         let mut cleanups = 0;
         dispose_owner = scope(|| {
-            list.each(|| items.get(), |value: i32| {
+            build(View::of(list).each(|| items.get(), |value: i32| {
                 if value == 1 {
                     on_cleanup(|| {
                         cleanups += 1;
                         dispose_owner();
                     });
                 }
-                let row = item(value).bind_attribute("title", || Option::Some(label.get()));
-                made.push(row.node);
-                return row;
-            });
+                return item(value)
+                    .bind_attribute("title", || Option::Some(label.get()))
+                    .with_node(|node| made.push(node));
+            }));
         });
 
         items.set([2]);
@@ -242,27 +266,30 @@ test "each keeps no rows once a removed row's cleanup disposed of its owner" {
         flush();
         assert cleanups == 1;
         assert made[1].get_attribute("title") == Option::Some("a");
-        assert !list.node.has_child_nodes();
+        assert !list.has_child_nodes();
     };
 }
 
 test "switch shows the subtree render makes for the key, and swaps it when the key changes" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div").text("[");
+        let box = new_element("div");
         let mode = signal("view");
         let mut cleanups: List<String> = [];
         let mut renders = 0;
         let mut dispose = scope(|| {
-            box
-                .switch(|| mode.get(), |key| {
-                    renders += 1;
-                    on_cleanup(|| cleanups.push(key));
-                    return element(if key == "edit" { "input" } else { "span" });
-                })
-                .text("]");
+            build(
+                View::of(box)
+                    .text("[")
+                    .switch(|| mode.get(), |key| {
+                        renders += 1;
+                        on_cleanup(|| cleanups.push(key));
+                        return element(if key == "edit" { "input" } else { "span" });
+                    })
+                    .text("]"),
+            );
         });
-        assert box.node.get_html() == "[<span></span>]";
+        assert box.get_html() == "[<span></span>]";
 
         mode.set("view");
         flush();
@@ -270,55 +297,55 @@ test "switch shows the subtree render makes for the key, and swaps it when the k
 
         mode.set("edit");
         flush();
-        assert box.node.get_html() == "[<input>]";
+        assert box.get_html() == "[<input>]";
         assert cleanups == ["view"];
 
         mode.set("view");
         flush();
         assert renders == 3;
-        assert box.node.get_html() == "[<span></span>]";
+        assert box.get_html() == "[<span></span>]";
 
         dispose();
         assert cleanups == ["view", "edit", "view"];
-        assert box.node.get_html() == "[]";
+        assert box.get_html() == "[]";
     };
 }
 
 test "show asks when once to show what was hidden" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div");
+        let box = new_element("div");
         let requests = signal(0);
         let mut pending = 0;
         let mut asked = 0;
         let _dispose = scope(|| {
-            box.show(|| {
+            build(View::of(box).show(|| {
                 asked += 1;
                 requests.get();
                 let answer = pending > 0;
                 pending = 0;
                 return answer;
-            }, || element("p"));
+            }, || element("p")));
         });
 
         pending = 1;
         requests.set(1);
         flush();
         assert asked == 2;
-        assert box.node.has_child_nodes();
+        assert box.has_child_nodes();
     };
 }
 
 test "switch renders nothing once its key disposed of the owner" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div");
+        let box = new_element("div");
         let mode = signal(1);
         let mut dispose_owner: fn mut() with Dom = || {
         };
         let mut renders = 0;
         dispose_owner = scope(|| {
-            box.switch(|| {
+            build(View::of(box).switch(|| {
                 let key = mode.get();
                 if key == 2 {
                     with &mut dom do {
@@ -329,30 +356,30 @@ test "switch renders nothing once its key disposed of the owner" {
             }, |_| {
                 renders += 1;
                 return element("p");
-            });
+            }));
         });
 
         mode.set(2);
         flush();
         assert renders == 1;
-        assert !box.node.has_child_nodes();
+        assert !box.has_child_nodes();
     };
 }
 
 test "switch renders the key a cleanup of the last subtree wrote" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div");
+        let box = new_element("div");
         let mode = signal(1);
         let mut rendered: List<i32> = [];
         let _dispose = scope(|| {
-            box.switch(|| mode.get(), |key| {
+            build(View::of(box).switch(|| mode.get(), |key| {
                 rendered.push(key);
                 if key == 1 {
                     on_cleanup(|| mode.set(3));
                 }
                 return element("p");
-            });
+            }));
         });
 
         mode.set(2);
@@ -364,83 +391,83 @@ test "switch renders the key a cleanup of the last subtree wrote" {
 test "switch renders no next subtree once the last one's cleanup disposed of its owner" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let box = element("div");
+        let box = new_element("div");
         let mode = signal(1);
         let mut dispose_owner: fn mut() with Dom = || {
         };
         let mut renders = 0;
         dispose_owner = scope(|| {
-            box.switch(|| mode.get(), |key| {
+            build(View::of(box).switch(|| mode.get(), |key| {
                 renders += 1;
                 if key == 1 {
                     on_cleanup(|| dispose_owner());
                 }
                 return element("p");
-            });
+            }));
         });
 
         mode.set(2);
         flush();
         assert renders == 1;
-        assert !box.node.has_child_nodes();
+        assert !box.has_child_nodes();
     };
 }
 
 test "each follows a new order with the nodes it had" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([1, 2, 3]);
         let _dispose = scope(|| {
-            list.each(|| items.get(), item);
+            build(View::of(list).each(|| items.get(), item));
         });
-        let first = list.node.first_child().unwrap();
-        let last = list.node.last_child().unwrap();
+        let first = list.first_child().unwrap();
+        let last = list.last_child().unwrap();
 
         items.set([3, 1, 2]);
         flush();
-        assert children_text(list.node) == "312";
-        assert list.node.first_child().unwrap() == last;
-        assert list.node.first_child().unwrap().next_sibling().unwrap() == first;
+        assert children_text(list) == "312";
+        assert list.first_child().unwrap() == last;
+        assert list.first_child().unwrap().next_sibling().unwrap() == first;
     };
 }
 
 test "bind_text owns one text node, and leaves the element's other children" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let label = element("p").child(element("b").text("Count: "));
+        let label = new_element("p");
         let count = signal(0);
         let _dispose = scope(|| {
-            label.bind_text(|| `${count.get()}`);
+            build(View::of(label).child(element("b").text("Count: ")).bind_text(|| `${count.get()}`));
         });
-        let shown = label.node.last_child().unwrap();
-        assert label.node.get_html() == "<b>Count: </b>0";
+        let shown = label.last_child().unwrap();
+        assert label.get_html() == "<b>Count: </b>0";
 
         count.set(1);
         flush();
-        assert label.node.get_html() == "<b>Count: </b>1";
-        assert label.node.last_child().unwrap() == shown;
+        assert label.get_html() == "<b>Count: </b>1";
+        assert label.last_child().unwrap() == shown;
     };
 }
 
 test "bind_text takes its text node out when it is disposed of" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let label = element("p");
+        let label = new_element("p");
         let shown = signal(true);
         let _dispose = scope(|| observe(|| {
             if shown.get() {
-                label.bind_text(|| "x");
+                build(View::of(label).bind_text(|| "x"));
             }
         }));
-        assert label.node.get_html() == "x";
+        assert label.get_html() == "x";
 
         shown.set(true);
         flush();
-        assert label.node.get_html() == "x";
+        assert label.get_html() == "x";
         shown.set(false);
         flush();
-        assert label.node.get_html() == "";
+        assert label.get_html() == "";
     };
 }
 
@@ -466,10 +493,10 @@ impl Node for Insertions {
 test "each moves only the rows out of place" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([1, 2, 3, 4, 5]);
         let _dispose = scope(|| {
-            list.each(|| items.get(), item);
+            build(View::of(list).each(|| items.get(), item));
         });
 
         let mut insertions = Insertions { count: 0 };
@@ -477,14 +504,14 @@ test "each moves only the rows out of place" {
             items.set([2, 3, 4, 5, 1]);
             flush();
         };
-        assert children_text(list.node) == "23451";
+        assert children_text(list) == "23451";
         assert insertions.count == 1;
 
         with Node => &mut insertions do {
             items.set([1, 2, 3, 4, 5]);
             flush();
         };
-        assert children_text(list.node) == "12345";
+        assert children_text(list) == "12345";
         assert insertions.count == 2;
     };
 }
@@ -492,71 +519,137 @@ test "each moves only the rows out of place" {
 test "each takes back a row moved out of its parent" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([1, 2]);
         let _dispose = scope(|| {
-            list.each(|| items.get(), item);
+            build(View::of(list).each(|| items.get(), item));
         });
-        element("ol").node.append_child(list.node.last_child().unwrap());
+        new_element("ol").append_child(list.last_child().unwrap());
 
         items.set([0, 1, 2]);
         flush();
-        assert children_text(list.node) == "012";
+        assert children_text(list) == "012";
     };
 }
 
 test "each restores its order after render moved a row" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([1, 2]);
         let _dispose = scope(|| {
-            list.each(|| items.get(), |value: i32| {
+            build(View::of(list).each(|| items.get(), |value: i32| {
                 if value == 0 {
-                    list.node.append_child(list.node.first_child().unwrap());
+                    list.append_child(list.first_child().unwrap());
                 }
                 return item(value);
-            });
+            }));
         });
 
         items.set([0, 1, 2]);
         flush();
-        assert children_text(list.node) == "012";
+        assert children_text(list) == "012";
+    };
+}
+
+test "each restores its order after render moved a row while it was built" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        let items: Signal<List<i32>> = signal([1, 2, 3]);
+        let _dispose = scope(|| {
+            build(View::of(list).each(|| items.get(), |value: i32| {
+                if value == 3 {
+                    list.append_child(list.first_child().unwrap());
+                }
+                return item(value);
+            }));
+        });
+        assert children_text(list) == "123";
+    };
+}
+
+test "show leaves nothing behind once its first run disposed of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = new_element("div");
+        let go = signal(false);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        dispose_owner = scope(|| observe(|| {
+            if go.get() {
+                build(View::of(box).show(|| {
+                    with &mut dom do {
+                        dispose_owner();
+                    };
+                    return true;
+                }, || element("p")));
+            }
+        }));
+
+        go.set(true);
+        flush();
+        assert !box.has_child_nodes();
+    };
+}
+
+test "each claims no further once render disposed of its owner while hydrating" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        let _built = scope(|| {
+            build(View::of(list).each(|| [1, 2] as List<i32>, item));
+        });
+        let go = signal(false);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        dispose_owner = scope(|| observe(|| {
+            if go.get() {
+                hydrate(View::of(list).each(|| [1, 2] as List<i32>, |value: i32| {
+                    dispose_owner();
+                    return item(value);
+                }));
+            }
+        }));
+
+        go.set(true);
+        flush();
+        assert !list.has_child_nodes();
     };
 }
 
 test "each restores its order after a row moved within its parent" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([1, 2]);
         let _dispose = scope(|| {
-            list.each(|| items.get(), item);
+            build(View::of(list).each(|| items.get(), item));
         });
-        list.node.append_child(list.node.first_child().unwrap());
+        list.append_child(list.first_child().unwrap());
 
         items.set([0, 1, 2]);
         flush();
-        assert children_text(list.node) == "012";
+        assert children_text(list) == "012";
     };
 }
 
 test "each disposes of the row of an item that left" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([1, 2, 3]);
         let mut left: List<i32> = [];
         let _dispose = scope(|| {
-            list.each(|| items.get(), |value: i32| {
+            build(View::of(list).each(|| items.get(), |value: i32| {
                 on_cleanup(|| left.push(value));
                 return item(value);
-            });
+            }));
         });
 
         items.set([1, 3]);
         flush();
-        assert children_text(list.node) == "13";
+        assert children_text(list) == "13";
         assert left == [2];
     };
 }
@@ -564,15 +657,275 @@ test "each disposes of the row of an item that left" {
 test "each gives equal items a row each" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let list = element("ul");
+        let list = new_element("ul");
         let items: Signal<List<i32>> = signal([1, 1]);
         let _dispose = scope(|| {
-            list.each(|| items.get(), item);
+            build(View::of(list).each(|| items.get(), item));
         });
-        assert children_text(list.node) == "11";
+        assert children_text(list) == "11";
 
         items.set([1, 1, 1]);
         flush();
-        assert children_text(list.node) == "111";
+        assert children_text(list) == "111";
+    };
+}
+
+// Leaves the tree as the HTML parser would: adjacent text joined into one
+// node, and empty text gone.
+fn serve(parent: Element) with Dom {
+    let mut child = parent.first_child();
+    while let Some(current) = child {
+        if let nested: Element = current {
+            serve(nested);
+            child = current.next_sibling();
+            continue;
+        }
+        let mut joined = "";
+        while let Some(node) = child && let text: Text = node {
+            joined.push_str(text.data());
+            child = node.next_sibling();
+            parent.remove_child(node);
+        }
+        if !joined.is_empty() {
+            parent.insert_before(Dom::document().create_text_node(joined), child);
+        }
+    }
+}
+
+fn elements_in(parent: Element) -> List<Element> with Dom {
+    let mut found: List<Element> = [];
+    let mut child = parent.first_child();
+    while let Some(node) = child {
+        if let nested: Element = node {
+            found.push(nested);
+            for let inner of elements_in(nested) {
+                found.push(inner);
+            }
+        }
+        child = node.next_sibling();
+    }
+    return found;
+}
+
+struct Page {
+    count: Signal<i32>,
+    items: Signal<List<i32>>,
+    clicks: Signal<i32>,
+}
+
+fn new_page() -> Page {
+    return Page {
+        count: signal(1),
+        items: signal([1, 2]),
+        clicks: signal(0),
+    };
+}
+
+fn page_view(root: Element, page: Page) -> View {
+    return View::of(root)
+        .children(
+            [
+                element("h1").attribute("class", "title").text("Count: ").bind_text(|| `${page.count.get()}`).text("!"),
+                element("ul").each(|| page.items.get(), item),
+                element("button")
+                    .bind_text(|| `${page.clicks.get()}`)
+                    .on("click", |_: Event| page.clicks.set(page.clicks.get() + 1)),
+            ],
+        )
+        .show(|| page.count.get() > 0, || element("em").text("positive"))
+        .child(element("footer"));
+}
+
+// Builds the page, serves it, and hydrates what was served with signals of its
+// own, so a write reaches only the hydrated bindings.
+fn hydrated(root: Element) -> Page with Dom {
+    let _built = scope(|| {
+        build(page_view(root, new_page()));
+    });
+    serve(root);
+    let page = new_page();
+    let _hydrated = scope(|| {
+        hydrate(page_view(root, page));
+    });
+    return page;
+}
+
+test "hydrate claims every element the served page holds, and makes none" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let _built = scope(|| {
+            build(page_view(root, new_page()));
+        });
+        serve(root);
+        let served = root.get_html();
+        let elements = elements_in(root);
+
+        let _hydrated = scope(|| {
+            hydrate(page_view(root, new_page()));
+        });
+        assert root.get_html() == served;
+        assert elements_in(root) == elements;
+    };
+}
+
+test "a hydrated page follows its signals" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let page = hydrated(root);
+
+        page.count.set(5);
+        flush();
+        assert root.get_html() == "<h1 class=\"title\">Count: 5!</h1><ul><li>1</li><li>2</li></ul><button>0</button><em>positive</em><footer></footer>";
+
+        root.first_child().unwrap().next_sibling().unwrap().next_sibling().unwrap().dispatch_event(Event::new("click"));
+        assert page.clicks.get() == 1;
+        assert children_text(root).contains("1positive");
+    };
+}
+
+test "a hydrated each keeps the rows it claimed" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let page = hydrated(root);
+        let list: Element = root.first_child().unwrap().next_sibling().unwrap() else {
+            unreachable();
+        };
+        let rows = elements_in(list);
+
+        page.items.set([1, 2, 3]);
+        flush();
+        assert children_text(list) == "123";
+        assert list.first_child().unwrap() == rows[0] as Node;
+        assert list.first_child().unwrap().next_sibling().unwrap() == rows[1] as Node;
+    };
+}
+
+test "a hydrated each moves none of the rows it claimed" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        for let value of [1, 2] as List<i32> {
+            let row = new_element("li");
+            row.append_child(Dom::document().create_text_node(`${value}`));
+            list.append_child(row);
+            list.append_child(Dom::document().create_text_node("\n"));
+        }
+
+        let mut insertions = Insertions { count: 0 };
+        with Node => &mut insertions do {
+            let _hydrated = scope(|| {
+                hydrate(View::of(list).each(|| [1, 2] as List<i32>, item));
+            });
+        };
+        assert list.get_html() == "<li>1</li><li>2</li>";
+        assert insertions.count == 2;
+    };
+}
+
+test "hydrate checks the attribute value the view leaves, not one it overwrites" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let view = || View::of(root).child(
+            element("p")
+                .attribute("class", "base")
+                .attribute("class", "final")
+                .attribute("title", "a")
+                .bind_attribute("title", || Option::Some("b"))
+                .bind_attribute("lang", || Option::Some("bound"))
+                .attribute("lang", "static"),
+        );
+        let _built = scope(|| {
+            build(view());
+        });
+        let built = root.get_html();
+        let _hydrated = scope(|| {
+            hydrate(view());
+        });
+        assert root.get_html() == built;
+        assert built == "<p class=\"final\" title=\"b\" lang=\"static\"></p>";
+    };
+}
+
+#[expect_trap]
+test "hydrate traps on a served attribute the view does not leave" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let served = new_element("p");
+        served.set_attribute("class", "other");
+        root.append_child(served);
+        let _hydrated = scope(|| {
+            hydrate(View::of(root).child(element("p").attribute("class", "final")));
+        });
+    };
+}
+
+#[expect_trap]
+test "an attribute name holds no uppercase letter, which an HTML element would lower" {
+    element("p").attribute("CLASS", "card");
+}
+
+test "a hydrated each restores its order after render moved a claimed row" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        let _built = scope(|| {
+            build(View::of(list).each(|| [1, 2, 3] as List<i32>, item));
+        });
+        let rows = elements_in(list);
+        let _hydrated = scope(|| {
+            hydrate(View::of(list).each(|| [1, 2, 3] as List<i32>, |value: i32| {
+                if value == 3 {
+                    list.append_child(list.first_child().unwrap());
+                }
+                return item(value);
+            }));
+        });
+        assert children_text(list) == "123";
+        assert elements_in(list) == rows;
+    };
+}
+
+test "a hydrated show hides and shows again where it stands" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let page = hydrated(root);
+
+        page.count.set(0);
+        flush();
+        assert !root.get_html().contains("<em>");
+
+        page.count.set(1);
+        flush();
+        assert root.get_html().contains("<em>positive</em><footer></footer>");
+    };
+}
+
+#[expect_trap]
+test "hydrate traps on a served element of another tag" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        root.append_child(new_element("p"));
+        let _hydrated = scope(|| {
+            hydrate(View::of(root).child(element("div")));
+        });
+    };
+}
+
+#[expect_trap]
+test "hydrate traps on a served element its view does not build" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        root.append_child(new_element("p"));
+        let _hydrated = scope(|| {
+            hydrate(View::of(root).text("x"));
+        });
     };
 }

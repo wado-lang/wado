@@ -1,6 +1,7 @@
-//! Runs programs on the plugin `WADO_PJRT_PLUGIN` names, through the same
-//! `wado-run-pjrt` a real invocation reaches. `mise run test-pjrt` fetches the
-//! plugin and sets it, with `WADO`; a plain `cargo test` has no plugin to load.
+//! Runs programs on XLA's CPU plugin, which `wado-run-pjrt` fetches when no
+//! plugin is named, through the same `wado-run-pjrt` a real invocation reaches.
+//! `mise run test-pjrt` sets `WADO` and fetches the TPU plugin as well; they are
+//! ignored by a plain `cargo test`, which would otherwise download them.
 
 use std::path::Path;
 use std::process::{Command, Output};

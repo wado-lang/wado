@@ -310,15 +310,15 @@ impl DirGrants {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
     O0,
-    /// All passes on a small budget, and contract checks on. Iterations: 2,
-    /// inline threshold: 4.
+    /// All passes on a small budget, and contract checks on.
     O1,
-    /// Production: contract checks off. Iterations: 15, inline threshold: 16.
+    /// Production: contract checks off.
     #[default]
     O2,
-    /// Aggressive. Iterations: 20, inline threshold: 26.
+    /// Aggressive: more iterations and a higher inline threshold than `O2`.
     O3,
-    /// `O2` plus name-section stripping.
+    /// `O2` for size: a lower inline threshold, no loop unrolling, and the
+    /// name section stripped.
     Os,
 }
 

@@ -2,69 +2,248 @@
 //! so a write to a signal touches the nodes that show it and no others.
 
 use { Track, flush, observe, on_cleanup, scope, untracked } from "./signals.wado";
+use { TreeMap } from "core:collections";
 use { Dom, Element, Event, EventTarget, Node } from "wado-lang:web";
 
-/// An element under construction. Each method changes the element at once and
-/// returns the view, so a page is written as one expression that nests as the
-/// DOM does. A method that binds a signal must run inside a computation, which
-/// owns the binding.
+/// An element as it is to be built. Each method returns the view with one more
+/// step, so a page is written as one expression that nests as the DOM does.
+/// Nothing is built until `build` or `hydrate` runs the steps, parent before
+/// children, in the order they were written.
 pub struct View {
-    pub node: Element,
+    origin: Origin,
+    steps: List<fn mut(&mut Build) with (Track, Dom)>,
 }
 
-pub fn element(tag: String) -> View with Dom {
-    return View::of(Dom::document().create_element(tag));
+/// What a view builds on: an element it makes, or one made elsewhere.
+variant Origin {
+    Tag(String),
+    Adopted(Element),
+}
+
+pub fn element(tag: String) -> View {
+    return View { origin: Origin::Tag(tag), steps: [] };
+}
+
+/// Builds `view` anew, inside the computation that owns its bindings.
+pub fn build(view: View) -> Element with (Track, Dom) {
+    let node = make(view.origin);
+    run_steps(node, false, view.steps);
+    return node;
+}
+
+fn make(origin: Origin) -> Element with Dom {
+    return match origin {
+        Tag(tag) => Dom::document().create_element(tag),
+        Adopted(node) => node,
+    };
+}
+
+/// Builds `view` on the served element it adopts, taking each element it would
+/// make from what the element already holds. Text is made anew, since the HTML
+/// a page is served as merges adjacent text and drops empty text.
+pub fn hydrate(view: View) -> Element with (Track, Dom) {
+    let Adopted(node) = view.origin else {
+        panic("hydrate builds on a served element, which `View::of` names");
+    };
+    run_steps(node, true, view.steps);
+    return node;
+}
+
+/// The element being built, and how far the build has come through it.
+///
+/// While claiming, `served` and `served_attributes` hold the children and the
+/// attributes the element was served with, taken before any step runs: a step
+/// may move a child or write an attribute. The build has passed the first
+/// `passed` children. `attributes` holds the value each static attribute is
+/// left at, `None` for one a binding writes, checked against
+/// `served_attributes` once every step has run.
+struct Build {
+    node: Element,
+    claiming: bool,
+    served: List<Node>,
+    passed: i32,
+    attributes: TreeMap<String, Option<String>>,
+    served_attributes: TreeMap<String, String>,
+}
+
+impl Build {
+    fn new(node: Element, claiming: bool) -> Build with Dom {
+        let mut served: List<Node> = [];
+        let mut served_attributes = TreeMap::<String, String>::new();
+        if claiming {
+            let mut child = node.first_child();
+            while let Some(current) = child {
+                served.push(current);
+                child = current.next_sibling();
+            }
+            for let name of node.get_attribute_names() {
+                served_attributes[name] = node.get_attribute(name).unwrap();
+            }
+        }
+        return Build { node, claiming, served, passed: 0, attributes: TreeMap::new(), served_attributes };
+    }
+
+    /// The first served child not yet passed, passing those a callback took
+    /// out of the element.
+    fn ahead(&mut self) -> Option<Node> with Dom {
+        while self.passed < self.served.len() {
+            let served = self.served[self.passed];
+            if served.parent_node() == Option::Some(self.node as Node) {
+                return Option::Some(served);
+            }
+            self.passed += 1;
+        }
+        return null;
+    }
+
+    fn next_served(&mut self) -> Option<Node> with Dom {
+        let served = self.ahead();
+        if served matches { Some(_) } {
+            self.passed += 1;
+        }
+        return served;
+    }
+
+    /// Puts `node` at the point the build has reached.
+    fn insert(&mut self, node: Node) with Dom {
+        self.node.insert_before(node, self.ahead());
+    }
+
+    /// Takes the next served element, and out the served text before it.
+    fn claim(&mut self) -> Element with Dom {
+        loop {
+            let Some(served) = self.next_served() else {
+                panic(`hydrate: <${self.node.local_name()}> was served with fewer elements than its view builds`);
+            };
+            if let claimed: Element = served {
+                return claimed;
+            }
+            self.node.remove_child(served);
+        }
+    }
+
+    /// Takes out the served text after the last element claimed.
+    fn finish(&mut self) with Dom {
+        while let Some(served) = self.next_served() {
+            if served matches { _: Element } {
+                panic(`hydrate: <${self.node.local_name()}> was served with more elements than its view builds`);
+            }
+            self.node.remove_child(served);
+        }
+    }
+
+    fn check_attributes(&self) with Dom {
+        for let [name, value] of self.attributes.entries() {
+            if let Some(expected) = value {
+                assert self.served_attributes.get(*name) == Option::Some(*expected), "hydrate: a served attribute must hold what its view leaves";
+            }
+        }
+    }
+}
+
+fn run_steps(node: Element, claiming: bool, steps: List<fn mut(&mut Build) with (Track, Dom)>) with (Track, Dom) {
+    let mut at = Build::new(node, claiming);
+    for let step of steps {
+        let mut step = step;
+        step(&mut at);
+    }
+    if claiming {
+        at.finish();
+        at.check_attributes();
+    }
+}
+
+/// Whether an HTML element stores the attribute name as written: it lowers
+/// the name, and hydration compares names as the element stores them.
+fn is_stored_as_written(name: String) -> bool {
+    return name == name.to_ascii_lowercase();
+}
+
+/// Builds `view` at the point `parent` has reached.
+fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
+    let node = if parent.claiming {
+        let served = parent.claim();
+        match view.origin {
+            Tag(tag) => {
+                assert served.local_name() == tag, "hydrate: a served element's tag must be the one its view builds";
+            },
+            Adopted(node) => {
+                assert served == node;
+            },
+        }
+        served;
+    } else {
+        let made = make(view.origin);
+        parent.insert(made);
+        made;
+    };
+    run_steps(node, parent.claiming, view.steps);
+    return node;
 }
 
 impl View {
     /// Builds on an element made elsewhere, such as the one a page mounts in.
     pub fn of(node: Element) -> View {
-        return View { node };
+        return View { origin: Origin::Adopted(node), steps: [] };
     }
 
-    pub fn attribute(&self, name: String, value: String) -> View with Dom {
-        self.node.set_attribute(name, value);
-        return *self;
+    fn then(&self, step: fn mut(&mut Build) with (Track, Dom)) -> View {
+        let mut next = *self;
+        next.steps.push(step);
+        return next;
+    }
+
+    pub fn attribute(&self, name: String, value: String) -> View
+        contract is_stored_as_written(name), "an attribute name must be lowercase, as an HTML element stores it"
+    {
+        return self.then(
+            |at: &mut Build| {
+                if at.claiming {
+                    at.attributes[name] = Option::Some(value);
+                }
+                at.node.set_attribute(name, value);
+            },
+        );
     }
 
     /// Keeps the attribute at what `value` answers, absent for `None`.
-    pub fn bind_attribute(&self, name: String, value: fn mut() -> Option<String> with Track) -> View with (Track, Dom) {
-        let target = self.node;
+    pub fn bind_attribute(&self, name: String, value: fn mut() -> Option<String> with Track) -> View
+        contract is_stored_as_written(name), "an attribute name must be lowercase, as an HTML element stores it"
+    {
         let mut value = value;
-        observe(|| {
-            match value() {
-                Some(set) => target.set_attribute(name, set),
-                None => target.remove_attribute(name),
-            }
+        return self.then(|at: &mut Build| {
+            at.attributes[name] = null;
+            let target = at.node;
+            observe(|| {
+                match value() {
+                    Some(set) => target.set_attribute(name, set),
+                    None => target.remove_attribute(name),
+                }
+            });
         });
-        return *self;
     }
 
-    /// Appends a text node holding `content`.
-    pub fn text(&self, content: String) -> View with Dom {
-        self.node.append_child(Dom::document().create_text_node(content));
-        return *self;
+    /// Adds a text node holding `content`.
+    pub fn text(&self, content: String) -> View {
+        return self.then(|at: &mut Build| at.insert(Dom::document().create_text_node(content)));
     }
 
-    /// Appends a text node and keeps its text at what `content` answers,
-    /// taking it out when the binding is disposed of.
-    pub fn bind_text(&self, content: fn mut() -> String with Track) -> View with (Track, Dom) {
+    /// Adds a text node and keeps its text at what `content` answers, taking it
+    /// out when the binding is disposed of.
+    pub fn bind_text(&self, content: fn mut() -> String with Track) -> View {
         let mut content = content;
-        let shown = Dom::document().create_text_node("");
-        self.node.append_child(shown);
-        on_cleanup(|| detach(shown));
-        observe(|| shown.set_data(content()));
-        return *self;
+        return self.then(|at: &mut Build| {
+            let shown = Dom::document().create_text_node("");
+            at.insert(shown);
+            on_cleanup(|| detach(shown));
+            observe(|| shown.set_data(content()));
+        });
     }
 
     /// Shows what `render` makes at this point among the element's children
     /// while `when` answers true. It renders anew each time it shows, and
     /// disposes of what it hides.
-    pub fn show(
-        &self,
-        when: fn mut() -> bool with Track,
-        render: fn mut() -> View with (Track, Dom),
-    ) -> View with (Track, Dom) {
+    pub fn show(&self, when: fn mut() -> bool with Track, render: fn mut() -> View with (Track, Dom)) -> View {
         let mut render = render;
         return self.place(when, |visible| visible, |_| render());
     }
@@ -72,85 +251,41 @@ impl View {
     /// Shows what `render` makes for the key `key` answers, at this point
     /// among the element's children. It keeps that subtree while the key stays
     /// equal, and disposes of it for the next one when the key changes.
-    pub fn switch<K: Eq>(
-        &self,
-        key: fn mut() -> K with Track,
-        render: fn mut(K) -> View with (Track, Dom),
-    ) -> View with (Track, Dom) {
+    pub fn switch<K: Eq>(&self, key: fn mut() -> K with Track, render: fn mut(K) -> View with (Track, Dom)) -> View {
         return self.place(key, |_| true, render);
     }
 
-    /// Shows what `render` makes for the key, for a key `shows` admits, at this
-    /// point among the element's children.
     fn place<K: Eq>(
         &self,
         key: fn mut() -> K with Track,
         shows: fn(K) -> bool,
         render: fn mut(K) -> View with (Track, Dom),
-    ) -> View with (Track, Dom) {
-        let mut key = key;
-        let mut render = render;
-        // Holds the place, so siblings added later stay after the subtree.
-        let anchor = Dom::document().create_text_node("");
-        self.node.append_child(anchor);
-        let mut shown_for: Option<K> = null;
-        let mut shown: Option<Rendered> = null;
-        let mut disposed = false;
-        on_cleanup(|| {
-            disposed = true;
-            hide(&mut shown);
-            detach(anchor);
+    ) -> View {
+        return self.then(|at: &mut Build| place(at, key, shows, render));
+    }
+
+    pub fn child(&self, child: View) -> View {
+        return self.then(|at: &mut Build| {
+            build_in(at, child);
         });
-        observe(|| {
-            let mut current = key();
-            if let Some(was) = shown_for && was == current {
-                return;
+    }
+
+    pub fn children(&self, children: List<View>) -> View {
+        return self.then(|at: &mut Build| {
+            for let child of children {
+                build_in(at, child);
             }
-            if shown matches { Some(_) } {
-                hide(&mut shown);
-                // A cleanup of what was shown may have written what `key`
-                // reads.
-                if !disposed {
-                    current = key();
-                }
-            }
-            // `key` or a cleanup may have disposed of the binding's owner.
-            if disposed {
-                return;
-            }
-            shown_for = Option::Some(current);
-            if !shows(current) {
-                return;
-            }
-            let made = render_owned(|| render(current));
-            // So may `render`.
-            if disposed {
-                remove(made);
-                return;
-            }
-            if let Some(holder) = anchor.parent_node() {
-                holder.insert_before(made.node, Option::Some(anchor as Node));
-            }
-            shown = Option::Some(made);
         });
-        return *self;
     }
 
-    pub fn child(&self, child: View) -> View with Dom {
-        self.node.append_child(child.node);
-        return *self;
+    pub fn on(&self, type: String, handler: fn mut(Event) with (Track, Dom)) -> View {
+        return self.then(|at: &mut Build| on(at.node, type, handler));
     }
 
-    pub fn children(&self, children: List<View>) -> View with Dom {
-        for let child of children {
-            self.child(child);
-        }
-        return *self;
-    }
-
-    pub fn on(&self, type: String, handler: fn mut(Event) with (Track, Dom)) -> View with Dom {
-        on(self.node, type, handler);
-        return *self;
+    /// Hands the element to `use_node` once it is built or claimed.
+    pub fn with_node(&self, use_node: fn mut(Element) with (Track, Dom)) -> View {
+        let mut use_node = use_node;
+        return self.then(|at: &mut Build| use_node(at.node));
     }
 
     /// Keeps the element's children at one per item, in the items' order. An
@@ -160,9 +295,8 @@ impl View {
         &self,
         items: fn mut() -> List<T> with Track,
         render: fn mut(T) -> View with (Track, Dom),
-    ) -> View with (Track, Dom) {
-        each(self.node, items, render);
-        return *self;
+    ) -> View {
+        return self.then(|at: &mut Build| each(at, items, render));
     }
 }
 
@@ -189,10 +323,15 @@ struct Rendered {
     dispose: fn mut() with Dom,
 }
 
-fn render_owned(render: fn mut() -> View with (Track, Dom)) -> Rendered with Dom {
+/// Builds what `render` makes in a scope of its own: at the point `at` has
+/// reached while `in_place`, so a claiming build claims it, and anew otherwise.
+fn render_owned(at: &mut Build, in_place: bool, render: fn mut() -> View with (Track, Dom)) -> Rendered with Dom {
     let mut render = render;
     let mut node: Option<Element> = null;
-    let dispose = scope(|| node = Option::Some(render().node));
+    let dispose = scope(|| {
+        let view = render();
+        node = Option::Some(if in_place { build_in(at, view) } else { build(view) });
+    });
     return Rendered { node: node.unwrap(), dispose };
 }
 
@@ -210,6 +349,65 @@ fn hide(shown: &mut Option<Rendered>) with Dom {
     };
     *shown = null;
     remove(current);
+}
+
+/// Shows what `render` makes for the key, for a key `shows` admits, at the
+/// point `at` has reached.
+fn place<K: Eq>(
+    at: &mut Build,
+    key: fn mut() -> K with Track,
+    shows: fn(K) -> bool,
+    render: fn mut(K) -> View with (Track, Dom),
+) with (Track, Dom) {
+    let mut key = key;
+    let mut render = render;
+    // Holds the place, so siblings added later stay after the subtree.
+    let anchor = Dom::document().create_text_node("");
+    let mut building = true;
+    let mut shown_for: Option<K> = null;
+    let mut shown: Option<Rendered> = null;
+    let mut disposed = false;
+    on_cleanup(|| {
+        disposed = true;
+        hide(&mut shown);
+        detach(anchor);
+    });
+    observe(|| {
+        let in_place = building;
+        building = false;
+        let mut current = key();
+        if let Some(was) = shown_for && was == current {
+            return;
+        }
+        if shown matches { Some(_) } {
+            hide(&mut shown);
+            // A cleanup of what was shown may have written what `key` reads.
+            if !disposed {
+                current = key();
+            }
+        }
+        // `key` or a cleanup may have disposed of the binding's owner.
+        if disposed {
+            return;
+        }
+        shown_for = Option::Some(current);
+        if !shows(current) {
+            return;
+        }
+        let made = render_owned(at, in_place, || render(current));
+        // So may `render`.
+        if disposed {
+            remove(made);
+            return;
+        }
+        if !in_place && let Some(holder) = anchor.parent_node() {
+            holder.insert_before(made.node, Option::Some(anchor as Node));
+        }
+        shown = Option::Some(made);
+    });
+    if !disposed {
+        at.insert(anchor);
+    }
 }
 
 struct Row<T> {
@@ -232,12 +430,14 @@ fn clear_rows<T>(rows: &mut List<Row<T>>) with Dom {
 }
 
 fn each<T: Eq>(
-    parent: Element,
+    at: &mut Build,
     items: fn mut() -> List<T> with Track,
     render: fn mut(T) -> View with (Track, Dom),
 ) with (Track, Dom) {
+    let parent = at.node;
     let mut items = items;
     let mut render = render;
+    let mut building = true;
     let mut rows: List<Row<T>> = [];
     let mut disposed = false;
     on_cleanup(|| {
@@ -245,6 +445,8 @@ fn each<T: Eq>(
         clear_rows(&mut rows);
     });
     observe(|| {
+        let in_place = building;
+        building = false;
         let mut kept: List<Row<T>> = [];
         // Each kept row's index among the rows before, -1 for a new one.
         let mut was: List<i32> = [];
@@ -263,8 +465,9 @@ fn each<T: Eq>(
             if found {
                 continue;
             }
-            kept.push(Row { item, rendered: render_owned(|| render(item)) });
-            was.push(-1);
+            // A row built in place stands as if it had been shown in order.
+            was.push(if in_place { kept.len() } else { -1 });
+            kept.push(Row { item, rendered: render_owned(at, in_place, || render(item)) });
             if disposed {
                 break;
             }
@@ -276,10 +479,16 @@ fn each<T: Eq>(
             remove_rows(kept);
             return;
         }
+        // The rows are all of the element's children, so served text after
+        // the last one goes before the order is checked.
+        if in_place && at.claiming {
+            at.finish();
+        }
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.
+        let slots = if in_place { kept.len() } else { shown };
         let mut before: List<Option<Element>> = [];
-        for let _ of 0..<shown {
+        for let _ of 0..<slots {
             before.push(null);
         }
         for let i of 0..<kept.len() {

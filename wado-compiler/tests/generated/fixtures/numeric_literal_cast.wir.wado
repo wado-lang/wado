@@ -509,14 +509,14 @@ fn "numeric_literal_cast.wado/$test_1_a_cast_literal_holds_the_value_it_spells"(
     let bits_16: u32;
     let kept_17: u16;
     kept_17 = local.tee bits_16(builtin::i32_reinterpret_f32(2_f32)) >>u 16;
-    bits_16 = $inline_round_to_even_6: block -> u16 {
+    bits_16 = $inline_round_to_even_11: block -> u16 {
         if local.tee bits_16(bits_16 & 65535) >u 32768 {
-            break $inline_round_to_even_6: (kept_17 + 1) & 65535;
+            break $inline_round_to_even_11: (kept_17 + 1) & 65535;
         }
         if (bits_16 == 32768) & ((kept_17 & 1) == 1) {
-            break $inline_round_to_even_6: (kept_17 + 1) & 65535;
+            break $inline_round_to_even_11: (kept_17 + 1) & 65535;
         }
-        break $inline_round_to_even_6: kept_17;
+        break $inline_round_to_even_11: kept_17;
     };
     let $float_cmp_1: f32;
     $float_cmp_1 = builtin::f32_reinterpret_i32(16384 << 16);

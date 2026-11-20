@@ -87,7 +87,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//opt_split_and_condition.wado/run" = fn();  // TypeId(17)
+type "functype//opt_split_and_condition.wado/count_triples" = fn(ref Array<u8>, i32) -> i32;  // TypeId(17)
 
 type "functype//opt_split_and_condition.wado/$template_segment$opt_split_and_condition.wado/$tmpl$b923f31b94a5175e" = fn(ref "opt_split_and_condition.wado//$tmpl$b923f31b94a5175e", i32) -> ref "core:prelude/string.wado//String";  // TypeId(18)
 
@@ -256,48 +256,26 @@ global global:core:prelude/array.wado::$const_obj_7: ref "core:prelude/string.wa
 global global:core:prelude/format.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 };
 global global:core:prelude/primitive.wado::$const_obj_9: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
-fn "opt_split_and_condition.wado/run"() {
-    let bytes_0: ref "core:prelude/list.wado//List<u8>";
-    let $v_2: ref "core:prelude/list.wado//List<u8>";
-    let v_8: ref "core:prelude/list.wado//List<u8>";
+fn "opt_split_and_condition.wado/count_triples"($mv$bytes$repr, $mv$bytes$used) {
     let n: i32;
     let i: i32;
-    let $av_41: i32;
-    $av_41 = local.tee v_8(black_box(local.tee bytes_0(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_data<u8>(0xe3, 0x81, 0x82, 0x41, 0xe3, 0x41), used: 6 }))).used;
-    $v_2 = struct.new "core:prelude/list.wado//List<u8>" { repr: $array_clone_src_1 = local.tee v_8(struct.new "core:prelude/list.wado//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_8.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_41)), 0, $array_clone_src_1, 0, $av_41); $array_clone_dst_2, used: $av_41 }).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_41)), 0, $array_clone_src_1, 0, $av_41); $array_clone_dst_2, used: $av_41 };
     n = 0;
     i = 0;
-    $array_clone_src_1 = $v_2.repr;
     b0: block {
         l1: loop {
-            break_if b0 i >= $av_41;
-            if (builtin::array_get_value<u8>($array_clone_src_1, i) >=u 225) & ((i + 2) < $av_41) {
-                n = n + (((if @unlikely(local.tee n(i + 1) >= $av_41) {
+            break_if b0 i >= $mv$bytes$used;
+            if (builtin::array_get_value<u8>($mv$bytes$repr, i) >=u 225) & ((i + 2) < $mv$bytes$used) {
+                n = n + (((if @unlikely(local.tee n(i + 1) >= $mv$bytes$used) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(n, $av_41, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_split_and_condition.wado:13"), used: 31 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(n, $mv$bytes$used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_split_and_condition.wado:13"), used: 31 });
                     unreachable;
-                }; builtin::array_get_value<u8>($array_clone_src_1, n) ^ 128) & 255) <u 64);
+                }; builtin::array_get_value<u8>($mv$bytes$repr, n) ^ 128) & 255) <u 64);
             }
             i = i + 1;
             continue l1;
         };
     };
-    if @unlikely(n != 1) {
-        cold_path;
-        let $mv_arg_7: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_7("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_split_and_condition.wado/$tmpl$b923f31b94a5175e,[core:prelude/list.wado/List<u8>,core:prelude/list.wado/List<u8>,&core:prelude/list.wado/List<u8>,i32]>"(struct.new "opt_split_and_condition.wado//$tmpl$b923f31b94a5175e" { h0: bytes_0, h1: v_8, h2: $v_2, h3: n, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_split_and_condition.wado:23
-condition: count_triples(&builtin::black_box(bytes)) == 1
-bytes: "), used: 124 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_split_and_condition.wado:23
-condition: count_triples(&builtin::black_box(bytes)) == 1
-bytes: "), used: 124 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-builtin::black_box(bytes): "), used: 28 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-builtin::black_box(bytes): "), used: 28 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-&builtin::black_box(bytes): "), used: 29 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-&builtin::black_box(bytes): "), used: 29 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-count_triples(&builtin::black_box(bytes)): "), used: 44 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-count_triples(&builtin::black_box(bytes)): "), used: 44 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_7.used);
-        unreachable;
-    }
+    return n;
 }
 
 fn "opt_split_and_condition.wado/$template_segment$opt_split_and_condition.wado/$tmpl$b923f31b94a5175e"(v, index) {
@@ -341,7 +319,27 @@ fn "opt_split_and_condition.wado/$hole_fmt$opt_split_and_condition.wado/$tmpl$b9
 }
 
 fn "opt_split_and_condition.wado/$cm_export__run"() {
-    "opt_split_and_condition.wado/run"();
+    let bytes: ref "core:prelude/list.wado//List<u8>";
+    let $v_2: ref "core:prelude/list.wado//List<u8>";
+    let v_8: ref "core:prelude/list.wado//List<u8>";
+    let $av_9: i32;
+    $av_9 = local.tee v_8(black_box(local.tee bytes(struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_data<u8>(0xe3, 0x81, 0x82, 0x41, 0xe3, 0x41), used: 6 }))).used;
+    if @unlikely(local.tee $av_9("opt_split_and_condition.wado/count_triples"(local.tee $v_2(struct.new "core:prelude/list.wado//List<u8>" { repr: $array_clone_src_1 = local.tee v_8(struct.new "core:prelude/list.wado//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_8.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_9)), 0, $array_clone_src_1, 0, $av_9); $array_clone_dst_2, used: $av_9 }).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_9)), 0, $array_clone_src_1, 0, $av_9); $array_clone_dst_2, used: $av_9 }).repr, $av_9)) != 1) {
+        cold_path;
+        let $mv_arg_7: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_7("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_split_and_condition.wado/$tmpl$b923f31b94a5175e,[core:prelude/list.wado/List<u8>,core:prelude/list.wado/List<u8>,&core:prelude/list.wado/List<u8>,i32]>"(struct.new "opt_split_and_condition.wado//$tmpl$b923f31b94a5175e" { h0: bytes, h1: v_8, h2: $v_2, h3: $av_9, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_split_and_condition.wado:23
+condition: count_triples(&builtin::black_box(bytes)) == 1
+bytes: "), used: 124 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at opt_split_and_condition.wado:23
+condition: count_triples(&builtin::black_box(bytes)) == 1
+bytes: "), used: 124 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+builtin::black_box(bytes): "), used: 28 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+builtin::black_box(bytes): "), used: 28 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+&builtin::black_box(bytes): "), used: 29 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+&builtin::black_box(bytes): "), used: 29 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+count_triples(&builtin::black_box(bytes)): "), used: 44 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+count_triples(&builtin::black_box(bytes)): "), used: 44 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_7.used);
+        unreachable;
+    }
     "wasi/task-return"(0);
 }
 

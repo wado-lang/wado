@@ -212,7 +212,8 @@ fn find_region(
 /// encloses it. Replacing such a tail with a `()` call cannot change what
 /// anything evaluates to, which is what lets a region become a call.
 fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)> {
-    let unit = |id| matches!(type_table.get(id), ResolvedType::Unit);
+    // A `!` expression yields nothing either: a let-else's diverging arm is one.
+    let unread = |id| matches!(type_table.get(id), ResolvedType::Unit | ResolvedType::Never);
     let mut out = Vec::new();
     let mut stack = vec![(NodeRef::Block(body.root()), false)];
     while let Some((node, under_loop)) = stack.pop() {
@@ -231,7 +232,7 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
                 }
                 _ => {}
             },
-            NodeRef::Expr(e) if unit(body.exprs[e].type_id) => match &body.exprs[e].kind {
+            NodeRef::Expr(e) if unread(body.exprs[e].type_id) => match &body.exprs[e].kind {
                 ExprKind::If {
                     then_branch,
                     else_branch,

@@ -17,6 +17,10 @@ fn h(x: i32) -> i32 {
     s = s ^ (s >> 5);
     s = s * 13 + builtin::black_box(3);
     s = s ^ (s >> 7);
+    s = s * 11 + builtin::black_box(2);
+    s = s ^ (s >> 9);
+    s = s * 19 + builtin::black_box(4);
+    s = s ^ (s >> 2);
     return sink(s);
 }
 
@@ -44,6 +48,26 @@ fn f(x: i32) -> i32 {
     s = s ^ (s >> 15);
     s = s * 47 + builtin::black_box(1);
     s = s ^ (s >> 1);
+    s = s * 53 + builtin::black_box(4);
+    s = s ^ (s >> 3);
+    s = s * 59 + builtin::black_box(6);
+    s = s ^ (s >> 5);
+    s = s * 61 + builtin::black_box(8);
+    s = s ^ (s >> 7);
+    s = s * 67 + builtin::black_box(9);
+    s = s ^ (s >> 8);
+    s = s * 71 + builtin::black_box(2);
+    s = s ^ (s >> 11);
+    s = s * 73 + builtin::black_box(3);
+    s = s ^ (s >> 13);
+    s = s * 79 + builtin::black_box(5);
+    s = s ^ (s >> 2);
+    s = s * 83 + builtin::black_box(7);
+    s = s ^ (s >> 4);
+    s = s * 89 + builtin::black_box(1);
+    s = s ^ (s >> 6);
+    s = s * 97 + builtin::black_box(9);
+    s = s ^ (s >> 10);
     return h(s) + sink(s);
 }
 
@@ -75,5 +99,5 @@ __DATA__
     "\"pgo_unmoved_caller_hot_site.wado/h\"("
   ],
   "wir_pass": {"O2": ["nir/inline"]},
-  "stdout": "1431570020\n"
+  "stdout": "-1805101240\n"
 }

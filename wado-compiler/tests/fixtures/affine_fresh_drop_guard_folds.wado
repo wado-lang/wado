@@ -12,15 +12,20 @@ impl Drop for Tok {
     }
 }
 
-export fn run() {
+#[inline("never")]
+fn show() {
     let t = Tok { n: builtin::black_box(1) };
     log_stdout(`${t.n}`);
+}
+
+export fn run() {
+    show();
 }
 
 __DATA__
 {
     "stdout": "1\ndrop 1\n",
     "wir_pass": {"O2": ["nir/store_load_forward_post_scalarize"]},
-    "wir_scope": "/run\"",
+    "wir_scope": "/show\"",
     "wir_not_expect:O2": ["ref.is_null("]
 }

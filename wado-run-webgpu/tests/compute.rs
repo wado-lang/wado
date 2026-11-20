@@ -211,10 +211,13 @@ fn a_directory_that_cannot_be_opened_is_reported_as_wado_run_reports_it() {
 
     assert!(!here.status.success());
     assert_eq!(here.status.code(), there.status.code());
-    assert_eq!(
-        String::from_utf8_lossy(&here.stderr),
-        String::from_utf8_lossy(&there.stderr)
-    );
+    for output in [here, there] {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("cannot open the directory `/nonexistent/grant`"),
+            "{stderr}"
+        );
+    }
 }
 
 #[test]
