@@ -248,11 +248,10 @@ fn any_sibling(start: Option<Node>, step: fn(&SurfaceNode) -> Option<Node>, acce
     return false;
 }
 
-// The DOM standard's pre-insertion validity, its steps in order; a DOM
-// exception traps (Web WEP, Exceptions).
-// The DOM standard's validity checks for inserting `node` before `child`, or
-// for replacing `child` with it where `replacing`: the child replaced counts
-// for neither the one element nor the one doctype a document holds.
+// The DOM standard's validity checks, its steps in order, for inserting `node`
+// before `child`, or for replacing `child` with it where `replacing`: the child
+// replaced counts for neither the one element nor the one doctype a document
+// holds. A DOM exception traps (Web WEP, Exceptions).
 fn assert_insertable(parent: Node, node: Node, child: Option<Node>, replacing: bool) {
     let replaced = if replacing { child } else { null };
     let other_child = |accept: fn(&SurfaceNode) -> bool| children(parent).find(
