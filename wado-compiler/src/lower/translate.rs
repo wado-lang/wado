@@ -2883,9 +2883,11 @@ impl FunctionTranslator<'_, '_> {
     /// frame still reads its storage.
     fn convert_returned_place(&self, value: &TirExpr) -> Operand {
         let operand = self.convert_operand(value);
-        let escaped = value_copy::last_use::alias_root(value)
-            .is_some_and(|root| self.escaped_storage.contains(&root))
-            && value_copy::needs_value_copy(value.type_id, &self.base.type_table.borrow());
+        let escaped = {
+            let type_table = self.base.type_table.borrow();
+            value_copy::needs_value_copy(value.type_id, &type_table)
+                && value_copy::last_use::yields_from(value, &self.escaped_storage, &type_table)
+        };
         if escaped {
             self.wrap_value_copy_operand(operand, value.type_id)
         } else {

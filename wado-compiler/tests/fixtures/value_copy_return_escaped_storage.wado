@@ -19,6 +19,19 @@ fn via_share(sink: &mut List<&List<i32>>) -> List<i32> {
     return r;
 }
 
+// Every value a control form hands on is the returned value.
+#[inline(never)]
+fn via_branch(sink: &mut List<&List<i32>>, n: i32) -> List<i32> {
+    let a: List<i32> = [1];
+    let b: List<i32> = [5];
+    sink.push(&a);
+    return match n {
+        0 => if n == 0 { a } else { b },
+        1 => found: { break found: a; },
+        _ => b,
+    };
+}
+
 // Storage behind a parameter is the caller's, which copies the result itself.
 #[inline(never)]
 fn through_param(sink: &mut List<&List<i32>>, p: &List<i32>) -> List<i32> {
@@ -32,6 +45,12 @@ export fn run() with Stdout {
     let mut z = through_param(&mut u, &l);
     z.push(2);
     assert l.len() == 1 && u[0].len() == 1 && z.len() == 2;
+    for let n of 0..<2 {
+        let mut w: List<&List<i32>> = [];
+        let mut r = via_branch(&mut w, builtin::black_box(n));
+        r.push(2);
+        assert w[0].len() == 1;
+    }
     let mut s: List<&List<i32>> = [];
     let mut x = direct(&mut s);
     x.push(2);

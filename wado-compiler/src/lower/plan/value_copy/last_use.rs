@@ -3557,6 +3557,15 @@ fn yielded_leaves(expr: &TirExpr, type_table: &TypeTable, leaf: &mut dyn FnMut(&
     }
 }
 
+/// Whether any value `expr` hands on is read out of one of `locals`.
+pub(crate) fn yields_from(expr: &TirExpr, locals: &IndexSet<u32>, type_table: &TypeTable) -> bool {
+    let mut hit = false;
+    yielded_leaves(expr, type_table, &mut |leaf| {
+        hit |= alias_root(leaf).is_some_and(|root| locals.contains(&root));
+    });
+    hit
+}
+
 /// Each expression a `let` may take its value from, on the path that runs it:
 /// the value itself, or the arm and tail values of a control form. Each runs
 /// last on its path, so it materializes into the binding as a `let` of it
