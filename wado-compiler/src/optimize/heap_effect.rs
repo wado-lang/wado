@@ -3,7 +3,6 @@
 
 use std::borrow::Cow;
 use std::cell::OnceCell;
-use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -296,6 +295,63 @@ impl Layouts {
     }
 }
 
+/// Each node's rank within its component: one past the highest rank among its
+/// callees there, a call that closes a cycle aside. A depth-first search drops
+/// those calls, the ones it meets to a node it has not finished, so what is
+/// left orders every component, and a rank's nodes call none of each other but
+/// along a dropped call.
+fn ranks_within(
+    successors: &[Vec<usize>],
+    components: &[Vec<usize>],
+    component_of: &[usize],
+) -> Vec<usize> {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Visit {
+        New,
+        Open,
+        Done,
+    }
+    let mut rank = vec![0; successors.len()];
+    let mut visit = vec![Visit::New; successors.len()];
+    for members in components.iter().filter(|members| members.len() > 1) {
+        for &root in members {
+            if visit[root] != Visit::New {
+                continue;
+            }
+            visit[root] = Visit::Open;
+            let mut stack = vec![(root, 0)];
+            while let Some((n, next)) = stack.last_mut() {
+                let n = *n;
+                let callee = successors[n][*next..]
+                    .iter()
+                    .position(|&s| component_of[s] == component_of[n]);
+                match callee {
+                    Some(at) => {
+                        let s = successors[n][*next + at];
+                        *next += at + 1;
+                        if visit[s] == Visit::New {
+                            visit[s] = Visit::Open;
+                            stack.push((s, 0));
+                        }
+                    }
+                    None => {
+                        stack.pop();
+                        visit[n] = Visit::Done;
+                        rank[n] = successors[n]
+                            .iter()
+                            .filter(|&&s| component_of[s] == component_of[n] && s != n)
+                            .filter(|&&s| visit[s] == Visit::Done)
+                            .map(|&s| rank[s] + 1)
+                            .max()
+                            .unwrap_or(0);
+                    }
+                }
+            }
+        }
+    }
+    rank
+}
+
 /// The call-graph-wide summaries, kept across passes no DCE separates and
 /// re-solved only where a function's write count moved since. A DCE removes
 /// types, and the summaries read the type table as only growing.
@@ -370,10 +426,9 @@ impl HeapEffectsCache {
 
     /// The least fixpoint over the call graph, callees first; a component whose
     /// inputs all stand is the fixpoint already. Components no path joins are
-    /// solved together: a cycle's members in place, the rest in rounds that
-    /// re-summarize every queued node against the summaries the round began
-    /// with, so a round runs in parallel and its outcome does not depend on the
-    /// thread count.
+    /// solved together, in sweeps whose batches each run in parallel against
+    /// the summaries the batch began with, so the outcome does not depend on
+    /// the thread count.
     fn solve(
         &mut self,
         functions: &[FuncRef],
@@ -420,9 +475,9 @@ impl HeapEffectsCache {
             }
             by_depth[depth[c]].push(c);
         }
-        let mut queued = vec![false; successors.len()];
+        let rank = ranks_within(&successors, &components, &component_of);
         for level in by_depth {
-            let mut pending: Vec<usize> = level
+            let pending: Vec<usize> = level
                 .into_iter()
                 .filter(|&c| {
                     components[c].iter().any(|&n| {
@@ -435,67 +490,52 @@ impl HeapEffectsCache {
                 .iter()
                 .map(|&n| (n, std::mem::take(self.summary_mut(n))))
                 .collect();
-            let (cyclic, acyclic): (Vec<usize>, Vec<usize>) = pending
-                .into_iter()
-                .partition(|&n| components[component_of[n]].len() > 1);
-            self.solve_in_place(functions, type_table, cyclic, &callers_within, &mut queued);
-            pending = acyclic;
-            while !pending.is_empty() {
-                let this = &*self;
-                let fresh = exec.map(&pending, |&n| {
-                    this.summarize(functions, type_table, n, true)
-                });
-                let mut next = Vec::new();
-                for (n, summary) in pending.into_iter().zip(fresh) {
-                    if summary == *self.summary_mut(n) {
-                        continue;
-                    }
-                    *self.summary_mut(n) = summary;
-                    for &m in &callers_within[n] {
-                        if !queued[m] {
-                            queued[m] = true;
-                            next.push(m);
-                        }
-                    }
-                }
-                for &n in &next {
-                    queued[n] = false;
-                }
-                pending = next;
-            }
+            self.sweep(functions, type_table, exec, &pending, &rank, &callers_within);
             for (n, before) in before {
                 moved[n] |= *self.summary_mut(n) != before;
             }
         }
     }
 
-    /// The members of cycles, solved one summary at a time against the latest
-    /// of the others. A round reads only the summaries it began with, so a
-    /// change crosses one call per round and a cycle of hundreds takes as many
-    /// rounds; the fixpoint is the least either way.
-    fn solve_in_place(
+    /// `nodes` solved in sweeps: each sweep summarizes the stale nodes rank by
+    /// rank, a rank's nodes in parallel against the summaries as the rank
+    /// began, so a change reaches every caller above it in the same sweep and
+    /// only one along a back edge waits for the next.
+    fn sweep(
         &mut self,
         functions: &[FuncRef],
         type_table: &TypeTable,
-        members: Vec<usize>,
+        exec: &Executor,
+        nodes: &[usize],
+        rank: &[usize],
         callers_within: &[Vec<usize>],
-        queued: &mut [bool],
     ) {
-        for &n in &members {
-            queued[n] = true;
-        }
-        let mut worklist: VecDeque<usize> = members.into();
-        while let Some(n) = worklist.pop_front() {
-            queued[n] = false;
-            let summary = self.summarize(functions, type_table, n, true);
-            if summary == *self.summary_mut(n) {
-                continue;
+        let mut by_rank: Vec<Vec<usize>> = Vec::new();
+        for &n in nodes {
+            if by_rank.len() <= rank[n] {
+                by_rank.resize_with(rank[n] + 1, Vec::new);
             }
-            *self.summary_mut(n) = summary;
-            for &m in &callers_within[n] {
-                if !queued[m] {
-                    queued[m] = true;
-                    worklist.push_back(m);
+            by_rank[rank[n]].push(n);
+        }
+        let mut stale: IndexSet<usize> = nodes.iter().copied().collect();
+        while !stale.is_empty() {
+            for members in &by_rank {
+                let batch: Vec<usize> = members
+                    .iter()
+                    .copied()
+                    .filter(|n| stale.swap_remove(n))
+                    .collect();
+                if batch.is_empty() {
+                    continue;
+                }
+                let this = &*self;
+                let fresh = exec.map(&batch, |&n| this.summarize(functions, type_table, n, true));
+                for (n, summary) in batch.into_iter().zip(fresh) {
+                    if summary == *self.summary_mut(n) {
+                        continue;
+                    }
+                    *self.summary_mut(n) = summary;
+                    stale.extend(callers_within[n].iter().copied());
                 }
             }
         }
