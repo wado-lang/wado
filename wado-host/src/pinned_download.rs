@@ -52,7 +52,7 @@ impl Pinned {
     ///
     /// # Errors
     ///
-    /// The fetch fails, or a member does not hash to its pin.
+    /// The fetch fails, or the archive or a member does not hash to its pin.
     pub async fn dir(&self) -> Result<PathBuf> {
         let dir = self.cache_dir()?;
         if self.is_cached(&dir) {
@@ -85,7 +85,9 @@ impl Pinned {
                 member.sha256,
                 &format!("{} in {}", member.path, self.url),
             )?;
-            write(&dir.join(member.file_name()), &bytes)?;
+            let path = dir.join(member.file_name());
+            write_atomic(&path, &bytes)
+                .with_context(|| format!("cannot write {}", path.display()))?;
         }
         Ok(dir)
     }
@@ -113,10 +115,6 @@ fn check(bytes: &[u8], pin: &str, what: &str) -> Result<()> {
         "{what} hashes to sha256:{actual}, not its pin sha256:{pin}"
     );
     Ok(())
-}
-
-fn write(path: &Path, bytes: &[u8]) -> Result<()> {
-    write_atomic(path, bytes).with_context(|| format!("cannot write {}", path.display()))
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

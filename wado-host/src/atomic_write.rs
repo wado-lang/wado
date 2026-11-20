@@ -1,4 +1,5 @@
-//! Writing a file so no reader ever sees it half-written.
+//! Writing a file so no reader ever sees it half-written, and holding a lock
+//! file so writers take turns.
 
 use std::io;
 use std::path::Path;
