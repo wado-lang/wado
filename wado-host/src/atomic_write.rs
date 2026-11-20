@@ -48,6 +48,27 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     }
 }
 
+/// Hold the file at `path` against every other holder, in this process or
+/// another, until the returned file drops, so concurrent writers of what it
+/// guards take turns.
+///
+/// # Errors
+///
+/// Fails when the parent directory cannot be created or the file cannot be
+/// opened or held.
+pub fn hold(path: &Path) -> io::Result<std::fs::File> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)?;
+    file.lock()?;
+    Ok(file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::write_atomic;

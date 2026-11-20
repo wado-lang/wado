@@ -64,7 +64,9 @@ async fn main() -> ExitCode {
 const CPU_PLUGIN: Option<Pinned> = Some(Pinned {
     name: "XLA's CPU PJRT plugin",
     url: "https://github.com/zml/pjrt-artifacts/releases/download/v18.0.0/pjrt-cpu_linux-amd64.tar.gz",
-    archive: wado_host::pinned_download::Archive::TarGz,
+    archive: wado_host::pinned_download::Archive::TarGz {
+        sha256: "6fbaa0cd1ff4d84fa7000ce5acc00e817bdf74c85cef1cc42c7cccc376c56431",
+    },
     members: &[wado_host::pinned_download::Member {
         path: "libpjrt_cpu.so",
         sha256: "edc5ecc1b13eceeba4b0c312a05efbfdd9bd0732040990024beacb64cc9c4569",

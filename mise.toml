@@ -325,6 +325,8 @@ WADO=$(scripts/dev-bin.sh --path wado)
 WADO_PJRT_TPU_PLUGIN=$(scripts/fetch-pjrt-plugin.sh)
 export WADO WADO_PJRT_TPU_PLUGIN
 unset WADO_PJRT_PLUGIN
+# A run fetches the CPU plugin, saying so on stderr, which a test reads.
+cargo run --locked -p wado-run-pjrt -- wado-run-pjrt/tests/fixtures/add.wado > /dev/null
 cargo test --locked -p wado-run-pjrt -- --ignored
 """
 

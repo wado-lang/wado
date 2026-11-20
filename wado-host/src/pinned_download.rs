@@ -12,7 +12,7 @@ use reqwest::header::{CONTENT_RANGE, RANGE};
 use reqwest::{Client, StatusCode};
 use sha2::{Digest, Sha256};
 
-use crate::atomic_write::write_atomic;
+use crate::atomic_write::{hold, write_atomic};
 use crate::tls_trust::reqwest_client;
 use crate::user_config::xdg_base_dir;
 
@@ -26,8 +26,9 @@ pub struct Pinned {
 }
 
 pub enum Archive {
-    /// Read whole: a gzip stream has no index to seek by.
-    TarGz,
+    /// Read whole, since a gzip stream has no index to seek by, and held to
+    /// its own pin before any of it is parsed.
+    TarGz { sha256: &'static str },
     /// Read a member at a time, by `Range`, from its central directory.
     Zip,
 }
@@ -53,10 +54,16 @@ impl Pinned {
     ///
     /// The fetch fails, or a member does not hash to its pin.
     pub async fn dir(&self) -> Result<PathBuf> {
-        if let Some(dir) = self.cached() {
+        let dir = self.cache_dir()?;
+        if self.is_cached(&dir) {
             return Ok(dir);
         }
-        let dir = self.cache_dir()?;
+        // Processes started together fetch once: the rest wait, then find it.
+        let lock = dir.with_extension("lock");
+        let _held = hold(&lock).with_context(|| format!("cannot hold {}", lock.display()))?;
+        if self.is_cached(&dir) {
+            return Ok(dir);
+        }
         eprintln!(
             "info: fetching {} once, into {}, from {}",
             self.name,
@@ -65,33 +72,28 @@ impl Pinned {
         );
         let client = reqwest_client()?.build()?;
         let files = match self.archive {
-            Archive::TarGz => {
+            Archive::TarGz { sha256 } => {
                 let gzip = get(&client, self.url, Part::Whole).await?.bytes;
+                check(&gzip, sha256, self.url)?;
                 tar_members(&gunzip(&gzip)?, self.members)?
             }
             Archive::Zip => zip_members(&client, self.url, self.members).await?,
         };
         for (member, bytes) in self.members.iter().zip(files) {
-            let actual = sha256_hex(&bytes);
-            ensure!(
-                actual == member.sha256,
-                "{} in {} hashes to sha256:{actual}, not its pin sha256:{}",
-                member.path,
-                self.url,
-                member.sha256
-            );
+            check(
+                &bytes,
+                member.sha256,
+                &format!("{} in {}", member.path, self.url),
+            )?;
             write(&dir.join(member.file_name()), &bytes)?;
         }
         Ok(dir)
     }
 
-    /// The directory [`Self::dir`] answers, where an earlier fetch filled it.
-    fn cached(&self) -> Option<PathBuf> {
-        let dir = self.cache_dir().ok()?;
+    fn is_cached(&self, dir: &Path) -> bool {
         self.members
             .iter()
             .all(|member| dir.join(member.file_name()).is_file())
-            .then_some(dir)
     }
 
     /// Keyed by the members' pins, so a new pin never finds an old file.
@@ -102,6 +104,15 @@ impl Pinned {
             .context("cannot locate the home directory; set XDG_CACHE_HOME")?;
         Ok(cache.join("wado").join("pinned").join(key))
     }
+}
+
+fn check(bytes: &[u8], pin: &str, what: &str) -> Result<()> {
+    let actual = sha256_hex(bytes);
+    ensure!(
+        actual == pin,
+        "{what} hashes to sha256:{actual}, not its pin sha256:{pin}"
+    );
+    Ok(())
 }
 
 fn write(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -144,27 +155,21 @@ struct Fetched {
     total: u64,
 }
 
-/// GET `part` of `url`. A server that ignores `Range` is answered from the
-/// whole file it sends.
+/// GET `part` of `url`, again after a connection that fails. A server that
+/// ignores `Range` is answered from the whole file it sends.
 async fn get(client: &Client, url: &str, part: Part) -> Result<Fetched> {
-    let mut request = client.get(url);
-    match &part {
-        Part::Whole => {}
-        Part::Tail(n) => request = request.header(RANGE, format!("bytes=-{n}")),
-        Part::Span(span) => {
-            request = request.header(RANGE, format!("bytes={}-{}", span.start, span.end - 1));
+    const ATTEMPTS: usize = 3;
+    let mut attempt = 1;
+    let (status, total, bytes) = loop {
+        match get_once(client, url, &part).await {
+            Ok(answered) => break answered,
+            Err(e) if attempt < ATTEMPTS => {
+                eprintln!("info: fetching {url} again after: {e}");
+                attempt += 1;
+            }
+            Err(e) => return Err(anyhow::Error::new(e).context(format!("cannot fetch {url}"))),
         }
-    }
-    let failed = || format!("cannot fetch {url}");
-    let response = request.send().await.with_context(failed)?;
-    let status = response.status();
-    let total = response
-        .headers()
-        .get(CONTENT_RANGE)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.rsplit_once('/'))
-        .and_then(|(_, total)| total.parse().ok());
-    let bytes = response.bytes().await.with_context(failed)?.to_vec();
+    };
     match (status, total) {
         (StatusCode::PARTIAL_CONTENT, Some(total)) => Ok(Fetched { bytes, total }),
         (StatusCode::OK, _) => Ok(Fetched {
@@ -173,6 +178,32 @@ async fn get(client: &Client, url: &str, part: Part) -> Result<Fetched> {
         }),
         (status, _) => bail!("cannot fetch {url}: the server answered {status}"),
     }
+}
+
+/// What one GET answered: its status, the file's length where the answer is
+/// a range, and the body.
+async fn get_once(
+    client: &Client,
+    url: &str,
+    part: &Part,
+) -> Result<(StatusCode, Option<u64>, Vec<u8>), reqwest::Error> {
+    let mut request = client.get(url);
+    match part {
+        Part::Whole => {}
+        Part::Tail(n) => request = request.header(RANGE, format!("bytes=-{n}")),
+        Part::Span(span) => {
+            request = request.header(RANGE, format!("bytes={}-{}", span.start, span.end - 1));
+        }
+    }
+    let response = request.send().await?;
+    let status = response.status();
+    let total = response
+        .headers()
+        .get(CONTENT_RANGE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.rsplit_once('/'))
+        .and_then(|(_, total)| total.parse().ok());
+    Ok((status, total, response.bytes().await?.to_vec()))
 }
 
 /// The one member of a gzip stream, inflated whole. Its trailer gives the
@@ -215,8 +246,17 @@ fn tar_members(tar: &[u8], members: &[Member]) -> Result<Vec<Vec<u8>>> {
             let end = field.iter().position(|&b| b == 0).unwrap_or(field.len());
             String::from_utf8_lossy(&field[..end]).trim().to_owned()
         };
+        ensure!(
+            header[257..262] == *b"ustar",
+            "the archive is not a ustar tar"
+        );
         let size = usize::from_str_radix(&text(124..136), 8).context("a tar size is not octal")?;
-        let prefix = text(345..500);
+        // GNU's header keeps times where POSIX's keeps the path's prefix.
+        let prefix = if header[257..263] == *b"ustar\0" {
+            text(345..500)
+        } else {
+            String::new()
+        };
         let name = text(0..100);
         let path = if prefix.is_empty() {
             name
@@ -228,7 +268,8 @@ fn tar_members(tar: &[u8], members: &[Member]) -> Result<Vec<Vec<u8>>> {
             .get(data..data + size)
             .context("the tar archive ends inside a file")?;
         let path = path.trim_start_matches("./");
-        if let Some(i) = members.iter().position(|member| member.path == path) {
+        let is_file = matches!(header[156], b'0' | 0);
+        if is_file && let Some(i) = members.iter().position(|member| member.path == path) {
             found[i] = Some(body.to_vec());
         }
         at = data + size.div_ceil(BLOCK) * BLOCK;
@@ -313,6 +354,7 @@ fn zip_directory_in(tail: &[u8], tail_at: u64) -> Result<Result<&[u8], Range<u64
         .context("the zip end record is cut short")?;
     let len = u32_at(record, 12);
     let at = u32_at(record, 16);
+    ensure!(len > 0, "the zip archive holds no files");
     ensure!(
         at != 0xffff_ffff,
         "the archive is zip64, which this reader does not take"
@@ -387,14 +429,48 @@ mod tests {
         sha256: "",
     };
 
+    /// A header's type, its magic, and what it keeps at the prefix's offset.
+    struct Entry<'a> {
+        name: &'a str,
+        body: &'a [u8],
+        typeflag: u8,
+        magic: &'a [u8; 8],
+        prefix: &'a str,
+    }
+
+    const POSIX: &[u8; 8] = b"ustar\x0000";
+    const GNU: &[u8; 8] = b"ustar  \0";
+
+    fn file<'a>(name: &'a str, body: &'a [u8]) -> Entry<'a> {
+        Entry {
+            name,
+            body,
+            typeflag: b'0',
+            magic: POSIX,
+            prefix: "",
+        }
+    }
+
     fn ustar(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let entries: Vec<_> = entries
+            .iter()
+            .map(|&(name, body)| file(name, body))
+            .collect();
+        tar_of(&entries)
+    }
+
+    fn tar_of(entries: &[Entry]) -> Vec<u8> {
         let mut tar = Vec::new();
-        for (name, body) in entries {
+        for entry in entries {
             let mut header = [0u8; 512];
-            header[..name.len()].copy_from_slice(name.as_bytes());
-            let size = format!("{:011o}\0", body.len());
+            header[..entry.name.len()].copy_from_slice(entry.name.as_bytes());
+            let size = format!("{:011o}\0", entry.body.len());
             header[124..136].copy_from_slice(size.as_bytes());
+            header[156] = entry.typeflag;
+            header[257..265].copy_from_slice(entry.magic);
+            header[345..345 + entry.prefix.len()].copy_from_slice(entry.prefix.as_bytes());
             tar.extend_from_slice(&header);
+            let body = entry.body;
             tar.extend_from_slice(body);
             tar.resize(tar.len().div_ceil(512) * 512, 0);
         }
@@ -406,6 +482,33 @@ mod tests {
     fn a_tar_member_is_found_past_others_and_a_leading_dot() {
         let tar = ustar(&[("./other", &[1; 600]), ("./lib/a.so", b"lib")]);
         assert_eq!(tar_members(&tar, &[MEMBER]).unwrap(), [b"lib".to_vec()]);
+    }
+
+    #[test]
+    fn a_tar_member_is_a_regular_file_at_the_path_its_prefix_completes() {
+        let link = Entry {
+            typeflag: b'2',
+            ..file("lib/a.so", b"")
+        };
+        let prefixed = Entry {
+            prefix: "lib",
+            ..file("a.so", b"lib")
+        };
+        let tar = tar_of(&[link, prefixed]);
+        assert_eq!(tar_members(&tar, &[MEMBER]).unwrap(), [b"lib".to_vec()]);
+    }
+
+    #[test]
+    fn a_gnu_header_keeps_no_prefix() {
+        let gnu = Entry {
+            magic: GNU,
+            prefix: "15243064557",
+            ..file("lib/a.so", b"lib")
+        };
+        assert_eq!(
+            tar_members(&tar_of(&[gnu]), &[MEMBER]).unwrap(),
+            [b"lib".to_vec()]
+        );
     }
 
     #[test]
@@ -488,6 +591,12 @@ mod tests {
             &archive[span.start as usize..span.start as usize + 4],
             b"PK\x01\x02"
         );
+    }
+
+    #[test]
+    fn a_zip_with_an_empty_directory_holds_no_files() {
+        let error = zip_directory_in(&zip(&[]), 0).unwrap_err().to_string();
+        assert!(error.contains("holds no files"), "{error}");
     }
 
     #[test]

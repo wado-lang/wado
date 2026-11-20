@@ -15,7 +15,6 @@ use std::net::{IpAddr, ToSocketAddrs};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
-use std::time::Duration;
 
 use reqwest::header::{CONTENT_RANGE, RANGE};
 use reqwest::redirect::Policy;
@@ -69,16 +68,11 @@ static CLIENT: LazyLock<Result<Client, String>> = LazyLock::new(|| {
                 attempt.follow()
             }
         }))
-        .connect_timeout(CONNECT_TIMEOUT)
-        .read_timeout(READ_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())
 });
 
 const MAX_REDIRECTS: usize = 10;
-/// A host that stops answering fails the build rather than hanging it.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
-const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Which side of the boundary between this network and the internet a host
 /// is on.

@@ -18,6 +18,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Once};
+use std::time::Duration;
 
 use indexmap::IndexSet;
 use rustls::RootCertStore;
@@ -74,12 +75,18 @@ pub fn extra_ca_certs() -> impl Iterator<Item = &'static CertificateDer<'static>
 
 /// A reqwest client trusting [`extra_ca_certs`] beyond the platform's roots,
 /// so a host behind an intercepting proxy is reached as a guest's HTTPS
-/// reaches it.
+/// reaches it. A host that stops answering fails the fetch rather than hanging
+/// it.
 pub fn reqwest_client() -> Result<reqwest::ClientBuilder, reqwest::Error> {
+    const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+    const READ_TIMEOUT: Duration = Duration::from_secs(60);
     let certs = extra_ca_certs()
         .map(|der| reqwest::Certificate::from_der(der))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(reqwest::Client::builder().tls_certs_merge(certs))
+    Ok(reqwest::Client::builder()
+        .tls_certs_merge(certs)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(READ_TIMEOUT))
 }
 
 fn bundle_paths() -> Vec<PathBuf> {
