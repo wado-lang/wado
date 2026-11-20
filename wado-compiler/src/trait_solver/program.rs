@@ -1,6 +1,7 @@
 //! The value trait resolution answers questions about. An id is a plain index,
 //! so a test writes the program it needs rather than compiling source.
 
+use super::holds::is_opaque;
 use crate::hashmap::{IndexMap, IndexSet};
 
 /// A type declaration — a struct, variant, enum, flags, newtype, resource, or
@@ -699,7 +700,7 @@ fn matching<'p, A: Iterator<Item = ImplId>>(
     all: impl FnOnce() -> A,
     by_head: impl Fn(Option<TypeDeclId>) -> Option<&'p Vec<ImplId>>,
 ) -> Matching<'p, A> {
-    if matches!(ty, SolverType::AnyRow) || super::holds::is_opaque(ty) {
+    if matches!(ty, SolverType::AnyRow) || is_opaque(ty) {
         return Matching::All(all());
     }
     let ids = |head| by_head(head).map_or(&[][..], Vec::as_slice);
