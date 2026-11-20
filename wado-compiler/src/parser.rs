@@ -7023,11 +7023,13 @@ impl Parser {
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeDecl {
                     id: assoc_id,
+                    attrs,
                     name: assoc_name,
                     name_span,
                     is_affine: assoc_is_affine,
                     type_params,
                     bounds,
+                    doc,
                     span: type_span.merge(&end),
                 });
             } else {

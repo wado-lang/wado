@@ -4464,6 +4464,25 @@ fn test_format_keeps_an_attribute_on_impl_use_and_assoc_members() {
     assert_format_preserves_ast(source);
 }
 
+/// A trait's associated type keeps its attribute through a format, under its
+/// doc comment.
+#[test]
+fn test_format_keeps_an_attribute_on_a_trait_assoc_type() {
+    let source = concat!(
+        "trait T {\n",
+        "    /// The element.\n",
+        "    #[allow(shadowed_name)]\n",
+        "    type Item;\n",
+        "\n",
+        "    #[cm(\"u\")]\n",
+        "    affine type Unit<E>: Eq;\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// Each `contract` clause takes a line of its own under the signature, and the
 /// body's `{` then opens a line of its own.
 #[test]

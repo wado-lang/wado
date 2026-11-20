@@ -61,8 +61,7 @@ impl Member<'_> {
 
     fn attrs(&self) -> &[Attribute] {
         match self {
-            // A trait's associated type takes no attribute.
-            Member::Declared(_) => &[],
+            Member::Declared(m) => &m.attrs,
             Member::Bound(m) => &m.attrs,
             Member::Const(m) => &m.attrs,
             Member::Method(m) => &m.attrs,
@@ -4038,10 +4037,15 @@ pub fn unparse_trait_header(t: &TraitDecl) -> String {
     out
 }
 
-/// A trait's associated type as declared, without `type` or the `;`:
-/// `Buf<E: Elem>: Len`.
+/// A trait's associated type as declared, without the `;`:
+/// `affine type Buf<E: Elem>: Len`.
 pub fn unparse_assoc_type_decl(decl: &AssociatedTypeDecl) -> String {
-    let mut out = decl.name.clone();
+    let mut out = String::from(if decl.is_affine {
+        "affine type "
+    } else {
+        "type "
+    });
+    out.push_str(&decl.name);
     unparse_generic_params_into(&decl.type_params, &mut out);
     if !decl.bounds.is_empty() {
         out.push_str(": ");

@@ -915,7 +915,12 @@ impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor<'_> for AttributeWalk<'_, F> {
             Item::Newtype(decl) => self.report(&decl.attrs, AttrTarget::Newtype),
             Item::TupleTypeDecl(decl) => self.report(&decl.attrs, AttrTarget::TupleType),
             Item::BuiltinTypeDecl(decl) => self.report(&decl.attrs, AttrTarget::BuiltinType),
-            Item::Trait(decl) => self.report(&decl.attrs, AttrTarget::Trait),
+            Item::Trait(decl) => {
+                self.report(&decl.attrs, AttrTarget::Trait);
+                for assoc in &decl.associated_types {
+                    self.report(&assoc.attrs, AttrTarget::AssociatedType);
+                }
+            }
             Item::Interface(decl) => self.report(&decl.attrs, AttrTarget::Interface),
             Item::Resource(decl) => self.report(&decl.attrs, AttrTarget::Resource),
             Item::World(decl) => {

@@ -1,0 +1,13 @@
+// A trait's associated type carries its attributes, so an unknown name on one
+// reaches the schema rather than being dropped by the parse.
+
+trait Shape {
+    #[bogus_on_decl]
+    type Unit;
+    fn area(&self) -> i32;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":5:5: analysis error: unknown attribute: `bogus_on_decl`", "compile_error_codes": ["UNKNOWN_ATTR"]}

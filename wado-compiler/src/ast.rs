@@ -751,9 +751,11 @@ pub fn walk_item_contents<'ast, V: AstVisitor<'ast>>(v: &mut V, item: &'ast Item
                 walk_effect_names(v, effects);
             }
             for assoc in &t.associated_types {
-                v.visit_id(assoc.id, assoc.span);
-                v.visit_assoc_type_params(&assoc.type_params, |v| {
-                    v.visit_trait_bounds(&assoc.bounds);
+                v.visit_attributed(&assoc.attrs, |v| {
+                    v.visit_id(assoc.id, assoc.span);
+                    v.visit_assoc_type_params(&assoc.type_params, |v| {
+                        v.visit_trait_bounds(&assoc.bounds);
+                    });
                 });
             }
             walk_methods(v, &t.methods);
@@ -5117,6 +5119,7 @@ pub struct BuiltinTypeDecl {
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeDecl {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub name_span: Span,
     /// `affine type Item;`: an impl may bind an affine type.
@@ -5127,6 +5130,7 @@ pub struct AssociatedTypeDecl {
     /// Trait bounds on this associated type (e.g., `SerializeSeq` in `type SeqSerializer: SerializeSeq;`
     /// or `Iterator<Item = Self::Item>` in `type Iter: Iterator<Item = Self::Item>;`)
     pub bounds: Vec<TraitBound>,
+    pub doc: Option<String>,
     pub span: Span,
 }
 
