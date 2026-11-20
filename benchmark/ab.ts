@@ -77,7 +77,7 @@ function main(): void {
       label: labelOf(rows[0]),
       b,
       h,
-      // A speedup, so positive is faster and +N% and -N% are the same size.
+      // A speedup: positive is faster.
       delta: (b.min / h.min - 1) * 100,
       real: sampled && (h.min > b.max || b.min > h.max),
       sampled,
