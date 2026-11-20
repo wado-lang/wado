@@ -47,7 +47,8 @@ pub struct TreeMap<K, V> {
     /// `slots[n * NODE_CAP]`, and above the leaves one more child than that
     /// from `kids[n * NODE_KIDS]`. `kids` is empty while the root is the only
     /// node. `nkeys[s]` is the key of entry `slots[s]`, kept beside it so a
-    /// probe reads one array.
+    /// probe reads one array. Nothing reads a slot past its node's length, so
+    /// a key moves between slots rather than being copied.
     slots: Array<i32>,
     nkeys: Array<K>,
     kids: Array<i32>,
@@ -207,7 +208,7 @@ impl<K: Ord, V> TreeMap<K, V> {
         let base = n * NODE_CAP;
         let len = self.lens[n];
         self.slots.copy_from(base + pos + 1, &self.slots, base + pos, len - pos);
-        self.nkeys.copy_from(base + pos + 1, &self.nkeys, base + pos, len - pos);
+        builtin::array_move(&mut self.nkeys, base + pos + 1, &self.nkeys, base + pos, len - pos);
         self.slots[base + pos] = e;
         self.nkeys[base + pos] = *key;
         self.lens[n] = len + 1;
@@ -222,7 +223,7 @@ impl<K: Ord, V> TreeMap<K, V> {
         let c = self.kids[p * NODE_KIDS + i];
         let cb = c * NODE_CAP;
         self.slots.copy_from(right * NODE_CAP, &self.slots, cb + half + 1, half);
-        self.nkeys.copy_from(right * NODE_CAP, &self.nkeys, cb + half + 1, half);
+        builtin::array_move(&mut self.nkeys, right * NODE_CAP, &self.nkeys, cb + half + 1, half);
         if !leaf {
             self.kids.copy_from(right * NODE_KIDS, &self.kids, c * NODE_KIDS + half + 1, half + 1);
         }
@@ -231,9 +232,9 @@ impl<K: Ord, V> TreeMap<K, V> {
         let pb = p * NODE_CAP;
         let plen = self.lens[p];
         self.slots.copy_from(pb + i + 1, &self.slots, pb + i, plen - i);
-        self.nkeys.copy_from(pb + i + 1, &self.nkeys, pb + i, plen - i);
+        builtin::array_move(&mut self.nkeys, pb + i + 1, &self.nkeys, pb + i, plen - i);
         self.slots[pb + i] = self.slots[cb + half];
-        self.nkeys[pb + i] = self.nkeys[cb + half];
+        builtin::array_move(&mut self.nkeys, pb + i, &self.nkeys, cb + half, 1);
         let kb = p * NODE_KIDS;
         self.kids.copy_from(kb + i + 2, &self.kids, kb + i + 1, plen - i);
         self.kids[kb + i + 1] = right;
@@ -261,7 +262,7 @@ impl<K: Ord, V> TreeMap<K, V> {
         slots.copy_from(0, &self.slots, 0, self.nodes * NODE_CAP);
         self.slots = slots;
         let mut nkeys = Array::<K>::new(cap * NODE_CAP);
-        nkeys.copy_from(0, &self.nkeys, 0, self.nodes * NODE_CAP);
+        builtin::array_move(&mut nkeys, 0, &self.nkeys, 0, self.nodes * NODE_CAP);
         self.nkeys = nkeys;
         if cap > 1 {
             let mut kids = Array::<i32>::new(cap * NODE_KIDS);

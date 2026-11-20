@@ -26,9 +26,15 @@ fn byte_sum(s: &String, extra: i32) -> i32 {
     return total;
 }
 
-export fn run() with Stdout {
+// Not spliced into `run`'s CM export wrapper, which the pass leaves alone.
+#[inline(never)]
+fn show() with Stdout {
     // 'h'+'e'+'l'+'l'+'o' = 104+101+108+108+111 = 532.
     println(`${byte_sum(&"hello", builtin::black_box(0))}`);
+}
+
+export fn run() with Stdout {
+    show();
 }
 
 __DATA__

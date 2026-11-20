@@ -21,6 +21,7 @@ use crate::name::{
     effect_default_impl_name, effect_namespace, mangle_generic_name, minted_name,
 };
 use crate::package::Package;
+use crate::synthesis::cm_binding::RESOURCE_DROP;
 use crate::synthesis::common::{
     alloc_local, alloc_named_local, assign, expr_stmt, let_mut_stmt, local_ref, option_none,
     option_some, panic_call, ref_expr, synth_span, unreachable_call,
@@ -184,14 +185,9 @@ fn identify_uncovered_effects(
     // Per-operation: an interface mixing a `#[cm]` operation with a plain one
     // still leaves the plain one unlowered, and the infrastructure covers the
     // whole interface either way.
-    let uncovered: IndexSet<EffectKey> = effect_index
+    let uncovered: IndexMap<&EffectKey, &EffectMeta> = effect_index
         .iter()
-        .filter(|(effect, meta)| {
-            !meta.is_resource
-                && meta.operations.iter().any(|op| op.cm_name.is_none())
-                && !active.contains(&InstantiationKey::monomorphic((*effect).clone()))
-        })
-        .map(|(key, _)| key.clone())
+        .filter(|(_, meta)| meta.operations.iter().any(|op| op.cm_name.is_none()))
         .collect();
     if uncovered.is_empty() {
         return IndexSet::default();
@@ -208,24 +204,62 @@ fn identify_uncovered_effects(
             }
         }
     }
-    collector.called
+    collector
+        .called
+        .into_iter()
+        .filter(|key| !active.contains(key))
+        .collect()
 }
 
-/// Records which uncovered effects are actually called, so a declared but
-/// never-performed effect costs no dispatch infrastructure.
+/// Records which instantiations of uncovered effects are actually called, so a
+/// declared but never-performed effect costs no dispatch infrastructure.
 struct UncoveredEffectCallCollector<'a> {
-    uncovered: &'a IndexSet<EffectKey>,
+    uncovered: &'a IndexMap<&'a EffectKey, &'a EffectMeta>,
     called: IndexSet<InstantiationKey>,
+}
+
+impl UncoveredEffectCallCollector<'_> {
+    /// The instantiation whose operation `func` names, of an uncovered effect:
+    /// an interface's lives in the interface's namespace, and a resource's is a
+    /// method of the resource that `cm_binding` would not lower.
+    fn called_instantiation(&self, func: &FunctionRef) -> Option<InstantiationKey> {
+        if let Some(effect) = func.module_source.effect_interface() {
+            return self
+                .uncovered
+                .contains_key(effect)
+                .then(|| InstantiationKey::monomorphic(effect.clone()));
+        }
+        let method_info = func.method_info.as_ref()?;
+        let resource = declaring_resource(method_info)?;
+        let (effect, _) = self.uncovered.iter().find(|(effect, meta)| {
+            effect.def() == resource
+                && meta
+                    .operations
+                    .iter()
+                    .any(|op| op.cm_name.is_none() && op.name == method_info.method_name)
+        })?;
+        Some(InstantiationKey {
+            effect: (*effect).clone(),
+            type_args: static_call_type_args(func),
+        })
+    }
+}
+
+/// The resource instantiation a static operation call names, which it carries
+/// only as its monomorphization's impl type args.
+fn static_call_type_args(func: &FunctionRef) -> Vec<TypeId> {
+    func.monomorph_info
+        .as_ref()
+        .map(|info| info.impl_type_args.clone())
+        .unwrap_or_default()
 }
 
 impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::Call { func, .. } = &expr.kind
-            && let Some(effect) = func.module_source.effect_interface()
-            && self.uncovered.contains(effect)
+            && let Some(key) = self.called_instantiation(func)
         {
-            self.called
-                .insert(InstantiationKey::monomorphic(effect.clone()));
+            self.called.insert(key);
         }
         self.walk_expr(expr);
     }
@@ -806,10 +840,9 @@ fn build_dispatch_wrapper_function(
     // Else-branch: fallback. Synthesised before `cm_binding::generate_adapters`
     // runs, so it emits the same pre-adapter shape user code would — an
     // effect-like `Call` for effects, a `cm_name`-tagged one for resources —
-    // and cm_binding rewrites both uniformly. A user-defined effect never gets
-    // here: effect-check insists on a handler at every call site.
+    // and cm_binding rewrites both uniformly.
     let mut else_stmts: Vec<TirStmt> = Vec::new();
-    if !is_resource && op.cm_name.is_none() && !is_open_boundary_effect && op.has_default {
+    if op.cm_name.is_none() && !is_open_boundary_effect && op.has_default {
         // The declaration gave the operation a body: that is what "no handler
         // installed" does, where nothing else answers for the operation. Being
         // open at the CM boundary is a property of the world rather than of the
@@ -852,8 +885,16 @@ fn build_dispatch_wrapper_function(
                 span,
             ));
         }
-    } else if is_resource {
+    } else if is_resource
+        && let Some(cm_name) = op.cm_name.as_deref().or_else(|| {
+            // A drop of a resource no host implements binds no import, but
+            // `cm_binding` ends it with the guest value it holds.
+            (op_name == "drop" && type_table.borrow().is_hostless_resource(effect.def()))
+                .then_some(RESOURCE_DROP)
+        })
+    {
         let placeholder_call = build_resource_fallback_call(
+            cm_name,
             effect,
             type_args,
             op,
@@ -902,13 +943,9 @@ fn build_dispatch_wrapper_function(
             span,
         ));
     } else {
-        // User-defined effect, or a dependency's guest effect no export leaves
-        // open: well-typed programs never reach the wrapper without a handler
-        // installed, since effect-check requires every call-site to have a
-        // `with E => h do { ... }` in scope. If we get
-        // here anyway, panic with a diagnostic identifying the operation
-        // — useful when a future refactor introduces a path that bypasses
-        // effect-check.
+        // Nothing answers with no handler installed: an operation of a user
+        // interface without a default, of a resource no host implements, or
+        // of a dependency's guest effect no export leaves open. It traps.
         let string_type_id = {
             let tt = type_table.borrow();
             let def = tt.require_compiler_item_def(CompilerItem::String);
@@ -1038,6 +1075,7 @@ fn build_dispatch_wrapper_function(
 /// for static ones — with `method_info` carrying the original `cm_name`, which
 /// is what lets `rewrite_cm_resource_methods` route it afterwards.
 fn build_resource_fallback_call(
+    cm_name: &str,
     resource: &DeclaredHead,
     type_args: &[TypeId],
     op: &TirEffectOp,
@@ -1046,10 +1084,6 @@ fn build_resource_fallback_call(
     return_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let cm_name = op
-        .cm_name
-        .clone()
-        .expect("build_resource_fallback_call: caller checked op.cm_name.is_some()");
     let is_instance = op.params.first().is_some_and(TirParam::is_self);
 
     // The receiver is the resource type (`Stream<u8>`): the dispatch label
@@ -1060,7 +1094,7 @@ fn build_resource_fallback_call(
 
     // `struct_name()` derives this exact spelling from the receiver.
     let mut method_info = LocalMethodName::new(receiver, None, op.name.clone());
-    method_info.cm_name = Some(cm_name);
+    method_info.cm_name = Some(cm_name.to_string());
 
     // Carry the instantiation's type args as `monomorph_info.impl_type_args`,
     // which WIR-build reads to pick the payload-parameterised canonical import
@@ -2502,20 +2536,20 @@ fn build_forward_closure(
 /// Rewrite every effect-operation call site to route through a dispatch wrapper.
 /// Runs before `cm_binding`, so it matches the two pre-adapter shapes the
 /// elaborator emits: a `Call` naming its operation (`TemplateId::Operation`)
-/// for `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
-/// op. Calls inside `$effect_dispatch__*` are left alone.
+/// for `Effect::op(…)`, and a method call naming a resource's operation. Calls
+/// inside `$effect_dispatch__*` are left alone.
 fn rewrite_call_sites_to_wrappers(
     project: &mut Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
 ) {
     let entry_source = project.entry_module_source.clone();
-    let (user_to_wrapper, cm_to_wrappers) = build_wrapper_indexes(project, plans);
-    project.resource_wrappers.clone_from(&cm_to_wrappers);
+    let (user_to_wrapper, resource_op_wrappers) = build_wrapper_indexes(project, plans);
+    project.resource_wrappers.clone_from(&resource_op_wrappers);
 
     for module in project.tir_modules.values_mut() {
         let ctx = RewriteCtx {
             user_to_wrapper: &user_to_wrapper,
-            cm_to_wrappers: &cm_to_wrappers,
+            resource_op_wrappers: &resource_op_wrappers,
             type_table: module.type_table.clone(),
             entry_source: &entry_source,
         };
@@ -2538,7 +2572,9 @@ fn rewrite_calls_in_functions(
     }
 }
 
-/// `(resource, cm_name) → [(type_args, wrapper_name)]`.
+/// `(resource, operation name) → [(type_args, wrapper_name)]`. Keyed by the
+/// operation's name rather than its `#[cm]` import, which a resource declared
+/// without `#[cm(...)]` lacks.
 /// Outlives its pass: an instance minted later routes through the same wrappers.
 pub type ResourceWrapperIndex = IndexMap<(DefId, String), Vec<(Vec<TypeId>, String)>>;
 
@@ -2553,7 +2589,7 @@ fn build_wrapper_indexes(
 ) -> (EffectOpWrappers, ResourceWrapperIndex) {
     let effect_index = build_effect_index(project);
     let mut user_to_wrapper = EffectOpWrappers::default();
-    let mut cm_to_wrappers: ResourceWrapperIndex = IndexMap::default();
+    let mut resource_op_wrappers: ResourceWrapperIndex = IndexMap::default();
     for (key, plan) in plans {
         let effect = &key.effect;
         let is_resource = effect_index[effect].is_resource;
@@ -2563,15 +2599,10 @@ fn build_wrapper_indexes(
                 .get(&op.name)
                 .expect("wrapper name registered for op");
             if is_resource {
-                if let Some(cm_name) = &op.cm_name {
-                    cm_to_wrappers
-                        .entry((effect.def(), cm_name.clone()))
-                        .or_default()
-                        .push((key.type_args.clone(), wrapper_name.clone()));
-                }
-                // Resource ops without `cm_name` aren't reachable from
-                // user-side calls (no canonical attribute → no
-                // elaborator-side `cm_name` tag), so skip them.
+                resource_op_wrappers
+                    .entry((effect.def(), op.name.clone()))
+                    .or_default()
+                    .push((key.type_args.clone(), wrapper_name.clone()));
             } else {
                 // Effect op: route by its declaration regardless of whether
                 // the op carries a CM attribute (the
@@ -2581,7 +2612,7 @@ fn build_wrapper_indexes(
             }
         }
     }
-    (user_to_wrapper, cm_to_wrappers)
+    (user_to_wrapper, resource_op_wrappers)
 }
 
 /// The resource half of [`rewrite_call_sites_to_wrappers`] again, for the
@@ -2612,17 +2643,17 @@ pub fn rewrite_resource_calls_monomorphized(flat: &mut FlatPackage, from: usize)
 
 fn rewrite_resource_calls(
     functions: &[std::rc::Rc<std::cell::RefCell<TirFunction>>],
-    cm_to_wrappers: &ResourceWrapperIndex,
+    resource_op_wrappers: &ResourceWrapperIndex,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
     entry_source: &ModuleSource,
 ) {
-    if cm_to_wrappers.is_empty() {
+    if resource_op_wrappers.is_empty() {
         return;
     }
     let no_user_effect_calls = IndexMap::default();
     let ctx = RewriteCtx {
         user_to_wrapper: &no_user_effect_calls,
-        cm_to_wrappers,
+        resource_op_wrappers,
         type_table: type_table.clone(),
         entry_source,
     };
@@ -2637,19 +2668,19 @@ fn rewrite_resource_calls(
 /// the wrapper's `&Self` first parameter.
 struct RewriteCtx<'a> {
     user_to_wrapper: &'a EffectOpWrappers,
-    /// For calls with `method_info.cm_name` set. Multiple instantiations live
-    /// under the same key; the rewriter narrows by the call's type args.
-    cm_to_wrappers: &'a ResourceWrapperIndex,
+    /// For resource method calls. Multiple instantiations live under the same
+    /// key; the rewriter narrows by the call's type args.
+    resource_op_wrappers: &'a ResourceWrapperIndex,
     type_table: std::rc::Rc<std::cell::RefCell<TypeTable>>,
     entry_source: &'a ModuleSource,
 }
 
-/// Pick the wrapper name for a resource method/call given its
-/// `cm_name`-tagged shape. Returns `None` if no instantiation matches
-/// (the call falls through to `cm_binding`'s normal rewriting).
+/// Pick the wrapper name for a resource method/call. Returns `None` if no
+/// instantiation matches (the call falls through to `cm_binding`'s normal
+/// rewriting).
 fn pick_resource_wrapper(
     resource: DefId,
-    cm_name: &str,
+    op_name: &str,
     call_type_args: &[TypeId],
     ctx: &RewriteCtx<'_>,
 ) -> Option<String> {
@@ -2659,23 +2690,17 @@ fn pick_resource_wrapper(
         .type_table
         .borrow()
         .resource_chain(resource)
-        .find_map(|declaring| ctx.cm_to_wrappers.get(&(declaring, cm_name.to_string())))?;
-    // Exact instantiation match first.
-    if let Some((_, name)) = candidates.iter().find(|(args, _)| args == call_type_args) {
-        return Some(name.clone());
-    }
-    // Single-instantiation fallback: when the call site couldn't
-    // pin down its type args (static methods of generic resources
-    // can hide them) but only one impl instantiation is active,
-    // route through it. Multi-instantiation static-call ambiguity
-    // is rejected (returns None → falls through to cm_binding).
-    if call_type_args.is_empty() && candidates.len() == 1 {
-        return Some(candidates[0].1.clone());
-    }
-    None
+        .find_map(|declaring| {
+            ctx.resource_op_wrappers
+                .get(&(declaring, op_name.to_string()))
+        })?;
+    candidates
+        .iter()
+        .find(|(args, _)| args == call_type_args)
+        .map(|(_, name)| name.clone())
 }
 
-/// The resource declaring a `#[cm]` method, as `cm_to_wrappers` keys it.
+/// The resource declaring an operation, as `resource_op_wrappers` keys it.
 fn declaring_resource(method_info: &LocalMethodName) -> Option<DefId> {
     if let Some(trait_name) = &method_info.trait_name {
         return trait_name.canonical();
@@ -2743,51 +2768,38 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
 
     // Then check if THIS expression is a call worth rewriting. The two
     // pre-cm_binding shapes the rewriter routes are: user-effect calls
-    // (`Effect::op(...)`) and resource calls tagged with `cm_name` on
-    // `method_info`.
+    // (`Effect::op(...)`) and resource method calls.
     let new_call: Option<TirExpr> = match &expr.kind {
         TirExprKind::Call { func, args, .. } if args.receiver().is_none() => {
             let return_type = expr.type_id;
-            // Resource static call?
-            if let Some(method_info) = &func.method_info
-                && let Some(cm_name) = &method_info.cm_name
-            {
-                // Static resource call: receiver type isn't directly
-                // available, fall back to single-instantiation routing.
-                declaring_resource(method_info)
-                    .and_then(|resource| pick_resource_wrapper(resource, cm_name, &[], ctx))
-                    .map(|wrapper| {
-                        wrapper_call(
-                            wrapper,
-                            args.to_vec(),
-                            return_type,
-                            expr.span,
-                            ctx.entry_source,
-                        )
-                    })
-            } else if let Some(op) = func.template.as_ref().and_then(TemplateId::operation)
-                && let Some(wrapper) = ctx.user_to_wrapper.get(&op)
-            {
-                Some(wrapper_call(
-                    wrapper.clone(),
-                    args.to_vec(),
-                    return_type,
-                    expr.span,
-                    ctx.entry_source,
-                ))
-            } else {
-                None
-            }
+            let resource_wrapper = func.method_info.as_ref().and_then(|method_info| {
+                pick_resource_wrapper(
+                    declaring_resource(method_info)?,
+                    &method_info.method_name,
+                    &static_call_type_args(func),
+                    ctx,
+                )
+            });
+            resource_wrapper
+                .or_else(|| {
+                    let op = func.template.as_ref().and_then(TemplateId::operation)?;
+                    ctx.user_to_wrapper.get(&op).cloned()
+                })
+                .map(|wrapper| {
+                    wrapper_call(
+                        wrapper,
+                        args.to_vec(),
+                        return_type,
+                        expr.span,
+                        ctx.entry_source,
+                    )
+                })
         }
         TirExprKind::Call { func, args, .. } if let (Some(receiver), args) = args.split() => {
             let receiver = &receiver.expr;
-            let mi_cm = func
-                .method_info
-                .as_ref()
-                .and_then(|mi| mi.cm_name.as_ref().map(|cm| (mi, cm)));
             // `extends` can declare the method above the receiver's resource,
             // never on a generic one, so the receiver's type args are its.
-            if let Some((method_info, cm_name)) = mi_cm
+            if let Some(method_info) = &func.method_info
                 && let Some(resource) = declaring_resource(method_info)
                 && let Some(type_args) = {
                     // Scoped: the body re-borrows `type_table` mutably.
@@ -2802,9 +2814,11 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 let mut all_args: Vec<CallArg> = Vec::with_capacity(args.len() + 1);
                 all_args.push(CallArg::new(receiver.clone(), false));
                 all_args.extend(args.iter().cloned());
-                pick_resource_wrapper(resource, cm_name, &type_args, ctx).map(|wrapper| {
-                    wrapper_call(wrapper, all_args, return_type, expr.span, ctx.entry_source)
-                })
+                pick_resource_wrapper(resource, &method_info.method_name, &type_args, ctx).map(
+                    |wrapper| {
+                        wrapper_call(wrapper, all_args, return_type, expr.span, ctx.entry_source)
+                    },
+                )
             } else {
                 None
             }

@@ -6,7 +6,7 @@
 use { HashMap, HashSet } from "core:collections";
 use { PlacedExperts } from "./emit_experts.wado";
 use { Extent, Solved, solved } from "./extent.wado";
-use { Graph, Node } from "./graph.wado";
+use { Graph, Node, is_float } from "./graph.wado";
 use { BACKEND_PARAM, is_bound, module_idents } from "./idents.wado";
 use { Lowers, Op, Poly } from "./poly.wado";
 use { RowRefusal, SLOTS } from "./rows.wado";
@@ -676,9 +676,13 @@ internal fn axis_list(shape: &Shape) -> String {
     return shape.names().join(", ");
 }
 
-/// `value` as an expression of `element`, a float. A half is rounded from the
-/// f32 spelling, which holds every half exactly.
-internal fn float_literal(element: &String, value: f32) -> String {
+/// `value` as an expression of `element`. A half is rounded from the f32
+/// spelling, which holds every half exactly.
+internal fn number_literal(element: &String, value: f32) -> String {
+    if !is_float(element) {
+        assert f32::trunc(value) == value, "an integer element takes a whole number";
+        return `${value as i64} as ${*element}`;
+    }
     let spelled = f32_literal(value);
     return if *element == "f32" { spelled } else { `${*element}::from_f32(${spelled})` };
 }

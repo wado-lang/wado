@@ -37,7 +37,8 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         return;
     };
     let checkpoint = one_file("model.safetensors", #include_bytes("../tests/models/tiny-gpt2/model.safetensors"));
-    let mut on_cpu = gpt2::Model::new(gpt2::Params::load(&mut Cpu {}, &checkpoint).unwrap());
+    let mut cpu = Cpu {};
+    let mut on_cpu = gpt2::Model::new(gpt2::Params::load(&mut cpu, &checkpoint).unwrap());
     let mut on_gpu = gpt2::Model::new(gpt2::Params::load(&mut gpu, &checkpoint).unwrap());
     for let length of [4, 7] as List<i32> {
         let ids: List<i64> = (0..<length).map(|i| (i * 13 + 5) as i64).collect();
@@ -47,7 +48,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             data: List::<i64>::filled(length, 1),
             extents,
         };
-        let want = gpt2::compute(&mut Cpu {}, &input, &mask, &mut on_cpu);
+        let want = gpt2::compute(&mut cpu, &input, &mask, &mut on_cpu);
         let [read, dispatched] = [
             gpu.read_backs(),
             gpu.dispatches(),

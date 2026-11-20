@@ -1,6 +1,6 @@
 use { Decoding, Picks, Sampling, opened, stepped } from "./sampling.wado";
 use { One, Slots } from "./hlo.wado";
-use { Cpu, Tensor } from "./tensor.wado";
+use { Cpu, CpuTensor, Tensor } from "./tensor.wado";
 
 /// Tokens of a row, as a test spells its logits.
 struct Vocabulary {
@@ -142,14 +142,14 @@ test "an ended row keeps returning its first end token" {
         ends: [2, 3],
     };
     let decoding = Decoding::new(&mut cpu, &sampling, [false, false], 3, [0]);
-    let scores = logits([
+    let scores = CpuTensor::Value(logits([
         [0.0, 0.0, 1.0, 0.0],
         [1.0, 0.0, 0.0, 0.0],
-    ]);
-    let step = |at: i64| Tensor::<i64, []> {
+    ]));
+    let step = |at: i64| CpuTensor::Value(Tensor::<i64, []> {
         data: [at],
         extents: [],
-    };
+    });
     let first = stepped::<Cpu, f32, [Slots, One, Vocabulary]>(
         &mut cpu,
         &scores,
@@ -158,12 +158,12 @@ test "an ended row keeps returning its first end token" {
         &decoding.finished,
         &step(0),
     );
-    assert first.token.data == [2, 0];
-    assert first.finished.data == [true, false];
-    let later = logits([
+    assert first.token.value().data == [2, 0];
+    assert first.finished.value().data == [true, false];
+    let later = CpuTensor::Value(logits([
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 0.0, 1.0],
-    ]);
+    ]));
     let second = stepped::<Cpu, f32, [Slots, One, Vocabulary]>(
         &mut cpu,
         &later,
@@ -172,9 +172,9 @@ test "an ended row keeps returning its first end token" {
         &first.finished,
         &step(1),
     );
-    assert second.token.data == [2, 3];
-    assert second.finished.data == [true, true];
-    assert second.tokens.data == [2, 2, 0, 0, 3, 0];
+    assert second.token.value().data == [2, 3];
+    assert second.finished.value().data == [true, true];
+    assert second.tokens.value().data == [2, 2, 0, 0, 3, 0];
 }
 
 test "a greedy sampler is one program whatever else it holds" {
@@ -183,28 +183,28 @@ test "a greedy sampler is one program whatever else it holds" {
 
 test "a mask opens the position a step reads" {
     let mut cpu = Cpu {};
-    let mask = Tensor::<i64, [Slots, Picks]> {
+    let mask = CpuTensor::Value(Tensor::<i64, [Slots, Picks]> {
         data: [1, 1, 0, 0],
         extents: [1, 4],
-    };
-    let at = Tensor::<i64, [Slots]> {
+    });
+    let at = CpuTensor::Value(Tensor::<i64, [Slots]> {
         data: [2],
         extents: [1],
-    };
-    assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).data == [1, 1, 1, 0];
+    });
+    assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).value().data == [1, 1, 1, 0];
 }
 
 test "a mask opens each row's own position" {
     let mut cpu = Cpu {};
-    let mask = Tensor::<i64, [Slots, Picks]> {
+    let mask = CpuTensor::Value(Tensor::<i64, [Slots, Picks]> {
         data: [1, 1, 0, 0, 1, 0, 0, 0],
         extents: [2, 4],
-    };
-    let at = Tensor::<i64, [Slots]> {
+    });
+    let at = CpuTensor::Value(Tensor::<i64, [Slots]> {
         data: [2, 1],
         extents: [2],
-    };
-    assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).data == [1, 1, 1, 0, 1, 1, 0, 0];
+    });
+    assert opened::<Cpu, [Slots, Picks]>(&mut cpu, &mask, &at).value().data == [1, 1, 1, 0, 1, 1, 0, 0];
 }
 
 /// The tokens `steps` steps draw over even logits, a row at each of `at`.
@@ -212,7 +212,7 @@ fn drawn_at(at: List<i64>, rows: i32, steps: i32) -> List<i64> {
     let mut cpu = Cpu {};
     let sampling = Sampling { temperature: 1.0, seed: 3 };
     let decoding = Decoding::new(&mut cpu, &sampling, List::<bool>::filled(rows, false), steps, at);
-    let even = logits(List::<List<f32>>::filled(rows, List::<f32>::filled(8, 1.0)));
+    let even = CpuTensor::Value(logits(List::<List<f32>>::filled(rows, List::<f32>::filled(8, 1.0))));
     let mut tokens = decoding.tokens;
     let mut finished = decoding.finished;
     for let step of 0..<steps {
@@ -222,15 +222,15 @@ fn drawn_at(at: List<i64>, rows: i32, steps: i32) -> List<i64> {
             &decoding,
             &tokens,
             &finished,
-            &Tensor::<i64, []> {
+            &CpuTensor::Value(Tensor::<i64, []> {
                 data: [step as i64],
                 extents: [],
-            },
+            }),
         );
         tokens = next.tokens;
         finished = next.finished;
     }
-    return tokens.data;
+    return tokens.value().data;
 }
 
 test "a row at a position of its own draws what it draws alone" {

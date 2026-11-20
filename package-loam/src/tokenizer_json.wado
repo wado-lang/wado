@@ -7,10 +7,14 @@
 use { HashMap, TreeMap } from "core:collections";
 use { from_string } from "core:json";
 use { Deserialize, DeserializeError, DeserializeMap, DeserializeSeq, Deserializer, Visitor } from "core:serde";
-use { TokenSpelling, byte_chars, byte_token } from "./runtime/tokenizer.wado";
+use { PieceSplit, TokenSpelling, byte_chars, byte_token } from "./runtime/tokenizer.wado";
+
+/// The pattern o200k's tokenizers split text by, which Loam's runtime
+/// implements by hand.
+global O200K_PATTERN: String = #"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"#;
 
 /// A BPE pipeline: the vocabulary, the merges resolved to ids, the added
-/// tokens, how text is spelled, and the ids an encoding starts with.
+/// tokens, how text is spelled and split, and the ids an encoding starts with.
 pub struct BpePipeline {
     /// Each token, its id the index.
     pub tokens: List<String>,
@@ -20,6 +24,9 @@ pub struct BpePipeline {
     /// The added tokens, matched in the text as they stand before it is split.
     pub specials: List<String>,
     pub spelling: TokenSpelling,
+    pub split: PieceSplit,
+    /// Whether a piece the vocabulary holds whole is that token, unmerged.
+    pub ignore_merges: bool = false,
     /// The id a character no token or byte spells encodes as, -1 for none.
     pub unknown: i32 = -1,
     /// The ids the post-processor puts before every encoding.
@@ -123,6 +130,18 @@ variant Normalizer {
 #[wire(tag = "type")]
 variant PreTokenizer {
     ByteLevel(ByteLevel),
+    Sequence(PreTokenizerSequence),
+    Split(Split),
+}
+
+struct PreTokenizerSequence {
+    pretokenizers: List<PreTokenizer>,
+}
+
+struct Split {
+    pattern: Pattern,
+    behavior: String,
+    invert: bool = false,
 }
 
 #[wire(tag = "type")]
@@ -150,11 +169,11 @@ struct ByteLevel {
 }
 
 struct Replace {
-    pattern: ReplacePattern,
+    pattern: Pattern,
     content: String,
 }
 
-variant ReplacePattern {
+variant Pattern {
     String(String),
     Regex(String),
 }
@@ -195,7 +214,7 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
     if file.padding matches { Some(_) } {
         return refused("padding is not supported");
     }
-    let spelling = spelling_of(&file)?;
+    let [spelling, split] = spelling_of(&file)?;
     let model = file.model;
     bpe(&model.kind)?;
     if let Some(dropout) = model.dropout {
@@ -209,9 +228,6 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
         if let Some(affix) = affix && affix != "" {
             return unsupported("model", key, affix);
         }
-    }
-    if model.ignore_merges {
-        return unsupported("model", "ignore_merges", "true");
     }
     let pieces = spelling matches { Pieces };
     if !pieces {
@@ -239,7 +255,14 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
     let Some(merges) = model.merges else {
         return refused("model: no merges");
     };
-    let mut pipeline = BpePipeline { tokens, merges: merges_of(&merges, &ids)?, specials, spelling };
+    let mut pipeline = BpePipeline {
+        tokens,
+        merges: merges_of(&merges, &ids)?,
+        specials,
+        spelling,
+        split,
+        ignore_merges: model.ignore_merges,
+    };
     if pieces {
         if !model.byte_fallback {
             return refused("model: SentencePiece's spelling without byte_fallback is not supported");
@@ -257,19 +280,12 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
     return Result::Ok(pipeline);
 }
 
-/// The spelling the normalizer, pre-tokenizer and decoder write down together:
-/// GPT-2's byte level, or SentencePiece's spaces as `▁`.
-fn spelling_of(file: &TokenizerFile) -> Result<TokenSpelling, TokenizerError> {
+/// The spelling the normalizer, pre-tokenizer and decoder write down together,
+/// and how the pre-tokenizer splits text: GPT-2's byte level, split by GPT-2's
+/// pattern or o200k's, or SentencePiece's spaces as `▁`, the text whole.
+fn spelling_of(file: &TokenizerFile) -> Result<[TokenSpelling, PieceSplit], TokenizerError> {
     let Some(normalizer) = file.normalizer else {
-        let Some(ByteLevel(pre)) = file.pre_tokenizer else {
-            return refused("pre_tokenizer: none is not supported");
-        };
-        if pre.add_prefix_space {
-            return unsupported("pre_tokenizer", "add_prefix_space", "true");
-        }
-        if !pre.use_regex {
-            return unsupported("pre_tokenizer", "use_regex", "false");
-        }
+        let split = byte_level_split(&file.pre_tokenizer)?;
         if !file.decoder matches { Some(ByteLevel(_)) } {
             return refused(`decoder: ${kind_of(&file.decoder)} is not supported`);
         }
@@ -277,7 +293,7 @@ fn spelling_of(file: &TokenizerFile) -> Result<TokenSpelling, TokenizerError> {
         if file.post_processor matches { Some(TemplateProcessing(_)) } {
             return refused(`post_processor: ${kind_of(&file.post_processor)} is not supported`);
         }
-        return Result::Ok(TokenSpelling::ByteLevel);
+        return Result::Ok([TokenSpelling::ByteLevel, split]);
     };
     let Replace(replace) = normalizer;
     if !is_space_replacement(&replace, " ", "▁") {
@@ -297,7 +313,51 @@ fn spelling_of(file: &TokenizerFile) -> Result<TokenSpelling, TokenizerError> {
         let kinds: List<String> = steps.into_iter().map(|s| case_name(&s)).collect();
         return refused(`decoder: ${kinds.join(", ")} is not supported`);
     }
-    return Result::Ok(TokenSpelling::Pieces);
+    return Result::Ok([TokenSpelling::Pieces, PieceSplit::Whole]);
+}
+
+/// How a byte-level `pre` splits text: by GPT-2's pattern, which `ByteLevel`
+/// applies itself, or by o200k's, which a `Split` ahead of it applies.
+fn byte_level_split(pre: &Option<PreTokenizer>) -> Result<PieceSplit, TokenizerError> {
+    match *pre {
+        Some(ByteLevel(level)) => {
+            byte_level(&level, true)?;
+            return Result::Ok(PieceSplit::Gpt2);
+        },
+        Some(Sequence(sequence)) => {
+            let steps = sequence.pretokenizers;
+            if steps.len() == 2 && let Split(split) = steps[0] && let ByteLevel(level) = steps[1] {
+                if !split.pattern matches { Regex(p) && p == O200K_PATTERN } {
+                    return refused("pre_tokenizer: a Split by another pattern is not supported");
+                }
+                if split.behavior != "Isolated" {
+                    return unsupported("pre_tokenizer", "behavior", split.behavior);
+                }
+                if split.invert {
+                    return unsupported("pre_tokenizer", "invert", "true");
+                }
+                byte_level(&level, false)?;
+                return Result::Ok(PieceSplit::O200k);
+            }
+            let kinds: List<String> = steps.into_iter().map(|s| case_name(&s)).collect();
+            return refused(`pre_tokenizer: Sequence of ${kinds.join(", ")} is not supported`);
+        },
+        _ => {
+            return refused(`pre_tokenizer: ${kind_of(pre)} is not supported`);
+        },
+    }
+}
+
+/// That `level` spells pieces in bytes and splits them by GPT-2's pattern
+/// where `use_regex`, as the runtime does.
+fn byte_level(level: &ByteLevel, use_regex: bool) -> Result<(), TokenizerError> {
+    if level.add_prefix_space {
+        return unsupported("pre_tokenizer", "add_prefix_space", "true");
+    }
+    if level.use_regex != use_regex {
+        return unsupported("pre_tokenizer", "use_regex", `${level.use_regex}`);
+    }
+    return Result::Ok(());
 }
 
 /// Whether `replace` replaces the string `pattern` by `content`.

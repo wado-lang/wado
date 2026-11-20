@@ -88,6 +88,8 @@ A uniformly chosen element of `items`, or `None` when it is empty.
 A range that [`random_range`](Rng::random_range) can draw from: `..<` or
 `..=` over any [`SampleUniform`] type.
 
+#### `type Value`
+
 #### `fn sample_from<R: Rng>(&self, rng: &mut R) -> Self::Value`
 
 ### `pub trait SampleUniform with ()`

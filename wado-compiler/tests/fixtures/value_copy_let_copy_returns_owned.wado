@@ -1,0 +1,41 @@
+// A `let` reading through a reference parameter into a binding the body then
+// writes always copies, so returning that binding returns owned: the caller
+// wraps the result in `Some` without copying it again.
+
+use { println, Stdout } from "core:cli";
+
+struct Rec {
+    name: String,
+    n: i32,
+}
+
+impl Rec {
+    #[inline(never)]
+    fn renamed(&self, name: String) -> Rec {
+        let mut r = *self;
+        r.name = name;
+        return r;
+    }
+}
+
+#[inline(never)]
+fn wrap(base: &Rec) -> Option<Rec> {
+    return Some(base.renamed("b"));
+}
+
+export fn run() with Stdout {
+    let base = builtin::black_box(Rec { name: "a", n: 1 });
+    let mut out = wrap(&base).unwrap();
+    out.name.push_str("!");
+    assert base.name == "a";
+    assert out.name == "b!" && out.n == 1;
+    println("ok");
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["lower/value_copy/owned"]},
+    "stdout": "ok\n",
+    "wir_scope": "value_copy_let_copy_returns_owned.wado/wrap\"",
+    "wir_not_expect:O2": ["array_copy"]
+}

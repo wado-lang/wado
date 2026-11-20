@@ -24,7 +24,7 @@ use {
     GpuSupportedLimits,
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
-use { Attention, Cpu, Graph, Holds, Placed, Slots, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use { Attention, Cpu, CpuTensor, Graph, Holds, Placed, Slots, Tensor, WebGpuBackend, element_count } from "lib:loam";
 use { deviation, noise } from "lib:loam/example/webgpu/compare.wado";
 
 struct Batch {
@@ -275,18 +275,25 @@ fn attended(
         data: [c.reach.unwrap_or(total) as i64],
         extents: [1],
     };
+    let [cpu_reach, cpu_cos, cpu_sin, cpu_bias, cpu_sinks] = [
+        CpuTensor::Value(positions_attended),
+        CpuTensor::Value(cos),
+        CpuTensor::Value(sin),
+        CpuTensor::Value(bias),
+        CpuTensor::Value(sinks),
+    ];
     let on_cpu = Cpu {}.group_query_attention(
-        &q,
-        &k,
-        &v,
-        &past_k,
-        &past_v,
+        &CpuTensor::Value(q),
+        &CpuTensor::Value(k),
+        &CpuTensor::Value(v),
+        &CpuTensor::Value(past_k),
+        &CpuTensor::Value(past_v),
         null,
-        if c.reach matches { Some(_) } { Option::Some(&positions_attended) } else { null },
-        if turned { Option::Some(&cos) } else { null },
-        if turned { Option::Some(&sin) } else { null },
-        if c.biased { Option::Some(&bias) } else { null },
-        if c.sunk { Option::Some(&sinks) } else { null },
+        if c.reach matches { Some(_) } { Option::Some(&cpu_reach) } else { null },
+        if turned { Option::Some(&cpu_cos) } else { null },
+        if turned { Option::Some(&cpu_sin) } else { null },
+        if c.biased { Option::Some(&cpu_bias) } else { null },
+        if c.sunk { Option::Some(&cpu_sinks) } else { null },
         &c.options,
     );
     gpu.begin();
@@ -324,7 +331,11 @@ fn attended(
     ];
     // Only the three downloads read back: the kernel ran on the device.
     assert gpu.read_backs() - reads == 3, "the attention reads nothing back";
-    return furthest([out.data, present_k.data, present_v.data], [on_cpu.0.data, on_cpu.1.data, on_cpu.2.data]);
+    return furthest([out.data, present_k.data, present_v.data], [
+        on_cpu.0.value().data,
+        on_cpu.1.value().data,
+        on_cpu.2.value().data,
+    ]);
 }
 
 /// How far the attended rows and the present keys and values `got` sit from
@@ -351,16 +362,20 @@ fn step(
     let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, seq, options.heads * d], seed);
     let k: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 1);
     let v: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, seq, options.kv_heads * d], seed + 2);
+    let [cpu_cos, cpu_sin] = [
+        CpuTensor::Value(*cos),
+        CpuTensor::Value(*sin),
+    ];
     let on_cpu = Cpu {}.group_query_attention::<f32, Batch, Seq, Query, Key, KvHead, Cache, Cache, Dim, Pos, Half, One, One, Seq, Query>(
-        &q,
-        &k,
-        &v,
-        &before.on_cpu.0,
-        &before.on_cpu.1,
+        &CpuTensor::Value(q),
+        &CpuTensor::Value(k),
+        &CpuTensor::Value(v),
+        &CpuTensor::Value(before.on_cpu.0),
+        &CpuTensor::Value(before.on_cpu.1),
         null,
         null,
-        Option::Some(cos),
-        Option::Some(sin),
+        Option::Some(&cpu_cos),
+        Option::Some(&cpu_sin),
         null,
         null,
         &options,
@@ -402,9 +417,16 @@ fn step(
         gpu.download(&on_gpu.2),
     ];
     return Stepped {
-        on_cpu: [on_cpu.1, on_cpu.2],
+        on_cpu: [
+            *on_cpu.1.value(),
+            *on_cpu.2.value(),
+        ],
         on_gpu: [on_gpu.1, on_gpu.2],
-        deviation: furthest([out.data, present_k.data, present_v.data], [on_cpu.0.data, on_cpu.1.data, on_cpu.2.data]),
+        deviation: furthest([out.data, present_k.data, present_v.data], [
+            on_cpu.0.value().data,
+            on_cpu.1.value().data,
+            on_cpu.2.value().data,
+        ]),
         bind_groups,
     };
 }

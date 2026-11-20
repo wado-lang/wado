@@ -1,0 +1,44 @@
+// A pass that solves a loop by walking its body until nothing changes walks a
+// nest of depth d some 2^d times if every level starts afresh. The move check
+// and the value-copy liveness both did: this nest of thirty never compiled.
+// The body moves an affine local of its own, which the move check knows of
+// after the walk, so the loop counts as settled only apart from it.
+
+affine struct Tok {
+    id: i32,
+}
+
+global mut drops: i32 = 0;
+
+impl Drop for Tok {
+    fn drop(self) {
+        drops += 1;
+    }
+}
+
+fn consume(tok: Tok) -> i32 {
+    return tok.id;
+}
+
+test {
+    let mut n = 0;
+    for let a of 0..<1 { for let b of 0..<1 { for let c of 0..<1 { for let d of 0..<1 { for let e of 0..<1 {
+    for let f of 0..<1 { for let g of 0..<1 { for let h of 0..<1 { for let i of 0..<1 { for let j of 0..<1 {
+    for let k of 0..<1 { for let l of 0..<1 { for let m of 0..<1 { for let o of 0..<1 { for let p of 0..<1 {
+    for let q of 0..<1 { for let r of 0..<1 { for let s of 0..<1 { for let t of 0..<1 { for let u of 0..<1 {
+    for let v of 0..<1 { for let w of 0..<1 { for let x of 0..<1 { for let y of 0..<1 { for let z of 0..<1 {
+    for let aa of 0..<1 { for let bb of 0..<1 { for let cc of 0..<1 { for let dd of 0..<1 { for let ee of 0..<1 {
+        let tok = Tok {
+            id: a + b + c + d + e + f + g + h + i + j + k + l + m + o + p
+                + q + r + s + t + u + v + w + x + y + z + aa + bb + cc + dd + ee + 1,
+        };
+        n += consume(tok);
+    } } } } }
+    } } } } }
+    } } } } }
+    } } } } }
+    } } } } }
+    } } } } }
+    assert n == 1;
+    assert drops == 1;
+}

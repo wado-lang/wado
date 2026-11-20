@@ -420,7 +420,7 @@ an operation.
 
 #### Resource Linearity
 
-A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine.
+A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine: `linearity` is a field of `#[cm(...)]`, so nothing declares one copyable.
 
 `repr = "externref"` declares how the handle is represented: one reference to a host object, which the collector reclaims. Nothing runs when such a handle dies, so it requires `linearity = "unrestricted"`. An unrestricted resource has no representation of its own, so it requires `repr = "externref"` in turn.
 
@@ -459,18 +459,22 @@ An affine resource crosses the Component Model boundary as an `own` / `borrow` h
 
 An extern resource is not a Component Model `resource`. Its operations are plain functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `repr = "externref"`.
 
-#### Extern Handles
+#### Backed Handles
 
-An extern handle is one Wasm `externref`. It is either an object of the host, or backed by a value of the guest. `Option<R>` of an extern handle type `R` is the same reference, nullable.
+A handle of any resource is either an object of the host or backed by a value of the guest. Every resource type implements `Backing`:
 
-Every extern handle type implements `ExternHandle`, a marker the compiler states, and through it `Backing`:
-
-- `R::backed_by(value)` makes a new handle of type `R` holding `value`. The value is passed as any argument is, so the handle's is its own: no variable names it, and only the handle reaches it. Its class is `R`'s own.
-- `handle.backing::<T>()` is the value the handle holds, in place, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle holding a value of another type. The reference is `&mut` whatever the handle is held in, since a resource is the object it names.
+- `R::backed_by(value)` makes a new handle of type `R` holding `value`. The value is passed as any argument is, so the handle's is its own: no variable names it, and only the handle reaches it. An extern handle's class is `R`'s own.
+- `handle.backing::<T>()` is the value the handle holds, in place, as `Option<&mut T>`. It is `None` for an object of the host, and for a handle holding a value of another type. The reference is `&mut` whatever the handle is held in, since a resource is the object it names. An affine resource is passed by reference, since it cannot be copied.
 
 The value's type is one a reference reaches in place, which the bound `T: RefMut` states: a struct, a tuple, a list, a string or a 128-bit integer. A scalar, a variant, a closure, a reference or an extern handle backs no handle.
 
-A backed handle is how a guest answers an import itself, as a handler in a test does.
+A backed handle is how a guest answers an import itself, as a handler in a test does. It is no object of the host's: where an affine one is handed to a host call, the call traps before the host sees it, and a real host rejects a backed extern handle. Its drop is in [Resources as Effects](./spec-effects.md#resources-as-effects).
+
+A resource declared without `#[cm(...)]`, on itself or on any operation, has no host implementation, and a guest value backs every handle of it. It has no WIT name, so it does not cross a component boundary: one in the signature of an `export fn` is an error. It takes no part in `extends`, which requires extern handles on both sides ([Resource Inheritance](#resource-inheritance)).
+
+#### Extern Handles
+
+An extern handle is one Wasm `externref`. It is either an object of the host, or backed by a value of the guest ([Backed Handles](#backed-handles)). `Option<R>` of an extern handle type `R` is the same reference, nullable. Every extern handle type implements `ExternHandle`, a marker the compiler states.
 
 <!-- {"fixture":"spec_components_backed_handle.wado"} -->
 

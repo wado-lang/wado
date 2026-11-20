@@ -48,7 +48,8 @@ export fn run() with Stdout {
 
 test "a float16 boundary runs through the f32 graph and comes back half" {
     let mut cpu = Cpu {};
-    let y = compute(&mut cpu, &ones_input(), &mut Model::new(weights().params(&mut cpu)));
+    let mut model = Model::new(weights().params(&mut cpu));
+    let y = compute(&mut cpu, &ones_input(), &mut model);
 
     assert y.extents == [1, 2] as List<i32>;
     // Four ones at 0.5 each, plus the bias. Every value here is exact in f16.

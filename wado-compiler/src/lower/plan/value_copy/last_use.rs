@@ -115,6 +115,7 @@ pub fn analyze_ownership(
             .frame(&func.module_source, &func.name)
             .expect("the fold computes points-to over every body it analyzes"),
         exits: Vec::new(),
+        loop_seeds: IndexMap::default(),
         reference_locals: all_locals
             .iter()
             .copied()
@@ -1363,6 +1364,36 @@ struct Exit {
     continue_live: Option<IndexSet<u32>>,
 }
 
+/// A loop's head as last solved, and what it was solved under: the live set
+/// at its exit and at each enclosing exit.
+struct LoopSeed {
+    exit_live: IndexSet<u32>,
+    enclosing: Vec<(IndexSet<u32>, Option<IndexSet<u32>>)>,
+    head: IndexSet<u32>,
+}
+
+impl LoopSeed {
+    /// Whether the head solved under this seed's inputs is below the head
+    /// under these: the transfer is monotone, so it is where every input
+    /// grew.
+    fn below(&self, exit_live: &IndexSet<u32>, exits: &[Exit]) -> bool {
+        self.exit_live.is_subset(exit_live)
+            && self.enclosing.len() == exits.len()
+            && self
+                .enclosing
+                .iter()
+                .zip(exits)
+                .all(|((live, cont), exit)| {
+                    live.is_subset(&exit.live)
+                        && match (cont, &exit.continue_live) {
+                            (None, None) => true,
+                            (Some(seed), Some(now)) => seed.is_subset(now),
+                            _ => false,
+                        }
+                })
+    }
+}
+
 /// The fields of each local a later read may take, as ids past every local in a
 /// live set. A local in the set says its storage is read again; these say which
 /// of its fields that read reaches, so a field read out of a live local still
@@ -1500,6 +1531,8 @@ struct Analyzer<'a> {
     /// This body's frame in `points_to`.
     frame: u32,
     exits: Vec<Exit>,
+    /// Each loop's head as last solved, by its body.
+    loop_seeds: IndexMap<*const TirBlock, LoopSeed>,
     reference_locals: IndexSet<u32>,
     all_locals: IndexSet<u32>,
     field_slots: FieldSlots,
@@ -3039,7 +3072,15 @@ impl<'a> Analyzer<'a> {
     /// Only the pass after it settles records anything.
     fn walk_loop(&mut self, body: &'a TirBlock, live: &mut IndexSet<u32>, record: bool) {
         let exit_live = live.clone();
-        let mut head = exit_live.clone();
+        // An enclosing loop walks this one once per iteration of its own, from
+        // inputs that only grow, so the last solution is a start below the
+        // least fixpoint. Starting from the exit every time would walk a nest
+        // of depth d some 2^d times.
+        let key = std::ptr::from_ref(body);
+        let mut head = match self.loop_seeds.get(&key) {
+            Some(seed) if seed.below(&exit_live, &self.exits) => union(&seed.head, &exit_live),
+            _ => exit_live.clone(),
+        };
         loop {
             self.exits.push(Exit {
                 label: None,
@@ -3055,6 +3096,19 @@ impl<'a> Analyzer<'a> {
             }
             head = candidate;
         }
+        let enclosing = self
+            .exits
+            .iter()
+            .map(|exit| (exit.live.clone(), exit.continue_live.clone()))
+            .collect();
+        self.loop_seeds.insert(
+            key,
+            LoopSeed {
+                exit_live: exit_live.clone(),
+                enclosing,
+                head: head.clone(),
+            },
+        );
         if record {
             self.exits.push(Exit {
                 label: None,

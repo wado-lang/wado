@@ -1,7 +1,17 @@
+use { LinearArray } from "core:linear";
+use { HostWeight } from "./weight.wado";
+
 /// A tensor of `E` over the axis list `Axes`, row-major.
 pub struct Tensor<E, Axes> {
     pub data: List<E>,
     pub extents: List<i32>,
+}
+
+impl<E: Element, Axes> Tensor<E, Axes> {
+    /// Each element cast to `B`, as StableHLO's `convert` casts it.
+    pub fn converted<B: Element>(&self) -> Tensor<B, Axes> {
+        return Tensor { data: self.data.into_iter().map(|v| v.cast_to::<B>()).collect(), extents: self.extents };
+    }
 }
 
 /// The elements `extents` hold, or `None` where its non-empty extents multiply
@@ -697,6 +707,9 @@ pub trait Element with () {
     fn from_f32(v: f32) -> Self;
     fn from_i64(v: i64) -> Self;
     fn from_bool(v: bool) -> Self;
+    /// The `count` elements stored from element `start` of `bytes`, as a
+    /// checkpoint stores them.
+    fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<Self>;
     /// Whether an f32 holds every value of this exactly, so a GPU can store
     /// it as one: a float, and `bool` as 1.0 and 0.0.
     fn exact_in_f32() -> bool {
@@ -730,6 +743,7 @@ pub enum ElementKind {
     /// What a packed int4 weight is stored in.
     U8,
     I64,
+    I32,
     Bool,
 }
 
@@ -753,6 +767,10 @@ impl Element for f16 {
     fn from_bool(v: bool) -> f16 {
         return f16::from_f32(f32::from_bool(v));
     }
+
+    fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<f16> {
+        return bytes.to_list_of::<f16>(2 * start, 2 * (start + count));
+    }
 }
 
 impl Element for bf16 {
@@ -774,6 +792,10 @@ impl Element for bf16 {
 
     fn from_bool(v: bool) -> bf16 {
         return bf16::from_f32(f32::from_bool(v));
+    }
+
+    fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<bf16> {
+        return bytes.to_list_of::<bf16>(2 * start, 2 * (start + count));
     }
 }
 
@@ -797,6 +819,10 @@ impl Element for u8 {
     fn from_bool(v: bool) -> u8 {
         return if v { 1 } else { 0 };
     }
+
+    fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<u8> {
+        return bytes.to_list_of::<u8>(start, start + count);
+    }
 }
 
 impl Element for f32 {
@@ -818,6 +844,10 @@ impl Element for f32 {
 
     fn from_bool(v: bool) -> f32 {
         return if v { 1.0 } else { 0.0 };
+    }
+
+    fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<f32> {
+        return bytes.to_list_of::<f32>(4 * start, 4 * (start + count));
     }
 }
 
@@ -841,6 +871,37 @@ impl Element for i64 {
     fn from_bool(v: bool) -> i64 {
         return if v { 1 } else { 0 };
     }
+
+    fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<i64> {
+        return bytes.to_list_of::<i64>(8 * start, 8 * (start + count));
+    }
+}
+
+impl Element for i32 {
+    fn kind() -> ElementKind {
+        return ElementKind::I32;
+    }
+
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_i64(*self as i64);
+    }
+
+    fn from_f32(v: f32) -> i32 {
+        return v as i32;
+    }
+
+    /// The low 32 bits, as ONNX's `Cast` from int64 keeps them.
+    fn from_i64(v: i64) -> i32 {
+        return v as i32;
+    }
+
+    fn from_bool(v: bool) -> i32 {
+        return if v { 1 } else { 0 };
+    }
+
+    fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<i32> {
+        return bytes.to_list_of::<i32>(4 * start, 4 * (start + count));
+    }
 }
 
 impl Element for bool {
@@ -862,6 +923,10 @@ impl Element for bool {
 
     fn from_bool(v: bool) -> bool {
         return v;
+    }
+
+    fn loaded(bytes: &LinearArray<u8>, start: i32, count: i32) -> List<bool> {
+        return bytes.to_list_of::<u8>(start, start + count).into_iter().map(|b| b != 0).collect();
     }
 
     fn exact_in_f32() -> bool {
@@ -1554,22 +1619,122 @@ pub affine trait Holds with _ {
     }
 }
 
-/// The graph that runs where the module runs.
-pub struct Cpu {
+/// The graph that runs where the module runs. It keeps a model's weights in
+/// linear memory, as a device keeps them in its own, so they need not fit the
+/// GC heap beside what a pass computes.
+pub affine struct Cpu {
+    id: i32 = next_cpu(),
+    kept: List<HostWeight> = [],
+}
+
+global mut CPUS: i32 = 0;
+
+fn next_cpu() -> i32 {
+    CPUS += 1;
+    return CPUS;
+}
+
+/// A tensor as `Cpu` holds it: a value, or a weight a `Cpu` keeps, which only
+/// that `Cpu` reads.
+pub variant CpuTensor<E, Axes> {
+    Value(Tensor<E, Axes>),
+    Kept(KeptWeight),
+}
+
+/// A weight a `Cpu` keeps: the `Cpu`, its place among the weights that one
+/// keeps, and its extents.
+pub struct KeptWeight {
+    cpu: i32,
+    at: i32,
+    extents: List<i32>,
+}
+
+impl KeptWeight {
+    /// The same weight under `extents`, which a row-major reshape leaves in place.
+    internal fn reshaped(&self, extents: List<i32>) -> KeptWeight
+        contract element_count(&extents) == element_count(&self.extents)
+    {
+        return KeptWeight { ..*self, extents };
+    }
+}
+
+impl<E: Element, Axes> CpuTensor<E, Axes> {
+    /// The value this holds, which every tensor but a kept weight is.
+    pub fn value(&self) -> &Tensor<E, Axes> {
+        let Value(t) = self else {
+            panic("a kept weight is read through the Cpu that keeps it");
+        };
+        return t;
+    }
+
+    /// `value`, taken out of this.
+    pub fn into_value(self) -> Tensor<E, Axes> {
+        let Value(t) = self else {
+            panic("a kept weight is read through the Cpu that keeps it");
+        };
+        return t;
+    }
+}
+
+impl Cpu {
+    /// The elements of `t`: its value, or the weight decoded.
+    pub fn held<E: Element, Axes>(&self, t: &CpuTensor<E, Axes>) -> &Tensor<E, Axes> {
+        return match t {
+            Value(v) => v,
+            Kept(k) => &Tensor {
+                data: E::loaded(self.weight(k).bytes(), 0, element_count(&k.extents)),
+                extents: k.extents,
+            },
+        };
+    }
+
+    /// The `run` consecutive elements of `t` from each of `starts`, so a
+    /// gather of a few rows of a kept weight reads those rows alone.
+    pub fn runs_at<E: Element, Axes>(&self, t: &CpuTensor<E, Axes>, starts: &List<i32>, run: i32) -> List<E> {
+        let mut out = List::<E>::with_capacity(starts.len() * run);
+        for let start of *starts {
+            match t {
+                Value(v) => out.extend_from_slice(v.data.slice(start, start + run)),
+                Kept(k) => out.extend(&E::loaded(self.weight(k).bytes(), start, run)),
+            }
+        }
+        return out;
+    }
+
+    /// `w`, kept for as long as this lives.
+    pub fn kept_weight(&mut self, w: HostWeight) -> KeptWeight {
+        let extents = w.extents;
+        self.kept.push(w);
+        return KeptWeight { cpu: self.id, at: self.kept.len() - 1, extents };
+    }
+
+    fn weight(&self, k: &KeptWeight) -> &HostWeight {
+        assert k.cpu == self.id, "a kept weight is read by the Cpu that keeps it";
+        return &self.kept[k.at];
+    }
+
+    /// The weight `k` names, which this keeps.
+    pub fn kept_mut(&mut self, k: &KeptWeight) -> &mut HostWeight {
+        assert k.cpu == self.id, "a kept weight is written by the Cpu that keeps it";
+        return &mut self.kept[k.at];
+    }
 }
 
 impl Holds for Cpu {
-    type Tensor<E: Element, Axes> = Tensor<E, Axes>;
+    type Tensor<E: Element, Axes> = CpuTensor<E, Axes>;
 
-    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
-        return *t;
+    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> CpuTensor<E, Axes> {
+        return CpuTensor::Value(*t);
     }
 
-    fn extents_of<E: Element, Axes>(&self, t: &Tensor<E, Axes>) -> List<i32> {
-        return t.extents;
+    fn extents_of<E: Element, Axes>(&self, t: &CpuTensor<E, Axes>) -> List<i32> {
+        return match t {
+            Value(v) => v.extents,
+            Kept(k) => k.extents,
+        };
     }
 
-    fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
-        return *t;
+    fn download<E: Element, Axes>(&mut self, t: &CpuTensor<E, Axes>) -> Tensor<E, Axes> {
+        return *self.held(t);
     }
 }

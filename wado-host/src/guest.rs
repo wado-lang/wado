@@ -7,7 +7,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{
     AsContext, Config, Engine, OptLevel, ProfilingStrategy, Store, StoreLimits, StoreLimitsBuilder,
@@ -29,7 +29,7 @@ use crate::http_hooks::WadoHttpHooks;
 use crate::options::{ProfileMode, RuntimeKnobs};
 use crate::process_host::{
     GuestStdio, ProcessCtx, ProcessGrant, ProcessView, Spawning,
-    add_to_linker as add_process_to_linker,
+    add_to_linker as add_process_to_linker, cannot_open,
 };
 use crate::random;
 use crate::timezone::add_to_linker as add_timezone_to_linker;
@@ -304,7 +304,10 @@ impl Preopens {
     pub fn open(preopened_dirs: &[(String, String)], process: ProcessGrant) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         for (host_path, guest_path) in preopened_dirs {
-            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
+            builder
+                .preopened_dir(host_path, guest_path, FsPerms::ReadWrite)
+                .map_err(anyhow::Error::from)
+                .with_context(|| cannot_open(host_path))?;
         }
         let mut ctx = builder.build();
         Ok(Self {
@@ -483,4 +486,21 @@ pub fn host_linker<T: Guest>(engine: &Engine) -> Result<Linker<T>> {
     add_timezone_to_linker(&mut linker)?;
     add_process_to_linker(&mut linker, process_view::<T>)?;
     Ok(linker)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_directory_that_cannot_be_opened_is_named() {
+        let Err(error) = Preopens::open(
+            &[("/nonexistent/grant".to_string(), ".".to_string())],
+            ProcessGrant::Denied,
+        ) else {
+            panic!("a missing directory opened");
+        };
+        assert_eq!(error.to_string(), cannot_open("/nonexistent/grant"));
+        assert!(error.source().is_some(), "the OS's reason is kept");
+    }
 }

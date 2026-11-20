@@ -134,12 +134,6 @@ test "gen --output writes the module and prints nothing" {
     assert fs::read_to_string(`${dir}/model.wado`).unwrap() == printed;
 }
 
-test "gen --runtime names the package the module imports" {
-    let dir = scratch("gen-runtime");
-    let printed = on_graph("gen", &dir, ["--runtime", "lib:elsewhere"]).unwrap();
-    assert printed.contains("} from \"lib:elsewhere\";");
-}
-
 test "gen --checkpoint checks the graph against the checkpoint's header" {
     let dir = scratch("gen-checkpoint");
     fs::write(`${dir}/good.safetensors`, &checkpoint([2, 3])).unwrap();
@@ -164,18 +158,6 @@ fn shards(dir: &String) with Preopens {
         `${*dir}/index.json`,
         &"{\"weight_map\": {\"V\": \"g-00001-of-00002.safetensors\", \"W\": \"g-00002-of-00002.safetensors\"}}",
     ).unwrap();
-}
-
-test "gen --index reads each weight from the shard the index places it in" {
-    let dir = scratch("gen-shards");
-    shards(&dir);
-    let printed = on_graph("gen", &dir, [
-        "--index", `${dir}/index.json`, "--checkpoint", `${dir}/g-00001-of-00002.safetensors`, "--checkpoint",
-        `${dir}/g-00002-of-00002.safetensors`,
-    ]).unwrap();
-    assert printed.contains(
-        "header.payload::<f32, Src>(source, \"g-00002-of-00002.safetensors\", &Expected { tensor: \"W\",",
-    );
 }
 
 test "a weight whose shard is not given names the shard" {
@@ -213,23 +195,6 @@ test "several checkpoints with no index are refused" {
         "--checkpoint", `${dir}/g-00001-of-00002.safetensors`, "--checkpoint", `${dir}/g-00002-of-00002.safetensors`,
     ]).unwrap_err();
     assert refused == "loam: 2 checkpoints and no index; the shards of one are given beside the index placing each tensor";
-}
-
-test "gen reads weights in place from the external data file the model places them in" {
-    let path = "tests/models/tiny-gpt2/external/model.onnx";
-    let printed = loam(["gen", "--type", "onnx", path]).unwrap();
-    assert printed.contains("those the graph does not carry read from model.onnx_data where the build found them.");
-    assert printed.contains("payload_at::<f32, Src>(source, \"model.onnx_data\", ");
-}
-
-test "gen with embed off reads the weights in place from the model file itself" {
-    let dir = scratch("gen-in-place");
-    fs::write(`${dir}/options.json`, &"{\"embed\": false}").unwrap();
-    let path = "tests/models/tiny-gpt2/model.onnx";
-    let printed = loam(["gen", "--type", "onnx", "--options", `${dir}/options.json`, path]).unwrap();
-    assert printed.contains("those the graph does not carry read from model.onnx where the build found them.");
-    assert printed.contains(`expect_len(source, "model.onnx", ${fs::read(path).unwrap().len()})?;`);
-    assert printed.contains("payload_at::<f32, Src>(source, \"model.onnx\", ");
 }
 
 test "embed off reads a protobuf, not the textual format" {

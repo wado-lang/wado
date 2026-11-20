@@ -150,8 +150,13 @@ jobs:
       # fail a change that has nothing to do with them.
       - uses: actions/cache@v6
         with:
-          path: ~/.cache/wado/pjrt
-          key: pjrt-plugins-${{ hashFiles('scripts/fetch-pjrt-plugin.sh') }}
+          path: |
+            ~/.cache/wado/pjrt
+            ~/.cache/wado/pinned
+          key: pjrt-plugins-${{ hashFiles('scripts/fetch-pjrt-plugin.sh', 'wado-run-pjrt/src/main.rs') }}
+          # Each plugin is kept under its pin, so an older cache holds no
+          # stale one.
+          restore-keys: pjrt-plugins-
       - run: mise run test-pjrt
       # tidy's `clippy-fix` applies what clippy can fix but fails on nothing, so
       # a lint with no automatic fix reaches main unless this step fails on it.

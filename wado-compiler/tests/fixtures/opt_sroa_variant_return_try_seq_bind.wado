@@ -49,6 +49,8 @@ impl Cursor {
     }
 }
 
+// A call too: spliced into `run`, the binding the test reads is folded away.
+#[inline("never")]
 fn total_len(data: List<String>) -> Result<i32, StepErr> {
     let mut cur = Cursor { data, pos: 0 };
     let mut total = 0;

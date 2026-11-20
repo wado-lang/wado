@@ -54,12 +54,16 @@ fn ones_input() -> Tensor<f32, [Batch, In]> {
 
 export fn run() with Stdout {
     let x = ones_input();
-    let y = compute(&mut Cpu {}, &x, &mut Model::new(weights().params(&mut Cpu {})));
+    let mut cpu = Cpu {};
+    let mut model = Model::new(weights().params(&mut cpu));
+    let y = compute(&mut cpu, &x, &mut model);
     println(`batch ${batch_size(&x)}, logits ${y.extents[1]}, first ${y.data[0]}`);
 }
 
 test "the generated graph runs the graph's operators" {
-    let y = compute(&mut Cpu {}, &ones_input(), &mut Model::new(weights().params(&mut Cpu {})));
+    let mut cpu = Cpu {};
+    let mut model = Model::new(weights().params(&mut cpu));
+    let y = compute(&mut cpu, &ones_input(), &mut model);
 
     assert y.extents == [1, 10] as List<i32>;
     // Each hidden unit sums 128 ones, `Relu` keeps them, each logit sums 64

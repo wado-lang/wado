@@ -482,6 +482,16 @@ pub enum OverloadedCallForm {
     StaticNullary,
 }
 
+/// A resource no other component can hold.
+#[derive(Debug, Clone)]
+pub enum ComponentLocalResource {
+    /// An extern handle: a reference into this component's own host.
+    ExternHandle,
+    /// The named resource, which no host implements: it has no WIT name
+    /// (WEP: Guest-Backed Resources).
+    Hostless(String),
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -1495,11 +1505,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// An extern handle in the signature of an `export`: it is a reference
-    /// into this component's own host, and no other component can hold it.
-    ExternHandleAtExport {
+    /// A resource no other component can hold, in the signature of an
+    /// `export`.
+    ComponentLocalResourceAtExport {
         function: String,
         position: String,
+        resource: ComponentLocalResource,
         span: Span,
     },
 
@@ -3129,14 +3140,27 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::ExternHandleAtExport {
+            TypeError::ComponentLocalResourceAtExport {
                 function,
                 position,
+                resource: ComponentLocalResource::ExternHandle,
                 span,
             } => (
                 Code::CmBoundaryType,
                 format!(
                     "extern handle in {position} of `{function}` is not allowed: an extern handle does not cross a component boundary"
+                ),
+                *span,
+            ),
+            TypeError::ComponentLocalResourceAtExport {
+                function,
+                position,
+                resource: ComponentLocalResource::Hostless(name),
+                span,
+            } => (
+                Code::CmBoundaryType,
+                format!(
+                    "resource `{name}` in {position} of `{function}` is not allowed: `{name}` has no host implementation, so it has no WIT name and does not cross a component boundary"
                 ),
                 *span,
             ),

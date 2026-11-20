@@ -1255,6 +1255,20 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
     folds_to_constant(body, op, const_locals, None)
 }
 
+/// The parameters among `params` that hold a number. A constant receiver halves
+/// almost any method, so only a number is worth waiting for.
+fn numeric_params(
+    func: &NirFunction,
+    params: &IndexSet<u32>,
+    type_table: &TypeTable,
+) -> IndexSet<u32> {
+    params
+        .iter()
+        .copied()
+        .filter(|&p| type_table.is_primitive_like(func.params[p as usize].type_id))
+        .collect()
+}
+
 /// [`is_constant_arg`], also seeing through a call to a `ctfe_eligible` callee
 /// given such arguments, which the compile-time engine runs to its value.
 fn folds_to_constant(
@@ -1391,23 +1405,22 @@ fn constant_params(
 fn hopeful_params(
     project: &NirPackage,
     scans: &[BodyScan],
+    bindings: &[IndexMap<u32, Operand>],
     sites: &[Vec<ArgSite>],
-    exec: &Executor,
+    opens: &[bool],
 ) -> Vec<IndexSet<u32>> {
     let n = project.functions.len();
     let funcs: Vec<_> = project.functions.iter().map(|f| f.borrow()).collect();
-    let bindings = exec.map(scans, single_bindings);
     let callers: Vec<Option<Caller<'_>>> = funcs
         .iter()
         .zip(scans)
-        .zip(sites)
         .zip(bindings)
-        .map(|(((func, scan), sites), bindings)| {
+        .map(|((func, scan), bindings)| {
             func.body.as_ref().map(|body| Caller {
                 body,
                 written: &scan.written,
                 bindings,
-                sites,
+                opens,
             })
         })
         .collect();
@@ -1421,7 +1434,7 @@ fn hopeful_params(
         };
         let own = hopeful[c].clone();
         let memo = RefCell::default();
-        for (callee, args) in caller.sites {
+        for (callee, args) in &sites[c] {
             let callee = callee.index();
             let mut grew = false;
             for &(pos, op) in args {
@@ -1444,8 +1457,11 @@ struct Caller<'a> {
     body: &'a Body,
     written: &'a IndexSet<u32>,
     /// The one value each unwritten, once-bound local holds.
-    bindings: IndexMap<u32, Operand>,
-    sites: &'a [ArgSite],
+    bindings: &'a IndexMap<u32, Operand>,
+    /// Per function, whether a call to it may fold to its value: a splice or
+    /// the compile-time engine reaches its body. `builtin::black_box(7)` and
+    /// an `#[inline(never)]` call stay calls, and never turn constant.
+    opens: &'a [bool],
 }
 
 /// How deep [`Caller::may_turn_constant`] follows an operand before it answers
@@ -1472,34 +1488,44 @@ impl Caller<'_> {
             return true;
         }
         let next = |op: Operand| self.may_turn_constant(op, hopeful, memo, depth + 1);
+        let local = |index: &u32| {
+            if self.written.contains(index) {
+                return false;
+            }
+            if hopeful.contains(index) {
+                return true;
+            }
+            let Some(&value) = self.bindings.get(index) else {
+                return false;
+            };
+            if let Some(&known) = memo.borrow().get(index) {
+                return known;
+            }
+            let answer = next(value);
+            memo.borrow_mut().insert(*index, answer);
+            answer
+        };
         let e = match op {
             Operand::Value(v) => {
-                return !matches!(self.body.values.kind(v), ValueKind::LoopPhi { .. });
+                return match self.body.values.kind(v) {
+                    ValueKind::Opaque(oid) => local(&self.body.values.promoted_opaque_local(*oid)),
+                    ValueKind::LoopPhi { .. } => false,
+                    _ => true,
+                };
             }
             Operand::Expr(e) => e,
         };
         match &self.body.exprs[e].kind {
-            ExprKind::Local { index, .. } => {
-                if self.written.contains(index) {
-                    return false;
-                }
-                if hopeful.contains(index) {
-                    return true;
-                }
-                let Some(&value) = self.bindings.get(index) else {
-                    return false;
-                };
-                if let Some(&known) = memo.borrow().get(index) {
-                    return known;
-                }
-                let answer = next(value);
-                memo.borrow_mut().insert(*index, answer);
-                answer
-            }
+            ExprKind::Local { index, .. } => local(index),
+            ExprKind::LabeledBlock { .. } => self
+                .body
+                .block_exits(e)
+                .expect("a labeled block")
+                .into_iter()
+                .all(|v| v.is_none_or(next)),
             ExprKind::PackedArray(_)
             | ExprKind::EnumConstruct { .. }
             | ExprKind::GlobalVarGet { .. }
-            | ExprKind::LabeledBlock { .. }
             | ExprKind::If { .. }
             | ExprKind::Match { .. }
             | ExprKind::Switch { .. } => true,
@@ -1516,7 +1542,9 @@ impl Caller<'_> {
             }
             ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| next(f.value)),
             ExprKind::VariantConstruct { payload, .. } => next(*payload),
-            ExprKind::Call { args, .. } => args.iter().all(|a| !a.is_mut && next(a.expr)),
+            ExprKind::Call { func_id, args, .. } => {
+                self.opens[func_id.index()] && args.iter().all(|a| !a.is_mut && next(a.expr))
+            }
             ExprKind::Dead
             | ExprKind::Assign { .. }
             | ExprKind::GlobalVarSet { .. }
@@ -1524,6 +1552,31 @@ impl Caller<'_> {
             | ExprKind::IndirectCall { .. }
             | ExprKind::ClosureToCanonical { .. } => false,
         }
+    }
+
+    /// Whether the call `call_id` may still hand its callee a constant it
+    /// lacks now at one of `numbers`, the parameters [`Verdict::awaits`] waits
+    /// on: the argument may turn constant given `hopeful`, the caller's own
+    /// parameters its sites may hand one, and cannot without them. A constant
+    /// arriving later arrives that way. Waiting anywhere else only delays the
+    /// splice: `String::len` waited at every site of a cbor serializer's loop,
+    /// for 12% of its fuel.
+    fn may_still_hand_constant(
+        &self,
+        call_id: ExprId,
+        numbers: &IndexSet<u32>,
+        hopeful: &IndexSet<u32>,
+    ) -> bool {
+        let ExprKind::Call { args, .. } = &self.body.exprs[call_id].kind else {
+            unreachable!("a site is a call")
+        };
+        let given = |op: Operand, hopeful: &IndexSet<u32>| {
+            self.may_turn_constant(op, hopeful, &RefCell::default(), 0)
+        };
+        numbers.iter().any(|&p| {
+            let op = args[p as usize].expr;
+            given(op, hopeful) && !given(op, &IndexSet::default())
+        })
     }
 }
 
@@ -1550,10 +1603,10 @@ fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
 /// copied. Only a callee reaching no safepoint qualifies inside a loop, so the
 /// splice brings its body alone and none of the spills a safepoint costs the
 /// loop ([`Reach::SoleOutsideLoops`] says what qualifies outside one). At `-O2`
-/// this admits up to 64, which reaches the stdlib's UTF-8 codec helpers
-/// (`decode_char_at` 50, `encode_char` 61) and the zlib match helpers that once
-/// carried an inline hint each.
-const PAYBACK_FACTOR: usize = 4;
+/// this admits up to 120, which reaches the stdlib's UTF-8 codec helpers and
+/// the zlib match helpers that once carried an inline hint each. Priced with
+/// what each splices, a tagged template's one-site `sql` driver is 105.
+const PAYBACK_FACTOR: usize = 5;
 
 /// One value for each [`Heat`] a profile sets on a call site.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
@@ -1782,6 +1835,8 @@ enum Refusal {
     NotTheSoleSite,
     /// The compile-time engine may fold the call to its value first.
     LeftToEngine,
+    /// The callee waits for the constants a site may still hand it.
+    AwaitingConstant,
     /// A callee admitted outside loops only, at a site in one.
     InLoop,
     /// A callee admitted in loops only, at a site outside them.
@@ -1809,6 +1864,10 @@ struct Verdict {
     /// growing it past the budget is one-way. This is what an
     /// `#[inline(never)]` on each leaf otherwise applies by hand.
     hold: bool,
+    /// Wait at a site whose numeric arguments may still turn constant: they
+    /// halve the callee, and spliced into a caller that lacks them it can no
+    /// longer fold on what that caller's own callers pass.
+    awaits: bool,
 }
 
 impl Verdict {
@@ -1822,6 +1881,7 @@ impl Verdict {
             hot: None,
             basis,
             hold: false,
+            awaits: false,
         }
     }
 
@@ -1915,22 +1975,15 @@ fn classify_callee(
             hot: Some(plain),
             basis: Basis::Forced,
             hold: false,
+            awaits: false,
         };
     }
 
     let effective_threshold = effective_threshold(func, inline_threshold);
-
     let params = func.params.len();
-    if net_cost(plain, params) <= effective_threshold {
-        return Verdict {
-            hot: Some(plain),
-            basis: Basis::Fits,
-            hold: false,
-        };
-    }
 
-    // Over budget as written, but the caller's constants may still fold it
-    // under. `(fits, drops a loop)` for one reading of the body.
+    // `(halves, drops a loop)` for one reading of the body, both false unless
+    // the folded body fits.
     let weigh = |view: &ConstView<'_>| {
         let folded = inline_cost_folded(body, type_table, cold, view, spliced);
         if net_cost(folded, params) > effective_threshold {
@@ -1939,7 +1992,34 @@ fn classify_callee(
         let walk = CostWalk::new(body, type_table, cold, Price::Hot).under(view);
         (folded * 2 <= plain, fold_drops_loop(body, view, &walk))
     };
+    let weigh_on = |params: &IndexSet<u32>| {
+        (!params.is_empty()).then(|| {
+            weigh(&ConstView {
+                params,
+                foldable,
+                loopy,
+            })
+        })
+    };
+    // `$template_segment` is the shape: a dispatch on its index, spliced into
+    // `TemplateHole::lit` while `lit`'s own index is a parameter, priced `lit`
+    // out of reaching the `String::format` site whose literal index folds it.
+    let numbers = numeric_params(func, hopeful, type_table);
+    let on_numbers = weigh_on(&numbers);
+    let awaits = on_numbers.is_some_and(|(halves, _)| halves);
 
+    if net_cost(plain, params) <= effective_threshold {
+        return Verdict {
+            hot: Some(plain),
+            basis: Basis::Fits,
+            hold: false,
+            awaits,
+        };
+    }
+
+    // Over budget as written, but the caller's constants may still fold it
+    // under.
+    //
     // `inline` reads the call sites, since splicing pays at the sites that
     // exist; the hold reads the body alone, since it protects an option whose
     // evidence has not arrived — a `field<T>` in a derived serializer is
@@ -1955,13 +2035,12 @@ fn classify_callee(
     // parameter no site can still hand a constant is a bet already lost, and
     // holding on it only defers the splices into this body to a second
     // convergence of the loop.
-    let optimistic_loop = !hopeful.is_empty()
-        && weigh(&ConstView {
-            params: hopeful,
-            foldable,
-            loopy,
-        })
-        .1;
+    let on_hopeful = if numbers.len() == hopeful.len() {
+        on_numbers
+    } else {
+        weigh_on(hopeful)
+    };
+    let optimistic_loop = on_hopeful.is_some_and(|(_, drops_loop)| drops_loop);
     let folds = const_view.is_some_and(|view| {
         let (halves, drops_loop) = weigh(view);
         halves || drops_loop
@@ -1981,6 +2060,7 @@ fn classify_callee(
         hot: Some(plain),
         basis,
         hold: optimistic_loop,
+        awaits,
     }
 }
 
@@ -2508,6 +2588,11 @@ struct Candidates<'a> {
     /// Whether a call the engine may fold is still left to it: until the loop
     /// first converges ([`InlineHolds::release`]).
     fold_pending: bool,
+    /// The candidates [`Verdict::awaits`] keeps waiting, each with the numeric
+    /// parameters it waits on.
+    awaiting: &'a IndexMap<FuncId, IndexSet<u32>>,
+    /// [`Caller::opens`].
+    opens: &'a [bool],
     /// What the re-scan of a splice may add, by the heat of the site that
     /// started it: a hot site's own callee may spend a plain cap by itself.
     rescan_cap: ByHeat<usize>,
@@ -2693,6 +2778,7 @@ fn inline_round(
     let mut reach: IndexMap<FuncId, ByHeat<Reach>> = IndexMap::default();
     let mut net_price: IndexMap<FuncId, ByHeat<Option<usize>>> = IndexMap::default();
     let mut shrinking: IndexSet<FuncId> = IndexSet::default();
+    let mut awaiting: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
 
     // Also collect function_strings for each candidate (to update caller's
     // strings after inlining). `function_strings` is keyed by `(module, name)`;
@@ -2722,7 +2808,15 @@ fn inline_round(
     // Both prices cost a walk over the whole unit per round and no level sets a
     // growth cap, so they are taken only where something reads them.
     let pricing = budget.prices_read() || record.is_some();
-    let hopeful_params = hopeful_params(project, scans, &sites, gate.exec());
+    let opens: Vec<bool> = project
+        .functions
+        .iter()
+        .zip(&never)
+        .zip(&ctfe_eligible)
+        .map(|((f, &never), &eligible)| f.borrow().body.is_some() && (!never || eligible))
+        .collect();
+    let bindings = gate.exec().map(scans, single_bindings);
+    let hopeful_params = hopeful_params(project, scans, &bindings, &sites, &opens);
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
 
@@ -2736,14 +2830,13 @@ fn inline_round(
     //
     // The two disagree on one shape: this admission test reads the gross price,
     // while `classify_callee` reads the price this table produces, so a driver
-    // that its own loopy callees push over the threshold is declined there and
+    // that its own callees push over the threshold is declined there and
     // charged to its callers here. Closing that takes a second lookahead level.
     //
-    // Only a callee carrying a loop is priced this way. A loop is what the model
-    // charges most to splice, being a region of its own in the caller. Pricing
-    // every inlinable callee by its whole body judges a driver by its
-    // post-inlining size against a threshold calibrated on as-written ones, and
-    // that suppresses inlining the CBOR serializers need.
+    // Every callee is priced this way, so a wrapper reads as the bodies it
+    // splices: priced as calls, `Cpu::held` spliced its two callees' 55 into
+    // each of 400 sites of a Loam program. The thresholds are calibrated on
+    // these prices, not on as-written ones.
     let exec = gate.exec().clone();
     let type_table: &TypeTable = &types;
     let functions = &project.functions;
@@ -2767,7 +2860,7 @@ fn inline_round(
         let Some(body) = func.body.as_ref() else {
             return 0;
         };
-        if !loopy[i] || splice_barred(&func, cycle_cuts, type_table).is_some() {
+        if splice_barred(&func, cycle_cuts, type_table).is_some() {
             return 0;
         }
         let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
@@ -2910,6 +3003,13 @@ fn inline_round(
         if shrinks {
             shrinking.insert(id);
         }
+        // Splicing a shrinking callee only makes room in its caller.
+        if verdict.awaits && !shrinks {
+            awaiting.insert(
+                id,
+                numeric_params(&func, &hopeful_params[id.index()], type_table),
+            );
+        }
         inline_candidates.insert(id, func);
     }
     drop(types);
@@ -3015,6 +3115,8 @@ fn inline_round(
             shrinking: &shrinking,
             ctfe_eligible: &ctfe_eligible,
             fold_pending,
+            awaiting: &awaiting,
+            opens: &opens,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels. A cold site
             // splices less, but what it spliced recurses as far as a plain one.
@@ -3041,6 +3143,9 @@ fn inline_round(
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
             glue,
             movable: movable.contains(&fid),
+            hopeful: &hopeful_params[fid.index()],
+            written: &scans[fid.index()].written,
+            bindings: &bindings[fid.index()],
             deferred: false,
             decisions: logging.map(|log| Decisions {
                 log,
@@ -3173,6 +3278,12 @@ struct CallerFrame<'f> {
     /// outer call for the inner one, so its hot sites wait until it has moved
     /// into its callers.
     movable: bool,
+    /// The caller's parameters some site of its own may still hand a constant.
+    hopeful: &'f IndexSet<u32>,
+    /// What [`Caller`] reads about the caller as the round found it. A local a
+    /// splice binds is in neither, so its argument never waits.
+    written: &'f IndexSet<u32>,
+    bindings: &'f IndexMap<u32, Operand>,
     /// A call was left to the compile-time engine this visit.
     deferred: bool,
     /// What the visit decides at each site, where the package keeps a log.
@@ -3801,6 +3912,22 @@ fn try_inline_call_expr(
         (Site::Plain, Reach::Loops) => Some(Refusal::OutsideLoop),
         (Site::Plain | Site::Loop, Reach::Nowhere) => Some(Refusal::OtherHeat),
     }
+    .or_else(|| {
+        // Like a call left to the engine, a wait lapses when the loop
+        // converges.
+        let awaits = candidates.fold_pending
+            && candidates.awaiting.get(&func_id).is_some_and(|numbers| {
+                Caller {
+                    body: caller,
+                    written: frame.written,
+                    bindings: frame.bindings,
+                    opens: candidates.opens,
+                }
+                .may_still_hand_constant(call_id, numbers, frame.hopeful)
+            });
+        frame.deferred |= awaits;
+        awaits.then_some(Refusal::AwaitingConstant)
+    })
     .or_else(|| (!candidates.charge(func_id, heat)).then_some(Refusal::RescanSpent));
     let call_span = caller.exprs[call_id].span;
     if let Some(decisions) = frame.decisions.as_mut() {

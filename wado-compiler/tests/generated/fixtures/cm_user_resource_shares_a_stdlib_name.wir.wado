@@ -30,14 +30,19 @@ fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#
 }
 
 fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]thing.id"(self) with Fields {
-    return "wasi/$wasi:demo/gfx@0.1.0#[method]thing.id"(self);
+    return "wasi/$wasi:demo/gfx@0.1.0#[method]thing.id"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }; self);
 }
 
 fn "cm_user_resource_shares_a_stdlib_name.wado/$cm_export__run"() {
     let t: i32;
     drop("cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]thing.id"(local.tee t("cm_user_resource_shares_a_stdlib_name.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-thing"())));
     if (t == 0) == 0 {
-        "wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fields"(t);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/resource-drop:cm_user_resource_shares_a_stdlib_name.wado#Fields"(t);
+        }
     }
     "wasi/task-return"(0);
 }

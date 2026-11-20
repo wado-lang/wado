@@ -57,6 +57,11 @@ pub fn le_bytes(data: &Data) -> ByteList {
                 push_le(&mut bytes, *v as u64, 8);
             }
         },
+        I32(values) => {
+            for let v of values {
+                push_le(&mut bytes, *v as u64, 4);
+            }
+        },
         Bool(values) => {
             for let v of values {
                 bytes.push(*v as u8);
@@ -131,7 +136,17 @@ fn element_name(kind: ElementKind) -> String {
         BF16 => "bf16",
         U8 => "ui8",
         I64 => "i64",
+        I32 => "i32",
         Bool => "i1",
+    };
+}
+
+/// What a sum over `kind` accumulates in: f32 for a float, i64 for an integer.
+fn accumulator(kind: ElementKind) -> ElementKind {
+    return match kind {
+        F32 | F16 | BF16 => ElementKind::F32,
+        U8 | I64 | I32 => ElementKind::I64,
+        Bool => unreachable(),
     };
 }
 
@@ -203,7 +218,7 @@ fn direction_name(direction: Comparison) -> String {
 fn comparison_type_name(kind: ElementKind) -> String {
     return match kind {
         F32 | F16 | BF16 => "FLOAT",
-        I64 => "SIGNED",
+        I64 | I32 => "SIGNED",
         U8 | Bool => "UNSIGNED",
     };
 }
@@ -432,9 +447,9 @@ impl Writer {
     }
 
     /// `op` over the node's operands and then `more`, whose types are
-    /// `more_types`, each opening with a comma. It accumulates in f32: a half
-    /// operand widens on the way in and the result rounds once, as a long sum in
-    /// a half loses its small terms.
+    /// `more_types`, each opening with a comma. It accumulates in
+    /// [`accumulator`]'s element: a half operand widens to f32 on the way in and
+    /// the result rounds once, as a long sum in a half loses its small terms.
     fn summed(
         &mut self,
         id: i32,
@@ -445,7 +460,8 @@ impl Writer {
         regions: String,
         attributes: String,
     ) {
-        if node.kind matches { F32 } {
+        let into = accumulator(node.kind);
+        if node.kind == into {
             self.lined(
                 id,
                 node,
@@ -462,27 +478,29 @@ impl Writer {
         let mut types: List<String> = [];
         for let [k, operand] of node.operands.into_iter().enumerate() {
             names.push(`${n}w${k}`);
-            types.push(self.widened(`${n}w${k}`, operand));
+            types.push(self.widened(`${n}w${k}`, operand, into));
         }
-        let wide = type_of(ElementKind::F32, &node.extents);
+        let wide = type_of(into, &node.extents);
         self.text.push_str(
             `${n}s = "${op}"(${names.join(", ")}${more})${regions}${attributes} : (${types.join(", ")}${more_types}) -> ${wide}\n`,
         );
         self.lined(id, node, "stablehlo.convert", `${n}s`, wide, "", "");
     }
 
-    /// Node `id` in f32 under `name`, and the type it has there.
-    fn widened(&mut self, name: String, id: i32) -> String {
-        let wide = type_of(ElementKind::F32, &self.recorded.nodes[id].extents);
+    /// Node `id` in `into` under `name`, and the type it has there.
+    fn widened(&mut self, name: String, id: i32, into: ElementKind) -> String {
+        let wide = type_of(into, &self.recorded.nodes[id].extents);
         self.text.push_str(`${name} = "stablehlo.convert"(${self.name(id)}) : (${self.type_at(id)}) -> ${wide}\n`);
         return wide;
     }
 
     /// `op` folding the operand with `binary`, from `init`.
     fn folded(&mut self, id: i32, node: &RecordedNode, op: String, binary: Binary, init: f32, attributes: String) {
-        let scalar = "tensor<f32>";
+        let into = accumulator(node.kind);
+        let scalar = type_of(into, &[]);
         let n = node_name(id);
-        self.scalar(`${n}i`, `0x${init.to_bits():08X}`, scalar);
+        let value = if into matches { F32 } { `0x${init.to_bits():08X}` } else { `${init as i64}` };
+        self.scalar(`${n}i`, value, scalar);
         let body = ` ({\n^bb0(${n}a: ${scalar}, ${n}b: ${scalar}):\n${n}r = "${binary_name(binary)}"(${n}a, ${n}b) : (${scalar}, ${scalar}) -> ${scalar}\n"stablehlo.return"(${n}r) : (${scalar}) -> ()\n})`;
         self.summed(id, node, op, `, ${n}i`, `, ${scalar}`, body, attributes);
     }
@@ -528,7 +546,7 @@ impl Writer {
         if !self.recorded.nodes[operand].kind matches { F32 } {
             // Widening a half is exact, so the order is the operand's own.
             compared = `${n}y`;
-            values = self.widened(compared, operand);
+            values = self.widened(compared, operand, ElementKind::F32);
         }
         let indices = type_of(ElementKind::I64, extents);
         let f = "tensor<f32>";

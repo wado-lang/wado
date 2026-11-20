@@ -4,6 +4,7 @@
 
 struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
+    mut backing: ref null eq,
 }
 
 struct cm_record_with_own_field_param.wado//Slot {  // TypeId(1)
@@ -32,7 +33,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_record_with_own_field_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
-    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-device"() };
+    return struct.new "core:prelude//$Resource" { value: "wasi/$wasi:demo/gfx@0.1.0#get-device"(), backing: ref.null eq };
 }
 
 fn "cm_record_with_own_field_param.wado/$cm_export__run"() {
@@ -41,7 +42,9 @@ fn "cm_record_with_own_field_param.wado/$cm_export__run"() {
 }
 
 fn "cm_record_with_own_field_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick$spec0"(slot) with Gfx {
-    return "wasi/$wasi:demo/gfx@0.1.0#pick"(slot.device.value, 3);
+    return "wasi/$wasi:demo/gfx@0.1.0#pick"(let $host_resource_1: ref null "core:prelude//$Resource"; if @unlikely(ref.is_null(local.tee $host_resource_1(slot.device).backing) == 0) {
+        unreachable;
+    }; $host_resource_1.value, 3);
 }
 
 export fn "cm_record_with_own_field_param.wado/$cm_export__run" as "run"

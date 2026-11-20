@@ -20,7 +20,7 @@ use {
     full,
     written_at,
 } from "./hlo.wado";
-use { Cpu, Element, ElementKind, Float, Holds, Tensor } from "./tensor.wado";
+use { Cpu, CpuTensor, Element, ElementKind, Float, Holds, Tensor } from "./tensor.wado";
 use {
     Any,
     Recorded,
@@ -119,6 +119,7 @@ fn element_type(kind: ElementKind) -> ElementType {
         BF16 => ElementType::Bfloat16,
         U8 => ElementType::Uint8,
         I64 => ElementType::Int64,
+        I32 => ElementType::Int32,
         Bool => ElementType::Pred,
     };
 }
@@ -136,6 +137,7 @@ fn elements_of<E: Element>(bytes: ByteList) -> List<E> {
         BF16 => widened(bytes),
         U8 => bytes.into_iter().map(|b| b.cast_to::<E>()).collect(),
         I64 => List::<i64>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v)).collect(),
+        I32 => List::<i32>::from_le_bytes(bytes).into_iter().map(|v| E::from_i64(v as i64)).collect(),
         Bool => bytes.into_iter().map(|b| E::from_bool(b != 0)).collect(),
     };
 }
@@ -168,6 +170,7 @@ fn returned_at(kind: ElementKind, on: DeviceBuffer) -> Any<PjrtBackend> {
         BF16 => Any::BF16(Located::Device(on)),
         U8 => Any::U8(Located::Device(on)),
         I64 => Any::I64(Located::Device(on)),
+        I32 => Any::I32(Located::Device(on)),
         Bool => Any::Bool(Located::Device(on)),
     };
 }
@@ -314,6 +317,7 @@ impl PjrtBackend {
             BF16 => Any::BF16(Located::Device(d)),
             U8 => Any::U8(Located::Device(d)),
             I64 => Any::I64(Located::Device(d)),
+            I32 => Any::I32(Located::Device(d)),
             Bool => Any::Bool(Located::Device(d)),
         };
     }
@@ -321,7 +325,7 @@ impl PjrtBackend {
     /// The slot of `value`, sent to the device for this pass if it is on the host.
     fn on_device(&mut self, value: &Any<PjrtBackend>) -> i32 with PjrtHost {
         let host = match value {
-            F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | Bool(Device(d)) => {
+            F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | I32(Device(d)) | Bool(Device(d)) => {
                 return self.slot_of(d);
             },
             F32(Host(t)) => self.sent(t),
@@ -329,6 +333,7 @@ impl PjrtBackend {
             BF16(Host(t)) => self.sent(t),
             U8(Host(t)) => self.sent(t),
             I64(Host(t)) => self.sent(t),
+            I32(Host(t)) => self.sent(t),
             Bool(Host(t)) => self.sent(t),
         };
         self.pass.push(host);
@@ -361,6 +366,16 @@ impl PjrtBackend {
             },
         };
     }
+
+    /// `t` as `Cpu` computes on it.
+    fn on_cpu<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> CpuTensor<E, Axes> with PjrtHost {
+        return CpuTensor::Value(self.host(t));
+    }
+}
+
+/// What `Cpu` computed, held on the host.
+fn hosted<E: Element, Axes>(t: CpuTensor<E, Axes>) -> Located<E, Axes> {
+    return Located::Host(t.into_value());
 }
 
 impl Holds for PjrtBackend {
@@ -535,7 +550,7 @@ impl Backend for PjrtBackend {
         if self.topology matches { Some(_) } {
             return;
         }
-        let F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | Bool(Device(d)) = pool else {
+        let F32(Device(d)) | F16(Device(d)) | BF16(Device(d)) | U8(Device(d)) | I64(Device(d)) | I32(Device(d)) | Bool(Device(d)) = pool else {
             unreachable();
         };
         let kind = kind_of(pool);
@@ -558,6 +573,7 @@ fn zeros_pass(kind: ElementKind, extents: List<i32>) -> Recorded {
         BF16 => zeros_of::<bf16>(extents),
         U8 => zeros_of::<u8>(extents),
         I64 => zeros_of::<i64>(extents),
+        I32 => zeros_of::<i32>(extents),
         Bool => zeros_of::<bool>(extents),
     };
 }
@@ -578,6 +594,7 @@ fn slot_pass(kind: ElementKind, extents: List<i32>) -> Recorded {
         BF16 => slot_of::<bf16>(extents),
         U8 => slot_of::<u8>(extents),
         I64 => slot_of::<i64>(extents),
+        I32 => slot_of::<i32>(extents),
         Bool => slot_of::<bool>(extents),
     };
 }
@@ -604,15 +621,15 @@ impl Graph for PjrtBackend {
     }
 
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Located<E, Axes> {
-        return Located::Host(self.cpu.iota(extents, dimension));
+        return hosted(self.cpu.iota(extents, dimension));
     }
 
     fn convert<A: Element, B: Element, Axes>(&mut self, x: &Located<A, Axes>) -> Located<B, Axes> with PjrtHost {
-        return Located::Host(self.cpu.convert(&self.host(x)));
+        return hosted(self.cpu.convert(&self.on_cpu(x)));
     }
 
     fn unary<E: Float, Axes>(&mut self, op: Unary, x: &Located<E, Axes>) -> Located<E, Axes> with PjrtHost {
-        return Located::Host(self.cpu.unary(op, &self.host(x)));
+        return hosted(self.cpu.unary(op, &self.on_cpu(x)));
     }
 
     fn binary<E: Element, Axes>(
@@ -621,7 +638,7 @@ impl Graph for PjrtBackend {
         a: &Located<E, Axes>,
         b: &Located<E, Axes>,
     ) -> Located<E, Axes> with PjrtHost {
-        return Located::Host(self.cpu.binary(op, &self.host(a), &self.host(b)));
+        return hosted(self.cpu.binary(op, &self.on_cpu(a), &self.on_cpu(b)));
     }
 
     fn compare<E: Element, Axes>(
@@ -630,7 +647,7 @@ impl Graph for PjrtBackend {
         a: &Located<E, Axes>,
         b: &Located<E, Axes>,
     ) -> Located<bool, Axes> with PjrtHost {
-        return Located::Host(self.cpu.compare(direction, &self.host(a), &self.host(b)));
+        return hosted(self.cpu.compare(direction, &self.on_cpu(a), &self.on_cpu(b)));
     }
 
     fn select<E: Element, Axes>(
@@ -639,7 +656,7 @@ impl Graph for PjrtBackend {
         on_true: &Located<E, Axes>,
         on_false: &Located<E, Axes>,
     ) -> Located<E, Axes> with PjrtHost {
-        return Located::Host(self.cpu.select(&self.host(pred), &self.host(on_true), &self.host(on_false)));
+        return hosted(self.cpu.select(&self.on_cpu(pred), &self.on_cpu(on_true), &self.on_cpu(on_false)));
     }
 
     fn broadcast_in_dim<E: Element, In, Out>(
@@ -648,15 +665,15 @@ impl Graph for PjrtBackend {
         extents: List<i32>,
         dims: List<i32>,
     ) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.broadcast_in_dim(&self.host(x), extents, dims));
+        return hosted(self.cpu.broadcast_in_dim(&self.on_cpu(x), extents, dims));
     }
 
     fn reshape<E: Element, In, Out>(&mut self, x: &Located<E, In>, extents: List<i32>) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.reshape(&self.host(x), extents));
+        return hosted(self.cpu.reshape(&self.on_cpu(x), extents));
     }
 
     fn transpose<E: Element, In, Out>(&mut self, x: &Located<E, In>, perm: List<i32>) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.transpose(&self.host(x), perm));
+        return hosted(self.cpu.transpose(&self.on_cpu(x), perm));
     }
 
     fn slice<E: Element, In, Out>(
@@ -666,7 +683,7 @@ impl Graph for PjrtBackend {
         limit: List<i32>,
         strides: List<i32>,
     ) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.slice(&self.host(x), start, limit, strides));
+        return hosted(self.cpu.slice(&self.on_cpu(x), start, limit, strides));
     }
 
     fn concatenate<E: Element, A, B, Out>(
@@ -675,17 +692,17 @@ impl Graph for PjrtBackend {
         b: &Located<E, B>,
         dimension: i32,
     ) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.concatenate(&self.host(a), &self.host(b), dimension));
+        return hosted(self.cpu.concatenate(&self.on_cpu(a), &self.on_cpu(b), dimension));
     }
 
-    fn reduce<E: Float, In, Out>(
+    fn reduce<E: Element, In, Out>(
         &mut self,
         x: &Located<E, In>,
         op: Binary,
         init: f32,
         dims: List<i32>,
     ) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.reduce(&self.host(x), op, init, dims));
+        return hosted(self.cpu.reduce(&self.on_cpu(x), op, init, dims));
     }
 
     fn dot_general<E: Float, A, B, Out>(
@@ -694,7 +711,7 @@ impl Graph for PjrtBackend {
         rhs: &Located<E, B>,
         dims: &DotDims,
     ) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.dot_general(&self.host(lhs), &self.host(rhs), dims));
+        return hosted(self.cpu.dot_general(&self.on_cpu(lhs), &self.on_cpu(rhs), dims));
     }
 
     fn gather<E: Element, D, I, Out>(
@@ -703,7 +720,7 @@ impl Graph for PjrtBackend {
         indices: &Located<i64, I>,
         dims: &GatherDims,
     ) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.gather(&self.host(operand), &self.host(indices), dims));
+        return hosted(self.cpu.gather(&self.on_cpu(operand), &self.on_cpu(indices), dims));
     }
 
     fn scatter<E: Element, D, I, U>(
@@ -713,7 +730,7 @@ impl Graph for PjrtBackend {
         updates: &Located<E, U>,
         dims: &ScatterDims,
     ) -> Located<E, D> with PjrtHost {
-        return Located::Host(self.cpu.scatter(&self.host(operand), &self.host(indices), &self.host(updates), dims));
+        return hosted(self.cpu.scatter(&self.on_cpu(operand), &self.on_cpu(indices), &self.on_cpu(updates), dims));
     }
 
     fn convolution<E: Float, In, K, Out>(
@@ -722,7 +739,7 @@ impl Graph for PjrtBackend {
         kernel: &Located<E, K>,
         conv: &Convolution,
     ) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.convolution(&self.host(x), &self.host(kernel), conv));
+        return hosted(self.cpu.convolution(&self.on_cpu(x), &self.on_cpu(kernel), conv));
     }
 
     fn reduce_window<E: Float, In, Out>(
@@ -732,11 +749,11 @@ impl Graph for PjrtBackend {
         init: f32,
         window: &WindowReduce,
     ) -> Located<E, Out> with PjrtHost {
-        return Located::Host(self.cpu.reduce_window(&self.host(x), op, init, window));
+        return hosted(self.cpu.reduce_window(&self.on_cpu(x), op, init, window));
     }
 
     fn reverse<E: Element, Axes>(&mut self, x: &Located<E, Axes>, dims: List<i32>) -> Located<E, Axes> with PjrtHost {
-        return Located::Host(self.cpu.reverse(&self.host(x), dims));
+        return hosted(self.cpu.reverse(&self.on_cpu(x), dims));
     }
 
     fn conditional<Axes, T>(
@@ -745,10 +762,10 @@ impl Graph for PjrtBackend {
         then: fn() -> T with _,
         otherwise: fn() -> T with _,
     ) -> T with (_, PjrtHost) {
-        return self.cpu.conditional(&self.host(pred), then, otherwise);
+        return self.cpu.conditional(&self.on_cpu(pred), then, otherwise);
     }
 
     fn arg_max<E: Float, Axes>(&mut self, x: &Located<E, Axes>, axis: i32) -> Located<i64, Axes> with PjrtHost {
-        return Located::Host(self.cpu.arg_max(&self.host(x), axis));
+        return hosted(self.cpu.arg_max(&self.on_cpu(x), axis));
     }
 }

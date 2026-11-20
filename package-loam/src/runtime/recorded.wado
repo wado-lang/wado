@@ -27,9 +27,21 @@ use {
     joined_extents,
     pooled_window,
     reduced_extents,
+    scalar,
     sliced_extents,
 } from "./hlo.wado";
-use { Attention, Cpu, Element, ElementKind, Float, Holds, Tensor, element_count, optional } from "./tensor.wado";
+use {
+    Attention,
+    Cpu,
+    CpuTensor,
+    Element,
+    ElementKind,
+    Float,
+    Holds,
+    Tensor,
+    element_count,
+    optional,
+} from "./tensor.wado";
 
 /// A tensor's elements, whichever element it holds.
 pub variant Data {
@@ -38,6 +50,7 @@ pub variant Data {
     BF16(List<bf16>),
     U8(List<u8>),
     I64(List<i64>),
+    I32(List<i32>),
     Bool(List<bool>),
 }
 
@@ -175,8 +188,6 @@ pub struct Recorder {
     /// compiler with no operation for it.
     decomposes: bool,
     appended: List<[i32, i32]>,
-    /// How many branches and loops enclose the region being recorded.
-    nested: i32,
 }
 
 impl Recorder {
@@ -187,7 +198,6 @@ impl Recorder {
             parameters: 0,
             decomposes: false,
             appended: [],
-            nested: 0,
         };
     }
 
@@ -239,6 +249,7 @@ internal fn data_of<E: Element>(v: &List<E>) -> Data {
         BF16 => Data::BF16(v.into_iter().map(|x| x.cast_to::<bf16>()).collect()),
         U8 => Data::U8(v.into_iter().map(|x| x.cast_to::<u8>()).collect()),
         I64 => Data::I64(v.into_iter().map(|x| x.cast_to::<i64>()).collect()),
+        I32 => Data::I32(v.into_iter().map(|x| x.cast_to::<i32>()).collect()),
         Bool => Data::Bool(v.into_iter().map(|x| x.cast_to::<bool>()).collect()),
     };
 }
@@ -349,7 +360,7 @@ impl Graph for Recorder {
         return self.value(Operation::Concatenate(dimension), [a.id, b.id], E::kind(), extents);
     }
 
-    fn reduce<E: Float, In, Out>(&mut self, x: &Value<E, In>, op: Binary, init: f32, dims: List<i32>) -> Value<E, Out> {
+    fn reduce<E: Element, In, Out>(&mut self, x: &Value<E, In>, op: Binary, init: f32, dims: List<i32>) -> Value<E, Out> {
         let extents = reduced_extents(&self.extents(x.id), &dims);
         return self.value(Operation::Reduce([op, init, dims]), [x.id], E::kind(), extents);
     }
@@ -433,7 +444,6 @@ impl Graph for Recorder {
         otherwise: fn() -> T with _,
     ) -> T with _ {
         let outer = self.current;
-        self.nested += 1;
         self.current = Region::empty();
         let taken = then();
         let first = self.current;
@@ -441,7 +451,6 @@ impl Graph for Recorder {
         otherwise();
         let second = self.current;
         self.current = outer;
-        self.nested -= 1;
         assert first.results.len() == second.results.len(), "both branches yield as many results";
         self.added(Operation::Case([first, second]), [pred.id], ElementKind::Bool, []);
         return taken;
@@ -470,7 +479,6 @@ impl Graph for Recorder {
         body: fn(&Value<i64, []>, &List<Any<Recorder>>) -> List<Any<Recorder>> with _,
     ) -> List<Any<Recorder>> with _ {
         let outer = self.current;
-        self.nested += 1;
         self.current = Region::empty();
         let step = self.added(Operation::Carried, [], ElementKind::I64, []);
         let mut carried: List<i32> = [];
@@ -487,7 +495,6 @@ impl Graph for Recorder {
         }
         let region = self.current;
         self.current = outer;
-        self.nested -= 1;
         let mut operands: List<i32> = [count.id];
         for let start of initial {
             operands.push(node_of(start));
@@ -502,7 +509,6 @@ impl Graph for Recorder {
         read: &List<Any<Recorder>>,
         given: &List<[ElementKind, List<i32>]>,
     ) -> List<Any<Recorder>> {
-        assert self.nested == 0, "a host step is in the pass's own region";
         let operands: List<i32> = read.into_iter().map(|r| node_of(r)).collect();
         let mut fetched: List<Any<Recorder>> = [];
         for let [k, [kind, extents]] of given.into_iter().enumerate() {
@@ -664,6 +670,7 @@ fn node_of(a: &Any<Recorder>) -> i32 {
         BF16(v) => v.id,
         U8(v) => v.id,
         I64(v) => v.id,
+        I32(v) => v.id,
         Bool(v) => v.id,
     };
 }
@@ -676,6 +683,7 @@ fn any_at(kind: ElementKind, id: i32) -> Any<Recorder> {
         BF16 => Any::BF16(Value { id }),
         U8 => Any::U8(Value { id }),
         I64 => Any::I64(Value { id }),
+        I32 => Any::I32(Value { id }),
         Bool => Any::Bool(Value { id }),
     };
 }
@@ -693,6 +701,7 @@ pub variant Any<affine G: Holds> {
     BF16(G::Tensor<bf16, Untyped>),
     U8(G::Tensor<u8, Untyped>),
     I64(G::Tensor<i64, Untyped>),
+    I32(G::Tensor<i32, Untyped>),
     Bool(G::Tensor<bool, Untyped>),
 }
 
@@ -704,6 +713,7 @@ pub fn kind_of<affine G: Holds>(a: &Any<G>) -> ElementKind {
         BF16(_) => ElementKind::BF16,
         U8(_) => ElementKind::U8,
         I64(_) => ElementKind::I64,
+        I32(_) => ElementKind::I32,
         Bool(_) => ElementKind::Bool,
     };
 }
@@ -775,6 +785,19 @@ impl Erasable for i64 {
     }
 }
 
+impl Erasable for i32 {
+    fn any<affine G: Holds>(t: G::Tensor<i32, Untyped>) -> Any<G> {
+        return Any::I32(t);
+    }
+
+    fn of_any<affine G: Holds>(a: &Any<G>) -> &G::Tensor<i32, Untyped> {
+        let I32(t) = a else {
+            unreachable();
+        };
+        return t;
+    }
+}
+
 impl Erasable for bool {
     fn any<affine G: Holds>(t: G::Tensor<bool, Untyped>) -> Any<G> {
         return Any::Bool(t);
@@ -788,12 +811,13 @@ impl Erasable for bool {
 /// `t` as `Cpu` holds it among a program's arguments.
 pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
     return match data_of(&t.data) {
-        F32(data) => Any::F32(Tensor { data, extents: t.extents }),
-        F16(data) => Any::F16(Tensor { data, extents: t.extents }),
-        BF16(data) => Any::BF16(Tensor { data, extents: t.extents }),
-        U8(data) => Any::U8(Tensor { data, extents: t.extents }),
-        I64(data) => Any::I64(Tensor { data, extents: t.extents }),
-        Bool(data) => Any::Bool(Tensor { data, extents: t.extents }),
+        F32(data) => Any::F32(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        F16(data) => Any::F16(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        BF16(data) => Any::BF16(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        U8(data) => Any::U8(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        I64(data) => Any::I64(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        I32(data) => Any::I32(CpuTensor::Value(Tensor { data, extents: t.extents })),
+        Bool(data) => Any::Bool(CpuTensor::Value(Tensor { data, extents: t.extents })),
     };
 }
 
@@ -805,35 +829,41 @@ pub fn zeros_on_host(kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
         BF16 => zeros_of::<bf16>(extents),
         U8 => zeros_of::<u8>(extents),
         I64 => zeros_of::<i64>(extents),
+        I32 => zeros_of::<i32>(extents),
         Bool => zeros_of::<bool>(extents),
     };
 }
 
 fn zeros_of<E: Erasable>(extents: List<i32>) -> Any<Cpu> {
-    return E::any::<Cpu>(Tensor { data: List::filled(element_count(&extents), E::from_i64(0)), extents });
+    return E::any::<Cpu>(CpuTensor::Value(Tensor {
+        data: List::filled(element_count(&extents), E::from_i64(0)),
+        extents,
+    }));
 }
 
-/// `value`, held on the host, as `h` holds it for this pass.
+/// `value`, a value on the host, as `h` holds it for this pass.
 pub fn uploaded_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
     return match value {
-        F32(t) => Any::F32(h.upload(t)),
-        F16(t) => Any::F16(h.upload(t)),
-        BF16(t) => Any::BF16(h.upload(t)),
-        U8(t) => Any::U8(h.upload(t)),
-        I64(t) => Any::I64(h.upload(t)),
-        Bool(t) => Any::Bool(h.upload(t)),
+        F32(t) => Any::F32(h.upload(t.value())),
+        F16(t) => Any::F16(h.upload(t.value())),
+        BF16(t) => Any::BF16(h.upload(t.value())),
+        U8(t) => Any::U8(h.upload(t.value())),
+        I64(t) => Any::I64(h.upload(t.value())),
+        I32(t) => Any::I32(h.upload(t.value())),
+        Bool(t) => Any::Bool(h.upload(t.value())),
     };
 }
 
-/// `value`, held on the host, as `h` keeps it.
+/// `value`, a value on the host, as `h` keeps it.
 pub fn kept_any<affine H: Holds>(h: &mut H, value: &Any<Cpu>) -> Any<H> with _ {
     return match value {
-        F32(t) => Any::F32(h.keep(t)),
-        F16(t) => Any::F16(h.keep(t)),
-        BF16(t) => Any::BF16(h.keep(t)),
-        U8(t) => Any::U8(h.keep(t)),
-        I64(t) => Any::I64(h.keep(t)),
-        Bool(t) => Any::Bool(h.keep(t)),
+        F32(t) => Any::F32(h.keep(t.value())),
+        F16(t) => Any::F16(h.keep(t.value())),
+        BF16(t) => Any::BF16(h.keep(t.value())),
+        U8(t) => Any::U8(h.keep(t.value())),
+        I64(t) => Any::I64(h.keep(t.value())),
+        I32(t) => Any::I32(h.keep(t.value())),
+        Bool(t) => Any::Bool(h.keep(t.value())),
     };
 }
 
@@ -850,6 +880,7 @@ fn extents_of_any<affine G: Graph>(g: &G, a: &Any<G>) -> List<i32> with _ {
         BF16(t) => g.extents_of(t),
         U8(t) => g.extents_of(t),
         I64(t) => g.extents_of(t),
+        I32(t) => g.extents_of(t),
         Bool(t) => g.extents_of(t),
     };
 }
@@ -862,29 +893,66 @@ pub fn assert_carries<affine G: Graph>(g: &G, held: &List<Any<G>>, returned: &Li
     }
 }
 
-/// A host step between two programs of a split pass: the step, the nodes of
-/// the whole recording it reads, and those its values give.
+/// A host step of a split pass: the step, the nodes of the whole recording it
+/// reads, and those its values give.
 struct HostStep {
     step: i32,
     reads: List<i32>,
     fetched: List<i32>,
 }
 
+/// A region of a split pass that runs on the host: its stages, and the node
+/// each result it yields is the value of.
+struct HostRegion {
+    stages: List<Stage>,
+    yielded: List<i32>,
+}
+
+/// A loop holding a host step, which the host runs: the nodes of its count
+/// and starts, of which run it is and of what it carries, its body, and the
+/// nodes that name its results outside it.
+struct HostLoop {
+    count: i32,
+    starts: List<i32>,
+    step: i32,
+    carried: List<i32>,
+    body: HostRegion,
+    results: List<i32>,
+}
+
+/// A branch holding a host step, which the host takes: the node of its
+/// predicate, each branch, and the nodes that name its results outside it.
+struct HostBranch {
+    pred: i32,
+    then: HostRegion,
+    otherwise: HostRegion,
+    results: List<i32>,
+}
+
+/// What a split pass runs, in order.
+variant Stage {
+    Program(i32),
+    Step(HostStep),
+    Loop(HostLoop),
+    Branch(HostBranch),
+}
+
 /// What crosses the cuts of a pass split at its host steps, each value named
 /// by its node in the whole recording: what each program takes past the
-/// pass's arguments and returns, the host step after each program but the
-/// last, the pass's results, and each parameter's node.
+/// pass's arguments and returns, the stages the pass runs, its results, and
+/// each parameter's node.
 pub struct Cuts {
     takes: List<List<i32>>,
     gives: List<List<i32>>,
-    steps: List<HostStep>,
+    stages: List<Stage>,
     results: List<i32>,
     parameters: HashMap<i32, i32>,
 }
 
 /// `recorded`, whose last `weights` parameters are weights, cut at each of its
 /// host steps into programs of their own, which take the pass's arguments,
-/// then what they take of the programs and steps before, then the weights.
+/// then what they take of the other stages, then the weights. A loop or branch
+/// holding a host step runs on the host, its regions cut the same way.
 pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
     let mut parameters = HashMap::<i32, i32>::new();
     for let [id, node] of recorded.nodes.into_iter().enumerate() {
@@ -892,82 +960,69 @@ pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
             parameters[id] = *i;
         }
     }
-    // Each segment's nodes, and each node's home: segment `s` is `2s`, and
-    // the step before it `2s - 1`.
-    let mut segments: List<List<i32>> = [[]];
-    let mut steps: List<HostStep> = [];
-    let mut home = List::<i32>::filled(recorded.nodes.len(), -1);
-    for let id of recorded.body.nodes {
-        let node = &recorded.nodes[id];
-        if let Fetched([step, k]) = &node.op {
-            if *k == 0 {
-                steps.push(HostStep { step: *step, reads: node.operands, fetched: [] });
-                segments.push([]);
-            }
-            steps[steps.len() - 1].fetched.push(id);
-            home[id] = 2 * segments.len() - 3;
-            continue;
-        }
-        segments[segments.len() - 1].push(id);
-        homed(recorded, id, 2 * (segments.len() - 1), &mut home);
-    }
-    if steps.is_empty() {
+    let stepped = holding_steps(recorded);
+    if !stepped.contains(&true) {
         return [
             [*recorded],
             Cuts {
                 takes: [[]],
                 gives: [recorded.body.results],
-                steps,
+                stages: [Stage::Program(0)],
                 results: recorded.body.results,
                 parameters,
             },
         ];
     }
     let arguments = recorded.parameters - weights;
+    let mut splitting = Splitting {
+        recorded,
+        segments: [],
+        home: List::<i32>::filled(recorded.nodes.len(), -1),
+        stepped,
+        hosted: [],
+        of_weights: weights_only(recorded, arguments),
+        again: [],
+    };
+    let mut stages = splitting.staged(&recorded.body);
+    splitting.read_by_host(&mut stages, &recorded.body.results);
+    let mut Splitting { segments, home, hosted, of_weights, again: for_host, .. } = splitting;
     // A value of the weights alone is computed again in each program that
-    // reads it, since a host step before that program may write the weights.
-    let of_weights = weights_only(recorded, arguments);
-    let last = segments.len() - 1;
+    // reads it, or that the host reads it after, since a host step before
+    // that program may write the weights.
     let mut takes: List<List<i32>> = [];
     for let s of 0..<segments.len() {
-        let mut read = read_by(recorded, &segments[s]);
-        if s < steps.len() {
-            read.extend(&steps[s].reads);
-        }
-        if s == last {
-            read.extend(&recorded.body.results);
-        }
         let mut again: List<i32> = [];
-        for let id of read {
-            if home[id] < 2 * s && of_weights[id] {
+        for let id of read_by(recorded, &segments[s]) {
+            if home[id] != s && of_weights[id] {
                 again.push(id);
             }
         }
+        again.extend(&for_host[s].into_iter().filter(|id| home[id] != s).collect());
         let mut redone = closed_over_weights(recorded, &again, &of_weights, &parameters);
         redone.extend(&segments[s]);
         segments[s] = redone;
         let mut taken: List<i32> = [];
         for let id of read_by(recorded, &segments[s]) {
-            if home[id] < 2 * s && !of_weights[id] && !parameters.contains_key(id) && !taken.contains(&id) {
+            if home[id] != s && !of_weights[id] && !parameters.contains_key(id) && !taken.contains(&id) {
                 taken.push(id);
             }
         }
         takes.push(taken);
     }
-    let mut later: List<List<i32>> = takes[1..<takes.len()].to_list();
-    later.push(recorded.body.results);
-    for let step of &steps {
-        later.push(step.reads);
+    let mut read = hosted;
+    for let taken of &takes {
+        read.extend(taken);
     }
     let mut gives: List<List<i32>> = [];
     for let s of 0..<segments.len() {
+        let mut computed = List::<bool>::filled(recorded.nodes.len(), false);
+        for let id of segments[s] {
+            computed[id] = true;
+        }
         let mut given: List<i32> = [];
-        for let ids of &later {
-            for let id of ids {
-                let computed = home[*id] == 2 * s || of_weights[*id] && segments[s].contains(id);
-                if computed && !parameters.contains_key(*id) && !given.contains(id) {
-                    given.push(*id);
-                }
+        for let id of read {
+            if (home[id] == s || computed[id]) && !parameters.contains_key(id) && !given.contains(&id) {
+                given.push(id);
             }
         }
         gives.push(given);
@@ -978,8 +1033,130 @@ pub fn split(recorded: &Recorded, weights: i32) -> [List<Recorded>, Cuts] {
     }
     return [
         programs,
-        Cuts { takes, gives, steps, results: recorded.body.results, parameters },
+        Cuts { takes, gives, stages, results: recorded.body.results, parameters },
     ];
+}
+
+/// Whether each node of `recorded` is a host step or holds one in a branch or
+/// loop of its own.
+fn holding_steps(recorded: &Recorded) -> List<bool> {
+    let mut holds: List<bool> = [];
+    for let node of &recorded.nodes {
+        // A region's nodes are recorded before the node holding it.
+        let within = |region: &Region| region.nodes.into_iter().any(|n| holds[n]);
+        let held = match &node.op {
+            Fetched(_) => true,
+            Case([first, second]) => within(first) || within(second),
+            Repeat(repeat) => within(&repeat.body),
+            _ => false,
+        };
+        holds.push(held);
+    }
+    return holds;
+}
+
+/// A pass being cut at its host steps: each program's nodes, each node's
+/// program or `-1` where the host sets it, whether each node holds a host step,
+/// every node the host reads, whether each node reads the weights alone, and
+/// the values of the weights alone each program computes again for the host.
+struct Splitting {
+    recorded: &Recorded,
+    segments: List<List<i32>>,
+    home: List<i32>,
+    stepped: List<bool>,
+    hosted: List<i32>,
+    of_weights: List<bool>,
+    again: List<List<i32>>,
+}
+
+impl Splitting {
+    /// Notes that the host reads `reads` after `stages`. The program just
+    /// before computes again what of them reads the weights alone, since a host
+    /// step before it may have written the weights. Where the host's own stage
+    /// comes last, a program of those values alone runs first.
+    fn read_by_host(&mut self, stages: &mut List<Stage>, reads: &List<i32>) {
+        self.hosted.extend(reads);
+        let fresh: List<i32> = (*reads)
+            .into_iter()
+            .filter(|id| self.of_weights[id] && !self.recorded.nodes[id].op matches { Parameter(_) })
+            .collect();
+        if fresh.is_empty() {
+            return;
+        }
+        let s = self.program_last(stages);
+        self.again[s].extend(&fresh);
+    }
+
+    /// The program `stages` end in, a new one where they end otherwise.
+    fn program_last(&mut self, stages: &mut List<Stage>) -> i32 {
+        if !stages.is_empty() && let Program(s) = &stages[stages.len() - 1] {
+            return *s;
+        }
+        stages.push(Stage::Program(self.segments.len()));
+        self.segments.push([]);
+        self.again.push([]);
+        return self.segments.len() - 1;
+    }
+
+    /// The stages of `region`: a program for each run of its nodes that holds
+    /// no host step, and the host's own stage for each other node.
+    fn staged(&mut self, region: &Region) -> List<Stage> {
+        let mut stages: List<Stage> = [];
+        for let id of region.nodes {
+            let node = &self.recorded.nodes[id];
+            match &node.op {
+                // Every program takes the parameters, and the host sets the rest.
+                Parameter(_) | Carried | Yield => {
+                },
+                Fetched([step, k]) => {
+                    if *k == 0 {
+                        self.read_by_host(&mut stages, &node.operands);
+                        stages.push(Stage::Step(HostStep { step: *step, reads: node.operands, fetched: [] }));
+                    }
+                    let Step(host) = &mut stages[stages.len() - 1] else {
+                        unreachable();
+                    };
+                    host.fetched.push(id);
+                },
+                Repeat(repeat) && self.stepped[id] => {
+                    let starts = carried_starts(node);
+                    let mut read = starts;
+                    read.push(node.operands[0]);
+                    self.read_by_host(&mut stages, &read);
+                    stages.push(Stage::Loop(HostLoop {
+                        count: node.operands[0],
+                        starts,
+                        step: repeat.step,
+                        carried: repeat.carried,
+                        body: self.hosted_region(&repeat.body),
+                        results: repeat.body.results,
+                    }));
+                },
+                Case([first, second]) && self.stepped[id] => {
+                    self.read_by_host(&mut stages, &[node.operands[0]]);
+                    stages.push(Stage::Branch(HostBranch {
+                        pred: node.operands[0],
+                        then: self.hosted_region(first),
+                        otherwise: self.hosted_region(second),
+                        results: first.results,
+                    }));
+                },
+                _ => {
+                    let s = self.program_last(&mut stages);
+                    self.segments[s].push(id);
+                    homed(self.recorded, id, s, &mut self.home);
+                },
+            }
+        }
+        return stages;
+    }
+
+    fn hosted_region(&mut self, region: &Region) -> HostRegion {
+        let yielded: List<i32> = region.results.into_iter().map(|id| self.recorded.nodes[id].operands[0]).collect();
+        let mut stages = self.staged(region);
+        self.read_by_host(&mut stages, &yielded);
+        return HostRegion { stages, yielded };
+    }
 }
 
 /// Whether each node of `recorded` reads the weights and constants alone, the
@@ -1218,33 +1395,82 @@ impl<affine G: Backend> Programs<G> {
             self.held[class] = Compiled { programs, cuts };
         }
         let compiled = &self.held[class];
-        let cuts = &compiled.cuts;
-        let mut values = HashMap::<i32, Any<G>>::new();
-        let value_of = |id: i32| -> Any<G> {
-            if let Some(i) = cuts.parameters.get(id) {
-                return if i < given.len() { given[i] } else { erased[i - given.len()] };
-            }
-            return values[id];
-        };
-        for let k of 0..<compiled.programs.len() {
-            let mut taken = given;
-            for let id of cuts.takes[k] {
-                taken.push(value_of(id));
-            }
-            for let [at, returned] of g.executed(&compiled.programs[k], &taken, erased).into_iter().enumerate() {
-                values[cuts.gives[k][at]] = returned;
-            }
-            if k < cuts.steps.len() {
-                let step = &cuts.steps[k];
-                let read: List<Any<G>> = step.reads.into_iter().map(|id| value_of(id)).collect();
-                let fetched = host(step.step, &read, erased);
-                assert fetched.len() == step.fetched.len(), "a host step gives each value it records";
-                for let [at, id] of step.fetched.into_iter().enumerate() {
-                    values[id] = fetched[at];
-                }
+        let mut running = Running { compiled, given, values: HashMap::new() };
+        running.ran(g, &compiled.cuts.stages, erased, &mut host);
+        return running.values_of(&compiled.cuts.results, erased);
+    }
+}
+
+/// A split pass running: its programs, the pass's arguments, and the value of
+/// each node a stage has given.
+struct Running<affine G: Backend> {
+    compiled: &Compiled<G>,
+    given: List<Any<G>>,
+    values: HashMap<i32, Any<G>>,
+}
+
+impl<affine G: Backend> Running<G> {
+    fn value_of(&self, id: i32, weights: &List<Any<G>>) -> Any<G> {
+        if let Some(i) = self.compiled.cuts.parameters.get(id) {
+            return if i < self.given.len() { self.given[i] } else { weights[i - self.given.len()] };
+        }
+        return self.values[id];
+    }
+
+    fn values_of(&self, ids: &List<i32>, weights: &List<Any<G>>) -> List<Any<G>> {
+        return ids.into_iter().map(|id| self.value_of(*id, weights)).collect();
+    }
+
+    fn set(&mut self, ids: &List<i32>, values: List<Any<G>>) {
+        assert values.len() == ids.len();
+        for let [at, id] of ids.into_iter().enumerate() {
+            self.values[*id] = values[at];
+        }
+    }
+
+    /// Runs `stages`, each program on `g`, and each host step by `host`, which
+    /// may write in the weights.
+    fn ran(
+        &mut self,
+        g: &mut G,
+        stages: &List<Stage>,
+        weights: &mut List<Any<G>>,
+        host: &mut fn mut(i32, &List<Any<G>>, &mut List<Any<G>>) -> List<Any<G>> with _,
+    ) with _ {
+        for let stage of stages {
+            match stage {
+                Program(k) => {
+                    let mut taken = self.given;
+                    taken.extend(&self.values_of(&self.compiled.cuts.takes[*k], weights));
+                    let returned = g.executed(&self.compiled.programs[*k], &taken, weights);
+                    self.set(&self.compiled.cuts.gives[*k], returned);
+                },
+                Step(step) => {
+                    let read = self.values_of(&step.reads, weights);
+                    self.set(&step.fetched, (*host)(step.step, &read, weights));
+                },
+                Loop(repeat) => {
+                    let count = self.value_of(repeat.count, weights);
+                    self.set(&repeat.carried, self.values_of(&repeat.starts, weights));
+                    for let at of 0..<g.download(&typed::<G, i64, []>(g, &count)).data[0] {
+                        self.values[repeat.step] = Any::I64(g.relabeled::<i64, [], Untyped>(&scalar(g, at)));
+                        self.ran(g, &repeat.body.stages, weights, host);
+                        self.set(&repeat.carried, self.values_of(&repeat.body.yielded, weights));
+                    }
+                    self.set(&repeat.results, self.values_of(&repeat.carried, weights));
+                },
+                Branch(branch) => {
+                    let pred = self.value_of(branch.pred, weights);
+                    let taken = if g.download(&typed::<G, bool, []>(g, &pred)).data[0] {
+                        &branch.then;
+                    } else {
+                        &branch.otherwise;
+                    };
+                    self.ran(g, &taken.stages, weights, host);
+                    self.set(&branch.results, self.values_of(&taken.yielded, weights));
+                },
             }
         }
-        return cuts.results.into_iter().map(|id| value_of(id)).collect();
     }
 }
 
@@ -1258,9 +1484,8 @@ pub fn run<affine G: Graph>(g: &mut G, recorded: &Recorded, arguments: &List<Any
 }
 
 /// The value of each node of `recorded` that reads no argument, computed on
-/// `Cpu`: what a program computes once, when it is compiled.
-pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
-    let mut cpu = Cpu {};
+/// `cpu`: what a program computes once, when it is compiled.
+pub fn constants(cpu: &mut Cpu, recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
     let mut state = Run::<Cpu>::new(recorded, &[], &[], &HashMap::new());
     let mut folded = HashMap::<i32, Any<Cpu>>::new();
     for let id of 0..<recorded.nodes.len() {
@@ -1270,7 +1495,7 @@ pub fn constants(recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
             _ => node.operands.into_iter().all(|o| state.values.holds(o)),
         };
         if reads_none {
-            let value = state.computed(&mut cpu, id, node);
+            let value = state.computed(cpu, id, node);
             folded[id] = value;
             state.values[id] = value;
         }
@@ -1439,6 +1664,7 @@ impl<affine G: Graph> Run<G> {
                 BF16(v) => Any::BF16(g.upload(&Tensor::<bf16, Untyped> { data: *v, extents: node.extents })),
                 U8(v) => Any::U8(g.upload(&Tensor::<u8, Untyped> { data: *v, extents: node.extents })),
                 I64(v) => Any::I64(g.upload(&Tensor::<i64, Untyped> { data: *v, extents: node.extents })),
+                I32(v) => Any::I32(g.upload(&Tensor::<i32, Untyped> { data: *v, extents: node.extents })),
                 Bool(v) => Any::Bool(g.upload(&Tensor::<bool, Untyped> { data: *v, extents: node.extents })),
             };
         }
@@ -1447,12 +1673,12 @@ impl<affine G: Graph> Run<G> {
         } else {
             node.kind;
         };
-        if node.op matches { Unary(_) | Reduce(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) } {
+        if node.op matches { Unary(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) } {
             return match over {
                 F32 => self.computed_in::<f32>(g, id, node),
                 F16 => self.computed_in::<f16>(g, id, node),
                 BF16 => self.computed_in::<bf16>(g, id, node),
-                U8 | I64 | Bool => unreachable(),
+                U8 | I64 | I32 | Bool => unreachable(),
             };
         }
         return match over {
@@ -1461,6 +1687,7 @@ impl<affine G: Graph> Run<G> {
             BF16 => self.computed_of::<bf16>(g, node),
             U8 => self.computed_of::<u8>(g, node),
             I64 => self.computed_of::<i64>(g, node),
+            I32 => self.computed_of::<i32>(g, node),
             Bool => self.computed_of::<bool>(g, node),
         };
     }
@@ -1475,8 +1702,15 @@ impl<affine G: Graph> Run<G> {
                 BF16 => Any::BF16(g.convert::<E, bf16, Untyped>(self.of::<E>(node, 0))),
                 U8 => Any::U8(g.convert::<E, u8, Untyped>(self.of::<E>(node, 0))),
                 I64 => Any::I64(g.convert::<E, i64, Untyped>(self.of::<E>(node, 0))),
+                I32 => Any::I32(g.convert::<E, i32, Untyped>(self.of::<E>(node, 0))),
                 Bool => Any::Bool(g.convert::<E, bool, Untyped>(self.of::<E>(node, 0))),
             },
+            Reduce([op, init, dims]) => E::any::<G>(g.reduce::<E, Untyped, Untyped>(
+                self.of::<E>(node, 0),
+                *op,
+                *init,
+                *dims,
+            )),
             Binary(op) => E::any::<G>(g.binary::<E, Untyped>(*op, self.of::<E>(node, 0), self.of::<E>(node, 1))),
             Compare(direction) => Any::Bool(g.compare::<E, Untyped>(
                 *direction,
@@ -1517,12 +1751,6 @@ impl<affine G: Graph> Run<G> {
     fn computed_in<E: Erasable + Float>(&mut self, g: &mut G, id: i32, node: &RecordedNode) -> Any<G> with _ {
         return match &node.op {
             Unary(op) => E::any::<G>(g.unary::<E, Untyped>(*op, self.of::<E>(node, 0))),
-            Reduce([op, init, dims]) => E::any::<G>(g.reduce::<E, Untyped, Untyped>(
-                self.of::<E>(node, 0),
-                *op,
-                *init,
-                *dims,
-            )),
             DotGeneral(dims) => E::any::<G>(g.dot_general::<E, Untyped, Untyped, Untyped>(
                 self.of::<E>(node, 0),
                 self.of::<E>(node, 1),

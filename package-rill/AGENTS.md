@@ -6,6 +6,8 @@ docs:
 
 - [`README.md`](./README.md) — what Rill offers, and how it works.
 - [`TODO.md`](./TODO.md) — open work.
+- [`static-generation.md`](./static-generation.md) — publishing an app as
+  static files that the browser program hydrates.
 - [WEP: Reactive Signals](../docs/wep-2026-04-04-reactive-signals.md) — the
   initial design and why signals are a library. It is complete and no longer
   edited: what Rill decides from here on is written in this directory.

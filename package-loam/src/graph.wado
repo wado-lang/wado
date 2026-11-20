@@ -92,6 +92,16 @@ pub fn is_float(primitive: &String) -> bool {
     return *primitive == "f32" || *primitive == "f16" || *primitive == "bf16";
 }
 
+/// Whether `op` computes on a signed integer as ONNX defines it, which a kernel
+/// computes exactly in i64, wrapping to the element.
+pub fn computes_integers(op: &String) -> bool {
+    return *op == "ReduceSum" || binary_operator(op) matches { Some(b) && !b matches { Pow } };
+}
+
+pub fn is_signed_integer(primitive: &String) -> bool {
+    return *primitive == "i64" || *primitive == "i32";
+}
+
 /// The `TensorProto.DataType` an attribute's number names, as `Cast`'s `to`
 /// carries one. `None` for a number the enum does not declare.
 pub fn data_type(number: i64) -> Option<onnx::TensorProtoDataType> {
@@ -110,6 +120,7 @@ pub fn element_of(dtype: &String) -> Option<Element> {
         "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, stored: "BF16" }),
         "uint8" => Option::Some(Element { primitive: "u8", width: 1, stored: "U8" }),
         "int64" => Option::Some(Element { primitive: "i64", width: 8, stored: "I64" }),
+        "int32" => Option::Some(Element { primitive: "i32", width: 4, stored: "I32" }),
         "bool" => Option::Some(Element { primitive: "bool", width: 1, stored: "BOOL" }),
         _ => null,
     };
@@ -631,7 +642,12 @@ pub global QMOE: String = "com.microsoft.QMoE";
 /// - `Max` and `Min` take any number of operands, two at a time.
 /// - `Clip` is `Min(Max(x, min), max)`, as ONNX defines it, each bound an
 ///   optional operand, or before opset 11 an optional attribute.
+/// - `com.microsoft.GroupQueryAttention` given its query, key and value packed
+///   in its query is that attention given the three apart.
 fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
+    if node.op == GROUP_QUERY_ATTENTION && !node.has_operand(1) {
+        return unpacked_attention(node).map(|nodes| Option::Some(nodes));
+    }
     let [needed, write]: [i32, fn(&Node, &mut FunctionBody) -> Result<(), String>] = match node.op.as_str_slice() {
         "Gelu" => [1, gelu],
         "SimplifiedLayerNormalization" => [2, rms_normalization],
@@ -650,6 +666,42 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
     let mut body = FunctionBody { prefix: named.unwrap_or(node.op), x: node.inputs[0], nodes: [] };
     write(node, &mut body)?;
     return Result::Ok(Option::Some(body.nodes));
+}
+
+/// The nodes of a `GroupQueryAttention` whose query packs the query, key and
+/// value as `[batch, sequence, (heads + 2 kv_heads) × head]`, each head's run in
+/// turn, the query's heads first: its heads split apart, and the attention
+/// given each part as an operand of its own.
+fn unpacked_attention(node: &Node) -> Result<List<Node>, String> {
+    if node.has_operand(2) {
+        return Result::Err(`${node.site()}: packs the key in the query and is given a value`);
+    }
+    let heads = node.required_int_attr("num_heads").map_err(|e| at_node(node, e))?;
+    let kv_heads = node.required_int_attr("kv_num_heads").map_err(|e| at_node(node, e))?;
+    let mut body = FunctionBody { prefix: node.outputs[0], x: node.inputs[0], nodes: [] };
+    let by_head = body.node("Reshape", [node.inputs[0], body.ints([0, 0, heads + 2 * kv_heads, -1])], []);
+    let parts: List<String> = (["query", "key", "value"] as List<String>)
+        .into_iter()
+        .map(|p| `${body.prefix}/${p}_heads`)
+        .collect();
+    body.nodes.push(Node {
+        op: "Split",
+        inputs: [by_head, body.ints([heads, kv_heads, kv_heads])],
+        outputs: parts,
+        attrs: [
+            Attr {
+                name: "axis",
+                values: ["2"],
+                is_list: false,
+            },
+        ],
+    });
+    let mut inputs = node.inputs;
+    for let [i, part] of parts.into_iter().enumerate() {
+        inputs[i] = body.node("Reshape", [part, body.ints([0, 0, -1])], []);
+    }
+    body.nodes.push(Node { ..*node, inputs });
+    return Result::Ok(body.nodes);
 }
 
 /// Why a node given `given` leading operands cannot be one reading `needed`.
@@ -789,6 +841,17 @@ impl FunctionBody {
             },
         ]);
         return self.binary("CastLike", &written, &self.x);
+    }
+
+    /// An int64 constant of `values`.
+    fn ints(&mut self, values: List<i64>) -> String {
+        return self.node("Constant", [], [
+            Attr {
+                name: "value_ints",
+                values: values.into_iter().map(|v| `${v}`).collect(),
+                is_list: true,
+            },
+        ]);
     }
 
     fn unary(&mut self, op: String, x: &String) -> String {

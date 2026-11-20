@@ -201,7 +201,8 @@ impl Cx<'_> {
 
 /// What a type holds that this pass drops, one level down.
 enum Layout<'a> {
-    /// A resource with a Component Model name, released by its `drop`.
+    /// A resource released by its `drop`: the host's, or one no host
+    /// implements that declares one.
     Resource,
     /// A stream or future end, released by its own canonical drop.
     End,
@@ -292,13 +293,14 @@ impl<'a> AffineTypes<'a> {
             if tt.is_stream_or_future_end(def) {
                 return Layout::End;
             }
-            if tt.is_unrestricted_resource(def) {
+            if tt.is_unrestricted_resource(def) || tt.is_undroppable_hostless_resource(def) {
                 return Layout::Opaque;
             }
-            let named = self
-                .reg
-                .resource_cm_name_of(tt.defs().ast_id(def))
-                .is_some();
+            let named = tt.is_hostless_resource(def)
+                || self
+                    .reg
+                    .resource_cm_name_of(tt.defs().ast_id(def))
+                    .is_some();
             return if named {
                 Layout::Resource
             } else {

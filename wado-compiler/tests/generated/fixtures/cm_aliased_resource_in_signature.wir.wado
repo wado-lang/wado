@@ -26,7 +26,9 @@ import fn wasi/resource-drop:sub/cm_aliased_resource_dep.wado#Device from "wasi/
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_aliased_resource_in_signature.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(self) with Device {
-    return "wasi/$wasi:demo/gfx@0.1.0#[method]device.id"(self);
+    return "wasi/$wasi:demo/gfx@0.1.0#[method]device.id"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }; self);
 }
 
 fn "cm_aliased_resource_in_signature.wado/$cm_binding__wasi:demo/maker@0.1.0#get-device"() with Maker {
@@ -37,7 +39,10 @@ fn "cm_aliased_resource_in_signature.wado/$cm_export__run"() {
     let $temp_0: i32;
     drop("cm_aliased_resource_in_signature.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(local.tee $temp_0("cm_aliased_resource_in_signature.wado/$cm_binding__wasi:demo/maker@0.1.0#get-device"())));
     if ($temp_0 == 0) == 0 {
-        "wasi/resource-drop:sub/cm_aliased_resource_dep.wado#Device"($temp_0);
+        if ref.is_null(ref.null eq) == 0 {
+        } else {
+            "wasi/resource-drop:sub/cm_aliased_resource_dep.wado#Device"($temp_0);
+        }
     }
     "wasi/task-return"(0);
 }

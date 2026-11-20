@@ -16,21 +16,19 @@ type "functype//coverage_never_operand.wado/$cm_binding__core:coverage/coverage-
 
 type "functype//coverage_never_operand.wado/$cm_export__$test_0_no_operand_diverges" = fn();  // TypeId(6)
 
-type "functype//core:rt/coverage_report" = fn();  // TypeId(7)
+type "functype//core:rt/$initialize_module" = fn();  // TypeId(7)
 
-type "functype//core:rt/$initialize_module" = fn();  // TypeId(8)
+type "functype//core:rt/coverage_probe$cold0" = fn(i32, i32);  // TypeId(8)
 
-type "functype//core:rt/coverage_probe$cold0" = fn(i32, i32);  // TypeId(9)
+type "functype//core:rt/coverage_probe$spec0$dae[id]" = fn();  // TypeId(9)
 
-type "functype//core:rt/coverage_probe$spec0$dae[id]" = fn();  // TypeId(10)
+type "functype//core:rt/coverage_probe$spec1$dae[id]" = fn();  // TypeId(10)
 
-type "functype//core:rt/coverage_probe$spec1$dae[id]" = fn();  // TypeId(11)
+type "functype//core:rt/coverage_probe$spec5$dae[id]" = fn();  // TypeId(11)
 
-type "functype//core:rt/coverage_probe$spec5$dae[id]" = fn();  // TypeId(12)
+type "functype//core:rt/coverage_probe$spec6$dae[id]" = fn();  // TypeId(12)
 
-type "functype//core:rt/coverage_probe$spec6$dae[id]" = fn();  // TypeId(13)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(14)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(13)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/$core:coverage/coverage-host@0.1.0#hit from "wasi/$core:coverage/coverage-host@0.1.0#hit";
@@ -50,6 +48,9 @@ fn "coverage_never_operand.wado/$cm_binding__core:coverage/coverage-host@0.1.0#c
 }
 
 fn "coverage_never_operand.wado/$cm_export__$test_0_no_operand_diverges"() {
+    let len: i32;
+    let id: i32;
+    let runs: i64;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:coverage_never_operand.wado::$modules_initialized);
         cold_path;
@@ -60,14 +61,6 @@ fn "coverage_never_operand.wado/$cm_export__$test_0_no_operand_diverges"() {
     "core:rt/coverage_probe$spec1$dae[id]"();
     "core:rt/coverage_probe$spec5$dae[id]"();
     "core:rt/coverage_probe$spec6$dae[id]"();
-    "core:rt/coverage_report"();
-    "wasi/task-return"(0);
-}
-
-fn "core:rt/coverage_report"() {
-    let len: i32;
-    let id: i32;
-    let runs: i64;
     len = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
     id = 0;
     b0: block {
@@ -80,6 +73,7 @@ fn "core:rt/coverage_report"() {
             continue l1;
         };
     };
+    "wasi/task-return"(0);
 }
 
 fn "core:rt/$initialize_module"() {

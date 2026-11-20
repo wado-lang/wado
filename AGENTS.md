@@ -179,6 +179,11 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `package-cm-catalog/` — a catalog of Wasm Component Model modules for demo and testing purposes.
 - `vendor/` — reference specs and runtimes, as git submodules; the `vendor-submodules` skill locates and syncs them.
 
+Outside this repository,
+[`wado-lang/wado-lang.github.io`](https://github.com/wado-lang/wado-lang.github.io)
+is the source of the wado-lang.org site, which also hosts examples that run
+Wado in a browser.
+
 ## Wasm and WASI
 
 Wado targets Wasm 3.0 (GC and JSPI included), the Component Model, and WASI

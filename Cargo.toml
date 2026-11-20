@@ -166,6 +166,19 @@ opt-level = 2
 [profile.dev.package.wado-dev-tools]
 opt-level = 1
 
+# wasmtime's typed lift and lower are generic over the store's data, so they
+# compile into the crates that name it. Unoptimized, they copy a list a byte per
+# iterator call: a file read into a guest took longer than the guest's work on
+# what it read.
+[profile.dev.package.wado-host]
+opt-level = 2
+
+[profile.dev.package.wado-cli]
+opt-level = 2
+
+[profile.dev.package.wado-run-pjrt]
+opt-level = 2
+
 # `release` is the profile for distributed `wado` binaries. `thin` LTO
 # captures most of fat LTO's size/perf benefit at a fraction of the
 # build cost. `codegen-units = 1` lets thin LTO see the whole crate

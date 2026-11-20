@@ -1,0 +1,14 @@
+// `#[allow(…)]` on a trait's associated type waives what its own parameters
+// raise, as it does on an impl's.
+
+struct T {}
+
+trait Store {
+    #[allow(shadowed_name)]
+    type Buf<T>;
+}
+
+export fn run() {}
+
+__DATA__
+{"warnings_not_contains": ["shadows"]}

@@ -1,13 +1,12 @@
 //! The two forms a mixture of experts takes compute one result, and so do its
 //! experts held in pools of every slot or fetched into fewer.
 
-use { A, B, C, experts_case, mixing, stacked_runs } from "./graph_cases.wado";
+use { A, B, C, STACKED_RUNS, STACKINGS, experts_case, mixing, stacked_runs } from "./graph_cases.wado";
 use { Untyped, typed } from "./recorded.wado";
 use { LoadError } from "./checkpoint.wado";
-use { ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
+use { ExpertBytes, ExpertLayout, HeldExperts, StoredExperts, Unread } from "./held_experts.wado";
 use { ElementKind } from "./tensor.wado";
-use { HashMap } from "core:collections";
-use { Cpu, Tensor } from "./tensor.wado";
+use { Cpu, Holds, Tensor } from "./tensor.wado";
 
 test "a token whose other logits are -inf runs its one expert once, in either form" {
     let cpu = &mut Cpu {};
@@ -18,19 +17,29 @@ test "a token whose other logits are -inf runs its one expert once, in either fo
     let mut rows = c.x;
     rows.data = c.x.data[0..<32].to_list();
     rows.data.extend(&rows.data);
-    let by_experts = mixing(cpu, &rows, &Tensor::<f32, [A, C]> {
+    let up = [
+        cpu.upload(&c.up.0),
+        cpu.upload(&c.up.1),
+        cpu.upload(&c.up.2),
+    ];
+    let down = [
+        cpu.upload(&c.down.0),
+        cpu.upload(&c.down.1),
+        cpu.upload(&c.down.2),
+    ];
+    let by_experts = mixing(cpu, &cpu.upload(&rows), &cpu.upload(&Tensor::<f32, [A, C]> {
         data: twice,
         extents: [2, 4],
-    }, &c.up, &c.down);
+    }), &up, &down);
     let mut row = rows;
     row.data = rows.data[0..<32].to_list();
     row.extents = [1, 32];
     // One token's two picks are fewer than the four experts, so it runs each pick.
-    let by_picks = mixing(cpu, &row, &Tensor::<f32, [A, C]> {
+    let by_picks = mixing(cpu, &cpu.upload(&row), &cpu.upload(&Tensor::<f32, [A, C]> {
         data: alone,
         extents: [1, 4],
-    }, &c.up, &c.down);
-    assert by_picks.data == by_experts.data[0..<32].to_list();
+    }), &up, &down);
+    assert cpu.download(&by_picks).data == cpu.download(&by_experts).data[0..<32].to_list();
 }
 
 /// The slots of each pool `HeldExperts::within` makes of a layout of 3 layers
@@ -41,8 +50,7 @@ fn slots_within(budget: i64) -> Result<List<i32>, LoadError> {
         layers: (0..<layers)
             .map(|_| [
                 StoredExperts {
-                    file: "w",
-                    start: 0,
+                    bytes: ExpertBytes::Held(List::<u8>::filled(8, 0) as ByteList),
                     kind: ElementKind::U8,
                     extents: [2],
                 },
@@ -55,10 +63,9 @@ fn slots_within(budget: i64) -> Result<List<i32>, LoadError> {
         layout(3, 0),
         layout(2, 1),
     ], budget)?;
-    let mut files = HashMap::<String, ByteList>::new();
-    files["w"] = List::<u8>::filled(8, 0) as ByteList;
-    let pools = held.pools(&mut Cpu {}, &files);
-    return Result::Ok(pools.into_iter().map(|p| typed::<Cpu, u8, Untyped>(&Cpu {}, &p).extents[0]).collect());
+    let mut cpu = Cpu {};
+    let pools = held.pools(&mut cpu, &Unread {});
+    return Result::Ok(pools.into_iter().map(|p| cpu.extents_of(&typed::<Cpu, u8, Untyped>(&cpu, &p))[0]).collect());
 }
 
 test "a budget holds one layer's experts of each pool, then shares the rest by each pool's bytes" {
@@ -69,20 +76,19 @@ test "a budget holds one layer's experts of each pool, then shares the rest by e
     assert slots_within(i64::MAX).unwrap() == [12, 8] as List<i32>;
 }
 
-test "experts fetched into pools of fewer slots compute what pools of every slot do" {
-    // Each layer of 3 tokens runs every expert it picks, which 5 slots hold
-    // only by giving way to the other layer's; 1 token runs its picks. A
-    // budget of 8 experts holds both layers.
-    let runs: List<i32> = [3, 1, 3];
-    let resident = stacked_runs(&mut Cpu {}, 8, runs);
-    let fetched = stacked_runs(&mut Cpu {}, 5, runs);
-    for let [r, f] of resident.into_iter().zip(fetched.into_iter()) {
-        let [want, got] = [
-            typed::<Cpu, f32, [A, B]>(&Cpu {}, &r),
-            typed::<Cpu, f32, [A, B]>(&Cpu {}, &f),
-        ];
-        for let [a, b] of want.data.into_iter().zip(got.data.into_iter()) {
-            assert f32::abs(a - b) <= 1e-5 * f32::max(1.0, f32::abs(a));
+test "experts fetched into pools of fewer slots compute what pools of every slot do, in a loop or a branch too" {
+    let mut cpu = Cpu {};
+    for let stacking of STACKINGS {
+        let resident = stacked_runs(&mut cpu, 8, stacking, STACKED_RUNS);
+        let fetched = stacked_runs(&mut cpu, 5, stacking, STACKED_RUNS);
+        for let [r, f] of resident.into_iter().zip(fetched.into_iter()) {
+            let [want, got] = [
+                cpu.download(&typed::<Cpu, f32, [A, B]>(&cpu, &r)),
+                cpu.download(&typed::<Cpu, f32, [A, B]>(&cpu, &f)),
+            ];
+            for let [a, b] of want.data.into_iter().zip(got.data.into_iter()) {
+                assert f32::abs(a - b) <= 1e-5 * f32::max(1.0, f32::abs(a));
+            }
         }
     }
 }

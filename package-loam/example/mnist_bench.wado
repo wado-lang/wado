@@ -25,18 +25,17 @@ fn image() -> Tensor<f32, [mnist::Input30, mnist::Input31, mnist::Input32, mnist
     };
 }
 
-fn embedded() -> mnist::Model<Cpu> {
-    return mnist::Model::new(mnist::Params::embedded(&mut Cpu {}));
-}
-
 test "smoke" {
-    let logits = mnist::compute(&mut Cpu {}, &image(), &mut embedded());
+    let mut cpu = Cpu {};
+    let mut model = mnist::Model::new(mnist::Params::embedded(&mut cpu));
+    let logits = mnist::compute(&mut cpu, &image(), &mut model);
     assert logits.extents == [1, 10] as List<i32>;
 }
 
 export fn run() with (Stdout, MonotonicClock) {
-    let mut model = embedded();
+    let mut cpu = Cpu {};
+    let mut model = mnist::Model::new(mnist::Params::embedded(&mut cpu));
     let x = image();
     let mut b = Benchmark { name: "MNIST-12 compute on the CPU", work_per_iter: Option::Some(1.0), unit: "images" };
-    b.run("", || mnist::compute(&mut Cpu {}, &x, &mut model).data[0]);
+    b.run("", || mnist::compute(&mut cpu, &x, &mut model).data[0]);
 }

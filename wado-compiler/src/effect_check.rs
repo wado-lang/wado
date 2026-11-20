@@ -670,12 +670,18 @@ fn run_effect_checks(
                 }
                 // An operation's default body is ordinary code, so what it
                 // performs is checked like any other function's. It runs where
-                // the operation was dispatched, which held the interface.
-                Item::Interface(interface_decl) => {
-                    let def = index.resolutions.defs().def_at(interface_decl.id);
+                // the operation was dispatched, which held the interface or
+                // resource.
+                Item::Interface(ast::InterfaceDecl {
+                    id, attrs, methods, ..
+                })
+                | Item::Resource(ast::ResourceDecl {
+                    id, attrs, methods, ..
+                }) => {
+                    let def = index.resolutions.defs().def_at(*id);
                     let own = index.interfaces.get(&def).map(|(effect, _)| effect);
-                    let enclosing = allows(&interface_decl.attrs);
-                    for method in &interface_decl.methods {
+                    let enclosing = allows(attrs);
+                    for method in methods {
                         let held = Held::Only(own.map_or(&[][..], std::slice::from_ref));
                         check_function_effects_sem(
                             sem, src, method, index, held, enclosing, out, solved, log,

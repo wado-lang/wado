@@ -10,21 +10,24 @@ initial design, and [`TODO.md`](./TODO.md) what the library leaves out.
 The synopsis test in `src/lib.wado` holds this sample:
 
 ```wado
-use { element, flush, scope, signal } from "wado-lang:rill";
-use { Event, SurfaceDom } from "wado-lang:web";
+use { build, element, flush, scope, signal } from "wado-lang:rill";
+use { Element, Event, SurfaceDom } from "wado-lang:web";
 
 let mut dom = SurfaceDom::new();
 with &mut dom do {
     let count = signal(0);
-    let button = element("button");
+    let mut button: Option<Element> = null;
     let mut dispose = scope(|| {
-        button.bind_text(|| `clicked ${count.get()} times`).on("click", |_event: Event| count.set(count.get() + 1));
+        let view = element("button")
+            .bind_text(|| `clicked ${count.get()} times`)
+            .on("click", |_event: Event| count.set(count.get() + 1));
+        button = Option::Some(build(view));
     });
-    assert button.node.text_content() == Option::Some("clicked 0 times");
+    assert button.unwrap().text_content() == Option::Some("clicked 0 times");
 
     count.set(2);
     flush();
-    assert button.node.text_content() == Option::Some("clicked 2 times");
+    assert button.unwrap().text_content() == Option::Some("clicked 2 times");
 
     dispose();
 };
@@ -33,13 +36,17 @@ with &mut dom do {
 ## Layout
 
 - `src/signals.wado` — `signal`, `memo`, `observe`, `scope` and `flush`.
-- `src/view.wado` — `View`, which builds an element, new from `element` or
-  adopted with `View::of`, and binds it: `text`, `attribute`, `child` and
-  `children` set it once, `bind_text`, `bind_attribute`, the keyed list `each`
-  and the conditional `show` and `switch` keep it current, and `on` listens on
-  it.
-- `example/todo/` — a to-do list. `wado run` there prints the page after a
-  short session, and `wado test` runs the session against `SurfaceDom`.
+- `src/view.wado` — `View`, an element as it is to be built, new from `element`
+  or adopted with `View::of`. `text`, `attribute`, `child` and `children` set
+  it once, `bind_text`, `bind_attribute`, the keyed list `each` and the
+  conditional `show` and `switch` keep it current, `on` listens on it, and
+  `with_node` hands it over. `build` builds a view; `hydrate` builds one on the
+  served HTML, as [`static-generation.md`](./static-generation.md) describes.
+- `example/todo/` — a to-do list, published as a static site. `site.wado`
+  renders its initial page and bundles `src/main.wado`, the browser program
+  that hydrates it; `mise run rill-todo-site` builds the site into
+  `build/rill-todo`, and `mise run rill-todo-demo` serves it as well.
+  `wado test` runs a session against `SurfaceDom`, built and hydrated.
 
 ## How it works
 
@@ -64,7 +71,7 @@ with &mut dom do {
   longer reads wakes nothing. A memo is disposed of with the computation that
   made it.
 - A binding writes the one place it owns, and takes it out when disposed of:
-  `bind_text` a text node it appends, and `each` its rows. A reorder leaves the
+  `bind_text` a text node it adds, and `each` its rows. A reorder leaves the
   longest run of rows already in order where they are, and moves the rest.
 - `on` flushes when the listener returns, so the page is consistent again
   before the browser gets control back. Any other code that writes, a listener

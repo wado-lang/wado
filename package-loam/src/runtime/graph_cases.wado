@@ -19,9 +19,9 @@ use {
 } from "./hlo.wado";
 use { Any, Programs, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
 use { Experts, mixture_of_experts } from "./experts.wado";
-use { ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
+use { ExpertBytes, ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
 use { HashMap } from "core:collections";
-use { HostWeight, stored_width } from "./weight.wado";
+use { HostWeight, stored_bytes } from "./weight.wado";
 use { Attention, ElementKind, Float, Tensor, element_count } from "./tensor.wado";
 use { noise } from "../../example/webgpu/compare.wado";
 
@@ -92,12 +92,12 @@ pub fn compiled_from<affine G: Backend>(
 }
 
 /// Every operation but the windowed ones and the composite, over `x` of
-/// extents [2, 3] and `ids` of extents [2].
+/// extents [2, 3] and `ids` of extents [2], an integer sum among them.
 pub fn mixed<affine G: Graph>(
     g: &mut G,
     x: &G::Tensor<f32, [A, B]>,
     ids: &G::Tensor<i64, [C]>,
-) -> [G::Tensor<f32, [A, A]>, G::Tensor<f32, [A, B]>, G::Tensor<f32, [C]>, G::Tensor<bool, [A, B]>, G::Tensor<i64, [C]>] with _ {
+) -> [G::Tensor<f32, [A, A]>, G::Tensor<f32, [A, B]>, G::Tensor<f32, [C]>, G::Tensor<bool, [A, B]>, G::Tensor<i64, [C]>, G::Tensor<i32, []>] with _ {
     let turned = g.unary(Unary::Tanh, x);
     let scaled = g.binary(Binary::Multiply, x, &turned);
     let counted = g.iota::<f32, [A, B]>([2, 3], 1);
@@ -145,7 +145,9 @@ pub fn mixed<affine G: Graph>(
     );
     let widened: G::Tensor<f32, [C]> = g.convert(ids);
     let twice = g.binary(Binary::Add, ids, ids);
-    return [product, placed, widened, above, twice];
+    let total: G::Tensor<i64, []> = g.reduce(&twice, Binary::Add, 0.0, [0]);
+    let narrowed: G::Tensor<i32, []> = g.convert(&total);
+    return [product, placed, widened, above, twice, narrowed];
 }
 
 /// Every `Unary` and `Binary`, and every `Comparison` of each element type, one
@@ -598,8 +600,7 @@ fn stacked_experts() -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
         files[file] = stored;
         for let layer of 0..<2 {
             layers[layer].push(StoredExperts {
-                file,
-                start: layer * size,
+                bytes: ExpertBytes::File([file, layer * size]),
                 kind: w.kind,
                 extents: w.extents[1..<w.extents.len()].to_list(),
             });
@@ -608,33 +609,80 @@ fn stacked_experts() -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
     return [files, layers];
 }
 
+/// Where `stacked_pass` runs its layers, and so its host steps: in the pass's
+/// own region, in a loop run `count` times, or in a branch taken where `count`
+/// is positive.
+pub enum Stacking {
+    Straight,
+    Looped,
+    Branched,
+}
+
 /// The layers of `stacked_experts` in turn, each `mixing` by its own router,
-/// over the input, the routers, then the pools.
-fn stacked_pass(r: &mut Recorder, extents: &List<List<i32>>) -> Recorded {
+/// where `stacking` puts them, over the input, the routers, a count, then the
+/// pools.
+fn stacked_pass(r: &mut Recorder, extents: &List<List<i32>>, stacking: Stacking) -> Recorded {
     let x = r.parameter::<f32, [A, B]>(extents[0]);
     let routers = [
         r.parameter::<f32, [A, C]>(extents[1]),
         r.parameter::<f32, [A, C]>(extents[2]),
     ];
+    let count = r.parameter::<i64, []>(extents[3]);
     let up = [
-        r.parameter::<u8, [C, Rows, Blob]>(extents[3]),
-        r.parameter::<f32, [C, Rows, Blocks]>(extents[4]),
-        r.parameter::<f32, [C, Rows]>(extents[5]),
+        r.parameter::<u8, [C, Rows, Blob]>(extents[4]),
+        r.parameter::<f32, [C, Rows, Blocks]>(extents[5]),
+        r.parameter::<f32, [C, Rows]>(extents[6]),
     ];
     let down = [
-        r.parameter::<u8, [C, B, Blob]>(extents[6]),
-        r.parameter::<f32, [C, B, Blocks]>(extents[7]),
-        r.parameter::<f32, [C, B]>(extents[8]),
+        r.parameter::<u8, [C, B, Blob]>(extents[7]),
+        r.parameter::<f32, [C, B, Blocks]>(extents[8]),
+        r.parameter::<f32, [C, B]>(extents[9]),
     ];
-    let first = mixing(r, &x, &routers.0, &up, &down, 0, 2);
-    return r.finished([mixing(r, &first, &routers.1, &up, &down, 1, 2).id]);
+    let layers = |input: &Value<f32, [A, B]>| {
+        let first = mixing(r, input, &routers.0, &up, &down, 0, 2);
+        return mixing(r, &first, &routers.1, &up, &down, 1, 2);
+    };
+    let out = match stacking {
+        Straight => layers(&x),
+        Looped => {
+            let last = r.repeated(&count, &[Any::F32(r.relabeled::<f32, [A, B], Untyped>(&x))], |_, state| {
+                let y = layers(&typed::<Recorder, f32, [A, B]>(r, &state[0]));
+                return [Any::F32(r.relabeled::<f32, [A, B], Untyped>(&y))];
+            });
+            typed::<Recorder, f32, [A, B]>(r, &last[0]);
+        },
+        Branched => {
+            let positive = r.compare(Comparison::Gt, &count, &scalar(r, 0 as i64));
+            r.conditional(&positive, || r.yielded(&layers(&x)), || r.yielded(&x));
+        },
+    };
+    return r.finished([out.id]);
 }
 
-/// `stacked_pass` over pools within a budget of `slots` experts, run once for
-/// each count of tokens in `runs`; each run's result, of `f32` over `[A, B]`.
-pub fn stacked_runs<affine G: Backend>(g: &mut G, slots: i32, runs: List<i32>) -> List<Any<G>> with _ {
+/// Each place `stacked_pass` may run its layers.
+pub global STACKINGS: List<Stacking> = [Stacking::Straight, Stacking::Looped, Stacking::Branched];
+
+/// The `[tokens, count]` each stacking runs over. Each layer of 3 tokens runs
+/// every expert it picks, which 5 slots hold only by giving way to the other
+/// layer's; 1 token runs its picks. A budget of 8 experts holds both layers.
+/// A count of 0 runs no loop and takes no branch.
+pub global STACKED_RUNS: List<[i32, i64]> = [
+    [3, 2],
+    [1, 0],
+    [3, 1],
+];
+
+/// `stacked_pass` over pools within a budget of `slots` experts, its layers
+/// where `stacking` puts them, run once for each `[tokens, count]` of `runs`;
+/// each run's result, of `f32` over `[A, B]`.
+pub fn stacked_runs<affine G: Backend>(
+    g: &mut G,
+    slots: i32,
+    stacking: Stacking,
+    runs: List<[i32, i64]>,
+) -> List<Any<G>> with _ {
     let [files, layers] = stacked_experts();
-    let expert_bytes = layers[0].into_iter().map(|w| element_count(&w.extents) * stored_width(w.kind)).sum().unwrap();
+    let expert_bytes = layers[0].into_iter().map(|w| stored_bytes(w.kind, &w.extents)).sum().unwrap();
     let mut store = HeldExperts::within(
         [
             ExpertLayout {
@@ -649,15 +697,16 @@ pub fn stacked_runs<affine G: Backend>(g: &mut G, slots: i32, runs: List<i32>) -
     let pools = store.pools(g, &files);
     let mut programs = Programs::<G>::new();
     let mut results: List<Any<G>> = [];
-    for let tokens of runs {
+    for let [tokens, count] of runs {
         let c = experts_case(tokens);
         let second = noisy::<[A, C]>(c.router.extents, 17);
         let got = programs.run(g, [
             [tokens],
-        ], stacked_pass, || [
+        ], |r, extents| stacked_pass(r, extents, stacking), || [
             Any::F32(g.relabeled::<f32, [A, B], Untyped>(&g.upload(&c.x))),
             Any::F32(g.relabeled::<f32, [A, C], Untyped>(&g.upload(&c.router))),
             Any::F32(g.relabeled::<f32, [A, C], Untyped>(&g.upload(&second))),
+            Any::I64(g.relabeled::<i64, [], Untyped>(&scalar(g, count))),
         ], || pools, |step, read, weights| store.fetched(g, &files, step, read, weights));
         results.push(got[0]);
     }

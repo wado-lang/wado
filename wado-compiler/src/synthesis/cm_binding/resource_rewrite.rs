@@ -29,10 +29,10 @@ use crate::type_table::TypeTable;
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmStreamPayload};
 use crate::synthesis::common::{
-    affine_handle, alloc_named_local, assign, binary, block, break_stmt, cast, cm_canonical_call,
-    entry_call, expr_stmt, i32_const, i64_const, if_stmt, internal_call, is_affine_resource,
-    let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt, option_none,
-    option_some, return_stmt, struct_literal, synth_span,
+    affine_handle, alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast,
+    cm_canonical_call, entry_call, expr_stmt, i32_const, i64_const, if_stmt, internal_call,
+    is_affine_resource, let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt,
+    option_none, option_some, return_stmt, struct_literal, synth_span,
 };
 
 use super::synthesize_lift;
@@ -1766,7 +1766,9 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
 
 impl CmMethodRewriter<'_> {
     /// `r.drop()` on a resource: the canonical `resource.drop` of its
-    /// declaration, handed the box itself, which the drop zeroes.
+    /// declaration, handed the box itself, which the drop zeroes. A resource
+    /// no host implements has no handle to release: its drop, reached where
+    /// no handler answers it, ends with the guest value it holds.
     fn rewrite_resource_drop(&self, expr: &mut TirExpr) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             unreachable!("a `cm_name` is read off a call");
@@ -1777,6 +1779,10 @@ impl CmMethodRewriter<'_> {
             .next()
             .expect("a drop takes its resource")
             .expr;
+        if self.tt.is_hostless_resource_type(receiver.type_id) {
+            *expr = builtin_call("forget", vec![receiver], TypeTable::UNIT);
+            return;
+        }
         *expr = cm_canonical_call(
             CanonicalIntrinsic::ResourceDrop(resource_decl(
                 receiver.type_id,
@@ -1790,15 +1796,24 @@ impl CmMethodRewriter<'_> {
 
     /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
     /// builtin/internal call, casting each handle it passes to the scalar the
-    /// canonical import takes.
+    /// canonical import takes. A drop is handed the box itself, as
+    /// `resource.drop` is, so that a backed one never reaches the host.
     fn rewrite_call(&self, expr: &mut TirExpr, target: BindingTarget) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             return;
         };
+        let ends_handle =
+            matches!(&target, BindingTarget::Canonical(intrinsic) if intrinsic.ends_handle());
         let taken_args: Vec<TirExpr> = std::mem::take(args)
             .into_vec()
             .into_iter()
-            .map(|a| affine_handle(a.expr, self.tt))
+            .map(|a| {
+                if ends_handle {
+                    a.expr
+                } else {
+                    affine_handle(a.expr, self.tt)
+                }
+            })
             .collect();
 
         *expr = match target {
