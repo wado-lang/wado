@@ -1603,11 +1603,11 @@ async fn dependency_seed<H: CompilerHost>(
 /// `export fn`s are lowered into the imported interface, and the result is wired
 /// `provider.export -> dependency.import` at codegen; a supplied provider also
 /// discharges the reconstructed effect at effect-check.
-async fn resolve_inline_providers<H: CompilerHost>(
+async fn resolve_inline_providers(
     load_result: &mut loader::LoadResult,
-    host: &H,
+    host: &ErasedHost<'_>,
     parent: &CompilerOptions,
-    logger: &Logger<'_, H>,
+    logger: &Logger<'_, ErasedHost<'_>>,
 ) -> Result<Vec<ProviderComponent>, Bail> {
     let entry_dir = entry_dir_of(Some(&load_result.entry_module_source));
     let mut providers = Vec::new();
@@ -1652,19 +1652,14 @@ async fn resolve_inline_providers<H: CompilerHost>(
             params: parent.params.clone(),
             ..Default::default()
         };
-        let result = Box::pin(compile_with_options(
-            &provider_src,
-            host,
-            Some(&resolved),
-            opts,
-        ))
-        .await
-        .map_err(|e| {
-            bail(
-                Code::EffectHandlerInvalid,
-                format!("provider `{prov_path}` failed to compile: {e}"),
-            )
-        })?;
+        let result = compile_erased(&provider_src, host, Some(&resolved), opts)
+            .await
+            .map_err(|e| {
+                bail(
+                    Code::EffectHandlerInvalid,
+                    format!("provider `{prov_path}` failed to compile: {e}"),
+                )
+            })?;
         providers.push(ProviderComponent {
             source: prov_path,
             import_fq: fq,
