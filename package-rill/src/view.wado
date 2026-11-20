@@ -422,8 +422,9 @@ fn each<T: Eq>(
         }
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.
+        let slots = if in_place { kept.len() } else { shown };
         let mut before: List<Option<Element>> = [];
-        for let _ of 0..<if in_place { kept.len() } else { shown } {
+        for let _ of 0..<slots {
             before.push(null);
         }
         for let i of 0..<kept.len() {

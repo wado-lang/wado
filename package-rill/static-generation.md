@@ -18,7 +18,7 @@ The first target is GitHub Pages, which serves files and nothing else.
 
 One `mount` runs on two hosts. At build time it runs on `SurfaceDom`, and
 `to_html()` gives the page. In the browser it runs on the real DOM in claim
-mode: each node it would create, it takes from the served HTML instead. The
+mode: each element it would create, it takes from the served HTML instead. The
 user sees the page before the Wasm loads, and nothing is rebuilt when it does.
 
 Hydration is correct only when the browser starts from the state the build
