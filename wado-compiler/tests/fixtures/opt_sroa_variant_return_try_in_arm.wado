@@ -33,6 +33,7 @@ fn check_whole(v: f64) -> Result<f64, NumError> {
 
 // Returns `Result<i64, NumError>`. The `?` inside the `Ok` arm propagates a
 // `Result<f64, NumError>` error into this `Result<i64, NumError>` return.
+#[inline("never")]
 fn to_i64(text: String) -> Result<i64, NumError> {
     return match f64::from_str(&text) {
         Ok(v) => {

@@ -8,8 +8,9 @@
 //
 // `black_box` keeps the arguments off the constant path: with constant ones
 // the loop runs at compile time, the call folds to its result, and the
-// function this fixture inspects is gone.
+// function this fixture inspects is gone. Spliced, it would be gone as well.
 
+#[inline("never")]
 fn count_up_to(limit: i32) -> i32 {
     let mut x = 0;
     while x <= limit {

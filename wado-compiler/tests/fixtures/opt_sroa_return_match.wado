@@ -3,7 +3,7 @@
 // Verifies that the WIR-level SROA pass correctly decomposes struct-returning
 // functions that use `return match { ... }` into multi-value returns.
 // This covers both small match (if-else chain) and large match (BrTable) patterns.
-// Each callee has two call sites, so neither is spliced into its only one.
+// The callees are never spliced, so their multi-value returns stay visible.
 
 struct Pair {
     a: i32,
@@ -11,6 +11,7 @@ struct Pair {
 }
 
 // Pattern 1: Small match (if-else chain) — return match with 3 arms
+#[inline("never")]
 fn small_match(x: i32) -> Pair {
     return match x {
         0 => Pair { a: 10, b: 20 },
@@ -40,6 +41,7 @@ struct HiLo {
     lo: u64,
 }
 
+#[inline("never")]
 fn large_match(i: i32) -> HiLo {
     return match i {
         0 => HiLo { hi: 100, lo: 200 },
