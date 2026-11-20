@@ -145,6 +145,31 @@ test "a tree is built by appending" {
     };
 }
 
+test "replace_child puts a node where the child stood, and takes the child out" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let list = doc.create_element("ul");
+        let a = doc.create_element("li");
+        let b = doc.create_element("li");
+        let c = doc.create_element("li");
+        list.append_child(a);
+        list.append_child(b);
+        assert list.replace_child(c, a) == a as Node;
+        assert list.first_child() == Option::Some(c as Node);
+        assert c.next_sibling() == Option::Some(b as Node);
+        assert a.parent_node() == null;
+
+        // The node may be the child's next sibling already.
+        list.replace_child(b, c);
+        assert list.first_child() == Option::Some(b as Node);
+        assert list.last_child() == Option::Some(b as Node);
+
+        assert list.replace_child(b, b) == b as Node;
+        assert list.first_child() == Option::Some(b as Node);
+    };
+}
+
 test "insert_before places a node ahead of a child, or last for null" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

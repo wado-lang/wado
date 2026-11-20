@@ -839,6 +839,20 @@ impl Node for SurfaceDom {
         resume child;
     }
 
+    fn replace_child(&mut self, this: &Node, node: Node, child: Node) -> Node {
+        self.own(*this);
+        self.own(node);
+        assert self.own(child).parent == Option::Some(*this), "NotFoundError: the node to replace is a child";
+        assert_insertable(*this, node, Option::Some(child));
+        let mut next = surface_node(child).next_sibling;
+        if next == Option::Some(node) {
+            next = surface_node(node).next_sibling;
+        }
+        detach(child);
+        insert(*this, node, next);
+        resume child;
+    }
+
     ..trap
 }
 

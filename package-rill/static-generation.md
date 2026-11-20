@@ -50,6 +50,15 @@ traps, naming the node. A production build discards the subtree that differs
 and builds it anew. A mismatch is a bug in the app or the build, so
 development reports it, and production keeps the page working.
 
+A build checks contracts or not, and that is what tells the two apart: a
+mismatch is a contract that `hydrate` vouches for. `wado test` and `wado run`
+check contracts, and `wado compile` does not unless told to.
+
+- A served element of another tag is replaced by one built anew.
+- An element the page was served without is built where it belongs.
+- A served element the view does not build is taken out.
+- A static attribute served at another value takes the view's.
+
 ### The site build is a Wado program
 
 A Wado program run with `wado run` builds the site: it renders the page on
@@ -86,7 +95,9 @@ Hydration is tested on `SurfaceDom` alone. Build the page, join and drop its
 text as the HTML parser would, then hydrate it with signals of its own. Claim
 mode must create no element and keep every element's identity, and a later
 write to a signal must reach the claimed node. `SurfaceDom` parses no HTML, so
-a test builds the served tree by hand.
+a test builds the served tree by hand. A test always checks contracts, so one
+of what a production build rebuilds hands each mismatch to a report of its own
+instead.
 
 ## GitHub Pages
 
@@ -112,7 +123,7 @@ HTML; only the bindings are missing.
 - [x] Make `View` describe the tree, and build it in one pass in document
   order.
 - [x] Add claim mode to that pass.
-- [ ] Apply the mismatch policy. A mismatch traps in every build so far.
+- [x] Apply the mismatch policy.
 - [ ] Render the to-do example's initial page at build time, and hydrate it
   in the browser, compiled as
   [`example/web-browser/build.sh`](../example/web-browser/build.sh) does.

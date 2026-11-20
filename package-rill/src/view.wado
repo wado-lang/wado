@@ -27,7 +27,7 @@ pub fn element(tag: String) -> View {
 /// Builds `view` anew, inside the computation that owns its bindings.
 pub fn build(view: View) -> Element with (Track, Dom) {
     let node = make(view.origin);
-    run_steps(node, false, view.steps);
+    run_steps(node, null, view.steps);
     return node;
 }
 
@@ -41,25 +41,41 @@ fn make(origin: Origin) -> Element with Dom {
 /// Builds `view` on the served element it adopts, taking each element it would
 /// make from what the element already holds. Text is made anew, since the HTML
 /// a page is served as merges adjacent text and drops empty text.
+///
+/// A served page that differs from the view is a bug in the app or the build.
+/// A build that checks contracts traps on it; any other builds anew what
+/// differs, so the page keeps working.
 pub fn hydrate(view: View) -> Element with (Track, Dom) {
+    return hydrate_reporting(view, |what: String| unchecked mismatch(what));
+}
+
+fn mismatch(what: String)
+    contract false, `hydrate: ${what}`
+{
+}
+
+/// Hydrates `view`, handing each mismatch to `report` and building anew what
+/// differs.
+internal fn hydrate_reporting(view: View, report: fn mut(String)) -> Element with (Track, Dom) {
     let Adopted(node) = view.origin else {
         panic("hydrate builds on a served element, which `View::of` names");
     };
-    run_steps(node, true, view.steps);
+    run_steps(node, Option::Some(report), view.steps);
     return node;
 }
 
 /// The element being built, and how far the build has come through it.
 ///
-/// While claiming, `served` and `served_attributes` hold the children and the
-/// attributes the element was served with, taken before any step runs: a step
-/// may move a child or write an attribute. The build has passed the first
-/// `passed` children. `attributes` holds the value each static attribute is
-/// left at, `None` for one a binding writes, checked against
-/// `served_attributes` once every step has run.
+/// A build claims what was served while it has a `report` for what differs.
+/// Then `served` and `served_attributes` hold the children and the attributes
+/// the element was served with, taken before any step runs: a step may move a
+/// child or write an attribute. The build has passed the first `passed`
+/// children. `attributes` holds the value each static attribute is left at,
+/// `None` for one a binding writes, checked against `served_attributes` once
+/// every step has run.
 struct Build {
     node: Element,
-    claiming: bool,
+    report: Option<fn mut(String)>,
     served: List<Node>,
     passed: i32,
     attributes: TreeMap<String, Option<String>>,
@@ -67,10 +83,10 @@ struct Build {
 }
 
 impl Build {
-    fn new(node: Element, claiming: bool) -> Build with Dom {
+    fn new(node: Element, report: Option<fn mut(String)>) -> Build with Dom {
         let mut served: List<Node> = [];
         let mut served_attributes = TreeMap::<String, String>::new();
-        if claiming {
+        if report matches { Some(_) } {
             let mut child = node.first_child();
             while let Some(current) = child {
                 served.push(current);
@@ -80,7 +96,16 @@ impl Build {
                 served_attributes[name] = node.get_attribute(name).unwrap();
             }
         }
-        return Build { node, claiming, served, passed: 0, attributes: TreeMap::new(), served_attributes };
+        return Build { node, report, served, passed: 0, attributes: TreeMap::new(), served_attributes };
+    }
+
+    fn claiming(&self) -> bool {
+        return self.report matches { Some(_) };
+    }
+
+    fn report(&mut self, what: String) with Dom {
+        let mut report = self.report.unwrap();
+        report(`<${self.node.local_name()}> ${what}`);
     }
 
     /// The first served child not yet passed, passing those a callback took
@@ -109,45 +134,50 @@ impl Build {
         self.node.insert_before(node, self.ahead());
     }
 
-    /// Takes the next served element, and out the served text before it.
-    fn claim(&mut self) -> Element with Dom {
-        loop {
-            let Some(served) = self.next_served() else {
-                panic(`hydrate: <${self.node.local_name()}> was served with fewer elements than its view builds`);
-            };
+    /// Takes the next served element, if any is left, and out the served text
+    /// before it.
+    fn claim(&mut self) -> Option<Element> with Dom {
+        while let Some(served) = self.next_served() {
             if let claimed: Element = served {
-                return claimed;
+                return Option::Some(claimed);
             }
             self.node.remove_child(served);
         }
+        return null;
     }
 
-    /// Takes out the served text after the last element claimed.
+    /// Takes out what was served after the last element claimed.
     fn finish(&mut self) with Dom {
         while let Some(served) = self.next_served() {
-            if served matches { _: Element } {
-                panic(`hydrate: <${self.node.local_name()}> was served with more elements than its view builds`);
+            if let extra: Element = served {
+                self.report(`was served <${extra.local_name()}>, which its view does not build`);
             }
             self.node.remove_child(served);
         }
     }
 
-    fn check_attributes(&self) with Dom {
+    /// Reports each static attribute served at another value. The step that
+    /// set it has written the view's value already.
+    fn check_attributes(&mut self) with Dom {
         for let [name, value] of self.attributes.entries() {
-            if let Some(expected) = value {
-                assert self.served_attributes.get(*name) == Option::Some(*expected), "hydrate: a served attribute must hold what its view leaves";
+            if let Some(expected) = value && self.served_attributes.get(*name) != Option::Some(*expected) {
+                self.report(`was served another ${name} than "${expected}"`);
             }
         }
     }
 }
 
-fn run_steps(node: Element, claiming: bool, steps: List<fn mut(&mut Build) with (Track, Dom)>) with (Track, Dom) {
-    let mut at = Build::new(node, claiming);
+fn run_steps(
+    node: Element,
+    report: Option<fn mut(String)>,
+    steps: List<fn mut(&mut Build) with (Track, Dom)>,
+) with (Track, Dom) {
+    let mut at = Build::new(node, report);
     for let step of steps {
         let mut step = step;
         step(&mut at);
     }
-    if claiming {
+    if at.claiming() {
         at.finish();
         at.check_attributes();
     }
@@ -159,26 +189,36 @@ fn is_stored_as_written(name: String) -> bool {
     return name == name.to_ascii_lowercase();
 }
 
-/// Builds `view` at the point `parent` has reached.
+/// Builds `view` at the point `parent` has reached: on the served element
+/// there while claiming, and anew where none fits.
 fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
-    let node = if parent.claiming {
-        let served = parent.claim();
-        match view.origin {
-            Tag(tag) => {
-                assert served.local_name() == tag, "hydrate: a served element's tag must be the one its view builds";
-            },
-            Adopted(node) => {
-                assert served == node;
-            },
-        }
-        served;
-    } else {
-        let made = make(view.origin);
-        parent.insert(made);
-        made;
+    let served = if parent.claiming() { parent.claim() } else { null };
+    if let Some(claimed) = served && fits(claimed, &view.origin) {
+        run_steps(claimed, parent.report, view.steps);
+        return claimed;
+    }
+    let made = make(view.origin);
+    match served {
+        Some(other) => {
+            parent.report(`was served <${other.local_name()}> where its view builds <${made.local_name()}>`);
+            parent.node.replace_child(made, other);
+        },
+        None => {
+            if parent.claiming() {
+                parent.report(`was served without the <${made.local_name()}> its view builds`);
+            }
+            parent.insert(made);
+        },
+    }
+    run_steps(made, null, view.steps);
+    return made;
+}
+
+fn fits(served: Element, origin: &Origin) -> bool with Dom {
+    return match *origin {
+        Tag(tag) => served.local_name() == tag,
+        Adopted(node) => served == node,
     };
-    run_steps(node, parent.claiming, view.steps);
-    return node;
 }
 
 impl View {
@@ -198,7 +238,7 @@ impl View {
     {
         return self.then(
             |at: &mut Build| {
-                if at.claiming {
+                if at.claiming() {
                     at.attributes[name] = Option::Some(value);
                 }
                 at.node.set_attribute(name, value);
@@ -481,7 +521,7 @@ fn each<T: Eq>(
         }
         // The rows are all of the element's children, so served text after
         // the last one goes before the order is checked.
-        if in_place && at.claiming {
+        if in_place && at.claiming() {
             at.finish();
         }
         // `render` and the cleanups have run, and either may have moved a row.

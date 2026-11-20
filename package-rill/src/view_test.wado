@@ -1,5 +1,5 @@
 use { Signal, flush, observe, on_cleanup, scope, signal } from "./signals.wado";
-use { View, build, element, hydrate } from "./view.wado";
+use { View, build, element, hydrate, hydrate_reporting } from "./view.wado";
 use { Dom, Element, Event, Node, SurfaceDom, Text } from "wado-lang:web";
 
 fn children_text(parent: Element) -> String with Dom {
@@ -927,5 +927,94 @@ test "hydrate traps on a served element its view does not build" {
         let _hydrated = scope(|| {
             hydrate(View::of(root).text("x"));
         });
+    };
+}
+
+#[expect_trap]
+test "hydrate traps on a served page missing an element its view builds" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let _hydrated = scope(|| {
+            hydrate(View::of(root).child(element("p")));
+        });
+    };
+}
+
+// Hydrates `view` as a build that checks no contracts does, and answers how
+// many mismatches it met.
+fn rebuilt(view: View) -> i32 with Dom {
+    let mut mismatches = 0;
+    let _hydrated = scope(|| {
+        hydrate_reporting(view, |_: String| mismatches += 1);
+    });
+    return mismatches;
+}
+
+test "a served element of another tag is built anew, its bindings live" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let kept = new_element("p");
+        root.append_child(kept);
+        let served = new_element("p");
+        served.append_child(new_element("i"));
+        root.append_child(served);
+        let shown = signal("a");
+        assert rebuilt(View::of(root).child(element("p")).child(element("div").bind_text(|| shown.get()))) == 1;
+        assert root.get_html() == "<p></p><div>a</div>";
+        assert root.first_child().unwrap() == kept as Node;
+
+        shown.set("b");
+        flush();
+        assert root.get_html() == "<p></p><div>b</div>";
+    };
+}
+
+test "an element missing from the served page is built where it belongs" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let kept = new_element("p");
+        root.append_child(kept);
+        let view = View::of(root).child(element("p")).child(element("span").text("x")).child(element("b"));
+        assert rebuilt(view) == 2;
+        assert root.get_html() == "<p></p><span>x</span><b></b>";
+        assert root.first_child().unwrap() == kept as Node;
+    };
+}
+
+test "a served element its view does not build is taken out" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        root.append_child(new_element("p"));
+        root.append_child(new_element("i"));
+        assert rebuilt(View::of(root).child(element("p"))) == 1;
+        assert root.get_html() == "<p></p>";
+    };
+}
+
+test "a served attribute the view does not leave takes the view's value" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let served = new_element("p");
+        served.set_attribute("class", "other");
+        root.append_child(served);
+        assert rebuilt(View::of(root).child(element("p").attribute("class", "final"))) == 1;
+        assert root.get_html() == "<p class=\"final\"></p>";
+    };
+}
+
+test "a page served as built meets no mismatch" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        let _built = scope(|| {
+            build(page_view(root, new_page()));
+        });
+        serve(root);
+        assert rebuilt(page_view(root, new_page())) == 0;
     };
 }

@@ -28,5 +28,3 @@ already measured, not how to close it. Closed work belongs in commit history.
 
 - [ ] No app is published. [`static-generation.md`](./static-generation.md)
   holds the design and its roadmap.
-- [ ] A served page that differs from its view traps `hydrate`, in production
-  too.
