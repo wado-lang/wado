@@ -541,7 +541,7 @@ struct Event {
 type Moves = IndexMap<(AstId, Vec<String>), Vec<Event>>;
 
 /// Why a local a value refers into no longer holds what the value reads.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum Gone {
     Moved(Span),
     Ended,
@@ -571,7 +571,7 @@ struct Owner {
 /// What a temporary borrowed in it lives as long as: the statement, a loop's
 /// iteration for one its head borrows, or the scope where a `let` keeps the
 /// borrow.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 struct Region {
     serial: u32,
     kind: RegionKind,
@@ -584,7 +584,7 @@ enum RegionKind {
     Scope,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct OwnerSite {
     /// How a message names the owner.
     name: String,
@@ -618,7 +618,7 @@ impl OwnerSite {
 }
 
 /// A `&mut` use of a place: `via` is the binding it went through.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct Disturbance {
     via: AstId,
     path: Vec<String>,
@@ -647,7 +647,7 @@ fn merge_owners(into: &mut Owners, from: Owners) {
 }
 
 /// What a body knows at a point of it.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 struct Flow {
     moved: Moves,
     /// The `&mut` uses of each local on the paths that reach here.
@@ -2352,7 +2352,10 @@ impl MoveWalker<'_, '_> {
     /// A loop as two iterations: the first records what it moves, and the
     /// second, starting where the loop entered or the first left, reports.
     /// Two suffice: an iteration's effect on what is moved or held is the same
-    /// from any start, so a third adds nothing the second did not see. Each
+    /// from any start, so a third adds nothing the second did not see. A first
+    /// iteration that leaves the state it entered with is the second already,
+    /// so its reports stand; walking a nest twice at every level would cost
+    /// two to the power of its depth. Each
     /// iteration runs the head, the body, then `update`, as a C-style `for`
     /// does.
     /// A loop whose head can end it may also run no iteration, so it ends
@@ -2361,11 +2364,13 @@ impl MoveWalker<'_, '_> {
     fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) -> bool {
         let entry = self.flow.clone();
         self.loops.push(LoopJumps::default());
-        self.suppress += 1;
+        let reported = self.checker.out.len();
         self.visit_iteration(head, body, update);
-        self.suppress -= 1;
         self.flow.merge(entry.clone());
-        self.visit_iteration(head, body, update);
+        if self.flow != entry {
+            self.checker.out.truncate(reported);
+            self.visit_iteration(head, body, update);
+        }
         let jumps = self.loops.pop().expect("pushed above");
         let end = (!head.is_endless()).then(|| {
             let mut ended = std::mem::take(&mut self.flow);
@@ -2397,7 +2402,10 @@ impl MoveWalker<'_, '_> {
                 if let Some(continued) = jumps.continues.take() {
                     reach(&mut end, continued);
                 }
+                let formed_before: IndexSet<AstId> = start.formed.keys().copied().collect();
                 walker.flow = end.unwrap_or(start);
+                // An iteration's value is never read.
+                walker.flow.formed.retain(|id, _| formed_before.contains(id));
                 if let Some(update) = update {
                     walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
                 }
