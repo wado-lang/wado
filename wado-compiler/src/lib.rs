@@ -1734,6 +1734,7 @@ fn check_effects_and_moves<H: CompilerHost>(
     let _span = logger.span("effect-check");
     let library_exports: Option<Vec<_>> = (exports == Exports::Recorded)
         .then(|| lib_export_functions(&sem.entry_module_source, &sem.modules).collect());
+<<<<<<< HEAD
     let diags =
         effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref(), lints);
     let move_errors = affine_move_check::check_affine_moves_semantic(sem);
@@ -1742,6 +1743,24 @@ fn check_effects_and_moves<H: CompilerHost>(
     for error in unmet_bounds {
         let _ = logger.error(error);
     }
+||||||| 27173eced9d
+    let diags =
+        effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref(), lints);
+    let move_errors = affine_move_check::check_affine_moves_semantic(sem);
+    let had_error = !diags.is_empty() || !move_errors.is_empty();
+    sem.write_back_effect_rows(&diags.rows);
+=======
+    let diags = {
+        let _span = logger.span("effect-check/effects");
+        effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref(), lints)
+    };
+    let move_errors = {
+        let _span = logger.span("effect-check/moves");
+        affine_move_check::check_affine_moves_semantic(sem)
+    };
+    let had_error = !diags.is_empty() || !move_errors.is_empty();
+    sem.write_back_effect_rows(&diags.rows);
+>>>>>>> origin/main
     for error in diags.effects {
         let _ = logger.error(error);
     }

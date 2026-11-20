@@ -10,7 +10,7 @@ use cranelift_entity::EntityRef;
 
 use crate::builtin_facts::{SideEffect, Storage};
 use crate::defs::DefId;
-use crate::graph::{DisjointSets, strongly_connected_components};
+use crate::graph::{DisjointSets, RankedSweep, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::RefKind;
 use crate::nir::StructFieldTypes;
@@ -369,9 +369,8 @@ impl HeapEffectsCache {
 
     /// The least fixpoint over the call graph, callees first; a component whose
     /// inputs all stand is the fixpoint already. Components no path joins are
-    /// solved together, and each round re-summarizes every queued node against
-    /// the summaries the round began with, so a round runs in parallel and its
-    /// outcome does not depend on the thread count.
+    /// solved together, in ranked sweeps whose batches each run in parallel,
+    /// so the outcome does not depend on the thread count.
     fn solve(
         &mut self,
         functions: &[FuncRef],
@@ -389,14 +388,7 @@ impl HeapEffectsCache {
                 component_of[n] = c;
             }
         }
-        let mut callers_within: Vec<Vec<usize>> = vec![Vec::new(); successors.len()];
-        for (n, callees) in successors.iter().enumerate() {
-            for &s in callees {
-                if component_of[s] == component_of[n] {
-                    callers_within[s].push(n);
-                }
-            }
-        }
+        let mut sweep = RankedSweep::new(&successors, &component_of);
         // A component's depth is one past its deepest callee component's, so
         // one depth's components reach none of each other.
         let mut depth = vec![0; components.len()];
@@ -418,9 +410,8 @@ impl HeapEffectsCache {
             }
             by_depth[depth[c]].push(c);
         }
-        let mut queued = vec![false; successors.len()];
         for level in by_depth {
-            let mut pending: Vec<usize> = level
+            let pending: Vec<usize> = level
                 .into_iter()
                 .filter(|&c| {
                     components[c].iter().any(|&n| {
@@ -433,29 +424,18 @@ impl HeapEffectsCache {
                 .iter()
                 .map(|&n| (n, std::mem::take(self.summary_mut(n))))
                 .collect();
-            while !pending.is_empty() {
+            sweep.solve(&pending, |batch| {
                 let this = &*self;
-                let fresh = exec.map(&pending, |&n| {
-                    this.summarize(functions, type_table, n, true)
-                });
-                let mut next = Vec::new();
-                for (n, summary) in pending.into_iter().zip(fresh) {
-                    if summary == *self.summary_mut(n) {
-                        continue;
-                    }
-                    *self.summary_mut(n) = summary;
-                    for &m in &callers_within[n] {
-                        if !queued[m] {
-                            queued[m] = true;
-                            next.push(m);
-                        }
+                let fresh = exec.map(batch, |&n| this.summarize(functions, type_table, n, true));
+                let mut changed = Vec::new();
+                for (&n, summary) in batch.iter().zip(fresh) {
+                    if summary != *self.summary_mut(n) {
+                        *self.summary_mut(n) = summary;
+                        changed.push(n);
                     }
                 }
-                for &n in &next {
-                    queued[n] = false;
-                }
-                pending = next;
-            }
+                changed
+            });
             for (n, before) in before {
                 moved[n] |= *self.summary_mut(n) != before;
             }

@@ -152,6 +152,25 @@ every struct; it cannot be implemented in user code and is callable only in
 monomorphized contexts (`T` a concrete struct).
 See WEP 2026-06-13.
 
+#### `affine type FieldTypes`
+
+The field types as a tuple `[F_0, F_1, ...]`.
+
+#### `type Members`
+
+The per-field member tuple `[StructField<Self, F_0>, ...]`.
+
+#### `affine type FieldSlots`
+
+The field slots `[Option<F_0>, ...]` — the value-level companion of
+`FieldTypes`. A filled slot is one the wire wrote.
+
+#### `affine type FieldInputs`
+
+What `from_fields` takes: `FieldTypes` when the struct is open (no
+field reaches less far than the struct), `!` when it is closed, so a
+struct guarding a field can be read but never forged.
+
 #### `fn members() -> Self::Members`
 
 `#[compiler_item("reflect_struct_members")]`
@@ -202,6 +221,14 @@ every variant; it cannot be implemented in user code and is callable only
 in monomorphized contexts (`T` a concrete variant).
 See WEP 2026-06-13 §3.
 
+#### `affine type CasePayloads`
+
+The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
+
+#### `type Members`
+
+The per-case member tuple `[VariantCase<Self, P_0>, ...]`.
+
 #### `fn discriminant(&self) -> i32`
 
 `#[compiler_item("reflect_variant_discriminant")]`
@@ -228,6 +255,10 @@ every enum; it cannot be implemented in user code and is callable only
 in monomorphized contexts (`T` a concrete enum).
 See WEP 2026-06-13 §3b.
 
+#### `type Members`
+
+The per-case member tuple `[EnumCase<Self>, ...]`.
+
 #### `fn discriminant(&self) -> i32`
 
 `#[compiler_item("reflect_enum_discriminant")]`
@@ -252,6 +283,10 @@ Compile-time flags introspection. The compiler synthesizes an impl for
 every flags type; it cannot be implemented in user code and is callable
 only in monomorphized contexts (`T` a concrete flags type).
 See WEP 2026-06-13 §3c.
+
+#### `type Members`
+
+The per-bit member tuple `[FlagsBit<Self>, ...]`.
 
 #### `fn bits(&self) -> u64`
 
@@ -284,12 +319,24 @@ it inherits from that base — `ReflectStruct::<T>` on a newtype over a
 struct walks the struct's fields — so only the base is stated here.
 See WEP 2026-06-13.
 
+#### `affine type Base`
+
+The type this newtype wraps: `type UserName = String` → `String`.
+
 ### `pub trait ReflectTemplate: Reflect with ()`
 
 Compile-time introspection of a tagged template literal's shape. The
 compiler synthesizes an impl per shape; it cannot be implemented in user
 code and is callable only in monomorphized contexts (`T` the anonymous
 type a template literal denotes). See WEP 2026-01-10.
+
+#### `affine type Holes`
+
+The hole types as a tuple `[V_0, V_1, ...]`.
+
+#### `type Members`
+
+The per-hole member tuple `[TemplateHole<Self, V_0>, ...]`.
 
 #### `fn members() -> Self::Members`
 
@@ -379,6 +426,8 @@ Immutable reference indexing: `&container[i]` reads through this.
 `Output: Ref` — only a reference element can be handed out by reference; a
 value element is read through `IndexValue`.
 
+#### `affine type Output: Ref`
+
 #### `fn index_ref(&self, index: IndexType) -> &Self::Output`
 
 Returns a reference to the element at the given index.
@@ -389,6 +438,8 @@ Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 element (`variant`, `fn`) cannot be handed out mutably by reference.
 
+#### `affine type Output: RefMut`
+
 #### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output`
 
 Returns a mutable reference to the element at the given index.
@@ -398,6 +449,8 @@ Returns a mutable reference to the element at the given index.
 Value-assignment indexing: `container[i] = value`.
 Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 writing it by value is a distinct operation from handing out a `&mut`.
+
+#### `affine type Output`
 
 #### `fn index_assign(&mut self, index: IndexType, value: Self::Output)`
 
@@ -419,6 +472,8 @@ The value-semantics counterpart to `IndexRef` for elements that cannot be
 aliased by reference (scalars, resources). An affine container hands out
 copyable elements by value too (`LinearArray`).
 
+#### `type Output`
+
 #### `fn index_value(&self, index: IndexType) -> Self::Output`
 
 Returns a copy of the element at the given index.
@@ -427,6 +482,8 @@ Returns a copy of the element at the given index.
 
 Trait for the `+` operator.
 Types implementing this trait can use the `+` operator for addition.
+
+#### `type Output`
 
 #### `fn add(&self, rhs: &Rhs) -> Self::Output`
 
@@ -437,6 +494,8 @@ Adds two values and returns the result.
 Trait for the `-` operator (binary subtraction).
 Types implementing this trait can use the `-` operator for subtraction.
 
+#### `type Output`
+
 #### `fn sub(&self, rhs: &Rhs) -> Self::Output`
 
 Subtracts rhs from self and returns the result.
@@ -445,6 +504,8 @@ Subtracts rhs from self and returns the result.
 
 Trait for the `*` operator.
 Types implementing this trait can use the `*` operator for multiplication.
+
+#### `type Output`
 
 #### `fn mul(&self, rhs: &Rhs) -> Self::Output`
 
@@ -455,6 +516,8 @@ Multiplies two values and returns the result.
 Trait for the `/` operator.
 Types implementing this trait can use the `/` operator for division.
 
+#### `type Output`
+
 #### `fn div(&self, rhs: &Rhs) -> Self::Output`
 
 Divides self by rhs and returns the result.
@@ -463,6 +526,8 @@ Divides self by rhs and returns the result.
 
 Trait for the `%` operator.
 Types implementing this trait can use the `%` operator for remainder.
+
+#### `type Output`
 
 #### `fn rem(&self, rhs: &Rhs) -> Self::Output`
 
@@ -473,6 +538,8 @@ Returns the remainder of dividing self by rhs.
 Trait for the unary `-` operator (negation).
 Types implementing this trait can use the `-` prefix operator.
 
+#### `type Output`
+
 #### `fn neg(&self) -> Self::Output`
 
 Returns the negation of self.
@@ -480,6 +547,8 @@ Returns the negation of self.
 ### `pub trait BitAnd<Rhs = Self> with ()`
 
 Trait for the `&` operator (bitwise AND).
+
+#### `type Output`
 
 #### `fn bitand(&self, rhs: &Rhs) -> Self::Output`
 
@@ -489,6 +558,8 @@ Returns the bitwise AND of self and rhs.
 
 Trait for the `|` operator (bitwise OR).
 
+#### `type Output`
+
 #### `fn bitor(&self, rhs: &Rhs) -> Self::Output`
 
 Returns the bitwise OR of self and rhs.
@@ -496,6 +567,8 @@ Returns the bitwise OR of self and rhs.
 ### `pub trait BitXor<Rhs = Self> with ()`
 
 Trait for the `^` operator (bitwise XOR).
+
+#### `type Output`
 
 #### `fn bitxor(&self, rhs: &Rhs) -> Self::Output`
 
@@ -505,6 +578,8 @@ Returns the bitwise XOR of self and rhs.
 
 Trait for the `~` operator (bitwise NOT).
 
+#### `type Output`
+
 #### `fn bitnot(&self) -> Self::Output`
 
 Returns the bitwise NOT of self.
@@ -513,6 +588,8 @@ Returns the bitwise NOT of self.
 
 Trait for the `<<` operator (left shift).
 
+#### `type Output`
+
 #### `fn shl(&self, rhs: &Rhs) -> Self::Output`
 
 Returns self shifted left by rhs bits.
@@ -520,6 +597,8 @@ Returns self shifted left by rhs bits.
 ### `pub trait Shr<Rhs = Self> with ()`
 
 Trait for the `>>` operator (right shift).
+
+#### `type Output`
 
 #### `fn shr(&self, rhs: &Rhs) -> Self::Output`
 
@@ -613,6 +692,8 @@ Formats the value in uppercase exponential notation and writes to the given form
 
 The core iterator trait for sequences of values.
 Types implementing this trait can be iterated over using `for-of` loops.
+
+#### `type Item`
 
 #### `fn next(&mut self) -> Option<Self::Item>`
 
@@ -739,6 +820,10 @@ The remaining element with the largest `key`, the last on ties.
 Conversion into an Iterator.
 Types implementing this trait can be used in `for-of` loops directly.
 
+#### `type Item`
+
+#### `type Iter: Iterator<Item = Self::Item>`
+
 #### `fn into_iter(&self) -> Self::Iter`
 
 Creates an iterator from a value.
@@ -750,6 +835,10 @@ the loop passes `e` to `start` and calls the state's
 `next(&mut self) -> Option<Item>` until it answers `None`. The loop owns
 what it walks, so an affine element moves into the binding once. Any other
 iterable is walked through its `IntoIterator`.
+
+#### `affine type Item`
+
+#### `affine type State`
 
 #### `fn start(self) -> Self::State`
 
@@ -770,6 +859,8 @@ Converts a value of type `T` into `Self`.
 Fallible conversion trait. `Err: Error`, so a caller reaching the failure
 through the bound can always report its reason.
 
+#### `type Err: Error`
+
 #### `fn try_from(value: T) -> Result<Self, Self::Err>`
 
 Attempts to convert a value of type `T` into `Self`.
@@ -779,12 +870,16 @@ Attempts to convert a value of type `T` into `Self`.
 Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 bound. Implemented for every `Add<Output = Self>`.
 
+#### `type Elem`
+
 #### `fn sum_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
 ### `pub trait Product with ()`
 
 Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
 element bound. Implemented for every `Mul<Output = Self>`.
+
+#### `type Elem`
 
 #### `fn product_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
@@ -793,6 +888,8 @@ element bound. Implemented for every `Mul<Output = Self>`.
 Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 `max`'s element bound. Implemented for every `Ord`.
 
+#### `type Elem`
+
 #### `fn min_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
 #### `fn max_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
@@ -800,6 +897,8 @@ Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 ### `pub trait FromIterator with ()`
 
 Trait for creating a collection from any iterator of `Elem`.
+
+#### `type Elem`
 
 #### `fn from_iter<affine I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _`
 
@@ -816,6 +915,8 @@ Parse a value from text that may not denote one, where `From<String>` is
 for text that always does. The parameter takes a `StrSlice` among the rest,
 so a field is parsed out of a larger buffer with no substring allocation.
 
+#### `type Err: Error`
+
 #### `fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
 
 Parse the whole of any `AsStrSlice` text as `Self`.
@@ -828,6 +929,8 @@ digit separators, alternate boolean words). Leniency widens accepted
 spellings only — an undenotable value still yields `Err`, and whitespace
 is never trimmed (that is the caller's concern). See
 `docs/wep-2026-06-22-lenient-from-str.md`.
+
+#### `type Err: Error`
 
 #### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
 
@@ -865,6 +968,8 @@ Implementors supply `len` and `at`; everything else is a default body over
 those two, so no default constructs a `Slice`. Methods needing an `Elem`
 bound (`contains`, `binary_search`, …) cannot live here — an associated
 type carries no bound — and stay bounded inherent impls.
+
+#### `type Elem`
 
 #### `fn len(&self) -> i32`
 
