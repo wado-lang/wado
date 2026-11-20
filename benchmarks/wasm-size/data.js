@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795156727015,
+  "lastUpdate": 1795170002606,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80049,6 +80049,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b208ba07ad63d97628ffa6993540f29bc89c6212"
         },
         "date": 1795156725977,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353636,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "27173eced9d8b225c04dc17095c1f9e6084615a4",
+          "message": "Merge pull request #2697 from wado-lang/rill-deploy-wado-lang-org\n\nfeat(rill): ship the to-do example as a static page hydrated in the browser",
+          "timestamp": "2026-11-20T18:55:23+09:00",
+          "tree_id": "66b99126a3e06e10ae136e3328bbbf0d4371f427",
+          "url": "https://github.com/wado-lang/wado/commit/27173eced9d8b225c04dc17095c1f9e6084615a4"
+        },
+        "date": 1795170002192,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
