@@ -2,7 +2,7 @@
   --bg: #f4f1ea;
   --card: #fffdf8;
   --ink: #2b2a27;
-  --muted: #8a857a;
+  --muted: #6b665c;
   --line: #e4ded1;
   --accent: #3d6b5a;
   --accent-ink: #ffffff;
@@ -132,14 +132,24 @@ li {
   border-top: 1px solid var(--line);
 }
 
-li span {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
+li button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 6px;
   cursor: pointer;
 }
 
-li span::before {
+.toggle {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.toggle::before {
   content: "";
   display: inline-block;
   width: 16px;
@@ -150,29 +160,25 @@ li span::before {
   border-radius: 50%;
 }
 
-li.done span {
+li.done .toggle {
   color: var(--muted);
   text-decoration: line-through;
 }
 
-li.done span::before {
+li.done .toggle::before {
   background: var(--accent);
   border-color: var(--accent);
 }
 
-li button {
+.remove {
   width: 28px;
   height: 28px;
   font-size: 18px;
   line-height: 1;
   color: var(--muted);
-  background: none;
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
 }
 
-li button:hover {
+.remove:hover {
   color: var(--ink);
   background: var(--line);
 }

@@ -32,7 +32,7 @@ test "the list follows what the user does" {
 
         add_todo("one");
         add_todo("two");
-        assert body.get_html() == "<input id=\"title\" placeholder=\"What needs doing?\"><button id=\"add\">Add</button><ul><li id=\"todo-1\"><span>one</span><button>×</button></li><li id=\"todo-2\"><span>two</span><button>×</button></li></ul><p>2 left</p>";
+        assert body.get_html() == "<input id=\"title\" placeholder=\"What needs doing?\"><button id=\"add\">Add</button><ul><li id=\"todo-1\"><button class=\"toggle\" aria-pressed=\"false\">one</button><button class=\"remove\" aria-label=\"Remove\">×</button></li><li id=\"todo-2\"><button class=\"toggle\" aria-pressed=\"false\">two</button><button class=\"remove\" aria-label=\"Remove\">×</button></li></ul><p>2 left</p>";
 
         let first = Dom::document().get_element_by_id("todo-1").unwrap();
         first.first_child().unwrap().dispatch_event(Event::new("click"));
@@ -86,6 +86,6 @@ test "the served page hydrates in place and then follows what the user does" {
         assert Dom::document().get_element_by_id("title") == Option::Some(field);
 
         add_todo("one");
-        assert body.get_html() == "<input id=\"title\" placeholder=\"What needs doing?\"><button id=\"add\">Add</button><ul><li id=\"todo-1\"><span>one</span><button>×</button></li></ul><p>1 left</p>";
+        assert body.get_html() == "<input id=\"title\" placeholder=\"What needs doing?\"><button id=\"add\">Add</button><ul><li id=\"todo-1\"><button class=\"toggle\" aria-pressed=\"false\">one</button><button class=\"remove\" aria-label=\"Remove\">×</button></li></ul><p>1 left</p>";
     };
 }

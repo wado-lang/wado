@@ -24,16 +24,24 @@ fn done_class(todo: &Todo) -> Option<String> with Track {
 }
 
 fn todo_row(todos: Signal<List<Todo>>, todo: Todo) -> View {
-    let title = element("span").text(todo.title).on("click", |_: Event| todo.done.set(!todo.done.get()));
-    let remove = element("button").text("×").on("click", |_: Event| {
-        let mut rest: List<Todo> = [];
-        for let other of todos.get() {
-            if other != todo {
-                rest.push(other);
+    let title = element("button")
+        .attribute("class", "toggle")
+        .bind_attribute("aria-pressed", || Option::Some(`${todo.done.get()}`))
+        .text(todo.title)
+        .on("click", |_: Event| todo.done.set(!todo.done.get()));
+    let remove = element("button")
+        .attribute("class", "remove")
+        .attribute("aria-label", "Remove")
+        .text("×")
+        .on("click", |_: Event| {
+            let mut rest: List<Todo> = [];
+            for let other of todos.get() {
+                if other != todo {
+                    rest.push(other);
+                }
             }
-        }
-        todos.set(rest);
-    });
+            todos.set(rest);
+        });
     let row = element("li").attribute("id", `todo-${todo.id}`);
     return row.bind_attribute("class", || done_class(&todo)).children([title, remove]);
 }

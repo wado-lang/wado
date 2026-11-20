@@ -92,5 +92,5 @@ Open the artifact and add an item. A row that appears means the program
 hydrated the page. The page shows before the Wasm loads either way, so a
 page that looks right proves nothing.
 
-The viewer's browser needs Wasm GC and JSPI. Chrome 137 has both; elsewhere
-the page stays as served, with no bindings.
+The viewer's browser needs Wasm GC and JSPI, as Chrome 137 and Safari 27 have.
+A browser missing either shows the page as served, with no bindings.

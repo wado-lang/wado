@@ -986,6 +986,34 @@ test "an adopted element that does not fit is put in place and claims what it ho
     };
 }
 
+test "an adopted element served later is moved up, and not taken out as extra" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        root.append_child(new_element("p"));
+        let adopted = new_element("section");
+        adopted.append_child(new_element("span"));
+        root.append_child(adopted);
+        assert rebuilt(View::of(root).child(View::of(adopted).child(element("span")))) == 1;
+        assert root.get_html() == "<section><span></span></section>";
+    };
+}
+
+test "an adopted element inside one built anew still claims what it holds" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        root.append_child(new_element("p"));
+        let adopted = new_element("section");
+        let held = new_element("button");
+        adopted.append_child(held);
+        let view = View::of(root).child(element("div").child(View::of(adopted).child(element("button"))));
+        assert rebuilt(view) == 1;
+        assert root.get_html() == "<div><section><button></button></section></div>";
+        assert adopted.first_child().unwrap() == held as Node;
+    };
+}
+
 test "an element missing from the served page is built where it belongs" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

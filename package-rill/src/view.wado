@@ -27,7 +27,7 @@ pub fn element(tag: String) -> View {
 /// Builds `view` anew, inside the computation that owns its bindings.
 pub fn build(view: View) -> Element with (Track, Dom) {
     let node = make(view.origin);
-    run_steps(node, null, view.steps);
+    run_steps(node, null, false, view.steps);
     return node;
 }
 
@@ -60,22 +60,25 @@ internal fn hydrate_reporting(view: View, report: fn mut(String)) -> Element wit
     let Adopted(node) = view.origin else {
         panic("hydrate builds on a served element, which `View::of` names");
     };
-    run_steps(node, Option::Some(report), view.steps);
+    run_steps(node, Option::Some(report), true, view.steps);
     return node;
 }
 
 /// The element being built, and how far the build has come through it.
 ///
-/// A build claims what was served while it has a `report` for what differs.
-/// Then `served` and `served_attributes` hold the children and the attributes
-/// the element was served with, taken before any step runs: a step may move a
-/// child or write an attribute. The build has passed the first `passed`
+/// A hydrating build carries a `report` for what differs, through elements
+/// built anew too, since an element adopted inside one holds what was served.
+/// A build `claiming` the element takes its children from what was served:
+/// `served` and `served_attributes` hold the children and the attributes the
+/// element was served with, taken before any step runs, since a step may move
+/// a child or write an attribute. The build has passed the first `passed`
 /// children. `attributes` holds the value each static attribute is left at,
 /// `None` for one a binding writes, checked against `served_attributes` once
 /// every step has run.
 struct Build {
     node: Element,
     report: Option<fn mut(String)>,
+    claiming: bool,
     served: List<Node>,
     passed: i32,
     attributes: TreeMap<String, Option<String>>,
@@ -83,10 +86,11 @@ struct Build {
 }
 
 impl Build {
-    fn new(node: Element, report: Option<fn mut(String)>) -> Build with Dom {
+    fn new(node: Element, report: Option<fn mut(String)>, claiming: bool) -> Build with Dom {
+        assert !claiming || report matches { Some(_) }, "a build claims only while it hydrates";
         let mut served: List<Node> = [];
         let mut served_attributes = TreeMap::<String, String>::new();
-        if report matches { Some(_) } {
+        if claiming {
             let mut child = node.first_child();
             while let Some(current) = child {
                 served.push(current);
@@ -96,11 +100,26 @@ impl Build {
                 served_attributes[name] = node.get_attribute(name).unwrap();
             }
         }
-        return Build { node, report, served, passed: 0, attributes: TreeMap::new(), served_attributes };
+        return Build { node, report, claiming, served, passed: 0, attributes: TreeMap::new(), served_attributes };
     }
 
     fn claiming(&self) -> bool {
+        return self.claiming;
+    }
+
+    fn hydrating(&self) -> bool {
         return self.report matches { Some(_) };
+    }
+
+    /// Takes `node` out of the served children still ahead, since it is being
+    /// placed at the point the build has reached.
+    fn forget(&mut self, node: Node) {
+        for let i of self.passed..<self.served.len() {
+            if self.served[i] == node {
+                self.served.remove(i);
+                return;
+            }
+        }
     }
 
     fn report(&mut self, what: String) with Dom {
@@ -170,9 +189,10 @@ impl Build {
 fn run_steps(
     node: Element,
     report: Option<fn mut(String)>,
+    claiming: bool,
     steps: List<fn mut(&mut Build) with (Track, Dom)>,
 ) with (Track, Dom) {
-    let mut at = Build::new(node, report);
+    let mut at = Build::new(node, report, claiming);
     for let step of steps {
         let mut step = step;
         step(&mut at);
@@ -190,17 +210,18 @@ fn is_stored_as_written(name: String) -> bool {
 }
 
 /// Builds `view` at the point `parent` has reached: on the served element
-/// there while claiming, and anew where none fits. An adopted element that
-/// does not fit takes the place, and claims what it holds, which was not made
-/// here.
+/// there while claiming, and anew where none fits. An adopted element takes
+/// the place wherever it was, and while hydrating claims what it holds, which
+/// was not made here.
 fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
     let served = if parent.claiming() { parent.claim() } else { null };
     if let Some(claimed) = served && fits(claimed, &view.origin) {
-        run_steps(claimed, parent.report, view.steps);
+        run_steps(claimed, parent.report, true, view.steps);
         return claimed;
     }
-    let report = if view.origin matches { Adopted(_) } { parent.report } else { null };
+    let claims = parent.hydrating() && view.origin matches { Adopted(_) };
     let made = make(view.origin);
+    parent.forget(made);
     match served {
         Some(other) => {
             parent.report(`was served <${other.local_name()}> where its view builds <${made.local_name()}>`);
@@ -213,7 +234,7 @@ fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
             parent.insert(made);
         },
     }
-    run_steps(made, report, view.steps);
+    run_steps(made, parent.report, claims, view.steps);
     return made;
 }
 
