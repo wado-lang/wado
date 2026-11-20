@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795139208903,
+  "lastUpdate": 1795144883693,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -79937,6 +79937,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 434173,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "067d1ab5cfc479d2af77191fd72732b4ca1e2c7e",
+          "message": "Merge pull request #2694 from wado-lang/compiler/inline-lookahead\n\nperf(inline): price callees by what they splice, cutting Loam compile time 9%",
+          "timestamp": "2026-11-20T12:01:57+09:00",
+          "tree_id": "a7bc24ed15c0531d40300694d8c345c02ed6b4fa",
+          "url": "https://github.com/wado-lang/wado/commit/067d1ab5cfc479d2af77191fd72732b4ca1e2c7e"
+        },
+        "date": 1795144882708,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353636,
             "unit": "bytes"
           }
         ]
