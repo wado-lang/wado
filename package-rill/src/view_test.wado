@@ -864,6 +864,11 @@ test "hydrate traps on a served attribute the view does not leave" {
     };
 }
 
+#[expect_trap]
+test "an attribute name holds no uppercase letter, which an HTML element would lower" {
+    element("p").attribute("CLASS", "card");
+}
+
 test "a hydrated each restores its order after render moved a claimed row" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

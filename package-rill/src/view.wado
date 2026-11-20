@@ -187,7 +187,9 @@ impl View {
         return next;
     }
 
-    pub fn attribute(&self, name: String, value: String) -> View {
+    pub fn attribute(&self, name: String, value: String) -> View
+        contract name == name.to_ascii_lowercase(), "an attribute name must be lowercase, as an HTML element stores it"
+    {
         return self.then(
             |at: &mut Build| {
                 if at.claiming {
@@ -199,7 +201,9 @@ impl View {
     }
 
     /// Keeps the attribute at what `value` answers, absent for `None`.
-    pub fn bind_attribute(&self, name: String, value: fn mut() -> Option<String> with Track) -> View {
+    pub fn bind_attribute(&self, name: String, value: fn mut() -> Option<String> with Track) -> View
+        contract name == name.to_ascii_lowercase(), "an attribute name must be lowercase, as an HTML element stores it"
+    {
         let mut value = value;
         return self.then(|at: &mut Build| {
             at.attributes[name] = null;
