@@ -214,14 +214,8 @@ pub fn gpu(selector: Option<&AdapterSelector>) -> Result<Gpu> {
     })
 }
 
-/// Whether wgpu finds any adapter here.
-pub fn has_adapter() -> bool {
-    !instance().enumerate_adapters(Backends::all()).is_empty()
-}
-
 const NO_ADAPTER: &str = "no GPU adapter found. wasi:webgpu needs one, and a driver supplies it: \
-     on x86-64 Linux a run fetches SwiftShader unless VK_DRIVER_FILES, VK_ICD_FILENAMES \
-     or WGPU_BACKEND names a choice; elsewhere install a driver, \
+     on Linux install mesa-vulkan-drivers for the lavapipe software adapter, \
      or set WGPU_BACKEND to pick another backend";
 
 /// The wgpu instance over whichever backends the platform and `WGPU_BACKEND`

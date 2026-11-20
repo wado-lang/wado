@@ -345,9 +345,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # A runner has no GPU, and wgpu needs a driver to find any adapter at all.
-      # mesa-vulkan-drivers supplies lavapipe, which answers in software. The
-      # SwiftShader the runner would fetch instead runs out of memory on Loam's
-      # graph conformance program.
+      # mesa-vulkan-drivers supplies lavapipe, which answers in software.
       - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
 
       - name: Build and test the runner

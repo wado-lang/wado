@@ -3,8 +3,6 @@
 
 mod args;
 mod host;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-mod software;
 
 use std::process::ExitCode;
 
@@ -12,34 +10,16 @@ use args::AdapterSelector;
 use wado_host::options::CliExit;
 use wado_host::runner::{RunOptions, command_line, program_for};
 
-fn main() -> ExitCode {
-    let parsed = args::parse(std::env::args_os().skip(1));
-    // `--help` lists the adapters a run gets, but fetches none to list.
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    if let Ok((invocation, _)) = &parsed {
-        use software::Fetch;
-        use wado_host::runner::Invocation;
-        let fetch = match invocation {
-            Invocation::Run(_) => Some(Fetch::Allowed),
-            Invocation::Help => Some(Fetch::CachedOnly),
-            Invocation::Version => None,
-        };
-        if let Some(fetch) = fetch
-            && let Err(e) = software::provide_when_absent(fetch, host::has_adapter)
-        {
-            eprintln!("error: no GPU adapter here, and none could be fetched: {e:#}");
-            return ExitCode::FAILURE;
-        }
-    }
-    tokio::runtime::Runtime::new()
-        .expect("the runtime starts")
-        .block_on(command_line(
-            "wado-run-webgpu",
-            env!("CARGO_PKG_VERSION"),
-            parsed,
-            || format!("{}\n{}", args::help(), host::adapter_list()),
-            run,
-        ))
+#[tokio::main]
+async fn main() -> ExitCode {
+    command_line(
+        "wado-run-webgpu",
+        env!("CARGO_PKG_VERSION"),
+        args::parse(std::env::args_os().skip(1)),
+        || format!("{}\n{}", args::help(), host::adapter_list()),
+        run,
+    )
+    .await
 }
 
 async fn run(options: RunOptions, gpu_adapter: Option<AdapterSelector>) -> Result<(), CliExit> {

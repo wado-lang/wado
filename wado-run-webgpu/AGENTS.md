@@ -18,14 +18,9 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 - The tests set `WADO` as `wado` does
   ([External Subcommands](../docs/wep-2026-09-19-external-subcommands.md)), so
   the tests and a real invocation reach the compiler through one path.
-- Running needs a GPU adapter. On x86-64 Linux, where wgpu finds none and the
-  user named no driver (`VK_DRIVER_FILES`, `VK_ICD_FILENAMES`) or backend
-  (`WGPU_BACKEND`), a run fetches SwiftShader, Chrome's software Vulkan driver,
-  before any other thread starts (`src/software.rs`). CI installs
-  `mesa-vulkan-drivers` and runs on lavapipe instead, since SwiftShader runs
-  out of memory on Loam's graph conformance program. Elsewhere
-  with no adapter, the host says so and exits rather than letting the guest see
-  `request-adapter` answer `none`. macOS answers with Metal and Windows with
-  D3D12.
+- Running needs a GPU adapter. wgpu finds none without a driver, and the host
+  says so and exits rather than letting the guest see `request-adapter` answer
+  `none`. On Linux `mesa-vulkan-drivers` supplies the lavapipe software adapter,
+  which is what CI installs; macOS answers with Metal and Windows with D3D12.
 - Dependencies live in this crate's own `Cargo.toml`, there being no workspace
   above it to hold them. The other Rust rules apply as written.
