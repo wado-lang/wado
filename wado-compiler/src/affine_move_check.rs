@@ -716,7 +716,9 @@ impl Flow {
         ) -> bool {
             let a_kept = a.iter().filter(|(key, _)| kept(key));
             a_kept.clone().count() == b.keys().filter(|key| kept(key)).count()
-                && a_kept.into_iter().all(|(key, value)| b.get(key) == Some(value))
+                && a_kept
+                    .into_iter()
+                    .all(|(key, value)| b.get(key) == Some(value))
         }
         same(&self.moved, &entry.moved, |(def, _)| !rebound.contains(def))
             && same(&self.holders, &entry.holders, |def| !rebound.contains(def))
@@ -2418,22 +2420,22 @@ impl MoveWalker<'_, '_> {
             walker.in_scope(|walker| {
                 // An iteration's value is never read.
                 walker.forming_nothing(|walker| {
-                match head {
-                    LoopHead::None => {}
-                    LoopHead::Condition(condition) => walker.visit_condition(condition),
-                    LoopHead::Binding(pattern, owners) => {
-                        walker.refuse_destructured_drop(pattern, None);
-                        walker.bind_pattern(pattern);
-                        walker.hold_bindings(pattern, owners);
+                    match head {
+                        LoopHead::None => {}
+                        LoopHead::Condition(condition) => walker.visit_condition(condition),
+                        LoopHead::Binding(pattern, owners) => {
+                            walker.refuse_destructured_drop(pattern, None);
+                            walker.bind_pattern(pattern);
+                            walker.hold_bindings(pattern, owners);
+                        }
                     }
-                }
-                let diverged = walker.visit_block(body);
-                let jumps = walker.loops.last_mut().expect("the loop pushed its jumps");
-                let mut end = (!diverged).then(|| walker.flow.clone());
-                if let Some(continued) = jumps.continues.take() {
-                    reach(&mut end, continued);
-                }
-                walker.flow = end.unwrap_or(start);
+                    let diverged = walker.visit_block(body);
+                    let jumps = walker.loops.last_mut().expect("the loop pushed its jumps");
+                    let mut end = (!diverged).then(|| walker.flow.clone());
+                    if let Some(continued) = jumps.continues.take() {
+                        reach(&mut end, continued);
+                    }
+                    walker.flow = end.unwrap_or(start);
                 });
                 if let Some(update) = update {
                     walker.in_region(RegionKind::Statement, |walker| walker.visit_at(update));
