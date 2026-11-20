@@ -1354,7 +1354,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             lexer.pos = error_end;
         } else {
             let tok_start = start;
-            let is_skip = best_kind matches { TK_WS };
+            let is_skip = best_kind matches { == TK_WS };
             if is_skip {
                 ts.push_trivia(best_kind, tok_start, best_end, 0);
             } else {
@@ -1370,20 +1370,20 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_STRING => "STRING",
-        TK_NUMBER => "NUMBER",
-        TK_WS => "WS",
-        TK_EOF => "Eof",
-        TK_ERROR => "Error",
-        TK_LIT_LBRACE => "'{'",
-        TK_LIT_COMMA => "','",
-        TK_LIT_RBRACE => "'}'",
-        TK_LIT_COLON => "':'",
-        TK_LIT_LBRACKET => "'['",
-        TK_LIT_RBRACKET => "']'",
-        TK_LIT_true => "'true'",
-        TK_LIT_false => "'false'",
-        TK_LIT_null => "'null'",
+        == TK_STRING => "STRING",
+        == TK_NUMBER => "NUMBER",
+        == TK_WS => "WS",
+        == TK_EOF => "Eof",
+        == TK_ERROR => "Error",
+        == TK_LIT_LBRACE => "'{'",
+        == TK_LIT_COMMA => "','",
+        == TK_LIT_RBRACE => "'}'",
+        == TK_LIT_COLON => "':'",
+        == TK_LIT_LBRACKET => "'['",
+        == TK_LIT_RBRACKET => "']'",
+        == TK_LIT_true => "'true'",
+        == TK_LIT_false => "'false'",
+        == TK_LIT_null => "'null'",
         _ => "Unknown",
     };
 }
@@ -1996,15 +1996,15 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_LBRACE | TK_LIT_LBRACKET | TK_LIT_false | TK_LIT_null | TK_LIT_true | TK_NUMBER | TK_STRING };
+    return k matches { == TK_LIT_LBRACE | == TK_LIT_LBRACKET | == TK_LIT_false | == TK_LIT_null | == TK_LIT_true | == TK_NUMBER | == TK_STRING };
 }
 
 fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_NUMBER | TK_STRING };
+    return k matches { == TK_NUMBER | == TK_STRING };
 }
 
 fn _kind_set_2(k: i32) -> bool {
-    return k matches { TK_LIT_false | TK_LIT_null | TK_LIT_true };
+    return k matches { == TK_LIT_false | == TK_LIT_null | == TK_LIT_true };
 }
 
 global EMPTY_SYNC: List<i32> = [];
