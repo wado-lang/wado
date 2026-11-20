@@ -638,6 +638,9 @@ fn keep_rows<T: Eq>(
         }
         if in_place {
             at.insert(anchor);
+        } else if anchor.parent_node() != Option::Some(parent as Node) {
+            // Other code took the anchor out, so the rows end the parent again.
+            parent.append_child(anchor);
         }
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.

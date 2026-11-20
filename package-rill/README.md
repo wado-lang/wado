@@ -60,7 +60,7 @@ The control-flow children stand among the others, where they are written:
   the rest.
 
 ```wado
-use { each, element, show, signal } from "wado-lang:rill";
+use { Signal, each, element, show, signal } from "wado-lang:rill";
 
 let items: Signal<List<String>> = signal(["a", "b"]);
 let list = element("ul").children([

@@ -700,6 +700,24 @@ test "each claims no further once render disposed of its owner while hydrating" 
     };
 }
 
+test "each puts its rows back after other code emptied its parent" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        let items: Signal<List<i32>> = signal([1, 2]);
+        let _dispose = scope(|| {
+            build(View::of(list).children([each(|| items.get(), item)]));
+        });
+        while let Some(child) = list.first_child() {
+            list.remove_child(child);
+        }
+
+        items.set([0, 1, 2]);
+        flush();
+        assert children_text(list) == "012";
+    };
+}
+
 test "each restores its order after a row moved within its parent" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
