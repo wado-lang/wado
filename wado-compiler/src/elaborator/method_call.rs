@@ -1722,7 +1722,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let holes: Vec<(usize, TypeId)> = omitted
             .iter()
             .zip(names)
-            .map(|(&i, name)| (i, self.mint_infer_hole(span, message.clone(), name, Vec::new())))
+            .map(|(&i, name)| {
+                (
+                    i,
+                    self.mint_infer_hole(span, message.clone(), name, Vec::new()),
+                )
+            })
             .collect();
         for &(i, hole) in &holes {
             args[i] = hole;
@@ -3146,7 +3151,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|&(_, var)| var)
                 .chain(required_args.iter().copied())
-                .filter(|&var| self.tysys.type_table.borrow().is_infer_var(self.apply_infer_holes(var)))
+                .filter(|&var| {
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .is_infer_var(self.apply_infer_holes(var))
+                })
                 .collect();
             if !open.is_empty() {
                 self.close_uninferred(&open);
