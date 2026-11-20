@@ -751,9 +751,11 @@ pub fn walk_item_contents<'ast, V: AstVisitor<'ast>>(v: &mut V, item: &'ast Item
                 walk_effect_names(v, effects);
             }
             for assoc in &t.associated_types {
-                v.visit_id(assoc.id, assoc.span);
-                v.visit_assoc_type_params(&assoc.type_params, |v| {
-                    v.visit_trait_bounds(&assoc.bounds);
+                v.visit_attributed(&assoc.attrs, |v| {
+                    v.visit_id(assoc.id, assoc.span);
+                    v.visit_assoc_type_params(&assoc.type_params, |v| {
+                        v.visit_trait_bounds(&assoc.bounds);
+                    });
                 });
             }
             walk_methods(v, &t.methods);
