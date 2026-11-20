@@ -1540,8 +1540,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         expected: Option<TypeId>,
     ) -> BareCase {
-        if let Some((owner, spelled)) = self.bare_case_in(expected, &ident.name) {
+        if let Some((owner, spelled)) = self.bare_case_in(expected, ident.case_name()) {
             return BareCase::Of { owner, spelled };
+        }
+        if ident.has_inferred_qualifier() {
+            let expected = expected
+                .filter(|&t| t != TypeTable::ERROR && t != TypeTable::UNKNOWN)
+                .map(|t| self.tysys.type_table.borrow().name(t));
+            let _ = self.emit(TypeError::InferredCaseUnresolved {
+                case: ident.case_name().to_string(),
+                expected,
+                span: ident.span,
+            });
+            return BareCase::NeedsContext;
         }
         let Some(qualified) = self.tysys.bare_case_at(ident.id) else {
             return BareCase::None;

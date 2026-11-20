@@ -200,7 +200,9 @@ fn read_body_from_request(request: Request) -> Result<String, RouteResponse> wit
                 ["accept-encoding", "gzip, deflate"],
             ],
         }),
-        Err(_::TooLarge) => Result::Err(json_response(413, json_error(`Request body decodes past ${MAX_BODY_SIZE} bytes`))),
+        Err(_::TooLarge) => Result::Err(json_response(413, json_error(
+            `Request body decodes past ${MAX_BODY_SIZE} bytes`,
+        ))),
         Err(Corrupt(e)) => Result::Err(json_response(400, json_error(`Malformed request body: ${e}`))),
     };
 }

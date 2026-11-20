@@ -2507,7 +2507,9 @@ impl<'a> Reify<'a> {
                 // `let _ = expr;` discards. Lower as an Expr stmt.
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } | ast::Pattern::Variant { .. } => {
+            ast::Pattern::Tuple(_, _)
+            | ast::Pattern::Struct { .. }
+            | ast::Pattern::Variant { .. } => {
                 // Destructuring `let [a, b] = …;` / `let Point { x, y }
                 // = …;` / `let A(x) = …;` or `let _::A = …;` of a one-case
                 // variant. The TIR uses

@@ -10,7 +10,6 @@ mod hover;
 mod inlay_hints;
 pub mod kiln;
 mod location;
-pub mod pattern_names;
 mod query;
 mod references;
 pub mod scip;
@@ -561,17 +560,6 @@ impl Engine {
         host: &H,
     ) -> Option<scip::ScipDocument> {
         self.with_query_ctx(uri, host, None, |ctx| Some(scip::document(ctx, root)))
-            .await
-    }
-
-    /// The bare names in the document's patterns that name a case or a
-    /// constant, with the spelling that names each by its shape alone.
-    pub async fn pattern_name_rewrites<H: CompilerHost>(
-        &self,
-        uri: &str,
-        host: &H,
-    ) -> Vec<pattern_names::PatternNameRewrite> {
-        self.with_query_ctx(uri, host, Vec::new(), pattern_names::rewrites)
             .await
     }
 

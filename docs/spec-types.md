@@ -1616,6 +1616,20 @@ A bare case with no expected type is an error:
 let red = Red;
 ```
 
+`_::Case` also names a case of the expected type, as it does in a
+[pattern](./spec-patterns.md#qualified-patterns). Unlike a bare name, it never
+names a binding, so a local spelled like the case does not take it:
+
+<!-- {"fixture":"expr_inferred_case.wado"} -->
+
+```wado
+fn paint() -> Color {
+    let Red = 1;
+    assert Red == 1;
+    return _::Red;
+}
+```
+
 An enum may have `impl` blocks:
 
 <!-- {"fixture":"spec_types_enum.wado"} -->

@@ -504,7 +504,8 @@ fn element_holds_epsilon_closure(elem: &Element, ctx: &LeftCornerCtx) -> bool {
         Label(l) => element_holds_epsilon_closure(&l.element, ctx),
         Group(g) => g.alternatives.iter_ref().any(|a: &Alternative| elements_hold_epsilon_closure(&a.elements, ctx)),
         Repeat(rep) => {
-            if rep.kind matches { _::Star | _::Plus } && element_nullable(&rep.element, &ctx.index, &ctx.nullable, false) {
+            if rep.kind matches { _::Star | _::Plus }
+                && element_nullable(&rep.element, &ctx.index, &ctx.nullable, false) {
                 true;
             } else {
                 element_holds_epsilon_closure(&rep.element, ctx);

@@ -37,12 +37,12 @@ A binding whose name is a case of the type it matches is an error. Writing
 
 ### A case is a path or a call
 
-| Form                 | Example                       | Type of the case    |
-| -------------------- | ----------------------------- | ------------------- |
-| Qualified            | `Color::Red`, `Option::Some(x)` | the qualifier       |
-| Inferred qualifier   | `_::Red`, `_::Some(x)`        | the scrutinee's     |
-| Call                 | `Some(x)`                     | the scrutinee's     |
-| `null`               | `null`                        | its `None`          |
+| Form               | Example                         | Type of the case |
+| ------------------ | ------------------------------- | ---------------- |
+| Qualified          | `Color::Red`, `Option::Some(x)` | the qualifier    |
+| Inferred qualifier | `_::Red`, `_::Some(x)`          | the scrutinee's  |
+| Call               | `Some(x)`                       | the scrutinee's  |
+| `null`             | `null`                          | its `None`       |
 
 `_::` reads as a qualifier left for inference, as `with _` is an effect left
 for inference. An expression whose expected type supplies the case takes the
@@ -84,17 +84,18 @@ and suggests `if y != X { … }`.
 
 ## Roadmap
 
-- [ ] Parse `_::Case` in patterns and expressions, and `== operand` in
-      patterns.
-- [ ] `wado-dev-tools migrate-pattern-names`, which rewrites each bare name the compiler resolves to a
-      case or a constant into the new form: `None` to `null`, another case to
-      `_::Case`, a global to `== NAME`. It edits where the compiler resolved
-      the name, never where the text matches.
-- [ ] Migrate the stdlib, the packages, the fixtures and the docs.
-- [ ] A bare identifier always binds; a binding named after a case of its type
-      is an error.
-- [ ] The `binding_free_let_else` lint.
-- [ ] Move the rules into `spec-patterns.md`.
+- [x] Parse `_::Case` in patterns and expressions, and `== operand` in
+  patterns.
+- [x] `wado-dev-tools migrate-pattern-names`, which rewrote each bare name the
+  compiler resolved to a case or a constant into the new form: `None` to
+  `null`, another case to `_::Case`, a global to `== NAME`. It edited where
+  the compiler resolved the name, never where the text matched, and was
+  deleted once the migration landed.
+- [x] Migrate the stdlib, the packages, the fixtures and the docs.
+- [x] A bare identifier always binds; a binding named after a case of its type
+  is an error.
+- [x] The `binding_free_let_else` lint.
+- [x] Move the rules into `spec-patterns.md`.
 
 ## Known gaps
 

@@ -737,6 +737,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `_::Case` where the expected type has no such case, or there is none.
+    InferredCaseUnresolved {
+        case: String,
+        expected: Option<String>,
+        span: Span,
+    },
+
     /// A bare case (`Red`) where no expected type supplies it: the type name
     /// may be omitted only where the context says which type is meant.
     BareCaseNeedsContext {
@@ -2110,6 +2117,19 @@ impl TypeError {
             TypeError::CannotInferType { message, span } => {
                 (Code::NeedsTypeAnnotation, message.clone(), *span)
             }
+            TypeError::InferredCaseUnresolved {
+                case,
+                expected,
+                span,
+            } => (
+                Code::NeedsTypeAnnotation,
+                match expected {
+                    Some(expected) => format!("`{expected}` has no case `{case}`"),
+                    None => format!("`_::{case}` needs an expected type to name its case"),
+                },
+                *span,
+            ),
+
             TypeError::BareCaseNeedsContext {
                 case,
                 qualified,

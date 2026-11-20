@@ -5140,6 +5140,34 @@ impl Parser {
         }))
     }
 
+    /// `_::Case`: a case of the expected type, the `_` standing for the type
+    /// the elaborator infers. The parser is positioned at the `_`.
+    fn parse_inferred_case_path(&mut self, underscore: Span) -> ParseResult<Expr> {
+        self.advance(); // consume _
+        self.advance(); // consume ::
+        let case_span = self.peek().span;
+        let case = self.consume_ident()?;
+        Ok(Expr::Ident(IdentExpr {
+            id: self.alloc_ast_id(),
+            name: format!("{}::{case}", ast::INFERRED_QUALIFIER),
+            span: underscore.merge(&case_span),
+            segments: vec![
+                PathSegment {
+                    id: self.alloc_ast_id(),
+                    name: ast::INFERRED_QUALIFIER.to_string(),
+                    span: underscore,
+                },
+                PathSegment {
+                    id: self.alloc_ast_id(),
+                    name: case,
+                    span: case_span,
+                },
+            ],
+            type_args: Vec::new(),
+            type_args_on_prefix: false,
+        }))
+    }
+
     fn parse_primary_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
 
@@ -5239,6 +5267,12 @@ impl Parser {
                 start_span,
                 "'matches' is an infix operator — write 'expr matches { pattern }' instead",
             )),
+            TokenKind::Underscore
+                if self.peek_nth(1).kind == TokenKind::ColonColon
+                    && self.peek_nth(2).kind.as_ident_name().is_some() =>
+            {
+                self.parse_inferred_case_path(start_span)
+            }
             TokenKind::Underscore => Err(self.wildcard_name_error()),
             TokenKind::Dot
                 if let TokenKind::NumberLit(digits) = &self.peek_nth(1).kind

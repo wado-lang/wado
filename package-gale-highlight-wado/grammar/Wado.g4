@@ -761,6 +761,7 @@ atom
     | compileTimeExpr
     | taggedTemplate
     | selfBoundCall
+    | '_' '::' identifier
     | exprPath
     | tupleOrArrayLiteral
     | closure

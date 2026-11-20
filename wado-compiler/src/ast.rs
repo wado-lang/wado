@@ -3868,6 +3868,9 @@ pub struct IdentExpr {
     pub type_args_on_prefix: bool,
 }
 
+/// The qualifier of `_::Case`, which leaves the case's type to inference.
+pub const INFERRED_QUALIFIER: &str = "_";
+
 impl IdentExpr {
     /// The segment naming the path's *owner*: `Color` in `Color::Red` and in
     /// `ns::Color::Red` — the one before the member, so a namespace qualifier
@@ -3880,7 +3883,15 @@ impl IdentExpr {
     /// Where [`Self::owner_segment`] sits, for a caller that also needs what
     /// qualifies it — the `ns` of `ns::Color::Red`.
     pub fn owner_index(&self) -> Option<usize> {
+        if self.has_inferred_qualifier() {
+            return None;
+        }
         self.segments.len().checked_sub(2)
+    }
+
+    /// Whether the path is `_::Case`, whose owner is the expected type.
+    pub fn has_inferred_qualifier(&self) -> bool {
+        matches!(self.segments.as_slice(), [qualifier, _] if qualifier.name == INFERRED_QUALIFIER)
     }
 
     /// The path's last segment, or the bare name: `Red` in `Color::Red` and in `Red`.

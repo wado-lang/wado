@@ -1599,6 +1599,16 @@ impl AstVisitor<'_> for Resolver<'_> {
         }
         // `ns::member` resolves under the `ns$member` alias; a path that is no
         // such import answers `Unresolved` and its segments below name it.
+        // `_::Case` names no declaration in scope: its case is the expected
+        // type's, which only the elaborator knows.
+        if let ast::Expr::Ident(ident) = expr
+            && ident.has_inferred_qualifier()
+        {
+            for site in std::iter::once(ident.id).chain(ident.segments.iter().map(|s| s.id)) {
+                self.refs.insert(site, Resolution::Unresolved);
+            }
+            return;
+        }
         if let ast::Expr::Ident(ident) = expr {
             let written = ident.name.replace("::", "$");
             let answer = self.resolve_value_name(&written);

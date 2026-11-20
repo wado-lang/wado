@@ -4179,7 +4179,7 @@ fn test_format_type_pattern_roundtrips() {
 /// `_::Case` and `== CONST` keep their spelling wherever a pattern stands.
 #[test]
 fn test_format_inferred_case_and_equal_patterns_roundtrip() {
-    let source = "fn run() {\n    let kind = match n {\n        _::Red | Color::Blue => 1,\n        _::Circle(r) => r,\n        == LIMIT | == i32::MAX => 2,\n        _ => 0,\n    };\n    let [== TK_FOO, n] = pair else {\n        return;\n    };\n}\n";
+    let source = "fn run() {\n    let kind = match n {\n        _::Red | Color::Blue => 1,\n        _::Circle(r) => r,\n        == LIMIT | == i32::MAX => 2,\n        _ => 0,\n    };\n    let [== TK_FOO, n] = pair else {\n        return;\n    };\n    let c: Shape = _::Circle(_::Red);\n}\n";
     assert_format_preserves_ast(source);
     let formatted = wado_compiler::format(source).expect("format failed");
     assert_eq!(formatted, source);

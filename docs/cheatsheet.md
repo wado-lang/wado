@@ -529,6 +529,7 @@ enum Color {
 
 let c = Color::Red;
 let d: Color = Red; // bare only where the expected type supplies it; `let e = Red;` is an error
+let f: Color = _::Red; // the same, and never a binding named `Red`
 
 // Pattern matching: a bare name always binds, so a case takes `_::`, which
 // leaves its type to the scrutinee's

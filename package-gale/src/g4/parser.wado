@@ -956,7 +956,11 @@ impl G4Parser {
             return Result::Err(ParseError::new(`expected ${what}`, self.peek().span, [what.to_string()]));
         }
         return Result::Ok(
-            if kind matches { _::CharClass } { self.extract_action(b'[', b']') } else { self.extract_action(b'{', b'}') },
+            if kind matches { _::CharClass } {
+                self.extract_action(b'[', b']');
+            } else {
+                self.extract_action(b'{', b'}');
+            },
         );
     }
 

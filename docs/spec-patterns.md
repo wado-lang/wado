@@ -7,22 +7,22 @@ parameters. The statements themselves are in [Control Flow](./spec-control-flow.
 
 ## Pattern Syntax
 
-| Pattern       | Example                              | Description                                  |
-| ------------- | ------------------------------------ | -------------------------------------------- |
-| Wildcard      | `_`                                  | Matches anything                             |
-| Variable      | `x`                                  | Binds matched value                          |
-| Mut variable  | `mut x`, `Some(mut x)`               | Binds as mutable                             |
-| Literal       | `0`, `"hello"`, `true`, `null`       | Matches exact value                          |
-| Constant      | `== MAX_LEN`, `i32::MAX`             | Matches an immutable global / const by value |
-| Range         | `0..<60`, `'a'..='z'`                | Matches an integer, `char` or float in range |
-| Case          | `Some(x)`, `_::Red`, `Color::Red`    | Matches a case of a variant or enum          |
-| Tuple         | `[a, b, c]`                          | Destructures tuple                           |
-| Nested tuple  | `[10, Some(x)]`                      | Literal/variant sub-patterns in tuple        |
-| Struct        | `{ x, y }`, `Point { x, y }`         | Destructures struct                          |
-| Nested struct | `{ x: 0, y }`                        | Literal/variant sub-patterns in struct       |
-| Or            | `_::Red \| _::Blue`                  | Matches either pattern                       |
-| Guard         | `Some(x) && x > 0`                   | Pattern with condition                       |
-| Type          | `input: HtmlInputElement`            | Matches when the value is of the type        |
+| Pattern       | Example                           | Description                                  |
+| ------------- | --------------------------------- | -------------------------------------------- |
+| Wildcard      | `_`                               | Matches anything                             |
+| Variable      | `x`                               | Binds matched value                          |
+| Mut variable  | `mut x`, `Some(mut x)`            | Binds as mutable                             |
+| Literal       | `0`, `"hello"`, `true`, `null`    | Matches exact value                          |
+| Constant      | `== MAX_LEN`, `i32::MAX`          | Matches an immutable global / const by value |
+| Range         | `0..<60`, `'a'..='z'`             | Matches an integer, `char` or float in range |
+| Case          | `Some(x)`, `_::Red`, `Color::Red` | Matches a case of a variant or enum          |
+| Tuple         | `[a, b, c]`                       | Destructures tuple                           |
+| Nested tuple  | `[10, Some(x)]`                   | Literal/variant sub-patterns in tuple        |
+| Struct        | `{ x, y }`, `Point { x, y }`      | Destructures struct                          |
+| Nested struct | `{ x: 0, y }`                     | Literal/variant sub-patterns in struct       |
+| Or            | `_::Red \| _::Blue`               | Matches either pattern                       |
+| Guard         | `Some(x) && x > 0`                | Pattern with condition                       |
+| Type          | `input: HtmlInputElement`         | Matches when the value is of the type        |
 
 A pattern's shape alone says what each of its names does. A bare identifier
 binds, in every pattern, whatever the scrutinee's type and whatever the name

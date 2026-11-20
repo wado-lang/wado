@@ -2166,15 +2166,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ..
                 } = &**operand
                 else {
-                    return self
-                        .resolve_if_pattern_inner(operand, scrutinee_type, ctx, span, site, ref_binding);
+                    return self.resolve_if_pattern_inner(
+                        operand,
+                        scrutinee_type,
+                        ctx,
+                        span,
+                        site,
+                        ref_binding,
+                    );
                 };
                 let constant = self
                     .resolve_pattern_constant(operand, ctx)
                     .expect("`names_pattern_constant` answered for it");
                 let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 self.typecheck(constant.ty, peeled, *name_span);
-                self.resolve_constant_pattern(*id, &constant, scrutinee_type, ctx, *name_span, site);
+                self.resolve_constant_pattern(
+                    *id,
+                    &constant,
+                    scrutinee_type,
+                    ctx,
+                    *name_span,
+                    site,
+                );
                 Vec::new()
             }
             Pattern::Typed {

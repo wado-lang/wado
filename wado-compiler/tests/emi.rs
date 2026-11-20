@@ -778,7 +778,7 @@ fn condition_bindings(condition: &Condition) -> Vec<Binding> {
     let mut bindings = Vec::new();
     for element in elements {
         if let ConditionElement::Let { pattern, .. } = element {
-            pattern_bindings(pattern, false, true, &mut bindings);
+            pattern_bindings(pattern, false, &mut bindings);
         }
     }
     bindings
@@ -877,7 +877,7 @@ impl AstVisitor<'_> for SiteCollector {
             Stmt::ForOf(for_of) => {
                 self.visit_expr(&for_of.iterable);
                 let mut bound = Vec::new();
-                pattern_bindings(&for_of.binding, for_of.is_mut, false, &mut bound);
+                pattern_bindings(&for_of.binding, for_of.is_mut, &mut bound);
                 self.in_scope(bound, |s| s.visit_block(&for_of.body));
             }
             _ => walk_stmt(self, stmt),
@@ -889,7 +889,7 @@ impl AstVisitor<'_> for SiteCollector {
         self.visit_expr(&match_expr.expr);
         for arm in &match_expr.arms {
             let mut bound = Vec::new();
-            pattern_bindings(&arm.pattern, false, true, &mut bound);
+            pattern_bindings(&arm.pattern, false, &mut bound);
             self.in_scope(bound, |s| {
                 if let Some(guard) = &arm.guard {
                     s.visit_expr(guard);

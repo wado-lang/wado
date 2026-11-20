@@ -150,6 +150,7 @@ pub use semantics::{
 };
 
 pub use affine_move_check::{AffineMoveError, check_affine_moves_semantic};
+use binding_free_let_else::binding_free_let_else_diagnostics;
 pub use compiler_host::InMemoryCompilerHost;
 use constant_arithmetic::constant_arithmetic_diagnostics;
 pub use effect_check::{
@@ -159,7 +160,6 @@ pub use effect_check::{
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
 use float_literal_pattern::float_literal_pattern_diagnostics;
-use binding_free_let_else::binding_free_let_else_diagnostics;
 use hex_suffix_lookalike::hex_suffix_lookalike_diagnostics;
 pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
