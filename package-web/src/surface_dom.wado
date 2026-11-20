@@ -250,7 +250,14 @@ fn any_sibling(start: Option<Node>, step: fn(&SurfaceNode) -> Option<Node>, acce
 
 // The DOM standard's pre-insertion validity, its steps in order; a DOM
 // exception traps (Web WEP, Exceptions).
-fn assert_insertable(parent: Node, node: Node, child: Option<Node>) {
+// The DOM standard's validity checks for inserting `node` before `child`, or
+// for replacing `child` with it where `replacing`: the child replaced counts
+// for neither the one element nor the one doctype a document holds.
+fn assert_insertable(parent: Node, node: Node, child: Option<Node>, replacing: bool) {
+    let replaced = if replacing { child } else { null };
+    let other_child = |accept: fn(&SurfaceNode) -> bool| children(parent).find(
+        |c| Option::Some(c) != replaced && accept(surface_node(c)),
+    );
     let into_document = surface_node(parent).content matches { Document };
     assert into_document || is_element(surface_node(parent)), "HierarchyRequestError: only a document or an element holds children";
     assert !is_inclusive_ancestor(node, parent), "HierarchyRequestError: a node cannot be inserted into itself or its descendant";
@@ -272,12 +279,13 @@ fn assert_insertable(parent: Node, node: Node, child: Option<Node>) {
         return;
     }
     if is_element(surface_node(node)) {
-        assert child_where(parent, is_element) == null, "HierarchyRequestError: a document holds one element";
+        assert other_child(is_element) == null, "HierarchyRequestError: a document holds one element";
         if let Some(reference) = child {
-            assert !any_sibling(Option::Some(reference), |n| n.next_sibling, is_doctype), "HierarchyRequestError: the element follows the doctype";
+            let after = if replacing { surface_node(reference).next_sibling } else { child };
+            assert !any_sibling(after, |n| n.next_sibling, is_doctype), "HierarchyRequestError: the element follows the doctype";
         }
     } else {
-        assert child_where(parent, is_doctype) == null, "HierarchyRequestError: a document holds one doctype";
+        assert other_child(is_doctype) == null, "HierarchyRequestError: a document holds one doctype";
         let ahead = match child {
             Some(reference) => surface_node(reference).previous_sibling,
             None => surface_node(parent).last_child,
@@ -288,7 +296,7 @@ fn assert_insertable(parent: Node, node: Node, child: Option<Node>) {
 
 // The DOM standard's pre-insert.
 fn pre_insert(parent: Node, node: Node, child: Option<Node>) {
-    assert_insertable(parent, node, child);
+    assert_insertable(parent, node, child, false);
     let next = if child == Option::Some(node) { surface_node(node).next_sibling } else { child };
     insert(parent, node, next);
 }
@@ -842,8 +850,8 @@ impl Node for SurfaceDom {
     fn replace_child(&mut self, this: &Node, node: Node, child: Node) -> Node {
         self.own(*this);
         self.own(node);
-        assert self.own(child).parent == Option::Some(*this), "NotFoundError: the node to replace is a child";
-        assert_insertable(*this, node, Option::Some(child));
+        self.own(child);
+        assert_insertable(*this, node, Option::Some(child), true);
         let mut next = surface_node(child).next_sibling;
         if next == Option::Some(node) {
             next = surface_node(node).next_sibling;

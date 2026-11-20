@@ -170,6 +170,25 @@ test "replace_child puts a node where the child stood, and takes the child out" 
     };
 }
 
+test "replace_child lets a document's element be replaced by another" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let html = doc.create_element("html");
+        doc.replace_child(html, doc.document_element().unwrap());
+        assert doc.document_element() == Option::Some(html);
+    };
+}
+
+#[expect_trap]
+test "replace_child keeps a document to one element" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        doc.replace_child(doc.create_element("p"), doc.first_child().unwrap());
+    };
+}
+
 test "insert_before places a node ahead of a child, or last for null" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

@@ -51,8 +51,9 @@ and builds it anew. A mismatch is a bug in the app or the build, so
 development reports it, and production keeps the page working.
 
 Contract checks tell the two builds apart: `hydrate` meets a mismatch as a
-contract that fails. `wado test` and `wado run` check contracts, and
-`wado compile` does not unless told to.
+contract that fails. A test checks contracts at every optimization level, and
+any other build checks them at `-O0` and `-O1` or with `-f contract-checks`.
+So the browser program is compiled at `-O2` or `-Os`.
 
 - A served element of another tag is replaced by one built anew.
 - An element the page was served without is built where it belongs.
@@ -78,7 +79,9 @@ So claim mode claims elements and builds text afresh.
 
 - An element claims the next element child and checks its tag. Its static
   attributes are checked against what was served, once its steps have run, at
-  the value the view leaves each at. One a binding writes is not checked.
+  the value the view leaves each at. One a binding writes is not checked, and
+  neither is one the view does not set: a browser or its extensions add
+  attributes of their own.
   A mismatch is like any other.
 - A `text` or `bind_text`, and the anchor of a `show` or `switch`, creates its
   node. The served text between two elements is removed once the elements

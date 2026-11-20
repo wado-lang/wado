@@ -50,7 +50,7 @@ pub fn hydrate(view: View) -> Element with (Track, Dom) {
 }
 
 fn mismatch(what: String)
-    contract false, `hydrate: ${what}`
+    contract false, `hydrate: a served page must be what its view builds: ${what}`
 {
 }
 
@@ -190,13 +190,16 @@ fn is_stored_as_written(name: String) -> bool {
 }
 
 /// Builds `view` at the point `parent` has reached: on the served element
-/// there while claiming, and anew where none fits.
+/// there while claiming, and anew where none fits. An adopted element that
+/// does not fit takes the place, and claims what it holds, which was not made
+/// here.
 fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
     let served = if parent.claiming() { parent.claim() } else { null };
     if let Some(claimed) = served && fits(claimed, &view.origin) {
         run_steps(claimed, parent.report, view.steps);
         return claimed;
     }
+    let report = if view.origin matches { Adopted(_) } { parent.report } else { null };
     let made = make(view.origin);
     match served {
         Some(other) => {
@@ -210,7 +213,7 @@ fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
             parent.insert(made);
         },
     }
-    run_steps(made, null, view.steps);
+    run_steps(made, report, view.steps);
     return made;
 }
 

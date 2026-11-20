@@ -23,6 +23,7 @@ export fn run() with (Environment, Exit, Preopens, Process, Stderr) {
     }
     let wado = given[0];
     let out = given[1];
+    assert !out.ends_with("/"), "<out> must name the directory without a trailing slash";
     // What only the build reads goes beside the site, not in it.
     let work = `${out}-work`;
     for let dir of [out, work] {

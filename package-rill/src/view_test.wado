@@ -971,6 +971,21 @@ test "a served element of another tag is built anew, its bindings live" {
     };
 }
 
+test "an adopted element that does not fit is put in place and claims what it holds" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let root = new_element("main");
+        root.append_child(new_element("p"));
+        let adopted = new_element("section");
+        let held = new_element("span");
+        held.append_child(Dom::document().create_text_node("a"));
+        adopted.append_child(held);
+        assert rebuilt(View::of(root).child(View::of(adopted).child(element("span").text("a")))) == 1;
+        assert root.get_html() == "<section><span>a</span></section>";
+        assert adopted.first_child().unwrap() == held as Node;
+    };
+}
+
 test "an element missing from the served page is built where it belongs" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {

@@ -55,8 +55,10 @@ and a site build that writes both pages.
 ## Publish
 
 Publish with the Artifact tool: `file_path` is `artifact.html`, and `files`
-maps `app.js` and each core module (`ls build/rill-todo/*.core*.wasm`) to the
-files in `build/rill-todo/`, each module with its content type.
+maps `app.js` and every core module the build wrote
+(`ls build/rill-todo/*.core*.wasm`) to the files in `build/rill-todo/`, each
+module with its content type. A module left out fails to load, and the page
+never hydrates.
 
 ```json
 {
@@ -65,6 +67,14 @@ files in `build/rill-todo/`, each module with its content type.
     "app.js": "build/rill-todo/app.js",
     "main.component.core.wasm": {
       "from": "build/rill-todo/main.component.core.wasm",
+      "contentType": "application/wasm"
+    },
+    "main.component.core2.wasm": {
+      "from": "build/rill-todo/main.component.core2.wasm",
+      "contentType": "application/wasm"
+    },
+    "main.component.core3.wasm": {
+      "from": "build/rill-todo/main.component.core3.wasm",
       "contentType": "application/wasm"
     }
   },
