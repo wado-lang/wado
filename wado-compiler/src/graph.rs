@@ -57,6 +57,60 @@ pub fn strongly_connected_components(successors: &[Vec<usize>]) -> Vec<Vec<usize
     out
 }
 
+/// Each node's rank within its component of `successors`, `component_of`
+/// naming it: one past the highest rank among its successors there, an edge
+/// that closes a cycle aside. A depth-first search drops those edges, the ones
+/// it meets to a node it has not finished, so what is left orders every
+/// component, and nodes of one rank are joined only by a dropped edge.
+pub fn ranks_within_components(successors: &[Vec<usize>], component_of: &[usize]) -> Vec<usize> {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Visit {
+        New,
+        Open,
+        Done,
+    }
+    let within = |n: usize| {
+        successors[n]
+            .iter()
+            .copied()
+            .filter(move |&s| component_of[s] == component_of[n])
+    };
+    let mut rank = vec![0; successors.len()];
+    let mut visit = vec![Visit::New; successors.len()];
+    // An explicit stack of (node, next successor), as in
+    // `strongly_connected_components`.
+    let mut work: Vec<(usize, usize)> = Vec::new();
+    for root in 0..successors.len() {
+        if visit[root] != Visit::New {
+            continue;
+        }
+        visit[root] = Visit::Open;
+        work.push((root, 0));
+        while let Some(&mut (n, ref mut next)) = work.last_mut() {
+            let unseen = successors[n][*next..]
+                .iter()
+                .position(|&s| component_of[s] == component_of[n]);
+            if let Some(at) = unseen {
+                let s = successors[n][*next + at];
+                *next += at + 1;
+                if visit[s] == Visit::New {
+                    visit[s] = Visit::Open;
+                    work.push((s, 0));
+                }
+                continue;
+            }
+            work.pop();
+            rank[n] = within(n)
+                .filter(|&s| visit[s] == Visit::Done)
+                .map(|s| rank[s] + 1)
+                .max()
+                .unwrap_or(0);
+            visit[n] = Visit::Done;
+        }
+    }
+    rank
+}
+
 /// A partition of the nodes `0..n` into sets that only ever merge.
 #[derive(Clone, Default)]
 pub struct DisjointSets {
@@ -128,7 +182,7 @@ impl DisjointSets {
 
 #[cfg(test)]
 mod tests {
-    use super::{DisjointSets, strongly_connected_components};
+    use super::{DisjointSets, ranks_within_components, strongly_connected_components};
 
     #[test]
     fn sets_merge_and_flatten() {
@@ -150,5 +204,24 @@ mod tests {
             c.sort_unstable();
         }
         assert_eq!(components, vec![vec![3], vec![1, 2], vec![0]]);
+    }
+
+    #[test]
+    fn ranks_order_a_component_but_the_edges_closing_cycles() {
+        // One component: 0 -> 1 -> 2 -> 0 closes the cycle, and 1 -> 3 -> 2 is
+        // a second path into 2. Node 4 loops on itself, and 5 calls into the
+        // component from outside it.
+        let graph = vec![vec![1], vec![2, 3], vec![0], vec![2], vec![4], vec![0]];
+        let component_of = [0, 0, 0, 0, 1, 2];
+        let rank = ranks_within_components(&graph, &component_of);
+        assert_eq!(rank, vec![3, 2, 0, 1, 0, 0]);
+        let dropped = [(2, 0), (4, 4)];
+        for (n, callees) in graph.iter().enumerate() {
+            for &s in callees {
+                if component_of[s] == component_of[n] && !dropped.contains(&(n, s)) {
+                    assert!(rank[n] > rank[s], "{n} -> {s} is kept, so it orders them");
+                }
+            }
+        }
     }
 }

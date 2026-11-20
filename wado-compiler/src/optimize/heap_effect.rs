@@ -10,7 +10,7 @@ use cranelift_entity::EntityRef;
 
 use crate::builtin_facts::{SideEffect, Storage};
 use crate::defs::DefId;
-use crate::graph::{DisjointSets, strongly_connected_components};
+use crate::graph::{DisjointSets, ranks_within_components, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::RefKind;
 use crate::nir::StructFieldTypes;
@@ -295,61 +295,52 @@ impl Layouts {
     }
 }
 
-/// Each node's rank within its component: one past the highest rank among its
-/// callees there, a call that closes a cycle aside. A depth-first search drops
-/// those calls, the ones it meets to a node it has not finished, so what is
-/// left orders every component, and a rank's nodes call none of each other but
-/// along a dropped call.
-fn ranks_within(
-    successors: &[Vec<usize>],
-    components: &[Vec<usize>],
-    component_of: &[usize],
-) -> Vec<usize> {
-    #[derive(Clone, Copy, PartialEq)]
-    enum Visit {
-        New,
-        Open,
-        Done,
-    }
-    let mut rank = vec![0; successors.len()];
-    let mut visit = vec![Visit::New; successors.len()];
-    for members in components.iter().filter(|members| members.len() > 1) {
-        for &root in members {
-            if visit[root] != Visit::New {
-                continue;
-            }
-            visit[root] = Visit::Open;
-            let mut stack = vec![(root, 0)];
-            while let Some((n, next)) = stack.last_mut() {
-                let n = *n;
-                let callee = successors[n][*next..]
-                    .iter()
-                    .position(|&s| component_of[s] == component_of[n]);
-                match callee {
-                    Some(at) => {
-                        let s = successors[n][*next + at];
-                        *next += at + 1;
-                        if visit[s] == Visit::New {
-                            visit[s] = Visit::Open;
-                            stack.push((s, 0));
-                        }
-                    }
-                    None => {
-                        stack.pop();
-                        visit[n] = Visit::Done;
-                        rank[n] = successors[n]
-                            .iter()
-                            .filter(|&&s| component_of[s] == component_of[n] && s != n)
-                            .filter(|&&s| visit[s] == Visit::Done)
-                            .map(|&s| rank[s] + 1)
-                            .max()
-                            .unwrap_or(0);
-                    }
+/// What [`HeapEffectsCache::sweep`] orders a component's nodes by, and which of
+/// them it has yet to summarize again.
+struct Sweep {
+    rank: Vec<usize>,
+    /// Each node's callers in its own component.
+    callers_within: Vec<Vec<usize>>,
+    /// The stale nodes, by rank.
+    by_rank: Vec<Vec<usize>>,
+    stale: Vec<bool>,
+    count: usize,
+    /// The nodes of the components being swept.
+    swept: Vec<bool>,
+}
+
+impl Sweep {
+    fn new(successors: &[Vec<usize>], component_of: &[usize]) -> Self {
+        let mut callers_within: Vec<Vec<usize>> = vec![Vec::new(); successors.len()];
+        for (n, callees) in successors.iter().enumerate() {
+            for &s in callees {
+                if component_of[s] == component_of[n] {
+                    callers_within[s].push(n);
                 }
             }
         }
+        Self {
+            rank: ranks_within_components(successors, component_of),
+            callers_within,
+            by_rank: Vec::new(),
+            stale: vec![false; successors.len()],
+            count: 0,
+            swept: vec![false; successors.len()],
+        }
     }
-    rank
+
+    fn mark(&mut self, n: usize) {
+        if self.stale[n] {
+            return;
+        }
+        self.stale[n] = true;
+        let rank = self.rank[n];
+        if self.by_rank.len() <= rank {
+            self.by_rank.resize_with(rank + 1, Vec::new);
+        }
+        self.by_rank[rank].push(n);
+        self.count += 1;
+    }
 }
 
 /// The call-graph-wide summaries, kept across passes no DCE separates and
@@ -446,14 +437,7 @@ impl HeapEffectsCache {
                 component_of[n] = c;
             }
         }
-        let mut callers_within: Vec<Vec<usize>> = vec![Vec::new(); successors.len()];
-        for (n, callees) in successors.iter().enumerate() {
-            for &s in callees {
-                if component_of[s] == component_of[n] {
-                    callers_within[s].push(n);
-                }
-            }
-        }
+        let mut sweep = Sweep::new(&successors, &component_of);
         // A component's depth is one past its deepest callee component's, so
         // one depth's components reach none of each other.
         let mut depth = vec![0; components.len()];
@@ -475,7 +459,6 @@ impl HeapEffectsCache {
             }
             by_depth[depth[c]].push(c);
         }
-        let rank = ranks_within(&successors, &components, &component_of);
         for level in by_depth {
             let pending: Vec<usize> = level
                 .into_iter()
@@ -490,7 +473,7 @@ impl HeapEffectsCache {
                 .iter()
                 .map(|&n| (n, std::mem::take(self.summary_mut(n))))
                 .collect();
-            self.sweep(functions, type_table, exec, &pending, &rank, &callers_within);
+            self.sweep(functions, type_table, exec, &pending, &mut sweep);
             for (n, before) in before {
                 moved[n] |= *self.summary_mut(n) != before;
             }
@@ -507,26 +490,21 @@ impl HeapEffectsCache {
         type_table: &TypeTable,
         exec: &Executor,
         nodes: &[usize],
-        rank: &[usize],
-        callers_within: &[Vec<usize>],
+        sweep: &mut Sweep,
     ) {
-        let mut by_rank: Vec<Vec<usize>> = Vec::new();
         for &n in nodes {
-            if by_rank.len() <= rank[n] {
-                by_rank.resize_with(rank[n] + 1, Vec::new);
-            }
-            by_rank[rank[n]].push(n);
+            sweep.swept[n] = true;
+            sweep.mark(n);
         }
-        let mut stale: IndexSet<usize> = nodes.iter().copied().collect();
-        while !stale.is_empty() {
-            for members in &by_rank {
-                let batch: Vec<usize> = members
-                    .iter()
-                    .copied()
-                    .filter(|n| stale.swap_remove(n))
-                    .collect();
+        while sweep.count > 0 {
+            for at in 0..sweep.by_rank.len() {
+                let batch = std::mem::take(&mut sweep.by_rank[at]);
                 if batch.is_empty() {
                     continue;
+                }
+                sweep.count -= batch.len();
+                for &n in &batch {
+                    sweep.stale[n] = false;
                 }
                 let this = &*self;
                 let fresh = exec.map(&batch, |&n| this.summarize(functions, type_table, n, true));
@@ -535,9 +513,16 @@ impl HeapEffectsCache {
                         continue;
                     }
                     *self.summary_mut(n) = summary;
-                    stale.extend(callers_within[n].iter().copied());
+                    for i in 0..sweep.callers_within[n].len() {
+                        let caller = sweep.callers_within[n][i];
+                        assert!(sweep.swept[caller], "a component is swept whole");
+                        sweep.mark(caller);
+                    }
                 }
             }
+        }
+        for &n in nodes {
+            sweep.swept[n] = false;
         }
     }
 
