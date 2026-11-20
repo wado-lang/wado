@@ -3687,10 +3687,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         required_args: &[TypeId],
     ) -> bool {
         let inherent = required_trait.is_none()
-            && self
-                .tysys
-                .static_receiver_key(target)
-                .is_some_and(|key| self.static_method_entries(&key, method_name).next().is_some());
+            && self.tysys.static_receiver_key(target).is_some_and(|key| {
+                self.static_method_entries(&key, method_name)
+                    .next()
+                    .is_some()
+            });
         inherent
             || self.tysys.solver.as_ref().is_some_and(|bridge| {
                 bridge.borrow().may_answer(
