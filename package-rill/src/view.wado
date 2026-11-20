@@ -51,12 +51,12 @@ pub fn hydrate(view: View) -> Element with (Track, Dom) {
 
 /// The element being built, and how far the build has come through it.
 ///
-/// While claiming, `served` holds the children the element was served with, in
-/// order, and the build has passed the first `passed` of them. It is taken
-/// before any step runs, since a callback may move a child the build already
-/// claimed. `attributes` holds the value each static attribute is left at,
-/// `None` for one a binding writes, checked once every step has run against
-/// `served_attributes`, taken before any step runs since a binding writes one.
+/// While claiming, `served` and `served_attributes` hold the children and the
+/// attributes the element was served with, taken before any step runs: a step
+/// may move a child or write an attribute. The build has passed the first
+/// `passed` children. `attributes` holds the value each static attribute is
+/// left at, `None` for one a binding writes, checked against
+/// `served_attributes` once every step has run.
 struct Build {
     node: Element,
     claiming: bool,
