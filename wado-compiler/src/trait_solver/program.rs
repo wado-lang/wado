@@ -671,10 +671,11 @@ pub struct Program {
     /// The associated types a [`Fact`] binds to a declaration's members. A
     /// pin on one descends into the type, which the cycle rule admits.
     pub member_channels: IndexSet<AssocId>,
-    /// Every impl written again after its first copy. Coherence reports each
-    /// where it is written, and no candidate set holds one, so a copy never
-    /// ties with its original. Set by [`super::mark_duplicates`].
-    pub duplicates: IndexSet<ImplId>,
+    /// Every impl coherence rejects: one written again after its first copy,
+    /// and a value blanket with no bound. Coherence reports each where it is
+    /// written, and no candidate set holds one, so a copy never ties with its
+    /// original. Set by [`super::mark_rejected`].
+    pub rejected: IndexSet<ImplId>,
     /// Impls that answer at their own level alone, never through a newtype's
     /// or a `flags` type's base: the stated `From` impls. Inheriting
     /// `From<Meters> for i64` would make every newtype of `i64` convert from

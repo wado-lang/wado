@@ -17,7 +17,7 @@ use crate::trait_solver::{
     ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
     Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, answering_link,
     bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
-    holds_with_args, instance_candidates, mark_duplicates, owed, pair_comparisons, rank, rank_open,
+    holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons, rank, rank_open,
     sourced, written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
@@ -1110,7 +1110,7 @@ impl SolverBridge {
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_reflexive_from(tysys, &mut lowering, &mut program);
-        mark_duplicates(&mut program);
+        mark_rejected(&mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
         if let (Some(eq), Some(ord)) = (
@@ -2526,6 +2526,31 @@ impl SolverBridge {
             &[],
         )?;
         answering_link(&self.program, &receiver, &found.in_scope).map(|(link, _)| link)
+    }
+
+    /// Whether an impl of a trait in scope may answer `method_name` on
+    /// `type_id` at some instance of its variables.
+    pub(super) fn may_answer(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        module: &ModuleSource,
+        type_id: TypeId,
+        method_name: &str,
+        required_trait: Option<DefId>,
+        required_args: &[TypeId],
+    ) -> bool {
+        self.call_candidates(
+            tysys,
+            ctx,
+            module,
+            type_id,
+            None,
+            method_name,
+            required_trait,
+            required_args,
+        )
+        .is_some_and(|(found, _)| !found.in_scope.is_empty())
     }
 
     /// The impl blocks answering `method_name` on `type_id` at the nearest

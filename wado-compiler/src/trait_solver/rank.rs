@@ -67,9 +67,9 @@ pub enum Selection {
     Overloaded(Vec<usize>),
     /// Several impls written for the receiver at one argument list, kept apart
     /// only by their bounds, which hold together here. A copy of one impl never
-    /// gets here: [`Program::duplicates`] keeps it out of the candidates.
+    /// gets here: [`Program::rejected`] keeps it out of the candidates.
     ///
-    /// [`Program::duplicates`]: super::Program::duplicates
+    /// [`Program::rejected`]: super::Program::rejected
     Duplicated(Vec<usize>),
     /// The order answers differently at different instances of the receiver's
     /// inference variables, so the call waits on an annotation.

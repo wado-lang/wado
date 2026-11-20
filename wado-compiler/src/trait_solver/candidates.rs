@@ -199,7 +199,7 @@ fn collect(
             let Some(trait_) = def.trait_ else {
                 continue;
             };
-            if program.duplicates.contains(&impl_)
+            if program.rejected.contains(&impl_)
                 || (depth >= own_levels && program.not_inherited.contains(&impl_))
             {
                 continue;

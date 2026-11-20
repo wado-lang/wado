@@ -819,6 +819,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|&var| self.infer_holes.vars.root_of(var))
             .collect();
         let blames = self.class_blames(&classes);
+        assert_eq!(
+            blames.len(),
+            classes.len(),
+            "an open class carries the blame that reports it"
+        );
         self.report_uninferred(blames);
         for &var in vars {
             self.close_infer_var(var);
@@ -865,11 +870,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Every variable still open has been reported or is covered, so it
         // stands as the error type, which every question takes, and the
         // queue runs once more at that.
-        for hole in self.infer_holes.vars.holes.clone() {
+        let holes = self.infer_holes.vars.holes.clone();
+        for &hole in &holes {
             if self.infer_holes.vars.is_unanswered(hole) {
                 self.close_infer_var(hole);
             }
         }
+        assert_eq!(
+            self.infer_holes.vars.len(),
+            holes.len(),
+            "closing a variable mints none"
+        );
         let subst = self.pinned_hole_subst();
         self.verify_commitments(&subst);
         self.sweep_recorded_facts(&subst);
