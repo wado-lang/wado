@@ -92,9 +92,10 @@ a test builds the served tree by hand.
 
 - Pages serves no custom headers. Rill runs on one thread, so it needs none
   (no COOP or COEP).
-- This repository already serves the `gh-pages` branch, for the benchmarks.
-  The app goes in a directory of it, deployed in the same concurrency group,
-  so every URL the page uses is relative.
+- The app is hosted on wado-lang.org, the site
+  [`wado-lang/wado-lang.github.io`](https://github.com/wado-lang/wado-lang.github.io)
+  builds. It goes in a directory of that site, so every URL the page uses is
+  relative.
 - The branch needs `.nojekyll`, or files whose names start with `_` are not
   served.
 - A single page needs no `404.html`. A router would, to serve its paths.
@@ -108,16 +109,14 @@ HTML; only the bindings are missing.
 
 ## Roadmap
 
-- [ ] Deploy the to-do example as a client-rendered app: a workflow compiles it
-  for the browser, as [`example/web-browser/build.sh`](../example/web-browser/build.sh) does, and publishes it to
-  `gh-pages`.
-- [ ] Render the initial page at build time, and have the browser program
-  replace it with a fresh `mount`. The page shows before the Wasm loads.
 - [x] Make `View` describe the tree, and build it in one pass in document
   order.
 - [x] Add claim mode to that pass.
-- [ ] Hydrate the deployed page instead of replacing it.
 - [ ] Apply the mismatch policy. A mismatch traps in every build so far.
+- [ ] Render the to-do example's initial page at build time, and hydrate it
+  in the browser, compiled as
+  [`example/web-browser/build.sh`](../example/web-browser/build.sh) does.
+- [ ] Host it on wado-lang.org.
 
 ## Known gaps
 
