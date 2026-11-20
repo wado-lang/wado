@@ -28,5 +28,5 @@ already measured, not how to close it. Closed work belongs in commit history.
 
 - [ ] No app is published. [`static-generation.md`](./static-generation.md)
   holds the design and its roadmap.
-- [ ] `View` creates each child before its parent, so a build cannot walk
-  served HTML in document order to hydrate it.
+- [ ] A served page that differs from its view traps `hydrate`, in production
+  too.

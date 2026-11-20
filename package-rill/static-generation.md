@@ -35,14 +35,13 @@ is one), and a closure cannot be serialized.
 ### Build order: parent first, in document order
 
 Claim mode walks the served DOM from the root down, so `mount` has to build in
-that order too. Today `View` creates each child before its parent:
-`element("li").children([title, remove])` makes `title` and `remove` first. The
-direction taken is to make `View` describe the tree rather than build it. A
-single pass then creates or claims each node, parent before children, siblings
-in order. The chained API can stay much as it is.
+that order too. A `View` therefore describes the tree rather than building it:
+each method adds a step, and `build` or `hydrate` runs the steps in one pass,
+parent before children, siblings in order. A node exists only once that pass
+reaches it, so code that needs one takes it from `with_node`.
 
-This is a prototype direction, not a final decision. The API may change: Rill
-has no users outside this repository.
+This is a prototype, not a final decision. The API may change: Rill has no
+users outside this repository.
 
 ### Mismatch: trap in development, rebuild in production
 
@@ -81,10 +80,11 @@ So claim mode claims elements and builds text afresh.
 
 ### Testing it
 
-Hydration is tested on `SurfaceDom` alone. Build the page in create mode, then
-run `mount` again in claim mode over the same DOM. Claim mode must create no
-element and keep every element's identity, and a later write to a signal must
-reach the claimed node.
+Hydration is tested on `SurfaceDom` alone. Build the page, join and drop its
+text as the HTML parser would, then hydrate it with signals of its own. Claim
+mode must create no element and keep every element's identity, and a later
+write to a signal must reach the claimed node. `SurfaceDom` parses no HTML, so
+a test builds the served tree by hand.
 
 ## GitHub Pages
 
@@ -111,10 +111,11 @@ HTML; only the bindings are missing.
   `gh-pages`.
 - [ ] Render the initial page at build time, and have the browser program
   replace it with a fresh `mount`. The page shows before the Wasm loads.
-- [ ] Make `View` describe the tree, and build it in one pass in document
+- [x] Make `View` describe the tree, and build it in one pass in document
   order.
-- [ ] Add claim mode to that pass, and hydrate instead of replacing.
-- [ ] Apply the mismatch policy: trap in development, rebuild in production.
+- [x] Add claim mode to that pass.
+- [ ] Hydrate the deployed page instead of replacing it.
+- [ ] Apply the mismatch policy. A mismatch traps in every build so far.
 
 ## Known gaps
 
