@@ -4,6 +4,7 @@ mod data_section;
 mod grammar_corpus;
 mod highlight_corpus;
 mod highlight_vocab;
+mod migrate_pattern_names;
 mod pipeline;
 mod rust_rename;
 mod template;
@@ -13,7 +14,8 @@ use lexopt::Arg::{Long, Short, Value};
 use wado_compiler::OptLevel;
 
 const COMMANDS: &str = "golden-dump, bundled-asset, const-regions, grammar-corpus, \
-     highlight-corpus, highlight-vocab, component-new, compose, print, objdump, rust-rename";
+     highlight-corpus, highlight-vocab, component-new, compose, print, objdump, rust-rename, \
+     migrate-pattern-names";
 
 fn main() {
     let mut parser = lexopt::Parser::from_env();
@@ -36,6 +38,7 @@ fn main() {
         "print" => wasm_tools::print(parser),
         "objdump" => wasm_tools::objdump(parser),
         "rust-rename" => rust_rename::run(parser),
+        "migrate-pattern-names" => migrate_pattern_names::run(parser),
         other => panic!("unknown command: {other}"),
     }
 }

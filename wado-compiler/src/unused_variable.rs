@@ -274,6 +274,7 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
             | Pattern::Tuple(..)
             | Pattern::Variant { .. }
             | Pattern::Range { .. }
+            | Pattern::Equal { .. }
             | Pattern::Typed { .. }
             | Pattern::Error(_) => {}
         }

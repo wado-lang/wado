@@ -1288,6 +1288,7 @@ impl Parser {
         Ok(Pattern::Variant {
             variant_name: name,
             variant_qualifier: qualifier,
+            inferred_qualifier: None,
             name_id,
             name_span,
             bindings,
@@ -1390,11 +1391,36 @@ impl Parser {
         Ok(Pattern::Variant {
             variant_name: case_name,
             variant_qualifier: Some(qualifier),
+            inferred_qualifier: None,
             name_id: case_id,
             name_span: case_span,
             bindings: vec![],
             span: start_span.merge(&end_span),
         })
+    }
+
+    /// The constant `==` compares with: a bare or qualified path, with the
+    /// span of its last segment.
+    fn parse_constant_operand(&mut self) -> ParseResult<(Pattern, Span)> {
+        let start_span = self.peek().span;
+        let name = self.consume_ident()?;
+        if !self.check(&TokenKind::Lt) && !self.check(&TokenKind::ColonColon) {
+            let pattern = Pattern::Ident {
+                id: self.alloc_ast_id(),
+                name,
+                span: start_span,
+            };
+            return Ok((pattern, start_span));
+        }
+        let operand = self.parse_pattern_qualified_case_from_first_segment(name, start_span)?;
+        match operand {
+            Pattern::Variant {
+                ref bindings,
+                name_span,
+                ..
+            } if bindings.is_empty() => Ok((operand, name_span)),
+            _ => Err(self.error_at_span(start_span, "`==` takes the path of a constant")),
+        }
     }
 
     fn consume_ident(&mut self) -> ParseResult<String> {
@@ -3896,8 +3922,44 @@ impl Parser {
             // Unnamed struct pattern: { x, y }
             self.parse_struct_pattern_fields(None)
         } else if self.check(&TokenKind::Underscore) {
+            let underscore = self.peek().span;
             self.advance();
-            Ok(Pattern::Wildcard)
+            if !self.check(&TokenKind::ColonColon) {
+                return Ok(Pattern::Wildcard);
+            }
+            self.advance();
+            let name_span = self.peek().span;
+            let name = self.consume_ident()?;
+            let name_id = self.alloc_ast_id();
+            let mut pattern = if self.check(&TokenKind::LParen) {
+                self.parse_variant_pattern(name, None, underscore, name_id, name_span)?
+            } else {
+                Pattern::Variant {
+                    variant_name: name,
+                    variant_qualifier: None,
+                    inferred_qualifier: None,
+                    name_id,
+                    name_span,
+                    bindings: Vec::new(),
+                    span: underscore.merge(&name_span),
+                }
+            };
+            if let Pattern::Variant {
+                inferred_qualifier, ..
+            } = &mut pattern
+            {
+                *inferred_qualifier = Some(underscore);
+            }
+            Ok(pattern)
+        } else if self.check(&TokenKind::EqEq) {
+            let start = self.peek().span;
+            self.advance();
+            let (operand, end) = self.parse_constant_operand()?;
+            let span = start.merge(&end);
+            Ok(Pattern::Equal {
+                operand: Box::new(operand),
+                span,
+            })
         } else if let Some(name) = self.peek_kind().as_ident_name() {
             // Accept identifiers and contextual keywords (flags, type) as pattern names.
             // Case does NOT affect parsing: disambiguation between variant cases and

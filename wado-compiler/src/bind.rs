@@ -760,8 +760,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 }
             }
             Pattern::Typed { pattern, .. } => self.bind_pattern_as(pattern, kind, span)?,
-            Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {
-            }
+            Pattern::Literal(_)
+            | Pattern::Wildcard
+            | Pattern::Range { .. }
+            | Pattern::Equal { .. }
+            | Pattern::Error(_) => {}
         }
         Ok(())
     }

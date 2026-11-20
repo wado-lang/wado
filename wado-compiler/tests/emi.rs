@@ -769,7 +769,11 @@ fn pattern_bindings(pattern: &Pattern, is_mut: bool, refutable: bool, out: &mut 
                 recurse(first, out);
             }
         }
-        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
+        Pattern::Literal(_)
+        | Pattern::Wildcard
+        | Pattern::Range { .. }
+        | Pattern::Equal { .. }
+        | Pattern::Error(_) => {}
     }
 }
 

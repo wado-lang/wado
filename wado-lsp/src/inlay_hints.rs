@@ -151,8 +151,11 @@ impl<'a> HintCollector<'a> {
             }
             // The ascription already states the type.
             Pattern::Typed { .. } => {}
-            Pattern::Range { .. } | Pattern::Literal(_) | Pattern::Wildcard | Pattern::Error(_) => {
-            }
+            Pattern::Range { .. }
+            | Pattern::Equal { .. }
+            | Pattern::Literal(_)
+            | Pattern::Wildcard
+            | Pattern::Error(_) => {}
         }
     }
 

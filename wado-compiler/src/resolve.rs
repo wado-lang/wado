@@ -1126,7 +1126,16 @@ impl Resolver<'_> {
     /// against: in a refutable pattern, where no binding in scope as the
     /// pattern starts has taken the name.
     fn pattern_constant(&self, name: &str) -> Option<DefId> {
-        if self.pattern_site == PatternSite::Declaration || self.bound_before_pattern(name) {
+        if self.pattern_site == PatternSite::Declaration {
+            return None;
+        }
+        self.immutable_global(name)
+    }
+
+    /// The immutable `global` `name` reaches, where no binding in scope as the
+    /// pattern starts has taken the name.
+    fn immutable_global(&self, name: &str) -> Option<DefId> {
+        if self.bound_before_pattern(name) {
             return None;
         }
         let Resolution::Def(def) = self.resolve_value_name(name) else {
@@ -1532,6 +1541,13 @@ impl AstVisitor<'_> for Resolver<'_> {
                 }
                 None => {}
             },
+            ast::Pattern::Equal { operand, .. } => {
+                if let ast::Pattern::Ident { id, name, .. } = &**operand
+                    && let Some(def) = self.immutable_global(name)
+                {
+                    self.record(*id, name, Resolution::Def(def));
+                }
+            }
             _ => {}
         }
         ast::walk_pattern(self, pat);

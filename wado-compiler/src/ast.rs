@@ -1184,6 +1184,23 @@ pub fn walk_pattern<'ast, V: AstVisitor<'ast>>(v: &mut V, pat: &'ast Pattern) {
             v.visit_pattern(start);
             v.visit_pattern(end);
         }
+        // The operand names a constant and binds nothing, so it is walked as
+        // the reference it is rather than as a pattern.
+        Pattern::Equal { operand, .. } => match &**operand {
+            Pattern::Ident { id, span, .. } => v.visit_id(*id, *span),
+            Pattern::Variant {
+                name_id,
+                name_span,
+                variant_qualifier,
+                ..
+            } => {
+                v.visit_id(*name_id, *name_span);
+                if let Some(qualifier) = variant_qualifier {
+                    v.visit_type(qualifier);
+                }
+            }
+            other => unreachable!("the parser makes an `==` operand a path, not {other:?}"),
+        },
         Pattern::Literal(_) | Pattern::Wildcard | Pattern::Error(_) => {}
     }
 }
@@ -4176,6 +4193,9 @@ pub enum Pattern {
         /// `Option::Some(x)`, `shapes::Op` in `shapes::Op::Wildcard`, or
         /// `Result<i32, E>` in `Result<i32, E>::Ok(v)`.
         variant_qualifier: Option<Type>,
+        /// The `_` of `_::Case`, which leaves the qualifier to the scrutinee's
+        /// type as a call form (`Some(x)`) does.
+        inferred_qualifier: Option<Span>,
         /// `AstId` of the variant-name identifier in the pattern. Used to
         /// record use→def references for LSP navigation (cursor on `Some`
         /// inside a match arm jumps to the case's declaration site).
@@ -4203,6 +4223,12 @@ pub enum Pattern {
         start: Box<Pattern>,
         end: Box<Pattern>,
         kind: RangeKind,
+        span: Span,
+    },
+    /// Equality pattern: `== LIMIT` or `== tok::TK_FOO`. The operand is an
+    /// `Ident` or a payload-free `Variant`, naming a constant.
+    Equal {
+        operand: Box<Pattern>,
         span: Span,
     },
     /// Type pattern: `input: HtmlInputElement`. Matches a value of `ty`, which
@@ -4252,6 +4278,7 @@ impl Pattern {
             | Pattern::Struct { .. }
             | Pattern::Or(_)
             | Pattern::Range { .. }
+            | Pattern::Equal { .. }
             | Pattern::Typed { .. }
             | Pattern::Error(_) => None,
         }

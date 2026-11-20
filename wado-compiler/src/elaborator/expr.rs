@@ -3210,6 +3210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Range {
                 start, end, kind, ..
             } => return self.exh_range(start, end, *kind, scrutinee_type),
+            ast::Pattern::Equal { operand, .. } => return self.exh_pattern(operand, written_type),
             ast::Pattern::Tuple(patterns, _) => {
                 let types = self
                     .tysys

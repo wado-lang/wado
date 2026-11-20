@@ -313,6 +313,7 @@ fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
         | ast::Pattern::Struct { .. }
         | ast::Pattern::Variant { .. }
         | ast::Pattern::Range { .. }
+        | ast::Pattern::Equal { .. }
         | ast::Pattern::Literal(_)
         | ast::Pattern::Wildcard
         | ast::Pattern::Error(_) => false,

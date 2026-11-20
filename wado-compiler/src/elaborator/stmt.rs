@@ -761,6 +761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Pattern::Variant { .. }
             | Pattern::Or(_)
             | Pattern::Range { .. }
+            | Pattern::Equal { .. }
             | Pattern::Error(_) => false,
         }
     }
@@ -1707,6 +1708,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &Pattern::Variant {
                             variant_name: name.clone(),
                             variant_qualifier: None,
+                            inferred_qualifier: None,
                             name_id: *id,
                             name_span: *name_span,
                             bindings: vec![],
@@ -1788,6 +1790,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Variant {
                 variant_name,
                 variant_qualifier,
+                inferred_qualifier: _,
                 name_id,
                 name_span: _,
                 bindings,
@@ -2184,6 +2187,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     *range_span,
                     site,
                 );
+                Vec::new()
+            }
+            Pattern::Equal {
+                operand,
+                span: equal_span,
+            } => {
+                let names_constant = self.names_pattern_constant(operand)
+                    || util::float_limit_pattern(operand, &self.tysys.resolutions).is_some();
+                if !names_constant {
+                    let _ = self.emit(TypeError::InvalidPattern {
+                        message: format!(
+                            "`==` takes a constant, and `{}` names none",
+                            crate::unparse::unparse_pattern_source(operand)
+                        ),
+                        span: *equal_span,
+                    });
+                    return Vec::new();
+                }
+                let Pattern::Ident {
+                    id,
+                    span: name_span,
+                    ..
+                } = &**operand
+                else {
+                    return self
+                        .resolve_if_pattern_inner(operand, scrutinee_type, ctx, span, site, ref_binding);
+                };
+                let constant = self
+                    .resolve_pattern_constant(operand, ctx)
+                    .expect("`names_pattern_constant` answered for it");
+                let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                self.typecheck(constant.ty, peeled, *name_span);
+                self.resolve_constant_pattern(*id, &constant, scrutinee_type, ctx, *name_span, site);
                 Vec::new()
             }
             Pattern::Typed {
@@ -3297,6 +3333,7 @@ fn refutable_shape(pattern: &Pattern) -> Option<String> {
         Pattern::Variant { variant_name, .. } => Some(format!("`{variant_name}` may not match")),
         Pattern::Or(_) => Some("or-patterns may not match".to_string()),
         Pattern::Range { .. } => Some("range patterns may not match".to_string()),
+        Pattern::Equal { .. } => Some("`==` patterns may not match".to_string()),
         Pattern::Ident { .. }
         | Pattern::MutIdent { .. }
         | Pattern::Wildcard
@@ -3319,6 +3356,7 @@ fn shape_checked_subpatterns(pattern: &Pattern) -> Option<Vec<&Pattern>> {
         | Pattern::Wildcard
         | Pattern::Literal(_)
         | Pattern::Range { .. }
+        | Pattern::Equal { .. }
         | Pattern::Or(_)
         | Pattern::Typed { .. }
         | Pattern::Error(_) => None,
@@ -3358,7 +3396,11 @@ pub(super) fn collect_ast_pattern_binding_ids(
             }
         }
         Pattern::Typed { pattern, .. } => collect_ast_pattern_binding_ids(pattern, out),
-        Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } | Pattern::Error(_) => {}
+        Pattern::Wildcard
+        | Pattern::Literal(_)
+        | Pattern::Range { .. }
+        | Pattern::Equal { .. }
+        | Pattern::Error(_) => {}
     }
 }
 

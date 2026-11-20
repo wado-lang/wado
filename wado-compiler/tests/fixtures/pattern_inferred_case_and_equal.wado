@@ -1,0 +1,51 @@
+// `_::Case` names a case of the scrutinee's type; `== NAME` compares with a
+// constant. Neither binds, in any pattern.
+
+enum Color { Red, Green, Blue }
+
+variant Shape { Circle(i32), Dot }
+
+global TK_FOO: i32 = 1;
+global TK_BAR: i32 = 2;
+
+fn color_name(c: Color) -> String {
+    return match c {
+        _::Red => "red",
+        _::Green | Color::Blue => "other",
+    };
+}
+
+fn shape_size(s: Shape) -> i32 {
+    return match s {
+        _::Circle(r) => r,
+        _::Dot => 0,
+    };
+}
+
+fn token_kind(t: i32) -> String {
+    return match t {
+        == TK_FOO | == TK_BAR => "keyword",
+        == i32::MAX => "max",
+        other => `other ${other}`,
+    };
+}
+
+fn first_is_foo(pair: [i32, i32]) -> i32 {
+    let [== TK_FOO, n] = pair else { return -1; };
+    return n;
+}
+
+test {
+    assert color_name(builtin::black_box(Color::Red)) == "red";
+    assert color_name(builtin::black_box(Color::Blue)) == "other";
+    assert shape_size(builtin::black_box(Shape::Circle(3))) == 3;
+    assert shape_size(builtin::black_box(Shape::Dot)) == 0;
+    assert token_kind(builtin::black_box(2)) == "keyword";
+    assert token_kind(builtin::black_box(i32::MAX)) == "max";
+    assert token_kind(builtin::black_box(5)) == "other 5";
+    assert first_is_foo(builtin::black_box([1, 7])) == 7;
+    assert first_is_foo(builtin::black_box([2, 7])) == -1;
+    let opt: Option<i32> = builtin::black_box(null);
+    assert opt matches { _::None };
+    assert Option::Some(1) matches { _::Some(1) };
+}

@@ -2686,12 +2686,15 @@ impl<'a> Unparser<'a> {
             Pattern::Variant {
                 variant_name,
                 variant_qualifier,
+                inferred_qualifier,
                 bindings,
                 ..
             } => {
                 if let Some(qualifier) = variant_qualifier {
                     self.unparse_type(qualifier);
                     self.output.push_str("::");
+                } else if inferred_qualifier.is_some() {
+                    self.output.push_str("_::");
                 }
                 self.output.push_str(variant_name);
                 if !bindings.is_empty() {
@@ -2734,6 +2737,10 @@ impl<'a> Unparser<'a> {
                 self.unparse_pattern(start);
                 self.output.push_str(kind.operator());
                 self.unparse_pattern(end);
+            }
+            Pattern::Equal { operand, .. } => {
+                self.output.push_str("== ");
+                self.unparse_pattern(operand);
             }
             Pattern::Typed { pattern, ty, .. } => {
                 self.unparse_pattern(pattern);

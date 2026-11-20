@@ -213,6 +213,18 @@ async fn scip_document_of(file: &Path, root_uri: &str) -> Option<wado_lsp::scip:
     Some(document)
 }
 
+/// The bare names in `file`'s patterns that name a case or a constant, analyzed
+/// as `wado query` analyzes the file.
+pub async fn pattern_name_rewrites(
+    file: &Path,
+) -> Result<Vec<wado_lsp::pattern_names::PatternNameRewrite>, String> {
+    let prepared = load_query(&file.to_string_lossy()).await?;
+    Ok(prepared
+        .engine
+        .pattern_name_rewrites(&prepared.uri, &prepared.host)
+        .await)
+}
+
 pub async fn run_diagnostics(filename: &str, json_output: bool) -> Result<(), CliExit> {
     let prepared = prepare_query(filename).await?;
     let diagnostics = prepared

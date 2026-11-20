@@ -2531,7 +2531,10 @@ impl<'a> Reify<'a> {
             ast::Pattern::Typed { .. } => {
                 unreachable!("the parser keeps a `let`'s top-level ascription in `LetStmt::ty`")
             }
-            ast::Pattern::Literal(_) | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
+            ast::Pattern::Literal(_)
+            | ast::Pattern::Or(_)
+            | ast::Pattern::Range { .. }
+            | ast::Pattern::Equal { .. } => {
                 // Annotate rejects a refutable `let` pattern.
                 panic!(
                     "reify_let: refutable pattern {:?} in let binding (annotate should have rejected)",
@@ -9183,6 +9186,16 @@ impl<'a> Reify<'a> {
                     type_id: scrutinee_type,
                 }
             }
+            ast::Pattern::Equal { operand, .. } => match &**operand {
+                ast::Pattern::Ident { .. } => {
+                    let constant = self
+                        .reify_pattern_constant(operand, ctx)
+                        .expect("annotate rejects an `==` naming no constant");
+                    let const_pat = self.constant_value_pattern(constant, scrutinee_type);
+                    self.compare_constant_by_eq(operand, const_pat, scrutinee_type, ctx)
+                }
+                _ => self.reify_pattern(operand, scrutinee_type, site, ctx),
+            },
             ast::Pattern::MutIdent { id, name, span } => {
                 let local_index = ctx.add_local_at(
                     name.clone(),

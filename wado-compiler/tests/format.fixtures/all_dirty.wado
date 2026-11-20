@@ -295,7 +295,9 @@ fn matches_example(opt: Option<i32>, shape: Shape) -> bool {
     let a = opt matches { Some(_) };
     let b = opt matches { Some(x) && x > 0 };
     let c = shape matches { Circle(_) };
-    return a && b && c;
+    let d = shape matches {   _::Point|_::Circle( _ ) };
+    let e = opt matches { Some(==   LIMIT) | Some( == i32::MAX ) };
+    return a && b && c && d && e;
 }
 
 /// Inline if expression (single-line when short enough)
