@@ -120,12 +120,15 @@ Each step keeps every fixture passing and deletes what it replaces.
 - [x] The union-find variable store with origins, behind the current API.
 - [x] `equate` at every site that checks a value against a slot. Two variables
   found equal report once.
-- [ ] `equate` in place of the `solve_*` family.
-- [ ] The obligation queue holds bounds, projection links, commitments and the
-  checks `equate` leaves undecided, and `resolve_head` runs it.
-  `DeferredCheck` and the deferred impl bound paths are deleted.
+- [x] `equate` in place of the `solve_*` family.
+- [x] One obligation queue holds bounds, projection links, commitments and the
+  checks `equate` leaves undecided. It is asked again each time a variable
+  settles, so a site that needs a head finds it at its fixed point.
 - [ ] Method, static, subscript and operator selection are obligations; a
   selection not yet known stays queued until `resolve_head` or the body's end.
+  Until then, a selection admits a variable awaiting its report as meeting
+  every bound, and each selection site requires the committed impl's bounds
+  itself (`defer_awaited_impl_bounds`); this step deletes both.
 - [ ] A numeric literal's variable has a kind and a default. The open item of
   [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
   closes with it, and so does `Settles::Nothing`, which until then keeps a

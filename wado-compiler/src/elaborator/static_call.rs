@@ -13,6 +13,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
+use super::infer_hole::Obligation;
 use super::callee::StaticMethodRef;
 use super::method_call::{MethodSignatureFacts, StaticReceiver, primitive_receiver_type};
 use super::method_lookup::narrow_to_reaching;
@@ -1413,7 +1414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &[],
         )?;
         if let Some(commitment) = commitment {
-            self.infer_holes.note_commitment(commitment);
+            self.infer_holes.require(Obligation::Selection(commitment));
         }
         Some(ordered)
     }

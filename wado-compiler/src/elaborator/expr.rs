@@ -2900,7 +2900,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         if let Some(target) = target {
             for &branch in &*branches {
-                self.solve_infer_holes_against(branch, target);
+                self.equate(branch, target);
             }
         } else {
             // No branch is decided alone, yet each may decide what another
@@ -2913,11 +2913,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let others = || (0..branches.len()).filter(move |&i| i != at);
             for i in others() {
                 let sibling = self.apply_infer_holes(branches[i]);
-                self.solve_infer_holes_against(branches[at], sibling);
+                self.equate(branches[at], sibling);
             }
             let hub = self.apply_infer_holes(branches[at]);
             for i in others() {
-                self.solve_infer_holes_against(branches[i], hub);
+                self.equate(branches[i], hub);
             }
         }
         for branch in branches {

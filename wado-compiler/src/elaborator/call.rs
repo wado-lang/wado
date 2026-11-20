@@ -680,14 +680,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let param = answered.map(|a| this.standing_in_open_packs(a, &mut stand_ins));
                 resolved[i] =
-                    Some(this.resolve_arg_against_param(arg, ctx, param, own_vars, &hints));
+                    Some(this.resolve_arg_against_param(arg, ctx, param, &hints));
             }
             for i in deferred {
                 let param = this
                     .packs_answered(&packs, param_types, &resolved, i)
                     .map(|a| this.standing_in_open_packs(a, &mut stand_ins));
                 resolved[i] =
-                    Some(this.resolve_arg_against_param(&args[i], ctx, param, own_vars, &hints));
+                    Some(this.resolve_arg_against_param(&args[i], ctx, param, &hints));
             }
             resolved
                 .into_iter()
@@ -702,9 +702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if TypeSystem::is_null_literal(arg)
                 && let Some(param) = param_types.get(i).copied()
             {
-                let expected = self.apply_infer_holes(param);
-                let answerable = self.answerable_vars(own_vars);
-                self.solve_own_infer_holes_against(expected, resolved[i], &answerable);
+                self.equate(resolved[i], param);
             }
         }
         resolved
@@ -847,7 +845,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .mentions_any(answered, &slots)
             {
-                self.chain_infer_var(var, answered);
+                self.equate(var, answered);
             }
         }
     }
@@ -861,15 +859,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.type_has_infer_hole(settled)
     }
 
-    /// Resolve one argument and pin what it answers about `own_vars`. A numeric
-    /// literal pins later, in [`Self::resolve_args_against_params`]. `hints` is
-    /// what the call's site expects of `own_vars`.
+    /// Resolve one argument and equate it with its parameter. A numeric
+    /// literal settles later, in [`Self::resolve_args_against_params`].
+    /// `hints` is what the call's site expects of its own variables.
     fn resolve_arg_against_param(
         &mut self,
         arg: &ast::Expr,
         ctx: &mut FunctionContext,
         param: Option<ArgParam>,
-        own_vars: &[TypeId],
         hints: &IndexMap<InferVarId, TypeId>,
     ) -> TypeId {
         let Some(param) = param else {
@@ -887,9 +884,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let checked_against = self.context_literal_expected(arg, expected, hints);
         let resolved = self.resolve_expr(arg, ctx, Some(checked_against));
         if !answers_last(Some(arg)) {
-            let declared = self.apply_infer_holes(param.declared);
-            let answerable = self.answerable_vars(own_vars);
-            self.solve_own_infer_holes_against(declared, resolved, &answerable);
+            self.equate(resolved, param.declared);
         }
         resolved
     }
@@ -1233,7 +1228,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
                 for (&hole, &arg) in holes.iter().zip(&args) {
-                    self.solve_infer_var(hole, arg);
+                    self.equate(hole, arg);
                 }
                 // An argument the turbofish left open is the construction's to infer.
                 Some(
@@ -1963,8 +1958,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
         };
 
-        if let Some(inst) = &arg_inst {
-            self.settle_onto_slots(inst, &mut args, ret);
+        if arg_inst.is_some() {
+            self.settle_onto_slots(&mut args, ret);
         }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
@@ -5097,7 +5092,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let answers: Vec<Option<TypeId>> = base_args.iter().copied().map(Some).collect();
         let solved = self.answer_receiver_vars(&vars, &shape, &answers);
         for (&var, &answer) in vars.iter().zip(&solved) {
-            self.chain_infer_var(var, answer);
+            self.equate(var, answer);
         }
         let open = vars.iter().zip(&solved).find(|(var, answer)| var == answer);
         let shaped = shape
@@ -5467,7 +5462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(args) => args,
             None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret),
         };
-        self.settle_onto_slots(&inst, &mut args, ret);
+        self.settle_onto_slots(&mut args, ret);
         // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
         for (arg, &expected) in args.iter_mut().zip(&payload) {
             let expected = self.apply_infer_holes(expected);

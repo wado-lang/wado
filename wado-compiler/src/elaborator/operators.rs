@@ -134,11 +134,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // concrete sibling before operator dispatch, which would otherwise
         // mangle a trait-method name against the hole.
         if self.type_has_infer_hole(left) ^ self.type_has_infer_hole(right) {
-            if self.type_has_infer_hole(left) {
-                self.solve_infer_holes_against(left, right);
-            } else {
-                self.solve_infer_holes_against(right, left);
-            }
+            self.equate(left, right);
             left = self.apply_infer_holes(left);
             right = self.apply_infer_holes(right);
         }

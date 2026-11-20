@@ -151,7 +151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             vars.push(var);
             // Answered here, so an argument meets what the source wrote.
             if let Some(named) = named {
-                self.solve_infer_var_as_written(var, named);
+                self.settle_as_written(var, named);
                 diags.push(None);
                 continue;
             }
@@ -271,7 +271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn record_instantiation(&mut self, inst: &Instantiated, solved: &[TypeId]) {
         for (&var, &answer) in inst.vars.iter().zip(solved.iter()) {
             if var != answer {
-                self.solve_infer_var(var, answer);
+                self.equate(var, answer);
             }
         }
     }
@@ -305,7 +305,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         let mut args =
             self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst), ret);
-        self.settle_onto_slots(&inst, &mut args, ret);
+        self.settle_onto_slots(&mut args, ret);
         (args, Some(inst))
     }
 
@@ -313,16 +313,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// argument answered is answered by `ret`, the type the call's site
     /// expects. One still open stays a variable of this site: the
     /// declaration's own parameter means nothing here (#2574).
-    pub(super) fn settle_onto_slots(
-        &mut self,
-        inst: &Instantiated,
-        args: &mut [TypeId],
-        ret: Option<ExpectedReturn>,
-    ) {
+    pub(super) fn settle_onto_slots(&mut self, args: &mut [TypeId], ret: Option<ExpectedReturn>) {
         if let Some(ret) = ret {
-            let declared = self.apply_infer_holes(ret.declared);
-            let expected = self.apply_infer_holes(ret.expected);
-            self.solve_own_infer_holes_against(declared, expected, &inst.vars);
+            self.equate(ret.declared, ret.expected);
         }
         for arg in args {
             *arg = self.apply_infer_holes(*arg);

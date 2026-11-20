@@ -1117,7 +1117,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(expected) = expected_type
             && (self.type_has_infer_hole(return_type) || self.type_has_infer_hole(receiver))
         {
-            self.solve_infer_holes_against(return_type, expected);
+            self.equate(return_type, expected);
             receiver = self.apply_infer_holes(receiver);
             return_type = self.apply_infer_holes(return_type);
             base_type_id = self.tysys.get_base_type(receiver);
@@ -2864,7 +2864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if answer == var {
                     unanswered.push(var);
                 } else {
-                    self.solve_infer_var(var, answer);
+                    self.equate(var, answer);
                     declaring_args[i] = answer;
                 }
             }
@@ -2892,6 +2892,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_sites: Vec<ArgSite> = static_call.args.iter().map(ArgSite::written).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
+        if let Some(def) = declaring_impl {
+            self.defer_awaited_impl_bounds(def, target_type_id, static_call.span);
+        }
         // The declaring block's type parameters, as the receiver settles them.
         let declaring_args = self
             .tysys

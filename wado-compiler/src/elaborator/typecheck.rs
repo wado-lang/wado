@@ -16,7 +16,7 @@ use crate::type_table::TypeTable;
 use super::Elaborator;
 use super::call::ArgSite;
 use super::coercion::is_literal_arithmetic;
-use super::infer_hole::{DeferredCheck, says_nothing};
+use super::infer_hole::{DeferredCheck, Obligation, says_nothing};
 use super::types::TypeError;
 use super::tysys::TypeSystem;
 
@@ -757,11 +757,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError + 'static,
     ) {
         if self.type_has_infer_hole(actual) || self.type_has_infer_hole(expected) {
-            self.infer_holes.note_deferred_check(DeferredCheck {
+            self.infer_holes.require(Obligation::Check(DeferredCheck {
                 actual,
                 expected,
                 mismatch: Box::new(mismatch),
-            });
+            }));
         }
     }
 

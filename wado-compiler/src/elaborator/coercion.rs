@@ -728,7 +728,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected = self.apply_infer_holes(ret.expected);
         let declared = self.apply_infer_holes(ret.declared);
         if self.is_open_pending_var(expected) && names(&self.tysys.type_table.borrow(), declared) {
-            self.chain_infer_var(expected, declared);
+            self.equate(expected, declared);
         }
     }
 
@@ -767,7 +767,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         for (var, answer) in self.unify_expected_return(ret) {
             if waited.contains(&var) && self.awaits_pending_call(answer) {
-                self.chain_infer_var(var, answer);
+                self.equate(var, answer);
             }
         }
         // The other direction: in `same(any(wrap(1)), x)` the enclosing `T`
@@ -797,7 +797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .own_vars
             .extend(&vars);
         let shape = build(&mut self.tysys.type_table.borrow_mut(), vars.clone());
-        self.chain_infer_var(var, shape);
+        self.equate(var, shape);
         Some(vars)
     }
 
@@ -898,18 +898,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut bindings = IndexMap::default();
         unify(&self.tysys.type_table, declared, expected, &mut bindings);
         bindings
-    }
-
-    /// The variables an argument of the call owning `own_vars` may answer: its
-    /// own, and those of the enclosing calls whose literals are pending, which
-    /// one of its own may be chained to.
-    pub(super) fn answerable_vars(&self, own_vars: &[TypeId]) -> Vec<TypeId> {
-        let enclosing = self
-            .annotate_ctx
-            .pending_literals
-            .iter()
-            .flat_map(|pending| pending.own_vars.iter().copied());
-        own_vars.iter().copied().chain(enclosing).collect()
     }
 
     /// Whether the innermost enclosing collection takes over the open `var`
@@ -1023,7 +1011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (resolved, pending) = self.collecting_pending_literals(collection, |this| {
             this.resolve_struct_literal(struct_lit, ctx, Some(open))
         });
-        self.solve_own_infer_holes_against(open, resolved, &inst.vars);
+        self.equate(resolved, open);
         self.settle_pending_literals(pending, &[], ret, ctx);
         // A variable still open is the outer call's to answer, or reported at
         // finalize; the struct's own parameter would stand for no type there.
@@ -1115,7 +1103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut answer = var;
             if open && !yields_to_return {
                 answer = hint.unwrap_or(default);
-                self.solve_infer_var(var, answer);
+                self.equate(var, answer);
             }
             for expr in &literals {
                 let ty = self.resolve_expr(expr, ctx, Some(answer));
@@ -1134,7 +1122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 settled.insert(expr.id(), ty);
             }
             if yields_to_return {
-                self.solve_infer_var(var, default);
+                self.equate(var, default);
             }
         }
         for walk in pending.walks {
@@ -1521,7 +1509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // second "not constructible" report would describe the same fault.
             return Some(target_type);
         }
-        self.solve_infer_holes_against(key_type, string_type);
+        self.equate(string_type, key_type);
 
         let spread = if struct_lit.spreads.is_empty() {
             None
@@ -1591,8 +1579,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if incompatible {
                         self.convert_literal_element(&field.value, value, value_type);
                     } else {
-                        // The values are what decide an open value type.
-                        self.solve_infer_holes_against(value_type, value);
                         value_type = self.apply_infer_holes(value_type);
                         self.record_widening(field.value.id(), value, value_type);
                     }
@@ -1905,11 +1891,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if incompatible {
                 self.convert_literal_element(element, elem_expr, element_type);
             } else {
-                // Where the target left the element type open — a callee's
-                // slot the call site instantiated — the elements decide it.
-                // Nothing else can: the literal is the only evidence of what
-                // this sequence holds.
-                self.solve_infer_holes_against(element_type, elem_expr);
                 element_type = self.apply_infer_holes(element_type);
                 self.record_widening(element.id(), elem_expr, element_type);
             }

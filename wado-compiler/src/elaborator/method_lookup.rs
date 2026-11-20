@@ -33,7 +33,7 @@ use super::call::{
 };
 use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::{InferCtx, infer_var_answers, unify};
-use super::infer_hole::DeclaredBound;
+use super::infer_hole::{DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
@@ -1292,7 +1292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
         for (&var, &answer) in &binding.answers {
-            self.solve_infer_var(var, answer);
+            self.equate(var, answer);
         }
         self.defer_open_impl_bounds(def, &binding.slots, span);
         true
@@ -1339,7 +1339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             each_element: false,
         };
         let witness = self.mint_infer_var();
-        self.chain_infer_var(witness, receiver);
+        self.equate(witness, receiver);
         self.attach_infer_var_bounds(witness, "Self".to_string(), vec![bound], span);
     }
 
@@ -1445,7 +1445,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let ArgClass::Exact(arg) = class
                 && self.type_has_infer_hole(param)
             {
-                self.solve_infer_holes_against(param, *arg);
+                self.equate(*arg, param);
             }
         }
     }
@@ -1482,7 +1482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (&param, &arg) in params.iter().zip(args) {
             if self.type_has_infer_hole(param) {
-                self.solve_infer_holes_against(param, arg);
+                self.equate(arg, param);
             }
         }
         for param in params {
@@ -2516,7 +2516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             found_traits.retain(|m| self.trait_args_settle_to(&m.trait_args, pinned));
             for m in &found_traits {
                 for (&arg, &want) in m.trait_args.iter().zip(pinned) {
-                    self.solve_infer_holes_against(arg, want);
+                    self.equate(arg, want);
                 }
             }
         }
@@ -3189,7 +3189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_default(),
         )?;
         if let Some(commitment) = commitment {
-            self.infer_holes.note_commitment(commitment);
+            self.infer_holes.require(Obligation::Selection(commitment));
         }
         Some(ordered)
     }
@@ -3573,6 +3573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let container = self.tysys.type_id_to_string(info.container);
             self.report_blocks_tied(&blocks, &key, &container, span);
         }
+        self.defer_awaited_impl_bounds(info.impl_def, info.container, span);
         self.defer_impl_bounds(
             info.impl_def,
             &info.trait_arg_slots,
@@ -3986,7 +3987,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             table.substitute_type_params(index_type, &slots)
         };
-        self.solve_infer_holes_against(index_type, key);
+        self.equate(key, index_type);
         self.apply_infer_holes(container)
     }
 
@@ -4065,12 +4066,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
                 let receiver = s.impl_receiver(header, base_type_id);
+                // The dispatch committing to the impl checks the bounds against
+                // the answer (`Self::indexing_function_ref`).
                 if !concrete_type_args.is_empty()
                     && !s.tysys.check_impl_block_bounds(
                         &s.annotate_ctx,
                         impl_ref.0,
                         Some(base_type_id),
-                        Some(&concrete_type_args),
+                        Some(&s.bounded_at_answer(&concrete_type_args)),
                     )
                 {
                     return None;

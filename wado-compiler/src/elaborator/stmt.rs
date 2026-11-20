@@ -1381,7 +1381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         if self.type_has_infer_hole(value_type) {
-            self.solve_infer_holes_against(value_type, expected);
+            self.equate(value_type, expected);
             value_type = self.apply_infer_holes(value_type);
         }
         self.typecheck(value_type, expected, span);
