@@ -414,6 +414,11 @@ else settles is reported as one that cannot be inferred, even where only one
 impl could apply: inferring it from that impl would let an impl written
 elsewhere later make the call fail.
 
+A numeric literal's variable is the exception. Where one impl alone could
+answer a method on a receiver holding it, that impl settles it:
+`wrap(1).tag()` under `impl Tag for Bx<u64>` takes `1` as `u64`. The literal's
+type is a default that settles last, and the impl only chooses it earlier.
+
 > Not yet implemented: only selecting the method a call names reads a type
 > holding a variable as open. Every other question, a bound check among them,
 > reads it as a type that holds only what every type holds, so a call can be

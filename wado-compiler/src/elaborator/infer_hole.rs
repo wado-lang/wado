@@ -837,6 +837,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.infer_holes.is_empty() {
             return;
         }
+        // A check queued after the last answer has not been asked yet.
+        self.run_obligations();
         let mismatches = self.infer_holes.mismatches.take();
         let covered: IndexSet<TypeId> = self
             .infer_holes

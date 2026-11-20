@@ -3983,16 +3983,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a slot nothing at the call site answers waits for a sink the
     /// call's value reaches, a sibling branch's type among them. It does where
-    /// no type is expected of the call and its arguments hold no variable but
-    /// the call's own `type_args`, as a closure argument typed by them does.
+    /// the type expected of the call is none or still holds a variable (an
+    /// enclosing call's argument), and its arguments hold no variable but the
+    /// call's own `type_args`, as a closure argument typed by them does.
     pub(super) fn defers_uninferred(
         &self,
         args: &[TypeId],
         type_args: &[TypeId],
         expected_type: Option<TypeId>,
     ) -> bool {
+        let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
         let tt = self.tysys.type_table.borrow();
-        expected_type.is_none()
+        expected_type.is_none_or(|t| tt.contains_infer_var(t))
             && args.iter().all(|&a| {
                 tt.infer_vars_in(a)
                     .iter()

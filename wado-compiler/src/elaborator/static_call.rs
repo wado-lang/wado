@@ -1357,7 +1357,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     return Selection::Tied { blocks, trait_args };
                 }
-                _ => {}
+                // The arguments and the count below decide these: the order
+                // left more than one, or named no block of its own.
+                Some(
+                    Ordered::One(None)
+                    | Ordered::Nothing
+                    | Ordered::OutOfScope { .. }
+                    | Ordered::AmbiguousTraits(_)
+                    | Ordered::Overloaded(_)
+                    | Ordered::Duplicated(_)
+                    | Ordered::Undecided(_),
+                )
+                | None => {}
             }
         }
         // At `!` every blanket reaches the receiver and the call traps once

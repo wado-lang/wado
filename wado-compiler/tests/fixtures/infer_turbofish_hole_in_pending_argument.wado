@@ -1,0 +1,27 @@
+// A `_` in a static's turbofish waits where the bare spelling's omitted
+// argument would: in an argument position the enclosing call's own variable
+// types, a later argument settles both.
+
+struct Bx<T> {
+    v: List<T>,
+}
+
+impl<T> Bx<T> {
+    fn new() -> Bx<T> {
+        return Bx { v: [] };
+    }
+}
+
+fn push<T>(b: Bx<T>, x: T) -> Bx<T> {
+    let mut b = b;
+    b.v.push(x);
+    return b;
+}
+
+test "the bare spelling" {
+    assert push(Bx::new(), 5 as u8).v == [5 as u8];
+}
+
+test "a `_` in the turbofish" {
+    assert push(Bx::<_>::new(), 5 as u8).v == [5 as u8];
+}
