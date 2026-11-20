@@ -552,6 +552,72 @@ test "each restores its order after render moved a row" {
     };
 }
 
+test "each restores its order after render moved a row while it was built" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        let items: Signal<List<i32>> = signal([1, 2, 3]);
+        let _dispose = scope(|| {
+            build(View::of(list).each(|| items.get(), |value: i32| {
+                if value == 3 {
+                    list.append_child(list.first_child().unwrap());
+                }
+                return item(value);
+            }));
+        });
+        assert children_text(list) == "123";
+    };
+}
+
+test "show leaves nothing behind once its first run disposed of its owner" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = new_element("div");
+        let go = signal(false);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        dispose_owner = scope(|| observe(|| {
+            if go.get() {
+                build(View::of(box).show(|| {
+                    with &mut dom do {
+                        dispose_owner();
+                    };
+                    return true;
+                }, || element("p")));
+            }
+        }));
+
+        go.set(true);
+        flush();
+        assert !box.has_child_nodes();
+    };
+}
+
+test "each claims no further once render disposed of its owner while hydrating" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        let _built = scope(|| {
+            build(View::of(list).each(|| [1, 2] as List<i32>, item));
+        });
+        let go = signal(false);
+        let mut dispose_owner: fn mut() with Dom = || {
+        };
+        dispose_owner = scope(|| observe(|| {
+            if go.get() {
+                hydrate(View::of(list).each(|| [1, 2] as List<i32>, |value: i32| {
+                    dispose_owner();
+                    return item(value);
+                }));
+            }
+        }));
+
+        go.set(true);
+        flush();
+        assert !list.has_child_nodes();
+    };
+}
+
 test "each restores its order after a row moved within its parent" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
@@ -734,6 +800,28 @@ test "a hydrated each keeps the rows it claimed" {
         assert children_text(list) == "123";
         assert list.first_child().unwrap() == rows[0] as Node;
         assert list.first_child().unwrap().next_sibling().unwrap() == rows[1] as Node;
+    };
+}
+
+test "a hydrated each moves none of the rows it claimed" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let list = new_element("ul");
+        for let value of [1, 2] as List<i32> {
+            let row = new_element("li");
+            row.append_child(Dom::document().create_text_node(`${value}`));
+            list.append_child(row);
+            list.append_child(Dom::document().create_text_node("\n"));
+        }
+
+        let mut insertions = Insertions { count: 0 };
+        with Node => &mut insertions do {
+            let _hydrated = scope(|| {
+                hydrate(View::of(list).each(|| [1, 2] as List<i32>, item));
+            });
+        };
+        assert list.get_html() == "<li>1</li><li>2</li>";
+        assert insertions.count == 2;
     };
 }
 

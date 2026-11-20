@@ -69,7 +69,7 @@ with &mut dom do {
   longer reads wakes nothing. A memo is disposed of with the computation that
   made it.
 - A binding writes the one place it owns, and takes it out when disposed of:
-  `bind_text` a text node it appends, and `each` its rows. A reorder leaves the
+  `bind_text` a text node it adds, and `each` its rows. A reorder leaves the
   longest run of rows already in order where they are, and moves the rest.
 - `on` flushes when the listener returns, so the page is consistent again
   before the browser gets control back. Any other code that writes, a listener

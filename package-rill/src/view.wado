@@ -401,8 +401,9 @@ fn each<T: Eq>(
             if found {
                 continue;
             }
+            // A row built in place stands as if it had been shown in order.
+            was.push(if in_place { kept.len() } else { -1 });
             kept.push(Row { item, rendered: render_owned(at, in_place, || render(item)) });
-            was.push(-1);
             if disposed {
                 break;
             }
@@ -414,14 +415,15 @@ fn each<T: Eq>(
             remove_rows(kept);
             return;
         }
-        if in_place {
-            rows = kept;
-            return;
+        // The rows are all of the element's children, so served text after
+        // the last one goes before the order is checked.
+        if in_place && at.claiming {
+            at.finish();
         }
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.
         let mut before: List<Option<Element>> = [];
-        for let _ of 0..<shown {
+        for let _ of 0..<if in_place { kept.len() } else { shown } {
             before.push(null);
         }
         for let i of 0..<kept.len() {

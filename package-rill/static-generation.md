@@ -68,7 +68,7 @@ at all.
 So claim mode claims elements and builds text afresh.
 
 - An element claims the next element child and checks its tag. Its static
-  attributes are taken as served; a development build checks them.
+  attributes are checked against what was served, a mismatch like any other.
 - A `text` or `bind_text`, and the anchor of a `show` or `switch`, creates its
   node. The served text between two elements is removed once the elements
   around it are claimed.
@@ -107,7 +107,7 @@ HTML; only the bindings are missing.
 ## Roadmap
 
 - [ ] Deploy the to-do example as a client-rendered app: a workflow compiles it
-  for the browser, as `example/web-browser/build.sh` does, and publishes it to
+  for the browser, as [`example/web-browser/build.sh`](../example/web-browser/build.sh) does, and publishes it to
   `gh-pages`.
 - [ ] Render the initial page at build time, and have the browser program
   replace it with a fresh `mount`. The page shows before the Wasm loads.
