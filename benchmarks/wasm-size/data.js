@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795184417994,
+  "lastUpdate": 1795194230771,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80225,6 +80225,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/704ce17a01b81bd6b5e2b62cdadbe5ad90dff675"
         },
         "date": 1795184417427,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "37a57b631d1b0335bb2233a60114e49b5c5ce55b",
+          "message": "Merge pull request #2701 from wado-lang/compiler/faster-compile\n\nperf(compiler): reach the heap-effect fixpoint in fewer, still parallel, sweeps",
+          "timestamp": "2026-11-21T01:35:47+09:00",
+          "tree_id": "fbd7d30d5e4fa746e6a63c5d3bc0a1478d54ea7d",
+          "url": "https://github.com/wado-lang/wado/commit/37a57b631d1b0335bb2233a60114e49b5c5ce55b"
+        },
+        "date": 1795194230254,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
