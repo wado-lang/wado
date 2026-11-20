@@ -1134,8 +1134,10 @@ impl SolverBridge {
             &tysys.resolutions,
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
-        Self::state_reflexive_from(tysys, &mut lowering, &mut program);
         mark_rejected(&mut program);
+        // Stated past coherence: as a blanket with no bound it would be
+        // rejected, and the source cannot write it.
+        Self::state_reflexive_from(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
         if let (Some(eq), Some(ord)) = (
