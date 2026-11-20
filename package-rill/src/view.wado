@@ -153,6 +153,12 @@ fn run_steps(node: Element, claiming: bool, steps: List<fn mut(&mut Build) with 
     }
 }
 
+/// Whether an HTML element stores the attribute name as written: it lowers
+/// the name, and hydration compares names as the element stores them.
+fn is_stored_as_written(name: String) -> bool {
+    return name == name.to_ascii_lowercase();
+}
+
 /// Builds `view` at the point `parent` has reached.
 fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
     let node = if parent.claiming {
@@ -188,7 +194,7 @@ impl View {
     }
 
     pub fn attribute(&self, name: String, value: String) -> View
-        contract name == name.to_ascii_lowercase(), "an attribute name must be lowercase, as an HTML element stores it"
+        contract is_stored_as_written(name), "an attribute name must be lowercase, as an HTML element stores it"
     {
         return self.then(
             |at: &mut Build| {
@@ -202,7 +208,7 @@ impl View {
 
     /// Keeps the attribute at what `value` answers, absent for `None`.
     pub fn bind_attribute(&self, name: String, value: fn mut() -> Option<String> with Track) -> View
-        contract name == name.to_ascii_lowercase(), "an attribute name must be lowercase, as an HTML element stores it"
+        contract is_stored_as_written(name), "an attribute name must be lowercase, as an HTML element stores it"
     {
         let mut value = value;
         return self.then(|at: &mut Build| {
