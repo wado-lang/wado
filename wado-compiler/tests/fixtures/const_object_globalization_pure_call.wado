@@ -15,6 +15,9 @@
 
 use { println, Stdout } from "core:cli";
 
+// The hoist takes a call that stands: spliced into the loop, the encoder's
+// statements are rebuilt per iteration.
+#[inline(never)]
 fn encode_key(name: &String) -> String {
     let mut s = String::with_capacity(name.len() + 2000);
     s.push('"');

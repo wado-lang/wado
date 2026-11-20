@@ -1,0 +1,49 @@
+// A let-else's diverging arm is a cold region although the `match` around it
+// yields a value: the arm is `!`, so nothing reads its tail. Left in place, the
+// message it builds is copied into every caller `count` is spliced into.
+
+fn checked(xs: &List<i32>) -> Option<i32> {
+    let mut n = 1;
+    for let x of *xs {
+        n *= x;
+    }
+    if n < 0 {
+        return null;
+    }
+    return Some(n);
+}
+
+fn count(xs: &List<i32>) -> i32 {
+    let Some(c) = checked(xs) else {
+        panic(`extents ${*xs} multiply past`);
+    };
+    return c;
+}
+
+#[inline(never)]
+fn first(xs: &List<i32>) -> i32 {
+    return count(xs) + 1;
+}
+
+#[inline(never)]
+fn second(xs: &List<i32>) -> i32 {
+    return count(xs) * 2;
+}
+
+export fn run() {
+    let xs: List<i32> = builtin::black_box([1, 2]);
+    assert first(&xs) + second(&xs) == 7;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_pass": {"O2": ["nir/cold_outline"]},
+    "wir_scope": "cold_outline_let_else_arm.wado/first",
+    "wir_expect:O2": [
+        "count$cold0\"(xs);"
+    ],
+    "wir_not_expect:O2": [
+        "multiply past"
+    ]
+}

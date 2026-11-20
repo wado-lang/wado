@@ -5,7 +5,8 @@
 
 use { println, Stdout } from "core:cli";
 
-export fn run() with Stdout {
+#[inline(never)]
+fn show() with Stdout {
     let mut s = "ab";
     let t = `x${s}`;
     s.push_str(&"c");
@@ -13,10 +14,14 @@ export fn run() with Stdout {
     println(s);
 }
 
+export fn run() with Stdout {
+    show();
+}
+
 __DATA__
 {
     "stdout": "xab\nabc\n",
-    "wir_scope": "niri_region_seed_snapshot.wado/run",
+    "wir_scope": "niri_region_seed_snapshot.wado/show",
     "wir_pass": {"O2": ["nir/param_spec"]},
     "wir_contrast": {"O2": [
         {"    s.push_str(&\"c\");\n": ""}

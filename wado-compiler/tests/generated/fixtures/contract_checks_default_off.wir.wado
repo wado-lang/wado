@@ -68,7 +68,7 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_248: i32;
+    let start_263: i32;
     end_62 = black_box(5);
     out_88 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
@@ -142,22 +142,22 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_88, is_negative_151);
         }
-        start_248 = out_88.used;
+        start_263 = out_88.used;
         out_88.used = is_negative_151;
-        builtin::array_set_u8(out_88.repr, start_248, 45);
+        builtin::array_set_u8(out_88.repr, start_263, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_151(out_88.used + end_62) > builtin::array_len(out_88.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_88, is_negative_151);
     }
-    start_248 = out_88.used;
+    start_263 = out_88.used;
     out_88.used = is_negative_151;
     arr = out_88.repr;
-    end_62 = start_248 + end_62;
+    end_62 = start_263 + end_62;
     b22: block {
         l23: loop {
-            break_if b22 (end_62 - start_248) < 2;
+            break_if b22 (end_62 - start_263) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_151(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, end_62 - 1, (48 + is_negative_151) - (tens * 10));
@@ -167,8 +167,8 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
             continue l23;
         };
     };
-    if end_62 > start_248 {
-        builtin::array_set_u8(arr, start_248, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if end_62 > start_263 {
+        builtin::array_set_u8(arr, start_263, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_59: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_59;
@@ -176,14 +176,14 @@ fn "contract_checks_default_off.wado/run"() with Stdout {
     end_62 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_151 = builtin::i32_wrap_i64(x >> 32_i64);
     end_62 = "contract_checks_default_off.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(end_62);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_248(out_88.used) + 1)), 0, out_88.repr, 0, start_248);
-    builtin::array_set_u8(arr, start_248, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_263(out_88.used) + 1)), 0, out_88.repr, 0, start_263);
+    builtin::array_set_u8(arr, start_263, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_248 = start_248 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_151, arr, 0, start_248);
+        start_263 = start_263 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_151, arr, 0, start_263);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

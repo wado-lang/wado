@@ -198,18 +198,19 @@ pub fn optimize(
     {
         assert!(threshold <= MAX_INLINE_THRESHOLD);
     }
-    // A hot site at 4x the level's threshold. Fuel favours 8x, but at 8x
-    // `cbor_twitter`'s deserializer ran 58% longer by the wall clock for the
-    // same fuel: fuel does not price a huge function's native code. LLVM's
-    // ratio is 3000 to 225, about 13x. A cold site at a quarter: no fuel
-    // region moved from a half down to an eighth, and a quarter grew gale_gen
-    // least.
+    // A hot site at 5x the level's threshold. At 4x the cbor serialize rows
+    // lose 10-13% of fuel: their drivers price 108 with their callees at a
+    // profiled hot site. Fuel does not price a huge function's native code,
+    // and at 8x of as-written prices `cbor_twitter`'s deserializer ran 58%
+    // longer by the wall clock for the same fuel. LLVM's ratio is 3000 to 225,
+    // about 13x. A cold site at a quarter: no fuel region moved from a half
+    // down to an eighth, and a quarter grew gale_gen least.
     let thresholds = |level: usize| {
         let plain = inline_threshold.unwrap_or(level);
         inline::Thresholds {
             cold: inline_cold_callsite_threshold.unwrap_or(plain / 4),
             plain,
-            hot: inline_hot_callsite_threshold.unwrap_or(plain * 4),
+            hot: inline_hot_callsite_threshold.unwrap_or(plain * 5),
         }
     };
     let specializations = specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS);
@@ -243,7 +244,7 @@ pub fn optimize(
         OptLevel::O1 => {
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(2),
-                inline_thresholds: thresholds(4),
+                inline_thresholds: thresholds(6),
                 inline_growth,
                 specializations,
                 cap_is_defect: false,
@@ -271,22 +272,15 @@ pub fn optimize(
             let config = OptConfig {
                 // Every source in the tree settles by 8, so 15 is slack.
                 iterations: opt_iterations.unwrap_or(15),
-                // Threshold 16, best of three alternating whole-suite runs
-                // against 13: the cbor serialize rows gain 11-13% and eight
-                // more 3-7%, against json-catalog ser at -3%. That row turns
-                // first as the threshold climbs — -8.2% at 20, -35.3% at 26 —
-                // so 16 costs it least while still buying the serde rows.
-                // Below 13 every row is worse.
+                // Threshold 24 against the fuel benchmarks, on prices that
+                // count what a round splices into the callee. At 20 microgpt
+                // infer loses 6.4%; 28 buys no row and grows fts 14% and
+                // cbor_twitter 6%. `inline::net_cost` subtracts the call site a
+                // splice removes, so the gate is `gross - (CALL + params) <= 24`.
                 //
-                // That sweep raised the threshold uniformly, so it does not
-                // describe this gate. `inline::net_cost` subtracts the call site
-                // a splice removes, making it `gross - (CALL + params) <= 16`,
-                // which admits a four-parameter callee at gross 22. A credit
-                // proportional to what calling costs is a different regime: it
-                // buys json-catalog ser 11.9% on release, where a uniform 20
-                // cost that row 8.2%. 16 is inherited from the sweep, not
-                // re-derived under it.
-                inline_thresholds: thresholds(16),
+                // `-Os` keeps 16: at 24 sqlite_parse, sqlite_highlight and
+                // cbor_twitter grow 19-21% over 16.
+                inline_thresholds: thresholds(if opt_level == OptLevel::Os { 16 } else { 24 }),
                 inline_growth,
                 specializations,
                 cap_is_defect: opt_iterations.is_none(),
@@ -314,14 +308,12 @@ pub fn optimize(
             // The heaviest source in the tree — the Gale-generated SQLite parser
             // in `benchmark/sqlite_parse` — converges in 6, so 20 is slack.
             //
-            // Threshold 26 is the top of what shakes NIR into new shapes for
-            // its cost: on the Gale CSS3 parser 28, 30 and 32 all emit ~959KB
-            // in ~13.5s off the same candidate set, while 26 emits 719KB in
-            // 10.7s. The corpus barely reads the knob (24 → 32 moves its
-            // compile CPU 4.6%), so the cost is felt compiling one heavy file.
+            // Threshold 39, O2's 24 scaled by the ratio O3 has kept to O2. The
+            // Gale CSS3 parser's test world grows with it in no step: 1.54MB
+            // at 26, 1.67MB at 39, 1.77MB at 45, in about the same time.
             let config = OptConfig {
                 iterations: opt_iterations.unwrap_or(20),
-                inline_thresholds: thresholds(26),
+                inline_thresholds: thresholds(39),
                 inline_growth,
                 specializations,
                 cap_is_defect: opt_iterations.is_none(),

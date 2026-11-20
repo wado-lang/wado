@@ -12,11 +12,9 @@ type "functype//coverage_module_off.wado/$cm_binding__core:coverage/coverage-hos
 
 type "functype//coverage_module_off.wado/$cm_export__$test_0" = fn();  // TypeId(4)
 
-type "functype//core:rt/coverage_report" = fn();  // TypeId(5)
+type "functype//core:rt/$initialize_module" = fn();  // TypeId(5)
 
-type "functype//core:rt/$initialize_module" = fn();  // TypeId(6)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/$core:coverage/coverage-host@0.1.0#count from "wasi/$core:coverage/coverage-host@0.1.0#count";
@@ -31,20 +29,15 @@ fn "coverage_module_off.wado/$cm_binding__core:coverage/coverage-host@0.1.0#coun
 }
 
 fn "coverage_module_off.wado/$cm_export__$test_0"() {
+    let len: i32;
+    let id: i32;
+    let runs: i64;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:coverage_module_off.wado::$modules_initialized);
         cold_path;
         "core:rt/$initialize_module"();
         global:coverage_module_off.wado::$modules_initialized = 1;
     };
-    "core:rt/coverage_report"();
-    "wasi/task-return"(0);
-}
-
-fn "core:rt/coverage_report"() {
-    let len: i32;
-    let id: i32;
-    let runs: i64;
     len = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
     id = 0;
     b0: block {
@@ -57,6 +50,7 @@ fn "core:rt/coverage_report"() {
             continue l1;
         };
     };
+    "wasi/task-return"(0);
 }
 
 fn "core:rt/$initialize_module"() {

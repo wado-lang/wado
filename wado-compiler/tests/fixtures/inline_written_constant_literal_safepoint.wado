@@ -14,8 +14,15 @@ fn digit_sum(value: i32) -> i32 {
     return digits[0] + digits[1] + digits[2];
 }
 
-export fn run() with Stdout {
+// Kept out of `run`, which lands in the CM export wrapper: glue takes no
+// callee at its one site.
+#[inline(never)]
+fn show() with Stdout {
     println(`${digit_sum(builtin::black_box(407))}`);
+}
+
+export fn run() with Stdout {
+    show();
 }
 
 __DATA__

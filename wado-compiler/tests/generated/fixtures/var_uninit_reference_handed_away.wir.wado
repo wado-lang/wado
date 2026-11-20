@@ -380,8 +380,8 @@ fn "var_uninit_reference_handed_away.wado/$template_segment$var_uninit_reference
 
 fn "var_uninit_reference_handed_away.wado/$cm_export__$test_0_the_reference_reads_the_reassigned_value"() {
     let $v_6: i32;
-    let x_15: ref "var_uninit_reference_handed_away.wado//P";
-    let r_16: ref "var_uninit_reference_handed_away.wado//P";
+    let x_20: ref "var_uninit_reference_handed_away.wado//P";
+    let r_21: ref "var_uninit_reference_handed_away.wado//P";
     drop(black_box(struct.new "var_uninit_reference_handed_away.wado//P" { a: 1, b: 1 }));
     b4: block {
         l5: loop {
@@ -395,18 +395,18 @@ fn "var_uninit_reference_handed_away.wado/$cm_export__$test_0_the_reference_read
         "var_uninit_reference_handed_away.wado/$test_0_the_reference_reads_the_reassigned_value$cold1"(10);
         unreachable;
     }
-    r_16 = struct.new "var_uninit_reference_handed_away.wado//P" { a: 0, b: 0 };
-    x_15 = struct.new "var_uninit_reference_handed_away.wado//P" { a: 1, b: 1 };
+    r_21 = struct.new "var_uninit_reference_handed_away.wado//P" { a: 0, b: 0 };
+    x_20 = struct.new "var_uninit_reference_handed_away.wado//P" { a: 1, b: 1 };
     b7: block {
         l8: loop {
-            break_if b7 r_16.a >= 1;
-            drop(black_box(local.tee r_16(x_15)));
+            break_if b7 r_21.a >= 1;
+            drop(black_box(local.tee r_21(x_20)));
             continue l8;
         };
     };
-    x_15.a = 5;
-    x_15.b = 5;
-    if @unlikely(local.tee $v_6(r_16.a + r_16.b) != 10) {
+    x_20.a = 5;
+    x_20.b = 5;
+    if @unlikely(local.tee $v_6(r_21.a + r_21.b) != 10) {
         cold_path;
         "var_uninit_reference_handed_away.wado/$test_0_the_reference_reads_the_reassigned_value$cold0"($v_6);
         unreachable;

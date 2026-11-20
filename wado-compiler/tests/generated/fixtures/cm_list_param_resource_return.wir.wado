@@ -55,27 +55,27 @@ fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-lay
     let $entries_i: i32;
     let $entries_addr: i32;
     let $entries_elem: u32;
-    let $licm_repr_25: ref Array<u32>;
+    let $licm_repr_21: ref Array<u32>;
     $entries_base = "mem/realloc"(0, 0, 4, 8);
     $entries_i = 0;
-    $licm_repr_25 = entries.repr;
+    $licm_repr_21 = entries.repr;
     b3: block {
         l4: loop {
             break_if b3 (builtin::i64_extend_i32_s($entries_i) + 3_i64) >= builtin::i64_extend_i32_s(2);
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_21, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_21, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_21, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_21, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             continue l4;
@@ -85,7 +85,7 @@ fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-lay
         l6: loop {
             break_if b5 $entries_i >= 2;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_25, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_21, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             continue l6;

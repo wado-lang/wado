@@ -25,27 +25,25 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_deref_of_taken_struct_reference_is_the_struct.wado/run" = fn();  // TypeId(10)
+type "functype//opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_export__run" = fn();  // TypeId(10)
 
-type "functype//opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_export__run" = fn();  // TypeId(11)
+type "functype//core:rt/unreachable" = fn();  // TypeId(11)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(12)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(12)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(13)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
-
-type "functype//opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -60,40 +58,46 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/run"() with Stdout {
+fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
+    return if @unlikely(ref.is_null(ref.null eq) == 0) {
+        unreachable;
+    }, , "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
+}
+
+fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
     let a: i32;
     let n_33: i32;
     let $cm_pair_7: i64;
-    let $sroa_out_repr_71: ref Array<u8>;
-    let $sroa_out_used_72: i32;
-    let $sroa_self_repr_73: ref Array<u8>;
+    let $sroa_self_repr_71: ref Array<u8>;
+    let $sroa_out_repr_77: ref Array<u8>;
+    let $sroa_out_used_78: i32;
     s = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abcdef"), used: 6 });
     a = black_box(1);
-    $sroa_out_repr_71 = builtin::array_new<u8>(8);
-    $sroa_out_used_72 = 0;
-    $sroa_self_repr_73 = s.repr;
-    $inline_core_prelude_string_wado_String__internal_push_view_9: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_view_9 local.tee n_33(4 - a) == 0;
+    $sroa_out_repr_77 = builtin::array_new<u8>(8);
+    $sroa_out_used_78 = 0;
+    $sroa_self_repr_71 = s.repr;
+    $inline_core_prelude_string_wado_String__internal_push_view_11: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_view_11 local.tee n_33(4 - a) == 0;
         if @unlikely(n_33 > 8) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee s(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_71, used: 0 }), n_33);
-            $sroa_out_repr_71 = s.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee s(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_77, used: 0 }), n_33);
+            $sroa_out_repr_77 = s.repr;
         }
-        $sroa_out_used_72 = n_33;
-        builtin::array_copy<u8>($sroa_out_repr_71, 0, $sroa_self_repr_73, a, n_33);
+        $sroa_out_used_78 = n_33;
+        builtin::array_copy<u8>($sroa_out_repr_77, 0, $sroa_self_repr_71, a, n_33);
     };
     a = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     n_33 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     a = "opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a);
-    builtin::array_copy<u8>(local.tee $sroa_self_repr_73(builtin::array_new<u8>($sroa_out_used_72 + 1)), 0, $sroa_out_repr_71, 0, $sroa_out_used_72);
-    builtin::array_set_u8($sroa_self_repr_73, $sroa_out_used_72, 10);
+    builtin::array_copy<u8>(local.tee $sroa_self_repr_71(builtin::array_new<u8>($sroa_out_used_78 + 1)), 0, $sroa_out_repr_77, 0, $sroa_out_used_78);
+    builtin::array_set_u8($sroa_self_repr_71, $sroa_out_used_78, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $sroa_out_used_72 = $sroa_out_used_72 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(n_33, $sroa_self_repr_73, 0, $sroa_out_used_72);
+        $sroa_out_used_78 = $sroa_out_used_78 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(n_33, $sroa_self_repr_71, 0, $sroa_out_used_78);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -103,16 +107,6 @@ fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/run"() with Stdout {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(a);
     }
-}
-
-fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return if @unlikely(ref.is_null(ref.null eq) == 0) {
-        unreachable;
-    }, , "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
-}
-
-fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_export__run"() {
-    "opt_deref_of_taken_struct_reference_is_the_struct.wado/run"();
     "wasi/task-return"(0);
 }
 

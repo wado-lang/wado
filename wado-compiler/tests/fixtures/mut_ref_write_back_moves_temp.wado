@@ -47,6 +47,7 @@ struct Model {
 }
 
 impl Message for Model {
+    #[inline(never)]
     fn merge(&mut self, r: &mut Reader) -> Result<bool, String> {
         return r.optional(&mut self.graph);
     }

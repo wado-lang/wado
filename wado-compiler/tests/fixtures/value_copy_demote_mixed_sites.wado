@@ -11,6 +11,8 @@
 
 use { println, Stdout } from "core:cli";
 
+// A call, so `a` and `b` stay references the copies must not trust.
+#[inline("never")]
 fn process(a: &List<String>, b: &List<String>) -> String {
     let mut sorted = *a;
     sorted.sort();
@@ -28,7 +30,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "p hi! hi\n",
-    "wir_expect:O2": ["array_clone_deep"],
+    "wir_expect:O2": ["builtin::array_new<ref \"core:prelude/string.wado//String\">(local.tee $av_{}(b.used))"],
     "wir_scope": "value_copy_demote_mixed_sites.wado/process",
     "wir_contrast": {"O2": [
         {"    victim[0].push('!');\n": ""}

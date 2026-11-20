@@ -64,22 +64,22 @@ fn "loop_unroll_search_wrapping_index.wado/run"() with Stdout {
     let base_1: i32;
     let a: ref Array<u8>;
     let out_21: ref "core:prelude/string.wado//String";
-    let i_32: i32;
+    let i: i32;
     let x_95: i64;
     let q: u64;
     let tens: i32;
     let start_192: i32;
     builtin::array_set_u8(local.tee a(builtin::array_new<u8>(black_box(11))), 4, 7);
     base_1 = black_box(-2147483644);
-    i_32 = black_box(-2147483648);
+    i = black_box(-2147483648);
     b0: block {
         l1: loop {
-            break_if b0 (if i_32 < 2147483647 -> i32 {
-                builtin::array_get_value<u8>(a, base_1 + i_32) != 7;
+            break_if b0 (if i < 2147483647 -> i32 {
+                builtin::array_get_value<u8>(a, base_1 + i) != 7;
             } else {
                 0;
             }) == 0;
-            i_32 = i_32 + 1431655764;
+            i = i + 1431655764;
             continue l1;
         };
     };
@@ -87,10 +87,10 @@ fn "loop_unroll_search_wrapping_index.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_27: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_27;
     };
-    base_1 = i_32 < 0;
-    x_95 = builtin::i64_extend_i32_s(i_32);
+    base_1 = i < 0;
+    x_95 = builtin::i64_extend_i32_s(i);
     x_95 = select i64(x_95 < 0_i64, 0_i64 - x_95, x_95);
-    i_32 = $inline_count_digits_u64_1: block -> i32 {
+    i = $inline_count_digits_u64_1: block -> i32 {
         if x_95 <u 100000_i64 {
             if x_95 <u 100_i64 {
                 if x_95 <u 10_i64 {
@@ -160,20 +160,20 @@ fn "loop_unroll_search_wrapping_index.wado/run"() with Stdout {
         builtin::array_set_u8(out_21.repr, start_192, 45);
     } else {
     }
-    if @unlikely(local.tee base_1(out_21.used + i_32) > builtin::array_len(out_21.repr)) {
+    if @unlikely(local.tee base_1(out_21.used + i) > builtin::array_len(out_21.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_21, base_1);
     }
     start_192 = out_21.used;
     out_21.used = base_1;
     a = out_21.repr;
-    base_1 = start_192 + i_32;
+    base_1 = start_192 + i;
     b25: block {
         l26: loop {
             break_if b25 (base_1 - start_192) < 2;
             q = x_95 /u 100_i64;
-            tens = local.tee i_32(builtin::i32_wrap_i64(x_95 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(a, base_1 - 1, (48 + i_32) - (tens * 10));
+            tens = local.tee i(builtin::i32_wrap_i64(x_95 - (q * 100_i64))) / 10;
+            builtin::array_set_u8(a, base_1 - 1, (48 + i) - (tens * 10));
             builtin::array_set_u8(a, base_1 - 2, 48 + tens);
             base_1 = base_1 - 2;
             x_95 = q;
@@ -187,7 +187,7 @@ fn "loop_unroll_search_wrapping_index.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
     };
     base_1 = builtin::i32_wrap_i64(local.tee x_95("wasi/stream-new"()));
-    i_32 = builtin::i32_wrap_i64(x_95 >> 32_i64);
+    i = builtin::i32_wrap_i64(x_95 >> 32_i64);
     base_1 = "loop_unroll_search_wrapping_index.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(base_1);
     builtin::array_copy<u8>(local.tee a(builtin::array_new<u8>(local.tee start_192(out_21.used) + 1)), 0, out_21.repr, 0, start_192);
     builtin::array_set_u8(a, start_192, 10);
@@ -196,11 +196,11 @@ fn "loop_unroll_search_wrapping_index.wado/run"() with Stdout {
             unreachable;
         }
         start_192 = start_192 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i_32, a, 0, start_192);
+        "core:rt/cm_stream_write_raw_all_u8"(i, a, 0, start_192);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"(i_32);
+        "wasi/stream-drop-writable"(i);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
