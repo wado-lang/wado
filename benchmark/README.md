@@ -49,9 +49,8 @@ Infer — 24 samples of the forward path alone, no gradients:
 | Rust              | 2.96 k tokens/s | 129.949 ms | 1.67x   |
 
 Training spends most of its time in the backward pass, which
-sorts the whole graph topologically and then walks every edge again. That is
-pointer chasing over GC objects, where Rust's flat `Vec` of indices is at its
-strongest. Inference never builds that traversal.
+sorts the whole graph topologically and then walks every edge again: pointer
+chasing over GC objects. Inference never builds that traversal.
 
 Each sample also runs the full 16-position attention window, deeper than any
 training step reaches on this corpus: the longest name gives 11 positions and
@@ -60,7 +59,7 @@ the mean is 7, and attention cost grows with the square of the position count.
 Rust makes a node a `usize` index into a `Vec<Value>`, because a `&mut` into a
 growing `Vec` is what the borrow checker forbids. Wado's `Graph::value` returns
 that `&mut Value` and a node holds those handles as its children, which is the
-shape the Python original has. The training gap is what that costs.
+shape the Python original has.
 
 All three arms print the same final loss and generate the same sample, so they
 are the same computation.
@@ -407,26 +406,26 @@ ranges overlap, as `ab.ts` judges:
 
 | Benchmark                      | PGO vs `no-pgo` |
 | ------------------------------ | --------------: |
-| microgpt / Wado / train        |           +4.2% |
-| microgpt / Wado / infer        |           -2.3% |
+| microgpt / Wado / train        |           +4.4% |
+| microgpt / Wado / infer        |           -2.2% |
 | mandelbrot / Wado              |           noise |
 | sieve / Wado                   |           noise |
 | fts / Wado                     |           -1.0% |
-| json_twitter / Wado / ser      |          +11.9% |
-| json_twitter / Wado / de       |           +3.4% |
-| cbor_twitter / Wado / ser      |          +17.1% |
-| cbor_twitter / Wado / de       |           +4.4% |
-| cbor_canada / Wado / ser       |          +21.8% |
-| cbor_canada / Wado / de        |          +27.4% |
-| cbor_catalog / Wado / ser      |          +22.3% |
-| cbor_catalog / Wado / de       |           +7.6% |
-| json_canada / Wado / ser       |           +4.3% |
-| json_canada / Wado / de        |           +7.9% |
-| json_catalog / Wado / ser      |           +9.4% |
-| json_catalog / Wado / de       |           +8.0% |
-| zlib_bench / Wado / compress   |           +7.5% |
-| zlib_bench / Wado / decompress |           -0.9% |
-| sqlite_parse / Wado            |           +1.9% |
+| json_twitter / Wado / ser      |          +13.4% |
+| json_twitter / Wado / de       |           +3.5% |
+| cbor_twitter / Wado / ser      |          +20.6% |
+| cbor_twitter / Wado / de       |           +4.6% |
+| cbor_canada / Wado / ser       |          +27.9% |
+| cbor_canada / Wado / de        |          +37.7% |
+| cbor_catalog / Wado / ser      |          +28.6% |
+| cbor_catalog / Wado / de       |           +8.3% |
+| json_canada / Wado / ser       |           +4.5% |
+| json_canada / Wado / de        |           +8.5% |
+| json_catalog / Wado / ser      |          +10.4% |
+| json_catalog / Wado / de       |           +8.7% |
+| zlib_bench / Wado / compress   |           +8.1% |
+| zlib_bench / Wado / decompress |           -0.8% |
+| sqlite_parse / Wado            |           +2.0% |
 | syntax_highlight / Wado        |           noise |
 | gale_gen / Wado                |           +1.8% |
 
