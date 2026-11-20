@@ -1,0 +1,44 @@
+// A `_` in a trait's turbofish that nothing settles asks for it, as an omitted
+// trait argument does, rather than reaching the instance unknown.
+
+trait Back with () {
+    fn name() -> String;
+}
+
+trait Left with () {
+    type Out;
+}
+
+struct Count {}
+
+impl Left for Count {
+    type Out = i32;
+}
+
+struct Bk {}
+
+impl Back for Bk {
+    fn name() -> String {
+        return "bk";
+    }
+}
+
+trait Defaulted<G: Back> with () {
+    fn defaulted(&self) -> String;
+}
+
+impl<T: Left<Out = X>, X: Default + Display, G: Back> Defaulted<G> for T {
+    fn defaulted(&self) -> String {
+        return `[${X::default()}] on ${G::name()}`;
+    }
+}
+
+export fn run() {
+    let _a = Defaulted::<_>::defaulted(&Count {});
+}
+
+__DATA__
+{
+    "compile_error": ":37:14: analysis error: cannot infer type parameter `G`",
+    "compile_error_count": 1
+}
