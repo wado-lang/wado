@@ -103,10 +103,6 @@ impl Build {
         return Build { node, report, claiming, served, passed: 0, attributes: TreeMap::new(), served_attributes };
     }
 
-    fn claiming(&self) -> bool {
-        return self.claiming;
-    }
-
     fn hydrating(&self) -> bool {
         return self.report matches { Some(_) };
     }
@@ -197,7 +193,7 @@ fn run_steps(
         let mut step = step;
         step(&mut at);
     }
-    if at.claiming() {
+    if at.claiming {
         at.finish();
         at.check_attributes();
     }
@@ -214,7 +210,7 @@ fn is_stored_as_written(name: String) -> bool {
 /// the place wherever it was, and while hydrating claims what it holds, which
 /// was not made here.
 fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
-    let served = if parent.claiming() { parent.claim() } else { null };
+    let served = if parent.claiming { parent.claim() } else { null };
     if let Some(claimed) = served && fits(claimed, &view.origin) {
         run_steps(claimed, parent.report, true, view.steps);
         return claimed;
@@ -228,7 +224,7 @@ fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
             parent.node.replace_child(made, other);
         },
         None => {
-            if parent.claiming() {
+            if parent.claiming {
                 parent.report(`was served without the <${made.local_name()}> its view builds`);
             }
             parent.insert(made);
@@ -262,7 +258,7 @@ impl View {
     {
         return self.then(
             |at: &mut Build| {
-                if at.claiming() {
+                if at.claiming {
                     at.attributes[name] = Option::Some(value);
                 }
                 at.node.set_attribute(name, value);
@@ -545,7 +541,7 @@ fn each<T: Eq>(
         }
         // The rows are all of the element's children, so served text after
         // the last one goes before the order is checked.
-        if in_place && at.claiming() {
+        if in_place && at.claiming {
             at.finish();
         }
         // `render` and the cleanups have run, and either may have moved a row.
