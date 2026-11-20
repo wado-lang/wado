@@ -1078,7 +1078,7 @@ WEB_BROWSER_JS="$PWD/example/web-browser/build/main.js" WEB_PROBE_JS="$PWD/$PROB
 """
 
 [tasks.rill-todo-site]
-description = "Build package-rill's to-do example as a static site into build/rill-todo, and serve it on http://127.0.0.1:8089"
+description = "Build package-rill's to-do example as a static site into build/rill-todo"
 depends = ["jco-deps"]
 run = """
 #!/usr/bin/env bash
@@ -1087,8 +1087,12 @@ WADO=$(scripts/dev-bin.sh --path wado)
 NODE_HOME=$(dirname "$(dirname "$(command -v node)")")
 "$WADO" run --dir . --process-read "$NODE_HOME" \
   package-rill/example/todo/site.wado "$WADO" build/rill-todo
-"$WADO" serve --addr 127.0.0.1:8089 --dir build/rill-todo example/static_server.wado
 """
+
+[tasks.rill-todo-demo]
+description = "Build package-rill's to-do example, and serve it on http://127.0.0.1:8089"
+depends = ["rill-todo-site"]
+run = "scripts/dev-bin.sh wado serve --addr 127.0.0.1:8089 --dir build/rill-todo example/static_server.wado"
 
 [tasks.web-browser-demo]
 description = "Build example/web-browser and serve it on http://127.0.0.1:8089"

@@ -5,7 +5,8 @@
 //!
 //!     wado run --dir . package-rill/example/todo/site.wado <wado> <out>
 
-use { page } from "./src/app.wado";
+use { page, render } from "./src/app.wado";
+use { Dom, Element, SurfaceDom } from "wado-lang:web";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Environment, Exit, Stderr, args, eprintln, exit } from "core:cli";
@@ -50,6 +51,33 @@ export fn run() with (Environment, Exit, Preopens, Process, Stderr) {
             fs::write(fs::join(out, entry.name), &fs::read(fs::join(work, entry.name)).unwrap()).unwrap();
         }
     }
+    fs::write(fs::join(work, "artifact.html"), &artifact_page(bundle)).unwrap();
+}
+
+/// The page as a Claude artifact takes it. The artifact wraps the file in a
+/// document of its own, which carries the charset and the viewport, so the
+/// file holds the rest of the head and the body's children. The meta it
+/// starts with says the page keeps its side gutter clear of the safe area.
+fn artifact_page(script: String) -> String {
+    let mut fragment = "<meta name=\"claude:viewport-fit-sides\" content=\"cover\">";
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        render(script);
+        let doc = Dom::document();
+        let Some(head: Element) = doc.document_element().unwrap().first_child() else {
+            unreachable();
+        };
+        let mut child = head.first_child();
+        while let Some(node) = child {
+            child = node.next_sibling();
+            if let meta: Element = node && meta.local_name() == "meta" {
+                head.remove_child(node);
+            }
+        }
+        fragment.push_str(&head.get_html());
+        fragment.push_str(&doc.body().unwrap().get_html());
+    };
+    return fragment;
 }
 
 fn step(command: Command) with (Exit, Process, Stderr) {

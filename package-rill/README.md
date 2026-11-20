@@ -45,8 +45,8 @@ with &mut dom do {
 - `example/todo/` — a to-do list, published as a static site. `site.wado`
   renders its initial page and bundles `src/main.wado`, the browser program
   that hydrates it; `mise run rill-todo-site` builds the site into
-  `build/rill-todo` and serves it. `wado test` runs a session against
-  `SurfaceDom`, built and hydrated.
+  `build/rill-todo`, and `mise run rill-todo-demo` serves it as well.
+  `wado test` runs a session against `SurfaceDom`, built and hydrated.
 
 ## How it works
 

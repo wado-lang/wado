@@ -102,39 +102,44 @@ pub global ROOT: String = "app";
 pub fn page(script: String) -> String {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let doc = Dom::document();
-        doc.set_title("Rill to-do");
-        let Some(head: Element) = doc.document_element().unwrap().first_child() else {
-            unreachable();
-        };
-        let charset = doc.create_element("meta");
-        charset.set_attribute("charset", "utf-8");
-        head.insert_before(charset, head.first_child());
-        let viewport = doc.create_element("meta");
-        viewport.set_attribute("name", "viewport");
-        viewport.set_attribute("content", "width=device-width, initial-scale=1");
-        head.append_child(viewport);
-        let style = doc.create_element("style");
-        style.set_text_content(Option::Some(#include_str("./style.css")));
-        head.append_child(style);
-        let program = doc.create_element("script");
-        program.set_attribute("type", "module");
-        program.set_attribute("src", script);
-        head.append_child(program);
-
-        let body = doc.body().unwrap();
-        let header = doc.create_element("header");
-        let title = doc.create_element("h1");
-        title.set_text_content(Option::Some("To-do"));
-        let note = doc.create_element("p");
-        note.set_text_content(Option::Some("Rendered at build time, then hydrated in your browser by Rill, in Wado."));
-        header.append_child(title);
-        header.append_child(note);
-        body.append_child(header);
-        let root = doc.create_element("main");
-        root.set_id(ROOT);
-        body.append_child(root);
-        mount(root, build);
+        render(script);
     };
     return dom.to_html();
+}
+
+/// Renders the page into the document, as `page` serves it.
+pub fn render(script: String) with Dom {
+    let doc = Dom::document();
+    doc.set_title("Rill to-do");
+    let Some(head: Element) = doc.document_element().unwrap().first_child() else {
+        unreachable();
+    };
+    let charset = doc.create_element("meta");
+    charset.set_attribute("charset", "utf-8");
+    head.insert_before(charset, head.first_child());
+    let viewport = doc.create_element("meta");
+    viewport.set_attribute("name", "viewport");
+    viewport.set_attribute("content", "width=device-width, initial-scale=1");
+    head.append_child(viewport);
+    let style = doc.create_element("style");
+    style.set_text_content(Option::Some(#include_str("./style.css")));
+    head.append_child(style);
+    let program = doc.create_element("script");
+    program.set_attribute("type", "module");
+    program.set_attribute("src", script);
+    head.append_child(program);
+
+    let body = doc.body().unwrap();
+    let header = doc.create_element("header");
+    let title = doc.create_element("h1");
+    title.set_text_content(Option::Some("To-do"));
+    let note = doc.create_element("p");
+    note.set_text_content(Option::Some("Rendered at build time, then hydrated in your browser by Rill, in Wado."));
+    header.append_child(title);
+    header.append_child(note);
+    body.append_child(header);
+    let root = doc.create_element("main");
+    root.set_id(ROOT);
+    body.append_child(root);
+    mount(root, build);
 }
