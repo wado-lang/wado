@@ -58,27 +58,32 @@ pub fn mount(root: Element, attach: fn(View) -> Element with (Track, Dom)) -> fn
 
         let mut field: Option<HtmlInputElement> = null;
         let view = View::of(root)
-            .children([
-                element("input").attribute("id", "title").with_node(|node| {
-                    let input: HtmlInputElement = node else {
-                        unreachable();
-                    };
-                    field = Option::Some(input);
-                }),
-                element("button").attribute("id", "add").text("Add").on("click", |_: Event| {
-                    let input = field.unwrap();
-                    let title = input.value();
-                    if title.is_empty() {
-                        return;
-                    }
-                    let mut list = todos.get();
-                    list.push(Todo { id: next_id, title, done: signal(false) });
-                    next_id += 1;
-                    todos.set(list);
-                    input.set_value("");
-                }),
-                element("ul").each(|| todos.get(), |todo: Todo| todo_row(todos, todo)),
-            ])
+            .children(
+                [
+                    element("input")
+                        .attribute("id", "title")
+                        .attribute("placeholder", "What needs doing?")
+                        .with_node(|node| {
+                            let input: HtmlInputElement = node else {
+                                unreachable();
+                            };
+                            field = Option::Some(input);
+                        }),
+                    element("button").attribute("id", "add").text("Add").on("click", |_: Event| {
+                        let input = field.unwrap();
+                        let title = input.value();
+                        if title.is_empty() {
+                            return;
+                        }
+                        let mut list = todos.get();
+                        list.push(Todo { id: next_id, title, done: signal(false) });
+                        next_id += 1;
+                        todos.set(list);
+                        input.set_value("");
+                    }),
+                    element("ul").each(|| todos.get(), |todo: Todo| todo_row(todos, todo)),
+                ],
+            )
             .switch(|| todos.get().is_empty(), |empty| {
                 if empty {
                     return element("p").text("Nothing to do.");
@@ -88,6 +93,9 @@ pub fn mount(root: Element, attach: fn(View) -> Element with (Track, Dom)) -> fn
         attach(view);
     });
 }
+
+/// The id of the element the list mounts in.
+pub global ROOT: String = "app";
 
 /// The page as served: the list's initial state, and the browser program that
 /// hydrates it, at `script` beside the page.
@@ -102,16 +110,31 @@ pub fn page(script: String) -> String {
         let charset = doc.create_element("meta");
         charset.set_attribute("charset", "utf-8");
         head.insert_before(charset, head.first_child());
+        let viewport = doc.create_element("meta");
+        viewport.set_attribute("name", "viewport");
+        viewport.set_attribute("content", "width=device-width, initial-scale=1");
+        head.append_child(viewport);
         let style = doc.create_element("style");
-        style.set_text_content(Option::Some(
-            "li.done span { text-decoration: line-through; } li span { cursor: pointer; }",
-        ));
+        style.set_text_content(Option::Some(#include_str("./style.css")));
         head.append_child(style);
         let program = doc.create_element("script");
         program.set_attribute("type", "module");
         program.set_attribute("src", script);
         head.append_child(program);
-        mount(doc.body().unwrap(), build);
+
+        let body = doc.body().unwrap();
+        let header = doc.create_element("header");
+        let title = doc.create_element("h1");
+        title.set_text_content(Option::Some("To-do"));
+        let note = doc.create_element("p");
+        note.set_text_content(Option::Some("Rendered at build time, then hydrated in your browser by Rill, in Wado."));
+        header.append_child(title);
+        header.append_child(note);
+        body.append_child(header);
+        let root = doc.create_element("main");
+        root.set_id(ROOT);
+        body.append_child(root);
+        mount(root, build);
     };
     return dom.to_html();
 }

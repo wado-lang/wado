@@ -1,9 +1,9 @@
 //! The browser program: it hydrates the page `site.wado` rendered.
 
-use { mount } from "./app.wado";
+use { ROOT, mount } from "./app.wado";
 use { hydrate } from "wado-lang:rill";
 use { Dom } from "wado-lang:web";
 
 export fn run() with Dom {
-    mount(Dom::document().body().unwrap(), hydrate);
+    mount(Dom::document().get_element_by_id(ROOT).unwrap(), hydrate);
 }
