@@ -750,6 +750,18 @@ Neither the inliner nor any NIR pass can stand in: the copy is chosen before NIR
 exists, and `#[inline(always)]` on `next` leaves the expanded clone in the
 caller's loop untouched even with the cloned array provably unread.
 
+### A copied `let` through a reference the body never writes
+
+`let r = *self; return r;` copies at the `let` when the share rule turns the
+binding down, yet the return conventions still read `r` as a projection of
+`self`, so the caller copies the result again. They run before the share rule
+and cannot read its answer, so `ownership::owned_lets` counts owned only the
+through-reference bindings the body writes, which never share.
+
+- [ ] Decide the share of each through-reference `let` once, before the return
+  conventions, from what does not depend on them (the writes and the live
+  ranges), and have both the conventions and the translator read it.
+
 ### A field moved out of a live aggregate
 
 A place-level move out of an aggregate happens at a struct or tuple literal,
