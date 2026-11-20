@@ -1,12 +1,51 @@
-//! The tiny GPT-2 decoder of `tiny_gpt2.wado`, run from the checkpoint holding
-//! its weights against the logits onnxruntime computes for two sequences of
-//! different lengths.
+//! The tiny GPT-2 under `tests/models/tiny-gpt2/` in the forms an exporter
+//! writes it and the ways Loam reads its weights, against the logits
+//! onnxruntime computes. The forms share a file because each file compiles the
+//! runtime again, and Kiln reads each model file once per file, so the other
+//! forms of these models live in the other `tiny_gpt2_*_test` files.
 
-use { Cpu, Tensor } from "lib:loam";
+use { Cpu, CpuTensor, Holds, Slots, Tensor, capacity_of, resized } from "lib:loam";
 use { HashMap } from "core:collections";
 use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
 use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
 use gpt2 from "./tiny_gpt2.wado";
+use external from "../tests/models/tiny-gpt2/external/model.onnx"
+    with {
+        type: "onnx",
+        generator: {
+            module: "lib:loam",
+            options: {
+                dims: { batch_size: 1 },
+                outputs: ["logits"],
+            },
+        },
+    };
+use in_place from "../tests/models/tiny-gpt2/model.onnx"
+    with {
+        type: "onnx",
+        generator: {
+            module: "lib:loam",
+            options: {
+                dims: { batch_size: 1 },
+                outputs: ["logits"],
+                embed: false,
+            },
+        },
+    };
+use open_step from "../tests/models/tiny-gpt2/with-past/model.onnx"
+    with {
+        type: "onnx",
+        generator: { module: "lib:loam" },
+    };
+use batched from "../tests/models/tiny-gpt2/merged/model.onnx"
+    with {
+        type: "onnx",
+        generator: { module: "lib:loam" },
+    };
+
+// The decoder of `tiny_gpt2.wado`, run from the checkpoint holding its weights
+// against the logits onnxruntime computes for two sequences of different
+// lengths.
 
 /// The checkpoint the build read.
 fn checkpoint() -> HashMap<String, ByteList> {
@@ -77,4 +116,355 @@ test "a checkpoint of another model names the axis it disagrees on" {
     ]);
     let e = gpt2::Params::load(&mut Cpu {}, &one_file("model.safetensors", other)).unwrap_err();
     assert `${e}` == "model.safetensors: transformer.wte.weight: axis TransformerWteWeight1 is 64 in the checkpoint and 32 in the graph";
+}
+
+// The decoder as an exporter writes a large model, its weights in an external
+// data file the graph places each in by offset, read there in place.
+
+fn reproduces_external(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
+    let [ids, ids_extents] = ints_of(input_ids);
+    let [mask, mask_extents] = ints_of(attention_mask);
+    let [want, want_extents] = tensor_of(logits);
+
+    let data = one_file("model.onnx_data", #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data"));
+    let mut cpu = Cpu {};
+    let mut model = external::Model::new(external::Params::load(&mut cpu, &data).unwrap());
+    let got = external::compute(
+        &mut cpu,
+        &Tensor::<i64, [external::BatchSize, external::SequenceLength]> { data: ids, extents: ids_extents },
+        &Tensor::<i64, [external::BatchSize, external::SequenceLength]> { data: mask, extents: mask_extents },
+        &mut model,
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
+
+test "weights read in place from external data reproduce the logits for four tokens" {
+    reproduces_external(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+    );
+}
+
+test "weights read in place from external data reproduce the logits for seven tokens" {
+    reproduces_external(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+    );
+}
+
+test "a data file shorter than the weights the graph places in it stops the load before any is read" {
+    let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
+    let cut = data[0..<data.len() - 1].to_list() as ByteList;
+    let e = external::Params::load(&mut Cpu {}, &one_file("model.onnx_data", cut)).unwrap_err();
+    assert `${e}` == `model.onnx_data is ${data.len() - 1} bytes, and the graph places weights up to ${data.len()}`;
+}
+
+// The decoder built with `embed: false`, its weights read in place out of the
+// model file itself.
+
+fn reproduces_in_place(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
+    let [ids, ids_extents] = ints_of(input_ids);
+    let [mask, mask_extents] = ints_of(attention_mask);
+    let [want, want_extents] = tensor_of(logits);
+
+    let mut cpu = Cpu {};
+    let mut model = in_place::Model::new(
+        in_place::Params::load(
+            &mut cpu,
+            &one_file("model.onnx", #include_bytes("../tests/models/tiny-gpt2/model.onnx")),
+        ).unwrap(),
+    );
+    let got = in_place::compute(
+        &mut cpu,
+        &Tensor::<i64, [in_place::BatchSize, in_place::SequenceLength]> { data: ids, extents: ids_extents },
+        &Tensor::<i64, [in_place::BatchSize, in_place::SequenceLength]> { data: mask, extents: mask_extents },
+        &mut model,
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
+
+test "weights read in place from the model file reproduce the logits for four tokens" {
+    reproduces_in_place(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+    );
+}
+
+test "weights read in place from the model file reproduce the logits for seven tokens" {
+    reproduces_in_place(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+    );
+}
+
+test "a file of another length than the model the build read is refused" {
+    let model = #include_bytes("../tests/models/tiny-gpt2/model.onnx");
+    let mut longer = model;
+    longer.push(0);
+    let e = in_place::Params::load(&mut Cpu {}, &one_file("model.onnx", longer)).unwrap_err();
+    assert `${e}` == `model.onnx is ${model.len() + 1} bytes, and the build found the weights in one of ${model.len()}`;
+}
+
+// The step built with its batch left open: its empty cache takes the batch, and
+// a step from it computes a position for each row.
+test "a step whose batch the graph leaves open starts from an empty cache of the batch asked for" {
+    let mut cpu = Cpu {};
+    let cache = open_step::Cache::empty(&mut cpu, 2);
+    assert cpu.extents_of(&cache.past_key_values_0_key) == [2, 4, 0, 8] as List<i32>;
+
+    let mut model = open_step::Model::new(open_step::Params::embedded(&mut cpu));
+    let o = open_step::compute(
+        &mut cpu,
+        &Tensor::<i64, [open_step::BatchSize, open_step::InputIds1]> {
+            data: [11, 12],
+            extents: [2, 1],
+        },
+        &Tensor::<i64, [open_step::BatchSize, open_step::AttentionMask1]> {
+            data: [1, 1],
+            extents: [2, 1],
+        },
+        &cache,
+        &mut model,
+    );
+    assert o.logits.extents[0..<2].to_list() == [2, 1] as List<i32>;
+    assert cpu.extents_of(&o.cache.past_key_values_4_value) == [2, 4, 1, 8] as List<i32>;
+}
+
+// The decoder that branches on whether it is given a past, over a batch of
+// rows, its lengths held at a capacity. Its projections merge the rows and
+// positions for a `Gemm` and split them back, which puts each row's padding
+// between the rows while they are merged. Each row computes what it computes
+// alone, at lengths shared or its own.
+
+/// The logits for each of `rows` after the `past` positions `cache` holds in
+/// each, and the cache grown by theirs.
+fn batched_run(
+    cpu: &mut Cpu,
+    rows: List<List<i64>>,
+    past: i32,
+    cache: &batched::Cache<Cpu>,
+    model: &mut batched::Model<Cpu>,
+) -> [Tensor<f32, [batched::BatchSize, batched::SequenceLength, batched::Logits2]>, batched::Cache<Cpu>] {
+    let s = rows[0].len();
+    let mut ids: List<i64> = [];
+    for let row of &rows {
+        ids.extend(row);
+    }
+    let o = batched::compute(
+        cpu,
+        &Tensor::<i64, [batched::BatchSize, batched::SequenceLength]> {
+            data: ids,
+            extents: [rows.len(), s],
+        },
+        &Tensor::<i64, [batched::BatchSize, batched::SequenceLength]> {
+            data: List::<i64>::filled(rows.len() * (past + s), 1),
+            extents: [rows.len(), past + s],
+        },
+        &Tensor::<bool, [batched::UseCacheBranch0]> {
+            data: [past > 0],
+            extents: [1],
+        },
+        cache,
+        model,
+    );
+    return [o.logits, o.cache];
+}
+
+/// Row `r` of `t`'s first axis.
+fn row_of<Axes>(t: &Tensor<f32, Axes>, r: i32) -> List<f32> {
+    let size = t.data.len() / t.extents[0];
+    return t.data[r * size..<(r + 1) * size].to_list();
+}
+
+test "each row of a batch computes the logits it computes alone, its prompt and each step after it" {
+    let cpu = &mut Cpu {};
+    let mut model = batched::Model::new(batched::Params::embedded(cpu));
+    let prompts: List<List<i64>> = [
+        [1, 5, 42, 7, 9],
+        [3, 8, 2, 77, 15],
+    ];
+    let steps: List<List<i64>> = [
+        [11, 13],
+        [12, 21],
+    ];
+    let mut both = batched::Cache::empty(cpu, 2);
+    let mut alone: List<batched::Cache<Cpu>> = [
+        batched::Cache::empty(cpu, 1),
+        batched::Cache::empty(cpu, 1),
+    ];
+    let mut past = 0;
+    let mut padded = false;
+    for let at of 0..<steps[0].len() + 1 {
+        let rows: List<List<i64>> = if at == 0 {
+            prompts;
+        } else {
+            [
+                [steps[0][at - 1]],
+                [steps[1][at - 1]],
+            ];
+        };
+        let [logits, grown] = batched_run(cpu, rows, past, &both, &mut model);
+        for let r of 0..<rows.len() {
+            let [own, own_grown] = batched_run(cpu, [rows[r]], past, &alone[r], &mut model);
+            assert_close(&row_of(&logits, r), &own.data);
+            alone[r] = own_grown;
+        }
+        past += rows[0].len();
+        assert cpu.extents_of(&grown.past_key_values_0_key) == [2, 4, capacity_of(past), 8] as List<i32>;
+        padded = padded || capacity_of(past) > past;
+        both = grown;
+    }
+    assert padded, "some pass holds padding between the rows";
+}
+
+/// Each of `lengths` as a length of its row.
+fn each_row(cpu: &mut Cpu, lengths: &List<i32>) -> CpuTensor<i64, [Slots]> {
+    return cpu.upload(&Tensor::<i64, [Slots]> {
+        data: lengths.into_iter().map(|l| l as i64).collect(),
+        extents: [lengths.len()],
+    });
+}
+
+/// `tokens`, a list per row each `width` long, padded with 0 past each row's.
+fn padded_rows(tokens: &List<List<i64>>, width: i32) -> List<i64> {
+    let mut data: List<i64> = [];
+    for let row of tokens {
+        data.extend(row);
+        data.extend(&List::<i64>::filled(width - row.len(), 0));
+    }
+    return data;
+}
+
+/// `cache`, of two rows, each past held at `capacity` positions.
+fn held_at(cpu: &mut Cpu, cache: &batched::Cache<Cpu>, capacity: i32) -> batched::Cache<Cpu> {
+    return batched::Cache {
+        past_key_values_0_key: past_at(cpu, &cache.past_key_values_0_key, capacity),
+        past_key_values_0_value: past_at(cpu, &cache.past_key_values_0_value, capacity),
+        past_key_values_1_key: past_at(cpu, &cache.past_key_values_1_key, capacity),
+        past_key_values_1_value: past_at(cpu, &cache.past_key_values_1_value, capacity),
+        past_key_values_2_key: past_at(cpu, &cache.past_key_values_2_key, capacity),
+        past_key_values_2_value: past_at(cpu, &cache.past_key_values_2_value, capacity),
+        past_key_values_3_key: past_at(cpu, &cache.past_key_values_3_key, capacity),
+        past_key_values_3_value: past_at(cpu, &cache.past_key_values_3_value, capacity),
+        past_key_values_4_key: past_at(cpu, &cache.past_key_values_4_key, capacity),
+        past_key_values_4_value: past_at(cpu, &cache.past_key_values_4_value, capacity),
+    };
+}
+
+/// One past of two rows, held at `capacity` positions.
+fn past_at<Axes>(cpu: &mut Cpu, past: &CpuTensor<f32, Axes>, capacity: i32) -> CpuTensor<f32, Axes> {
+    return cpu.upload(&resized(&cpu.download(past), [2, 4, capacity, 8]));
+}
+
+/// Position `p` of row `r` of `t`, of axes rows, positions and logits.
+fn position_of<Axes>(t: &Tensor<f32, Axes>, r: i32, p: i32) -> List<f32> {
+    let width = t.extents[2];
+    let at = (r * t.extents[1] + p) * width;
+    return t.data[at..<at + width].to_list();
+}
+
+test "rows of their own lengths in one buffer each compute the logits they compute alone, their prompts and each step after" {
+    let cpu = &mut Cpu {};
+    let params = batched::Params::embedded(cpu);
+    let mut model = batched::Model::new(batched::Params::embedded(cpu));
+    let prompts: List<List<i64>> = [
+        [1, 5, 42, 7, 9],
+        [3, 8, 2],
+    ];
+    let steps: List<List<i64>> = [
+        [11, 13],
+        [12, 21],
+    ];
+    // Each row's prompt, padded to the longest, with no past.
+    let mut lengths: List<i32> = prompts.into_iter().map(|p| p.len()).collect();
+    let width = 5;
+    let ids = cpu.upload(&Tensor::<i64, [batched::BatchSize, batched::SequenceLength]> {
+        data: padded_rows(&prompts, width),
+        extents: [2, width],
+    });
+    let mask = cpu.upload(&Tensor::<i64, [batched::BatchSize, batched::SequenceLength]> {
+        data: padded_rows(&prompts.into_iter().map(|p| List::<i64>::filled(p.len(), 1)).collect(), width),
+        extents: [2, width],
+    });
+    let without_past = cpu.upload(&Tensor::<bool, [batched::UseCacheBranch0]> {
+        data: [false],
+        extents: [1],
+    });
+    let empty = batched::Cache::empty(cpu, 2);
+    let prompt_lengths = batched::Lengths {
+        dim_sequence_length: each_row(cpu, &lengths),
+        dim_past_sequence_length: each_row(cpu, &[0, 0]),
+    };
+    let o = batched::build(
+        cpu,
+        &ids,
+        &mask,
+        &without_past,
+        &empty,
+        &prompt_lengths,
+        &batched::Chosen { use_cache_branch: Option::Some(false) },
+        &params,
+    );
+    let prompt_logits = cpu.download(&o.logits);
+    let mut alone: List<batched::Cache<Cpu>> = [];
+    for let r of 0..<2 {
+        let empty_row = batched::Cache::empty(cpu, 1);
+        let [own, own_cache] = batched_run(cpu, [prompts[r]], 0, &empty_row, &mut model);
+        for let p of 0..<lengths[r] {
+            assert_close(&position_of(&prompt_logits, r, p), &position_of(&own, 0, p));
+        }
+        alone.push(own_cache);
+    }
+    // The steps write each row's token after its own past, in one buffer.
+    let capacity = 8;
+    let mut both = held_at(cpu, &o.cache, capacity);
+    for let at of 0..<steps[0].len() {
+        let pasts = lengths;
+        lengths = pasts.into_iter().map(|l| l + 1).collect();
+        let tokens: List<List<i64>> = [
+            [steps[0][at]],
+            [steps[1][at]],
+        ];
+        let step_ids = cpu.upload(&Tensor::<i64, [batched::BatchSize, batched::SequenceLength]> {
+            data: [steps[0][at], steps[1][at]],
+            extents: [2, 1],
+        });
+        let step_mask = cpu.upload(&Tensor::<i64, [batched::BatchSize, batched::SequenceLength]> {
+            data: padded_rows(&lengths.into_iter().map(|l| List::<i64>::filled(l, 1)).collect(), capacity),
+            extents: [2, capacity],
+        });
+        let with_past = cpu.upload(&Tensor::<bool, [batched::UseCacheBranch0]> {
+            data: [true],
+            extents: [1],
+        });
+        let step_lengths = batched::Lengths {
+            dim_sequence_length: each_row(cpu, &[1, 1]),
+            dim_past_sequence_length: each_row(cpu, &pasts),
+        };
+        let stepped = batched::build(
+            cpu,
+            &step_ids,
+            &step_mask,
+            &with_past,
+            &both,
+            &step_lengths,
+            &batched::Chosen { use_cache_branch: Option::Some(true) },
+            &params,
+        );
+        let step_logits = cpu.download(&stepped.logits);
+        for let r of 0..<2 {
+            let [own, own_cache] = batched_run(cpu, [tokens[r]], pasts[r], &alone[r], &mut model);
+            assert_close(&position_of(&step_logits, r, 0), &own.data);
+            alone[r] = own_cache;
+        }
+        both = stepped.cache;
+    }
 }
