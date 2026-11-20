@@ -2210,6 +2210,54 @@ impl SolverBridge {
                 tysys.type_table.borrow().name(type_id)
             ),
         };
+        self.answer(tysys, || binder_types(ctx), type_id, &q)
+    }
+
+    /// `asked` of `type_id` as [`Self::answer_owing`] would ask it, kept to be
+    /// asked again of the type once the effect check has solved its rows.
+    /// `None` where the question cannot be put, which `answer_owing` answers
+    /// at once.
+    pub(super) fn deferred(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> Option<DeferredQuestion> {
+        let question = self.question(tysys, ctx, type_id, asked).ok()?;
+        Some(DeferredQuestion {
+            question,
+            binders: binder_types(ctx),
+        })
+    }
+
+    /// The answer to `deferred`, asked of `closed`, the type it was put for
+    /// with its rows solved.
+    pub(super) fn answer_deferred(
+        &self,
+        tysys: &TypeSystem,
+        deferred: &mut DeferredQuestion,
+        closed: TypeId,
+    ) -> Option<Vec<OwedBody>> {
+        let binders = &deferred.binders;
+        deferred.question.ty = {
+            let table = tysys.type_table.borrow();
+            self.lowering
+                .type_id(&table, closed, &place_binder(binders, &table))
+                .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"))
+        };
+        self.answer(tysys, || binders.clone(), closed, &deferred.question)
+    }
+
+    /// Whether `q` holds, with the bodies the answer owes. `binders` are the
+    /// asking scope's [`binder_types`].
+    fn answer(
+        &self,
+        tysys: &TypeSystem,
+        binders: impl FnOnce() -> Vec<TypeId>,
+        type_id: TypeId,
+        q: &Question,
+    ) -> Option<Vec<OwedBody>> {
         let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args)?;
         let owed = owed(&self.program, &q.env, held.requests);
         let table = tysys.type_table.borrow();
@@ -2222,7 +2270,7 @@ impl SolverBridge {
             .iter()
             .any(|r| matches!(&r.ty, SolverType::Decl(head, _) if shape_heads.contains(head)))
         {
-            let binders = binder_types(ctx);
+            let binders = binders();
             self.shapes_in(
                 &table,
                 type_id,
@@ -2830,6 +2878,13 @@ pub(super) struct OwedBody {
     pub(super) head: TypeHead,
     pub(super) module: ModuleSource,
     pub(super) trait_: DefId,
+}
+
+/// A question put of a type whose rows the effect check has yet to solve, with
+/// the binders of the scope that put it.
+pub(super) struct DeferredQuestion {
+    question: Question,
+    binders: Vec<TypeId>,
 }
 
 /// A `type_implements_trait` question as the solver reads it.

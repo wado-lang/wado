@@ -25,6 +25,7 @@ use super::scope::{
     TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
+use super::solver_bridge::{DeferredQuestion, OwedBody};
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause, clause_writer};
 use super::type_resolution::ParamSpace;
 use super::types::{
@@ -57,6 +58,15 @@ use crate::unparse::unparse_generic_params_into;
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
 #[derive(Clone, Debug)]
 pub struct BoundUnmet(());
+
+/// A bound asked of a type whose rows the effect check had yet to solve.
+pub(crate) struct DeferredBound {
+    question: DeferredQuestion,
+    type_arg: TypeId,
+    trait_name: String,
+    param_name: String,
+    span: Span,
+}
 
 /// Whether a bound query may follow a newtype to its base. Dispatch does; rank
 /// 2 does not (`docs/wep-2026-09-01-trait-resolution.md`).
@@ -956,11 +966,41 @@ impl TypeSystem {
         // (WEP 2026-09-01).
         let answer = self.solver().answer_owing(self, ctx, type_id, trait_);
         let holds = answer.is_some();
+        self.record_owed(answer.into_iter().flatten());
+        holds
+    }
+
+    fn record_owed(&self, bodies: impl IntoIterator<Item = OwedBody>) {
         let mut table = self.type_table.borrow_mut();
-        for body in answer.into_iter().flatten() {
+        for body in bodies {
             table.record_bound_driven_synth_request(&body.head, &body.module, &body.trait_);
         }
-        holds
+    }
+
+    /// The deferred bounds unmet once `rows`, the effect check's solution,
+    /// closes the rows of the types they were asked of. A bound met records
+    /// the bodies its answer owes, as one answered at once does.
+    pub(crate) fn unmet_deferred_bounds(&self, rows: &EffectRows) -> Vec<TypeError> {
+        let deferred = std::mem::take(&mut *self.deferred_bounds.borrow_mut());
+        let mut unmet = Vec::new();
+        for mut bound in deferred {
+            let closed = self.type_table.borrow_mut().close_type(bound.type_arg, rows);
+            let answer = self
+                .solver()
+                .answer_deferred(self, &mut bound.question, closed);
+            match answer {
+                Some(bodies) => self.record_owed(bodies),
+                None => unmet.push(TypeError::TraitBoundNotSatisfied {
+                    type_name: self.type_id_to_string(closed),
+                    trait_name: bound.trait_name,
+                    param_name: bound.param_name,
+                    reason: Vec::new(),
+                    span: bound.span,
+                    unmet: BoundUnmet(()),
+                }),
+            }
+        }
+        unmet
     }
 
     /// The trait a bound names, with the arguments it writes for that trait's
@@ -3145,6 +3185,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(trait_) = trait_ else {
             return true;
         };
+        // The solver reads an unsolved row as empty, so for a type carrying
+        // one, such as a closure literal's, neither answer it gives now is
+        // final. The bound is asked again once the effect check has solved it.
+        let carries_row = self.tysys.type_table.borrow().contains_effect_var(type_arg);
+        let deferred = carries_row
+            .then(|| {
+                self.tysys
+                    .solver()
+                    .deferred(&self.tysys, &self.annotate_ctx, type_arg, trait_)
+            })
+            .flatten();
+        let was_deferred = deferred.is_some();
+        if let Some(question) = deferred {
+            self.tysys.deferred_bounds.borrow_mut().push(DeferredBound {
+                question,
+                type_arg,
+                trait_name: bound_as_written(trait_name, trait_),
+                param_name: param_name.to_string(),
+                span,
+            });
+        }
         if self.check_and_register_bound(type_arg, trait_) {
             let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
                 bridge.borrow().tied_through_bound(
@@ -3157,10 +3218,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.report_tied_impls(&tied, trait_, type_arg, span);
             return true;
         }
-        // The solver reads an unsolved row as empty, so an impl for the row
-        // a closure's body performs is not found yet. The instance is checked
-        // once the effect check has solved it.
-        if self.tysys.type_table.borrow().contains_effect_var(type_arg) {
+        if was_deferred {
             return true;
         }
         let type_name = self.tysys.type_id_to_string(type_arg);

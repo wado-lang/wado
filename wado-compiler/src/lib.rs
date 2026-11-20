@@ -1737,8 +1737,11 @@ fn check_effects_and_moves<H: CompilerHost>(
     let diags =
         effect_check::check_semantics(sem, provided_import_fqs, library_exports.as_deref(), lints);
     let move_errors = affine_move_check::check_affine_moves_semantic(sem);
-    let had_error = !diags.is_empty() || !move_errors.is_empty();
-    sem.write_back_effect_rows(&diags.rows);
+    let unmet_bounds = sem.write_back_effect_rows(&diags.rows);
+    let had_error = !diags.is_empty() || !move_errors.is_empty() || !unmet_bounds.is_empty();
+    for error in unmet_bounds {
+        let _ = logger.error(error);
+    }
     for error in diags.effects {
         let _ = logger.error(error);
     }
