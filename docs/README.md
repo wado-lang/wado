@@ -221,6 +221,7 @@
 - [Resources Are Held Only by `with`](./wep-2026-11-17-resources-held-by-with.md)
 - [The `spec` Command and Reference Search](./wep-2026-11-17-spec-command.md)
 - [Every Resource Can Be Backed by a Guest Value](./wep-2026-11-19-guest-backed-resources.md)
+- [A Bare Name in a Pattern Always Binds](./wep-2026-11-20-bare-names-bind.md)
 
 ## Standard Library
 
