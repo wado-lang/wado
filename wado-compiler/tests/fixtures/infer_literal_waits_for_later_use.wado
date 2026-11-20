@@ -1,0 +1,47 @@
+// A numeric literal meeting a variable leaves it open: its default type is
+// taken only where nothing later settles the variable. Each later use here
+// settles it to `i64`, so the literal is an `i64` too.
+
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn put<T>(_o: Option<T>, v: T) -> Option<T> {
+    return Some(v);
+}
+
+fn empty<T>() -> List<T> {
+    return [];
+}
+
+fn wide(o: Option<i64>) -> i64 {
+    return o.unwrap_or(0);
+}
+
+test "an argument beside a variable" {
+    let a = none();
+    let b = put(a, 5);
+    assert wide(b) == 5;
+}
+
+test "an assignment into a variable" {
+    let mut a = none();
+    if builtin::black_box(true) {
+        a = Some(5);
+    }
+    assert wide(a) == 5;
+}
+
+test "a method argument" {
+    let mut xs = empty();
+    xs.push(5);
+    let ys: List<i64> = xs;
+    assert ys[0] == 5;
+}
+
+test "nothing settles it: the default" {
+    let a = none();
+    let b = put(a, 5);
+    let n = b.unwrap();
+    assert n + 2147483647 == -2147483644;
+}

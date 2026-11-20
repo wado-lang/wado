@@ -3114,6 +3114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let selected = resolution.selected;
         let declaration = resolution.declaration;
+        let declared = selected.is_some() || declaration.is_some() || resolution.blanket.is_some();
         let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
         let mangled_func_name = MethodName::format_local(
@@ -3147,8 +3148,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Emit a compile error if the static method was not found anywhere.
-        // Where a `_` is still open, the bare spelling would have asked for
-        // it, and so does this one.
+        // Where one is declared and a `_` is still open, the bare spelling
+        // would have asked for it, and so does this one.
         if return_type == TypeTable::UNKNOWN {
             let open: Vec<TypeId> = receiver_holes
                 .iter()
@@ -3161,9 +3162,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .is_infer_var(self.apply_infer_holes(var))
                 })
                 .collect();
-            if !open.is_empty() {
+            if declared && !open.is_empty() {
                 self.close_uninferred(&open);
                 return TypeTable::ERROR;
+            }
+            // The unknown name is the whole fault: no answer to an open `_`
+            // could make it exist.
+            for var in open {
+                self.close_infer_var(var);
             }
             let _ = self.emit(TypeError::UnknownFunction {
                 name: static_call_symbol_name(static_call),
