@@ -1484,10 +1484,9 @@ pub async fn semantics_for_world<H: CompilerHost>(
     invocations: InvocationIndex,
     build_tir: bool,
 ) -> Semantics {
-    let host = ErasedHost::new(host);
     semantics_for_world_erased(
         source,
-        &host,
+        &ErasedHost::new(host),
         filename,
         target_world,
         invocations,

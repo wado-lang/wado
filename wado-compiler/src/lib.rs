@@ -133,13 +133,13 @@ pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
 pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
-use compiler_host::{ErasedHost, LocalBoxFuture};
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
-    GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorRequest,
-    GeneratorResponse, GeneratorRunnerError, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir,
-    ProbeInput, ProbeRequest, Severity, SourceError, SourceReader,
+    GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir, ProbeInput,
+    ProbeRequest, Severity, SourceError, SourceReader,
 };
+use compiler_host::{ErasedHost, LocalBoxFuture};
 pub use logger::{Bail, Logger};
 pub use remarks::{
     EntryCode, Remark, collect_const_region_remarks, collect_param_gate_remarks,
