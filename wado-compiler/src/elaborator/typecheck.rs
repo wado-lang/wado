@@ -447,11 +447,11 @@ fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
 /// The arguments of `actual` and `expected` where both are one constructor
 /// at their own arguments: two tuples, two arrays, or two instances of one
 /// declaration.
-fn same_constructor_args<'t>(
+fn same_constructor_args(
     actual: TypeId,
     expected: TypeId,
-    type_table: &'t TypeTable,
-) -> Option<(&'t [TypeId], &'t [TypeId])> {
+    type_table: &TypeTable,
+) -> Option<(&[TypeId], &[TypeId])> {
     match (type_table.get(actual), type_table.get(expected)) {
         (ResolvedType::Tuple(a), ResolvedType::Tuple(e)) => Some((a.as_slice(), e.as_slice())),
         (ResolvedType::BuiltinArray(a), ResolvedType::BuiltinArray(e)) => {
