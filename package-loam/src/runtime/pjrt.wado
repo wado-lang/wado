@@ -20,14 +20,13 @@ use {
     full,
     written_at,
 } from "./hlo.wado";
-use { Cpu, CpuTensor, Element, ElementKind, Float, Holds, Tensor } from "./tensor.wado";
+use { Cpu, CpuTensor, Element, ElementKind, Float, Holds, Tensor, element_count } from "./tensor.wado";
 use {
     Any,
     Recorded,
     Recorder,
     Untyped,
     data_of,
-    kept_any,
     kind_of,
     uploaded_any,
     zeros_on_host,
@@ -178,6 +177,12 @@ fn returned_at(kind: ElementKind, on: DeviceBuffer) -> Any<PjrtBackend> {
     };
 }
 
+/// A weight a backend compiling for a topology keeps: its shape alone, since
+/// no program it compiles runs.
+fn shape_only(kind: ElementKind, extents: List<i32>) -> Any<PjrtBackend> {
+    return returned_at(kind, DeviceBuffer { slot: -1, generation: 0, extents, halved: false });
+}
+
 impl PjrtBackend {
     pub fn new() -> PjrtBackend {
         return PjrtBackend {
@@ -310,7 +315,7 @@ impl PjrtBackend {
     /// `w` on the device as it is stored.
     fn kept_stored(&mut self, w: &HostWeight) -> Any<PjrtBackend> with PjrtHost {
         if self.topology matches { Some(_) } {
-            return kept_any(self, &w.decoded());
+            return shape_only(w.kind, w.extents);
         }
         let buffer = done(PjrtHost::upload(element_type(w.kind), buffer_extents(&w.extents), w.bytes()));
         let d = self.device_buffer(self.stored(buffer), w.extents, false);
@@ -362,6 +367,12 @@ impl PjrtBackend {
     fn host<E: Element, Axes>(&mut self, t: &Located<E, Axes>) -> Tensor<E, Axes> with PjrtHost {
         return match t {
             Host(h) => *h,
+            // A weight compiled for a topology is its shape: zeros, as each
+            // program's results are there.
+            Device(d) && self.topology matches { Some(_) } => Tensor {
+                data: List::filled(element_count(&d.extents), E::from_i64(0)),
+                extents: d.extents,
+            },
             Device(d) => {
                 self.reads += 1;
                 let bytes = done(self.buffer_at(self.slot_of(d)).to_host());
@@ -540,7 +551,7 @@ impl Backend for PjrtBackend {
     /// A program's zeros, which the backend keeps.
     fn pool(&mut self, kind: ElementKind, extents: List<i32>) -> Any<PjrtBackend> with PjrtHost {
         if self.topology matches { Some(_) } {
-            return kept_any(self, &zeros_on_host(kind, extents));
+            return shape_only(kind, extents);
         }
         let at = self.compiled_once(`zeros ${kind:?} ${extents:?}`, || zeros_pass(kind, extents));
         let zeros = done(self.executables[at].execute([], [])).pop().unwrap();

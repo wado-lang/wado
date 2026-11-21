@@ -1,8 +1,9 @@
 //! A mixture of experts' weights held in pools of slots, each slot one expert.
-//! Pools of a slot for every expert of every layer they serve are filled once.
-//! Smaller ones are filled at each host step with the experts the tokens pick,
-//! the slot used longest ago giving way.
+//! Where the budget holds every expert of a layout, each layer holds its own.
+//! Otherwise runs of its layers share pools of fewer slots than their experts,
+//! which each host step fills with the experts the tokens pick.
 
+use { HashMap } from "core:collections";
 use { LoadError, WeightSource } from "./checkpoint.wado";
 use { Picked, Pool, Tokens } from "./experts.wado";
 use { Backend, One } from "./hlo.wado";
@@ -46,12 +47,13 @@ impl StoredExperts {
     }
 }
 
-/// The layers whose experts share one pool per weight.
+/// The layers whose experts are laid out alike.
 pub struct ExpertLayout {
-    /// Where each pool is among the weights a pass reads.
-    pub weights: List<i32>,
-    /// Each layer's weights, one per pool, and the host step that fetches its
-    /// experts.
+    /// Where each layer's pools are among the weights a pass reads, one for
+    /// each of its expert weights.
+    pub weights: List<List<i32>>,
+    /// Each layer's expert weights, in the order of its pools, and the host
+    /// step that fetches its experts.
     pub layers: List<List<StoredExperts>>,
     pub steps: List<i32>,
     /// The experts of one layer.
@@ -59,97 +61,422 @@ pub struct ExpertLayout {
 }
 
 impl ExpertLayout {
-    /// The bytes a checkpoint stores one expert of these pools in.
+    /// The bytes a checkpoint stores one expert of these layers in.
     fn slot_bytes(&self) -> i64 {
         return self.layers[0].into_iter().map(|w| w.slice_bytes() as i64).sum().unwrap();
     }
+}
 
-    fn every_slot(&self) -> i32 {
-        return self.layers.len() * self.experts;
+/// What planning a layout's pools reads of it: its layers, the experts of
+/// each, the bytes a checkpoint stores one expert in, the host step of each
+/// layer, and the most slots one of its pools may hold.
+pub struct ExpertShape {
+    pub layers: i32,
+    pub experts: i32,
+    pub slot_bytes: i64,
+    pub steps: List<i32>,
+    pub most_slots: i32,
+}
+
+/// The layers `first..<first + count` of a layout, which share one pool for
+/// each weight of `slots` slots. A run of one layer holds its own experts, a
+/// slot each; a longer run holds more than one layer's experts and fewer than
+/// all of its layers'.
+pub struct LayerRun {
+    pub first: i32,
+    pub count: i32,
+    pub slots: i32,
+}
+
+impl LayerRun {
+    fn shared(&self) -> bool {
+        return self.count > 1;
     }
 }
 
-/// One layout's pools: how many slots each holds, the expert in each slot as
-/// `layer · experts + expert` or -1, and when each slot was used last.
-struct Pools {
-    layout: ExpertLayout,
-    slots: i32,
+/// Each layout's layers in runs within `budget` bytes, counted as a
+/// checkpoint stores them. A budget past every expert gives each layer its
+/// own. Otherwise each layout first gets one layer's experts and one more,
+/// then the rest is shared by the bytes each still lacks, and its layers are
+/// split into as few runs as keep each pool within `most_slots`.
+pub fn planned(shapes: &List<ExpertShape>, budget: i64) -> Result<List<List<LayerRun>>, LoadError> {
+    let least_of = |s: &ExpertShape| if s.layers == 1 { s.experts } else { s.experts + 1 };
+    let all_of = |s: &ExpertShape| s.layers * s.experts;
+    let least = shapes.into_iter().map(|s| least_of(s) as i64 * s.slot_bytes).sum().unwrap_or(0);
+    if budget < least {
+        return Result::Err(
+            LoadError { reason: `a budget of ${budget} bytes holds less than one layer's experts and one more of each layout, ${least} bytes` },
+        );
+    }
+    let rest = shapes.into_iter().map(|s| (all_of(s) - least_of(s)) as i64 * s.slot_bytes).sum().unwrap_or(0);
+    let spare = i64::min(budget - least, rest);
+    let mut plans: List<List<LayerRun>> = [];
+    for let s of *shapes {
+        let others = all_of(&s) - least_of(&s);
+        let extra = if spare == rest { others } else { (others as i64 * spare / rest) as i32 };
+        plans.push(runs_of(&s, least_of(&s) + extra)?);
+    }
+    return Result::Ok(plans);
+}
+
+/// `shape`'s layers in runs sharing `slots` slots, or each its own where the
+/// slots hold every expert.
+fn runs_of(shape: &ExpertShape, slots: i32) -> Result<List<LayerRun>, LoadError> {
+    let [layers, experts] = [shape.layers, shape.experts];
+    if experts > shape.most_slots {
+        return Result::Err(LoadError { reason: `one layer's ${experts} experts outgrow a pool of ${shape.most_slots} slots` });
+    }
+    let own = |first: i32, count: i32| -> List<LayerRun> {
+        return (first..<first + count).map(|l| LayerRun { first: l, count: 1, slots: experts }).collect();
+    };
+    if slots >= layers * experts {
+        return Result::Ok(own(0, layers));
+    }
+    for let count of 1..=layers {
+        if count * (experts + 1) > slots {
+            break;
+        }
+        let mut runs: List<LayerRun> = [];
+        let extra = slots - count * (experts + 1);
+        let mut given = 0;
+        for let r of 0..<count {
+            let [first, end] = [r * layers / count, (r + 1) * layers / count];
+            let share = if r == count - 1 { extra - given } else { extra * (end - first) / layers };
+            given += share;
+            runs.push(LayerRun { first, count: end - first, slots: experts + 1 + share });
+        }
+        if runs.into_iter().all(|run| run.slots <= shape.most_slots) {
+            let mut planned: List<LayerRun> = [];
+            for let run of runs {
+                if run.count == 1 || run.slots >= run.count * experts {
+                    planned.extend(&own(run.first, run.count));
+                } else {
+                    planned.push(run);
+                }
+            }
+            return Result::Ok(planned);
+        }
+    }
+    return Result::Err(
+        LoadError { reason: `${slots} slots of ${experts} experts a layer outgrow pools of ${shape.most_slots} slots` },
+    );
+}
+
+/// Which expert of a shared pool gives way to one a step needs. Each breaks a
+/// tie by taking the one used longest ago.
+pub enum Eviction {
+    /// The one used longest ago.
+    Recent,
+    /// The one picked least often, of those the pool has seen.
+    Frequent,
+    /// The one whose layer runs last from here, the run's layers running in
+    /// order and over again.
+    LayerOrder,
+    /// The one picked next furthest from now, which only a replay of known
+    /// steps can tell.
+    Farthest,
+}
+
+/// A shared pool's slots: the expert in each as `layer · experts + expert` of
+/// the run's layers or -1, when each was used last, and how often each expert
+/// has been picked.
+pub struct SharedSlots {
+    layers: i32,
+    experts: i32,
+    eviction: Eviction,
     held: List<i32>,
     used: List<i64>,
-}
-
-impl Pools {
-    fn resident(&self) -> bool {
-        return self.slots == self.layout.every_slot();
-    }
-}
-
-/// Every layout's pools a model reads, and what their slots hold.
-pub struct HeldExperts {
-    groups: List<Pools>,
+    picked: List<i64>,
     clock: i64,
 }
 
-impl HeldExperts {
-    /// Pools of `layouts` within `budget` bytes, as a checkpoint stores them:
-    /// one layer's experts each, then the rest shared by each pool's bytes, so
-    /// that a budget past every expert holds them all.
-    pub fn within(layouts: List<ExpertLayout>, budget: i64) -> Result<HeldExperts, LoadError> {
-        let least = layouts.into_iter().map(|l| l.experts as i64 * l.slot_bytes()).sum().unwrap_or(0);
-        if budget < least {
-            return Result::Err(
-                LoadError { reason: `a budget of ${budget} bytes holds less than one layer's experts of each pool, ${least} bytes` },
-            );
+impl SharedSlots {
+    pub fn new(layers: i32, experts: i32, slots: i32, eviction: Eviction) -> SharedSlots
+        contract experts < slots < layers * experts, "a shared pool holds more than one layer's experts and fewer than all"
+    {
+        return SharedSlots {
+            layers,
+            experts,
+            eviction,
+            held: List::filled(slots, -1),
+            used: List::filled(slots, -1),
+            picked: List::filled(layers * experts, 0),
+            clock: 0,
+        };
+    }
+
+    /// The slot holding each of `picked`, distinct experts of the run's layer
+    /// `layer`, and whether it was filled now. Those held already are kept, so
+    /// no expert this step needs gives way. `next_use(key)` is when the expert
+    /// `key` is picked next, which only `Farthest` reads.
+    pub fn placed(&mut self, layer: i32, picked: &List<i32>, next_use: fn(i32) -> i64) -> List<[i32, bool]>
+        contract 0 <= layer < self.layers
+    {
+        self.clock += 1;
+        let keys: List<i32> = picked.into_iter().map(|e| layer * self.experts + *e).collect();
+        let mut slots = List::<i32>::filled(keys.len(), -1);
+        for let [i, key] of keys.into_iter().enumerate() {
+            self.picked[key] += 1;
+            if let Some(s) = self.held.into_iter().position(|h| h == key) {
+                self.used[s] = self.clock;
+                slots[i] = s;
+            }
         }
-        let rest = layouts.into_iter().map(|l| (l.every_slot() - l.experts) as i64 * l.slot_bytes()).sum().unwrap_or(0);
-        let spare = i64::min(budget - least, rest);
-        let mut groups: List<Pools> = [];
-        for let layout of layouts {
-            assert layout.layers.len() == layout.steps.len();
-            let others = layout.every_slot() - layout.experts;
-            let extra = if spare == rest { others } else { (others as i64 * spare / rest) as i32 };
-            let slots = layout.experts + extra;
-            groups.push(Pools {
-                layout,
-                slots,
-                held: List::filled(slots, -1),
-                used: List::filled(slots, -1),
+        let mut placed: List<[i32, bool]> = [];
+        for let [i, key] of keys.into_iter().enumerate() {
+            if slots[i] >= 0 {
+                placed.push([slots[i], false]);
+                continue;
+            }
+            let s = self.victim(layer, next_use);
+            self.held[s] = key;
+            self.used[s] = self.clock;
+            placed.push([s, true]);
+        }
+        return placed;
+    }
+
+    /// The slot that gives way: an empty one, else the one the eviction keeps
+    /// least, among those this step has not used.
+    fn victim(&self, layer: i32, next_use: fn(i32) -> i64) -> i32 {
+        let mut best = -1;
+        let mut best_kept: i64 = 0;
+        for let s of 0..<self.held.len() {
+            if self.used[s] == self.clock {
+                continue;
+            }
+            let key = self.held[s];
+            if key < 0 {
+                return s;
+            }
+            let kept = self.kept(key, layer, next_use);
+            if best < 0 || kept < best_kept || kept == best_kept && self.used[s] < self.used[best] {
+                best = s;
+                best_kept = kept;
+            }
+        }
+        assert best >= 0, "a shared pool holds one layer's experts and more";
+        return best;
+    }
+
+    /// How much the eviction would keep `key` while layer `layer` runs: the
+    /// least is the one to give way.
+    fn kept(&self, key: i32, layer: i32, next_use: fn(i32) -> i64) -> i64 {
+        return match self.eviction {
+            _::Recent => 0,
+            _::Frequent => self.picked[key],
+            _::LayerOrder => -(((key / self.experts - layer - 1) % self.layers + self.layers) % self.layers) as i64,
+            _::Farthest => -next_use(key),
+        };
+    }
+}
+
+/// One host step's fetch: its id, the tokens it ran, and the distinct experts
+/// they picked, in the order they first appear.
+pub struct Fetch {
+    pub step: i32,
+    pub tokens: i32,
+    pub experts: List<i32>,
+}
+
+/// What a model's host steps fetched, with the shapes of its layouts: what
+/// [`replayed`] reads.
+pub struct Fetches {
+    pub shapes: List<ExpertShape>,
+    pub fetches: List<Fetch>,
+}
+
+/// How many experts steps picked, how many of those a pool held already, and
+/// the bytes the rest took to load, as a checkpoint stores them.
+pub struct ExpertCounts {
+    pub picked: i64 = 0,
+    pub held: i64 = 0,
+    pub loaded_bytes: i64 = 0,
+}
+
+impl ExpertCounts {
+    fn counted(&mut self, filled: bool, bytes: i64) {
+        self.picked += 1;
+        if filled {
+            self.loaded_bytes += bytes;
+        } else {
+            self.held += 1;
+        }
+    }
+}
+
+/// A shared run of a layout's layers and its slots.
+struct SharedRun {
+    layout: i32,
+    run: LayerRun,
+    slots: SharedSlots,
+}
+
+/// Each shared run of `plans`, slots under `eviction`, and the run and layer
+/// each host step of `shapes` fetches into.
+fn shared_runs(
+    shapes: &List<ExpertShape>,
+    plans: &List<List<LayerRun>>,
+    eviction: Eviction,
+) -> [List<SharedRun>, HashMap<i32, [i32, i32]>] {
+    let mut runs: List<SharedRun> = [];
+    let mut of_step = HashMap::<i32, [i32, i32]>::new();
+    for let [at, plan] of plans.into_iter().enumerate() {
+        let shape = &shapes[at];
+        for let run of plan {
+            if !run.shared() {
+                continue;
+            }
+            for let layer of run.first..<run.first + run.count {
+                of_step[shape.steps[layer]] = [runs.len(), layer];
+            }
+            runs.push(SharedRun {
+                layout: at,
+                run: *run,
+                slots: SharedSlots::new(run.count, shape.experts, run.slots, eviction),
             });
         }
-        return Result::Ok(HeldExperts { groups, clock: 0 });
+    }
+    return [runs, of_step];
+}
+
+/// What `fetches`, recorded by a model of `shapes`, would have held within
+/// `budget` bytes under `eviction`: the counts of the steps of many tokens,
+/// as a prompt's are, and of one.
+pub fn replayed(
+    shapes: &List<ExpertShape>,
+    fetches: &List<Fetch>,
+    budget: i64,
+    eviction: Eviction,
+) -> Result<[ExpertCounts, ExpertCounts], LoadError> {
+    let [mut runs, of_step] = shared_runs(shapes, &planned(shapes, budget)?, eviction);
+    // The fetch that next picks each expert, by step and expert: at first the
+    // one that first does, and past each fetch the one after it.
+    let mut upcoming = HashMap::<[i32, i32], i64>::new();
+    let mut after: List<List<i64>> = [];
+    for let back of 1..=fetches.len() {
+        let i = fetches.len() - back;
+        let f = &(*fetches)[i];
+        let mut next: List<i64> = [];
+        for let e of f.experts {
+            next.push(upcoming.get([f.step, e]).unwrap_or(i64::MAX));
+            upcoming[[f.step, e]] = i as i64;
+        }
+        after.push(next);
+    }
+    after.reverse();
+    let mut prompts = ExpertCounts {};
+    let mut steps = ExpertCounts {};
+    for let [i, f] of fetches.into_iter().enumerate() {
+        for let [k, e] of f.experts.into_iter().enumerate() {
+            upcoming[[f.step, e]] = after[i][k];
+        }
+        let Some([r, layer]) = of_step.get(f.step) else {
+            continue;
+        };
+        let shared = &mut runs[r];
+        let shape = &shapes[shared.layout];
+        let first = shared.run.first;
+        let next_use = |key: i32| -> i64 {
+            return upcoming.get([shape.steps[first + key / shape.experts], key % shape.experts]).unwrap_or(i64::MAX);
+        };
+        let counts = if f.tokens > 1 { &mut prompts } else { &mut steps };
+        for let [_, filled] of shared.slots.placed(layer - first, &f.experts, next_use) {
+            counts.counted(filled, shape.slot_bytes);
+        }
+    }
+    return Result::Ok([prompts, steps]);
+}
+
+/// Every layout's pools a model reads, and what the shared ones hold.
+pub struct HeldExperts {
+    layouts: List<ExpertLayout>,
+    plans: List<List<LayerRun>>,
+    runs: List<SharedRun>,
+    of_step: HashMap<i32, [i32, i32]>,
+    counts: ExpertCounts,
+    fetches: List<Fetch>,
+}
+
+/// The order in which a shared pool's experts give way.
+global EVICTION: Eviction = Eviction::LayerOrder;
+
+impl HeldExperts {
+    /// Pools of `layouts` within `budget` bytes, as a checkpoint stores them,
+    /// planned as [`planned`] does, each within what `g` holds in one pool.
+    pub fn within<affine G: Backend>(layouts: List<ExpertLayout>, budget: i64, g: &G) -> Result<HeldExperts, LoadError> {
+        return HeldExperts::planned_by(layouts, budget, |w| g.pool_slots(w.kind, &w.extents));
     }
 
-    /// Pools of `layouts` that hold every expert.
+    /// Pools of `layouts`, each layer holding its own experts.
     pub fn resident(layouts: List<ExpertLayout>) -> HeldExperts {
-        return HeldExperts::within(layouts, i64::MAX).unwrap();
+        return HeldExperts::planned_by(layouts, i64::MAX, |_| i32::MAX).unwrap();
     }
 
-    /// Each layout's pools in turn, in the order of its `weights`: those whose
-    /// slots hold every expert filled from `source`, the others empty.
-    pub fn pools<affine G: Backend, affine Src: WeightSource>(&mut self, g: &mut G, source: &Src) -> List<Any<G>> with _ {
+    fn planned_by(
+        layouts: List<ExpertLayout>,
+        budget: i64,
+        most: fn(&StoredExperts) -> i32,
+    ) -> Result<HeldExperts, LoadError> {
+        let shapes: List<ExpertShape> = layouts.into_iter().map(|l| {
+            assert l.layers.len() == l.steps.len() && l.layers.len() == l.weights.len();
+            return ExpertShape {
+                layers: l.layers.len(),
+                experts: l.experts,
+                slot_bytes: l.slot_bytes(),
+                steps: l.steps,
+                most_slots: l.layers[0].into_iter().map(|w| most(&w)).min().unwrap(),
+            };
+        }).collect();
+        let plans = planned(&shapes, budget)?;
+        let [runs, of_step] = shared_runs(&shapes, &plans, EVICTION);
+        return Result::Ok(HeldExperts { layouts, plans, runs, of_step, counts: ExpertCounts {}, fetches: [] });
+    }
+
+    /// Every host step's fetch so far, in order, and the shapes of the
+    /// layouts, each pool as large as one tensor holds.
+    pub fn fetches(&self) -> Fetches {
+        let shapes = self.layouts.into_iter().map(|l| ExpertShape {
+            layers: l.layers.len(),
+            experts: l.experts,
+            slot_bytes: l.slot_bytes(),
+            steps: l.steps,
+            most_slots: l.layers[0].into_iter().map(|w| i32::MAX / w.slice_bytes()).min().unwrap(),
+        }).collect();
+        return Fetches { shapes, fetches: self.fetches };
+    }
+
+    /// How many experts the host steps have picked, held and loaded.
+    pub fn counts(&self) -> &ExpertCounts {
+        return &self.counts;
+    }
+
+    /// Each layer's pools in the order of their weights: a layer's own filled
+    /// from `source`, a shared run's one pool for each of its layers, empty.
+    pub fn pools<affine G: Backend, affine Src: WeightSource>(&self, g: &mut G, source: &Src) -> List<Any<G>> with _ {
         let mut made: List<Any<G>> = [];
-        for let at of 0..<self.groups.len() {
-            let group = &self.groups[at];
-            let first = made.len();
-            for let w of group.layout.layers[0] {
-                let mut extents: List<i32> = [group.slots];
-                extents.extend(&w.extents);
-                made.push(g.pool(w.kind, extents));
-            }
-            if group.resident() {
-                let these: List<i32> = (first..<made.len()).collect();
-                for let layer of 0..<group.layout.layers.len() {
-                    for let expert of 0..<group.layout.experts {
-                        self.placed(
-                            g,
-                            source,
-                            at,
-                            layer,
-                            expert,
-                            layer * group.layout.experts + expert,
-                            &mut made,
-                            &these,
-                        );
+        if self.layouts.is_empty() {
+            return made;
+        }
+        let first = self.layouts[0].weights[0][0];
+        for let [at, layout] of self.layouts.into_iter().enumerate() {
+            for let run of &self.plans[at] {
+                let mut pools: List<Any<G>> = [];
+                for let w of layout.layers[run.first] {
+                    let mut extents: List<i32> = [run.slots];
+                    extents.extend(&w.extents);
+                    assert run.slots <= g.pool_slots(w.kind, &w.extents), "a pool fits the backend";
+                    pools.push(g.pool(w.kind, extents));
+                }
+                if !run.shared() {
+                    for let expert of 0..<layout.experts {
+                        written(g, source, &layout.layers[run.first], expert, expert, &mut pools);
+                    }
+                }
+                for let layer of run.first..<run.first + run.count {
+                    for let [i, pool] of pools.into_iter().enumerate() {
+                        assert layout.weights[layer][i] == first + made.len(), "the pools follow each other";
+                        made.push(pool);
                     }
                 }
             }
@@ -158,7 +485,7 @@ impl HeldExperts {
     }
 
     /// The host step `step`: the experts `read[0]` picks, each written into a
-    /// slot of `weights`' pools unless one holds it already; then each expert's
+    /// slot of its run's pools unless one holds it already; then each expert's
     /// slot, the picked experts in order, and how many they are.
     pub fn fetched<affine G: Backend, affine Src: WeightSource>(
         &mut self,
@@ -168,8 +495,12 @@ impl HeldExperts {
         read: &List<Any<G>>,
         weights: &mut List<Any<G>>,
     ) -> List<Any<G>> with _ {
-        let [at, layer] = self.step_of(step);
-        let experts = self.groups[at].layout.experts;
+        let Some([r, layer]) = self.of_step.get(step) else {
+            panic(`no shared pool's experts are fetched at host step ${step}`);
+        };
+        let shared = &mut self.runs[r];
+        let layout = &self.layouts[shared.layout];
+        let experts = layout.experts;
         let picks = g.download(&typed::<G, i64, [Tokens, Picked]>(g, &read[0]));
         let mut order: List<i64> = [];
         for let pick of picks.data {
@@ -177,17 +508,23 @@ impl HeldExperts {
                 order.push(pick);
             }
         }
-        self.clock += 1;
-        // Those held already first, so that no expert this step runs gives way.
+        let picked: List<i32> = order.into_iter().map(|e| e as i32).collect();
+        self.fetches.push(Fetch { step, tokens: picks.extents[0], experts: picked });
         let mut slot_of = List::<i64>::filled(experts, -1);
-        for let expert of &order {
-            if let Some(slot) = self.holding(at, layer, *expert as i32) {
-                slot_of[*expert as i32] = slot as i64;
+        let placed = shared.slots.placed(layer - shared.run.first, &picked, |_| unreachable());
+        for let [i, [slot, filled]] of placed.into_iter().enumerate() {
+            slot_of[picked[i]] = slot as i64;
+            self.counts.counted(filled, layout.slot_bytes());
+            if !filled {
+                continue;
             }
-        }
-        for let expert of &order {
-            if slot_of[*expert as i32] < 0 {
-                slot_of[*expert as i32] = self.fetched_into_slot(g, source, at, layer, *expert as i32, weights) as i64;
+            let at: List<i32> = layout.weights[shared.run.first];
+            let mut pools: List<Any<G>> = at.into_iter().map(|p| weights[p]).collect();
+            written(g, source, &layout.layers[layer], picked[i], slot, &mut pools);
+            for let l of shared.run.first..<shared.run.first + shared.run.count {
+                for let [w, pool] of pools.into_iter().enumerate() {
+                    weights[layout.weights[l][w]] = pool;
+                }
             }
         }
         let count = order.len();
@@ -204,76 +541,22 @@ impl HeldExperts {
             }),
         ];
     }
+}
 
-    /// The group and layer whose experts the host step `step` fetches.
-    fn step_of(&self, step: i32) -> [i32, i32] {
-        for let [at, group] of self.groups.into_iter().enumerate() {
-            for let [layer, s] of group.layout.steps.into_iter().enumerate() {
-                if s == step {
-                    return [at, layer];
-                }
-            }
-        }
-        panic(`no layer's experts are fetched at host step ${step}`);
-    }
-
-    /// The slot of group `at` that holds `layer`'s expert `expert`, marked
-    /// used now.
-    fn holding(&mut self, at: i32, layer: i32, expert: i32) -> Option<i32> {
-        let group = &mut self.groups[at];
-        let key = layer * group.layout.experts + expert;
-        for let s of 0..<group.held.len() {
-            if group.held[s] == key {
-                group.used[s] = self.clock;
-                return Option::Some(s);
-            }
-        }
-        return null;
-    }
-
-    /// The slot of group `at` used longest ago, and not now, which comes to
-    /// hold `layer`'s expert `expert`.
-    fn fetched_into_slot<affine G: Backend, affine Src: WeightSource>(
-        &mut self,
-        g: &mut G,
-        source: &Src,
-        at: i32,
-        layer: i32,
-        expert: i32,
-        weights: &mut List<Any<G>>,
-    ) -> i32 with _ {
-        let group = &mut self.groups[at];
-        let mut slot = 0;
-        for let s of 1..<group.used.len() {
-            if group.used[s] < group.used[slot] {
-                slot = s;
-            }
-        }
-        assert group.used[slot] < self.clock, "a pool holds one layer's experts";
-        self.placed(g, source, at, layer, expert, slot, weights, &group.layout.weights);
-        group.held[slot] = layer * group.layout.experts + expert;
-        group.used[slot] = self.clock;
-        return slot;
-    }
-
-    /// The pools of group `at`, `values[pools[i]]` the `i`th, with their slot
-    /// `slot` holding `layer`'s expert `expert`.
-    fn placed<affine G: Backend, affine Src: WeightSource>(
-        &self,
-        g: &mut G,
-        source: &Src,
-        at: i32,
-        layer: i32,
-        expert: i32,
-        slot: i32,
-        values: &mut List<Any<G>>,
-        pools: &List<i32>,
-    ) with _ {
-        for let [i, stored] of self.groups[at].layout.layers[layer].into_iter().enumerate() {
-            let mut pool = values[pools[i]];
-            g.written(&mut pool, slot, HostWeight::stored(stored.kind, stored.extents, stored.expert(source, expert)));
-            values[pools[i]] = pool;
-        }
+/// `pools`, one for each of `stored`, with their slot `slot` holding expert
+/// `expert`.
+fn written<affine G: Backend, affine Src: WeightSource>(
+    g: &mut G,
+    source: &Src,
+    stored: &List<StoredExperts>,
+    expert: i32,
+    slot: i32,
+    pools: &mut List<Any<G>>,
+) with _ {
+    for let [i, w] of stored.into_iter().enumerate() {
+        let mut pool = pools[i];
+        g.written(&mut pool, slot, HostWeight::stored(w.kind, w.extents, w.expert(source, expert)));
+        pools[i] = pool;
     }
 }
 

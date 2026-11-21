@@ -1,6 +1,6 @@
-//! Two `QMoE` layers whose pools hold half their experts, which a device
-//! computes as it does with every expert held. `operators_test.wado` holds the
-//! same model to the operator's definition on `Cpu`.
+//! Two `QMoE` layers sharing pools that hold 6 of their 8 experts, which a
+//! device computes as it does with every expert held. `operators_test.wado`
+//! holds the same model to the operator's definition on `Cpu`.
 
 use { Backend, Tensor } from "lib:loam";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
@@ -11,10 +11,10 @@ use layers from "./operators/QMoeLayers.onnx"
         generator: { module: "lib:loam" },
     };
 
-/// How far each of `passes` passes on `device`, its pools holding half the
+/// How far each of `passes` passes on `device`, its pools holding 6 of the 8
 /// experts, sits from the same pass with every expert held.
 pub fn experts_apart<affine Bk: Backend>(device: &mut Bk, passes: i32) -> List<f32> with _ {
-    let mut held = layers::Model::embedded(device, 4 * QMOE_LAYERS_EXPERT_BYTES).unwrap();
+    let mut held = layers::Model::embedded(device, 6 * QMOE_LAYERS_EXPERT_BYTES).unwrap();
     let mut whole = layers::Model::new(layers::Params::embedded(device));
     let mut apart: List<f32> = [];
     for let pass of 0..<passes {

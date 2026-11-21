@@ -301,6 +301,14 @@ impl Backend for WebGpuBackend {
         return of_kind(self, kind, Placed::Device(d));
     }
 
+    /// As many slots as one binding holds, laid as `pooled` lays them: four
+    /// bytes or one float to a word.
+    fn pool_slots(&self, kind: ElementKind, slot: &List<i32>) -> i32 {
+        let elements = element_count(slot);
+        let words = if kind matches { _::U8 } { elements.div_ceil(4) } else { elements };
+        return self.max_binding() / words;
+    }
+
     fn written(&mut self, pool: &mut Any<WebGpuBackend>, slot: i32, row: HostWeight) with (GpuQueue, GpuBuffer) {
         self.written_slot(on_device(pool).unwrap(), slot, &row);
     }

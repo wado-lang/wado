@@ -4,8 +4,7 @@
 use { A, B, C, STACKED_RUNS, STACKINGS, experts_case, mixing, stacked_runs } from "./graph_cases.wado";
 use { Untyped, typed } from "./recorded.wado";
 use { LoadError } from "./checkpoint.wado";
-use { ExpertBytes, ExpertLayout, HeldExperts, StoredExperts, Unread } from "./held_experts.wado";
-use { ElementKind } from "./tensor.wado";
+use { Eviction, ExpertCounts, ExpertShape, Fetch, planned, replayed } from "./held_experts.wado";
 use { Cpu, Holds, Tensor } from "./tensor.wado";
 
 test "a token whose other logits are -inf runs its one expert once, in either form" {
@@ -42,38 +41,68 @@ test "a token whose other logits are -inf runs its one expert once, in either fo
     assert cpu.download(&by_picks).data == cpu.download(&by_experts).data[0..<32].to_list();
 }
 
-/// The slots of each pool `HeldExperts::within` makes of a layout of 3 layers
-/// and one of 2, each of 4 experts of 2 bytes, within `budget` bytes.
-fn slots_within(budget: i64) -> Result<List<i32>, LoadError> {
-    let layout = |layers: i32, weight: i32| ExpertLayout {
-        weights: [weight],
-        layers: (0..<layers)
-            .map(|_| [
-                StoredExperts {
-                    bytes: ExpertBytes::Held(List::<u8>::filled(8, 0) as ByteList),
-                    kind: ElementKind::U8,
-                    extents: [2],
-                },
-            ] as List<StoredExperts>)
-            .collect(),
-        steps: (0..<layers).collect(),
+/// A layout of `layers` layers of 4 experts of 2 bytes, each pool holding at
+/// most `most_slots`, its host steps numbered from `first_step`.
+fn shape(layers: i32, first_step: i32, most_slots: i32 = i32::MAX) -> ExpertShape {
+    return ExpertShape {
+        layers,
         experts: 4,
+        slot_bytes: 2,
+        steps: (first_step..<first_step + layers).collect(),
+        most_slots,
     };
-    let mut held = HeldExperts::within([
-        layout(3, 0),
-        layout(2, 1),
-    ], budget)?;
-    let mut cpu = Cpu {};
-    let pools = held.pools(&mut cpu, &Unread {});
-    return Result::Ok(pools.into_iter().map(|p| cpu.extents_of(&typed::<Cpu, u8, Untyped>(&cpu, &p))[0]).collect());
 }
 
-test "a budget holds one layer's experts of each pool, then shares the rest by each pool's bytes" {
-    assert slots_within(15) matches { Err(_) };
-    assert slots_within(16).unwrap() == [4, 4] as List<i32>;
-    assert slots_within(28).unwrap() == [8, 6] as List<i32>;
-    assert slots_within(40).unwrap() == [12, 8] as List<i32>;
-    assert slots_within(i64::MAX).unwrap() == [12, 8] as List<i32>;
+/// Each run of each layout `planned` makes, as `[first, count, slots]`.
+fn runs(shapes: List<ExpertShape>, budget: i64) -> Result<List<List<[i32, i32, i32]>>, LoadError> {
+    return Result::Ok(planned(&shapes, budget)?.into_iter().map(|plan| plan.into_iter().map(|r| [
+        r.first,
+        r.count,
+        r.slots,
+    ]).collect()).collect());
+}
+
+test "a budget holds one layer's experts and one more of each layout, then shares the rest by each layout's bytes" {
+    let two_layouts = || [shape(3, 0), shape(2, 3)] as List<ExpertShape>;
+    assert runs(two_layouts(), 19) matches { Err(_) };
+    assert runs(two_layouts(), 20).unwrap() == [[[0, 3, 5]], [[0, 2, 5]]];
+    assert runs(two_layouts(), 30).unwrap() == [[[0, 3, 8]], [[0, 2, 6]]];
+    let own: List<List<[i32, i32, i32]>> = [[[0, 1, 4], [1, 1, 4], [2, 1, 4]], [[0, 1, 4], [1, 1, 4]]];
+    assert runs(two_layouts(), 40).unwrap() == own;
+    assert runs(two_layouts(), i64::MAX).unwrap() == own;
+    // One layer shares with none, so it holds its own experts or nothing.
+    assert runs([shape(1, 0)], 7) matches { Err(_) };
+    assert runs([shape(1, 0)], 8).unwrap() == [[[0, 1, 4]]];
+}
+
+test "a layout's layers split into as few runs as keep each pool within what the backend holds" {
+    assert runs([shape(4, 0, 7)], 24).unwrap() == [[[0, 2, 6], [2, 2, 6]]];
+    assert runs([shape(4, 0, 3)], 24) matches { Err(_) };
+    // A run of one layer holds its own experts.
+    assert runs([shape(3, 0, 6)], 22).unwrap() == [[[0, 1, 4], [1, 2, 6]]];
+}
+
+/// Rounds of three layers sharing 5 slots, each layer picking experts 0 and 1
+/// at every one-token step: the counts `eviction` gives.
+fn cycled(eviction: Eviction) -> ExpertCounts {
+    let mut fetches: List<Fetch> = [];
+    for let _ of 0..<10 {
+        for let layer of 0..<3 {
+            fetches.push(Fetch { step: layer, tokens: 1, experts: [0, 1] });
+        }
+    }
+    let [prompts, steps] = replayed(&[shape(3, 0)], &fetches, 10, eviction).unwrap();
+    assert prompts.picked == 0;
+    assert steps.picked == 60;
+    assert steps.loaded_bytes == 2 * (steps.picked - steps.held);
+    return steps;
+}
+
+test "layers taken in turn hold more under the layer that runs last from here than under the slot used longest ago" {
+    let recent = cycled(Eviction::Recent).held;
+    let in_order = cycled(Eviction::LayerOrder).held;
+    assert recent < in_order;
+    assert in_order <= cycled(Eviction::Farthest).held;
 }
 
 test "experts fetched into pools of fewer slots compute what pools of every slot do, in a loop or a branch too" {

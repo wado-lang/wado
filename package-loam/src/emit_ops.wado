@@ -567,20 +567,17 @@ fn built_quantized(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
 }
 
 /// A `QMoE` as its composite's call. An absent zero point's axes are spelled as
-/// its scales'. A pooled one reads its pools, whose axes past the slots are
-/// the weights' standing for them.
+/// its scales'. A pooled one reads its weights as pools, their first axis its
+/// layout's slots.
 fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     let element = checked.primitives[node.outputs[0]];
     let options = settled(expert_options(node));
     let q = settled(quantization(node));
     let placed = exprs.experts.get(node.outputs[0]);
-    let shape_of = |at: i32| -> Shape {
-        let read = node.inputs[at];
-        return checked.shapes[exprs.pooled.get(read).unwrap_or(read)];
-    };
-    let [slots, layer, layers, step] = match &placed {
-        Some(p) => [p.slots, `${p.layer}`, `${p.layers}`, `${p.step}`],
-        null => [shape_of(QMOE_UP).axes[0].name, "0", "1", "0"],
+    let shape_of = |at: i32| checked.shapes[node.inputs[at]];
+    let [slots, step] = match &placed {
+        Some(p) => [p.slots, `${p.step}`],
+        null => [shape_of(QMOE_UP).axes[0].name, "0"],
     };
     let mut turbofish: List<String> = [
         BACKEND_PARAM,
@@ -611,7 +608,7 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     operands.push(
         `&Experts { k: ${options.k}, normalized: ${options.normalized}, alpha: ${f32_literal(options.alpha)}, beta: ${f32_literal(
             options.beta,
-        )}, limit: ${f32_literal(options.limit)}, quantized: Quantized { bits: ${q.bits}, block: ${q.block} }, layer: ${layer}, layers: ${layers}, step: ${step} }`,
+        )}, limit: ${f32_literal(options.limit)}, quantized: Quantized { bits: ${q.bits}, block: ${q.block} }, step: ${step} }`,
     );
     return `mixture_of_experts::<${turbofish.join(", ")}>(backend, ${operands.join(", ")})`;
 }

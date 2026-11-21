@@ -564,7 +564,11 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
     );
     for let group of &experts.groups {
         let mut layers: List<String> = [];
+        let mut pools: List<String> = [];
         for let layer of &group.layers {
+            let at: List<String> = (first..<first + layer.len()).map(|i| `${i}`).collect();
+            pools.push(`[${at.join(", ")}]`);
+            first += layer.len();
             let mut stored: List<String> = [];
             for let weight of layer {
                 let at = position(weight);
@@ -578,8 +582,6 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
             }
             layers.push(`[${stored.join(", ")}]`);
         }
-        let pools: List<String> = (first..<first + group.pools().len()).map(|i| `${i}`).collect();
-        first += group.pools().len();
         let steps: List<String> = group.steps.into_iter().map(|s| `${s}`).collect();
         let x = static_extents(&checked.shapes[group.pools()[0]]).unwrap()[0];
         layouts.push(
@@ -713,7 +715,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
                 w.line(`${at} => ${bytes},`);
             }
             w.line("_ => unreachable(),");
-            w.end_with("))?, budget)?;");
+            w.end_with("))?, budget, backend)?;");
             w.line("let pools = experts.pools(backend, source);");
             "pools";
         } else {
@@ -775,7 +777,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         UNREAD,
         [],
         [
-            `let mut experts = HeldExperts::within(${CARRIED_LAYOUTS}, budget)?;`, "let source = Unread {};",
+            `let mut experts = HeldExperts::within(${CARRIED_LAYOUTS}, budget, backend)?;`, "let source = Unread {};",
             "let weights = Params::embedded_within(backend, &mut experts);",
         ],
     );
@@ -2038,6 +2040,16 @@ fn emit_model(w: &mut CodeWriter) {
     );
     w.line("}");
     w.end();
+    w.blank();
+    let mut any = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}, ${SOURCE_PARAM}>`);
+    any.add_generic(BACKEND_BOUND);
+    any.add_generic(SOURCE_BOUND);
+    any.emit_begin(w);
+    w.line("/// The experts the pools hold, and what the passes have picked of them.");
+    w.line("pub fn experts(&self) -> &HeldExperts {");
+    w.line("    return &self.experts;");
+    w.line("}");
+    w.end();
 }
 
 /// `recorded`: [`build`] recorded over parameters, one for each of `taken`,
@@ -2283,7 +2295,7 @@ fn emit_entry(
     experts: &ExpertPlan,
 ) -> Result<List<String>, EmitError> {
     let shapes = &checked.shapes;
-    let mut exprs = Operands { experts: experts.placements(), pooled: experts.pooled };
+    let mut exprs = Operands { experts: experts.placements() };
     let mut entry = FnSpec::new("build", Vis::Pub);
     entry.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // The pasts cross in one `Cache`, and the presents replace them in it.
@@ -2304,7 +2316,7 @@ fn emit_entry(
         entry.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
     }
     for let vi of &graph.initializers {
-        exprs.values[vi.name] = `weights.${names.get(&experts.held_in(&vi.name))}`;
+        exprs.values[vi.name] = `weights.${names.get(&vi.name)}`;
     }
     for let tensor of kept {
         exprs.values[*tensor] = `weights.${names.get(tensor)}`;
