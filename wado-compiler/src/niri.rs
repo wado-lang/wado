@@ -4,6 +4,8 @@
 //! `frame`, `rewrite`, `trackability`, `pattern`, `place`, `region`, `callee`.
 //! What it can evaluate: `docs/wep-2026-04-27-nir-interpreter.md`.
 
+use std::rc::Rc;
+
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -202,7 +204,7 @@ use pattern::PatternMatch;
 pub use region::RegionRefusal;
 pub(crate) use rewrite::guard_declares_locals;
 pub use shapes::AggregateShapes;
-use trackability::Trackability;
+use trackability::{ArenaReads, Trackability};
 
 /// Commit sink for niri's body rewrites, so one set of rewrites serves two
 /// backends: [`BodySink`] over a throwaway CTFE body, and the optimize layer's
@@ -681,7 +683,16 @@ pub struct Interpreter<'a> {
     /// stays failed, and re-running it re-pays a whole-body copy for the same
     /// refusal.
     call_misses: Vec<CallMiss>,
+    /// [`ArenaReads::of`] the bodies trackability last read, by
+    /// [`ArenaReads::key`]. A frame copies its body afresh each time, so the
+    /// copy's own version never repeats; the source's does while it is
+    /// unchanged. Installing either fact `ArenaReads::of` reads clears it.
+    arena_reads: Vec<([(u64, u64); 2], Rc<ArenaReads>)>,
 }
+
+/// Ceiling on remembered [`Interpreter::arena_reads`]; the list is scanned
+/// linearly. Dropping one costs a recomputation, never an answer.
+const MAX_ARENA_READS: usize = 8;
 
 struct CallMiss {
     callee: CalleeKey,
@@ -742,7 +753,26 @@ impl<'a> Interpreter<'a> {
             step_budget: DEFAULT_STEP_BUDGET,
             call_stack: Vec::new(),
             call_misses: Vec::new(),
+            arena_reads: Vec::new(),
         }
+    }
+
+    /// Least recently used last out: a frame's scratch copy is never asked
+    /// for again, and must not push out a callee asked for on every call.
+    fn arena_reads(&mut self, body: &Body) -> Rc<ArenaReads> {
+        let key = ArenaReads::key(body);
+        let entry = if let Some(at) = self.arena_reads.iter().position(|(k, _)| *k == key) {
+            self.arena_reads.remove(at)
+        } else {
+            if self.arena_reads.len() == MAX_ARENA_READS {
+                self.arena_reads.remove(0);
+            }
+            let reads = ArenaReads::of(body, self.facts.callees, self.facts.ctfe_builtins);
+            (key, Rc::new(reads))
+        };
+        let reads = Rc::clone(&entry.1);
+        self.arena_reads.push(entry);
+        reads
     }
 
     #[must_use]
@@ -777,6 +807,7 @@ impl<'a> Interpreter<'a> {
     /// [`Lattice::Unevaluated`] — the engine has no body to look up.
     pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
         self.facts.callees = Some(callees);
+        self.arena_reads.clear();
         self
     }
 
@@ -784,6 +815,7 @@ impl<'a> Interpreter<'a> {
     /// read stays opaque.
     pub fn with_ctfe_builtins(&mut self, ctfe_builtins: &'a CtfeBuiltinMap) -> &mut Self {
         self.facts.ctfe_builtins = Some(ctfe_builtins);
+        self.arena_reads.clear();
         self
     }
 
@@ -880,7 +912,8 @@ impl<'a> Interpreter<'a> {
     /// ones nothing beyond their single read reaches. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        let track = Trackability::outside_frame(body, self.facts, self.type_table);
+        let arena = self.arena_reads(body);
+        let track = Trackability::outside_frame(body, self.facts, &arena, self.type_table);
         self.frame.aggregate_locals = track.aggregate_locals;
         self.frame.unshared_locals = track.unshared;
         self.frame.const_views = track.const_views;
