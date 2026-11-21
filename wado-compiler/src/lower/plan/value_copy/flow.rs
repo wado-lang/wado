@@ -929,7 +929,6 @@ impl<'p, 'a> Body<'p, 'a> {
         args: &[&TirExpr],
         storage: u32,
     ) -> Option<u32> {
-        let returns_reference = decl.returns_reference;
         let handed: Vec<Option<u32>> = args
             .iter()
             .enumerate()
@@ -951,7 +950,7 @@ impl<'p, 'a> Body<'p, 'a> {
                     || decl.reference_params.contains(&p);
                 // A value handed back is the argument's own storage, or part of
                 // what a reference names.
-                if !returns_reference {
+                if !decl.returns_reference {
                     let part = if through_reference {
                         handed[p]
                     } else {
@@ -962,7 +961,7 @@ impl<'p, 'a> Body<'p, 'a> {
                     }
                 }
                 let Some(h) = handed[p] else { continue };
-                if self.package.type_table.is_reference(args[p].type_id) && !returns_reference {
+                if self.package.type_table.is_reference(args[p].type_id) && !decl.returns_reference {
                     self.g.load(h, result);
                 } else {
                     self.g.copy(h, result);
