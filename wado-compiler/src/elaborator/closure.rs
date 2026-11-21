@@ -8,7 +8,7 @@ use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
 use crate::effect_check::{WalkInProgress, closure_row};
 use crate::name::capture_ref_name;
-use crate::tir::{CaptureSource, EffectRef, ResolvedType, TirCapture, TypeId};
+use crate::tir::{CaptureSource, EffectRef, ResolvedType, RowClosing, TirCapture, TypeId};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -352,10 +352,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // otherwise.
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let performed = self.closure_performs(closure);
+        let site = RowClosing {
+            span: closure.span,
+            module: self.home_module(closure.id).source_path(),
+        };
         let mut table = self.tysys.type_table.borrow_mut();
         let var = table.mint_effect_var();
         if let Some(performed) = performed {
-            table.solve_effect_var(var.name(), performed);
+            table.solve_effect_var(var.name(), performed, site);
         }
         let row = vec![var];
         let func_type =

@@ -815,8 +815,9 @@ impl FqTypeName {
         is_mut: bool,
         params: Vec<FqTypeName>,
         ret: FqTypeName,
-        effects: Vec<tir::EffectRef>,
+        mut effects: Vec<tir::EffectRef>,
     ) -> Self {
+        tir::canonicalize_row(&mut effects);
         let mut signature = params;
         signature.push(ret);
         Self::of_head_kind(TypeHead::Function {
@@ -1160,6 +1161,7 @@ impl FqTypeName {
         let mut out = self.descend(&|name| name.map_rows(row));
         if let TypeHead::Function { effects, .. } = &mut out.head {
             *effects = row(effects);
+            tir::canonicalize_row(effects);
         }
         out.reference.clone_from(&self.reference);
         out

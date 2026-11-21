@@ -98,6 +98,29 @@ impl EffectRef {
     }
 }
 
+/// Put `row` in one order, each effect once: a row is a set, so two rows
+/// holding the same effects name one function type.
+pub fn canonicalize_row(row: &mut Vec<EffectRef>) {
+    row.sort_by_cached_key(|effect| {
+        let rank = match effect {
+            EffectRef::Concrete(_) | EffectRef::Undeclared { .. } => 0,
+            EffectRef::Param { .. } => 1,
+            EffectRef::Var { .. } => 2,
+        };
+        let id = match effect {
+            EffectRef::Var { id, .. } => *id,
+            _ => 0,
+        };
+        (
+            rank,
+            effect.name().to_string(),
+            effect.module().map(ToString::to_string),
+            id,
+        )
+    });
+    row.dedup();
+}
+
 /// Whether `row` still stands for whatever meets it: it names an effect
 /// parameter, or a variable the effect check solves.
 pub fn is_open_row(row: &[EffectRef]) -> bool {

@@ -1609,6 +1609,7 @@ fn semantics_of_erased(
         None,
         &LivenessScope::Compilation,
         None,
+        &IndexSet::default(),
     )
 }
 
@@ -1624,6 +1625,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     profile: Option<Applied<'_>>,
     liveness_scope: &LivenessScope,
     dependencies: Option<Rc<Semantics>>,
+    provided_import_fqs: &IndexSet<String>,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1740,6 +1742,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             coverage,
             profile,
             liveness_scope,
+            provided_import_fqs,
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),
@@ -2031,6 +2034,7 @@ mod tests {
             profile.map(|profile| profile.applied(pgo::Thresholds::default())),
             &LivenessScope::Compilation,
             None,
+            &IndexSet::default(),
         )
     }
 

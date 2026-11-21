@@ -1781,6 +1781,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for trait_decl in &trait_decls {
             self.resolve_trait_decl(trait_decl);
         }
+        // A default method's parameters, which the effect index reads before
+        // any impl walks the body.
+        for sig in self.sem.decls.trait_sigs.values() {
+            for method in sig.methods.values() {
+                let Some(body) = &method.default_body else {
+                    continue;
+                };
+                let types = &mut self.sem.types;
+                types
+                    .fn_param_types
+                    .insert(body.id, method.sig.decl.param_types.clone());
+                types.fn_return_types.insert(
+                    body.id,
+                    method.sig.decl.return_type.unwrap_or(TypeTable::UNIT),
+                );
+            }
+        }
 
         // Resolve each `interface` / `resource` declaration's operations in
         // its own frame, so a generic resource's methods see its type params

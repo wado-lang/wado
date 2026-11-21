@@ -374,10 +374,10 @@ impl Lowering {
         if row.iter().any(EffectRef::is_param) {
             return SolverType::AnyRow;
         }
-        SolverType::Tuple(
+        closed_row(
             row.iter()
                 .filter(|e| !e.is_var())
-                .map(|e| SolverType::Decl(self.effect_head(e), Vec::new()))
+                .map(|e| self.effect_head(e))
                 .collect(),
         )
     }
@@ -621,17 +621,14 @@ impl Lowering {
                 // A name reaching no effect declaration is the signature's own
                 // effect parameter, `_` among them.
                 let mut open = false;
-                let effects: Vec<SolverType> = f
+                let heads: Vec<TypeDeclId> = f
                     .effects
                     .iter()
                     .filter_map(|effect| match resolutions.get(effect.id) {
-                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => {
-                            Some(SolverType::Decl(
-                                self.known_type(&DeclKey::Def(def))
-                                    .expect("every effect is interned up front"),
-                                Vec::new(),
-                            ))
-                        }
+                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => Some(
+                            self.known_type(&DeclKey::Def(def))
+                                .expect("every effect is interned up front"),
+                        ),
                         _ => {
                             open = true;
                             None
@@ -641,7 +638,7 @@ impl Lowering {
                 let row = if open {
                     SolverType::AnyRow
                 } else {
-                    SolverType::Tuple(effects)
+                    closed_row(heads)
                 };
                 Ok(self.fn_type(f.is_mut, signature, row))
             }
@@ -850,6 +847,19 @@ pub(super) fn lower_impls<'a>(
         sources.push(header);
     }
     sources
+}
+
+/// A row naming the effects `heads`, as a set: one order, each once, so rows
+/// written in different orders are one type.
+fn closed_row(mut heads: Vec<TypeDeclId>) -> SolverType {
+    heads.sort_unstable();
+    heads.dedup();
+    SolverType::Tuple(
+        heads
+            .into_iter()
+            .map(|head| SolverType::Decl(head, Vec::new()))
+            .collect(),
+    )
 }
 
 /// An impl header as the program states it.

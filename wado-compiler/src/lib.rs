@@ -848,7 +848,16 @@ async fn package_unused_diagnostics_body(
         production,
         walked,
     }));
-    let sem = semantics::semantics_with_logger(load, &logger, false, None, None, &scope, None);
+    let sem = semantics::semantics_with_logger(
+        load,
+        &logger,
+        false,
+        None,
+        None,
+        &scope,
+        None,
+        &IndexSet::default(),
+    );
     sem.is_complete()
         .then(|| unused_diagnostics(&sem, lints, false))
 }
@@ -1991,6 +2000,7 @@ fn build_after_load<H: CompilerHost>(
             .map(|profile| profile.applied(options.opt.profile_thresholds())),
         &LivenessScope::Compilation,
         dependencies,
+        &provided_import_fqs,
     );
     if let Some(views) = views.as_deref_mut() {
         views.analysis = Some(AnalysisViews {

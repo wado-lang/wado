@@ -1460,6 +1460,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         coverage: Option<CoverageScope>,
         profile: Option<Applied<'_>>,
         liveness_scope: &LivenessScope,
+        provided_import_fqs: &IndexSet<String>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
         // Per-rehydration memo: maps each cached function `Rc`'s pointer
@@ -1729,7 +1730,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             modules,
             &state.tysys.type_table.borrow(),
             state,
-            IndexSet::default(),
+            provided_import_fqs.clone(),
         );
         state.effect_decls = Some(Rc::new(effect_decls));
 

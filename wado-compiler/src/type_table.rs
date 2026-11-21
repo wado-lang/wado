@@ -33,8 +33,8 @@ use crate::tir::{
     AnonShape, AssocParamId, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE,
     ResolvedType, RowClosing, RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole,
     TemplateShape, TirExpr, TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap,
-    TypeId, TypeParamId, is_open_row, positional_substitution, projection_arguments, range_item,
-    slots_from_impl_args, solve_row,
+    TypeId, TypeParamId, canonicalize_row, is_open_row, positional_substitution,
+    projection_arguments, range_item, slots_from_impl_args, solve_row,
 };
 
 /// The effect variables a question read, noted behind a shared reference: a
@@ -94,7 +94,11 @@ pub struct TypeTable {
     early_effect_rows: EffectRows,
     /// The variables of [`Self::early_effect_rows`] a question has read.
     read_effect_vars: ReadVars,
-    /// Where each variable of [`Self::read_effect_vars`] was first read.
+    /// The closure literal that minted each variable of
+    /// [`Self::early_effect_rows`].
+    early_effect_sites: IndexMap<String, RowClosing>,
+    /// The expression whose resolution first read each variable of
+    /// [`Self::read_effect_vars`], where an expression did.
     effect_row_closings: IndexMap<String, RowClosing>,
     /// Where a function value whose row holds a variable moved into a slot,
     /// which the type check admits unbounded and the effect check bounds.
@@ -321,6 +325,7 @@ impl TypeTable {
             effect_vars_solved: false,
             early_effect_rows: EffectRows::default(),
             read_effect_vars: ReadVars::default(),
+            early_effect_sites: IndexMap::default(),
             effect_row_closings: IndexMap::default(),
             row_flows: IndexSet::default(),
             compiler_items: CompilerItems::new(),
@@ -368,7 +373,10 @@ impl TypeTable {
 
     /// The id `ty` interns to; from erasure on, the id of what it erases to,
     /// the only one the IR holds.
-    pub fn intern(&mut self, ty: ResolvedType) -> TypeId {
+    pub fn intern(&mut self, mut ty: ResolvedType) -> TypeId {
+        if let ResolvedType::Function { effects, .. } = &mut ty {
+            canonicalize_row(effects);
+        }
         let id = if let Some(&id) = self.intern_map.get(&ty) {
             id
         } else {
@@ -3453,11 +3461,13 @@ impl TypeTable {
         }
     }
 
-    /// Solve `var` to `row` while the bodies are walked. A variable is solved
-    /// once, before any question reads it.
-    pub fn solve_effect_var(&mut self, var: &str, row: Vec<EffectRef>) {
+    /// Solve `var`, minted by the closure literal at `site`, to `row` while
+    /// the bodies are walked. A variable is solved once, before any question
+    /// reads it.
+    pub fn solve_effect_var(&mut self, var: &str, row: Vec<EffectRef>, site: RowClosing) {
         let previous = self.early_effect_rows.insert(var.to_string(), row);
         assert!(previous.is_none(), "a row variable is solved once");
+        self.early_effect_sites.insert(var.to_string(), site);
     }
 
     /// What each effect row variable is solved to while the bodies are walked.
@@ -3469,11 +3479,13 @@ impl TypeTable {
     /// noted as read: a question answered from it holds only if the solution
     /// stays what it was.
     pub fn read_effect_row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
-        solve_row(effects, &self.early_effect_rows, &mut |var| {
+        let mut row = solve_row(effects, &self.early_effect_rows, &mut |var| {
             if self.early_effect_rows.contains_key(var) {
                 self.read_effect_vars.note(var);
             }
-        })
+        });
+        canonicalize_row(&mut row);
+        row
     }
 
     /// How many variables a question has read so far, to pass to
@@ -3491,15 +3503,22 @@ impl TypeTable {
         }
     }
 
-    /// Where each variable a question read was closed. Every read variable
-    /// has one.
-    pub fn effect_row_closings(&self) -> &IndexMap<String, RowClosing> {
-        assert_eq!(
-            self.effect_row_closings.len(),
-            self.read_effect_vars.count(),
-            "every read happens while an expression is resolved"
-        );
-        &self.effect_row_closings
+    /// Where each variable a question read was closed: the expression whose
+    /// resolution read it, or, for a read outside any expression, the closure
+    /// literal that minted it.
+    pub fn effect_row_closings(&self) -> IndexMap<String, RowClosing> {
+        self.read_effect_vars
+            .all()
+            .into_iter()
+            .map(|var| {
+                let closing = self
+                    .effect_row_closings
+                    .get(&var)
+                    .unwrap_or(&self.early_effect_sites[&var])
+                    .clone();
+                (var, closing)
+            })
+            .collect()
     }
 
     /// Record the slot `id` stands for, for diagnostics. Called on every mint,

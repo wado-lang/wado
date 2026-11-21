@@ -1122,17 +1122,6 @@ impl OwnedEffectData {
                 fn_params.insert(*key, params.clone());
             }
             fn_returns.extend(facts.fn_return_types.iter().map(|(&k, &t)| (k, t)));
-            // A trait's default method is walked once per impl inheriting it.
-            // Its function-typed parameters carry the same rows in each, which
-            // is all a call reads off them.
-            for facts in module_sem.default_method_facts.values() {
-                for (key, params) in &facts.types.fn_param_types {
-                    fn_params.entry(*key).or_insert_with(|| params.clone());
-                }
-                for (&key, &ret) in &facts.types.fn_return_types {
-                    fn_returns.entry(key).or_insert(ret);
-                }
-            }
             for (key, names) in &facts.method_names {
                 if let Some(effects) = facts.function_effects.get(key) {
                     mangled_index.insert((src.clone(), names.mangled.clone()), effects.clone());
