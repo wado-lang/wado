@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795194230771,
+  "lastUpdate": 1795223977754,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80269,6 +80269,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/37a57b631d1b0335bb2233a60114e49b5c5ce55b"
         },
         "date": 1795194230254,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7ecc697d9af0a2a2547291d2e1be153adc21c64e",
+          "message": "Merge pull request #2703 from wado-lang/gfx/omitted-type-args\n\nfeat(elaborator): omitted type arguments are inference variables",
+          "timestamp": "2026-11-21T09:49:08+09:00",
+          "tree_id": "f2ff4c72761a0d272c243583916bfa6db1d3eb77",
+          "url": "https://github.com/wado-lang/wado/commit/7ecc697d9af0a2a2547291d2e1be153adc21c64e"
+        },
+        "date": 1795223976690,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
