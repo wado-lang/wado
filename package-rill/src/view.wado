@@ -260,7 +260,6 @@ impl View {
     {
         let attr = value.into_attr();
         return self.then(|at: &mut Build| {
-<<<<<<< HEAD
             match attr {
                 Static(value) => {
                     if at.claiming {
@@ -275,30 +274,11 @@ impl View {
                     observe(|| {
                         match value() {
                             Some(set) => target.set_attribute(name, set),
-                            None => target.remove_attribute(name),
+                            null => target.remove_attribute(name),
                         }
                     });
                 },
             }
-||||||| ddf80d8a28e
-            at.attributes[name] = null;
-            let target = at.node;
-            observe(|| {
-                match value() {
-                    Some(set) => target.set_attribute(name, set),
-                    None => target.remove_attribute(name),
-                }
-            });
-=======
-            at.attributes[name] = null;
-            let target = at.node;
-            observe(|| {
-                match value() {
-                    Some(set) => target.set_attribute(name, set),
-                    null => target.remove_attribute(name),
-                }
-            });
->>>>>>> origin/main
         });
     }
 
