@@ -3,7 +3,6 @@
 use super::Elaborator;
 use super::call::DefaultWalk;
 use super::infer::{infer_var_answers, unify};
-use super::pending_selection::Undecided;
 use super::scope::Scope;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
@@ -292,17 +291,9 @@ impl Scope {
         })
     }
 
-    /// Whether the variable `var` belongs to a call whose literals are pending,
-    /// or literals wait at it for the body to end.
+    /// Whether the variable `var` belongs to a call whose literals are pending.
     pub(super) fn awaits_literal(&self, var: TypeId) -> bool {
-        self.pending_owns(|own| own == var) || self.body_literals_wait_at(var)
-    }
-
-    fn body_literals_wait_at(&self, var: TypeId) -> bool {
-        self.body_literals
-            .iter()
-            .flatten()
-            .any(|&(_, at)| at == var)
+        self.pending_owns(|own| own == var)
     }
 
     fn awaits_pending_var(&self, tt: &TypeTable, var: InferVarId) -> bool {
@@ -320,7 +311,6 @@ impl Scope {
         self.pending_literals
             .iter()
             .any(|pending| pending.literals.iter().any(|&(_, at)| at == var))
-            || self.body_literals_wait_at(var)
     }
 }
 
@@ -675,30 +665,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(target_type)
     }
 
-    /// Defer `expr` where it is a numeric literal meeting an open variable,
-    /// answering that variable as its type: one [`PendingLiterals`] collects
-    /// for until [`Self::settle_pending_literals`], any other until the body
-    /// ends ([`Self::settling_body`]).
+    /// Defer `expr` where it is a numeric literal meeting one of the open
+    /// variables [`PendingLiterals`] collects for, answering that variable as
+    /// its type until [`Self::settle_pending_literals`].
     pub(super) fn defer_literal_at_var(&mut self, expr: &Expr, expected: TypeId) -> Option<TypeId> {
-        if !is_literal_arithmetic(expr) {
+        if self.annotate_ctx.pending_literals.is_empty() || !is_literal_arithmetic(expr) {
             return None;
         }
         let var = self.apply_infer_holes(expected);
-        if let Some(owner) = self.pending_owner_of(var) {
-            owner.literals.push((expr.clone(), var));
-            return Some(var);
-        }
-        let waits = self.waits_for_body_end()
-            && self.is_unanswered_var(var)
-            && self.tysys.type_table.borrow().is_infer_var(var)
-            && !self.infer_holes_is_pack(var);
-        if !waits {
-            return None;
-        }
-        self.annotate_ctx
-            .body_literals
-            .as_mut()
-            .expect("a body is being walked")
+        self.pending_owner_of(var)?
+            .literals
             .push((expr.clone(), var));
         Some(var)
     }
@@ -1117,17 +1093,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .extend(literals.into_iter().map(|expr| (expr, var)));
                 continue;
             }
-            if open && hint.is_none() && self.waits_for_body_end() {
-                for expr in literals {
-                    settled.insert(expr.id(), var);
-                    self.annotate_ctx
-                        .body_literals
-                        .as_mut()
-                        .expect("a body is being walked")
-                        .push((expr, var));
-                }
-                continue;
-            }
             // An operation's operands take one type only once it is known, so
             // it cannot wait for the call's own inference as a literal can.
             let yields_to_return = open
@@ -1171,90 +1136,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         settled
-    }
-
-    /// Whether a literal whose variable its call leaves open waits for the
-    /// body's end. An unrolled tuple `for-of` element is walked into facts of
-    /// its own, which the body's end no longer writes, so its call answers it.
-    fn waits_for_body_end(&self) -> bool {
-        self.annotate_ctx.body_literals.is_some() && self.infer_holes.element_home.is_none()
-    }
-
-    /// `ty` with its head answered, where a site needs it now and it is a
-    /// variable literals wait at for the body's end: they take their default
-    /// there, as Wado's literals always have where nothing else answers them.
-    pub(super) fn with_literal_head_defaulted(&mut self, ty: TypeId) -> TypeId {
-        let base = self.tysys.get_base_type(self.apply_infer_holes(ty));
-        if self.tysys.type_table.borrow().is_infer_var(base) {
-            self.default_body_literals_at(base);
-        }
-        self.apply_infer_holes(ty)
-    }
-
-    /// Answer `var`, where it is still open, with the default of the literals
-    /// waiting at it for the body's end.
-    fn default_body_literals_at(&mut self, var: TypeId) {
-        if !self.is_unanswered_var(var) {
-            return;
-        }
-        let literals: Vec<Expr> = self
-            .annotate_ctx
-            .body_literals
-            .iter()
-            .flatten()
-            .filter(|&&(_, at)| at == var)
-            .map(|(expr, _)| expr.clone())
-            .collect();
-        if !literals.is_empty() {
-            self.equate(var, shared_literal_default(&literals));
-        }
-    }
-
-    /// Walk a function or test body, then type the literals its calls left
-    /// waiting: at what a later use settled each variable to, else at the
-    /// literals' default. The selections still waiting are made once the
-    /// defaults are in, and those left undecided are reported.
-    pub(super) fn settling_body<R>(
-        &mut self,
-        ctx: &mut FunctionContext,
-        walk: impl FnOnce(&mut Self, &mut FunctionContext) -> R,
-    ) -> R {
-        let outer = self.annotate_ctx.body_literals.replace(Vec::new());
-        let result = self.settling_selections(Undecided::Report, |this| {
-            let result = walk(this, ctx);
-            this.settle_pending_selections(Undecided::Wait);
-            let waiting: Vec<TypeId> = this
-                .annotate_ctx
-                .body_literals
-                .iter()
-                .flatten()
-                .map(|&(_, var)| var)
-                .collect();
-            for var in waiting {
-                this.default_body_literals_at(var);
-            }
-            result
-        });
-        let literals = std::mem::replace(&mut self.annotate_ctx.body_literals, outer)
-            .expect("set for the walk");
-        for (expr, var) in literals {
-            let answer = self.apply_infer_holes(var);
-            let ty = self.resolve_expr(&expr, ctx, Some(answer));
-            // A variable closed behind a report is answered with the error type.
-            if ty != answer && answer != TypeTable::ERROR {
-                let (expected, found) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .names_for_mismatch(answer, ty);
-                let _ = self.emit(TypeError::TypeMismatch {
-                    expected,
-                    found,
-                    span: expr.span(),
-                });
-            }
-        }
-        result
     }
 
     /// Hand `operator` to the pending call owning a variable one of its

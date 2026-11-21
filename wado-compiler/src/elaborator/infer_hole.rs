@@ -640,17 +640,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.type_table.borrow().contains_infer_var(ty)
     }
 
-    /// Whether `var` stands for a pack.
-    pub(super) fn infer_holes_is_pack(&self, var: TypeId) -> bool {
-        self.infer_holes.vars.is_pack(var)
-    }
-
-    /// Whether `var` is one of the module's variables whose class has no
-    /// answer yet.
-    pub(super) fn is_unanswered_var(&self, var: TypeId) -> bool {
-        self.infer_holes.vars.is_unanswered(var)
-    }
-
     /// Pin `var` to the error type: a reported diagnostic already covers it,
     /// and nothing later may settle it.
     pub(super) fn close_infer_var(&mut self, var: TypeId) {
