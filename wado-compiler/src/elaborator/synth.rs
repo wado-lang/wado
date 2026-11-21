@@ -10,7 +10,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
-use crate::tir::{ResolvedType, TypeId, range_item};
+use crate::tir::{EffectRef, ResolvedType, TypeId, range_item};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -272,13 +272,38 @@ fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
 
 /// Whether an argument of type `arg` answers a parameter of type `param`,
 /// the reference conversion included: a `&mut T` argument answers a `&T`
-/// parameter, as [`unify`] binds it.
+/// parameter, as [`unify`] binds it. A closure whose effects are still a
+/// variable answers a function parameter of its shape, which settles them.
 pub(super) fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
-    param == arg
-        || matches!(
-            (tt.get(param), tt.get(arg)),
-            (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
-        )
+    if param == arg {
+        return true;
+    }
+    if let (ResolvedType::Ref(p), ResolvedType::MutRef(a)) = (tt.get(param), tt.get(arg)) {
+        return p == a;
+    }
+    let (
+        ResolvedType::Function {
+            is_mut: param_mut,
+            params: param_params,
+            return_type: param_return,
+            effects: param_effects,
+        },
+        ResolvedType::Function {
+            is_mut: arg_mut,
+            params: arg_params,
+            return_type: arg_return,
+            effects: arg_effects,
+        },
+    ) = (tt.get(param), tt.get(arg))
+    else {
+        return false;
+    };
+    param_mut == arg_mut
+        && param_params == arg_params
+        && param_return == arg_return
+        && arg_effects
+            .iter()
+            .all(|effect| matches!(effect, EffectRef::Var { .. }) || param_effects.contains(effect))
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {

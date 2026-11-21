@@ -4084,7 +4084,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // here rather than asked of every caller: it costs a scope, and the
         // returns above are the calls that never survey (WEP: "Resolving is not
         // free").
-        let Some(receiver_type) = self.static_receiver_type(recv.receiver) else {
+        let receiver_type = match recv.receiver.ty() {
+            Some(ty) => Some(ty),
+            None => self
+                .declared_type_at_variables(recv.receiver.key())
+                .map(|(instance, _)| instance)
+                .or_else(|| self.static_receiver_type(recv.receiver)),
+        };
+        let Some(receiver_type) = receiver_type else {
             return PreselectedArg::Undecided;
         };
         let typed = recv.receiver.at_type(Some(receiver_type));
@@ -4133,11 +4140,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         classes: &[ArgClass],
     ) -> ArgPreselect {
-        // Every argument opaque leaves nothing to select on. One opaque among
-        // others admits every parameter, so the rest still decide.
-        if classes.iter().all(|c| matches!(c, ArgClass::Opaque(_))) {
-            return ArgPreselect::Pass;
-        }
+        // An opaque argument admits every parameter, so the rest decide. Every
+        // argument opaque selects nothing, and shapes the arguments only where
+        // the impls all declare one parameter list.
+        let all_opaque = classes.iter().all(|c| matches!(c, ArgClass::Opaque(_)));
         let mut admitted: Vec<ArgCandidate> = self
             .static_arg_survey(recv, method_name)
             .candidates
@@ -4170,7 +4176,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // answer, not a tie. Only classes each denoting one type may call
             // two candidates ambiguous; elaborating the arguments decides the
             // rest.
-            _ if classes.iter().any(|c| matches!(c, ArgClass::Head(_))) => ArgPreselect::Pass,
+            _ if all_opaque || classes.iter().any(|c| matches!(c, ArgClass::Head(_))) => {
+                ArgPreselect::Pass
+            }
             _ => ArgPreselect::Ambiguous(admitted.into_iter().map(|c| c.spelling).collect()),
         }
     }

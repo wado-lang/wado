@@ -940,6 +940,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(table.make_generic_instance(def, args.to_vec()))
     }
 
+    /// The generic type `key` declares at a fresh variable per parameter, each
+    /// named after it, with those variables: what a receiver spelled without
+    /// its arguments (`Bx::make()`) is asked at, so an impl written for any
+    /// instance may answer it.
+    pub(super) fn declared_type_at_variables(
+        &mut self,
+        key: &ImplTargetKey,
+    ) -> Option<(TypeId, Vec<TypeId>)> {
+        let declared = self.declared_self_type(key.decl()?)?;
+        let names: Vec<String> = {
+            let tt = self.tysys.type_table.borrow();
+            let params = tt.nominal_type_args(declared)?;
+            params.iter().map(|&param| tt.name(param)).collect()
+        };
+        let vars: Vec<TypeId> = names
+            .iter()
+            .map(|name| self.mint_infer_var_named(name))
+            .collect();
+        let instance = self.declared_type_at(key, &vars)?;
+        Some((instance, vars))
+    }
+
     /// The type a struct, resource, variant, enum, flags or newtype declaration
     /// `def` declares, a generic one applied to its own parameters.
     pub(super) fn declared_self_type(&mut self, def: DefId) -> Option<TypeId> {

@@ -2088,28 +2088,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // apart may be told apart by the instance a later use settles. A
                 // receiver spelled without its arguments is the instance at the
                 // ones the call inferred, each a variable where none did.
-                let declared_params = (matches!(resolved, StaticLookup::Overloaded { .. })
+                let at_variables = (matches!(resolved, StaticLookup::Overloaded { .. })
                     && impl_type_args_inferred.is_empty())
-                .then(|| {
-                    let declared = self.declared_self_type(receiver.key().decl()?)?;
-                    let tt = self.tysys.type_table.borrow();
-                    let params = tt.nominal_type_args(declared)?;
-                    Some(params.iter().map(|&p| tt.name(p)).collect::<Vec<_>>())
-                })
+                .then(|| self.declared_type_at_variables(receiver.key()))
                 .flatten();
-                let (instance, instance_args) = match declared_params {
-                    Some(names) => {
-                        let vars: Vec<TypeId> = names
-                            .iter()
-                            .map(|name| self.mint_infer_var_named(name))
-                            .collect();
-                        let instance = self
-                            .declared_type_at(receiver.key(), &vars)
-                            .unwrap_or(receiver_type);
-                        (instance, vars)
-                    }
-                    None => (receiver_type, impl_type_args_inferred.clone()),
-                };
+                let (instance, instance_args) = at_variables
+                    .unwrap_or_else(|| (receiver_type, impl_type_args_inferred.clone()));
                 if matches!(resolved, StaticLookup::Overloaded { .. })
                     && method_type_args.is_empty()
                     && let Some(info) = self.static_waits(instance, suffix, args.len())
