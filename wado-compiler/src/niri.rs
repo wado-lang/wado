@@ -684,10 +684,10 @@ pub struct Interpreter<'a> {
     /// refusal.
     call_misses: Vec<CallMiss>,
     /// [`ArenaReads::of`] the bodies trackability last read, by
-    /// [`Body::version`]. A frame copies its body afresh each time, so the
+    /// [`ArenaReads::key`]. A frame copies its body afresh each time, so the
     /// copy's own version never repeats; the source's does while it is
     /// unchanged. Installing either fact `ArenaReads::of` reads clears it.
-    arena_reads: Vec<([(u64, u64); 8], Rc<ArenaReads>)>,
+    arena_reads: Vec<([(u64, u64); 2], Rc<ArenaReads>)>,
 }
 
 /// Ceiling on remembered [`Interpreter::arena_reads`]; the list is scanned
@@ -760,7 +760,7 @@ impl<'a> Interpreter<'a> {
     /// Least recently used last out: a frame's scratch copy is never asked
     /// for again, and must not push out a callee asked for on every call.
     fn arena_reads(&mut self, body: &Body) -> Rc<ArenaReads> {
-        let version = body.version();
+        let version = ArenaReads::key(body);
         let entry = match self.arena_reads.iter().position(|(v, _)| *v == version) {
             Some(at) => self.arena_reads.remove(at),
             None => {

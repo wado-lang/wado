@@ -78,6 +78,12 @@ pub(super) struct ArenaReads {
 }
 
 impl ArenaReads {
+    /// What [`Self::of`] reads of `body`, by version: its expressions and its
+    /// statements, and nothing a block or a promoted value holds.
+    pub(super) fn key(body: &Body) -> [(u64, u64); 2] {
+        [body.exprs.version(), body.stmts.version()]
+    }
+
     pub(super) fn of(
         body: &Body,
         callees: Option<&CalleeMap>,
