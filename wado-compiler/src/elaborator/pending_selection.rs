@@ -158,8 +158,7 @@ pub(super) struct PendingCall {
     /// What the call was typed with, from the trait's declaration.
     pub(super) param_types: Vec<TypeId>,
     pub(super) return_type: TypeId,
-    /// What the call's context expects of its result, which selects as at
-    /// an immediate call.
+    /// What the call's context expects of its result.
     pub(super) expected: Option<TypeId>,
     pub(super) span: Span,
 }
