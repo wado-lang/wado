@@ -21,28 +21,28 @@ struct tuple//[i32, i32] {  // TypeId(4)
     mut 1: i32,
 }
 
-variant bug_mut_self_operator_receiver_boxed.wado//Cell<i32> {  // TypeId(5)
+variant bug_mut_self_operator_receiver_boxed.wado//Two<i32> {  // TypeId(5)
+    Pair(ref "tuple//[i32, i32]"),
+}
+
+variant bug_mut_self_operator_receiver_boxed.wado//Cell<i32> {  // TypeId(6)
     One(ref "bug_mut_self_operator_receiver_boxed.wado//Point"),
     Never(i32),
 }
 
-variant bug_mut_self_operator_receiver_boxed.wado//Two<i32> {  // TypeId(6)
-    Pair(ref "tuple//[i32, i32]"),
+struct bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair {  // TypeId(7)
+    discriminant: i32,
+    payload_0: ref "tuple//[i32, i32]",
 }
 
-struct bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One {  // TypeId(7)
+struct bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One {  // TypeId(8)
     discriminant: i32,
     payload_0: ref "bug_mut_self_operator_receiver_boxed.wado//Point",
 }
 
-struct bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::Never {  // TypeId(8)
+struct bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::Never {  // TypeId(9)
     discriminant: i32,
     payload_0: i32,
-}
-
-struct bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair {  // TypeId(9)
-    discriminant: i32,
-    payload_0: ref "tuple//[i32, i32]",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
