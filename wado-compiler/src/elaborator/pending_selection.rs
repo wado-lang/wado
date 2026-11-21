@@ -74,7 +74,7 @@ pub(super) enum PendingSelection {
     /// An operator, which records its dispatch once it selects.
     Operator(PendingOperator),
     /// A static call, which records its dispatch once it selects.
-    Static(PendingStatic),
+    Static(Box<PendingStatic>),
 }
 
 /// What becomes of a selection nothing has decided where its walk ends.
@@ -352,12 +352,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Queue `pending`, which records its dispatch once it selects.
     pub(super) fn wait_for_static(&mut self, pending: PendingStatic) {
         self.infer_holes
-            .require(Obligation::Pending(PendingSelection::Static(pending)));
+            .require(Obligation::Pending(PendingSelection::Static(Box::new(
+                pending,
+            ))));
     }
 
     /// Resolve the static call `pending` waits for, or hand it back while its
     /// receiver still leaves the impl undecided.
-    fn select_static(&mut self, pending: PendingStatic) -> Option<PendingStatic> {
+    fn select_static(&mut self, pending: Box<PendingStatic>) -> Option<Box<PendingStatic>> {
         let instance = self.apply_infer_holes(pending.instance);
         if self.selection_undecided(instance, &pending.method_name, None) {
             return Some(pending);

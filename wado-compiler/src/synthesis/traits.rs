@@ -3381,8 +3381,8 @@ impl SynthesisCtx<'_, '_, '_> {
                 trait_,
                 module,
                 |block| {
-                    !self.partial_impls.contains(&block)
-                        && !(marked && self.trait_env.is_bounded_impl(block))
+                    !(self.partial_impls.contains(&block)
+                        || marked && self.trait_env.is_bounded_impl(block))
                 },
             )
     }
