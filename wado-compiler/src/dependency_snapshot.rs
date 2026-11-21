@@ -16,8 +16,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::affine_move_check::check_affine_moves_semantic;
 use crate::ast::{AstIdSpace, Item, declares_extern_handle};
 use crate::compiler_host::{
-    CompilerHost, DependencyIndex, Diagnostic, LogLevel, ModuleDir, Severity, SourceError,
-    SourceReader,
+    CompilerHost, DependencyIndex, Diagnostic, ErasedHost, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, LogLevel, ModuleDir, ProbeRequest, Severity, SourceError, SourceReader,
 };
 use crate::compiler_trace;
 use crate::elaborator::liveness::LivenessScope;
@@ -62,9 +62,9 @@ pub(crate) fn is_building() -> bool {
 /// The snapshot of `load`'s dependency modules, built on the second compile of
 /// them in a row on this thread. `None` where `load` has none, or where no
 /// snapshot can serve them.
-pub(crate) async fn dependency_snapshot<H: CompilerHost>(
+pub(crate) async fn dependency_snapshot(
     load: &LoadResult,
-    host: &H,
+    host: &ErasedHost<'_>,
 ) -> Option<Rc<Semantics>> {
     let key = key_of(load);
     if key.is_empty() {
@@ -149,11 +149,12 @@ fn servable(load: &LoadResult, source: &ModuleSource) -> bool {
 /// Load the modules `key` names from an empty entry beside `load`'s, so they
 /// resolve as `load`'s did, and elaborate them on the stdlib snapshot. `None`
 /// where they load other modules or parses, or report an error.
-async fn build<H: CompilerHost>(load: &LoadResult, host: &H, key: &Key) -> Option<Semantics> {
-    let host = BuildHost {
+async fn build(load: &LoadResult, host: &ErasedHost<'_>, key: &Key) -> Option<Semantics> {
+    let build_host = BuildHost {
         host,
         failed: AtomicBool::new(false),
     };
+    let host = ErasedHost::new(&build_host);
     let dir = entry_dir_of(Some(&load.entry_module_source));
     let entry = synthesized_module_path(&dir, "dependencies");
     let roots = key.iter().map(|(source, ..)| source.clone()).collect();
@@ -180,19 +181,20 @@ async fn build<H: CompilerHost>(load: &LoadResult, host: &H, key: &Key) -> Optio
     );
     // A compile seeded from the snapshot skips its modules in the move check.
     let clean = semantics.is_complete()
-        && !host.failed.load(Ordering::Relaxed)
+        && !build_host.failed.load(Ordering::Relaxed)
         && check_affine_moves_semantic(&semantics).is_empty();
     clean.then_some(semantics)
 }
 
 /// The compile's host, for a snapshot build: it reads what the compile reads,
 /// and keeps the diagnostics, which are the compile's to report.
-struct BuildHost<'a, H> {
-    host: &'a H,
+struct BuildHost<'a> {
+    host: &'a ErasedHost<'a>,
     failed: AtomicBool,
 }
 
-impl<H: CompilerHost> CompilerHost for BuildHost<'_, H> {
+#[deny(clippy::missing_trait_methods)]
+impl CompilerHost for BuildHost<'_> {
     fn load_source(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
         self.host.load_source(path)
     }
@@ -239,6 +241,26 @@ impl<H: CompilerHost> CompilerHost for BuildHost<'_, H> {
         if matches!(diagnostic.severity, Severity::Fatal | Severity::Error) {
             self.failed.store(true, Ordering::Relaxed);
         }
+    }
+
+    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+        self.host.save_internal_artifact(file_stem, bytes)
+    }
+
+    fn run_generator(
+        &self,
+        component_wasm: &[u8],
+        request: GeneratorRequest,
+    ) -> impl Future<Output = Result<GeneratorResponse, GeneratorRunnerError>> + Send {
+        self.host.run_generator(component_wasm, request)
+    }
+
+    fn probe_generator(
+        &self,
+        component_wasm: &[u8],
+        request: &ProbeRequest,
+    ) -> impl Future<Output = Result<Vec<Option<u64>>, GeneratorRunnerError>> + Send {
+        self.host.probe_generator(component_wasm, request)
     }
 
     fn dependency_index(&self) -> DependencyIndex {

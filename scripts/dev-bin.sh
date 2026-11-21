@@ -34,12 +34,17 @@ bin=$1
 shift
 
 # A relative CARGO_TARGET_DIR names a directory under the caller's, so it is
-# made absolute before cargo runs at the root.
-target_dir="${CARGO_TARGET_DIR:-${root}/target}"
-case "${target_dir}" in
-    /*) ;;
-    *) target_dir="${PWD}/${target_dir}" ;;
-esac
+# made absolute before cargo runs at the root. Without one, cargo's own answer
+# covers a `build.target-dir` in its configuration.
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+    case "${CARGO_TARGET_DIR}" in
+        /*) target_dir="${CARGO_TARGET_DIR}" ;;
+        *) target_dir="${PWD}/${CARGO_TARGET_DIR}" ;;
+    esac
+else
+    target_dir="$(cd "${root}" && cargo metadata --format-version 1 --no-deps --offline |
+        grep -o '"target_directory":"[^"]*"' | cut -d'"' -f4)"
+fi
 exe="${target_dir}/debug/${bin}"
 
 if [ -z "${WADO_PREBUILT:-}" ]; then
