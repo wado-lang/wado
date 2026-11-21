@@ -108,6 +108,15 @@ impl ArgClass {
     pub(super) fn leaves_width_open(&self) -> bool {
         matches!(self, Self::IntLit | Self::FloatLit)
     }
+
+    /// Whether this is a literal's class, which admits more than the type the
+    /// literal defaults to where its call is walked.
+    pub(super) fn is_literal(&self) -> bool {
+        match self {
+            Self::IntLit | Self::FloatLit | Self::StrLit | Self::BytesLit | Self::NullLit => true,
+            Self::Exact(_) | Self::Head(_) | Self::Opaque(_) => false,
+        }
+    }
 }
 
 /// The call site's scope, plus the names the argument binds for itself — a
@@ -199,10 +208,10 @@ impl<'a> ArgProbe<'a> {
 pub(super) enum ArgSource<'probe, 'a> {
     /// A call's argument expressions, classified on demand.
     Exprs(&'probe mut ArgProbe<'a>),
-    /// Argument types already elaborated, as the callee will receive them, and
-    /// what the call's context expects of its result.
-    Types {
-        args: Vec<TypeId>,
+    /// Arguments already elaborated, classed as selection reads them, and what
+    /// the call's context expects of its result.
+    Classes {
+        classes: Vec<ArgClass>,
         expected: Option<TypeId>,
     },
     /// The site passes no value argument, so nothing selects.
@@ -213,7 +222,7 @@ impl<'a> ArgSource<'_, 'a> {
     pub(super) fn len(&self) -> usize {
         match self {
             Self::Exprs(probe) => probe.len(),
-            Self::Types { args, .. } => args.len(),
+            Self::Classes { classes, .. } => classes.len(),
             Self::NoArguments => 0,
         }
     }
@@ -226,7 +235,7 @@ impl<'a> ArgSource<'_, 'a> {
     pub(super) fn expected(&self) -> Option<TypeId> {
         match self {
             Self::Exprs(probe) => probe.expected,
-            Self::Types { expected, .. } => *expected,
+            Self::Classes { expected, .. } => *expected,
             Self::NoArguments => None,
         }
     }
@@ -238,7 +247,7 @@ impl<'a> ArgSource<'_, 'a> {
     ) -> ArgClass {
         match self {
             Self::Exprs(probe) => probe.class(elaborator, index),
-            Self::Types { args, .. } => ArgClass::Exact(args[index]),
+            Self::Classes { classes, .. } => classes[index].clone(),
             Self::NoArguments => unreachable!("`NoArguments` has no argument at {index}"),
         }
     }
@@ -247,8 +256,8 @@ impl<'a> ArgSource<'_, 'a> {
     pub(super) fn reborrow(&mut self) -> ArgSource<'_, 'a> {
         match self {
             Self::Exprs(probe) => ArgSource::Exprs(probe),
-            Self::Types { args, expected } => ArgSource::Types {
-                args: args.clone(),
+            Self::Classes { classes, expected } => ArgSource::Classes {
+                classes: classes.clone(),
                 expected: *expected,
             },
             Self::NoArguments => ArgSource::NoArguments,

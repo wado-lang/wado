@@ -755,7 +755,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Selection is over; the classes come out of the probe so the arguments
-        // can be elaborated (which needs `ctx` mutably) and then checked.
+        // can be elaborated (which needs `ctx` mutably) and then checked. A
+        // waiting call selects later from every class.
+        if waits_for_selection {
+            for index in 0..probe.len() {
+                probe.class(self, index);
+            }
+        }
         let synthesized = probe.take_classes();
 
         // Get method info (error if method not found)
@@ -1236,6 +1242,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ref_kind: matched_ref_kind,
                     method_name: method_name.to_string(),
                     args,
+                    classes: synthesized
+                        .into_iter()
+                        .map(|class| class.expect("a waiting call classed every argument"))
+                        .collect(),
                     param_types: substituted_param_types,
                     return_type,
                     expected: expected_type,

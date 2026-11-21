@@ -21,7 +21,7 @@ use super::expr::IndexAccess;
 use super::infer_hole::Obligation;
 use super::method_call::InheritedFrame;
 use super::static_call::ReceiverId;
-use super::synth::ArgSource;
+use super::synth::{ArgClass, ArgSource};
 use super::trait_env::ImplTargetKey;
 use super::types::{
     MethodInfo, MethodOwner, RequiredTrait, TraitLookup, TraitMethodMatch, TypeError,
@@ -173,6 +173,9 @@ pub(super) struct PendingCall {
     pub(super) ref_kind: Option<RefKind>,
     pub(super) method_name: String,
     pub(super) args: Vec<TypeId>,
+    /// Each argument as the call's own selection classed it. A literal keeps
+    /// its class, which admits what the type it defaulted to does not.
+    pub(super) classes: Vec<ArgClass>,
     /// What the call was typed with, from the trait's declaration.
     pub(super) param_types: Vec<TypeId>,
     pub(super) return_type: TypeId,
@@ -551,6 +554,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|&arg| self.apply_infer_holes(arg))
             .collect();
+        let classes: Vec<ArgClass> = call
+            .classes
+            .iter()
+            .zip(&args)
+            .map(|(class, &arg)| match class.is_literal() {
+                true => class.clone(),
+                false => ArgClass::Exact(arg),
+            })
+            .collect();
         let value_target = self.impl_target_of(receiver);
         let lookup_at = |this: &mut Self, target: &ImplTargetKey| {
             this.find_trait_method_for_type(
@@ -560,8 +572,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(receiver),
                 call.span,
                 None,
-                Some(ArgSource::Types {
-                    args: args.clone(),
+                Some(ArgSource::Classes {
+                    classes: classes.clone(),
                     expected: call.expected,
                 }),
             )

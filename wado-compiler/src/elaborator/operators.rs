@@ -2490,8 +2490,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(FqTraitName, MethodInfo)> {
         let required = self.tysys.required_compiler_trait(item);
         let args = match rhs {
-            Some(rhs) => ArgSource::Types {
-                args: vec![self.tysys.type_table.borrow_mut().make_ref(rhs)],
+            Some(rhs) => ArgSource::Classes {
+                classes: vec![ArgClass::Exact(
+                    self.tysys.type_table.borrow_mut().make_ref(rhs),
+                )],
                 expected: None,
             },
             None => ArgSource::NoArguments,
