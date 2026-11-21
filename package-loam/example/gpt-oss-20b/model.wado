@@ -2,9 +2,12 @@
 //! tokenizer, and the model that continues a prompt, its experts held within a
 //! budget and the others read from `build/` as a token routes to them.
 
-use { eprintln, Stderr, Stdout } from "core:cli";
+use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Backend, FileSource, LoadError, Sampling, Tensor } from "lib:loam";
+use { to_string } from "core:json";
+use { MonotonicClock } from "wasi:clocks";
+use { Backend, FileSource, HeldExperts, LoadError, Sampling, Tensor } from "lib:loam";
 use { deviation, recorded, reported } from "../checks.wado";
 /// gpt-oss's byte-level BPE, split by o200k's pattern.
 pub use {
@@ -52,6 +55,10 @@ impl<affine Bk: Backend> Model<Bk> {
         return &mut self.on;
     }
 
+    pub fn experts(&self) -> &HeldExperts {
+        return self.model.experts();
+    }
+
     /// The `steps` tokens greedy decoding picks after `ids` from an empty
     /// cache, and the logits it picks the first from: the prompt in one pass,
     /// then every token after its first in one call.
@@ -85,27 +92,79 @@ impl<affine Bk: Backend> Model<Bk> {
         generated.extend(&decoded.tokens.data.into_iter().map(|id| id as i32).collect());
         return [generated, passed.logits.data];
     }
+
+    /// The pass over `ids` from an empty cache, then one over the next token
+    /// against its cache, each run from the host: a prompt's program and a
+    /// step's, without the loop `continued` runs the steps in.
+    pub fn stepped_once(&mut self, ids: &List<i32>) with (_, Preopens) {
+        let passed = gptoss::compute(
+            &mut self.on,
+            &token_ids(ids.into_iter().map(|id| id as i64).collect()),
+            &mask_of(ids.len()),
+            &gptoss::Cache::empty(&mut self.on),
+            1,
+            &mut self.model,
+        );
+        let first = Sampling {}.first_tokens(&passed.logits, ids.len() as i64)[0];
+        gptoss::compute(&mut self.on, &token_ids([first]), &mask_of(ids.len() + 1), &passed.cache, 0, &mut self.model);
+    }
 }
 
 /// Continues each prompt `generate.json` records on `backend` by `steps`
 /// tokens, its pools holding as many experts as `budget` bytes hold, and says
-/// whether it picks the tokens onnxruntime picks.
-pub fn checked<affine Bk: Backend>(backend: Bk, budget: i64, steps: i32) with (_, Stdout, Stderr, Preopens) {
+/// whether it picks the tokens onnxruntime picks and how long it took. Then it
+/// says how many of the experts the tokens picked the pools held already, and
+/// writes what each host step fetched to `build/fetches.json`, which
+/// `tools/expert_eviction.wado` replays.
+pub fn checked<affine Bk: Backend>(
+    backend: Bk,
+    budget: i64,
+    steps: i32,
+) -> Option<Model<Bk>> with (_, Stdout, Stderr, Preopens, MonotonicClock) {
     let Some([generate, expected]) = recorded("generate.json", "build/logits.bin") else {
-        return;
+        return null;
     };
+    let started = MonotonicClock::now();
     let mut loaded = match Model::load(backend, budget) {
         Ok(loaded) => loaded,
         Err(e) => {
             eprintln(`${e}; run fetch.sh first`);
-            return;
+            return null;
         },
     };
+    println(`loaded in ${seconds((MonotonicClock::now() - started) as u64):.1} s`);
+    loaded.model.experts_mut().record_fetches();
     for let p of 0..<generate.len() {
         let g = &generate[p];
-        let [generated, logits] = loaded.continued(&g.ids, i32::min(steps, g.generated.len()));
+        let count = i32::min(steps, g.generated.len());
+        let began = MonotonicClock::now();
+        let [generated, logits] = loaded.continued(&g.ids, count);
+        let took = seconds((MonotonicClock::now() - began) as u64);
         reported(g, &generated, deviation(&logits, &expected, p));
+        println(`  ${took:.1} s for the prompt of ${g.ids.len()} and ${count} tokens`);
     }
+    let counts = loaded.experts().counts();
+    println(
+        `the pools held ${counts.held} of the ${counts.picked} experts the steps picked, and loaded ${counts.loaded_bytes} bytes`,
+    );
+    if let Err(e) = fs::write("build/fetches.json", &to_string(&loaded.experts().fetches()).unwrap()) {
+        eprintln(`${e}`);
+    }
+    return Option::Some(loaded);
+}
+
+/// The budget in bytes and the tokens a check continues each prompt by, as the
+/// arguments give them, else `budget` and `steps`.
+pub fn budget_and_steps(budget: i64, steps: i32) -> [i64, i32] with Environment {
+    let given = args();
+    let bytes = if given.len() > 0 { i64::from_str(&given[0]).unwrap() } else { budget };
+    let tokens = if given.len() > 1 { i32::from_str(&given[1]).unwrap() } else { steps };
+    return [bytes, tokens];
+}
+
+/// A monotonic clock's span of nanoseconds in seconds.
+fn seconds(span: u64) -> f64 {
+    return span as f64 / 1e9;
 }
 
 fn token_ids(data: List<i64>) -> Tensor<i64, [gptoss::BatchSize, gptoss::SequenceLength]> {

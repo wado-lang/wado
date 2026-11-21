@@ -20,11 +20,8 @@ pub struct Experts {
     pub beta: f32,
     pub limit: f32,
     pub quantized: Quantized,
-    /// The layer these experts are, among the `layers` that share the pools,
-    /// and the id of the host step that fetches their weights where the pools
-    /// are too few to hold them all.
-    pub layer: i32,
-    pub layers: i32,
+    /// The id of the host step that fetches these experts where the layer
+    /// shares its pools with others.
     pub step: i32,
 }
 
@@ -76,11 +73,11 @@ struct Projection<affine G: Graph, E: Float> {
 /// reads its weight as `Graph::quantized_product` does, and adds its bias.
 /// The experts compute in f32, and the result rounds once to `E`.
 ///
-/// The weights are pools of slots, each holding one expert. Pools of a slot
-/// for every expert of every layer hold layer `l`'s expert `e` at
-/// `l · experts + e`. Smaller pools hold what a host step puts in them: it
-/// reads the picks, writes their experts into slots, and answers where each
-/// expert is.
+/// The weights are pools of slots, each holding one expert. Pools of exactly
+/// one slot for each expert are the layer's own, expert `e` in slot `e`.
+/// Larger pools are shared with other layers and hold what a host step puts in
+/// them: it reads the picks, writes their experts into slots, and answers where
+/// each expert is.
 ///
 /// Where a token's picks are fewer than the experts, each pick runs its expert
 /// on its token's row, so only the experts the tokens route to are read.
@@ -100,7 +97,7 @@ pub fn mixture_of_experts<affine G: Graph, E: Float, In, T, X, S, N, P, Blocks, 
     down_zero_points: Option<&G::Tensor<u8, [S, H, Z2]>>,
     experts: &Experts,
 ) -> G::Tensor<E, In> with _
-    contract 0 < experts.k, 0 <= experts.layer < experts.layers
+    contract 0 < experts.k
 {
     let extents = g.extents_of(x);
     let hidden = extents[extents.len() - 1];
@@ -138,9 +135,9 @@ impl<affine G: Graph> Held<G> {
     }
 }
 
-/// The experts `picks` reach and their slots: fixed where the pools hold
-/// every layer's experts, else what the host step `experts.step` answers once
-/// it has put them in.
+/// The experts `picks` reach and their slots: each in its own where the pools
+/// are the layer's own, else what the host step `experts.step` answers once it
+/// has put them in.
 fn held_experts<affine G: Graph>(
     g: &mut G,
     picks: &G::Tensor<i64, [Tokens, Picks]>,
@@ -149,16 +146,11 @@ fn held_experts<affine G: Graph>(
     experts: &Experts,
 ) -> Held<G> with _ {
     let column: List<i32> = [pool, 1];
-    if slots == experts.layers * pool {
+    if slots == pool {
         let order: G::Tensor<i64, [Pool, One]> = g.iota(column, 0);
-        let base = full::<G, i64, [Pool, One]>(g, (experts.layer * pool) as i64, column);
-        return Held {
-            slots: g.binary(Binary::Add, &order, &base),
-            order,
-            count: scalar(g, pool as i64),
-        };
+        return Held { slots: order, order, count: scalar(g, pool as i64) };
     }
-    assert pool <= slots < experts.layers * pool, "the pools hold one layer's experts";
+    assert pool < slots, "shared pools hold one layer's experts and more";
     let fetched = g.fetched(
         experts.step,
         &[Any::I64(g.relabeled::<i64, [Tokens, Picks], Untyped>(picks))],

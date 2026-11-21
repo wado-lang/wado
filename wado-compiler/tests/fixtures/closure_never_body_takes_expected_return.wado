@@ -1,0 +1,23 @@
+// A closure whose expression body diverges returns the type its expected fn
+// type names, not the `()` a body of `!` would otherwise settle on.
+
+fn called(k: i32, next: fn(i32) -> i64) -> i64 {
+    if k > 5 {
+        return next(k);
+    }
+    return 0;
+}
+
+test "a closure of `unreachable()` passed where `fn(i32) -> i64` is expected" {
+    assert called(1, |_| unreachable()) == 0;
+}
+
+test "a closure of `panic(...)` bound under an annotation" {
+    let next: fn(i32) -> String = |_| panic("never called");
+    assert called(2, |k| next(k).len() as i64) == 0;
+}
+
+#[expect_trap]
+test "the closure traps where it runs" {
+    called(6, |_| unreachable());
+}
