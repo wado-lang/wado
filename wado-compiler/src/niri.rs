@@ -4,6 +4,8 @@
 //! `frame`, `rewrite`, `trackability`, `pattern`, `place`, `region`, `callee`.
 //! What it can evaluate: `docs/wep-2026-04-27-nir-interpreter.md`.
 
+use std::rc::Rc;
+
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -202,7 +204,7 @@ use pattern::PatternMatch;
 pub use region::RegionRefusal;
 pub(crate) use rewrite::guard_declares_locals;
 pub use shapes::AggregateShapes;
-use trackability::Trackability;
+use trackability::{ArenaReads, Trackability};
 
 /// Commit sink for niri's body rewrites, so one set of rewrites serves two
 /// backends: [`BodySink`] over a throwaway CTFE body, and the optimize layer's
@@ -681,7 +683,17 @@ pub struct Interpreter<'a> {
     /// stays failed, and re-running it re-pays a whole-body copy for the same
     /// refusal.
     call_misses: Vec<CallMiss>,
+    /// [`ArenaReads::of`] the bodies frames last ran over, by
+    /// [`Body::version`]. A frame copies its body afresh each time, so the
+    /// copy's own version never repeats; the source's does while it is
+    /// unchanged. Facts installed later read differently, so installing one
+    /// clears it.
+    arena_reads: Vec<([(u64, u64); 8], Rc<ArenaReads>)>,
 }
+
+/// Ceiling on remembered [`Interpreter::arena_reads`]; the list is scanned
+/// linearly. Dropping one costs a recomputation, never an answer.
+const MAX_ARENA_READS: usize = 8;
 
 struct CallMiss {
     callee: CalleeKey,
@@ -742,7 +754,21 @@ impl<'a> Interpreter<'a> {
             step_budget: DEFAULT_STEP_BUDGET,
             call_stack: Vec::new(),
             call_misses: Vec::new(),
+            arena_reads: Vec::new(),
         }
+    }
+
+    fn arena_reads(&mut self, body: &Body) -> Rc<ArenaReads> {
+        let version = body.version();
+        if let Some((_, reads)) = self.arena_reads.iter().find(|(v, _)| *v == version) {
+            return Rc::clone(reads);
+        }
+        let reads = Rc::new(ArenaReads::of(body, self.facts));
+        if self.arena_reads.len() == MAX_ARENA_READS {
+            self.arena_reads.remove(0);
+        }
+        self.arena_reads.push((version, Rc::clone(&reads)));
+        reads
     }
 
     #[must_use]
@@ -777,6 +803,7 @@ impl<'a> Interpreter<'a> {
     /// [`Lattice::Unevaluated`] — the engine has no body to look up.
     pub fn with_callees(&mut self, callees: &'a CalleeMap) -> &mut Self {
         self.facts.callees = Some(callees);
+        self.arena_reads.clear();
         self
     }
 
@@ -784,6 +811,7 @@ impl<'a> Interpreter<'a> {
     /// read stays opaque.
     pub fn with_ctfe_builtins(&mut self, ctfe_builtins: &'a CtfeBuiltinMap) -> &mut Self {
         self.facts.ctfe_builtins = Some(ctfe_builtins);
+        self.arena_reads.clear();
         self
     }
 
