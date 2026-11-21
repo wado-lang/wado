@@ -1,0 +1,46 @@
+// Where one signature has an impl with an effect and one without, a closure
+// literal performing that effect reaches the effectful impl, whether called
+// directly, through a bound, or through a `let` binding.
+
+#![TODO]
+
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() -> i32 {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() -> i32 with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+fn named<T: Name>(t: T) -> String {
+    return t.name();
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(named(|| loud()));
+    println(named(|| 1));
+    let f = || loud();
+    println(f.name());
+    let g = || 1;
+    println(g.name());
+}
+
+__DATA__
+{
+    "stdout": "loud\npure\nloud\npure\n"
+}
