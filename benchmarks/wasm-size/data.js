@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795277595022,
+  "lastUpdate": 1795298182777,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80665,6 +80665,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/081b134ab48ca110b2d07ab1dc1e32bbb8832147"
         },
         "date": 1795277594365,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9f0267e5d923ca5efbcacb8799c78fad2f0737f",
+          "message": "Merge pull request #2715 from wado-lang/gfx/inference-context-selections\n\nfeat(elaborator): a call on a receiver not yet settled waits for a later use",
+          "timestamp": "2026-11-22T06:37:45+09:00",
+          "tree_id": "613ae6b0ffce537ad7752dfeca5e73f4b4cb20ba",
+          "url": "https://github.com/wado-lang/wado/commit/b9f0267e5d923ca5efbcacb8799c78fad2f0737f"
+        },
+        "date": 1795298181688,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
