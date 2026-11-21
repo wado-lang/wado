@@ -1,0 +1,28 @@
+// A trait declaring an associated type the method's signature never reads
+// still lets the call wait for a later use.
+
+struct Bx<T> { v: Option<T> }
+
+fn empty<T>() -> Bx<T> { return Bx { v: null }; }
+
+trait Label with () {
+    type Item;
+    fn label(&self) -> i32;
+}
+
+impl Label for Bx<i32> {
+    type Item = i32;
+    fn label(&self) -> i32 { return 1; }
+}
+
+impl Label for Bx<bool> {
+    type Item = bool;
+    fn label(&self) -> i32 { return 2; }
+}
+
+test {
+    let b = empty();
+    let n = b.label();
+    let _settled: Bx<bool> = b;
+    assert n == 2;
+}

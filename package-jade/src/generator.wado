@@ -1,0 +1,77 @@
+//! Kiln generator entry for Jade. Reads a JSON Schema, and the documents its
+//! references reach among the `inputs`, and emits the Wado declarations they
+//! describe.
+
+use { Error, InputFile, OutputFile, Request, Response, read_text } from "core:kiln";
+use { Uri } from "core:uri";
+use { percent_encode } from "core:url";
+use { ModuleSpec } from "lib:wadopoet";
+use { GenerateOptions, file_stem, generate_in } from "./generate.wado";
+use { Schema } from "./schema.wado";
+use { SchemaSet } from "./validate.wado";
+
+export struct Options {
+    /// The name of the declaration the root becomes, before its `title` and
+    /// the file's name.
+    pub root: Option<String> = null,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream {
+    let module = ModuleSpec::from_origin(&req.origin());
+    let primary = input_uri(&req.primary.path);
+    let stem = file_stem(&req.primary.path);
+    let mut set = SchemaSet::new();
+    let mut pending: List<InputFile> = [req.primary];
+    for let input of req.inputs {
+        pending.push(input);
+    }
+    while let Some(file) = pending.pop() {
+        let path = file.path;
+        let text = match read_text(file.content) {
+            Ok(text) => text,
+            Err(e) => {
+                return Result::Err(Error::InvalidSchema(`jade: '${path}' is not UTF-8: ${e}`));
+            },
+        };
+        let schema = Schema::parse(text).map_err(|e| Error::InvalidSchema(`jade: '${path}': ${e}`))?;
+        set.insert(input_uri(&path), schema);
+    }
+    let source = match generate_in(&set, &primary, &module, GenerateOptions { root: req.options.root }) {
+        Ok(source) => source,
+        Err(Invalid(e)) => {
+            return Result::Err(Error::InvalidSchema(`jade: ${e}`));
+        },
+        Err(Unsupported(e)) => {
+            return Result::Err(Error::Unsupported(`jade: ${e}`));
+        },
+    };
+    return Result::Ok(Response {
+        files: [
+            OutputFile { path: `${stem}.wado`, content: source, is_entry: true },
+        ],
+    });
+}
+
+/// The URI an input is retrieved from: a remote input's URL, or else the
+/// `file:` URI of its path from the package root, each segment
+/// percent-encoded, so that a relative `$ref` resolves to the file beside it.
+fn input_uri(path: &String) -> Uri {
+    if path.starts_with("https://") || path.starts_with("http://") {
+        return Uri::from_str(path).unwrap();
+    }
+    let segments: List<String> = path.split("/").map(|s| percent_encode(s)).collect();
+    return Uri::from_str(`file:///${segments.join("/")}`).unwrap();
+}
+
+test "a path's segments are percent-encoded into its URI" {
+    assert `${input_uri(&"tests/a b/ü.json")}` == "file:///tests/a%20b/%C3%BC.json";
+}
+
+test "a remote input is retrieved from its URL" {
+    assert `${input_uri(&"https://example.com/s/a.json")}` == "https://example.com/s/a.json";
+}
+
+test "a file's stem drops every extension" {
+    assert file_stem(&"tests/api.schema.json") == "api";
+    assert file_stem(&"api") == "api";
+}

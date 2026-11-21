@@ -211,6 +211,14 @@ impl SchemaObject {
         return Result::Ok(());
     }
 
+    /// The keywords Draft 2020-12 defines that this object holds, in the order
+    /// it writes them.
+    internal fn keywords(&self) -> List<String> {
+        let mut present = KeywordList { names: [] };
+        self.each_keyword(&mut present).unwrap();
+        return present.names;
+    }
+
     /// Breaks none of the rules Draft 2020-12's meta-schema states on this
     /// object's own keywords, nor Core's on where its subschemas' `$schema`
     /// goes, at the JSON Pointer `at` to it. Each subschema is checked where it
@@ -409,6 +417,17 @@ struct KeywordCount {
 impl KeywordSink for KeywordCount {
     fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
         self.n += 1;
+        return Result::Ok(());
+    }
+}
+
+struct KeywordList {
+    names: List<String>,
+}
+
+impl KeywordSink for KeywordList {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
+        self.names.push(key);
         return Result::Ok(());
     }
 }

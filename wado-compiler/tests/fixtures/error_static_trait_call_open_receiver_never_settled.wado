@@ -1,0 +1,30 @@
+// Nothing settles the instance `Bx::make()` builds, so which `Make` answers
+// stays undecided.
+
+struct Bx<T> { v: T }
+
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for Bx<u64> {
+    fn make() -> Bx<u64> {
+        return Bx { v: 7 };
+    }
+}
+
+impl Make for Bx<i64> {
+    fn make() -> Bx<i64> {
+        return Bx { v: -7 };
+    }
+}
+
+test {
+    let _a = Bx::make();
+}
+
+__DATA__
+{
+    "compile_error": ":23:14: analysis error: cannot infer `Bx<T>` far enough to choose which `make` this calls; annotate it",
+    "compile_error_count": 1
+}

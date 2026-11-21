@@ -1,0 +1,29 @@
+// `Bx` spelled without its arguments is asked at variables, so the impls
+// written for `Bx<u64>` and `Bx<i64>` both answer, and the parameter they
+// agree on shapes the literal: `5_000_000_000` is an `i64`, not an `i32`
+// out of range.
+
+struct Bx<T> { v: T }
+
+trait Mk with () {
+    fn make(n: i64) -> Self;
+}
+
+impl Mk for Bx<u64> {
+    fn make(n: i64) -> Bx<u64> { return Bx { v: n as u64 }; }
+}
+
+impl Mk for Bx<i64> {
+    fn make(n: i64) -> Bx<i64> { return Bx { v: -n }; }
+}
+
+test "annotated" {
+    let d: Bx<u64> = Bx::make(5_000_000_000);
+    assert d.v == 5_000_000_000;
+}
+
+test "settled by a later use" {
+    let b = Bx::make(5);
+    let d: Bx<i64> = b;
+    assert d.v == -5;
+}

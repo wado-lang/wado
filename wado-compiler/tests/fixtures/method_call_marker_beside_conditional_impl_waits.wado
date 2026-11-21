@@ -1,7 +1,6 @@
 // The written `Eq` holds only where `T: Cap`, and the marker where `T: Eq`,
-// so which impl answers `eq` on `Box<_>` depends on what `_` becomes: the
-// call asks for an annotation rather than commit to the written impl, whose
-// bound then fails at `Box<bool>`.
+// so which impl answers `eq` on `Box<_>` depends on what `_` becomes. The
+// selection waits for it: `Box<bool>` misses `Cap`, so the marker answers.
 
 struct Box<T> { v: T }
 
@@ -15,14 +14,9 @@ fn mk<T: Default>() -> Box<T> {
     return Box { v: T::default() };
 }
 
-export fn run() {
+test {
     let a = mk();
-    let _same = a.eq(&a);
+    let same = a.eq(&a);
     let _c: Box<bool> = a;
-}
-
-__DATA__
-{
-    "compile_error": ":20:17: analysis error: cannot infer `Box<T>` far enough to choose which `eq` this calls",
-    "compile_errors_not_contains": ["'Cap'"]
+    assert same;
 }

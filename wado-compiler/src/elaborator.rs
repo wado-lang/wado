@@ -25,6 +25,7 @@ mod method_lookup;
 mod module;
 mod operators;
 pub(crate) mod orchestration;
+mod pending_selection;
 mod probe;
 mod reflect;
 pub(crate) mod reify;
@@ -980,6 +981,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 return_type,
                 method_type_args,
                 consumes_self,
+                selection: None,
             },
         );
     }

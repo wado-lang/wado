@@ -6,7 +6,9 @@
 //! performs it — inside a compile-time frame, which either carries the write
 //! out or abandons the evaluation. An ordinary walk performs nothing at all.
 
-use crate::hashmap::{IndexMap, IndexSet};
+use cranelift_entity::EntitySet;
+
+use crate::hashmap::IndexMap;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtId, StmtKind,
@@ -26,8 +28,8 @@ use crate::compiler_trace;
 /// performs. Reachable from the body root, because an orphaned statement never
 /// runs — counting one as performed would credit the walk with a write it will
 /// never carry out.
-fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
-    let mut performed = IndexSet::default();
+fn performed_exprs(body: &Body) -> EntitySet<ExprId> {
+    let mut performed = EntitySet::with_capacity(body.exprs.len());
     for s in reachable_stmts(body) {
         let op = match &body.stmts[s].kind {
             StmtKind::Expr(op)
@@ -61,30 +63,110 @@ fn reachable_stmts(body: &Body) -> Vec<StmtId> {
     stmts
 }
 
-/// The places a walk reaches, and how. A mention it does not reach disqualifies
-/// the local that mention roots at.
-#[derive(Default)]
-pub(super) struct Reached {
-    reads: IndexSet<ExprId>,
-    writes: IndexSet<ExprId>,
-    /// Reached through an `Assign`'s target rather than through an operand.
-    place_assigns: IndexSet<ExprId>,
+/// What a walk reads wherever in the arena it appears, whatever the walk
+/// performs: the arguments of a builtin that writes nothing, a parameter that
+/// only reads, and every statement's operand. None of them depends on the
+/// body's root, so the frames over one body's regions and the runs of one
+/// callee share it while the body is unchanged.
+pub(super) struct ArenaReads {
+    /// The arena's size, which a body read against these must share.
+    exprs: usize,
+    /// Recorded through [`peel_wrappers`], as [`Reached::record`] records.
+    places: EntitySet<ExprId>,
+    /// As written: the operand a `Return`, `Break`, `Let` or `Expr` yields.
+    stmt_operands: EntitySet<ExprId>,
 }
 
-impl Reached {
+impl ArenaReads {
+    /// What [`Self::of`] reads of `body`, by version: its expressions and its
+    /// statements, and nothing a block or a promoted value holds.
+    pub(super) fn key(body: &Body) -> [(u64, u64); 2] {
+        [body.exprs.version(), body.stmts.version()]
+    }
+
+    pub(super) fn of(
+        body: &Body,
+        callees: Option<&CalleeMap>,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+    ) -> Self {
+        let mut places = EntitySet::with_capacity(body.exprs.len());
+        let mut record = |op: Operand| {
+            if let Some(e) = peel_wrappers(body, op) {
+                places.insert(e);
+            }
+        };
+        for (_, node) in &body.exprs {
+            let ExprKind::Call { func_id, args, .. } = &node.kind else {
+                continue;
+            };
+            if let Some(builtin) = ctfe_builtins.and_then(|map| map.get(func_id))
+                && !builtin.is_write()
+            {
+                for arg in args {
+                    record(arg.expr);
+                }
+            }
+            if let Some(callee) = callees.and_then(|map| map.get(func_id))
+                && args.len() == callee.arity()
+            {
+                for (index, arg) in args.iter().enumerate() {
+                    if !callee.writes_param(index) && callee.reads_only(index) {
+                        record(arg.expr);
+                    }
+                }
+            }
+        }
+        let mut stmt_operands = EntitySet::with_capacity(body.exprs.len());
+        for (_, stmt) in &body.stmts {
+            let (StmtKind::Return { value: Some(op) }
+            | StmtKind::Break {
+                value: Some(op), ..
+            }
+            | StmtKind::Let {
+                value: Some(op), ..
+            }
+            | StmtKind::Expr(op)) = &stmt.kind
+            else {
+                continue;
+            };
+            if let Some(e) = op.as_expr() {
+                stmt_operands.insert(e);
+            }
+        }
+        Self {
+            exprs: body.exprs.len(),
+            places,
+            stmt_operands,
+        }
+    }
+}
+
+/// The places a walk reaches, and how. A mention it does not reach disqualifies
+/// the local that mention roots at.
+pub(super) struct Reached<'r> {
+    arena: &'r ArenaReads,
+    /// Read beyond [`ArenaReads::places`].
+    reads: EntitySet<ExprId>,
+    writes: EntitySet<ExprId>,
+    /// Reached through an `Assign`'s target rather than through an operand.
+    place_assigns: EntitySet<ExprId>,
+}
+
+impl<'r> Reached<'r> {
     pub(super) fn in_frame(
         body: &Body,
         facts: ProgramFacts<'_>,
+        arena: &'r ArenaReads,
         reassigned: &LocalSet,
         type_table: &TypeTable,
     ) -> Self {
         let performed = performed_exprs(body);
-        let mut reached = Self::collect(body, facts, &performed);
-        for e in &performed {
-            if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
+        let mut reached = Self::collect(body, facts, arena, &performed);
+        for e in performed.iter() {
+            if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
                 && place_of(body, (*target).into()).is_some()
             {
-                reached.place_assigns.insert(*e);
+                reached.place_assigns.insert(e);
             }
         }
         reached.record_alias_refs(body, reassigned, type_table);
@@ -152,102 +234,82 @@ impl Reached {
     /// carries out. The reads are collected as [`Self::in_frame`] collects them:
     /// what a statement-position write builtin reads is read wherever that
     /// mention appears, whoever performs the write.
-    pub(super) fn outside_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
+    pub(super) fn outside_frame(
+        body: &Body,
+        facts: ProgramFacts<'_>,
+        arena: &'r ArenaReads,
+    ) -> Self {
+        let reached = Self::collect(body, facts, arena, &performed_exprs(body));
         Self {
-            reads: Self::collect(body, facts, &performed_exprs(body)).reads,
-            ..Self::default()
+            writes: EntitySet::new(),
+            ..reached
         }
     }
 
-    /// What the walk reaches, given the expressions it performs. Collected
-    /// over the whole arena, not the reachable tree — [`aggregate_safe_locals`]
-    /// owns the rule.
-    fn collect(body: &Body, facts: ProgramFacts<'_>, performed: &IndexSet<ExprId>) -> Self {
-        let mut reached = Self::default();
-        reached.collect_builtin_reaches(body, facts.ctfe_builtins, performed);
-        reached.collect_call_reaches(body, facts.callees, performed);
-        reached
-    }
-
+    /// What the walk reaches, given the expressions it performs, beyond what
+    /// `arena` reads wherever it appears. A call is performed only at
+    /// statement position, so only those reach more.
+    ///
     /// The engine models a builtin call exactly, so the destination it writes
     /// and the source it reads are equally current — where the frame runs it.
-    fn collect_builtin_reaches(
-        &mut self,
+    /// A callee's `&mut` argument counts only at statement position, where a
+    /// frame performs the write; elsewhere the projection merely reads the call.
+    /// A shared receiver or by-value one counts wherever it appears, which
+    /// `arena` holds: that is what carries a container through the `&self`
+    /// reads `push` makes of its own capacity. A callee the map does not hold
+    /// exempts nothing.
+    fn collect(
         body: &Body,
-        ctfe_builtins: Option<&CtfeBuiltinMap>,
-        performed: &IndexSet<ExprId>,
-    ) {
-        let Some(map) = ctfe_builtins else {
-            return;
+        facts: ProgramFacts<'_>,
+        arena: &'r ArenaReads,
+        performed: &EntitySet<ExprId>,
+    ) -> Self {
+        let exprs = body.exprs.len();
+        assert_eq!(
+            arena.exprs, exprs,
+            "arena reads must come from a body sharing these nodes"
+        );
+        let mut reached = Self {
+            arena,
+            reads: EntitySet::with_capacity(exprs),
+            writes: EntitySet::with_capacity(exprs),
+            place_assigns: EntitySet::with_capacity(exprs),
         };
-        for (e, node) in &body.exprs {
-            let ExprKind::Call { func_id, args, .. } = &node.kind else {
+        for e in performed.iter() {
+            let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
                 continue;
             };
-            let Some(builtin) = map.get(func_id) else {
-                continue;
-            };
-            if !builtin.is_write() {
-                for arg in args {
-                    self.record(body, arg.expr, Reach::Read);
+            if let Some(builtin) = facts.ctfe_builtins.and_then(|map| map.get(func_id))
+                && builtin.is_write()
+            {
+                for (i, arg) in args.iter().enumerate() {
+                    let reach = if i == 0 { Reach::Write } else { Reach::Read };
+                    reached.record(body, arg.expr, reach);
                 }
-                continue;
             }
-            if !performed.contains(&e) {
-                continue;
-            }
-            for (i, arg) in args.iter().enumerate() {
-                let reach = if i == 0 { Reach::Write } else { Reach::Read };
-                self.record(body, arg.expr, reach);
-            }
-        }
-    }
-
-    /// A shared receiver or by-value argument counts wherever it appears —
-    /// that is what carries a container through the `&self` reads `push` makes
-    /// of its own capacity. A `&mut` one counts only at statement position,
-    /// where a frame performs the write; elsewhere the projection merely reads
-    /// the call. A callee the map does not hold exempts nothing.
-    fn collect_call_reaches(
-        &mut self,
-        body: &Body,
-        callees: Option<&CalleeMap>,
-        performed: &IndexSet<ExprId>,
-    ) {
-        let Some(callees) = callees else {
-            return;
-        };
-        for (e, node) in &body.exprs {
-            let ExprKind::Call { func_id, args, .. } = &node.kind else {
-                continue;
-            };
-            let Some(callee) = callees.get(func_id) else {
-                continue;
-            };
-            if args.len() != callee.arity() {
-                continue;
-            }
-            let at_statement = performed.contains(&e);
-            for (index, arg) in args.iter().enumerate() {
-                match (callee.writes_param(index), at_statement) {
-                    (false, _) if callee.reads_only(index) => {
-                        self.record(body, arg.expr, Reach::Read);
+            if let Some(callee) = facts.callees.and_then(|map| map.get(func_id))
+                && args.len() == callee.arity()
+            {
+                for (index, arg) in args.iter().enumerate() {
+                    if callee.writes_param(index) {
+                        reached.record(body, arg.expr, Reach::Write);
                     }
-                    (true, true) => self.record(body, arg.expr, Reach::Write),
-                    (false, _) | (true, false) => {}
                 }
             }
         }
+        reached
     }
 
     /// Both directions of the mention check go through [`peel_wrappers`], so a
     /// mention recorded at a cast still matches the reference the disqualification
     /// walk asks about.
     fn covers(&self, body: &Body, op: Operand) -> bool {
-        let Some(e) = peel_wrappers(body, op) else {
-            return false;
-        };
-        self.reads.contains(&e) || self.writes.contains(&e)
+        peel_wrappers(body, op).is_some_and(|e| self.reaches(e))
+    }
+
+    /// Whether `e`, as recorded, is reached.
+    fn reaches(&self, e: ExprId) -> bool {
+        self.arena.places.contains(e) || self.reads.contains(e) || self.writes.contains(e)
     }
 
     /// Records the place `op` names.
@@ -273,8 +335,8 @@ enum Reach {
 /// the others, so an untaught node kind costs a fold and never a wrong one.
 ///
 /// The two sides scan different populations. Mentions and disqualifications come
-/// from the reachable body alone, an orphaned mention being unable to run. Two
-/// `value_reads` sources sweep the whole arena instead: an in-place rewrite
+/// from the reachable body alone, an orphaned mention being unable to run. The
+/// reads [`ArenaReads`] holds sweep the whole arena instead: an in-place rewrite
 /// shares ids between a live node and the displaced parent that held it, so a
 /// mention's only witness may sit in a node nothing live refers to.
 pub(super) fn aggregate_safe_locals(
@@ -301,12 +363,12 @@ pub(super) fn aggregate_safe_locals(
             set.insert(index);
         }
     };
-    fn read_value(op: Operand, reads: &mut IndexSet<ExprId>) {
+    fn read_value(op: Operand, reads: &mut EntitySet<ExprId>) {
         if let Some(e) = op.as_expr() {
             reads.insert(e);
         }
     }
-    let mut value_reads: IndexSet<ExprId> = IndexSet::default();
+    let mut value_reads = EntitySet::with_capacity(body.exprs.len());
     let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
     let mut disqualified = LocalSet::default();
     let projected = projected_borrows(body);
@@ -344,7 +406,7 @@ pub(super) fn aggregate_safe_locals(
                 // A store the frame performs replaces a value. Over a reference
                 // it would repoint an alias instead, which stays a disqualifying
                 // mention.
-                if !reached.place_assigns.contains(&e) {
+                if !reached.place_assigns.contains(e) {
                     disqualify_root(body, (*target).into(), &mut disqualified);
                 } else if !type_table.is_reference(body.exprs[*target].type_id) {
                     read_value((*target).into(), &mut value_reads);
@@ -375,26 +437,11 @@ pub(super) fn aggregate_safe_locals(
             _ => {}
         }
     }
-    for (_, stmt) in &body.stmts {
-        match &stmt.kind {
-            StmtKind::Return { value: Some(op) }
-            | StmtKind::Break {
-                value: Some(op), ..
-            } => {
-                read_value(*op, &mut value_reads);
-            }
-            StmtKind::Let {
-                value: Some(op), ..
-            }
-            | StmtKind::Expr(op) => {
-                read_value(*op, &mut value_reads);
-            }
-            _ => {}
-        }
-    }
-    value_reads.extend(reached.reads.iter().chain(&reached.writes).copied());
     for (e, index) in &local_mentions {
-        if !value_reads.contains(e) {
+        if !value_reads.contains(*e)
+            && !reached.arena.stmt_operands.contains(*e)
+            && !reached.reaches(*e)
+        {
             compiler_trace!(
                 "region_seed",
                 "not aggregate-safe: local {index} mentioned at {e:?} outside a read position"
@@ -435,7 +482,7 @@ pub(super) fn clobbered_locals(
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Assign { target, .. } => {
-                if !reached.place_assigns.contains(&e) {
+                if !reached.place_assigns.contains(e) {
                     disqualify(body, (*target).into(), &mut set);
                 }
             }
@@ -710,9 +757,14 @@ pub(super) struct Trackability {
 
 impl Trackability {
     /// For a compile-time frame, which performs the writes it walks.
-    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, type_table: &TypeTable) -> Self {
+    pub(super) fn in_frame(
+        body: &Body,
+        facts: ProgramFacts<'_>,
+        arena: &ArenaReads,
+        type_table: &TypeTable,
+    ) -> Self {
         let reassigned = reassigned_locals(body);
-        let reached = Reached::in_frame(body, facts, &reassigned, type_table);
+        let reached = Reached::in_frame(body, facts, arena, &reassigned, type_table);
         let const_views = const_view_locals(body, facts, &reassigned);
         Self {
             aggregate_locals: aggregate_safe_locals(body, &reached, type_table, &const_views),
@@ -728,9 +780,10 @@ impl Trackability {
     pub(super) fn outside_frame(
         body: &Body,
         facts: ProgramFacts<'_>,
+        arena: &ArenaReads,
         type_table: &TypeTable,
     ) -> Self {
-        let reached = Reached::outside_frame(body, facts);
+        let reached = Reached::outside_frame(body, facts, arena);
         let reassigned = reassigned_locals(body);
         let const_views = const_view_locals(body, facts, &reassigned);
         Self {

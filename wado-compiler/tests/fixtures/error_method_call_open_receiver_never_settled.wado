@@ -1,0 +1,35 @@
+// The selection waits for `T`, and nothing settles it, so the call asks for
+// an annotation once the body ends, and `T` reports nothing more.
+struct Bx<T> {
+    v: List<T>,
+}
+
+fn mk<T>() -> Bx<T> {
+    return Bx { v: [] };
+}
+
+trait Me with () {
+    fn me(&self) -> Self;
+}
+
+impl Me for Bx<u64> {
+    fn me(&self) -> Self {
+        return Bx { v: [] };
+    }
+}
+
+impl Me for Bx<i64> {
+    fn me(&self) -> Self {
+        return Bx { v: [] };
+    }
+}
+
+export fn run() {
+    let _c = mk().me();
+}
+
+__DATA__
+{
+    "compile_error": ":28:14: analysis error: cannot infer `Bx<T>` far enough to choose which `me` this calls; annotate it",
+    "compile_error_count": 1
+}
