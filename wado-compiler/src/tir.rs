@@ -2900,6 +2900,8 @@ pub struct DeclarationShape {
     pub immediate_params: IndexSet<usize>,
     /// It returns neither `()` nor `!`.
     pub returns_value: bool,
+    /// It returns `&` or `&mut`.
+    pub returns_reference: bool,
     /// It returns `&mut`.
     pub returns_mut_ref: bool,
     /// The declaration returns `!`, so every call ends in a trap.
@@ -2931,6 +2933,7 @@ impl DeclarationShape {
             mut_params: positions(params, |p| p.is_mut_ref),
             immediate_params,
             returns_value: ret.returns_value,
+            returns_reference: ret.is_reference,
             returns_mut_ref: ret.is_mut_ref,
             returns_never: ret.is_never,
         }
@@ -2966,6 +2969,10 @@ pub struct BuiltinDeclaration {
     pub immediate_params: IndexSet<usize>,
     /// The array parameter whose one element the call reaches, and how.
     pub element_access: Option<(usize, ArrayElementAccess)>,
+    /// The declared return type is a reference, so a `part_of_args` result
+    /// names part of what the argument names. A type parameter instantiated
+    /// with a reference returns the value read out of that part instead.
+    pub returns_reference: bool,
     /// Every call ends in a trap, as a `!` return states.
     pub never_returns: bool,
     /// No parameter's type can carry storage, so the call is handed nothing it
@@ -3053,6 +3060,7 @@ impl BuiltinDeclaration {
             ranged_params,
             immediate_params: shape.immediate_params,
             element_access,
+            returns_reference: shape.returns_reference,
             never_returns: shape.returns_never,
             handed_no_storage,
         }

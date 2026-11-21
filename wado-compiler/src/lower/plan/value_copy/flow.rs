@@ -926,10 +926,10 @@ impl<'p, 'a> Body<'p, 'a> {
     fn builtin_call(
         &mut self,
         decl: &BuiltinDeclaration,
-        returns_reference: bool,
         args: &[&TirExpr],
         storage: u32,
     ) -> Option<u32> {
+        let returns_reference = decl.returns_reference;
         let handed: Vec<Option<u32>> = args
             .iter()
             .enumerate()
@@ -1349,7 +1349,7 @@ impl<'p, 'a> Body<'p, 'a> {
                 self.call_storage.insert(key(expr), storage);
                 let args: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 if let Some(decl) = self.package.builtins.get(&**func) {
-                    return self.builtin_call(decl, tt.is_reference(expr.type_id), &args, storage);
+                    return self.builtin_call(decl, &args, storage);
                 }
                 match self.package.functions.id(&func.module_source, &func.name) {
                     Some(id) => self.call(id, &args, storage),

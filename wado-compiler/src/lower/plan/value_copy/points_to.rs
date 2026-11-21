@@ -1568,7 +1568,6 @@ impl Builder<'_> {
     fn builtin_call(
         &mut self,
         decl: &BuiltinDeclaration,
-        returns_reference: bool,
         args: &[&TirExpr],
     ) -> Option<u32> {
         let handed: Vec<Option<u32>> = args
@@ -1590,7 +1589,7 @@ impl Builder<'_> {
         if let Some(ReturnConvention::PartOf(params)) = &decl.returns {
             for &p in params {
                 let Some(h) = handed[p] else { continue };
-                if self.type_table.is_reference(args[p].type_id) && !returns_reference {
+                if self.type_table.is_reference(args[p].type_id) && !decl.returns_reference {
                     self.g.load(h, result);
                 } else {
                     self.g.copy(h, result);
@@ -1825,8 +1824,7 @@ impl Builder<'_> {
                 let mut args = args.iter().map(|a| &a.expr);
                 if let Some(decl) = self.builtins.get(&**func) {
                     let args: Vec<&TirExpr> = args.collect();
-                    let returns_reference = self.type_table.is_reference(expr.type_id);
-                    return self.builtin_call(decl, returns_reference, &args);
+                    return self.builtin_call(decl, &args);
                 }
                 match self.functions.id(&func.module_source, &func.name) {
                     Some(id) => self.call(id, &mut args),
