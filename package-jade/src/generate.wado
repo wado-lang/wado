@@ -5,6 +5,7 @@
 use { apply_case } from "core:serde";
 use { HashMap, HashSet } from "core:collections";
 use { to_string } from "core:json";
+use { Uri } from "core:uri";
 use { percent_decode } from "core:url";
 use {
     CodeWriter,
@@ -25,13 +26,33 @@ use {
 use { Node } from "./document.wado";
 use { JsonSchema, SchemaGenerator } from "./derive.wado";
 use { JsonTypes, Schema, SchemaError, SchemaObject, pointer_token } from "./schema.wado";
+use { CompileError, DEFAULT_BASE, SchemaSet } from "./validate.wado";
 
 /// Where the root's name comes from when it declares a type: `root` first,
-/// then its `title`, then `file_stem`.
+/// then its `title`, then the name of the file it was read from.
 pub struct GenerateOptions {
     pub root: Option<String> = null,
-    /// The name of the file the schema was read from, its extensions left out.
-    pub file_stem: Option<String> = null,
+}
+
+/// Why a schema generates no module.
+pub variant GenerateError {
+    /// A document breaks a rule of Draft 2020-12, or a reference names a
+    /// document nobody supplied.
+    Invalid(CompileError),
+    /// A keyword or a name has no Wado declaration.
+    Unsupported(SchemaError),
+}
+
+impl Display for GenerateError {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            Invalid(e) => e.fmt(f),
+            Unsupported(e) => e.fmt(f),
+        }
+    }
+}
+
+impl Error for GenerateError {
 }
 
 /// The module declaring the types `schema` describes, headed by `module`. Each
@@ -42,30 +63,30 @@ pub fn generate(
     schema: &Schema,
     module: &ModuleSpec,
     options: GenerateOptions = GenerateOptions {},
-) -> Result<String, SchemaError> {
-    let mut root = schema.into_object();
-    let defs = root.defs;
-    root.dialect = null;
-    root.defs = HashMap::new();
-    let mut gen = Gen {};
-    for let [key, def] of defs.entries() {
-        let name = gen.claim(decl_name(key, &`/$defs/${pointer_token(key)}`)?, &"/$defs")?;
-        gen.defs[*key] = [name, *def];
-    }
-    if assertions(&root) == ["$ref"] {
-        gen.type_of(&Schema::Object(root), &"", &"")?;
-    } else {
-        let Some(name) = root_name(&root, &options)? else {
-            return fail(&"", "has no name: give the `root` option, a `title`, or a file name");
-        };
-        let name = gen.claim(name, &"")?;
-        gen.root = Option::Some(name);
-        gen.declare(name, &Schema::Object(root), &"", doc_of(&root))?;
-    }
-    for let [key, def] of defs.entries() {
-        let at = `/$defs/${pointer_token(key)}`;
-        gen.declare(gen.defs[*key].0, def, &at, doc_of(&def.into_object()))?;
-    }
+) -> Result<String, GenerateError> {
+    let base = Uri::from_str(&DEFAULT_BASE).unwrap();
+    let mut set = SchemaSet::new();
+    set.insert(base, *schema);
+    return generate_in(&set, &base, module, options);
+}
+
+/// The module declaring the types the document `set` holds under `uri`
+/// describes, as `generate` writes it, and those of the other documents' that
+/// its references reach. A reference resolves among the documents of `set`,
+/// as `Validator::compile_in` resolves it, and names a document's root or one
+/// of its `$defs`. A document's root is named by its `title`, or else by the
+/// name of the file its URI names.
+pub fn generate_in(
+    set: &SchemaSet,
+    uri: &Uri,
+    module: &ModuleSpec,
+    options: GenerateOptions = GenerateOptions {},
+) -> Result<String, GenerateError>
+    contract set.holds(uri), "`uri` must name a document the set holds"
+{
+    let targets = set.reference_targets(uri).map_err(|e| GenerateError::Invalid(e))?;
+    let mut gen = Gen { set: *set, targets };
+    gen.start(uri, &options).map_err(|e| GenerateError::Unsupported(e))?;
     let mut w = CodeWriter::new();
     module.emit(&mut w);
     for let line of gen.imports.sorted() {
@@ -76,19 +97,25 @@ pub fn generate(
     return Result::Ok(w.to_string());
 }
 
-/// The root's name, from the first source `GenerateOptions` names that holds
-/// one.
-fn root_name(root: &SchemaObject, options: &GenerateOptions) -> Result<Option<String>, SchemaError> {
-    if let Some(name) = &options.root {
+/// A document's root's name, from the first source that holds one: `root`,
+/// its `title`, the name of the file its URI names.
+fn root_name(root: &SchemaObject, uri: &Uri, root_option: &Option<String>) -> Result<Option<String>, SchemaError> {
+    if let Some(name) = root_option {
         return Result::Ok(Option::Some(decl_name(name, &"")?));
     }
     if let Some(title) = &root.title {
         return Result::Ok(Option::Some(decl_name(title, &"/title")?));
     }
-    if let Some(stem) = &options.file_stem {
-        return Result::Ok(Option::Some(decl_name(stem, &"")?));
+    if `${*uri}` == DEFAULT_BASE {
+        return Result::Ok(null);
     }
-    return Result::Ok(null);
+    let text = uri.to_string();
+    let file = text.as_str_slice().slice(text.rfind("/").map(|i| i + 1).unwrap_or(0), text.len());
+    let stem = file.slice(0, file.find(".").unwrap_or(file.len()));
+    let Ok(decoded) = percent_decode(stem) else {
+        return Result::Ok(null);
+    };
+    return Result::Ok(Option::Some(decl_name(&decoded, &"")?));
 }
 
 /// What a value of a generated type is written as, for a field's default.
@@ -113,9 +140,15 @@ struct Ty {
 }
 
 struct Gen {
-    /// Each `$defs` key's Wado name, and its schema.
-    defs: HashMap<String, [String, Schema]> = HashMap::new(),
-    root: Option<String> = null,
+    set: SchemaSet,
+    /// `SchemaSet::reference_targets` of the primary document.
+    targets: HashMap<String, String>,
+    /// The document being read.
+    doc: Uri = Uri::from_str(&DEFAULT_BASE).unwrap(),
+    /// The Wado name of each schema declared, by its `uri#pointer`.
+    names: HashMap<String, String> = HashMap::new(),
+    /// The schemas named and not declared yet, as `[uri#pointer, name]`.
+    pending: List<[String, String]> = [],
     /// The names declared at the module's top level.
     taken: HashSet<String> = HashSet::new(),
     imports: List<String> = [],
@@ -123,6 +156,77 @@ struct Gen {
 }
 
 impl Gen {
+    /// Declares the root of the document under `uri` unless it is only a
+    /// `$ref`, each of its `$defs`, and every schema those reach.
+    fn start(&mut self, uri: &Uri, options: &GenerateOptions) -> Result<(), SchemaError> {
+        self.doc = *uri;
+        let root = self.set.get(uri).unwrap().into_object();
+        let bare = SchemaObject { ..root, dialect: null, defs: HashMap::new() };
+        if assertions(&bare) == ["$ref"] {
+            self.type_of(&Schema::Object(bare), &"", &"")?;
+        } else {
+            let Some(name) = root_name(&root, uri, &options.root)? else {
+                return fail(&"", "has no name: give the `root` option or a `title`");
+            };
+            self.name(`${*uri}#`, name, &"")?;
+        }
+        for let key of root.defs.keys() {
+            let at = `/$defs/${pointer_token(key)}`;
+            self.name(`${*uri}#${at}`, decl_name(key, &at)?, &"/$defs")?;
+        }
+        while !self.pending.is_empty() {
+            let [place, name] = self.pending.remove(0);
+            self.declare_place(&place, name)?;
+        }
+        return Result::Ok(());
+    }
+
+    /// Claims `name` for the schema at `place`, to be declared in turn, unless
+    /// a reference named it first.
+    fn name(&mut self, place: String, name: String, at: &String) -> Result<String, SchemaError> {
+        if let Some(named) = self.names.get(place) {
+            return Result::Ok(named);
+        }
+        let claimed = self.claim(name, at)?;
+        self.names[place] = claimed;
+        self.pending.push([place, claimed]);
+        return Result::Ok(claimed);
+    }
+
+    /// The document holding `place`, and the JSON Pointer to it there.
+    fn split(place: &String) -> [Uri, String] {
+        let hash = place.find("#").unwrap();
+        return [
+            Uri::from_str(place.substr_bytes(0, hash)).unwrap(),
+            place.substr_bytes(hash + 1, place.len()),
+        ];
+    }
+
+    /// The schema at `place`, a document's root or one of its `$defs`.
+    fn schema_at(&self, place: &String) -> Option<Schema> {
+        let [uri, at] = Gen::split(place);
+        let root = self.set.get(&uri)?;
+        if at.is_empty() {
+            let o = root.into_object();
+            return Option::Some(Schema::Object(SchemaObject { ..o, dialect: null, defs: HashMap::new() }));
+        }
+        return root.into_object().defs.get(def_key(&at)?);
+    }
+
+    /// Declares the schema at `place` as `name`, its errors placed in its
+    /// document.
+    fn declare_place(&mut self, place: &String, name: String) -> Result<(), SchemaError> {
+        let [uri, at] = Gen::split(place);
+        let s = self.schema_at(place).unwrap();
+        self.doc = uri;
+        return self.declare(name, &s, &at, doc_of(&s.into_object())).map_err(|e| {
+            if e.uri matches { null } && `${uri}` != DEFAULT_BASE {
+                return SchemaError { ..e, uri: Option::Some(uri) };
+            }
+            return e;
+        });
+    }
+
     /// `name` for a declaration at the top level, which no other may take.
     fn claim(&mut self, name: String, at: &String) -> Result<String, SchemaError> {
         if !self.taken.insert(name) {
@@ -200,9 +304,9 @@ impl Gen {
         if let Some(leaf) = leaf_of(&o) {
             return Result::Ok(leaf);
         }
-        if let Some(r) = &o.reference {
+        if o.reference matches { Some(_) } {
             only(&keys, ["$ref"], at)?;
-            return self.resolve(r, at);
+            return self.resolve(at);
         }
         if let Some(ty) = self.wado_format(&o) {
             return Result::Ok(ty);
@@ -354,24 +458,29 @@ impl Gen {
         return Ty { text: name };
     }
 
-    /// The declaration `$ref`'s `r` names: one of the root's `$defs`, or the
-    /// root itself.
-    fn resolve(&self, r: &String, at: &String) -> Result<Ty, SchemaError> {
-        if *r == "#" && let Some(root) = &self.root {
-            return Result::Ok(Ty { text: *root });
-        }
-        let prefix = "#/$defs/";
-        let view = r.as_str_slice();
-        if view.starts_with(prefix) {
-            let token = view.slice(prefix.len(), view.len());
-            if !token.contains("/") && let Ok(decoded) = percent_decode(token) {
-                let key = decoded.replace("~1", "/").replace("~0", "~");
-                if let Some([name, def]) = self.defs.get(key) {
-                    return Result::Ok(self.named(name, &def.into_object()));
-                }
-            }
-        }
-        return fail(&`${*at}/$ref`, "names no entry of the root's `$defs`, the one reference D resolves");
+    /// The declaration the `$ref` at `at` names: a document's root or one of
+    /// its `$defs`, named the first time a reference reaches it.
+    fn resolve(&mut self, at: &String) -> Result<Ty, SchemaError> {
+        let place = self.targets[`${self.doc}#${*at}`];
+        let Some(s) = self.schema_at(&place) else {
+            return fail(&`${*at}/$ref`, "names neither a document's root nor one of its `$defs`, which D declares");
+        };
+        let here = `${*at}/$ref`;
+        let name = match self.names.get(place) {
+            Some(n) => n,
+            null => {
+                let [uri, pointer] = Gen::split(&place);
+                let named = match def_key(&pointer) {
+                    Some(key) => Option::Some(decl_name(&key, &here)?),
+                    null => root_name(&s.into_object(), &uri, &null)?,
+                };
+                let Some(n) = named else {
+                    return fail(&here, "names a document's root, which has no name: give it a `title`");
+                };
+                self.name(place, n, &here)?;
+            },
+        };
+        return Result::Ok(self.named(name, &s.into_object()));
     }
 
     fn struct_decl(
@@ -580,6 +689,16 @@ impl Gen {
         let json = to_string(&node.to_document()).unwrap();
         return wado`${self.namespace("core:json")}::from_string::<${ty.text}>("${json}").unwrap()`;
     }
+}
+
+/// The `$defs` key the JSON Pointer `at` names an entry of a document's root
+/// by, or `null` where it points anywhere else.
+fn def_key(at: &String) -> Option<String> {
+    let rest = at.as_str_slice().strip_prefix("/$defs/")?;
+    if rest.contains("/") {
+        return null;
+    }
+    return Option::Some(rest.to_string().replace("~1", "/").replace("~0", "~"));
 }
 
 /// The keywords of `o` that assert, as D reads them: an annotation reads as

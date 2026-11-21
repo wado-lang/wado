@@ -49,6 +49,21 @@ let schema = Schema::parse(#"{"title": "Point", "type": "object", "properties": 
 let source = generate(&schema, &ModuleSpec::new("my-script", ["point.schema.json"])).unwrap();
 ```
 
+As a Kiln generator, Jade turns an imported schema into that module. A schema
+whose `$ref` names another file lists the file under `inputs`. The package names
+Jade under `[build-dependencies]`, and the code needs nothing of Jade's at run
+time.
+
+```wado
+use { Order } from "./order.schema.json"
+    with {
+        generator: {
+            module: "lib:jade",
+            inputs: ["./address.schema.json"],
+        },
+    };
+```
+
 ## Formats
 
 Jade treats `format` strictly. A format means what Draft 2020-12 defines, by

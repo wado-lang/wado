@@ -1,0 +1,34 @@
+//! A schema imported through Jade's Kiln generator, with a `$ref` into each of
+//! two other files its `inputs` list.
+
+use { Address, LineItem, Order, OrderStatus } from "./schemas/order.schema.json"
+    with {
+        generator: {
+            module: "lib:jade",
+            inputs: ["./schemas/address.schema.json", "./schemas/common/line.schema.json"],
+        },
+    };
+use { from_string, to_string } from "core:json";
+
+test "a document decodes into the generated types and is written back" {
+    let text = ##"{"id":"0190b7a2-3c1e-7d4f-8a6b-1c2d3e4f5a6b","shipTo":{"street":"1 Main","zip":"100"},"lines":[{"sku":"a","quantity":2}],"status":"shipped"}"##;
+    let order = from_string::<Order>(text).unwrap();
+    assert order.ship_to.zip == "100";
+    assert order.lines[0].quantity == 2;
+    assert order.status matches { _::Shipped };
+    assert to_string(&order).unwrap() == ##"{"id":"0190b7a2-3c1e-7d4f-8a6b-1c2d3e4f5a6b","shipTo":{"street":"1 Main","zip":"100"},"lines":[{"sku":"a","quantity":2}],"status":"shipped","note":null}"##;
+}
+
+test "a value built from the generated types is written as the schema describes" {
+    let order = from_string::<Order>(
+        ##"{"id":"0190b7a2-3c1e-7d4f-8a6b-1c2d3e4f5a6b","shipTo":{"street":"s","zip":"z"},"lines":[]}"##,
+    ).unwrap();
+    let line = LineItem { sku: "b", quantity: 1 };
+    let moved = Order {
+        ..order,
+        ship_to: Address { street: "t", zip: "y" },
+        lines: [line],
+    };
+    assert moved.status matches { _::Pending };
+    assert to_string(&moved.lines).unwrap() == ##"[{"sku":"b","quantity":1}]"##;
+}

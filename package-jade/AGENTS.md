@@ -40,8 +40,10 @@ JSON Schema forbids an `x-` keyword from affecting evaluation.
   documents, and `SchemaSet`, the documents its references reach.
 - `src/format.wado` — the formats a validator asserts when compiled to.
 - `src/generate.wado` — `generate`, Wado declarations written from a schema.
-- `tests/roundtrip/` — a package depending on Jade, so a program it evaluates
-  can call `schema_for` on the types `generate` writes.
+- `src/generator.wado` — the Kiln generator around `generate`.
+- `tests/roundtrip/` — a package that uses Jade as a consumer does: it imports
+  schemas through the generator, and a program it evaluates can call
+  `schema_for` on the types `generate` writes.
 - `meta/` — Draft 2020-12's meta-schemas as json-schema.org serves them, under
   the specification's license. A reference reaches them without their being
   supplied.

@@ -1,10 +1,17 @@
-# Jade as a consumer uses it: a test here evaluates the types D generates
-# with `schema_for` in scope, which a program evaluated from Jade's own tests
-# cannot import.
+# Jade as a consumer uses it: the generator a build dependency, and the
+# library an ordinary one, so a program a test evaluates can call
+# `schema_for` on the types `generate` writes.
 [package]
 name = "jade-roundtrip"
 version = "0.0.0"
 
+[build-dependencies]
+"lib:jade" = { path = "../.." }
+
 [dependencies]
 "lib:jade" = { path = "../.." }
 "lib:wadopoet" = { path = "../../../package-wadopoet" }
+
+[test]
+# Kiln intermediates are not standalone source files.
+exclude = ["build/**"]

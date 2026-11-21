@@ -1,4 +1,5 @@
-use { GenerateOptions, Schema, generate } from "../src/lib.wado";
+use { GenerateError, GenerateOptions, Schema, SchemaSet, generate, generate_in } from "../src/lib.wado";
+use { Uri } from "core:uri";
 use { eval, EvalHost } from "core:eval";
 use { ModuleSpec, wado } from "lib:wadopoet";
 
@@ -86,17 +87,76 @@ test "a generated struct reads and writes its JSON" {
     assert reread(schema, "CreateUserV2", text) == ##"{"userName":"ann","tags":["b","a"],"address":{"zip":"1"},"nick":null}"##;
 }
 
+/// What `generate_in` writes for the documents `files`, each `[path, text]`,
+/// the first the primary, each under a `file:` URI.
+fn generated_files(
+    files: List<[String, String]>,
+    options: GenerateOptions = GenerateOptions {},
+) -> Result<String, GenerateError> {
+    let mut set = SchemaSet::new();
+    for let [path, text] of &files {
+        set.insert(Uri::from_str(`file:///${*path}`).unwrap(), Schema::parse(*text).unwrap());
+    }
+    return generate_in(&set, &Uri::from_str(`file:///${files[0].0}`).unwrap(), &module(), options);
+}
+
 test "the root takes the root option before its title, and its title before the file's name" {
     let schema = ##"{"title": "Titled", "type": "string"}"##;
-    assert generated(schema, GenerateOptions {
-        root: Option::Some("given name"),
-        file_stem: Option::Some("file"),
-    }).contains("pub type GivenName = String;");
-    assert generated(schema, GenerateOptions { file_stem: Option::Some("file") }).contains("pub type Titled = String;");
-    assert generated(##"{"type": "string"}"##, GenerateOptions { file_stem: Option::Some("create-user") }).contains(
-        "pub type CreateUser = String;",
-    );
-    assert refused(##"{"type": "string"}"##) == "has no name: give the `root` option, a `title`, or a file name";
+    let file: List<[String, String]> = [
+        ["dir/file.schema.json", schema],
+    ];
+    assert generated_files(file, GenerateOptions { root: Option::Some("given name") })
+        .unwrap()
+        .contains("pub type GivenName = String;");
+    assert generated_files(file).unwrap().contains("pub type Titled = String;");
+    assert generated_files([
+        ["create-user.schema.json", ##"{"type": "string"}"##],
+    ])
+        .unwrap()
+        .contains("pub type CreateUser = String;");
+    assert refused(##"{"type": "string"}"##) == "has no name: give the `root` option or a `title`";
+}
+
+test "a reference to another document declares what it reaches there" {
+    let api = ##"{
+        "title": "Order",
+        "type": "object",
+        "properties": {
+            "to": {"$ref": "./address.schema.json"},
+            "items": {"type": "array", "items": {"$ref": "common/item.json#/$defs/Line%20item"}}
+        },
+        "required": ["to", "items"]
+    }"##;
+    let address = ##"{"type": "object", "properties": {"zip": {"type": "string"}}, "required": ["zip"]}"##;
+    let item = ##"{"$defs": {"Line item": {"type": "object", "properties": {"sku": {"type": "string"}}, "required": ["sku"]}, "Unused": {"type": "string"}}}"##;
+    let out = generated_files([
+        ["api/order.schema.json", api],
+        ["api/address.schema.json", address],
+        ["api/common/item.json", item],
+    ]).unwrap();
+    assert out.contains("pub struct Order {\n    pub to: Address,\n    pub items: List<LineItem>,\n}");
+    assert out.contains("pub struct Address {");
+    assert out.contains("pub struct LineItem {");
+    assert !out.contains("Unused");
+}
+
+test "a reference to a document nobody supplied is refused" {
+    let Err(e) = generated_files([
+        ["a.json", ##"{"$ref": "b.json"}"##],
+    ]) else {
+        panic("the schema generates");
+    };
+    assert `${e}` == "file:///a.json#/$ref: refers to file:///b.json, a document nobody supplied";
+}
+
+test "an error in another document names it" {
+    let Err(e) = generated_files([
+        ["a.json", ##"{"$ref": "b.json"}"##],
+        ["b.json", ##"{"title": "B", "type": "string", "maxLength": 1}"##],
+    ]) else {
+        panic("the schema generates");
+    };
+    assert `${e}` == "file:///b.json#/maxLength: has no Wado type D generates";
 }
 
 test "a reserved field name takes a suffix, and its wire name back" {
@@ -158,9 +218,9 @@ test "a keyword D reads no type from is refused at its pointer" {
     assert refused(schema) == "/$defs/Name/maxLength: has no Wado type D generates";
 }
 
-test "a reference to anything but a definition is refused" {
-    let schema = ##"{"$ref": "other.json#/$defs/A"}"##;
-    assert refused(schema) == "/$ref: names no entry of the root's `$defs`, the one reference D resolves";
+test "a reference to neither a root nor a definition is refused" {
+    let schema = ##"{"$defs": {"A": {"title": "A", "type": "array", "items": {"type": "string"}}}, "$ref": "#/$defs/A/items"}"##;
+    assert refused(schema) == "/$ref: names neither a document's root nor one of its `$defs`, which D declares";
 }
 
 test "two names converting to one Wado name are refused" {
