@@ -203,8 +203,10 @@ let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not th
 
 A function's parameters share the body's scope, so a `let` taking a parameter's
 name redeclares it, and so does a parameter named twice. One pattern binding a
-name twice is a redeclaration too. Only a name that binds counts: the operand
-of `==` and a range bound name a constant and bind nothing.
+name twice is a redeclaration too. Only a name that binds counts, and in a
+pattern that is a bare identifier
+([Patterns](./spec-patterns.md#pattern-syntax)): a case, `null` and a constant
+bind nothing.
 
 A binder that takes a name already reaching a symbol, without deriving its value
 from that name as above, is legal, and the

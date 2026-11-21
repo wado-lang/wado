@@ -2084,8 +2084,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|(n, _, t)| (n.as_str(), *t))
                         .collect();
 
-                    // Over an ERROR scrutinee a bare case name reads as a
-                    // binding, so the names compare nothing.
+                    // Over an ERROR scrutinee the bindings' types are
+                    // unknown, so the names compare nothing.
                     if scrutinee_type != TypeTable::ERROR && first_names != alt_names {
                         let shown = |names: &[(&str, tir::TypeId)]| {
                             if names.is_empty() {
