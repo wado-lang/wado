@@ -63,8 +63,10 @@ effect row is not yet known, and the effect check solves it.
   receiver's argument. A closure literal's type takes a fresh one for its row.
 - The type check and impl target matching let a row holding an effect
   parameter or a variable meet any row. The trait solver does so for a
-  parameter, and reads a variable as the empty row, so a closure literal
-  selects one impl rather than every impl of its signature. A bound asked of a
+  parameter. It reads a closure literal's variable as what the body performs,
+  solved once the body is elaborated, and any other variable as the empty row,
+  so a closure literal selects one impl rather than every impl of its
+  signature. A bound asked of a
   type holding a variable, or at trait arguments holding one, is asked again
   once the effect check has solved it, and is unmet if no impl answers the
   solved row.
@@ -124,15 +126,3 @@ effect row is not yet known, and the effect check solves it.
 8. [x] A function generic over an effect is taken as a value: the expected
    `fn(...)` type settles its effect parameters as it settles its type
    parameters. `effect_generic_fn_as_value.wado` holds it.
-
-## Known gaps
-
-- The elaborator selects an impl for a closure literal's function type before
-  the effect check has solved its row, and takes the row to be empty. Where
-  impls exist for the same signature with and without an effect, a closure
-  performing that effect is dispatched to the pure one, while the effect check
-  reads the one its row names.
-- An associated type a bound reaches through a closure literal's impl is
-  resolved from the empty row too. Where only an impl for an effectful
-  signature answers, `T::Out` stays unresolved, and only an annotation on the
-  result (`let x: i32 = go(&h)`) lets the call compile.

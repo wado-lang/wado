@@ -31,11 +31,44 @@ use crate::token::{Delimiter, Quote, Span};
 
 use crate::tir::{
     AnonShape, AssocParamId, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE,
-    ResolvedType, RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole,
+    ResolvedType, RowClosing, RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole,
     TemplateShape, TirExpr, TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap,
     TypeId, TypeParamId, is_open_row, positional_substitution, projection_arguments, range_item,
     slots_from_impl_args, solve_row,
 };
+
+/// The effect variables a question read, noted behind a shared reference: a
+/// question reads the table without writing it.
+#[derive(Debug, Default)]
+struct ReadVars(std::sync::Mutex<IndexSet<String>>);
+
+impl ReadVars {
+    fn note(&self, var: &str) {
+        self.0
+            .lock()
+            .expect("no reader panics holding it")
+            .insert(var.to_string());
+    }
+
+    fn all(&self) -> IndexSet<String> {
+        self.0.lock().expect("no reader panics holding it").clone()
+    }
+
+    fn count(&self) -> usize {
+        self.0.lock().expect("no reader panics holding it").len()
+    }
+
+    fn since(&self, count: usize) -> Vec<String> {
+        let read = self.0.lock().expect("no reader panics holding it");
+        read.iter().skip(count).cloned().collect()
+    }
+}
+
+impl Clone for ReadVars {
+    fn clone(&self) -> Self {
+        Self(std::sync::Mutex::new(self.all()))
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct TypeTable {
@@ -56,6 +89,13 @@ pub struct TypeTable {
     /// Whether the effect check has solved the variables, after which a use
     /// mints none: no check is left to solve it.
     effect_vars_solved: bool,
+    /// What each effect row variable is solved to while the bodies are walked:
+    /// a closure literal's, once its body is.
+    early_effect_rows: EffectRows,
+    /// The variables of [`Self::early_effect_rows`] a question has read.
+    read_effect_vars: ReadVars,
+    /// Where each variable of [`Self::read_effect_vars`] was first read.
+    effect_row_closings: IndexMap<String, RowClosing>,
     /// Where a function value whose row holds a variable moved into a slot,
     /// which the type check admits unbounded and the effect check bounds.
     row_flows: IndexSet<RowFlow>,
@@ -279,6 +319,9 @@ impl TypeTable {
             assoc_param_names: IndexMap::default(),
             next_effect_var: 0,
             effect_vars_solved: false,
+            early_effect_rows: EffectRows::default(),
+            read_effect_vars: ReadVars::default(),
+            effect_row_closings: IndexMap::default(),
             row_flows: IndexSet::default(),
             compiler_items: CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
@@ -3410,6 +3453,55 @@ impl TypeTable {
         }
     }
 
+    /// Solve `var` to `row` while the bodies are walked. A variable is solved
+    /// once, before any question reads it.
+    pub fn solve_effect_var(&mut self, var: &str, row: Vec<EffectRef>) {
+        let previous = self.early_effect_rows.insert(var.to_string(), row);
+        assert!(previous.is_none(), "a row variable is solved once");
+    }
+
+    /// What each effect row variable is solved to while the bodies are walked.
+    pub fn early_effect_rows(&self) -> &EffectRows {
+        &self.early_effect_rows
+    }
+
+    /// `effects` with each variable solved so far replaced by its solution,
+    /// noted as read: a question answered from it holds only if the solution
+    /// stays what it was.
+    pub fn read_effect_row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
+        solve_row(effects, &self.early_effect_rows, &mut |var| {
+            if self.early_effect_rows.contains_key(var) {
+                self.read_effect_vars.note(var);
+            }
+        })
+    }
+
+    /// How many variables a question has read so far, to pass to
+    /// [`Self::close_effect_rows_read_since`].
+    pub fn effect_vars_read(&self) -> usize {
+        self.read_effect_vars.count()
+    }
+
+    /// Close at `closing` each variable first read after `count` were.
+    pub fn close_effect_rows_read_since(&mut self, count: usize, closing: &RowClosing) {
+        for var in self.read_effect_vars.since(count) {
+            self.effect_row_closings
+                .entry(var)
+                .or_insert_with(|| closing.clone());
+        }
+    }
+
+    /// Where each variable a question read was closed. Every read variable
+    /// has one.
+    pub fn effect_row_closings(&self) -> &IndexMap<String, RowClosing> {
+        assert_eq!(
+            self.effect_row_closings.len(),
+            self.read_effect_vars.count(),
+            "every read happens while an expression is resolved"
+        );
+        &self.effect_row_closings
+    }
+
     /// Record the slot `id` stands for, for diagnostics. Called on every mint,
     /// `None` included: ids restart per module, so a reused id must not read
     /// its last holder's name.
@@ -4002,6 +4094,25 @@ impl TypeTable {
             }
             ResolvedType::Ref(inner) => InstanceKey::Ref(Box::new(self.instance_key(*inner))),
             ResolvedType::MutRef(inner) => InstanceKey::MutRef(Box::new(self.instance_key(*inner))),
+            // A row solved while the bodies are walked is the row the type
+            // has, so the key is the function type that writes it.
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } if effects
+                .iter()
+                .any(|e| self.early_effect_rows.contains_key(e.name())) =>
+            {
+                let solved = ResolvedType::Function {
+                    is_mut: *is_mut,
+                    params: params.clone(),
+                    return_type: *return_type,
+                    effects: self.read_effect_row(effects),
+                };
+                InstanceKey::Other(self.intern_map.get(&solved).copied().unwrap_or(id))
+            }
             unerased => InstanceKey::Other(self.intern_map.get(unerased).copied().unwrap_or(id)),
         }
     }

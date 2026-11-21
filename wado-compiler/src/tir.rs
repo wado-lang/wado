@@ -2288,6 +2288,15 @@ pub struct RowFlow {
     pub module: String,
 }
 
+/// The expression whose elaboration read an effect variable's early solution,
+/// closing the row at it: a flow may no longer widen it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RowClosing {
+    pub span: Span,
+    /// The source path of the module the expression is written in.
+    pub module: String,
+}
+
 /// `effects` with each variable `rows` solves replaced by its solution, and each
 /// variable in that solution in turn, each effect once. `read` sees every
 /// variable looked up; one with no solution stays as it is.

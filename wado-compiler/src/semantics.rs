@@ -45,6 +45,7 @@ use crate::type_table::TypeTable;
 use crate::unparse::unparse_contract_clause_renamed;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::{ExportMapping, ExportMappings, WorldRegistry, world_key};
+use crate::effect_check::BodyFacts;
 use crate::{ast, load_erased, loader, parse, report_without_span, symbol_notation};
 
 /// A ready-to-query analysis result.
@@ -217,6 +218,17 @@ impl Semantics {
         let Some(state) = &self.state else {
             return Vec::new();
         };
+        {
+            let table = state.tysys.type_table.borrow();
+            for var in table.effect_row_closings().keys() {
+                let early = &table.early_effect_rows()[var];
+                let late = solved.get(var).map(Vec::as_slice).unwrap_or_default();
+                assert!(
+                    early.len() == late.len() && early.iter().all(|e| late.contains(e)),
+                    "a closed row {var} keeps the solution it was read at"
+                );
+            }
+        }
         let rows = state.tysys.type_table.borrow().solved_effect_rows(solved);
         // Asked while a struct's arguments still carry their rows, which an
         // impl's target may write.
@@ -753,21 +765,6 @@ impl Semantics {
         self.expr_types(expr)
             .into_iter()
             .any(|ty| self.reaches_mut_ref(ty))
-    }
-
-    /// Types of `expr`, one per walk that reached it, preferring the type of
-    /// the binding an identifier names, where a parameter or a function-typed
-    /// local has one and the use site does not.
-    pub(crate) fn expr_types(&self, expr: &Expr) -> Vec<TypeId> {
-        if let Expr::Ident(ident) = expr
-            && let Some(def) = self.referenced_symbol(ident.id)
-        {
-            let bound: Vec<TypeId> = self.local_types(def).collect();
-            if !bound.is_empty() {
-                return bound;
-            }
-        }
-        self.expression_types(expr.id()).collect()
     }
 
     /// Where a write to `place` lands once it has gone down every field and

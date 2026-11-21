@@ -365,14 +365,16 @@ impl Lowering {
 
     /// A row of named effects as the solver spells it. One holding an effect
     /// parameter is [`SolverType::AnyRow`]: it stands for whatever row meets
-    /// it. A variable is a row the effect check has yet to solve, so it
-    /// selects nothing here: an impl is chosen as if it performed nothing.
-    fn effect_row(&self, effects: &[EffectRef]) -> SolverType {
+    /// it. A variable is what `table` has it solved to
+    /// ([`TypeTable::read_effect_row`]). One not solved yet selects nothing
+    /// here: an impl is chosen as if it performed nothing.
+    fn effect_row(&self, table: &TypeTable, effects: &[EffectRef]) -> SolverType {
         if effects.iter().any(EffectRef::is_param) {
             return SolverType::AnyRow;
         }
         SolverType::Tuple(
-            effects
+            table
+                .read_effect_row(effects)
                 .iter()
                 .filter(|e| !e.is_var())
                 .map(|e| SolverType::Decl(self.effect_head(e), Vec::new()))
@@ -421,10 +423,15 @@ impl Lowering {
     /// binder heads of the space it is written in.
     fn named_arg(
         &self,
+        table: &TypeTable,
         name: &FqTypeName,
         param: &dyn Fn(&TypeHead) -> Option<ParamKind>,
     ) -> Result<SolverType, Unsaid> {
-        let args = said(name.args().iter().map(|arg| self.named_arg(arg, param)))?;
+        let args = said(
+            name.args()
+                .iter()
+                .map(|arg| self.named_arg(table, arg, param)),
+        )?;
         let pointee = match name.head() {
             binder @ TypeHead::Binder { .. } => param(binder).ok_or(Unsaid::Open)?.spelled()?,
             TypeHead::Tuple => SolverType::Tuple(args),
@@ -441,8 +448,8 @@ impl Lowering {
                 effects,
             } => self.fn_type(
                 *is_mut,
-                said(signature.iter().map(|ty| self.named_arg(ty, param)))?,
-                self.effect_row(effects),
+                said(signature.iter().map(|ty| self.named_arg(table, ty, param)))?,
+                self.effect_row(table, effects),
             ),
             TypeHead::Projection(_) => {
                 let projected = name.projected().expect("a projection head projects");
@@ -452,7 +459,7 @@ impl Lowering {
                     .and_then(|owning| self.known_trait(owning))
                     .ok_or(Unsaid::Unsayable)?;
                 SolverType::Projection {
-                    base: Box::new(self.named_arg(projected.base, param)?),
+                    base: Box::new(self.named_arg(table, projected.base, param)?),
                     trait_,
                     assoc: self
                         .known_assoc(trait_, projected.assoc)
@@ -481,6 +488,7 @@ impl Lowering {
     /// binders its arguments are written in.
     fn bound_named(
         &self,
+        table: &TypeTable,
         named: &FqTraitName,
         param: &dyn Fn(&TypeHead) -> Option<ParamKind>,
     ) -> Result<ParamBound, Unsaid> {
@@ -488,7 +496,12 @@ impl Lowering {
             .canonical()
             .and_then(|def| self.known_trait(def))
             .ok_or(Unsaid::Unsayable)?;
-        let args = said(named.args().iter().map(|arg| self.named_arg(arg, param)))?;
+        let args = said(
+            named
+                .args()
+                .iter()
+                .map(|arg| self.named_arg(table, arg, param)),
+        )?;
         Ok(ParamBound { trait_, args })
     }
 
@@ -768,7 +781,7 @@ impl Lowering {
                         .chain(std::iter::once(return_type))
                         .map(|&a| lower(a)),
                 )?;
-                Ok(self.fn_type(*is_mut, signature, self.effect_row(effects)))
+                Ok(self.fn_type(*is_mut, signature, self.effect_row(table, effects)))
             }
             // `impl Inspect for !` is written in the prelude, so the receiver
             // side names the same shape.
@@ -2106,7 +2119,7 @@ impl SolverBridge {
                 .get(&binder.type_id)
                 .into_iter()
                 .flatten()
-                .map(|declared| self.lowering.bound_named(declared, &named));
+                .map(|declared| self.lowering.bound_named(&table, declared, &named));
             let scoped = binder.bounds.iter().map(|scoped| {
                 let self_type = scoped
                     .self_binding
@@ -2196,9 +2209,9 @@ impl SolverBridge {
         }
         let table = tysys.type_table.borrow();
         let binders = binder_types(ctx);
-        let ParamBound { trait_, args } = self
-            .lowering
-            .bound_named(asked, &place_head(&binders, &table))?;
+        let ParamBound { trait_, args } =
+            self.lowering
+                .bound_named(&table, asked, &place_head(&binders, &table))?;
         Ok(Question {
             env,
             ty,
@@ -2311,7 +2324,7 @@ impl SolverBridge {
                 .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"));
             let ParamBound { trait_, args } = self
                 .lowering
-                .bound_named(asked, &place_head(&binders, &table))
+                .bound_named(&table, asked, &place_head(&binders, &table))
                 .unwrap_or_else(|_| panic!("the bound lowered before its rows were solved"));
             question.trait_ = trait_;
             question.args = args;
@@ -2914,7 +2927,7 @@ impl SolverBridge {
             .iter()
             .map(|arg| {
                 self.lowering
-                    .named_arg(arg, &|_| Some(ParamKind::Type(0)))
+                    .named_arg(table, arg, &|_| Some(ParamKind::Type(0)))
                     .ok()
             })
             .collect::<Option<Vec<_>>>()?;

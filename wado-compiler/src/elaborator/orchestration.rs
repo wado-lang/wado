@@ -533,6 +533,10 @@ pub(crate) struct AnnotateState {
     /// body walks. One set, so a default body lowers alike in each module
     /// that walks it.
     pub(super) transpositions: Rc<IndexMap<AstId, transposition::Clean>>,
+    /// What the effect check reads of the declarations, built once every
+    /// module's declarations resolve, so a body walk can work out what a
+    /// closure literal performs. `None` until then.
+    pub(super) effect_decls: Option<Rc<crate::effect_check::OwnedEffectData>>,
     /// Source-level liveness computed between `annotate_bodies` and `reify`
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
     /// reify item gating and the unused-diagnostics emitter.
@@ -1338,6 +1342,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             interner,
             abstract_selections: Rc::default(),
             transpositions: Rc::default(),
+            effect_decls: None,
             liveness: Liveness::default(),
             coverage: None,
             marks: None,
@@ -1435,6 +1440,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             checked_type_param_defaults: hashmap::IndexMap::default(),
             abstract_selection_cache: Rc::clone(&state.abstract_selections),
             transpositions: Rc::clone(&state.transpositions),
+            effect_decls: state.effect_decls.clone(),
         }
     }
 
@@ -1719,6 +1725,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 && liveness_scope.walks_bodies_of(module_source)
         };
         state.transpositions = Rc::new(transposition::transpositions(modules, walks_bodies_of));
+        let effect_decls = crate::effect_check::OwnedEffectData::build(
+            modules,
+            &state.tysys.type_table.borrow(),
+            state,
+            IndexSet::default(),
+        );
+        state.effect_decls = Some(Rc::new(effect_decls));
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user
         // module to populate `ModuleSemantics`; reify (Phase 2, below) is the

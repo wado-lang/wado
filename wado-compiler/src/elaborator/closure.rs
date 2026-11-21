@@ -6,8 +6,9 @@
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
+use crate::effect_check::{WalkInProgress, closure_row};
 use crate::name::capture_ref_name;
-use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId};
+use crate::tir::{CaptureSource, EffectRef, ResolvedType, TirCapture, TypeId};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -349,13 +350,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Its row is what the body performs, which the effect check works out:
         // a variable here.
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
+        let performed = self.closure_performs(closure);
         let mut table = self.tysys.type_table.borrow_mut();
-        let row = vec![table.mint_effect_var()];
+        let var = table.mint_effect_var();
+        if let Some(performed) = performed {
+            table.solve_effect_var(var.name(), performed);
+        }
+        let row = vec![var];
         let func_type =
             table.make_function_with_mut(any_mutating_capture, param_types, return_type, row);
         drop(table);
 
         ctx.source_bindings.extend(closure_ctx.source_bindings);
         func_type
+    }
+
+    /// What the body of `closure`, just walked, performs, where every row it
+    /// reads is solved.
+    fn closure_performs(&self, closure: &ast::ClosureExpr) -> Option<Vec<EffectRef>> {
+        let decls = self.effect_decls.as_ref()?;
+        let types = self.tysys.type_table.borrow();
+        let facts = WalkInProgress {
+            types: &types,
+            sem: &self.sem,
+        };
+        closure_row(
+            &facts,
+            decls,
+            &self.current_module_source,
+            closure,
+            types.early_effect_rows(),
+        )
     }
 }

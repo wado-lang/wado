@@ -80,16 +80,21 @@ see an effect variable.
 
 Each step keeps every fixture passing and deletes what it replaces.
 
+- [x] A closure literal's row is solved at the end of its body, by the effect
+  check's own walk over what the body has elaborated so far, against an effect
+  index built from the declarations. Selection and associated types read that
+  solution, and a read closes the row at the expression that read it.
+  `fn_type_impl_effectful_closure_picks_effectful_impl.wado` and
+  `fn_type_impl_effectful_closure_assoc_type.wado` pass.
+- [x] A row closed early reports a widening flow
+  (`error_effect_row_widened_after_read.wado`).
 - [ ] The prerequisites in
   [WEP: One Inference Context](./wep-2026-11-20-inference-context.md):
   selection as obligations, and a context per body.
 - [ ] Row variables live in the context, with the inclusions above recorded as
   each body is elaborated. The effect check reads the solution, and agrees
   with its own on every fixture.
-- [ ] Selection and associated types wait for the rows they read.
-  `fn_type_impl_effectful_closure_picks_effectful_impl.wado` and
-  `fn_type_impl_effectful_closure_assoc_type.wado` pass, and
-  `DeferredBound` with its recheck is deleted.
-- [ ] A row closed early reports a widening flow.
+- [ ] Selection and associated types wait for every row they read, a call's
+  row included, and `DeferredBound` with its recheck is deleted.
 - [ ] The effect check solves nothing: `solve_rows` and the write-back are
   deleted.
