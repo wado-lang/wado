@@ -1764,6 +1764,14 @@ impl TraitEnv {
             })
     }
 
+    /// Whether a marker on `receiver` asks for `trait_`'s derived impl.
+    pub(crate) fn has_marker_by_receiver(&self, receiver: &name::Receiver, trait_: DefId) -> bool {
+        self.entries_by_receiver(receiver).any(|entry| {
+            let header = &self.impl_headers[&entry];
+            header.is_synthesize_request && header.trait_def() == Some(trait_)
+        })
+    }
+
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         let header = &self.impl_headers[&entry];
         !header.methods.is_empty() && header.trait_def() == Some(trait_)
