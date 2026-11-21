@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795241708683,
+  "lastUpdate": 1795251638036,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80489,6 +80489,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e3fa3be7d030d7db41ccea964c4dcbc3d1a94396"
         },
         "date": 1795241708211,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e09ac4ef1c2e08a701c3ff17e5f8f8a7c7a562cb",
+          "message": "Merge pull request #2706 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(rill): declare a page as nested children, without `dyn`",
+          "timestamp": "2026-11-21T17:45:30+09:00",
+          "tree_id": "c3a0fed2c5988061812923cd197f2c8c29b45352",
+          "url": "https://github.com/wado-lang/wado/commit/e09ac4ef1c2e08a701c3ff17e5f8f8a7c7a562cb"
+        },
+        "date": 1795251637357,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
