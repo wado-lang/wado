@@ -14,7 +14,9 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::assoc_target_slot;
-use super::pending_selection::{PendingSelection, SelectedDispatch, Undecided};
+use super::pending_selection::{
+    ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
+};
 use super::scope::{ParamRef, ScopeParams};
 use super::solver_bridge::Commitment;
 use super::trait_query::{SelfBinding, spelled_at};
@@ -57,6 +59,9 @@ pub(crate) struct InferHoleTable {
     /// What each pending selection selected, by the id its recorded dispatch
     /// carries; `None` until it is made, and for good where it is reported.
     selections: Vec<Option<SelectedDispatch>>,
+    /// The unrolled tuple `for-of` element being walked, which a selection
+    /// queued now is made into the facts of.
+    pub(super) element_home: Option<ElementHome>,
 }
 
 /// A question a variable left undecided. Asked again whenever a variable
@@ -83,7 +88,7 @@ pub(super) enum Obligation {
     Check(DeferredCheck),
     /// A call that selects its impl once its receiver settles. Asked only once
     /// the body ends, by [`Elaborator::settle_pending_selections`].
-    Pending(PendingSelection),
+    Pending(Waiting),
 }
 
 /// A type check a variable left undecided, and how its mismatch is worded.
@@ -126,6 +131,14 @@ impl InferHoleTable {
         self.obligations.borrow_mut().push(obligation);
     }
 
+    /// Queue `selection`, to be made into the facts of the walk queuing it.
+    pub(super) fn require_pending(&self, selection: PendingSelection) {
+        self.require(Obligation::Pending(Waiting {
+            selection,
+            home: self.element_home,
+        }));
+    }
+
     /// The id of a selection yet to be made.
     pub(super) fn reserve_selection(&mut self) -> usize {
         self.selections.push(None);
@@ -139,7 +152,7 @@ impl InferHoleTable {
 
     /// Take the pending selections out of the queue, in the order they were
     /// owed.
-    pub(super) fn take_pending(&self) -> Vec<PendingSelection> {
+    pub(super) fn take_pending(&self) -> Vec<Waiting> {
         let mut queue = self.obligations.borrow_mut();
         let (pending, rest): (Vec<Obligation>, Vec<Obligation>) = std::mem::take(&mut *queue)
             .into_iter()
@@ -148,7 +161,7 @@ impl InferHoleTable {
         pending
             .into_iter()
             .map(|o| match o {
-                Obligation::Pending(selection) => selection,
+                Obligation::Pending(waiting) => waiting,
                 Obligation::Bound { .. }
                 | Obligation::Projection(_)
                 | Obligation::Selection(_)

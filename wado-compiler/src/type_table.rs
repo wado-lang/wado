@@ -6868,6 +6868,17 @@ impl TypeTable {
         &self.impl_target(def).args
     }
 
+    /// What a receiver's arguments are read against in impl block `def`'s
+    /// target: the arguments of the head it names, or the elements of a tuple
+    /// it writes, which a tuple receiver's arguments are.
+    pub fn impl_target_positions(&self, def: DefId) -> Vec<TypeId> {
+        let whole = self.peel_refs(self.impl_target_whole(def));
+        match self.as_tuple(whole) {
+            Some(elements) => elements,
+            None => self.impl_target_args(def).to_vec(),
+        }
+    }
+
     /// The slots each of impl block `def`'s target positions holds, at any
     /// depth, filled from the receiver's arguments: `T` in `Pair<List<T>, i32>`
     /// from `Pair<List<String>, i32>`, then the slots its bounds project from
@@ -7132,7 +7143,7 @@ impl TypeTable {
     }
 
     /// What a target writing `written` binds at a receiver with `receiver_args`,
-    /// or `None` where it misses it. Unknown arguments and a pack's tail pin none.
+    /// or `None` where it misses it. Unknown arguments pin none.
     pub fn impl_target_binding(
         &mut self,
         written: &[TypeId],
@@ -7173,20 +7184,16 @@ impl TypeTable {
         if written.is_empty() || receiver_args.is_empty() {
             return Some(binding);
         }
-        let fixed = written
-            .iter()
-            .position(|&w| self.is_type_pack(w))
-            .unwrap_or(written.len());
-        if receiver_args.len() < written.len() && fixed == written.len() {
-            return None;
-        }
-        self.bind_all(
-            &written[..fixed],
-            receiver_args.get(..fixed)?,
-            open,
-            &mut binding,
-        )
-        .then_some(binding)
+        let bound = match written.iter().position(|&w| self.is_type_pack(w)) {
+            Some(at) => self.bind_run(written, at, receiver_args, None, open, &mut binding),
+            None => self.bind_all(
+                written,
+                receiver_args.get(..written.len())?,
+                open,
+                &mut binding,
+            ),
+        };
+        bound.then_some(binding)
     }
 
     /// The type parameters `concrete` fills in `written`, at any depth; `None`
@@ -7303,6 +7310,25 @@ impl TypeTable {
             return None;
         };
         let at = written.iter().position(|&w| self.is_type_pack(w))?;
+        let ResolvedType::Tuple(elements) = self.get(concrete) else {
+            return Some(false);
+        };
+        Some(self.bind_run(written, at, elements, Some(concrete), open, binding))
+    }
+
+    /// `written`, spreading a pack at `at` among fixed neighbours, against
+    /// `elements`: the neighbours take the ends, and the pack the run between
+    /// them. `whole` is the tuple `elements` make, where one exists, which a
+    /// pack with no neighbours takes as it stands.
+    fn bind_run(
+        &self,
+        written: &[TypeId],
+        at: usize,
+        elements: &[TypeId],
+        whole: Option<TypeId>,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
+    ) -> bool {
         assert!(
             matches!(
                 self.get(written[at]),
@@ -7313,16 +7339,13 @@ impl TypeTable {
             ),
             "a written target spreads a declared pack; a repeat appears only in a signature"
         );
-        let ResolvedType::Tuple(elements) = self.get(concrete) else {
-            return Some(false);
-        };
         // A second spread leaves no count to split the elements by.
         if written[at + 1..].iter().any(|&w| self.is_type_pack(w)) {
-            return Some(false);
+            return false;
         }
         let after = written.len() - at - 1;
         let Some(end) = elements.len().checked_sub(after).filter(|&end| end >= at) else {
-            return Some(false);
+            return false;
         };
         let ends: Vec<TypeId> = elements[..at]
             .iter()
@@ -7332,41 +7355,42 @@ impl TypeTable {
         // A neighbour takes one element, and a spread in the receiver stands
         // for any number of them.
         if ends.iter().any(|&e| self.is_type_pack(e)) {
-            return Some(false);
+            return false;
         }
         let neighbours = written[..at].iter().chain(&written[at + 1..]);
         if !neighbours
             .zip(&ends)
             .all(|(&w, &e)| self.bind_one(w, e, open, binding))
         {
-            return Some(false);
+            return false;
         }
         let slot = self.declared_param(written[at]);
         let run = &elements[at..end];
+        let whole = whole.filter(|_| ends.is_empty());
         let prior = match binding.slots.get(&slot) {
-            Some(&prior) => match self.as_tuple(prior) {
-                Some(prior) => Some(prior),
-                None => {
-                    return Some(ends.is_empty() && self.agree(prior, concrete, open, binding));
-                }
+            Some(&prior) => match (self.as_tuple(prior), whole) {
+                (Some(prior), _) => Some(prior),
+                (None, Some(whole)) => return self.agree(prior, whole, open, binding),
+                (None, None) => return false,
             },
             None => binding.runs.get(&slot).cloned(),
         };
         if let Some(prior) = prior {
-            return Some(
-                prior.len() == run.len()
-                    && prior
-                        .iter()
-                        .zip(run)
-                        .all(|(&p, &r)| self.agree(p, r, open, binding)),
-            );
+            return prior.len() == run.len()
+                && prior
+                    .iter()
+                    .zip(run)
+                    .all(|(&p, &r)| self.agree(p, r, open, binding));
         }
-        if ends.is_empty() {
-            binding.slots.insert(slot, concrete);
-        } else {
-            binding.runs.insert(slot, run.to_vec());
+        match whole {
+            Some(whole) => {
+                binding.slots.insert(slot, whole);
+            }
+            None => {
+                binding.runs.insert(slot, run.to_vec());
+            }
         }
-        Some(true)
+        true
     }
 
     /// The base, trait arguments and arguments of `a` and of `b` where both

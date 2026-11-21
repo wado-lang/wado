@@ -77,6 +77,24 @@ pub(super) enum PendingSelection {
     Static(Box<PendingStatic>),
 }
 
+/// A selection queued, with the walk whose facts it is made into.
+pub(super) struct Waiting {
+    pub(super) selection: PendingSelection,
+    pub(super) home: Option<ElementHome>,
+}
+
+/// One unrolled element of a tuple `for-of`. Its facts are peeled off into an
+/// overlay once it is walked, so a selection it queued that is made later is
+/// made into that overlay.
+#[derive(Clone, Copy)]
+pub(super) struct ElementHome {
+    pub(super) for_of: AstId,
+    /// Which walk of the loop, where an enclosing tuple `for-of` walks it once
+    /// per element of its own.
+    pub(super) instantiation: usize,
+    pub(super) element: usize,
+}
+
 /// What becomes of a selection nothing has decided where its walk ends.
 #[derive(Clone, Copy)]
 pub(super) enum Undecided {
@@ -326,13 +344,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("a waiting call recorded its dispatch")
             .selection = Some(id);
         self.infer_holes
-            .require(Obligation::Pending(PendingSelection::Call(id, pending)));
+            .require_pending(PendingSelection::Call(id, pending));
     }
 
     /// Queue `pending`, which records its dispatch once it selects.
     pub(super) fn wait_for_operator(&mut self, pending: PendingOperator) {
         self.infer_holes
-            .require(Obligation::Pending(PendingSelection::Operator(pending)));
+            .require_pending(PendingSelection::Operator(pending));
     }
 
     /// The trait's declaration of the static `method_name` on `receiver`,
@@ -354,9 +372,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Queue `pending`, which records its dispatch once it selects.
     pub(super) fn wait_for_static(&mut self, pending: PendingStatic) {
         self.infer_holes
-            .require(Obligation::Pending(PendingSelection::Static(Box::new(
-                pending,
-            ))));
+            .require_pending(PendingSelection::Static(Box::new(pending)));
     }
 
     /// Resolve the static call `pending` waits for, or hand it back while its
@@ -419,8 +435,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let outer = self.infer_holes.take_pending();
         let result = walk(self);
         self.settle_pending_selections(undecided);
-        for selection in outer {
-            self.infer_holes.require(Obligation::Pending(selection));
+        for waiting in outer {
+            self.infer_holes.require(Obligation::Pending(waiting));
         }
         result
     }
@@ -436,36 +452,74 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return;
             }
             let asked = pending.len();
-            let waiting: Vec<PendingSelection> = pending
+            let waiting: Vec<Waiting> = pending
                 .into_iter()
-                .filter_map(|selection| match selection {
-                    PendingSelection::Call(id, call) => self
-                        .select_call(id, call)
-                        .map(|call| PendingSelection::Call(id, call)),
-                    PendingSelection::Operator(op) => {
-                        self.select_operator(op).map(PendingSelection::Operator)
-                    }
-                    PendingSelection::Static(call) => {
-                        self.select_static(call).map(PendingSelection::Static)
-                    }
+                .filter_map(|Waiting { selection, home }| {
+                    self.at_home(home, |this| this.select(selection))
+                        .map(|selection| Waiting { selection, home })
                 })
                 .collect();
             if waiting.len() == asked {
-                for selection in waiting {
+                for waiting in waiting {
                     match undecided {
-                        Undecided::Report => self.report_stuck_selection(selection),
+                        Undecided::Report => self.report_stuck_selection(waiting.selection),
                         Undecided::Wait => {
-                            self.infer_holes.require(Obligation::Pending(selection));
+                            self.infer_holes.require(Obligation::Pending(waiting));
                         }
                     }
                 }
                 return;
             }
-            for selection in waiting {
-                self.infer_holes.require(Obligation::Pending(selection));
+            for waiting in waiting {
+                self.infer_holes.require(Obligation::Pending(waiting));
             }
             self.run_obligations();
         }
+    }
+
+    /// Make `selection`, or hand it back while it is still undecided.
+    fn select(&mut self, selection: PendingSelection) -> Option<PendingSelection> {
+        match selection {
+            PendingSelection::Call(id, call) => self
+                .select_call(id, call)
+                .map(|call| PendingSelection::Call(id, call)),
+            PendingSelection::Operator(op) => {
+                self.select_operator(op).map(PendingSelection::Operator)
+            }
+            PendingSelection::Static(call) => {
+                self.select_static(call).map(PendingSelection::Static)
+            }
+        }
+    }
+
+    /// Run `make` recording into the facts of `home`: its overlay where the
+    /// element's facts were already peeled off, else the walk's own, which
+    /// the element's are still part of.
+    fn at_home<R>(&mut self, home: Option<ElementHome>, make: impl FnOnce(&mut Self) -> R) -> R {
+        let peeled = home.filter(|home| {
+            self.sem
+                .types
+                .tuple_overlays
+                .get(&home.for_of)
+                .is_some_and(|walks| walks.len() > home.instantiation)
+        });
+        let Some(home) = peeled else {
+            return make(self);
+        };
+        self.swap_overlay_in(home);
+        let made = make(self);
+        self.swap_overlay_in(home);
+        made
+    }
+
+    fn swap_overlay_in(&mut self, home: ElementHome) {
+        let types = &mut self.sem.types;
+        let overlay = &mut types
+            .tuple_overlays
+            .get_mut(&home.for_of)
+            .expect("a peeled element's loop recorded its overlays")[home.instantiation]
+            [home.element];
+        std::mem::swap(overlay, &mut types.body);
     }
 
     /// Report `selection` as needing an annotation, unless a report on another
@@ -492,25 +546,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// still leaves it undecided.
     fn select_call(&mut self, id: usize, call: PendingCall) -> Option<PendingCall> {
         let receiver = self.apply_infer_holes(call.receiver);
-        let target = match call.ref_kind {
-            Some(kind) => ImplTargetKey::Ref(kind),
-            None => self.impl_target_of(receiver),
+        let args: Vec<TypeId> = call
+            .args
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
+        let value_target = self.impl_target_of(receiver);
+        let lookup_at = |this: &mut Self, target: &ImplTargetKey| {
+            this.find_trait_method_for_type(
+                target,
+                &call.method_name,
+                this.tysys.impl_position_args(receiver).as_deref(),
+                Some(receiver),
+                call.span,
+                None,
+                Some(ArgSource::Types {
+                    args: args.clone(),
+                    expected: call.expected,
+                }),
+            )
         };
-        let lookup = self.find_trait_method_for_type(
-            &target,
-            &call.method_name,
-            self.tysys.impl_position_args(receiver).as_deref(),
-            Some(receiver),
-            call.span,
-            None,
-            Some(ArgSource::Types {
-                args: call.args.clone(),
-                expected: call.expected,
-            }),
-        );
+        // As an immediate call asks: the impls written for the reference
+        // first, then those for the value it points at.
+        let (lookup, ref_kind) = match call.ref_kind {
+            Some(kind) => match lookup_at(self, &ImplTargetKey::Ref(kind)) {
+                TraitLookup::Missing => (lookup_at(self, &value_target), None),
+                lookup => (lookup, Some(kind)),
+            },
+            None => (lookup_at(self, &value_target), None),
+        };
         match lookup {
             TraitLookup::Undecided(_) => return Some(call),
-            TraitLookup::Found(found) => self.select_pending(id, &call, receiver, *found),
+            TraitLookup::Found(found) => {
+                self.select_pending(id, &call, &args, ref_kind, receiver, *found);
+            }
             TraitLookup::Missing => {
                 if !self.report_unmet_impl_bound(receiver, call.span, |s, def| {
                     s.impl_offers_method(def, &call.method_name, None)
@@ -582,12 +651,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         id: usize,
         selection: &PendingCall,
+        args: &[TypeId],
+        ref_kind: Option<RefKind>,
         receiver: TypeId,
         found: TraitMethodMatch,
     ) {
-        let ref_owner = selection
-            .ref_kind
-            .map(|_| found.owner_for(receiver, &self.tysys.type_table.borrow()));
+        let ref_owner =
+            ref_kind.map(|_| found.owner_for(receiver, &self.tysys.type_table.borrow()));
         let impl_struct_fq = found.impl_struct_fq.clone();
         let mut adopted = self.adopt_trait_match(found, receiver, None);
         if let Some(owner) = ref_owner {
@@ -612,7 +682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &slots_from_impl_args(block, &info.impl_slot_args),
                 &info.inferred_impl_slots,
                 &mut param_types,
-                &selection.args,
+                args,
                 &mut return_type,
                 selection.span,
             );
@@ -636,7 +706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name: &selection.method_name,
             trait_name: Some(adopted.trait_name),
             matched_impl_decl: adopted.matched_impl_decl,
-            matched_ref_kind: selection.ref_kind,
+            matched_ref_kind: ref_kind,
             trait_impl_struct_name: adopted.trait_impl_struct_name,
             trait_impl_module_source: adopted.trait_impl_module_source,
             inherent_impl_module: info.impl_module,

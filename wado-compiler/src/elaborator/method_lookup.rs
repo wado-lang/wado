@@ -1039,7 +1039,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !type_args.iter().any(|&arg| names_var(arg)) {
                 return;
             }
-            tt.open_impl_target_binding(tt.impl_target_args(def), type_args, &names_var)
+            tt.open_impl_target_binding(&tt.impl_target_positions(def), type_args, &names_var)
         };
         if let Some(binding) = binding {
             let binding = self.tysys.type_table.borrow_mut().settle_runs(binding);
@@ -1683,7 +1683,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let binding = {
             let tt = self.tysys.type_table.borrow();
             let open = |ty: TypeId| self.pending_owner_index(ty).is_some();
-            tt.open_impl_target_binding(tt.impl_target_args(def), &args, &open)?
+            tt.open_impl_target_binding(&tt.impl_target_positions(def), &args, &open)?
         };
         Some(self.tysys.type_table.borrow_mut().settle_runs(binding))
     }

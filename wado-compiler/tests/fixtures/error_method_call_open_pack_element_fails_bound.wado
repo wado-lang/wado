@@ -1,0 +1,36 @@
+// A call committed to an impl over a pack, with a receiver element still
+// open, owes the pack's bound on that element once a later use settles it.
+
+struct Bx<T> { v: Option<T> }
+
+fn empty<T>() -> Bx<T> { return Bx { v: null }; }
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for Bx<i32> {
+    fn tag(&self) -> i32 { return 1; }
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 { return 2; }
+}
+
+trait Describe with () {
+    fn describe(&self) -> i32;
+}
+
+impl<..Ts: Tag> Describe for [..Ts] {
+    fn describe(&self) -> i32 { return 7; }
+}
+
+test {
+    let t = [empty(), 1];
+    let n = t.describe();
+    let _settled: [Bx<String>, i32] = t;
+    assert n == 7;
+}
+
+__DATA__
+{"compile_error": ":30:13: error: type 'Bx<String>' does not implement trait 'Tag' required by bound on 'Ts'"}
