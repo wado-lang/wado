@@ -270,15 +270,19 @@ pub(super) enum Handle {
     Writes,
 }
 
-/// Whether what `spec` retains out of an argument of type `source` is storage:
-/// anything but the elements of an array of plain values, which are copied.
+/// Whether what `spec` retains out of an argument of type `source` names
+/// storage: anything but the elements of an array of plain values, which are
+/// copied and hold no handle.
 pub(super) fn retains_storage<P>(
     spec: &RetainSpec<P>,
     source: TypeId,
     type_table: &TypeTable,
+    names: &HoldsHandle<'_>,
 ) -> bool {
     match (spec.elements, type_table.get(type_table.peel_refs(source))) {
-        (true, ResolvedType::BuiltinArray(element)) => carries_storage(*element, type_table),
+        (true, ResolvedType::BuiltinArray(element)) => {
+            carries_storage(*element, type_table) || names.of(*element)
+        }
         _ => true,
     }
 }
@@ -463,8 +467,10 @@ pub(super) enum Args {
 pub(super) struct Site {
     pub(super) args: Args,
     pub(super) result: u32,
-    /// The function location an [`Graph::external`] location binds the call
-    /// to instead: every function a value of the call's type may run.
+    /// The function location a location with no [`Target`] binds the call to
+    /// instead: every function a value of the call's type may run. Such a
+    /// location is a function the body did not see made: one a caller passed,
+    /// a call returned, or a global held.
     pub(super) fallback: Option<u32>,
 }
 
@@ -531,9 +537,6 @@ pub(super) struct Graph {
     /// reaches it.
     sites: Vec<Vec<Site>>,
     pub(super) targets: IndexMap<u32, Target>,
-    /// Locations a caller supplies, whose function a call through them runs
-    /// is the site's [`Site::fallback`].
-    pub(super) external: IndexSet<u32>,
     /// Locations whose value names no storage, which nothing flows into.
     pub(super) inert: IndexSet<u32>,
     edges: IndexSet<(u32, u32)>,
@@ -581,7 +584,7 @@ impl Graph {
     /// Connect call `at` through `callee` to `loc`, where `loc` is a function.
     fn bind(&mut self, callee: u32, at: usize, loc: u32) {
         let (loc, supplied) = match self.sites[callee as usize][at].fallback {
-            Some(fallback) if self.external.contains(&loc) => (fallback, Some(loc)),
+            Some(fallback) if !self.targets.contains_key(&loc) => (fallback, Some(loc)),
             _ => (loc, None),
         };
         // A function the caller supplies is its own `self`, should it be a
@@ -1596,7 +1599,7 @@ impl Builder<'_> {
             let Some(source) = handed[spec.source] else {
                 continue;
             };
-            if !retains_storage(spec, args[spec.source].type_id, self.type_table) {
+            if !retains_storage(spec, args[spec.source].type_id, self.type_table, &self.names) {
                 continue;
             }
             let kept = if spec.elements {

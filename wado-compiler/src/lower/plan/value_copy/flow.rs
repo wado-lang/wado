@@ -119,7 +119,9 @@ impl Flow {
     }
 
     /// Whether a call to `module`/`name` hands over storage nothing else
-    /// reaches. A function this resolver did not read answers `false`.
+    /// reaches. A function outside the package answers `false`; one whose body
+    /// the resolver does not read (none, or a canonical dispatch) answers
+    /// `true`, leaving the answer to the conventions this narrows.
     #[must_use]
     pub fn returns_owned(&self, module: &ModuleSource, name: &str) -> bool {
         self.functions
@@ -146,7 +148,7 @@ struct Package<'a> {
     /// Each `$call`, by the type of the closure it takes as `self`.
     calls_by_receiver: IndexMap<TypeId, u32>,
     /// The functions a value of a function type may run, by the type's shape.
-    minted: IndexMap<String, IndexSet<u32>>,
+    minted: IndexMap<Shape, IndexSet<u32>>,
     handler_slots: FuncKeySet,
 }
 
@@ -284,17 +286,37 @@ struct Solved {
 }
 
 /// The structural key of a function type: two values of one shape may run the
-/// same functions, whichever id the table interned each under.
-fn shape(type_id: TypeId, type_table: &TypeTable) -> String {
-    type_table.mangle_type_arg_for_generic(type_table.peel_refs(type_id))
+/// same functions, whichever id the table interned each under. Only the
+/// parameters and the result key it: a `fn` coerces to a `fn mut`, and a
+/// closure is minted with an effect row of its own that the value it reaches
+/// need not state.
+type Shape = Vec<String>;
+
+/// The [`Shape`] of `type_id`, `None` for a type that is not a function.
+fn shape(type_id: TypeId, type_table: &TypeTable) -> Option<Shape> {
+    let ResolvedType::Function {
+        params,
+        return_type,
+        ..
+    } = type_table.get(type_table.peel_refs(type_id))
+    else {
+        return None;
+    };
+    Some(
+        params
+            .iter()
+            .chain([return_type])
+            .map(|&t| type_table.mangle_type_arg_rowless(t))
+            .collect(),
+    )
 }
 
 /// The functions a value of each function shape may run: every closure and
 /// every function taken by name, at the type the expression minting it has.
-fn minted_by_shape(flat: &FlatPackage, package: &Package<'_>) -> IndexMap<String, IndexSet<u32>> {
+fn minted_by_shape(flat: &FlatPackage, package: &Package<'_>) -> IndexMap<Shape, IndexSet<u32>> {
     struct Mints<'p, 'a> {
         package: &'p Package<'a>,
-        out: IndexMap<String, IndexSet<u32>>,
+        out: IndexMap<Shape, IndexSet<u32>>,
     }
     impl crate::tir_visitor::TirRefVisitor for Mints<'_, '_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
@@ -311,10 +333,9 @@ fn minted_by_shape(flat: &FlatPackage, package: &Package<'_>) -> IndexMap<String
                 _ => None,
             };
             if let Some(id) = minted {
-                self.out
-                    .entry(shape(expr.type_id, self.package.type_table))
-                    .or_default()
-                    .insert(id);
+                let key = shape(expr.type_id, self.package.type_table)
+                    .expect("a closure or a function taken by name is a function value");
+                self.out.entry(key).or_default().insert(id);
             }
             self.walk_expr(expr);
         }
@@ -361,7 +382,6 @@ fn summarize(package: &Package<'_>, summaries: &[Summary], func: &TirFunction) -
             b.g.add(own, arg);
             b.g.add(arg, deep);
             b.g.add(deep, deep);
-            b.g.external.extend([arg, deep]);
             ParamLocs {
                 own,
                 arg,
@@ -504,7 +524,7 @@ struct Body<'p, 'a> {
     /// The function location running each function, for a call through it.
     function_locations: IndexMap<u32, u32>,
     /// The function location running every function of a shape.
-    shape_locations: IndexMap<String, u32>,
+    shape_locations: IndexMap<Shape, u32>,
 }
 
 impl<'p, 'a> Body<'p, 'a> {
@@ -545,8 +565,10 @@ impl<'p, 'a> Body<'p, 'a> {
             shape_locations: IndexMap::default(),
         };
         // Whatever escapes may reach, and be stored in, whatever else escapes,
-        // and may be called with it.
+        // and may be called with it. Each world is a location too, so a store
+        // through a global's place lands in it.
         for world in [escape, installed] {
+            b.g.add(world, world);
             let reached = b.held_by(world);
             b.g.copy(reached, world);
             b.g.store(world, escape);
@@ -747,19 +769,11 @@ impl<'p, 'a> Body<'p, 'a> {
 
     /// The function location running every function a value of `callee`'s
     /// shape may run.
-    fn shape_location(&mut self, callee_type: TypeId) -> Option<u32> {
-        let key = shape(callee_type, self.package.type_table);
+    fn shape_location(&mut self, key: Shape) -> u32 {
         if let Some(&loc) = self.shape_locations.get(&key) {
-            return Some(loc);
+            return loc;
         }
-        let ResolvedType::Function { params, .. } = self
-            .package
-            .type_table
-            .get(self.package.type_table.peel_refs(callee_type))
-        else {
-            return None;
-        };
-        let arity = params.len();
+        let arity = key.len() - 1;
         let loc = self.g.node();
         self.shape_locations.insert(key.clone(), loc);
         let this = self.g.node();
@@ -786,7 +800,7 @@ impl<'p, 'a> Body<'p, 'a> {
                 ret,
             },
         );
-        Some(loc)
+        loc
     }
 
     fn place(&mut self, expr: &TirExpr) -> Option<u32> {
@@ -973,7 +987,12 @@ impl<'p, 'a> Body<'p, 'a> {
             let Some(source) = handed[spec.source] else {
                 continue;
             };
-            if !retains_storage(spec, args[spec.source].type_id, self.package.type_table) {
+            if !retains_storage(
+                spec,
+                args[spec.source].type_id,
+                self.package.type_table,
+                &self.package.names,
+            ) {
                 continue;
             }
             let kept = if spec.elements {
@@ -1035,8 +1054,9 @@ impl<'p, 'a> Body<'p, 'a> {
             .zip(slots)
             .map(|(arg, slot)| self.hand(arg, slot).0)
             .collect();
-        self.shape_storage(callee.type_id, value, &handed, storage);
-        let fallback = self.shape_location(callee.type_id);
+        let key = shape(callee.type_id, tt).expect("checked to be a function above");
+        self.shape_storage(&key, value, &handed, storage);
+        let fallback = Some(self.shape_location(key));
         let result = self.g.node();
         self.g.call_site(
             value,
@@ -1049,28 +1069,22 @@ impl<'p, 'a> Body<'p, 'a> {
         Some(result)
     }
 
-    /// The storage a call through a value of `callee_type` hands back: what
-    /// any function of that shape hands back, over these arguments.
-    fn shape_storage(
-        &mut self,
-        callee_type: TypeId,
-        receiver: u32,
-        handed: &[Option<u32>],
-        storage: u32,
-    ) {
-        let key = shape(callee_type, self.package.type_table);
-        let minted = self.package.minted.get(&key).cloned().unwrap_or_default();
+    /// The storage a call through a value of shape `key` hands back: what any
+    /// function of that shape hands back, over these arguments.
+    fn shape_storage(&mut self, key: &Shape, receiver: u32, handed: &[Option<u32>], storage: u32) {
+        let minted = self.package.minted.get(key).cloned().unwrap_or_default();
         for callee in minted {
             let info = &self.package.callees[callee as usize];
             if !info.analyzed {
                 self.g.copy(self.escape, storage);
                 continue;
             }
-            let receiver = info.is_closure_call.then_some(receiver);
-            let args: Vec<(Option<u32>, Option<u32>)> = receiver
+            let args: Vec<(Option<u32>, Option<u32>)> = info
+                .is_closure_call
+                .then_some(Some(receiver))
                 .into_iter()
-                .chain(handed.iter().flatten().copied())
-                .map(|node| (Some(node), None))
+                .chain(handed.iter().copied())
+                .map(|node| (node, None))
                 .collect();
             self.read.insert(callee);
             let returned = Summary {

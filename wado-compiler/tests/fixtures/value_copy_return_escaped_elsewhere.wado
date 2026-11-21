@@ -1,0 +1,73 @@
+// A returned local whose reference something outside the frame keeps is
+// copied at the `return`, however the reference gets there: into a global,
+// through a closure the callee did not see minted, through a closure a call
+// returned, or as the payload of an element a builtin copies across.
+
+use { println, Stdout } from "core:cli";
+
+global mut KEPT: List<&List<i32>> = [];
+
+#[inline(never)]
+fn into_global() -> List<i32> {
+    let n: List<i32> = [1];
+    KEPT.push(&n);
+    return n;
+}
+
+#[inline(never)]
+fn call_it(mut f: fn mut(&List<i32>), x: &List<i32>) {
+    f(x);
+}
+
+#[inline(never)]
+fn through_passed_closure(sink: &mut List<&List<i32>>, quiet: bool) -> List<i32> {
+    let n: List<i32> = [1];
+    let mut g: fn mut(&List<i32>) = |l| sink.push(l);
+    if quiet {
+        g = |_l| {};
+    }
+    call_it(g, &n);
+    return n;
+}
+
+#[inline(never)]
+fn keeper(sink: &mut List<&List<i32>>) -> fn mut(&List<i32>) {
+    return |l| sink.push(l);
+}
+
+#[inline(never)]
+fn through_returned_closure(sink: &mut List<&List<i32>>) -> List<i32> {
+    let n: List<i32> = [1];
+    let mut f = keeper(sink);
+    f(&n);
+    return n;
+}
+
+#[inline(never)]
+fn through_payload(sink: &mut List<Option<&List<i32>>>) -> List<i32> {
+    let n: List<i32> = [1];
+    let mut tmp: List<Option<&List<i32>>> = [];
+    tmp.push(Some(&n));
+    sink.extend(&tmp);
+    return n;
+}
+
+export fn run() with Stdout {
+    let mut a = into_global();
+    a.push(2);
+    let mut s: List<&List<i32>> = [];
+    let mut b = through_passed_closure(&mut s, builtin::black_box(false));
+    b.push(2);
+    let mut t: List<&List<i32>> = [];
+    let mut c = through_returned_closure(&mut t);
+    c.push(2);
+    let mut u: List<Option<&List<i32>>> = [];
+    let mut d = through_payload(&mut u);
+    d.push(2);
+    println(`${KEPT[0].len()} ${s[0].len()} ${t[0].len()} ${u[0].unwrap().len()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1 1 1\n"
+}
