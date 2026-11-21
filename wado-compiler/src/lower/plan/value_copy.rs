@@ -117,6 +117,9 @@ impl<T> ValueCopyHelpers<T> {
 /// telling the fold whether a call result is owned (a move) or shared.
 pub struct ValueCopyPlan {
     pub helpers: ValueCopyHelpers<(ModuleSource, String)>,
+    /// The closures, by functor id, whose `$call` keeps nothing of its
+    /// receiver, so one keeps what it captures only while it lasts.
+    pub capture_confining: IndexSet<u32>,
     /// What each call writes into its receiver, as fields of the receiver's
     /// type: a read of one field is undisturbed by a call that writes another.
     pub mod_ref: modref::ModRef,
@@ -179,6 +182,7 @@ pub fn plan(
     flat: &mut FlatPackage,
     builtins: BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
+    functors: &[tir::ClosureFunctor],
     profiler: &dyn SpanEmitter,
 ) -> ValueCopyPlan {
     // Again: closure lifting has added its environment structs since `plan`
@@ -293,8 +297,18 @@ pub fn plan(
             &closure_captures,
         )
     });
+    let capture_confining = functors
+        .iter()
+        .filter(|functor| {
+            call_graph
+                .closure_call(functor.ref_type_id)
+                .is_some_and(|call| !retained.calls.of_call(call, 1, true).keeps(0))
+        })
+        .map(|functor| functor.id)
+        .collect();
     ValueCopyPlan {
         helpers,
+        capture_confining,
         mod_ref,
         observed_fields,
         closure_captures,

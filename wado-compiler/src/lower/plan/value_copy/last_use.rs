@@ -135,6 +135,13 @@ pub fn analyze_ownership(
             by_root: IndexMap::default(),
             imprecise: false,
         },
+        capture_confining: &plan.capture_confining,
+        closure_kept: None,
+        value_reads: {
+            let mut reads = ValueReads::default();
+            reads.visit_block(body);
+            reads.found
+        },
         all_locals,
         place_cands: Vec::new(),
         declared_owned: IndexSet::default(),
@@ -1530,6 +1537,12 @@ struct Analyzer<'a> {
     frame: u32,
     exits: Vec<Exit>,
     reference_locals: IndexSet<u32>,
+    capture_confining: &'a IndexSet<u32>,
+    /// What keeps the closure a `let` is about to walk, set by the `let`.
+    closure_kept: Option<Kept>,
+    /// See [`ValueReads`]. A closure bound to a local outside it is held only
+    /// by that local and what the holder graph follows from it.
+    value_reads: IndexSet<u32>,
     all_locals: IndexSet<u32>,
     field_slots: FieldSlots,
     /// Place-level move sites found at literals, filtered after the walk.
@@ -1724,11 +1737,13 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// A `&place` / `&mut place`. The referent stays live, but a reference takes no
-    /// value, so it never ends the local's final use. Returns the referent.
+    /// A `&place` / `&mut place`, or a read of `place`, kept as `kept` says.
+    /// The referent stays live, but a reference takes no value, so it never
+    /// ends the local's final use. Returns the referent.
     fn ref_read(
         &mut self,
         place: &'a TirExpr,
+        kept: &Kept,
         live: &mut IndexSet<u32>,
         record: bool,
     ) -> Option<u32> {
@@ -1742,23 +1757,28 @@ impl<'a> Analyzer<'a> {
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Unary { expr: inner, .. } => self.ref_read(inner, live, record),
+            | TirExprKind::Unary { expr: inner, .. } => self.ref_read(inner, kept, live, record),
             TirExprKind::Index { expr: inner, index } => {
                 self.walk_expr(index, live, record);
-                self.ref_read(inner, live, record)
+                self.ref_read(inner, kept, live, record)
             }
-            // A call handing back a projection of an argument (`index_value`)
-            // is a place of that argument's root.
-            TirExprKind::Call { .. }
-                if let Names::Place(projected) = self.resolver.names(place) =>
-            {
-                self.walk_expr(place, live, record);
-                self.mark_read(projected.root, None, live);
-                Some(projected.root)
-            }
-            // A reference to a non-place (a fresh temporary) escapes nothing.
             _ => {
+                // The place is part of what the call returns, so the call's
+                // result lasts as long as the place is kept.
+                if record && is_call(place) {
+                    self.result_kept = Some(kept.clone());
+                }
                 self.walk_expr(place, live, record);
+                // A call handing back a projection of an argument
+                // (`index_value`) is a place of that argument's root; a
+                // reference to any other non-place, a fresh temporary,
+                // escapes nothing.
+                if matches!(place.kind, TirExprKind::Call { .. })
+                    && let Names::Place(projected) = self.resolver.names(place)
+                {
+                    self.mark_read(projected.root, None, live);
+                    return Some(projected.root);
+                }
                 None
             }
         }
@@ -2241,10 +2261,7 @@ impl<'a> Analyzer<'a> {
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
-        if record && is_call(place) {
-            self.result_kept = Some(kept.clone());
-        }
-        if let Some(r) = self.ref_read(place, live, record)
+        if let Some(r) = self.ref_read(place, kept, live, record)
             && record
         {
             self.pin_ref(op, r, place, kept);
@@ -2414,6 +2431,18 @@ impl<'a> Analyzer<'a> {
         record: bool,
     ) {
         let stripped = strip_casts(value);
+        if self.confines_captures(local, value) {
+            let kept = self.held_in(local);
+            if record {
+                self.closure_kept = Some(kept.clone());
+            }
+            self.walk_kept(value, &kept, false, live, record);
+            assert!(
+                self.closure_kept.is_none(),
+                "the closure a `let` binds takes what keeps it"
+            );
+            return;
+        }
         match &stripped.kind {
             TirExprKind::Unary {
                 op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
@@ -2428,6 +2457,46 @@ impl<'a> Analyzer<'a> {
                 self.walk_kept(value, &kept, false, live, record);
             }
             _ => self.walk_persisting(value, live, record),
+        }
+    }
+
+    /// Whether `value`, stored in `local`, is a closure keeping what it
+    /// captures only while `local` holds it: its `$call` keeps nothing of the
+    /// closure, and nothing copies `local` out.
+    fn confines_captures(&self, local: u32, value: &TirExpr) -> bool {
+        let mut tails = Vec::new();
+        result_tails(value, &mut tails);
+        let [tail] = tails.as_slice() else {
+            return false;
+        };
+        matches!(
+            &strip_casts(tail).kind,
+            TirExprKind::Closure { functor_id: Some(functor), .. }
+                if self.capture_confining.contains(functor)
+        ) && !self.value_reads.contains(&local)
+    }
+
+    /// A closure literal, which keeps what it captures as `kept` says. The body
+    /// indexes locals of its own.
+    fn walk_closure(
+        &mut self,
+        closure: &'a TirExpr,
+        kept: &Kept,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        let TirExprKind::Closure { captures, .. } = &closure.kind else {
+            unreachable!("walk_closure takes a closure literal");
+        };
+        let sources: Vec<u32> = capture_source_locals(captures).collect();
+        for index in sources {
+            self.mark_read(index, None, live);
+            if record {
+                self.pin(index, None, kept);
+                self.mark_local_mutated(index, false, live);
+                let at = self.consumed.entry(index).or_default();
+                at.extend(live.iter().copied());
+            }
         }
     }
 
@@ -2954,8 +3023,15 @@ impl<'a> Analyzer<'a> {
                 }
                 self.collect_place_moves(&values, &live_out);
             }
-            for stmt in stmts[start..end].iter().rev() {
-                self.walk_stmt(stmt, live, record, run.is_none());
+            for (at, stmt) in (start..end).zip(&stmts[start..end]).rev() {
+                match &stmt.kind {
+                    // Any statement but the tail drops its value, and what
+                    // that value kept with it.
+                    TirStmtKind::Expr(e) if at + 1 < stmts.len() => {
+                        self.walk_kept(e, &Kept::Transient, false, live, record);
+                    }
+                    _ => self.walk_stmt(stmt, live, record, run.is_none()),
+                }
             }
             end = start;
         }
@@ -3187,11 +3263,16 @@ impl<'a> Analyzer<'a> {
                 self.record_mutation(place, live);
             }
             // The walk goes through the projections over the reference as well.
-            if let Some(r) = self.ref_read(scrut, live, record)
+            let kept = if binds.is_empty() {
+                Kept::Transient
+            } else {
+                Kept::Into(binds.to_vec())
+            };
+            if let Some(r) = self.ref_read(scrut, &kept, live, record)
                 && record
                 && !binds.is_empty()
             {
-                self.pin_ref(op, r, place, &Kept::Into(binds.to_vec()));
+                self.pin_ref(op, r, place, &kept);
             }
         } else if alias_root(scrut).is_some() {
             // A `match` projects its scrutinee rather than taking it: the arm
@@ -3431,18 +3512,9 @@ impl<'a> Analyzer<'a> {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.walk_persisting(value, live, record);
             }
-            // The body indexes locals of its own.
-            TirExprKind::Closure { captures, .. } => {
-                let sources: Vec<u32> = capture_source_locals(captures).collect();
-                for index in sources {
-                    self.mark_read(index, None, live);
-                    if record {
-                        self.mark_escaped(index, None);
-                        self.mark_local_mutated(index, false, live);
-                        let at = self.consumed.entry(index).or_default();
-                        at.extend(live.iter().copied());
-                    }
-                }
+            TirExprKind::Closure { .. } => {
+                let kept = self.closure_kept.take().unwrap_or(Kept::Frame);
+                self.walk_closure(expr, &kept, live, record);
             }
             // A scalar projection hands back bits, not the aggregate's storage,
             // so a later whole-value read is still the root's final use.
@@ -3451,7 +3523,7 @@ impl<'a> Analyzer<'a> {
             | TirExprKind::Index { .. }
                 if is_scalar_type(expr.type_id, self.type_table) =>
             {
-                self.ref_read(expr, live, record);
+                self.ref_read(expr, &Kept::Transient, live, record);
             }
             // A newtype cast hands over the storage it wraps, so a local under
             // one is taken as the bare local would be.
@@ -3486,6 +3558,41 @@ impl<'a> Analyzer<'a> {
                     self.walk_expr(child, live, record);
                 }
             }
+        }
+    }
+}
+
+/// The locals read as a value anywhere: other than as the callee of an indirect
+/// call, under a `&` / `&mut` (which the holder graph follows), or a `let`
+/// binding one. A copy of a closure value is a holder nothing follows.
+#[derive(Default)]
+struct ValueReads {
+    found: IndexSet<u32>,
+}
+
+impl TirRefVisitor for ValueReads {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => {
+                self.found.insert(*index);
+            }
+            TirExprKind::IndirectCall { callee, args }
+                if matches!(callee.kind, TirExprKind::Local { .. }) =>
+            {
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } if matches!(place.kind, TirExprKind::Local { .. }) => {}
+            // A closure body numbers locals of its own; what it captures it
+            // reads.
+            TirExprKind::Closure { captures, .. } => {
+                self.found.extend(capture_source_locals(captures));
+            }
+            _ => self.walk_expr(expr),
         }
     }
 }

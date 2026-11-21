@@ -74,6 +74,40 @@ impl RetentionFacts {
         }
     }
 
+    /// A method's facts as a call through its receiver reads them: position 0,
+    /// the callee value itself, is no argument there, and a position landing in
+    /// it lands out of the caller's sight.
+    fn without_receiver(&self) -> Self {
+        let argument = |position: u32| position.checked_sub(1);
+        let shifted = |set: &IndexSet<u32>| -> IndexSet<u32> {
+            set.iter().filter_map(|&p| argument(p)).collect()
+        };
+        let mut out = RetentionFacts {
+            escapes: shifted(&self.escapes),
+            escape_types: self
+                .escape_types
+                .iter()
+                .filter_map(|(&p, types)| Some((argument(p)?, types.clone())))
+                .collect(),
+            into_result: shifted(&self.into_result),
+            into_param: IndexMap::default(),
+            elements: shifted(&self.elements),
+        };
+        for (&source, destinations) in &self.into_param {
+            let Some(source) = argument(source) else {
+                continue;
+            };
+            if destinations.contains(&0) {
+                out.escape_as(source, None);
+            }
+            let named = shifted(destinations);
+            if !named.is_empty() {
+                out.into_param.insert(source, named);
+            }
+        }
+        out
+    }
+
     /// `source` escapes as values of `types`, or as the argument itself where
     /// `types` is `None`. Reports whether that widened anything: no entry is
     /// the widest, and a position's first escape sets the types it starts from.
@@ -380,8 +414,14 @@ impl Callees {
 /// Model boundary, so joining the facts of every such expression of one type
 /// bounds every call through a value of that type. A call site that can name
 /// which of those values reach it joins only those instead.
+///
+/// The type a row is keyed by is the function type's shape: its parameters and
+/// result. `fn` is a subtype of `fn mut` and an effect row only subsumes, so a
+/// value minted at one type reaches a slot of any other of the same shape.
 #[derive(Default, Clone)]
 pub struct FunctorRows {
+    /// Each function type's shape, as one representative type.
+    shapes: IndexMap<TypeId, TypeId>,
     /// The functor types some expression in the package mints a value at,
     /// collected before the fixpoint so that "nothing mints this" and "not
     /// reached yet" stay apart: the first is read conservatively, the second is
@@ -522,11 +562,16 @@ impl Retained {
 }
 
 impl FunctorRows {
+    fn shape(&self, type_id: TypeId) -> TypeId {
+        self.shapes.get(&type_id).copied().unwrap_or(type_id)
+    }
+
     fn row(&self, callee_type: TypeId, arity: usize) -> RetentionFacts {
-        if !self.minted.contains(&callee_type) {
+        let shape = self.shape(callee_type);
+        if !self.minted.contains(&shape) {
             return RetentionFacts::every(arity);
         }
-        self.facts.get(&callee_type).cloned().unwrap_or_default()
+        self.facts.get(&shape).cloned().unwrap_or_default()
     }
 
     /// The facts of a call the walk resolved to `callees`. A resolved set joins
@@ -535,7 +580,7 @@ impl FunctorRows {
         let Callees::Mints(ids) = callees else {
             return self.row(callee_type, arity);
         };
-        if !self.minted.contains(&callee_type) {
+        if !self.minted.contains(&self.shape(callee_type)) {
             return self.row(callee_type, arity);
         }
         let mut out = RetentionFacts::default();
@@ -550,7 +595,7 @@ impl FunctorRows {
     /// What a value of `type_id` arriving at `site` may be. A type this analysis
     /// stopped following anywhere is read as any value of it.
     fn at_site(&self, site: Site, type_id: TypeId) -> Callees {
-        if self.escaped.contains(&type_id) {
+        if self.escaped.contains(&self.shape(type_id)) {
             return Callees::Any;
         }
         self.flow.get(&site).cloned().unwrap_or_default()
@@ -566,7 +611,8 @@ impl FunctorRows {
     }
 
     fn merge(&mut self, callee_type: TypeId, facts: &RetentionFacts) -> bool {
-        self.facts.entry(callee_type).or_default().absorb(facts)
+        let shape = self.shape(callee_type);
+        self.facts.entry(shape).or_default().absorb(facts)
     }
 
     fn merge_mint(&mut self, id: MintId, row: &MintRow) -> bool {
@@ -619,6 +665,27 @@ fn unfollowed_functor_params(project: &FlatPackage, type_table: &TypeTable) -> I
         }
     }
     found
+}
+
+/// The first function type of each shape stands for every type of it.
+fn functor_shapes(type_table: &TypeTable) -> IndexMap<TypeId, TypeId> {
+    let mut representative: IndexMap<(&[TypeId], TypeId), TypeId> = IndexMap::default();
+    type_table
+        .all_types()
+        .filter_map(|(id, ty)| match ty {
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => Some((
+                id,
+                *representative
+                    .entry((params.as_slice(), *return_type))
+                    .or_insert(id),
+            )),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Every functor type a `Closure` or `FuncRef` expression mints a value at.
@@ -826,10 +893,17 @@ pub fn compute_retention(
         .map(|func| functor_params_of(&func.borrow(), &type_table))
         .collect();
     let mut rows = FunctorRows {
-        minted: minted_functor_types(project, &type_table),
-        escaped: unfollowed_functor_params(project, &type_table),
+        shapes: functor_shapes(&type_table),
         ..FunctorRows::default()
     };
+    rows.minted = minted_functor_types(project, &type_table)
+        .into_iter()
+        .map(|t| rows.shape(t))
+        .collect();
+    rows.escaped = unfollowed_functor_params(project, &type_table)
+        .into_iter()
+        .map(|t| rows.shape(t))
+        .collect();
     // A row is a whole-program join, so a function's facts depend on a minting
     // site the call graph gives no edge to. The worklist settles each round
     // against the rows it was given, and the round is repeated while any row
@@ -888,7 +962,8 @@ pub fn compute_retention(
             grew |= rows.flow_into(site, &callees);
         }
         for type_id in round.escaping {
-            grew |= rows.escaped.insert(type_id);
+            let shape = rows.shape(type_id);
+            grew |= rows.escaped.insert(shape);
         }
         for (key, retained) in round.at_call {
             match rows.at_call.get_mut(&key) {
@@ -1379,6 +1454,13 @@ fn facts_of_body(
             reaching.insert(*local_index, callees);
         }
     }
+    let functor_locals = params
+        .iter()
+        .filter_map(|(local_index, type_id)| {
+            let call = oracle.call_graph.closure_call(*type_id)?.clone();
+            Some((*local_index, (*type_id, call)))
+        })
+        .collect();
     let anchors = anchors_of_body(&param_of_local, body);
     let mut walker = StoresWalker {
         carries,
@@ -1389,6 +1471,7 @@ fn facts_of_body(
         carrying,
         owner,
         reaching,
+        functor_locals,
         facts: RetentionFacts::default(),
         contributions: Contributions::default(),
         grew: false,
@@ -1429,6 +1512,8 @@ struct StoresWalker<'a> {
     owner: Owner,
     /// Which function values each function-typed local may hold.
     reaching: IndexMap<u32, Callees>,
+    /// The type and the `$call` of each parameter holding one closure's functor.
+    functor_locals: IndexMap<u32, (TypeId, FunctionRef)>,
     facts: RetentionFacts,
     contributions: Contributions,
     grew: bool,
@@ -2028,6 +2113,31 @@ impl TirRefVisitor for StoresWalker<'_> {
                     None => Landing::Unfollowed,
                 };
                 self.functor_args_reach(Some(&[landing]), &exprs);
+            }
+            // A parameter a fn-param specialization retyped holds one functor,
+            // so the call is its `$call`, with the functor as the receiver.
+            TirExprKind::IndirectCall { callee, args }
+                if let TirExprKind::Local { index, .. } = &callee.kind
+                    && let Some(call) = self.functor_locals.get(index) =>
+            {
+                let (receiver_type, call) = call.clone();
+                // At the type the parameter holds it, which the body's reads
+                // no longer spell: what `$call` puts into it lands in the
+                // parameter.
+                let mut receiver = (**callee).clone();
+                receiver.type_id = receiver_type;
+                let facts = self.oracle.calls.facts(&call, args.len() + 1);
+                let exprs: Vec<&TirExpr> = std::iter::once(&receiver).chain(args).collect();
+                self.call_hands_on(&exprs, &facts);
+                let landing = match self.oracle.call_graph.id_of(&call) {
+                    Some(id) => Landing::Named(id),
+                    None => Landing::Unfollowed,
+                };
+                self.functor_args_reach(Some(&[landing]), &exprs);
+                self.contributions.at_call.push((
+                    (callee.type_id, callee.span),
+                    Retained::of(&facts.without_receiver()),
+                ));
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let callees = self.reaching_of(callee);

@@ -11,7 +11,8 @@
 
 use super::funcset::FuncIndex;
 use crate::flat_package::FlatPackage;
-use crate::tir::{FunctionRef, TirExpr, TirExprKind};
+use crate::hashmap::IndexMap;
+use crate::tir::{FunctionRef, TirExpr, TirExprKind, TypeId};
 use crate::tir_visitor::TirRefVisitor;
 use std::collections::VecDeque;
 
@@ -25,6 +26,10 @@ pub struct CallGraph {
     callers: Vec<Vec<u32>>,
     /// `callees[caller]` lists every function it calls, deduplicated.
     callees: Vec<Vec<u32>>,
+    /// Each closure's `$call`, by its receiver's type. A parameter a fn-param
+    /// specialization retyped to one holds that closure, so a body taking one
+    /// calls that `$call` through it.
+    closure_calls: IndexMap<TypeId, FunctionRef>,
 }
 
 pub fn body_ids(project: &FlatPackage) -> impl Iterator<Item = u32> + '_ {
@@ -42,6 +47,21 @@ impl CallGraph {
             let func = func.borrow();
             index.insert(func.module_source.clone(), func.name.clone(), i as u32);
         }
+        let closure_calls: IndexMap<TypeId, FunctionRef> = project
+            .functions
+            .iter()
+            .filter_map(|func| {
+                let func = func.borrow();
+                if !func.is_closure_call() {
+                    return None;
+                }
+                let receiver = func.params.first()?.type_id;
+                Some((
+                    receiver,
+                    FunctionRef::from_resolved(&func, func.module_source.clone()),
+                ))
+            })
+            .collect();
         let mut callers: Vec<Vec<u32>> = vec![Vec::new(); n];
         let mut callees: Vec<Vec<u32>> = vec![Vec::new(); n];
         for (caller, func) in project.functions.iter().enumerate() {
@@ -52,6 +72,14 @@ impl CallGraph {
                 callees: Vec::new(),
             };
             collector.visit_block(body);
+            if !func.is_closure_call() {
+                collector.callees.extend(
+                    func.params
+                        .iter()
+                        .filter_map(|p| closure_calls.get(&p.type_id))
+                        .filter_map(|call| index.id(&call.module_source, &call.name)),
+                );
+            }
             collector.callees.sort_unstable();
             collector.callees.dedup();
             for &callee in &collector.callees {
@@ -63,7 +91,13 @@ impl CallGraph {
             index,
             callers,
             callees,
+            closure_calls,
         }
+    }
+
+    /// The `$call` taking a receiver of `receiver`'s type.
+    pub fn closure_call(&self, receiver: TypeId) -> Option<&FunctionRef> {
+        self.closure_calls.get(&receiver)
     }
 
     /// Every function that calls `id`.

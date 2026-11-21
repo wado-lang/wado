@@ -31,6 +31,10 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_pass": {"O2": ["wir/fuse_remaining_local_tees"]},
-    "wir_not_expect:O2": ["p = struct.new"]
+    "wir_not_expect:O2": ["//Point\" {"],
+    "wir_contrast": {"O2": [
+        {
+            "#[inline(\"never\")]\nfn read_point(p: &Point) -> i32 {": "global mut KEPT: List<&Point> = [];\n\n#[inline(\"never\")]\nfn read_point(p: &Point) -> i32 {\n    KEPT.push(p);"
+        }
+    ]}
 }

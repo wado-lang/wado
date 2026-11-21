@@ -32,6 +32,14 @@ fn via_branch(sink: &mut List<&List<i32>>, n: i32) -> List<i32> {
     };
 }
 
+// A closure stores into its capture what the specialized callee hands it.
+#[inline(never)]
+fn via_closure(sink: &mut List<&List<i32>>) -> List<List<i32>> {
+    let a: List<List<i32>> = [[1]];
+    let _ = a.iter_ref().position(|l| { sink.push(l); return true; });
+    return a;
+}
+
 // Storage behind a parameter is the caller's, which copies the result itself.
 #[inline(never)]
 fn through_param(sink: &mut List<&List<i32>>, p: &List<i32>) -> List<i32> {
@@ -45,6 +53,10 @@ export fn run() with Stdout {
     let mut z = through_param(&mut u, &l);
     z.push(2);
     assert l.len() == 1 && u[0].len() == 1 && z.len() == 2;
+    let mut v: List<&List<i32>> = [];
+    let mut c = via_closure(&mut v);
+    c[0].push(2);
+    assert v[0].len() == 1;
     for let n of 0..<2 {
         let mut w: List<&List<i32>> = [];
         let mut r = via_branch(&mut w, builtin::black_box(n));

@@ -1,0 +1,44 @@
+// `out[i].end = v` writes through the reference `index_ref_mut` returns, which
+// dies with the write. `out` is then returned without a copy.
+
+use { println, Stdout } from "core:cli";
+
+struct Span {
+    start: i32,
+    end: i32,
+}
+
+#[inline(never)]
+fn merged(spans: &List<Span>) -> List<Span> {
+    let mut out: List<Span> = [];
+    for let s of spans {
+        if !out.is_empty() && s.start <= out[out.len() - 1].end + 1 {
+            let last = out.len() - 1;
+            out[last].end = s.end;
+            continue;
+        }
+        out.push(*s);
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    let spans: List<Span> = builtin::black_box([Span { start: 1, end: 2 }, Span { start: 3, end: 4 }]);
+    let mut m = merged(&spans);
+    m[0].end = 9;
+    println(`${m.len()} ${m[0].end} ${spans[1].end}`);
+}
+
+__DATA__
+{
+    "stdout": "1 9 4\n",
+    "wir_scope": "value_copy_return_after_index_write.wado/merged",
+    "wir_not_expect:O2": ["$value_copy$"],
+    "wir_contrast": {"O2": [
+        {
+            "fn merged(spans: &List<Span>)": "fn merged(spans: &List<Span>, sink: &mut List<&Span>)",
+            "            out[last].end = s.end;": "            out[last].end = s.end;\n            sink.push(&out[last]);",
+            "merged(&spans)": "merged(&spans, &mut [])"
+        }
+    ]}
+}
