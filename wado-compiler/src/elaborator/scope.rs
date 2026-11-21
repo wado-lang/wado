@@ -804,6 +804,11 @@ pub(super) struct Scope {
     /// call's open variables, one entry per call nested in another's argument,
     /// innermost last. See [`PendingLiterals`].
     pub(super) pending_literals: Vec<PendingLiterals>,
+    /// The numeric literals whose variable their call left open, each typed
+    /// once the body ends, at what a later use settled it to or else at the
+    /// literals' default. `None` outside a body, where a call answers its
+    /// literals itself. See [`Elaborator::settling_body`].
+    pub(super) body_literals: Option<Vec<(ast::Expr, TypeId)>>,
     /// Set while what answers the bounds the types resolved meanwhile owe is
     /// not yet in place. See [`Elaborator::holding_bounds`].
     pub(super) held_bounds: Option<Vec<PendingBounds>>,

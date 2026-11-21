@@ -495,6 +495,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
+        // Inherent methods are found by the receiver's head.
+        receiver = self.with_literal_head_defaulted(receiver);
         // Base (non-ref) type for method lookup. `mut`: deferred-inference may
         // concretise the receiver below.
         let mut base_type_id = self.tysys.get_base_type(receiver);
