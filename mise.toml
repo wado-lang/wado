@@ -11,6 +11,10 @@ min_version = "2026.10.24"
 node = "26"
 # Node 26 bundles npm 11, and package-loam/package.json requires 12.
 npm = "12"
+#
+# A task's `tools` pins an exact version: mise re-resolves a task tool on every
+# `mise install` and ignores its mise.lock entry, so `java = "lts"` rewrote the
+# lock whenever a new release appeared.
 
 [settings]
 auto_install = true
@@ -495,17 +499,17 @@ PATH="/usr/bin:$PATH" exec "$@"
 # ~/.config/wado/config.toml names mise's installs (~/.local/share/mise/installs).
 [tasks.oracle-gale]
 description = "Run the ANTLR4 jar on a grammar and the input on stdin (package-gale/scripts/antlr4_oracle.wado)"
-tools = { java = "lts" }
+tools = { java = "temurin-25.0.5+100000002.0.LTS" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle.wado"
 
 [tasks.oracle-gale-selftest]
 description = "Check the ANTLR4 oracle's answers and refusals against the corpus grammars"
-tools = { java = "lts" }
+tools = { java = "temurin-25.0.5+100000002.0.LTS" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle_selftest.wado"
 
 [tasks.oracle-gale-regen]
 description = "Regenerate Gale's oracle-pinned driver tests (sqlite, json, or all)"
-tools = { java = "lts" }
+tools = { java = "temurin-25.0.5+100000002.0.LTS" }
 run = 'WADO="$(scripts/dev-bin.sh --path wado)" scripts/dev-bin.sh wado run package-gale/scripts/regen_oracle.wado'
 
 [tasks.oracle-re]
@@ -526,12 +530,12 @@ run = "scripts/dev-bin.sh wado run scripts/affine_matrix/main.wado"
 
 [tasks.oracle-gale-typescript]
 description = "List where Gale's TypeScript parse tree for a file differs from the ANTLR4 jar's"
-tools = { java = "lts" }
+tools = { java = "temurin-25.0.5+100000002.0.LTS" }
 run = "scripts/dev-bin.sh wado run package-gale/tools/oracle_typescript.wado"
 
 [tasks.extract-gale-descriptors]
 description = "Regenerate Gale's ANTLR4 descriptor corpus (all categories, or those named)"
-tools = { java = "lts" }
+tools = { java = "temurin-25.0.5+100000002.0.LTS" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/extract_antlr4_descriptors.wado"
 
 [tasks.test-gale-o2]
