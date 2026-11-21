@@ -87,6 +87,24 @@ The queue is asked again after each equation that settles a variable it reads,
 until nothing changes. A selection commits under the rule of the previous WEP:
 one candidate left, whose target meets the receiver at every instance.
 
+A selection not yet known types its site by the trait's declaration of the
+method, with `Self` the receiver. Once the impl is selected, its signature is
+held to those types. A comparison operator answers `bool` whichever impl it
+selects. Any other operator and a subscript answer the trait's `Output`, a
+variable until the impl is selected. A static call on a receiver spelled
+without its arguments (`Bx::make()`) is asked at the instance whose arguments
+are variables. A site waits only where:
+
+- the receiver's head is known: a bare variable, or a projection off an open
+  variable, needs its head resolved first;
+- every candidate is of one trait;
+- a method call's or a static call's declaration reads no associated type and
+  no type parameter of its own;
+- a static call omits no default.
+
+Elsewhere an undecided selection reports at once that the receiver needs an
+annotation.
+
 ### `resolve_head(ty, cause)`
 
 Some sites need a type's head before they can go on: a method name is looked
@@ -109,8 +127,7 @@ take their defaults, and the queue runs again. Then:
 ### What goes
 
 The deferred machinery that exists only because sites decide alone:
-`DeferredCheck`, `defer_awaited_impl_bounds` and the other deferred impl bound
-paths, `Commitment` and `commit_to`, `close_infer_var` and `close_uninferred`,
+`DeferredCheck`, the deferred impl bound paths, `Commitment` and `commit_to`, `close_infer_var` and `close_uninferred`,
 and every branch that tests a type for `unknown` standing for an omitted
 argument. `unknown` remains only as error recovery.
 
@@ -125,15 +142,14 @@ Each step keeps every fixture passing and deletes what it replaces.
 - [x] One obligation queue holds bounds, projection links, commitments and the
   checks `equate` leaves undecided. It is asked again each time a variable
   settles, so a site that needs a head finds it at its fixed point.
-- [ ] Method, static, subscript and operator selection are obligations; a
-  selection not yet known stays queued until `resolve_head` or the body's end.
-  Until then, a selection admits a variable awaiting its report as meeting
-  every bound, and each selection site requires the committed impl's bounds
-  itself (`defer_awaited_impl_bounds`); this step deletes both. An operator
-  (`==`) still selects its impl by the receiver's head
-  (`resolve_trait_method_for_op`), apart from the solver. So a marker trait
-  beside a conditional impl decides `==` at an open receiver, where `a.eq(&a)`
-  reports it cannot choose. This step makes the two one.
+- [x] Method, static, subscript and operator selection are obligations. A
+  selection not yet known stays queued until the body's end
+  (`Obligation::Pending`), so a later use settles which impl a call on
+  `Box<_>` reaches, and `a.eq(&a)` and `a == a` select alike.
+- [x] A selection asks an impl's bounds in three values (`Unsettled::MayHold`):
+  one an open variable may yet meet keeps the candidate, and the selected impl
+  requires it (`require_selected_impl_bounds`). This replaces standing a
+  variable awaiting its report in as the error type, which met every bound.
 - [ ] A numeric literal's variable has a kind and a default. The open item of
   [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
   closes with it, and so does `Settles::Nothing`, which until then keeps a

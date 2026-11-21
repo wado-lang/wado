@@ -4486,13 +4486,16 @@ pub(super) enum TraitLookup {
     /// The lookup reported why it cannot answer, so the call reports nothing
     /// more.
     Reported,
+    /// The impls that may answer depend on what the receiver's variables
+    /// settle to: the blocks the order names, each `None` for a derived body.
+    Undecided(Vec<Option<DefId>>),
 }
 
 impl TraitLookup {
     pub(super) fn found(self) -> Option<TraitMethodMatch> {
         match self {
             Self::Found(found) => Some(*found),
-            Self::Missing | Self::Reported => None,
+            Self::Missing | Self::Reported | Self::Undecided(_) => None,
         }
     }
 }

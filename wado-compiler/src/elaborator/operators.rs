@@ -20,6 +20,7 @@ use super::coercion::{
 use super::control_flow::break_values;
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
+use super::pending_selection::{PendingOp, PendingOperator};
 use super::scope::ScopedBound;
 use super::synth::KeyedAccess;
 use super::trait_query::primitive_has_operator;
@@ -36,7 +37,7 @@ use crate::elaborator::sem::types::{
 };
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
-use crate::elaborator::types::RequiredTrait;
+use crate::elaborator::types::{IndexingTraitInfo, RequiredTrait};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::FqTraitName;
 
@@ -453,7 +454,7 @@ impl TypeSystem {
     }
 
     /// The one method an operator trait declares.
-    fn operator_method_name(&self, item: CompilerItem) -> String {
+    pub(super) fn operator_method_name(&self, item: CompilerItem) -> String {
         self.type_table
             .borrow()
             .compiler_items()
@@ -538,6 +539,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             )
         );
+        // An operator whose impl waits on the left operand's variables is
+        // resolved once the body has settled them. A comparison answers `bool`
+        // whichever impl it selects; any other operator answers its impl's
+        // `Output`, a variable until then. The right operand is held to the
+        // selected impl then.
+        if !both_refs
+            && let Some(origin) = origin
+            && let Some(item) = operator_compiler_item(&op)
+            && self.selection_waits(left, item, None)
+        {
+            let result = if is_comparison {
+                TypeTable::BOOL
+            } else {
+                self.mint_infer_var_named("Output")
+            };
+            self.wait_for_operator(PendingOperator {
+                op: PendingOp::Binary {
+                    op,
+                    right,
+                    right_span,
+                },
+                item,
+                left,
+                span,
+                origin,
+                result,
+            });
+            return result;
+        }
+
         if both_refs {
             let type_name = self.tysys.type_table.borrow().name(left);
             let _ = self.emit(TypeError::OperatorNotApplicable {
@@ -1134,6 +1165,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.tysys.type_table.borrow().is_never(expr_type) {
             return Some(expr_type);
         }
+        if self.selection_waits(expr_type, item, None) {
+            let result = self.mint_infer_var_named("Output");
+            self.wait_for_operator(PendingOperator {
+                op: PendingOp::Unary(op),
+                item,
+                left: expr_type,
+                span,
+                origin: id,
+                result,
+            });
+            return Some(result);
+        }
         let trait_name = self
             .tysys
             .type_table
@@ -1689,39 +1732,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if index_type == TypeTable::ERROR {
                         return Err(());
                     }
-                    let assign_info = lookup(self, Some(index_type));
-
                     // Reject &T/&mut T used as index expression (would ICE in codegen)
                     if let Some(expected) = self.tysys.pointee_of(index_type) {
                         self.typecheck(index_type, expected, index_expr.index.span());
                     }
 
-                    if let Some((trait_info, _)) = assign_info {
+                    if self.selection_waits(
+                        base_type_id,
+                        CompilerItem::IndexAssign,
+                        Some(index_type),
+                    ) {
+                        let output_type = self.mint_infer_var_named("Output");
+                        self.wait_for_operator(PendingOperator {
+                            op: PendingOp::IndexAssign { key: index_type },
+                            item: CompilerItem::IndexAssign,
+                            left: base_type_id,
+                            span: index_expr.span,
+                            origin: index_expr.id,
+                            result: output_type,
+                        });
+                        return Ok(WritePlace::IndexAssign { output_type });
+                    }
+
+                    if let Some((trait_info, _)) = lookup(self, Some(index_type)) {
                         let output_type = trait_info.output_type;
-                        let func = self.indexing_function_ref(
-                            &trait_info,
-                            "index_assign",
-                            index_expr.span,
-                        );
-
-                        // Record the
-                        // resolved `IndexAssign` dispatch keyed by
-                        // the inner `IndexExpr`'s `AstId` so reify
-                        // can replay the same `arr.index_assign(idx,
-                        // value)` shape for `arr[i] = v` and
-                        // `arr[i] OP= v`.
-                        self.record_index_assign_dispatch(
-                            index_expr.id,
-                            OperatorDispatch {
-                                function_ref: func,
-                                method_def: Some(trait_info.method_def),
-                                self_kind: trait_info.self_kind,
-                                arg_ref_wraps: vec![false, false],
-                                return_type: TypeTable::UNIT,
-                                needs_deref: false,
-                            },
-                        );
-
+                        self.record_index_assign(index_expr.id, index_expr.span, &trait_info);
                         return Ok(WritePlace::IndexAssign { output_type });
                     }
                     // Where no `IndexRefMut` writes through instead, an
@@ -1770,6 +1805,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // IndexAssign trait lookup returned None.
         let target_type = self.resolve_place_receiver(target_ast, target_ast, ctx)?;
         Ok(WritePlace::Place { target_type })
+    }
+
+    /// Record the `IndexAssign` dispatch of the subscript `id`, so reify
+    /// replays `arr.index_assign(idx, value)` for `arr[i] = v` and
+    /// `arr[i] OP= v`.
+    fn record_index_assign(&mut self, id: ast::AstId, span: Span, trait_info: &IndexingTraitInfo) {
+        let func = self.indexing_function_ref(trait_info, "index_assign", span);
+        self.record_index_assign_dispatch(
+            id,
+            OperatorDispatch {
+                function_ref: func,
+                method_def: Some(trait_info.method_def),
+                self_kind: trait_info.self_kind,
+                arg_ref_wraps: vec![false, false],
+                return_type: TypeTable::UNIT,
+                needs_deref: false,
+            },
+        );
+    }
+
+    /// The `IndexAssign` impl `base` answers at `key` with, its dispatch
+    /// recorded for the subscript `id`: its `Output`, or the error type where
+    /// none answers.
+    pub(super) fn dispatch_index_assign(
+        &mut self,
+        id: ast::AstId,
+        span: Span,
+        base: TypeId,
+        key: TypeId,
+    ) -> TypeId {
+        let lookup_type_id = self.tysys.newtype_base_lookup(base);
+        let found = self.index_lookup_or_newtype_base(base, lookup_type_id, |s, t| {
+            s.find_index_assign_trait_impl(t, Some(key))
+        });
+        let Some((trait_info, _)) = found else {
+            if !self.report_unmet_trait_impl_bound(
+                base,
+                &[CompilerItem::IndexAssign],
+                Some(key),
+                span,
+            ) {
+                let _ = self.emit(TypeError::MissingTraitImpl {
+                    type_name: self.tysys.type_id_to_string(base),
+                    trait_name: format!("IndexAssign<{}>", self.tysys.type_id_to_string(key)),
+                    span,
+                });
+            }
+            return TypeTable::ERROR;
+        };
+        self.record_index_assign(id, span, &trait_info);
+        trait_info.output_type
     }
 
     /// Check that `target_ast`, resolved to `place`, takes a value of
@@ -2103,6 +2189,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
+    /// Whether the impl answering operator trait `item` on `left` waits on a
+    /// variable `left` holds. An indexing trait is asked at the subscript's
+    /// `key`.
+    pub(super) fn selection_waits(
+        &self,
+        left: TypeId,
+        item: CompilerItem,
+        key: Option<TypeId>,
+    ) -> bool {
+        let left = self.apply_infer_holes(left);
+        {
+            let tt = self.tysys.type_table.borrow();
+            if !tt.head_is_known(left)
+                || !tt.contains_infer_var(left)
+                || tt.contains_rigid_param(left)
+            {
+                return false;
+            }
+        }
+        let required = match key {
+            Some(key) => self.subscript_trait(item, key),
+            None => self.tysys.required_compiler_trait(item),
+        };
+        let Some(required) = required else {
+            return false;
+        };
+        self.selection_undecided(
+            left,
+            &self.tysys.operator_method_name(item),
+            Some(&required),
+        )
+    }
+
     /// A comparison operator's trait method on `struct_name`, named through
     /// the compiler item that anchors the trait.
     fn resolve_comparison_method(
@@ -2371,7 +2490,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(FqTraitName, MethodInfo)> {
         let required = self.tysys.required_compiler_trait(item);
         let args = match rhs {
-            Some(rhs) => ArgSource::Types(vec![self.tysys.type_table.borrow_mut().make_ref(rhs)]),
+            Some(rhs) => ArgSource::Classes {
+                classes: vec![ArgClass::Exact(
+                    self.tysys.type_table.borrow_mut().make_ref(rhs),
+                )],
+                expected: None,
+            },
             None => ArgSource::NoArguments,
         };
         self.find_method_in_trait_bounds(

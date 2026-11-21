@@ -1092,6 +1092,7 @@ impl TypeSystem {
         ctx: &Scope,
         type_id: TypeId,
         bounds: &'b [FqTraitName],
+        unsettled: Unsettled,
     ) -> Option<&'b FqTraitName> {
         let table = self.type_table.borrow();
         if ctx.awaits_pending_call(&table, type_id) {
@@ -1101,11 +1102,22 @@ impl TypeSystem {
             .iter()
             .map(|trait_| ctx.trait_awaits_pending_call(&table, trait_))
             .collect();
+        let unsettled = match unsettled {
+            Unsettled::MayHold if table.infer_vars_in(type_id).is_empty() => Unsettled::Fails,
+            Unsettled::MayHold | Unsettled::Fails => unsettled,
+        };
         drop(table);
         bounds
             .iter()
             .zip(awaiting)
-            .find(|&(trait_, awaits)| !awaits && !self.type_implements_trait(ctx, type_id, trait_))
+            .find(|&(trait_, awaits)| {
+                !awaits
+                    && !self.type_implements_trait(ctx, type_id, trait_)
+                    && match unsettled {
+                        Unsettled::Fails => true,
+                        Unsettled::MayHold => !self.solver().may_hold(self, ctx, type_id, trait_),
+                    }
+            })
             .map(|(trait_, _)| trait_)
     }
 
@@ -1849,7 +1861,13 @@ impl TypeSystem {
                 if header.trait_def() == Some(trait_)
                     && self.header_answers_bound_args(header, wanted, type_args)
                     && self.impl_reaches(entry, type_args)
-                    && self.check_impl_block_bounds(ctx, entry, subject, type_args)
+                    && self.check_impl_block_bounds(
+                        ctx,
+                        entry,
+                        subject,
+                        type_args,
+                        Unsettled::Fails,
+                    )
                 {
                     return true;
                 }
@@ -2139,7 +2157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The header answers whether the method exists, the digest what it says.
     /// A method the header lists but the digest lacks is a decl-pass bug, so it
     /// panics rather than reading as "no such method".
-    fn trait_method_of(
+    pub(super) fn trait_method_of(
         &self,
         key: &DefId,
         method_name: &str,
@@ -2652,8 +2670,9 @@ impl TypeSystem {
         def: DefId,
         receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
+        unsettled: Unsettled,
     ) -> bool {
-        self.unmet_impl_bound(ctx, def, receiver, type_args)
+        self.unmet_impl_bound(ctx, def, receiver, type_args, unsettled)
             .is_none()
     }
 
@@ -2666,6 +2685,7 @@ impl TypeSystem {
         def: DefId,
         receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
+        unsettled: Unsettled,
     ) -> Option<UnmetImplBound> {
         let trait_env = self.trait_env.clone();
         let header = &trait_env.impl_headers[&def];
@@ -2678,7 +2698,7 @@ impl TypeSystem {
         }
         let affine_params = ctx.trait_ctx.affine_params();
         let unmet = |param: &str, subjects: &[TypeId]| {
-            self.unmet_param_bound(ctx, header, param, subjects, &affine_params, &[])
+            self.unmet_param_bound(ctx, header, param, subjects, &affine_params, &[], unsettled)
         };
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
@@ -2697,7 +2717,7 @@ impl TypeSystem {
         let impl_ty = header.ty.referent();
         if let ast::Type::Generic(_) = impl_ty {
             let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
-            return self.unmet_slot_bound(ctx, def, &slots);
+            return self.unmet_slot_bound(ctx, def, &slots, unsettled);
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
@@ -2720,6 +2740,7 @@ impl TypeSystem {
         ctx: &Scope,
         def: DefId,
         slots: &TypeArgMap,
+        unsettled: Unsettled,
     ) -> Option<UnmetImplBound> {
         let trait_env = self.trait_env.clone();
         let header = &trait_env.impl_headers[&def];
@@ -2745,7 +2766,15 @@ impl TypeSystem {
                 .iter()
                 .any(|p| p.name == param && p.is_pack);
             let subjects = self.bound_subjects(is_pack, type_arg);
-            self.unmet_param_bound(ctx, header, param, &subjects, &affine_params, &at)
+            self.unmet_param_bound(
+                ctx,
+                header,
+                param,
+                &subjects,
+                &affine_params,
+                &at,
+                unsettled,
+            )
         })
     }
 
@@ -2762,6 +2791,7 @@ impl TypeSystem {
         subjects: &[TypeId],
         affine_params: &[TypeId],
         at: &[(FqTypeName, FqTypeName)],
+        unsettled: Unsettled,
     ) -> Option<UnmetImplBound> {
         let declared = header.type_params.iter().find(|p| p.name == param)?;
         let bounds: Vec<FqTraitName> = declared
@@ -2774,7 +2804,7 @@ impl TypeSystem {
             let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
                 UnmetKind::Affine
             } else {
-                UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds)?.clone())
+                UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds, unsettled)?.clone())
             };
             Some(UnmetImplBound {
                 param: param.to_string(),
@@ -2791,6 +2821,16 @@ pub(super) struct UnmetImplBound {
     pub(super) param: String,
     pub(super) type_arg: TypeId,
     pub(super) missing: UnmetKind,
+}
+
+/// How a bound check answers a type whose variables have not settled.
+#[derive(Clone, Copy)]
+pub(super) enum Unsettled {
+    /// As it stands: no impl answers a variable.
+    Fails,
+    /// In three values, as a selection asks it: a bound the type may yet meet
+    /// keeps the candidate, and selecting it requires the bound.
+    MayHold,
 }
 
 pub(super) enum UnmetKind {

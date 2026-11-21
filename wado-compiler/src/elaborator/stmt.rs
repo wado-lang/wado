@@ -17,6 +17,7 @@ use crate::unparse::{case_pattern_head, unparse_instance_pattern, unparse_patter
 
 use super::method_call::MethodCallInput;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
+use super::pending_selection::{ElementHome, Undecided};
 use super::type_resolution::slot_type_ids;
 use super::types::{BindingSite, FunctionContext, MustBind, TypeError};
 use super::tysys::TypeSystem;
@@ -2833,9 +2834,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the freshly recorded tail. See `BodyFacts`.
         let overlay_base = self.sem.types.lens();
         let mut element_overlays: Vec<BodyFacts> = Vec::new();
+        let instantiation = self
+            .sem
+            .types
+            .tuple_overlays
+            .get(&for_of.id)
+            .map_or(0, Vec::len);
+        let enclosing_home = self.infer_holes.element_home;
 
-        for &elem_type in elems {
+        for (element, &elem_type) in elems.iter().enumerate() {
             let ctx = &mut ctx.enter_scope();
+            self.infer_holes.element_home = Some(ElementHome {
+                for_of: for_of.id,
+                instantiation,
+                element,
+            });
 
             // When iterating through a reference, the element binds by reference
             // (`&T_k`); otherwise by value. Mirrors `tuple_element_binding`.
@@ -2862,13 +2875,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Resolve the body AST (each expansion gets its own resolution with
             // different element types) for its facts.
-            self.resolve_block(&for_of.body, ctx, None);
+            self.settling_selections(Undecided::Wait, |this| {
+                this.resolve_block(&for_of.body, ctx, None);
+            });
 
             // Capture this element's body annotations and reset the maps back to
             // their pre-loop state so the next element records from a clean
             // slate.
             element_overlays.push(self.sem.types.split_off(overlay_base));
         }
+        self.infer_holes.element_home = enclosing_home;
 
         // Record this for-of's per-element overlays as one instantiation (in
         // deterministic walk order). A nested inner for-of resolves once per

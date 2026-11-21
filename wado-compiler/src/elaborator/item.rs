@@ -22,6 +22,7 @@ use crate::token::Span;
 use crate::type_table::{ImplProjection, TypeTable};
 
 use super::infer_hole::InferHoleTable;
+use super::pending_selection::Undecided;
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig, own_effect_params};
 use super::trait_query::SelfBinding;
@@ -1315,7 +1316,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .fn_affine_params
             .insert(func.id, affine_params);
         if let Some(b) = func.body.as_ref() {
-            self.resolve_block(b, ctx, None);
+            self.settling_selections(Undecided::Report, |this| this.resolve_block(b, ctx, None));
         }
         self.validate_missing_return_ast(return_type, func, ctx.in_handler_method);
         self.validate_loop_jumps_ast(func.body.as_ref());
@@ -2860,7 +2861,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         self.sem.decls.clear_fn_local_items();
 
-        self.resolve_block(&test_decl.body, &mut ctx, None);
+        self.settling_selections(Undecided::Report, |this| {
+            this.resolve_block(&test_decl.body, &mut ctx, None);
+        });
     }
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully

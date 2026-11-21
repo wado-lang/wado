@@ -1,0 +1,38 @@
+// A closure passed to a trait's static method takes its parameter types
+// from the one signature every impl declares, and its effects settle to the
+// parameter's.
+
+struct Bx<T> { v: T }
+
+trait Mk with () {
+    fn make(f: fn(i64) -> i64) -> Self;
+}
+
+impl Mk for Bx<u64> {
+    fn make(f: fn(i64) -> i64) -> Bx<u64> { return Bx { v: f(1) as u64 }; }
+}
+
+impl Mk for Bx<i64> {
+    fn make(f: fn(i64) -> i64) -> Bx<i64> { return Bx { v: f(2) }; }
+}
+
+struct One { v: i32 }
+
+trait Make with () {
+    fn make(f: fn(i32) -> i32) -> Self;
+}
+
+impl Make for One {
+    fn make(f: fn(i32) -> i32) -> One { return One { v: f(1) }; }
+}
+
+test "one impl" {
+    let d = One::make(|x: i32| x + 1);
+    assert d.v == 2;
+}
+
+test "parameter inferred, impl settled by a later use" {
+    let b = Bx::make(|x| x + 1);
+    let d: Bx<u64> = b;
+    assert d.v == 2;
+}

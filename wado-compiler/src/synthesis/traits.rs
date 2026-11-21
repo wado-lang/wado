@@ -3371,12 +3371,19 @@ impl SynthesisCtx<'_, '_, '_> {
             ImplScope::CurrentModule => Some(&self.module),
             ImplScope::AnyModule => None,
         };
+        let receiver = Receiver::Type(receiver.clone());
+        // A marker beside a bounded written impl answers the instances whose
+        // bounds the written one misses, so the written one covers none of them.
+        let marked = self.trait_env.has_marker_by_receiver(&receiver, trait_);
         pending
             || self.trait_env.has_covering_methodful_impl_by_receiver(
-                &Receiver::Type(receiver.clone()),
+                &receiver,
                 trait_,
                 module,
-                |block| !self.partial_impls.contains(&block),
+                |block| {
+                    !(self.partial_impls.contains(&block)
+                        || marked && self.trait_env.is_bounded_impl(block))
+                },
             )
     }
 

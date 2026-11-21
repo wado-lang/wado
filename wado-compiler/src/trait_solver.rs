@@ -15,7 +15,7 @@ pub use candidates::{
 };
 pub use coherence::{CoherenceError, coherence_errors, mark_rejected};
 pub use derive::{derive, derive_alongside, pair_comparisons, sourced, written_over};
-pub use holds::{Holds, comparison_row, holds, holds_with_args, owed, written_comparison};
+pub use holds::{Holds, Verdict, comparison_row, holds, holds_with_args, owed, written_comparison};
 pub use program::{
     ArgDefault, AssocId, Declaration, DerivationRequest, Env, Fact, ImplDef, ImplId, ImplOrigin,
     MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, SolverType,

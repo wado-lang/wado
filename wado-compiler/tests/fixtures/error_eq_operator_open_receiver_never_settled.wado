@@ -1,0 +1,25 @@
+// Nothing settles `T`, so which `Eq` answers `a == a` stays undecided.
+
+struct Box<T> { v: T }
+
+trait Cap with () { fn cap(&self) -> i32; }
+impl Cap for i32 { fn cap(&self) -> i32 { return 1; } }
+
+impl<T: Cap> Eq for Box<T> { fn eq(&self, _o: &Self) -> bool { return false; } }
+impl<T: Eq> Eq for Box<T>;
+
+fn mk<T: Default>() -> Box<T> {
+    return Box { v: T::default() };
+}
+
+test {
+    let a = mk();
+    #[allow(self_comparison)]
+    let _same = a == a;
+}
+
+__DATA__
+{
+    "compile_error": ":18:17: analysis error: cannot infer `Box<T>` far enough to choose which `eq` this calls; annotate it",
+    "compile_error_count": 1
+}

@@ -1,0 +1,32 @@
+// Nothing settles `T`, so which `IndexValue` answers `a[0]` stays undecided.
+
+struct Bx<T> { v: T }
+
+impl IndexValue<i32> for Bx<u64> {
+    type Output = u64;
+    fn index_value(&self, _i: i32) -> u64 {
+        return self.v;
+    }
+}
+
+impl IndexValue<i32> for Bx<i64> {
+    type Output = i64;
+    fn index_value(&self, _i: i32) -> i64 {
+        return self.v;
+    }
+}
+
+fn mk<T: Default>() -> Bx<T> {
+    return Bx { v: T::default() };
+}
+
+test {
+    let a = mk();
+    let _c = a[0];
+}
+
+__DATA__
+{
+    "compile_error": ":25:14: analysis error: cannot infer `Bx<T>` far enough to choose which `index_value` this calls; annotate it",
+    "compile_error_count": 1
+}
