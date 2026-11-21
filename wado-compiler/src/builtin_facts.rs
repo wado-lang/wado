@@ -325,8 +325,7 @@ pub struct ReturnShape {
     pub carries_storage: bool,
     /// An `Array<T>`, by value or through a reference.
     pub is_array: bool,
-    /// A `&` or `&mut`, as declared: a type parameter that some call
-    /// instantiates with a reference is not one.
+    /// A `&` or `&mut`.
     pub is_reference: bool,
     /// A `&mut`.
     pub is_mut_ref: bool,

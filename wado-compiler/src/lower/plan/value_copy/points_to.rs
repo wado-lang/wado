@@ -626,7 +626,7 @@ impl Graph {
     }
 
     /// The node holding `node`'s set.
-    pub(super) fn find(&mut self, node: u32) -> u32 {
+    fn find(&mut self, node: u32) -> u32 {
         self.rep.find(node)
     }
 
@@ -637,7 +637,7 @@ impl Graph {
     }
 
     /// The location nodes in the set of `node`, a representative.
-    pub(super) fn locations_in(&self, node: u32) -> Vec<u32> {
+    fn locations_in(&self, node: u32) -> Vec<u32> {
         Locations {
             set: &self.pts[node as usize],
             nodes: &self.locations,
@@ -1565,11 +1565,7 @@ impl Builder<'_> {
     /// A builtin, as its declaration states: the result is part of the
     /// arguments it names, and each retained argument — or what it points to
     /// — lands where the declaration says.
-    fn builtin_call(
-        &mut self,
-        decl: &BuiltinDeclaration,
-        args: &[&TirExpr],
-    ) -> Option<u32> {
+    fn builtin_call(&mut self, decl: &BuiltinDeclaration, args: &[&TirExpr]) -> Option<u32> {
         let handed: Vec<Option<u32>> = args
             .iter()
             .enumerate()

@@ -961,7 +961,8 @@ impl<'p, 'a> Body<'p, 'a> {
                     }
                 }
                 let Some(h) = handed[p] else { continue };
-                if self.package.type_table.is_reference(args[p].type_id) && !decl.returns_reference {
+                if self.package.type_table.is_reference(args[p].type_id) && !decl.returns_reference
+                {
                     self.g.load(h, result);
                 } else {
                     self.g.copy(h, result);
