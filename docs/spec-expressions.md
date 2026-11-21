@@ -205,7 +205,7 @@ A function's parameters share the body's scope, so a `let` taking a parameter's
 name redeclares it, and so does a parameter named twice. One pattern binding a
 name twice is a redeclaration too. Only a name that binds counts. In a pattern
 that is a bare identifier ([Patterns](./spec-patterns.md#pattern-syntax)),
-never a case, `null` or a constant.
+never a case's name, `null` or a constant.
 
 A binder that takes a name already reaching a symbol, without deriving its value
 from that name as above, is legal, and the
