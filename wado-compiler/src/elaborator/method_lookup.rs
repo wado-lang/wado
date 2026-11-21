@@ -1009,9 +1009,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
     }
 
-    /// Require the bounds impl `def`, selected for `receiver`, places on what
-    /// is still open in its arguments: the selection asked them in three
-    /// values, and one it could not answer yet holds or fails once settled.
+    /// Require the bounds impl `def`, selected for `receiver`, places on its
+    /// arguments where they name a variable: the selection asked those in
+    /// three values, and one it could not answer yet holds or fails once
+    /// settled.
     pub(super) fn require_selected_impl_bounds(
         &mut self,
         def: DefId,
@@ -1030,22 +1031,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::require_selected_impl_bounds`] at `type_args`, block `def`'s
     /// arguments as it reads them.
+    ///
+    /// Each bound is owed where any argument names a variable, the answered
+    /// ones included: the selection asked in three values wherever one did.
     fn require_impl_bounds_at(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
-        let type_args: Vec<TypeId> = type_args
-            .iter()
-            .map(|&arg| self.apply_infer_holes(arg))
-            .collect();
         let binding = {
             let tt = self.tysys.type_table.borrow();
-            let open = |ty: TypeId| !tt.infer_vars_in(ty).is_empty();
-            if !type_args.iter().any(|&arg| open(arg)) {
+            let names_var = |ty: TypeId| !tt.infer_vars_in(ty).is_empty();
+            if !type_args.iter().any(|&arg| names_var(arg)) {
                 return;
             }
-            tt.open_impl_target_binding(tt.impl_target_args(def), &type_args, &open)
+            tt.open_impl_target_binding(tt.impl_target_args(def), type_args, &names_var)
         };
         if let Some(binding) = binding {
             let binding = self.tysys.type_table.borrow_mut().settle_runs(binding);
-            self.defer_open_impl_bounds(def, &binding.slots, span);
+            self.defer_impl_bounds(def, &binding.slots, &binding.slots, span, OwedBounds::All);
         }
     }
 

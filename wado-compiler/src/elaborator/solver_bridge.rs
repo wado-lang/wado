@@ -2330,7 +2330,8 @@ impl SolverBridge {
     }
 
     /// Whether `type_id` may satisfy `asked` once its variables settle: the
-    /// solver's answer in three values, where only a refutation says no.
+    /// solver's answer in three values, where only a refutation says no. A
+    /// type the lowering cannot say keeps the two-valued answer, which is no.
     pub(super) fn may_hold(
         &self,
         tysys: &TypeSystem,
@@ -2351,10 +2352,7 @@ impl SolverBridge {
                 Verdict::Fails
             ),
             Err(Unsaid::Failed | Unsaid::Open) => true,
-            Err(Unsaid::Unsayable) => panic!(
-                "the lowering states no `{}: {asked}`",
-                tysys.type_table.borrow().name(type_id)
-            ),
+            Err(Unsaid::Unsayable) => false,
         }
     }
 

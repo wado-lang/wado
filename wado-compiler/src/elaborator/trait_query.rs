@@ -997,6 +997,10 @@ impl TypeSystem {
             .iter()
             .map(|trait_| ctx.trait_awaits_pending_call(&table, trait_))
             .collect();
+        let unsettled = match unsettled {
+            Unsettled::MayHold if table.infer_vars_in(type_id).is_empty() => Unsettled::Fails,
+            Unsettled::MayHold | Unsettled::Fails => unsettled,
+        };
         drop(table);
         bounds
             .iter()
