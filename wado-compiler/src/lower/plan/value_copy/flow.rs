@@ -88,13 +88,14 @@ impl Summary {
         Summary { holds }
     }
 
-    /// Whether every value the call returns is storage it created that nothing
-    /// else reaches, so the caller takes it over without a copy.
+    /// Whether every value the call returns is storage it created or took by
+    /// value that nothing else reaches, so the caller takes it over without a
+    /// copy. A parameter its callers pass uncopied is the caller's to rule out.
     #[must_use]
     pub fn returns_owned(&self) -> bool {
-        self.holds
-            .iter()
-            .all(|&(holder, source)| holder != Holder::Returned || source == Iface::Fresh)
+        self.holds.iter().all(|&(holder, source)| {
+            holder != Holder::Returned || matches!(source, Iface::Fresh | Iface::Own(_))
+        })
     }
 }
 
@@ -453,7 +454,7 @@ fn summarize(package: &Package<'_>, summaries: &[Summary], func: &TirFunction) -
     // over, wherever it was created.
     for loc in b.g.solved(b.returned) {
         let source = match of(loc) {
-            Iface::Fresh if seen.contains(&loc) => Iface::Escape,
+            Iface::Fresh | Iface::Own(_) if seen.contains(&loc) => Iface::Escape,
             source => source,
         };
         holds.insert((Holder::Returned, source));
