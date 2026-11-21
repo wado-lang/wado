@@ -761,15 +761,14 @@ impl<'a> Interpreter<'a> {
     /// for again, and must not push out a callee asked for on every call.
     fn arena_reads(&mut self, body: &Body) -> Rc<ArenaReads> {
         let key = ArenaReads::key(body);
-        let entry = match self.arena_reads.iter().position(|(k, _)| *k == key) {
-            Some(at) => self.arena_reads.remove(at),
-            None => {
-                if self.arena_reads.len() == MAX_ARENA_READS {
-                    self.arena_reads.remove(0);
-                }
-                let reads = ArenaReads::of(body, self.facts.callees, self.facts.ctfe_builtins);
-                (key, Rc::new(reads))
+        let entry = if let Some(at) = self.arena_reads.iter().position(|(k, _)| *k == key) {
+            self.arena_reads.remove(at)
+        } else {
+            if self.arena_reads.len() == MAX_ARENA_READS {
+                self.arena_reads.remove(0);
             }
+            let reads = ArenaReads::of(body, self.facts.callees, self.facts.ctfe_builtins);
+            (key, Rc::new(reads))
         };
         let reads = Rc::clone(&entry.1);
         self.arena_reads.push(entry);
