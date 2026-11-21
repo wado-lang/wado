@@ -683,7 +683,7 @@ pub struct Interpreter<'a> {
     /// stays failed, and re-running it re-pays a whole-body copy for the same
     /// refusal.
     call_misses: Vec<CallMiss>,
-    /// [`ArenaReads::of`] the bodies frames last ran over, by
+    /// [`ArenaReads::of`] the bodies trackability last read, by
     /// [`Body::version`]. A frame copies its body afresh each time, so the
     /// copy's own version never repeats; the source's does while it is
     /// unchanged. Installing either fact `ArenaReads::of` reads clears it.
