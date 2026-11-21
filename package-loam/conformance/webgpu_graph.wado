@@ -34,6 +34,7 @@ use {
     Element,
     Float,
     full,
+    GatherDims,
     Graph,
     Holds,
     Placed,
@@ -233,6 +234,21 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     );
     assert gpu.read_backs() == reads_before_runs, "each row's run is gathered on the device";
     println(`row runs ${apart(&mut gpu, &taken_runs, &row_runs)}`);
+
+    // A slot of a pool of bytes, as an expert's weight is taken, is a view of
+    // the pool, which nothing reads back.
+    let octets = typed::<WebGpuBackend, u8, [Rows, Pair]>(&gpu, &cases::written_pools(&mut gpu).1);
+    let reads_before_slot = gpu.read_backs();
+    let slot_one = gpu.upload(&Tensor::<i64, [Slots, Run]> { data: [1], extents: [1, 1] });
+    let slot: Placed<u8, [Slots, Pair]> = gpu.gather(&octets, &slot_one, &GatherDims {
+        offset_dims: [1],
+        collapsed_slice_dims: [0],
+        start_index_map: [0],
+        index_vector_dim: 1,
+        slice_sizes: [1, 4],
+    });
+    assert gpu.read_backs() == reads_before_slot, "a slot of a pool of bytes is a view";
+    assert gpu.download(&slot).data == [1, 2, 3, 255] as List<u8>;
 
     let w = cases::windowed_input();
     println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &cpu.upload(

@@ -577,8 +577,11 @@ impl Graph for WebGpuBackend {
             return Placed::Device(out);
         }
         let index = self.host(indices);
-        if E::exact_in_f32()
-            && let Some(TakenAxes { first, count, batch }) = taken_axes(&extents, &index.extents, dims) {
+        let exact = E::exact_in_f32();
+        // An element an f32 does not hold is taken by a view alone, which a
+        // merge of the axes taken could copy.
+        if let Some(TakenAxes { first, count, batch }) = taken_axes(&extents, &index.extents, dims)
+            && (exact || count == 1) {
             // The axes taken merge into one, which each index's flat position
             // along them takes.
             let mut starts = List::<i64>::with_capacity(index.data.len() / count);
@@ -598,7 +601,7 @@ impl Graph for WebGpuBackend {
             merged.push(element_count(&extents[first..<first + count].to_list()));
             merged.extend(&extents[first + count..<extents.len()].to_list());
             let view = self.device_view(data);
-            if let Some(out) = self.gathered(&self.reshaped(&view, &merged), &clamped, first) {
+            if let Some(out) = self.gathered(&self.reshaped(&view, &merged), &clamped, first, exact) {
                 assert out.extents == gathered_extents(&index.extents, dims);
                 return Placed::Device(out);
             }
