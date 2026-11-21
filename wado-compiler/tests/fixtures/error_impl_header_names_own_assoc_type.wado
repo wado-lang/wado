@@ -1,0 +1,19 @@
+// An impl header cannot name its own associated type: the header is resolved
+// before the impl answers anything.
+
+trait Conv<T> with () {
+    type Item;
+    fn conv(&self, t: T) -> i32;
+}
+
+struct X {}
+
+impl Conv<Self::Item> for X {
+    type Item = i32;
+    fn conv(&self, t: i32) -> i32 {
+        return t + 1;
+    }
+}
+
+__DATA__
+{"compile_error": ":11:11: error: unknown type 'Self::Item'", "compile_error_count": 1}

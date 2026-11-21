@@ -4345,11 +4345,15 @@ impl TypeTable {
     }
 
     /// Whether `entry`'s impl's target binds at `type_args`:
-    /// `impl<T> Tr for W<List<T>>` answers nothing at `W<i32>`.
+    /// `impl<T> Tr for W<List<T>>` answers nothing at `W<i32>`. An impl whose
+    /// header is still being resolved answers nothing yet, so a header naming
+    /// its own associated type (`impl Conv<Self::Item> for X`) finds none.
     fn entry_reaches(&self, entry: &AssocAnswer, type_args: &[TypeId]) -> bool {
-        entry
-            .impl_def
-            .is_none_or(|def| self.impl_target_reaches(self.impl_target_args(def), type_args))
+        entry.impl_def.is_none_or(|def| {
+            self.impl_targets
+                .get(&def)
+                .is_some_and(|target| self.impl_target_reaches(&target.args, type_args))
+        })
     }
 
     fn answers_reaching(&self, answers: &AssocAnswers, type_args: &[TypeId]) -> AssocAnswers {

@@ -126,3 +126,12 @@ effect row is not yet known, and the effect check solves it.
 8. [x] A function generic over an effect is taken as a value: the expected
    `fn(...)` type settles its effect parameters as it settles its type
    parameters. `effect_generic_fn_as_value.wado` holds it.
+
+## Known gaps
+
+- The rewrite that drops a struct's own arguments' rows also drops them where
+  a generic impl's bound reads one. Under `impl Make for fn() -> i32 with Stdout`,
+  `impl<T: Make> W<T> { fn get(&self) -> T::Out { … } }` called on
+  `W { t: || loud() }` fails in the method body: `W<fn() -> i32>` holds no
+  `Make` impl. An annotation on the field's value does not help, since the
+  row is dropped from the instance whatever wrote it.
