@@ -452,7 +452,7 @@ A request carries its method, its path and query, and its headers.
 use { Request, Response, ErrorCode, Headers, Trailers, FieldName } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
-    let is_post = request.get_method() matches { Post };
+    let is_post = request.get_method() matches { _::Post };
     let path = request.get_path_with_query().unwrap_or("/");
     let headers = request.get_headers();
     let greetings = headers.get("x-greeting" as FieldName);
@@ -644,7 +644,7 @@ fn request_for(path: String) -> [Request, FutureWritable<Result<Option<Trailers>
 
 test "only the root is served" {
     let [request, trailers_tx] = request_for("/admin");
-    assert handle(request) matches { Err(HttpRequestDenied) };
+    assert handle(request) matches { Err(_::HttpRequestDenied) };
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 ```

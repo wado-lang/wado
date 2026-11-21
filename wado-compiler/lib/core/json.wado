@@ -1185,7 +1185,7 @@ fn parse_integral<T: FromStr<Err = ParseIntError>>(
         Err(e) => {
             builtin::cold_path();
             Result::Err(match e.kind() {
-                PosOverflow | NegOverflow => integer_range_error(type_name, start),
+                _::PosOverflow | _::NegOverflow => integer_range_error(type_name, start),
                 // `digits` is a valid integer, so only an unsigned `T` refuses
                 // one, and only for its sign.
                 _ => DeserializeError::overflow(`negative value for ${type_name}`, start),
@@ -1208,7 +1208,7 @@ fn read_number_text<T: Deserialize>(text: ByteSlice, offset: i64) -> Result<Opti
     return match T::deserialize(&mut de) {
         Ok(v) => Result::Ok(if de.pos == de.input.len() { Option::Some(v) } else { null }),
         Err(e) => match e.kind {
-            MalformedInput | Eof => Result::Ok(null),
+            _::MalformedInput | _::Eof => Result::Ok(null),
             _ => Result::Err(DeserializeError { ..e, offset }),
         },
     };
@@ -2374,7 +2374,7 @@ impl DeserializeStruct for JsonStructAccess {
             de.expect_char(b':')?;
             let idx = match S::lookup(de.input.slice(key_start, key_end)) {
                 Some(i) => i,
-                None => -1,
+                null => -1,
             };
             return Result::Ok(Option::Some(idx));
         }
@@ -2387,7 +2387,7 @@ impl DeserializeStruct for JsonStructAccess {
         de.expect_char(b':')?;
         let idx = match S::lookup(key.as_bytes()) {
             Some(i) => i,
-            None => -1,
+            null => -1,
         };
         return Result::Ok(Option::Some(idx));
     }
@@ -2623,7 +2623,7 @@ impl Deserializer for JsonDeserializer {
                     Result::Ok(c);
                 }
             },
-            None => {
+            null => {
                 builtin::cold_path();
                 Result::Err(DeserializeError::invalid_value(
                     "empty string for char",

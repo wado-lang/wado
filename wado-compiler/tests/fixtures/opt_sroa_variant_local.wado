@@ -15,7 +15,7 @@ fn last_even(xs: &List<i64>) -> i64 {
     let seen = found matches { Some(_) };
     return match found {
         Some(v) => if seen { v } else { -2 },
-        None => -1,
+        null => -1,
     };
 }
 
@@ -24,7 +24,7 @@ fn last_even(xs: &List<i64>) -> i64 {
 fn describe(v: Option<i64>) -> i64 {
     return match v {
         Some(x) => x,
-        None => 0,
+        null => 0,
     };
 }
 
@@ -47,8 +47,8 @@ fn nested(n: i32) -> i32 {
     }
     return match o {
         Some(Some(v)) => v,
-        Some(None) => -1,
-        None => 0,
+        Some(null) => -1,
+        null => 0,
     };
 }
 
@@ -63,7 +63,7 @@ fn guard_resets(n: i64, reset: bool) -> i64 {
     return match s {
         Some(v) && if reset { s = null; false } else { false } => v,
         Some(v) => v + 1,
-        None => 0,
+        null => 0,
     };
 }
 
@@ -77,7 +77,7 @@ fn payload_breaks(c: bool) -> i32 {
     }
     return match s {
         Some(v) => v,
-        None => -1,
+        null => -1,
     };
 }
 
@@ -101,7 +101,7 @@ __DATA__
     "stdout": "",
     "wir_pass": {"O2": ["nir/sroa_variant_return"]},
     "wir_contrast": {"O2": [
-        {"    return describe(kept);": "    return match kept {\n        Some(x) => x,\n        None => 0,\n    };"}
+        {"    return describe(kept);": "    return match kept {\n        Some(x) => x,\n        null => 0,\n    };"}
     ]},
     "wir_not_expect:O2": ["last_even\"($mv$xs$repr, $mv$xs$used) {\n    let found: ref"],
     "wir_expect:O2": ["fn \"opt_sroa_variant_local.wado/passed_whole\"(n) {\n    let kept: ref \"core:prelude/types.wado//Option<i64>\";"]

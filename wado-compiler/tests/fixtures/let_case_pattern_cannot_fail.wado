@@ -24,13 +24,13 @@ test "a variant whose other cases hold no value" {
 test "nested in a tuple and a struct" {
     let [A(x), y] = [W::A(5), 1];
     let Holder { w: A(z) } = Holder { w: W::A(6) };
-    let [Only, n] = [One::Only, 7];
+    let [_::Only, n] = [One::Only, 7];
     assert x + y + z + n == 19;
 }
 
 test "a case name at the root is the case" {
-    let Only = One::Only;
-    for let Only of [One::Only] {}
+    let _::Only = One::Only;
+    for let _::Only of [One::Only] {}
 }
 
 test "mut binds every name mutably" {

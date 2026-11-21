@@ -158,7 +158,7 @@ test "missing terminal becomes a Missing child and marks the node incomplete" {
     assert s.is_error(0);
     assert s.is_incomplete(0);
     let ch = children_of(&s, 0);
-    assert s.child_kind(ch[2]) matches { Missing };
+    assert s.child_kind(ch[2]) matches { _::Missing };
     assert s.token_index(ch[2]) == syn;
     assert ts.is_synthetic(s.token_index(ch[2]));
     assert s.to_string_tree(0, &ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + <missing ID>)";
@@ -182,7 +182,7 @@ test "skipped terminal becomes a Skipped child and marks the node erroneous" {
     assert s.is_error(0);
     assert !s.is_incomplete(0);
     let ch = children_of(&s, 0);
-    assert s.child_kind(ch[1]) matches { Skipped };
+    assert s.child_kind(ch[1]) matches { _::Skipped };
     assert s.to_string_tree(0, &ts, &names(["expr"]), &names(["ID", "PLUS", "AT"])) == "(expr a <skip @> b)";
 }
 
@@ -371,7 +371,7 @@ test "Diagnostic::error carries what was wanted and found, positions resolve lat
     assert d.is_error();
     assert d.expected == [3];
     assert d.found == 5;
-    assert d.recovery matches { Inserted };
+    assert d.recovery matches { _::Inserted };
     assert d.line == 1 && d.col == 0;
     resolve_positions(&mut diags, &src);
     assert diags[0].line == 2 && diags[0].col == 2;
@@ -401,14 +401,14 @@ test "merge_lex_errors merges each lex-error token in source order, up to the ca
     let mut diags: List<Diagnostic> = [parse_error];
     merge_lex_errors(&ts, &mut diags, 10);
     assert diags.len() == 3;
-    assert diags[0].code matches { LexError };
+    assert diags[0].code matches { _::LexError };
     assert diags[0].message == "token recognition error at: '#'";
-    assert diags[1].code matches { ExtraToken };
+    assert diags[1].code matches { _::ExtraToken };
     assert diags[2].span == Span::new(3, 4);
     let mut capped: List<Diagnostic> = [parse_error];
     merge_lex_errors(&ts, &mut capped, 1);
     assert capped.len() == 1;
-    assert capped[0].code matches { LexError };
+    assert capped[0].code matches { _::LexError };
 }
 
 test "merge_lex_errors keeps the earliest errors when the parse reported out of order" {
@@ -430,5 +430,5 @@ test "merge_lex_errors keeps the earliest errors when the parse reported out of 
     merge_lex_errors(&ts, &mut diags, 2);
     assert diags.len() == 2;
     assert diags[0].message == "pending";
-    assert diags[1].code matches { LexError };
+    assert diags[1].code matches { _::LexError };
 }

@@ -33,7 +33,7 @@ global MAX_IDLE_EXITS: i32 = 16;
 /// the ends of the text, and no other assertion.
 internal fn runs(program: &Program) -> bool {
     for let inst of &program.insts {
-        if let Assert(look) = *inst && !look matches { StartText | EndText } {
+        if let Assert(look) = *inst && !look matches { _::StartText | _::EndText } {
             return false;
         }
     }
@@ -133,7 +133,7 @@ impl Dfa {
         while let Some(came_entered) = stack.pop() {
             let pc = stack.pop().unwrap();
             let inst = self.program.insts[pc];
-            let entered = if forward && !inst matches { Byte(_) | Match } { came_entered } else { 0 };
+            let entered = if forward && !inst matches { Byte(_) | _::Match } { came_entered } else { 0 };
             let state = self.program.state_base[pc] + entered;
             if self.seen[state] == self.stamp {
                 continue;
@@ -182,9 +182,9 @@ impl Dfa {
                         stack.push(entered);
                     }
                 },
-                Fail => {
+                _::Fail => {
                 },
-                Byte(_) | Match => {
+                Byte(_) | _::Match => {
                     out.push(pc);
                     out.push(0);
                 },
@@ -201,7 +201,7 @@ impl Dfa {
                 key.push(threads[2 * i]);
                 key.push(threads[2 * i + 1]);
                 // The threads below a match never run.
-                if self.program.insts[threads[2 * i]] matches { Match } {
+                if self.program.insts[threads[2 * i]] matches { _::Match } {
                     accept = true;
                     break;
                 }
@@ -216,7 +216,7 @@ impl Dfa {
             for let pc of pcs {
                 key.push(pc);
                 key.push(0);
-                accept = accept || self.program.insts[pc] matches { Match };
+                accept = accept || self.program.insts[pc] matches { _::Match };
             }
         }
         if let Some(state) = self.index.get(key) {
@@ -275,7 +275,7 @@ impl Dfa {
                 },
                 // A new start has the lowest priority, and none is tried once
                 // a match is found.
-                Match => found = found || forward,
+                _::Match => found = found || forward,
                 // An assertion about the scan's end, which is not here.
                 _ => {
                 },
@@ -331,7 +331,7 @@ impl Dfa {
                 match self.program.insts[pc] {
                     Byte(_) => {
                     },
-                    Match => {
+                    _::Match => {
                         threads.push(pc);
                         threads.push(0);
                     },
@@ -340,7 +340,7 @@ impl Dfa {
             }
             let mut accepts = false;
             for let i of (0..<threads.len()).step_by(2) {
-                accepts = accepts || self.program.insts[threads[i]] matches { Match };
+                accepts = accepts || self.program.insts[threads[i]] matches { _::Match };
             }
             self.accepts_at_end[state] = accepts as i32;
         }

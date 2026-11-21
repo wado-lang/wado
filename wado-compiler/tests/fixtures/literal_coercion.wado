@@ -443,37 +443,37 @@ test "i64 and u64 associated constants" {
 
 test "match arm literal adopts u64 sibling" {
     let opt: Option<u64> = Option::Some(5);
-    let v = match opt { Some(id) => id, None => 0 };
+    let v = match opt { Some(id) => id, null => 0 };
     assert v == 5;
 }
 
 test "match arm literal adopts i64 sibling" {
     let opt: Option<i64> = Option::Some(5);
-    let v = match opt { Some(x) => x, None => 0 };
+    let v = match opt { Some(x) => x, null => 0 };
     assert v == 5;
 }
 
 test "match arm literal adopts i128 sibling" {
     let opt: Option<i128> = Option::Some(5);
-    let v = match opt { Some(x) => x, None => 0 };
+    let v = match opt { Some(x) => x, null => 0 };
     assert v == 5;
 }
 
 test "match arm literal adopts f64 sibling" {
     let opt: Option<f64> = Option::Some(2.5);
-    let v = match opt { Some(x) => x, None => 0 };
+    let v = match opt { Some(x) => x, null => 0 };
     assert v == 2.5;
 }
 
 test "match arm negated literal adopts i64 sibling" {
     let opt: Option<i64> = Option::Some(5);
-    let v = match opt { Some(x) => x, None => -1 };
+    let v = match opt { Some(x) => x, null => -1 };
     assert v == 5;
 }
 
 test "match arm literal in a block tail" {
     let opt: Option<u64> = null;
-    let v = match opt { Some(x) => x, None => { 0 } };
+    let v = match opt { Some(x) => x, null => { 0 } };
     assert v == 0;
 }
 
@@ -527,7 +527,7 @@ test "a braced literal arm adopts the typed arm before it" {
 
 test "match arm whose body is an else-if chain of literals" {
     let opt: Option<i64> = null;
-    let v = match opt { Some(x) => x, None => if true { 0 } else { 1 } };
+    let v = match opt { Some(x) => x, null => if true { 0 } else { 1 } };
     assert v == 0;
 }
 
@@ -548,7 +548,7 @@ test "a braced else holding a match reaches the literals inside it" {
 
 test "a match arm block holding an if reaches the literals inside it" {
     let opt: Option<i64> = null;
-    let v = match opt { Some(x) => x, None => { if true { 0 } else { 1 } } };
+    let v = match opt { Some(x) => x, null => { if true { 0 } else { 1 } } };
     assert v == 0;
 }
 

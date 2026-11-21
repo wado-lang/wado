@@ -1288,6 +1288,7 @@ impl Parser {
         Ok(Pattern::Variant {
             variant_name: name,
             variant_qualifier: qualifier,
+            inferred_qualifier: None,
             name_id,
             name_span,
             bindings,
@@ -1390,11 +1391,36 @@ impl Parser {
         Ok(Pattern::Variant {
             variant_name: case_name,
             variant_qualifier: Some(qualifier),
+            inferred_qualifier: None,
             name_id: case_id,
             name_span: case_span,
             bindings: vec![],
             span: start_span.merge(&end_span),
         })
+    }
+
+    /// The constant `==` compares with: a bare or qualified path, with the
+    /// span of its last segment.
+    fn parse_constant_operand(&mut self) -> ParseResult<(Pattern, Span)> {
+        let start_span = self.peek().span;
+        let name = self.consume_ident()?;
+        if !self.check(&TokenKind::Lt) && !self.check(&TokenKind::ColonColon) {
+            let pattern = Pattern::Ident {
+                id: self.alloc_ast_id(),
+                name,
+                span: start_span,
+            };
+            return Ok((pattern, start_span));
+        }
+        let operand = self.parse_pattern_qualified_case_from_first_segment(name, start_span)?;
+        match operand {
+            Pattern::Variant {
+                ref bindings,
+                name_span,
+                ..
+            } if bindings.is_empty() => Ok((operand, name_span)),
+            _ => Err(self.error_at_span(start_span, "`==` takes the path of a constant")),
+        }
     }
 
     fn consume_ident(&mut self) -> ParseResult<String> {
@@ -3896,12 +3922,47 @@ impl Parser {
             // Unnamed struct pattern: { x, y }
             self.parse_struct_pattern_fields(None)
         } else if self.check(&TokenKind::Underscore) {
+            let underscore = self.peek().span;
             self.advance();
-            Ok(Pattern::Wildcard)
+            if !self.check(&TokenKind::ColonColon) {
+                return Ok(Pattern::Wildcard);
+            }
+            self.advance();
+            let name_span = self.peek().span;
+            let name = self.consume_ident()?;
+            let name_id = self.alloc_ast_id();
+            if !self.check(&TokenKind::LParen) {
+                return Ok(Pattern::Variant {
+                    variant_name: name,
+                    variant_qualifier: None,
+                    inferred_qualifier: Some(underscore),
+                    name_id,
+                    name_span,
+                    bindings: Vec::new(),
+                    span: underscore.merge(&name_span),
+                });
+            }
+            let mut pattern =
+                self.parse_variant_pattern(name, None, underscore, name_id, name_span)?;
+            let Pattern::Variant {
+                inferred_qualifier, ..
+            } = &mut pattern
+            else {
+                unreachable!("`parse_variant_pattern` builds a `Variant`");
+            };
+            *inferred_qualifier = Some(underscore);
+            Ok(pattern)
+        } else if self.check(&TokenKind::EqEq) {
+            let start = self.peek().span;
+            self.advance();
+            let (operand, end) = self.parse_constant_operand()?;
+            let span = start.merge(&end);
+            Ok(Pattern::Equal {
+                operand: Box::new(operand),
+                span,
+            })
         } else if let Some(name) = self.peek_kind().as_ident_name() {
             // Accept identifiers and contextual keywords (flags, type) as pattern names.
-            // Case does NOT affect parsing: disambiguation between variant cases and
-            // variable bindings is deferred to the elaborator using type information.
             let name = name.to_string();
             let start_span = self.peek().span;
             self.mark_keyword_name();
@@ -3916,8 +3977,6 @@ impl Parser {
                 // Named struct pattern: Point { x, y }
                 self.parse_struct_pattern_fields(Some(name))
             } else {
-                // Bare identifier: could be a variable binding or a variant/enum case
-                // without payload. The elaborator disambiguates using type information.
                 Ok(Pattern::Ident {
                     id: self.alloc_ast_id(),
                     name,
@@ -5078,6 +5137,34 @@ impl Parser {
         }))
     }
 
+    /// `_::Case`: a case of the expected type, the `_` standing for the type
+    /// the elaborator infers. The parser is positioned at the `_`.
+    fn parse_inferred_case_path(&mut self, underscore: Span) -> ParseResult<Expr> {
+        self.advance(); // consume _
+        self.advance(); // consume ::
+        let case_span = self.peek().span;
+        let case = self.consume_ident()?;
+        Ok(Expr::Ident(IdentExpr {
+            id: self.alloc_ast_id(),
+            name: format!("{}::{case}", ast::INFERRED_QUALIFIER),
+            span: underscore.merge(&case_span),
+            segments: vec![
+                PathSegment {
+                    id: self.alloc_ast_id(),
+                    name: ast::INFERRED_QUALIFIER.to_string(),
+                    span: underscore,
+                },
+                PathSegment {
+                    id: self.alloc_ast_id(),
+                    name: case,
+                    span: case_span,
+                },
+            ],
+            type_args: Vec::new(),
+            type_args_on_prefix: false,
+        }))
+    }
+
     fn parse_primary_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
 
@@ -5177,6 +5264,12 @@ impl Parser {
                 start_span,
                 "'matches' is an infix operator — write 'expr matches { pattern }' instead",
             )),
+            TokenKind::Underscore
+                if self.peek_nth(1).kind == TokenKind::ColonColon
+                    && self.peek_nth(2).kind.as_ident_name().is_some() =>
+            {
+                self.parse_inferred_case_path(start_span)
+            }
             TokenKind::Underscore => Err(self.wildcard_name_error()),
             TokenKind::Dot
                 if let TokenKind::NumberLit(digits) = &self.peek_nth(1).kind
@@ -9582,8 +9675,7 @@ line 2
 
     #[test]
     fn test_pattern_bare_identifier_always_ident() {
-        // Bare identifiers (no parens, no braces) are always Pattern::Ident
-        // regardless of case — the elaborator disambiguates
+        // A bare identifier binds, whatever its case.
         let upper = parse_pattern_from("None");
         let lower = parse_pattern_from("none");
         assert_matches!(&upper, Pattern::Ident { name, .. } if name == "None");

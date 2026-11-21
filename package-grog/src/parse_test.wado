@@ -14,7 +14,7 @@ message Outer {
   enum Kind { KIND_UNSPECIFIED = 0; KIND_A = -1; }
 }
 ").unwrap();
-    assert file.syntax matches { Proto3 };
+    assert file.syntax matches { _::Proto3 };
     assert file.package == "demo.v1";
     assert file.imports == ["other.proto"];
     assert file.messages.len() == 2;
@@ -22,12 +22,12 @@ message Outer {
     assert outer.path == ["Outer"];
     assert file.messages[1].path == ["Outer", "Inner"];
     assert outer.fields.len() == 6;
-    assert outer.fields[0].label matches { None };
-    assert outer.fields[0].type_ matches { Scalar(Int32) };
-    assert outer.fields[1].label matches { Optional };
+    assert outer.fields[0].label matches { _::None };
+    assert outer.fields[0].type_ matches { Scalar(_::Int32) };
+    assert outer.fields[1].label matches { _::Optional };
     assert outer.fields[2].number == 3;
     assert outer.fields[2].type_ matches { Named(t) && t == "Inner" };
-    assert outer.fields[3].type_ matches { Map([Str, Scalar(Int64)]) };
+    assert outer.fields[3].type_ matches { Map([_::Str, Scalar(_::Int64)]) };
     assert outer.fields[4].oneof matches { Some(o) && o == "choice" };
     assert outer.fields[5].line == 9;
     assert file.enums[0].path == ["Outer", "Kind"];
@@ -61,7 +61,7 @@ test "a keyword names a message, a field and its type" {
     assert file.messages[0].path == ["message"];
     let field = &file.messages[0].fields[0];
     assert field.name == "message";
-    assert field.label matches { Optional };
+    assert field.label matches { _::Optional };
     assert field.type_ matches { Named(t) && t == "message" };
     assert field.number == 1;
 }
@@ -78,7 +78,7 @@ message M { repeated int32 a = 1 [packed = true]; }
 }
 
 test "no syntax statement is proto2" {
-    assert read("message M {}").unwrap().syntax matches { Proto2 };
+    assert read("message M {}").unwrap().syntax matches { _::Proto2 };
 }
 
 test "an unknown edition is refused" {

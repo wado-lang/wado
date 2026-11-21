@@ -58,9 +58,9 @@ pub variant ParseError {
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
         let message: String = match *self {
-            InvalidLength => "not a UUID-shaped length",
-            InvalidGroups => "hyphens, braces or the `urn:uuid:` prefix are misplaced",
-            InvalidCharacter => "not a hex digit",
+            _::InvalidLength => "not a UUID-shaped length",
+            _::InvalidGroups => "hyphens, braces or the `urn:uuid:` prefix are misplaced",
+            _::InvalidCharacter => "not a hex digit",
         };
         f.write_str(&message);
     }
@@ -250,7 +250,7 @@ impl Visitor for UuidVisitor {
     fn visit_bytes(&mut self, v: ByteList) -> Result<Uuid, DeserializeError> {
         return match Uuid::from_bytes(&v) {
             Some(id) => Result::Ok(id),
-            None => Result::Err(DeserializeError::invalid_value("a UUID is 16 bytes", -1)),
+            null => Result::Err(DeserializeError::invalid_value("a UUID is 16 bytes", -1)),
         };
     }
 

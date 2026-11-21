@@ -43,8 +43,8 @@ test "every level wrapper reaches the sink" {
         error(`e`);
     };
     assert sink.events.len() == 5;
-    assert sink.events[0].meta.level matches { Trace };
-    assert sink.events[4].meta.level matches { Error };
+    assert sink.events[0].meta.level matches { _::Trace };
+    assert sink.events[4].meta.level matches { _::Error };
 }
 
 test "tier 3 drops events below the sink's minimum level" {
@@ -61,7 +61,7 @@ test "tier 2 drops events below the process-wide level" {
     let mut sink = CaptureSink {};
     let prev = log_level();
     set_log_level(Level::Warn);
-    assert log_level() matches { Warn };
+    assert log_level() matches { _::Warn };
     with Log => &mut sink do {
         info(`dropped`);
         warn(`kept`);

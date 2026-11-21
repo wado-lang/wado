@@ -354,8 +354,8 @@ fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &EmitContext) {
 /// The `lr_cont` argument a self-reference passes, or `null` for none.
 fn lr_cont_expr(cont: &LrCont, ctx: &mut EmitContext) -> Option<String> {
     return match *cont {
-        Unset => null,
-        Forward => Option::Some("lr_cont"),
+        _::Unset => null,
+        _::Forward => Option::Some("lr_cont"),
         Rest(id) => Option::Some(`lr_frame(${id}, ${lr_frame_prec(ctx)}, ${follow_forward_args()}, lr_cont)`),
     };
 }
@@ -641,7 +641,7 @@ fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &EmitContext) ->
         } else {
             return null;
         },
-        None => {
+        null => {
             return null;
         },
     };
@@ -684,9 +684,9 @@ fn scan_body_can_match_empty(elements: &List<ScanElement>, ctx: &mut EmitContext
 
 fn scan_element_can_match_empty(se: &ScanElement, ctx: &mut EmitContext) -> bool {
     return match se {
-        Token(_) | Wildcard | Excluded(_) => false,
+        Token(_) | _::Wildcard | Excluded(_) => false,
         RuleCall(rc) => !ctx.analysis.scan_callee_consumes(&rc.target_snake),
-        Repeat(re) => if let Plus = re.kind {
+        Repeat(re) => if let _::Plus = re.kind {
             scan_element_can_match_empty(&re.body, ctx);
         } else {
             true;
@@ -1268,7 +1268,7 @@ fn gen_lr_candidates_begin<S: AsStrSlice>(
 /// tournament seeds per candidate rather than once.
 fn gen_scan_gate_from(w: &mut CodeWriter, ctx: &EmitContext, from: &ScanOrigin) {
     match from {
-        Parser => {
+        _::Parser => {
             if ctx.settings.emit_scan_gate() {
                 for let f of &ctx.settings.scan_gate_fields {
                     w.line(`${ctx.scan_gate_member(f)} = ${PARSER_HANDLE}.${*f};`);
@@ -1332,7 +1332,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     // A suffix scan runs the suffix's gate actions, so an abandoned climb has
     // to put the gate back with the position. A prebound scan already matched,
     // so only an empty match can abandon it.
-    let can_abandon = may_match_empty || prebound matches { None };
+    let can_abandon = may_match_empty || prebound matches { null };
     if can_abandon {
         gen_scan_mark(w, ctx, "lr_saved_pos");
     }
@@ -1431,7 +1431,7 @@ fn emit_lr_overlap_branch(
 ) {
     let may_match_empty = scan_body_can_match_empty(&lr.scan_suffix.elements, ctx);
     match &site.branch {
-        ScanCall => {
+        _::ScanCall => {
             gen_scan_lr_call_with_prec(
                 w,
                 `${site.scan_fn}_lr_${lr.alt_index}`,
@@ -1628,7 +1628,7 @@ fn emit_lr_overlap(
             for let p of &plans {
                 if let Prebound(local) = &p.1 {
                     let alt = lr_alts[lr_dispatch.valid_lr_alts[group[p.0]]].alt_index;
-                    if !first_candidate || origin matches { Parser } {
+                    if !first_candidate || origin matches { _::Parser } {
                         gen_scan_gate_from(w, ctx, &origin);
                     }
                     first_candidate = false;
@@ -1820,7 +1820,7 @@ fn scan_element_is_proven(se: &ScanElement, known: &List<List<i32>>, ctx: &EmitC
 /// token, and anything else consumes an unknown count.
 fn known_after(se: &ScanElement, known: &List<List<i32>>, ctx: &EmitContext) -> List<List<i32>> {
     let mut rest: List<List<i32>> = [];
-    if se matches { Wildcard | Excluded(_) } || scan_one_token_kinds(se, ctx) matches { Some(_) } {
+    if se matches { _::Wildcard | Excluded(_) } || scan_one_token_kinds(se, ctx) matches { Some(_) } {
         for let d of 1..<known.len() {
             rest.push(known[d]);
         }
@@ -1833,8 +1833,8 @@ fn known_after(se: &ScanElement, known: &List<List<i32>>, ctx: &EmitContext) -> 
 fn scan_element_can_fail(se: &ScanElement, known: &List<List<i32>>, ctx: &EmitContext) -> bool {
     return match se {
         Token(_) | RuleCall(_) => !scan_element_is_proven(se, known, ctx),
-        Wildcard | Excluded(_) => true,
-        Repeat(re) => re.kind matches { Plus } && scan_element_can_fail(&re.body, known, ctx),
+        _::Wildcard | Excluded(_) => true,
+        Repeat(re) => re.kind matches { _::Plus } && scan_element_can_fail(&re.body, known, ctx),
         Group(ge) => !ge.lenient && scan_group_can_fail(ge, known, ctx),
         OptionalLookahead(_) => false,
     };
@@ -1936,7 +1936,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
             gen_scan_rule_call(w, rc, ctx);
             w.line(`if pos < 0 { ${fail_stmt} }`);
         },
-        Wildcard => {
+        _::Wildcard => {
             w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF { ${fail_stmt} }`);
             w.line("pos += 1;");
         },
@@ -1949,7 +1949,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
         Group(ge) => gen_scan_op_group(w, ge, ctx, fail_stmt, ge.lenient, known),
         OptionalLookahead(ole) => match contested_shape_repeat(ole, ctx) {
             Some(re) => gen_scan_op_repeat(w, &re, ctx, fail_stmt, known),
-            None => gen_scan_op_optional_lookahead(w, ole, ctx),
+            null => gen_scan_op_optional_lookahead(w, ole, ctx),
         },
     }
 }
@@ -2019,7 +2019,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Em
             }
             gen_scan_rule_call(w, rc, ctx);
         },
-        Wildcard => {
+        _::Wildcard => {
             w.line("if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
         },
         Excluded(e) => {
@@ -2243,11 +2243,11 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     // A body matching nothing has no iteration to scan — once here, not once
     // per arm, so an arm added later cannot miss it.
     if admits_is_untestable(&loop_admits) {
-        assert re.kind matches { Optional }, "a closure over a body matching nothing is rejected by check_epsilon_closure before emit";
+        assert re.kind matches { _::Optional }, "a closure over a body matching nothing is rejected by check_epsilon_closure before emit";
         return;
     }
 
-    if re.kind matches { Optional }
+    if re.kind matches { _::Optional }
         && optional_asks_simulator(re.non_greedy, re.atn_decides, re.gate_caller_follow, ctx) {
         w.begin(`if ${atn_scan_enters(ctx, re.atn_decision, re.non_greedy, &NO_KINDS, "")}`);
         gen_scan_iteration(w, re, &loop_admits, ctx, false);
@@ -2258,7 +2258,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         gen_scan_optional_continuation(w, re, ctx);
         return;
     }
-    if let Optional = re.kind {
+    if let _::Optional = re.kind {
         // OptionalLookahead doesn't reach this path (it's a
         // ScanElement::OptionalLookahead, not a ScanElement::Repeat).
         let body_is_rulecall = re.body matches { RuleCall(_) };
@@ -2278,7 +2278,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         if admits_is_untestable(&effective) {
             return;
         }
-        let excluded = if excludes_follow && effective matches { Everything } {
+        let excluded = if excludes_follow && effective matches { _::Everything } {
             re.caller_follow_first;
         } else {
             [] as List<i32>;
@@ -2308,7 +2308,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     }
 
     // A `+`'s first iteration is mandatory, so its failure is the element's.
-    if re.kind matches { Plus } {
+    if re.kind matches { _::Plus } {
         gen_scan_op_element(w, &re.body, ctx, fail_stmt, known);
     }
     if scan_non_greedy_continuation_decides(re, ctx) {
@@ -2372,11 +2372,11 @@ fn scan_exit_yield_gate(re: &ScanRepeatElement, ctx: &mut EmitContext) -> String
 /// The scan's twin of `enters_while_viable`, for a body longer than the one
 /// token `leaf_enters_while_viable` answers.
 fn scan_enters_while_viable(re: &ScanRepeatElement) -> bool {
-    return re.kind matches { Optional } && !scan_body_is_leaf(&re.body) && re.gate_caller_follow && re.body_scannable;
+    return re.kind matches { _::Optional } && !scan_body_is_leaf(&re.body) && re.gate_caller_follow && re.body_scannable;
 }
 
 fn scan_body_is_leaf(body: &ScanElement) -> bool {
-    return body matches { Token(_) | Wildcard | Excluded(_) };
+    return body matches { Token(_) | _::Wildcard | Excluded(_) };
 }
 
 /// Rewind an optional's body, scanned from `start` to `pos`, where the caller's
@@ -2438,7 +2438,7 @@ fn gen_scan_iteration_duties(
     kind: RepeatKind,
     ctx: &mut EmitContext,
 )
-    contract duties.is_empty() || kind matches { Star | Plus }, "only a loop can starve a suffix; lowering stamps duties for no other kind"
+    contract duties.is_empty() || kind matches { _::Star | _::Plus }, "only a loop can starve a suffix; lowering stamps duties for no other kind"
 {
     gen_scan_reserve(w, duties, loop_admits, ctx);
 }
@@ -2877,7 +2877,7 @@ fn optional_scanning_rest(
 
 /// Whether an optional's scan runs its body and then its continuation.
 fn scan_takes_optional_continuation(re: &ScanRepeatElement, ctx: &mut EmitContext) -> bool {
-    return re.kind matches { Optional }
+    return re.kind matches { _::Optional }
         && !admits_is_untestable(&re.inner_admits)
         && scan_optional_continuation_decides(re, ctx);
 }
@@ -2922,7 +2922,7 @@ fn gen_scan_gate_check<S: AsStrSlice, S1: AsStrSlice>(
 fn gen_scan_entry(w: &mut CodeWriter, ctx: &EmitContext, from: &ScanOrigin) {
     gen_scan_gate_from(w, ctx, from);
     let at = match from {
-        Parser => String::from("p.pos"),
+        _::Parser => String::from("p.pos"),
         Entry(slot) => *slot,
     };
     w.line("let tokens = &p.kinds;");
@@ -3424,7 +3424,7 @@ fn emit_trace_pick<S: AsStrSlice, S1: AsStrSlice>(
     alt: S1,
     ctx: &EmitContext,
 ) {
-    if ctx.settings.trace && side matches { Parse } {
+    if ctx.settings.trace && side matches { _::Parse } {
         w.line(wado`trace_pick(p, "${rule_display.to_string()}", ${alt.to_string()});`);
     }
 }
@@ -3475,7 +3475,7 @@ fn gen_rule_pick<S: AsStrSlice>(
     og: &RuleOverlap,
     fn_name: S,
 )
-    contract side matches { Scan } == ctx.cursor.in_scan_fn(), "a pick is emitted into the function its side names"
+    contract side matches { _::Scan } == ctx.cursor.in_scan_fn(), "a pick is emitted into the function its side names"
 {
     if has_multi_alt_groups(&og.groups) {
         gen_multi_alt_body_alt(w, side, rule, lowered_rule, ctx, og, fn_name);
@@ -3550,8 +3550,8 @@ fn gen_multi_alt_body(
         let proven_first: List<i32> = if cond_depth > 0 { pos_sets[0] } else { [] };
         if cond_depth > 0 {
             let cond = match side {
-                Parse => build_lookahead_condition(ctx, pos_sets, cond_depth),
-                Scan => build_scan_lookahead_condition(ctx, pos_sets, cond_depth),
+                _::Parse => build_lookahead_condition(ctx, pos_sets, cond_depth),
+                _::Scan => build_scan_lookahead_condition(ctx, pos_sets, cond_depth),
             };
             w.begin(`if ${cond}${and_gate(gate)}`);
         } else if gate.is_empty() {
@@ -3805,11 +3805,11 @@ fn leave_after_labels(w: &mut CodeWriter, ctx: &EmitContext) {
             continue;
         };
         let value = match b.reach {
-            Unmatched => {
+            _::Unmatched => {
                 continue;
             },
-            Shared => b.field,
-            Bound => if label.is_token { b.field } else { `Option::Some(${b.field})` },
+            _::Shared => b.field,
+            _::Bound => if label.is_token { b.field } else { `Option::Some(${b.field})` },
         };
         w.line(`${VALS_LOCAL}.${after_label_field(&label.base)} = ${value};`);
     }
@@ -3908,7 +3908,7 @@ fn inner_walker_follow_for_repeat(
     outer_follow: &List<i32>,
     ctx: &mut EmitContext,
 ) -> List<i32> {
-    let is_greedy_optional = if let Optional = rep.kind {
+    let is_greedy_optional = if let _::Optional = rep.kind {
         !rep.non_greedy;
     } else {
         false;
@@ -4690,15 +4690,15 @@ enum LrCheckAt {
 /// verdict `_lrc_verdict` took as the iteration started.
 fn gen_lr_loop_check(w: &mut CodeWriter, decision: i32, ctx: &mut EmitContext, at: LrCheckAt, edge: i32) {
     let pos = match at {
-        IterationStart => "_lrc_at",
-        Exit => "p.pos",
+        _::IterationStart => "_lrc_at",
+        _::Exit => "p.pos",
     };
     let met = *ctx.decisions.at_lr_loop(ctx.cursor.current_rule_index());
     ctx.cursor.note_ref(&ATN_VERIFIED);
     if met.is_empty() {
         let call = atn_verified_call(decision, AtnPicker::LrLoop, ctx.atn_arg(), "&p.kinds", pos, "min_prec", `${edge}`);
         gen_verified_check(w, "", [call]);
-    } else if at matches { IterationStart } {
+    } else if at matches { _::IterationStart } {
         gen_verified_check(w, "", [
             atn_verified_against_call(decision, AtnPicker::LrLoop, pos, "_lrc_verdict", `${edge}`),
         ]);
@@ -4782,7 +4782,7 @@ fn emit_lr_branch_body<S: AsStrSlice>(
 fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: &mut List<[String, i32]>) {
     let by_continuation = non_greedy_continuation_decides(r, ctx);
     if by_continuation || r.atn_decides {
-        if let Plus = r.kind {
+        if let _::Plus = r.kind {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -4799,7 +4799,7 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitCo
     let cond = non_greedy_static_cond(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
     let loops = cond != "false";
     match r.kind {
-        Plus => {
+        _::Plus => {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -4809,14 +4809,14 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitCo
                 w.end();
             }
         },
-        Star => {
+        _::Star => {
             if loops {
                 w.begin(`while !p.recovering && ${and_operand(cond)}`);
                 gen_op(w, &r.body, ctx, nc);
                 w.end();
             }
         },
-        Optional => panic("gen_repeat_non_greedy_body: non-greedy `??` should be excluded by needs_atn"),
+        _::Optional => panic("gen_repeat_non_greedy_body: non-greedy `??` should be excluded by needs_atn"),
     }
 }
 
@@ -4825,7 +4825,7 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitCo
 /// in for the overlap; it also gates each iteration, hence non-empty.
 fn non_greedy_continuation_decides(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
     return r.static_exit_undecided
-        && r.kind matches { Star | Plus }
+        && r.kind matches { _::Star | _::Plus }
         && !admits_kinds(&r.body_admits).is_empty()
         && continuation_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
@@ -4939,8 +4939,8 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         gen_repeat_non_greedy_body(w, r, ctx, nc);
         return;
     }
-    if r.kind matches { Star | Plus } && r.atn_decides {
-        if let Plus = r.kind {
+    if r.kind matches { _::Star | _::Plus } && r.atn_decides {
+        if let _::Plus = r.kind {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -4952,8 +4952,8 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         w.end();
         return;
     }
-    if r.kind matches { Star | Plus } && repeat_is_scan_guarded(r, ctx) {
-        if let Plus = r.kind {
+    if r.kind matches { _::Star | _::Plus } && repeat_is_scan_guarded(r, ctx) {
+        if let _::Plus = r.kind {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -4988,11 +4988,11 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
     let follow_gate = ctx.current_rule_reads_follow() && r.gate_caller_follow;
-    if let Optional = r.kind {
+    if let _::Optional = r.kind {
         gen_op_optional(w, r, ctx, nc, follow_gate);
         return;
     }
-    if let Plus = r.kind {
+    if let _::Plus = r.kind {
         begin_plus_first_iteration(w, nc);
         gen_op(w, &r.body, ctx, nc);
         w.end();
@@ -5036,7 +5036,7 @@ fn simulated_enters(
     nc: &mut List<[String, i32]>,
     path: StaticPath = StaticPath::OpWalk,
 ) -> String {
-    if r.shadow matches { None } {
+    if r.shadow matches { null } {
         return enters;
     }
     // Walkers nest without sharing `nc`, but a decision is emitted once.
@@ -5084,7 +5084,7 @@ fn gen_op_optional(
         gen_op_optional_shape_lookahead(w, r, s, ctx, nc, follow_gate);
         return;
     }
-    if r.strategy matches { OptionalScanGuard } {
+    if r.strategy matches { _::OptionalScanGuard } {
         if let Group(g) = &r.body {
             if let Some(branches) = op_group_alt_decision(g, ctx) {
                 // One answer, one set of scans: the scan deciding entry is the
@@ -5113,11 +5113,11 @@ fn gen_op_optional_entry_cond(
 ) -> String {
     return match &r.strategy {
         OptionalLookahead(s) => gen_lookahead_condition(ctx, &s.sig),
-        OptionalScanGuard => {
+        _::OptionalScanGuard => {
             let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, "opt_scan_pos", "opt_scan", false);
             `${scan_pos} >= 0`;
         },
-        Plain => body_guard_cond(r, ctx),
+        _::Plain => body_guard_cond(r, ctx),
         OptionalShapeLookahead(_) => panic(
             "gen_op_optional_entry_cond: shape lookahead has one condition per shape, not one for the optional",
         ),
@@ -5233,10 +5233,10 @@ fn gen_op_inner_for_storable_repeat(
     proven: &List<i32> = &NO_KINDS,
 ) {
     let entry = open_group_entry(w, elem, ctx, entry);
-    assert proven.is_empty() || entry matches { Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
+    assert proven.is_empty() || entry matches { _::Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
     match rep_op.body_shape {
-        LeafRuleCall | LeafOther => gen_op_leaf(w, &rep_op.body, ctx, name_counts, proven),
-        StorableGroup => {
+        _::LeafRuleCall | _::LeafOther => gen_op_leaf(w, &rep_op.body, ctx, name_counts, proven),
+        _::StorableGroup => {
             let Group(g_op) = &rep_op.body else {
                 unreachable();
             };
@@ -5248,7 +5248,7 @@ fn gen_op_inner_for_storable_repeat(
                 ctx,
             ));
         },
-        TransparentGroup => unreachable(),
+        _::TransparentGroup => unreachable(),
     }
 }
 
@@ -5285,7 +5285,7 @@ fn gen_op_dispatch_element(
 /// own gate (the shape already promised the element is present).
 fn unwrap_optional_op(op: &Op) -> &Op {
     if let Repeat(rep_op) = op {
-        if let Optional = rep_op.kind {
+        if let _::Optional = rep_op.kind {
             return &rep_op.body;
         }
     }
@@ -5362,10 +5362,10 @@ fn gen_op_repeat_optional_group(
             opt.gen_present(w, ctx, &enters, &optional_proven_first(rep_op));
         },
         OptionalShapeLookahead(s) => {
-            assert rep_op.body_shape matches { StorableGroup }, "a shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`";
+            assert rep_op.body_shape matches { _::StorableGroup }, "a shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`";
             gen_op_optional_with_shape_lookahead_storable(w, rep_op, g_op, g_elem, s, ctx, name_counts, follow_gate);
         },
-        OptionalScanGuard => {
+        _::OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
                 // One answer, one set of scans.
                 let [winner, enters] = gen_decided_optional_group(
@@ -5392,7 +5392,7 @@ fn gen_op_repeat_optional_group(
                 opt.gen_present(w, ctx, &enters);
             }
         },
-        Plain => {
+        _::Plain => {
             let enters = optional_entry_yielding(
                 w,
                 rep_op,
@@ -5444,7 +5444,7 @@ impl OptionalGroup {
         proven: &List<i32> = &NO_KINDS,
     ) {
         match self.rep_op.body_shape {
-            TransparentGroup => gen_op_transparent_optional_with_cond(
+            _::TransparentGroup => gen_op_transparent_optional_with_cond(
                 w,
                 self.g_op,
                 self.g_elem,
@@ -5453,7 +5453,7 @@ impl OptionalGroup {
                 cond,
                 proven,
             ),
-            LeafRuleCall | LeafOther | StorableGroup => gen_op_storable_optional_with_first(
+            _::LeafRuleCall | _::LeafOther | _::StorableGroup => gen_op_storable_optional_with_first(
                 w,
                 self.rep_op,
                 self.inner,
@@ -5591,7 +5591,7 @@ fn gen_op_storable_optional_body<S: AsStrSlice>(
 /// The kinds an optional's entry condition proves the next token is one of.
 fn optional_proven_first(rep_op: &RepeatOp) -> List<i32> {
     return match &rep_op.strategy {
-        Plain => admits_kinds(&rep_op.body_admits),
+        _::Plain => admits_kinds(&rep_op.body_admits),
         OptionalLookahead(s) => if s.sig.is_empty() { [] as List<i32> } else { s.sig[0] },
         _ => [] as List<i32>,
     };
@@ -5761,7 +5761,7 @@ fn looped() -> GroupEntry {
 fn optional_entry_test<S: AsStrSlice>(own: S, inner: &Element, ctx: &mut EmitContext) -> String {
     return match group_entry_condition(inner, ctx) {
         Some(gate) => `${and_operand(own)} && ${and_operand(gate)}`,
-        None => own.to_string(),
+        null => own.to_string(),
     };
 }
 
@@ -5850,7 +5850,7 @@ fn repeat_body_reports_itself(inner: &Element, ctx: &mut EmitContext) -> bool {
 fn group_dispatch_reports(inner: &Element) -> bool {
     return match repeat_body_group_alts(inner) {
         Some(alts) => alts.len() > 1,
-        None => true,
+        null => true,
     };
 }
 
@@ -5985,7 +5985,7 @@ fn gen_op_group(
     // `peel_scalar_label` helper handles theoretical multi-level
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
-    if entry matches { Required } {
+    if entry matches { _::Required } {
         if let Group(g_elem) = peel_scalar_label(elem) {
             gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(g_elem.atn_decision), "sync_alts", proven);
         }
@@ -6052,7 +6052,7 @@ fn gen_group_shape(
             decided,
             atn,
         ),
-        Transparent => {
+        _::Transparent => {
             // The inner alt is inlined, actions included, so inside a Repeat
             // they run once per iteration.
             let body = &g_op.alts[0];
@@ -6181,11 +6181,11 @@ fn gen_op_repeat_with_follow_override(
     follow: &List<i32>,
 ) {
     gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(rep.atn_decision), "sync_enter");
-    if let Optional = rep.kind {
+    if let _::Optional = rep.kind {
         // The simulator decides as under the op-only walker
         // (`gen_op_optional`); a group body's emitters ask it themselves.
         if optional_asks_simulator(rep.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx)
-            && rep_op.body_shape matches { LeafRuleCall | LeafOther } {
+            && rep_op.body_shape matches { _::LeafRuleCall | _::LeafOther } {
             let _ = dedup_name(&rep_op.field, name_counts);
             let enters = atn_parse_enters(w, ctx, rep_op.atn_decision, rep.non_greedy);
             let simulated = simulated_enters(w, rep_op, enters, ctx, name_counts, StaticPath::LeafWalk(*follow));
@@ -6215,7 +6215,7 @@ fn gen_op_repeat_non_greedy(
 ) {
     let body = RepeatBody::of(rep_op, &NO_KINDS);
     let inner = &rep.element;
-    let is_plus = rep.kind matches { Plus };
+    let is_plus = rep.kind matches { _::Plus };
     let _ = dedup_name(&rep_op.field, name_counts);
     if is_plus {
         // The mandatory first iteration is a required position: no loop guard
@@ -6252,8 +6252,8 @@ variant RepeatBody {
 impl RepeatBody {
     fn of(rep_op: &RepeatOp, iter_follow: &List<i32>) -> RepeatBody {
         return match rep_op.body_shape {
-            TransparentGroup => RepeatBody::Transparent,
-            LeafRuleCall | LeafOther | StorableGroup => RepeatBody::Storable(*iter_follow),
+            _::TransparentGroup => RepeatBody::Transparent,
+            _::LeafRuleCall | _::LeafOther | _::StorableGroup => RepeatBody::Storable(*iter_follow),
         };
     }
 }
@@ -6282,7 +6282,7 @@ fn gen_repeat_iteration(
             decided,
             proven,
         ),
-        Transparent => {
+        _::Transparent => {
             let Group(g_op) = &rep_op.body else {
                 unreachable();
             };
@@ -6305,8 +6305,8 @@ fn gen_op_repeat_optional_greedy(
     follow: &List<i32>,
 ) {
     return match rep_op.body_shape {
-        LeafRuleCall | LeafOther => gen_op_repeat_optional_leaf(w, rep_op, ctx, name_counts, follow),
-        StorableGroup | TransparentGroup => gen_op_repeat_optional_group(w, rep, rep_op, ctx, name_counts),
+        _::LeafRuleCall | _::LeafOther => gen_op_repeat_optional_leaf(w, rep_op, ctx, name_counts, follow),
+        _::StorableGroup | _::TransparentGroup => gen_op_repeat_optional_group(w, rep, rep_op, ctx, name_counts),
     };
 }
 
@@ -6351,7 +6351,7 @@ fn gen_leaf_optional_enters(
     name_counts: &mut List<[String, i32]>,
     follow: &List<i32>,
 ) -> Option<[String, List<i32>]> {
-    if rep_op.body_shape matches { LeafOther } {
+    if rep_op.body_shape matches { _::LeafOther } {
         let entry = body_guard_cond(rep_op, ctx);
         let enters = if rep_op.gate_caller_follow {
             `${entry} && ${leaf_enters_while_viable(
@@ -6371,7 +6371,7 @@ fn gen_leaf_optional_enters(
     // matches here and everywhere.
     let entry = match &rep_op.body_admits {
         Everything(_) => repeat_guard_cond(&rep_op.body_admits, follow, &PEEK_KIND, ctx),
-        Untestable => body_guard_cond(rep_op, ctx),
+        _::Untestable => body_guard_cond(rep_op, ctx),
         Kinds(kinds) => {
             let first = subtract_sets(kinds, follow);
             if first.is_empty() {
@@ -6433,7 +6433,7 @@ fn optional_entry_yielding<S: AsStrSlice>(
     w.begin(`if ${verdict} && ${contested}`);
     let scan_pos = match end {
         Some(e) => e,
-        None => gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, "opt_scan_pos", "opt_scan", false),
+        null => gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, "opt_scan_pos", "opt_scan", false),
     };
     let resumes = continuation_resumes_at(ctx, &r.after_iteration, "&p.kinds", "p.kinds", &scan_pos);
     let yields = repeat_continuation_yields(ctx, &r.exit, "&p.kinds", "p.pos");
@@ -6450,7 +6450,7 @@ fn repeat_continuation_yields<S: AsStrSlice, S1: AsStrSlice>(
     tokens: S,
     pos: S1,
 ) -> String {
-    assert !cont matches { NoFollow }, "a gated repeat knows what follows it";
+    assert !cont matches { _::NoFollow }, "a gated repeat knows what follows it";
     return follow_query("follow_yields", tokens, pos, &follow_arg_expr(ctx, cont));
 }
 
@@ -6461,7 +6461,7 @@ fn repeat_exit_admits<S: AsStrSlice, S1: AsStrSlice>(
     tokens: S,
     pos: S1,
 ) -> String {
-    assert !exit matches { NoFollow }, "a gated repeat knows what follows it";
+    assert !exit matches { _::NoFollow }, "a gated repeat knows what follows it";
     return follow_query("follow_admits", tokens, pos, &follow_arg_expr(ctx, exit));
 }
 
@@ -6665,8 +6665,8 @@ fn gen_iter_caller_follow_gate<S: AsStrSlice>(
 /// parameter (parse and scan share the spelling — both bind `follow`).
 fn follow_arg_expr(ctx: &mut EmitContext, arg: &FollowArg) -> String {
     return match arg {
-        NoFollow => "0",
-        Forward => follow_forward_args(),
+        _::NoFollow => "0",
+        _::Forward => follow_forward_args(),
         Site(site) => {
             let site_ref = ctx.follow_site_ref(site.id);
             if site.ends {
@@ -6701,7 +6701,7 @@ fn gen_op_repeat_star_plus_greedy(
     };
     let body = RepeatBody::of(rep_op, &iter_follow);
     let inner = &rep.element;
-    let is_plus = rep.kind matches { Plus };
+    let is_plus = rep.kind matches { _::Plus };
     let _ = dedup_name(&rep_op.field, name_counts);
     if rep_op.atn_decides {
         if is_plus {
@@ -6767,16 +6767,16 @@ fn gen_repeat_shadow<S: AsStrSlice>(
         caller_follow_kinds: s.caller_follow_kinds,
     };
     let mut lines = CodeWriter::with_capacity(512);
-    let static_enters = if !r.kind matches { Optional } {
+    let static_enters = if !r.kind matches { _::Optional } {
         gen_loop_static_enters(&mut lines, &static_view, ctx, nc);
     } else if optional_continuation_decides(&static_view, ctx) {
         gen_optional_continuation_verdict(&mut lines, &static_view, ctx, nc);
     } else {
         match path {
-            OpWalk => gen_op_optional_static_enters(&mut lines, &static_view, ctx, nc),
+            _::OpWalk => gen_op_optional_static_enters(&mut lines, &static_view, ctx, nc),
             LeafWalk(follow) => match gen_leaf_optional_enters(&mut lines, &static_view, ctx, nc, follow) {
                 Some([cond, _]) => cond,
-                None => "false",
+                null => "false",
             },
             GroupWalk(inner) => gen_group_optional_static_enters(&mut lines, &static_view, inner, ctx, nc),
         }
@@ -6850,7 +6850,7 @@ fn gen_op_optional_static_enters(
     if let OptionalShapeLookahead(s) = &r.strategy {
         return any_shape_enters(w, r, s, ctx, nc, follow_gate);
     }
-    if r.strategy matches { OptionalScanGuard }
+    if r.strategy matches { _::OptionalScanGuard }
         && let Group(g) = &r.body
         && let Some(branches) = op_group_alt_decision(g, ctx) {
         let [_, enters] = gen_decided_optional_group(w, r, &branches, g, ctx, nc, follow_gate);
@@ -6883,7 +6883,7 @@ fn gen_group_optional_static_enters(
             optional_entry_yielding(w, r, lookahead, null, follow_gate, ctx, nc);
         },
         OptionalShapeLookahead(s) => any_shape_enters(w, r, s, ctx, nc, follow_gate),
-        OptionalScanGuard => {
+        _::OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
                 let [_, enters] = gen_decided_optional_group(w, r, &decision.branches, g_op, ctx, nc, follow_gate);
                 return enters;
@@ -6891,7 +6891,7 @@ fn gen_group_optional_static_enters(
             let scan_pos = gen_op_opt_scan_guard_for_group(w, g_op, ctx, nc);
             optional_entry_yielding(w, r, `${scan_pos} >= 0`, Option::Some(scan_pos), follow_gate, ctx, nc);
         },
-        Plain => optional_entry_yielding(w, r, body_guard_cond(r, ctx), null, follow_gate, ctx, nc),
+        _::Plain => optional_entry_yielding(w, r, body_guard_cond(r, ctx), null, follow_gate, ctx, nc),
         NonGreedy(_) => unreachable(),
     };
     return optional_entry_test(own, inner, ctx);
@@ -7854,7 +7854,7 @@ fn group_decision(
 /// simulator decides or checks has none either, so its caller enters it as a
 /// body and its own dispatch asks the simulator.
 fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut EmitContext) -> Option<GroupDecision> {
-    if !group_dispatches(g_op) || !group_atn(g_op, ctx) matches { Unasked } {
+    if !group_dispatches(g_op) || !group_atn(g_op, ctx) matches { _::Unasked } {
         return null;
     }
     return Option::Some(group_decision(&g_elem.alternatives, &g_op.empty_alt_admits, ctx));
@@ -7863,7 +7863,7 @@ fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut EmitConte
 fn group_dispatches(g_op: &GroupOp) -> bool {
     return match &g_op.shape {
         SimpleCst(_) | General(_) => g_op.alts.len() > 1,
-        TokenOnly(_) | SingleAlt(_) | Transparent => false,
+        TokenOnly(_) | SingleAlt(_) | _::Transparent => false,
     };
 }
 
@@ -7873,7 +7873,7 @@ fn group_dispatches(g_op: &GroupOp) -> bool {
 fn op_group_alt_decision(g: &GroupOp, ctx: &EmitContext) -> Option<List<DecisionBranch>> {
     if g.alts.len() < 2
         || group_token_only_kinds(&g.alts) matches { Some(_) }
-        || !group_atn(g, ctx) matches { Unasked } {
+        || !group_atn(g, ctx) matches { _::Unasked } {
         return null;
     }
     return Option::Some(dispatch_branches(&g.dispatch));
@@ -8068,8 +8068,8 @@ fn gen_group_scan_dispatch(
         let alt_index = sorted_group[k];
         open_winner_arm(w, &winner_var, sorted_group, k);
         match kind {
-            RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
-            General => gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_index], alt_index, ctx),
+            _::RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
+            _::General => gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_index], alt_index, ctx),
         }
     }
     w.end();
@@ -8118,7 +8118,7 @@ fn gen_group_dispatch(
     atn: GroupAtn = GroupAtn::Unasked,
 ) {
     if decided matches { Some(_) } {
-        assert entry matches { Guaranteed }, "gen_group_dispatch: a decided dispatch commits, so it has no arm left to report or break in";
+        assert entry matches { _::Guaranteed }, "gen_group_dispatch: a decided dispatch commits, so it has no arm left to report or break in";
         let mut order: List<i32> = [];
         for let b of branches {
             let branch_order = branch_emit_order(&b.alts, alts, ctx);
@@ -8155,7 +8155,7 @@ fn gen_group_dispatch(
     // also what decides whether the last branch may drop its condition and
     // become the `else` — so the nullable arm below reads it rather than
     // clearing it, or the two both claim that `else`.
-    let must_answer = !ends_in_fallback && (any_alt_gated(branches) || entry matches { Required });
+    let must_answer = !ends_in_fallback && (any_alt_gated(branches) || entry matches { _::Required });
     // A nullable alternative matches empty, so it takes a lookahead no branch
     // tests for and there is nothing to report. `apply_empty_alt_admits`
     // answers this by name where the group's FOLLOW is exact; where it is not,
@@ -8163,7 +8163,7 @@ fn gen_group_dispatch(
     // grammar accepts — `(COMMA structBase | COMMA?)` at the `}` closing
     // `Point { x, y }`.
     let nullable_else = if must_answer { first_nullable_alt(classes) } else { null };
-    let report = must_answer && nullable_else matches { None };
+    let report = must_answer && nullable_else matches { null };
     let grp_var = dedup_name("grp_kind", name_counts);
     w.line(`let ${grp_var} = p.peek_kind();`);
 
@@ -8290,8 +8290,8 @@ fn gen_group_branch_body(
     if group.len() == 1 {
         let alt_index = group[0];
         match kind {
-            RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
-            General => gen_general_alt_parse_and_store(
+            _::RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
+            _::General => gen_general_alt_parse_and_store(
                 w,
                 alts,
                 &g_op_alts[alt_index],
@@ -8379,7 +8379,7 @@ fn verified_pick<S: AsStrSlice>(
     call: String,
     ctx: &mut EmitContext,
 ) -> String {
-    if !ctx.settings.prediction.verifies() || side matches { Scan } {
+    if !ctx.settings.prediction.verifies() || side matches { _::Scan } {
         return call;
     }
     let [tokens, pos] = pick_reads(side);
@@ -8394,7 +8394,7 @@ fn verified_pick<S: AsStrSlice>(
 /// parse. Without predicates the pick goes through the decision's lookahead
 /// DFA first (`atn_sll.wado`).
 fn atn_predict_call(atn_dec: i32, met: &List<MetPredicate>, side: PickSide, ctx: &mut EmitContext) -> String {
-    let gates = atn_decision_gates(met, ctx, side matches { Scan });
+    let gates = atn_decision_gates(met, ctx, side matches { _::Scan });
     return atn_gated_predict_call(atn_dec, &gates, side, ctx);
 }
 
@@ -8449,7 +8449,7 @@ fn gen_alt_group(
     let [kind, field_base] = match &g_op.shape {
         SimpleCst(_) => [GroupBranchKind::RuleRef, group_field_base_name(alts)],
         General(gs) => [GroupBranchKind::General, general_group_field_name(gs.group_index)],
-        TokenOnly(_) | SingleAlt(_) | Transparent => unreachable(),
+        TokenOnly(_) | SingleAlt(_) | _::Transparent => unreachable(),
     };
     let _ = dedup_name(&field_base, name_counts);
     let [classes, groups] = group_partition(alts, &g_op.empty_alt_admits, ctx);
@@ -8549,7 +8549,7 @@ fn compute_lr_second_token(shared_token: i32, elements: &List<Element>, ctx: &mu
 fn optional_body_is_single_token(elem: &Element, ctx: &mut EmitContext) -> bool {
     let mut visiting: List<String> = [];
     return match elem {
-        Repeat(rep) => rep.kind matches { Optional }
+        Repeat(rep) => rep.kind matches { _::Optional }
             && ctx.analysis.element_is_single_token(&rep.element, &mut visiting),
         _ => false,
     };
@@ -8716,8 +8716,8 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 /// Run alternative `idx` from the rule's start as the rule's whole match.
 fn emit_leaf_pick<S: AsStrSlice>(w: &mut CodeWriter, side: PickSide, fn_name: S, idx: i32, ctx: &EmitContext) {
     match side {
-        Parse => emit_alt_helper_exit(w, fn_name, idx, ctx),
-        Scan => w.call(alt_scan_call(idx, ctx, "tokens", "start", CallForm::Return)),
+        _::Parse => emit_alt_helper_exit(w, fn_name, idx, ctx),
+        _::Scan => w.call(alt_scan_call(idx, ctx, "tokens", "start", CallForm::Return)),
     }
 }
 
@@ -8747,11 +8747,11 @@ global NO_VIABLE_HERE: String = "p.no_viable(\"no viable alternative\", p.peek_s
 /// What a rule does when its choice finds no viable alternative.
 fn emit_no_viable_pick(w: &mut CodeWriter, side: PickSide, ctx: &EmitContext) {
     match side {
-        Parse => {
+        _::Parse => {
             w.line(&NO_VIABLE_HERE);
             emit_no_viable_return(w, ctx);
         },
-        Scan => {
+        _::Scan => {
             w.line("return -1;");
         },
     }
@@ -9134,7 +9134,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 return;
             }
             if ctx.ambiguous_routes_via_atn(a) {
-                let in_scan = side matches { Scan };
+                let in_scan = side matches { _::Scan };
                 assert !in_scan || ctx.plan.needs_atn, "a scan picks through the ATN only where every scan takes its state by `&mut`";
                 let Some(numbers) = ctx.atn_body_alt_numbers(&sorted_indices) else {
                     unreachable();
@@ -9142,9 +9142,9 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 let rule = ctx.cursor.current_rule_index();
                 let met = *ctx.decisions.at_rule(rule);
                 let dec = ctx.plan.atn_rule_body_decision(rule);
-                let gates = atn_decision_gates(&met, ctx, side matches { Scan });
+                let gates = atn_decision_gates(&met, ctx, side matches { _::Scan });
                 w.line(`let _atn_alt = ${atn_gated_predict_call(dec, &gates, side, ctx)};`);
-                if side matches { Parse } && ctx.settings.prediction.verifies() {
+                if side matches { _::Parse } && ctx.settings.prediction.verifies() {
                     gen_tournament_shadow(w, dec, &sorted_indices, &numbers, alts, rule_display, ctx);
                 }
                 w.begin("if _atn_alt < 0");
@@ -9162,8 +9162,8 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
             assert all_scan_full;
             match side {
-                Parse => emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx),
-                Scan => emit_scan_side_tournament(w, &sorted_indices, ctx, false),
+                _::Parse => emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx),
+                _::Scan => emit_scan_side_tournament(w, &sorted_indices, ctx, false),
             }
         },
         Dispatch(d) => {
@@ -9218,7 +9218,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             if !fallback.is_empty() {
                 w.else_begin("else");
                 match side {
-                    Parse => emit_scan_tournament(
+                    _::Parse => emit_scan_tournament(
                         w,
                         &fallback,
                         fn_name,
@@ -9226,7 +9226,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                         ctx,
                         /*fall_through_on_no_match=*/ true,
                     ),
-                    Scan => emit_scan_side_tournament(w, &fallback, ctx, true),
+                    _::Scan => emit_scan_side_tournament(w, &fallback, ctx, true),
                 }
             }
             w.end();
@@ -9244,8 +9244,8 @@ enum PickSide {
 /// The token array and the position a pick on `side` reads.
 fn pick_reads(side: PickSide) -> [String, String] {
     return match side {
-        Parse => ["&p.kinds", "p.pos"],
-        Scan => ["tokens", "pos"],
+        _::Parse => ["&p.kinds", "p.pos"],
+        _::Scan => ["tokens", "pos"],
     };
 }
 
@@ -9259,8 +9259,8 @@ fn dispatch_check_var(w: &mut CodeWriter, side: PickSide, skip: i32, depth: i32,
         return DISPATCH_KIND_LOCAL;
     }
     return match side {
-        Parse => `${PARSER_HANDLE}.peek_at(${at})`,
-        Scan => {
+        _::Parse => `${PARSER_HANDLE}.peek_at(${at})`,
+        _::Scan => {
             let local = `la_${at}`;
             if !read.contains(&at) {
                 gen_kind_read(w, &local, "tokens", `pos + ${at}`);
@@ -9383,24 +9383,24 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
 /// side can. The parse's registers the predicate its condition names.
 fn side_gate(side: PickSide, alt: &Alternative, ctx: &mut EmitContext) -> String {
     return match side {
-        Parse => alt_gate_condition(alt, ctx),
-        Scan => ctx.alt_scan_gate_conditions(alt),
+        _::Parse => alt_gate_condition(alt, ctx),
+        _::Scan => ctx.alt_scan_gate_conditions(alt),
     };
 }
 
 /// Whether `side` tests a gate on `alt`, asked without registering it.
 fn side_has_gate(side: PickSide, alt: &Alternative, ctx: &EmitContext) -> bool {
     return match side {
-        Parse => ctx.alt_has_gate(alt),
-        Scan => !ctx.alt_scan_gate_conditions(alt).is_empty(),
+        _::Parse => ctx.alt_has_gate(alt),
+        _::Scan => !ctx.alt_scan_gate_conditions(alt).is_empty(),
     };
 }
 
 /// The `kind` local a rule's choice tests first.
 fn emit_pick_kind_read(w: &mut CodeWriter, side: PickSide) {
     match side {
-        Parse => w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`),
-        Scan => gen_kind_read(w, DISPATCH_KIND_LOCAL, "tokens", "pos"),
+        _::Parse => w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`),
+        _::Scan => gen_kind_read(w, DISPATCH_KIND_LOCAL, "tokens", "pos"),
     }
 }
 
@@ -9415,8 +9415,8 @@ fn gen_pick_alt(
     proven_first: &List<i32>,
 ) {
     match side {
-        Parse => gen_picked_rule_alt(w, rule, lowered_rule, alt_index, ctx, proven_first),
-        Scan => {
+        _::Parse => gen_picked_rule_alt(w, rule, lowered_rule, alt_index, ctx, proven_first),
+        _::Scan => {
             let body = rule_alt_scan_body(lowered_rule, alt_index).unwrap();
             if gen_scan_alt_in_place(w, alt_index, body, &known_at_start(proven_first), ctx) {
                 w.line("return -1;");
@@ -9428,8 +9428,8 @@ fn gen_pick_alt(
 /// What a rule does when no alternative's test admits the lookahead.
 fn emit_no_alternative(w: &mut CodeWriter, side: PickSide, rule: &ParserRule, ctx: &mut EmitContext) {
     match side {
-        Parse => gen_error_fallback(w, rule, ctx),
-        Scan => w.line("return -1;"),
+        _::Parse => gen_error_fallback(w, rule, ctx),
+        _::Scan => w.line("return -1;"),
     }
 }
 

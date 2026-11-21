@@ -455,7 +455,7 @@ fn name_root(root: &String, origin: String, axes: &Axes, sources: &mut List<Axis
     }
     let [name, source] = match axes.word(root) {
         Some(w) => [naming.param(&w.word), `dim_param ${w.word} at ${w.tensor}`],
-        None => [naming.take(pascal(&origin)), `minted from ${origin}`],
+        null => [naming.take(pascal(&origin)), `minted from ${origin}`],
     };
     naming.names[*root] = name;
     sources.push(AxisName { name, source });
@@ -566,7 +566,7 @@ fn checked_node(node: &Node, scope: &mut Checked, opset: Option<i64>) -> Result<
             scope.known[node.outputs[0]] = k;
             return Result::Ok(());
         },
-        Ok(None) => {
+        Ok(null) => {
         },
         Err(reason) => {
             return Result::Err(refusal(node, reason));
@@ -720,7 +720,7 @@ fn hoist_constants(node: &Node, scope: &mut Checked, branch: &Checked) -> Result
 fn held_name(primitive: &Option<String>) -> String {
     return match primitive {
         Some(p) => *p,
-        None => "an element no kernel holds",
+        null => "an element no kernel holds",
     };
 }
 
@@ -833,12 +833,12 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
     if op == "Cast" {
         let to = attr_read(node, node.required_int_attr("to"))?;
         return match data_type(to) {
-            Some(Float) => Result::Ok(Option::Some("f32")),
-            Some(Float16) => Result::Ok(Option::Some("f16")),
-            Some(Bfloat16) => Result::Ok(Option::Some("bf16")),
-            Some(Int64) => Result::Ok(Option::Some("i64")),
-            Some(Int32) => Result::Ok(Option::Some("i32")),
-            Some(Bool) => Result::Ok(Option::Some("bool")),
+            Some(_::Float) => Result::Ok(Option::Some("f32")),
+            Some(_::Float16) => Result::Ok(Option::Some("f16")),
+            Some(_::Bfloat16) => Result::Ok(Option::Some("bf16")),
+            Some(_::Int64) => Result::Ok(Option::Some("i64")),
+            Some(_::Int32) => Result::Ok(Option::Some("i32")),
+            Some(_::Bool) => Result::Ok(Option::Some("bool")),
             _ => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
         };
     }
@@ -985,7 +985,7 @@ fn resolved_nodes(nodes: List<Node>, checked: &Checked) -> List<Node> {
                         graph: Option::Some(cast_likes_resolved(&g, &scope)),
                     };
                 },
-                None => a,
+                null => a,
             });
         }
         let node = Node { ..node, attrs };
@@ -1030,8 +1030,8 @@ fn cast_like(node: &Node, primitives: &HashMap<String, String>) -> Result<Node, 
 fn known_primitive(k: &Known) -> String {
     return match [k.elements, k.stored] {
         [Ints(_) | Symbolic(_), _] => "i64",
-        [Floats(_), Float16] => "f16",
-        [Floats(_), BFloat16] => "bf16",
+        [Floats(_), _::Float16] => "f16",
+        [Floats(_), _::BFloat16] => "bf16",
         [Floats(_), _] => "f32",
         [Bools(_), _] => "bool",
     };
@@ -1174,7 +1174,7 @@ fn extent_of(dim: &Dim, origin: &String) -> Extent {
         Static(n) => Extent::Static(*n),
         Bound([_, n]) => Extent::Static(*n),
         Symbol(s) => Extent::param(s),
-        Unknown => Extent::symbol(origin),
+        _::Unknown => Extent::symbol(origin),
     };
 }
 
@@ -1204,7 +1204,7 @@ fn infer_node(
         for let [i, from] of carried.into_iter().enumerate() {
             axes.push(match from {
                 Some(a) => operand.axes[a],
-                None => new_axis(&node.outputs[0], i, Extent::Static(1), classes),
+                null => new_axis(&node.outputs[0], i, Extent::Static(1), classes),
             });
         }
         return Result::Ok(Shape { axes });
@@ -1441,7 +1441,7 @@ pub fn split_parts(
             }
             given;
         },
-        None => {
+        null => {
             let chunk = Poly::ceil_div(&whole, &Poly::constant(count as i64), &node.site());
             let mut equal = List::<Poly>::filled(count - 1, chunk);
             let others = chunk
@@ -1463,7 +1463,7 @@ pub fn split_parts(
     }
     match Extent::Symbolic(sum).agreement(&Extent::Symbolic(whole)) {
         Some(presumed) => owed.extend(&presumed),
-        None => {
+        null => {
             let exact = `the parts sum to ${sum}, which must be axis ${axis}'s ${whole}`;
             owe_equal(node, owed, &sum, &whole, exact)?;
         },
@@ -1503,7 +1503,7 @@ fn regrouped(node: &Node, operand: &Shape, targets: &List<Extent>, classes: &mut
     for let [i, found] of operand.regroup(targets).into_iter().enumerate() {
         axes.push(match found {
             Some(axis) => axis,
-            None => new_axis(&node.outputs[0], i, targets[i], classes),
+            null => new_axis(&node.outputs[0], i, targets[i], classes),
         });
     }
     return Shape { axes };
@@ -1585,7 +1585,7 @@ fn slice_bound(node: &Node, written: &Poly, dim: &Poly, floor: i64, top: &Poly) 
     let limit = i32::MAX as i64 + 1;
     let bound = match written.as_constant() {
         Some(c) => Poly::constant(i64::clamp(c, -limit, limit)),
-        None => *written,
+        null => *written,
     };
     let site = node.site();
     let Some(resolved) = Poly::from_end(&bound, dim, &site) else {
@@ -1935,7 +1935,7 @@ pub fn expert_options(node: &Node) -> Result<ExpertOptions, InferError> {
         return Result::Err(attribute_error(node, "k", `is ${k}, and a token picks at least one expert`));
     }
     let required = |attr: String| -> Result<f32, InferError> {
-        if node.attr(attr) matches { None } {
+        if node.attr(attr) matches { null } {
             return Result::Err(refusal(node, `${attr} is absent, and onnxruntime documents no default`));
         }
         return float_attr(node, attr, 0.0);
@@ -2278,7 +2278,7 @@ pub fn window_of(
         }
         spatial_extents(&static_extents_of(node, &w, classes)?);
     } else {
-        if node.attr("kernel_shape") matches { None } {
+        if node.attr("kernel_shape") matches { null } {
             return attr_read(node, Result::Err(absent("kernel_shape")));
         }
         attr_read(node, ints(node, "kernel_shape", spatial.len(), 1))?;
@@ -2345,7 +2345,7 @@ fn grouped_inputs(node: &Node, input: &Axis, per_group: &Axis, group: i32) -> Re
     }
     let read = match per_group.extent.poly().try_mul(&Poly::constant(group as i64)) {
         Some(p) => Extent::of(p),
-        None => null,
+        null => null,
     };
     let Some(extent) = read else {
         return Result::Err(attribute_error(
@@ -2595,7 +2595,7 @@ pub fn is_unary_elementwise(op: &String) -> bool {
 pub fn is_elementwise(node: &Node) -> bool {
     let op = node.op;
     return is_unary_elementwise(&op)
-        || is_binary_elementwise(&op) && node.attr("axis") matches { None }
+        || is_binary_elementwise(&op) && node.attr("axis") matches { null }
         || op == "Where";
 }
 

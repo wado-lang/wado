@@ -40,7 +40,7 @@ export fn run() with (Stdout, SystemClock, Timezone) {
 
     let zone = match Timezone::utc_offset(now) {
         Some(ns) => offset_zone(ns / 1_000_000_000),
-        None => "UTC",
+        null => "UTC",
     };
     let local = ZonedDateTime { instant, time_zone: zone };
     println(`Local: ${local:.3}`);

@@ -292,12 +292,12 @@ test "dump reports as JSON, every node with its lowering" {
     let json = on_graph("dump", &dir, ["--format", "json"]).unwrap();
     assert json.contains("\"lowering\":\"operation\"");
     let nodes = from_string::<Report>(&json).unwrap().scope.nodes;
-    assert nodes[0].lowering matches { Operation } && nodes[0].inputs == ["X", "W"] as List<String>;
-    assert nodes[2].lowering matches { Alias };
-    assert nodes[3].lowering matches { Folded }
+    assert nodes[0].lowering matches { _::Operation } && nodes[0].inputs == ["X", "W"] as List<String>;
+    assert nodes[2].lowering matches { _::Alias };
+    assert nodes[3].lowering matches { _::Folded }
         && nodes[3].outputs[0].values == Option::Some(["N", "2"] as List<String>);
     let padding = from_string::<Report>(&json).unwrap().padding;
-    assert padding.len() == 1 && padding[0].symbol == "N" && padding[0].refused matches { None };
+    assert padding.len() == 1 && padding[0].symbol == "N" && padding[0].refused matches { null };
 }
 
 test "dump's format is text or json" {

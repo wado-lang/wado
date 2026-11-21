@@ -37,11 +37,11 @@ enum Language {
 
 fn highlights_in(language: Language, source: &String) -> List<Highlight> {
     return match language {
-        JavaScript => javascript_highlights(source),
-        Json => json_highlights(source),
-        Css => stylesheet_highlights(source),
-        CssDeclarations => declarations_highlights(source),
-        Opaque => [],
+        _::JavaScript => javascript_highlights(source),
+        _::Json => json_highlights(source),
+        _::Css => stylesheet_highlights(source),
+        _::CssDeclarations => declarations_highlights(source),
+        _::Opaque => [],
     };
 }
 
@@ -103,7 +103,7 @@ fn script_language(src: &StrSlice, attrs: &List<Attribute>) -> Language {
         let ty = text_of(src, start, end).trim().to_string().to_ascii_lowercase();
         let essence = match ty.split_once(";") {
             Some([head, _]) => head.trim().to_string(),
-            None => ty,
+            null => ty,
         };
         return match essence.as_str_slice() {
             "" | "module" | "text/javascript" | "application/javascript" | "text/ecmascript" | "application/ecmascript" | "application/x-javascript" | "application/x-ecmascript" | "text/jscript" | "text/livescript" | "text/x-javascript" | "text/x-ecmascript" => Language::JavaScript,

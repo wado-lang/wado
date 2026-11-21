@@ -313,6 +313,7 @@ fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
         | ast::Pattern::Struct { .. }
         | ast::Pattern::Variant { .. }
         | ast::Pattern::Range { .. }
+        | ast::Pattern::Equal { .. }
         | ast::Pattern::Literal(_)
         | ast::Pattern::Wildcard
         | ast::Pattern::Error(_) => false,
@@ -577,7 +578,7 @@ mod tests {
                 "fn f(opt: Option<i32>) -> i32 {\n",
                 "    return match opt {\n",
                 "        Some(v) => v,\n",
-                "        None => 0,\n",
+                "        null => 0,\n",
                 "    };\n",
                 "}\n",
             );

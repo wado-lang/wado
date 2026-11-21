@@ -107,7 +107,7 @@ fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>, node
                 }
                 let at_start = match cur.at(i - 1) {
                     Some(pc) => pc == '\n',
-                    None => true,
+                    null => true,
                 };
                 let at_end = j >= cur.end() || cur.is_at(j, '\n');
                 if !at_start && !at_end {
@@ -146,7 +146,7 @@ fn tokenize(cursor: StrCursor, refs: &RefTable, toks: &mut List<InlineTok>, node
 fn char_at(cur: &StrCursor, idx: i32) -> char {
     return match cur.at(idx) {
         Some(c) => c,
-        None => ' ',
+        null => ' ',
     };
 }
 
@@ -184,7 +184,7 @@ fn push_construct(
             push_node(node, toks, nodes);
             return next;
         },
-        None => {
+        null => {
             buf.push(c);
             return i + 1;
         },
@@ -217,7 +217,7 @@ fn process_emphasis(toks: &mut List<InlineTok>) {
                 if d.close && d.count > 0 {
                     match find_opener(toks, ci, &d) {
                         Some(oi) => ci = resolve_pair(toks, oi, ci),
-                        None => ci += 1,
+                        null => ci += 1,
                     }
                 } else {
                     ci += 1;
@@ -488,7 +488,7 @@ fn try_angle_construct(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
         Some(r) => {
             return Option::Some(r);
         },
-        None => {
+        null => {
         },
     }
     return try_html_span(cur, i);
@@ -591,7 +591,7 @@ fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> 
     let end = cur.end();
     let close = match find_bracket_close(cur, open) {
         Some(c) => c,
-        None => {
+        null => {
             return null;
         },
     };
@@ -617,7 +617,7 @@ fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> 
                 close + 1,
             ]);
         },
-        None => null,
+        null => null,
     };
 }
 
@@ -691,7 +691,7 @@ fn try_reference_link(cur: &StrCursor, open: i32, close: i32, refs: &RefTable) -
                 second_close + 1,
             ]);
         },
-        None => null,
+        null => null,
     };
 }
 
@@ -699,7 +699,7 @@ fn try_image(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]>
     let end = cur.end();
     let close = match find_bracket_close(cur, open) {
         Some(c) => c,
-        None => {
+        null => {
             return null;
         },
     };
@@ -720,7 +720,7 @@ fn try_image(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]>
                 Node::ReferenceImage(ReferenceImageNode { alt, label: raw_label.trim().to_string() }),
                 second_close + 1,
             ]),
-            None => null,
+            null => null,
         };
     }
     return match ref_table_get(refs, &alt) {
@@ -728,7 +728,7 @@ fn try_image(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]>
             Node::ReferenceImage(ReferenceImageNode { alt, label: alt.trim().to_string() }),
             close + 1,
         ]),
-        None => null,
+        null => null,
     };
 }
 
@@ -761,21 +761,21 @@ fn right_flanking(prev: Option<char>, next: Option<char>) -> bool {
 fn opt_is_ws(o: Option<char>) -> bool {
     return match o {
         Some(c) => is_space(c),
-        None => true,
+        null => true,
     };
 }
 
 fn opt_is_punct(o: Option<char>) -> bool {
     return match o {
         Some(c) => is_ascii_punct(c),
-        None => false,
+        null => false,
     };
 }
 
 fn opt_is_alnum(o: Option<char>) -> bool {
     return match o {
         Some(c) => c.is_ascii_alphanumeric(),
-        None => false,
+        null => false,
     };
 }
 

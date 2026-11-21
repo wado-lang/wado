@@ -39,7 +39,7 @@ impl Tree {
         drop_other_submodules(&".", &tree.root, &submodules, &built);
         for let [path, recorded] of built {
             assert fs::exists(fs::join(path, ".git")), `the submodule must be checked out: git submodule update --init ${path}`;
-            if try_git(["-C", path, "cat-file", "-e", `${recorded}^{commit}`]) matches { None } {
+            if try_git(["-C", path, "cat-file", "-e", `${recorded}^{commit}`]) matches { null } {
                 git(["-C", path, "fetch", "--quiet", "--depth", "1", "origin", recorded]);
             }
             checkout_at(&path, &from_submodule(&path, &tree.root), &recorded);
@@ -59,7 +59,7 @@ fn hold(path: &String) -> Result<Option<Child>, String> with Process {
         .spawn();
     let mut child = match started {
         Ok(child) => child,
-        Err(e) && e.kind matches { Spawn(NotFound) } => {
+        Err(e) && e.kind matches { Spawn(_::NotFound) } => {
             log_stderr(`eddy: no flock here, so nothing keeps another run out of ${*path}`);
             return Ok(null);
         },
@@ -160,7 +160,7 @@ test "a tree's own .git is not what checks it out again" {
     fs::write(fs::join(&root, "README.md"), &"scribbled").unwrap();
     assert checkout_at(&repo, &"tree", &head).root == root;
     assert fs::read_to_string(fs::join(&root, "README.md")).unwrap() == "read me";
-    assert try_git(["-C", planted, "rev-parse", "--verify", "HEAD"]) matches { None };
+    assert try_git(["-C", planted, "rev-parse", "--verify", "HEAD"]) matches { null };
 }
 
 test "a tree removed by hand is checked out again beside a worktree of a like path" {
@@ -221,7 +221,7 @@ test "a submodule the tree does not keep is emptied" {
 
     drop_other_submodules(&repo, &tree.root, &submodules, &[]);
     assert !fs::exists(&checkout);
-    assert worktree_git_dir(&fs::join(repo, "vendor/s"), &checkout) matches { None };
+    assert worktree_git_dir(&fs::join(repo, "vendor/s"), &checkout) matches { null };
 }
 
 /// A worktree a reviewer writes into, and the git directory its repository
@@ -315,7 +315,7 @@ fn worktree_git_dir(repo: &String, root: &String) -> Option<String> with (Proces
     let records = fs::join(fs::join(repo, &common[0]), "worktrees");
     let entries = match fs::read_dir(&records) {
         Ok(entries) => entries,
-        Err(e) && e.kind matches { NotFound } => {
+        Err(e) && e.kind matches { _::NotFound } => {
             return null;
         },
         Err(e) => panic(`${e}`),
@@ -324,7 +324,7 @@ fn worktree_git_dir(repo: &String, root: &String) -> Option<String> with (Proces
         // git takes a record without one for a worktree to prune.
         let names = match fs::read_to_string(fs::join(fs::join(&records, &entry.name), "gitdir")) {
             Ok(names) => names,
-            Err(e) && e.kind matches { NotFound } => {
+            Err(e) && e.kind matches { _::NotFound } => {
                 continue;
             },
             Err(e) => panic(`${e}`),

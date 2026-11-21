@@ -29,7 +29,7 @@ fn end_trailers(end: FutureWritable<Result<Option<Trailers>, ErrorCode>>) with F
 fn gateway(req: Request) -> [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>] with Client {
     let path = match req.get_path_with_query() {
         Some(p) => p,
-        None => "/",
+        null => "/",
     };
     if path != "/status" {
         return respond(404, []);
@@ -96,7 +96,7 @@ impl Client for MockUpstream {
     fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
         let path = match request.get_path_with_query() {
             Some(p) => p,
-            None => "",
+            null => "",
         };
         self.hits.push(path);
         let [resp, end] = respond(self.status, []);

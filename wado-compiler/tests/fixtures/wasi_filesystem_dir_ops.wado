@@ -53,7 +53,7 @@ export fn run() with (Stdout, Stderr, Preopens) {
     // Creating the same directory again should fail with Exist.
     let mkdir_dup = dir.create_directory_at("test_newdir").wait();
     if let Err(err) = mkdir_dup {
-        if err matches { Exist } {
+        if err matches { _::Exist } {
             println("create_directory_at: duplicate returns Exist (correct)");
         } else {
             eprintln("create_directory_at: duplicate returned wrong error");
@@ -76,19 +76,19 @@ export fn run() with (Stdout, Stderr, Preopens) {
             entry_count += 1;
             if entry.name == "alpha.txt" {
                 found_alpha = true;
-                if entry.type matches { RegularFile } {
+                if entry.type matches { _::RegularFile } {
                     println("read_directory: alpha.txt is RegularFile (correct)");
                 }
             }
             if entry.name == "nested" {
                 found_nested = true;
-                if entry.type matches { Directory } {
+                if entry.type matches { _::Directory } {
                     println("read_directory: nested is Directory (correct)");
                 }
             }
             if entry.name == "test_newdir" {
                 found_newdir = true;
-                if entry.type matches { Directory } {
+                if entry.type matches { _::Directory } {
                     println("read_directory: test_newdir is Directory (correct)");
                 }
             }

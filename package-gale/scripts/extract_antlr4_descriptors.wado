@@ -149,7 +149,7 @@ fn parse_descriptor_text<S: AsStrSlice>(text: S) -> ParsedDescriptor {
                 have_current = true;
                 current_value = String::with_capacity(256);
             },
-            None => {
+            null => {
                 current_value.push_str(&line);
                 current_value.push('\n');
             },
@@ -371,7 +371,7 @@ struct TriageMaps {
 fn read_status_file(root: &Descriptor) -> Option<String> with (Stderr, Exit, Descriptor) {
     return match read_file_to_string(root, &status_file_path()) {
         Ok(text) => Some(text),
-        Err(e) && e matches { NoEntry } => null,
+        Err(e) && e matches { _::NoEntry } => null,
         Err(e) => {
             eprintln(`extract: cannot read ${status_file_path()}: ${e:?}`);
             exit(1);
@@ -387,7 +387,7 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     let mut stage_c = TriageMap::new();
     let text = match content {
         Some(t) => t,
-        None => {
+        null => {
             return TriageMaps { category, stage_a, stage_b, stage_b_oracle, stage_c };
         },
     };
@@ -404,7 +404,7 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
         // Expect `"key" = "value"`
         let eq_idx = match line.find("=") {
             Some(i) => i,
-            None => {
+            null => {
                 continue;
             },
         };
@@ -510,7 +510,7 @@ fn expand_grammar_templates<S: AsStrSlice, S1: AsStrSlice>(key: S, grammar: S1) 
 /// ends the run.
 fn remove_stale<S: AsStrSlice>(dir: &Descriptor, path: S) with (Stderr, Exit, Descriptor) {
     let path = path.to_string();
-    if let Err(e) = dir.unlink_file_at(path).wait() && !e matches { NoEntry } {
+    if let Err(e) = dir.unlink_file_at(path).wait() && !e matches { _::NoEntry } {
         eprintln(`extract: cannot remove ${path}: ${e:?}`);
         exit(1);
     }
@@ -540,7 +540,7 @@ fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<St
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     for let e of stream.read_to_end() {
-        if e.type matches { RegularFile } && e.name.ends_with(suffix) {
+        if e.type matches { _::RegularFile } && e.name.ends_with(suffix) {
             out.push(e.name);
         }
     }
@@ -554,7 +554,7 @@ fn list_subdirs(dir: &Descriptor) -> List<String> with Descriptor {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     for let e of stream.read_to_end() {
-        if e.type matches { Directory } {
+        if e.type matches { _::Directory } {
             out.push(e.name);
         }
     }
@@ -626,7 +626,7 @@ fn emit_test_file_for_category<S: AsStrSlice>(category: S, entries: &List<Descri
                 w.line(`// triage: ${escape_for_wado_str(reason)}`);
                 w.line("#[TODO]");
             },
-            Pass => {
+            _::Pass => {
                 if needs_separator {
                     w.blank();
                 }
@@ -1806,7 +1806,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             }
             let normalised = match normalize_output_for_stage_b(&parsed.output) {
                 Some(t) => t,
-                None => {
+                null => {
                     // Stage C: the descriptor's own [output] is action-print
                     // text, not a tree — emit an output-compare test (parses
                     // [input], asserts result.output == [output]). Independent
@@ -1864,7 +1864,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
             if is_sub_tree {
                 let sub_rule = match sub_rule_opt {
                     Some(r) => r,
-                    None => {
+                    null => {
                         stage_b_auto_skip += 1;
                         // Oracle produces the full tree for `[start]`,
                         // so the sub-tree-identification concern doesn't
@@ -2052,7 +2052,7 @@ fn invoke_stage_b_oracle(jar: &Jar) -> Result<(), String> with (Stdout, Stderr, 
             let base = fs::join(&category_dir, &name);
             let expected_path = `${base}.expected`;
             // A stale `.expected` left behind would pin the last run's tree.
-            if let Err(e) = fs::remove_file(&expected_path) && !e.kind matches { NotFound } {
+            if let Err(e) = fs::remove_file(&expected_path) && !e.kind matches { _::NotFound } {
                 return Err(`${e}`);
             }
             let start = match fs::read_to_string(`${base}.start`) {
@@ -2476,9 +2476,9 @@ test "normalize: nested tree with literal token text is preserved" {
 }
 
 test "normalize: empty output is not Stage B testable" {
-    assert normalize_output_for_stage_b("") matches { None };
-    assert normalize_output_for_stage_b("\n") matches { None };
-    assert normalize_output_for_stage_b("   ") matches { None };
+    assert normalize_output_for_stage_b("") matches { null };
+    assert normalize_output_for_stage_b("\n") matches { null };
+    assert normalize_output_for_stage_b("   ") matches { null };
 }
 
 test "normalize: nested-at-end EOF marker is stripped" {
@@ -2492,7 +2492,7 @@ test "normalize: mid-tree EOF-looking token text auto-skips, not corrupts" {
     // ` <EOF>` NOT in tail position is token text; the old global replace
     // silently deleted it. It must survive the strip and then hit the
     // `<` / `>` rejection (auto-skip).
-    assert normalize_output_for_stage_b("(r <EOF> y)") matches { None };
+    assert normalize_output_for_stage_b("(r <EOF> y)") matches { null };
 }
 
 test "strip_eof_marker: mid-tree marker untouched, tail marker stripped" {
@@ -2516,35 +2516,35 @@ test "strip_tail_eof_marker: leaves a non-tree ' <EOF>' (no closing paren) untou
 test "normalize: action $text echo is not a tree" {
     // `[output]` like `abc` comes from a grammar whose action prints
     // `$text` after a successful parse — not a tree shape.
-    assert normalize_output_for_stage_b("abc") matches { None };
-    assert normalize_output_for_stage_b("alt 1") matches { None };
-    assert normalize_output_for_stage_b("alt 2\n") matches { None };
+    assert normalize_output_for_stage_b("abc") matches { null };
+    assert normalize_output_for_stage_b("alt 1") matches { null };
+    assert normalize_output_for_stage_b("alt 2\n") matches { null };
 }
 
 test "normalize: lexer token-type names are not a tree" {
     // LexerExec descriptors print one token-type name per line.
-    assert normalize_output_for_stage_b("I\nI\n") matches { None };
-    assert normalize_output_for_stage_b("DASHBRACK\nDASHBRACK\n") matches { None };
+    assert normalize_output_for_stage_b("I\nI\n") matches { null };
+    assert normalize_output_for_stage_b("DASHBRACK\nDASHBRACK\n") matches { null };
 }
 
 test "normalize: lexer token dump is not a tree" {
     // `[@0,0:-1='<EOF>',<-1>,1:0]` is `Token.toString()` from the runtime
     // — looks like a tree at first glance because of the `[`, but starts
     // with `[` rather than `(`.
-    assert normalize_output_for_stage_b("[@0,0:-1='<EOF>',<-1>,1:0]") matches { None };
+    assert normalize_output_for_stage_b("[@0,0:-1='<EOF>',<-1>,1:0]") matches { null };
 }
 
 test "normalize: ATN decision trace is not a tree" {
     // FullContextParsing descriptors that exercise ATN decisions emit a
     // `<DecisionInfo>`-style dump. It does not start with `(`.
-    assert normalize_output_for_stage_b("Decision 0:\ns0-ID->:s1^=>1") matches { None };
+    assert normalize_output_for_stage_b("Decision 0:\ns0-ID->:s1^=>1") matches { null };
 }
 
 test "normalize: testsuite ${...} substitution is rejected" {
     // `(s ${ (v ? a) ? })` from ParseTrees/ExtraTokensAndAltLabels carries
     // an action-block reference the testsuite resolves at runtime. Not a
     // self-contained parse tree.
-    assert normalize_output_for_stage_b("(s ${ (v ? a) ? })") matches { None };
+    assert normalize_output_for_stage_b("(s ${ (v ? a) ? })") matches { null };
 }
 
 test "normalize: leftover <...> substitution is rejected" {
@@ -2552,7 +2552,7 @@ test "normalize: leftover <...> substitution is rejected" {
     // StringTemplate directive (e.g. `<AltNum()>` injects `:N`). After
     // stripping `<EOF>` we should see no remaining angle brackets in a
     // clean tree; if any do, the descriptor is not Stage B testable.
-    assert normalize_output_for_stage_b("(s <AltNum()> x)") matches { None };
+    assert normalize_output_for_stage_b("(s <AltNum()> x)") matches { null };
 }
 
 test "normalize: action print like (a+b) without separator after name is rejected" {
@@ -2560,9 +2560,9 @@ test "normalize: action print like (a+b) without separator after name is rejecte
     // value is `(a+b)`. The string looks like `(<ident><op><ident>)` but
     // is NOT a tree: real `to_string_tree` always separates the rule name
     // from its children by a single space.
-    assert normalize_output_for_stage_b("(a+b)") matches { None };
-    assert normalize_output_for_stage_b("(x=1)") matches { None };
-    assert normalize_output_for_stage_b("(foo,bar)") matches { None };
+    assert normalize_output_for_stage_b("(a+b)") matches { null };
+    assert normalize_output_for_stage_b("(x=1)") matches { null };
+    assert normalize_output_for_stage_b("(foo,bar)") matches { null };
     // A childless tree (`(foo)`) is still valid.
     assert normalize_output_for_stage_b("(foo)") matches { Some(_) };
     // Whitespace-separated children are still valid (space, newline, tab).
@@ -2574,8 +2574,8 @@ test "normalize: action print like (a+b) without separator after name is rejecte
 test "normalize: host-side prints after the tree are rejected" {
     // The Listeners descriptors print the tree, then let a listener print
     // more lines; accepting that pins listener output as tree content.
-    assert normalize_output_for_stage_b("(a 1 2)\n1\n2") matches { None };
-    assert normalize_output_for_stage_b("(a x)\n[a, s]") matches { None };
+    assert normalize_output_for_stage_b("(a 1 2)\n1\n2") matches { null };
+    assert normalize_output_for_stage_b("(a x)\n[a, s]") matches { null };
     // An indented tree still ends at its closing paren.
     assert normalize_output_for_stage_b("(s\n  (a x))") matches { Some(_) };
 }
@@ -2583,9 +2583,9 @@ test "normalize: host-side prints after the tree are rejected" {
 test "normalize: line-noise output starting with paren but no name is rejected" {
     // `()`, `( )`, or `(123 ...)` are not valid `to_string_tree()` output
     // — every node starts with an identifier (the rule name).
-    assert normalize_output_for_stage_b("()") matches { None };
-    assert normalize_output_for_stage_b("( a)") matches { None };
-    assert normalize_output_for_stage_b("(123 abc)") matches { None };
+    assert normalize_output_for_stage_b("()") matches { null };
+    assert normalize_output_for_stage_b("( a)") matches { null };
+    assert normalize_output_for_stage_b("(123 abc)") matches { null };
 }
 
 // ===== Stage B: status.toml triage parser =====
@@ -2626,7 +2626,7 @@ fn assert_triage_todo<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 }
 
 fn assert_triage_pass<S: AsStrSlice, S1: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1) {
-    assert lookup_for_axis(maps, axis, key) matches { Pass }, "expected Pass, got other";
+    assert lookup_for_axis(maps, axis, key) matches { _::Pass }, "expected Pass, got other";
 }
 
 test "triage: missing file yields empty maps on all axes" {
@@ -2799,12 +2799,12 @@ test "extract_root_rule_name: simple tree returns the first identifier" {
 }
 
 test "extract_root_rule_name: rejects malformed prefixes" {
-    assert extract_root_rule_name("") matches { None };
-    assert extract_root_rule_name("(") matches { None };
+    assert extract_root_rule_name("") matches { null };
+    assert extract_root_rule_name("(") matches { null };
     // Must start with `(` followed by an identifier.
-    assert extract_root_rule_name("a b") matches { None };
-    assert extract_root_rule_name("( a b)") matches { None };  // space after (
-    assert extract_root_rule_name("(123 abc)") matches { None };  // starts with digit
+    assert extract_root_rule_name("a b") matches { null };
+    assert extract_root_rule_name("( a b)") matches { null };  // space after (
+    assert extract_root_rule_name("(123 abc)") matches { null };  // starts with digit
 }
 
 test "classify_tokens: clean token dump returns Clean(normalised)" {
@@ -2823,14 +2823,14 @@ test "classify_tokens: action-print prefix is part of the expectation" {
 
 test "classify_tokens: empty output is not tokens-testable at all" {
     // Genuinely no `[@…]` line anywhere — not even a Stage C target.
-    assert classify_output_for_tokens("") matches { None };
-    assert classify_output_for_tokens("\n\n") matches { None };
+    assert classify_output_for_tokens("") matches { null };
+    assert classify_output_for_tokens("\n\n") matches { null };
 }
 
 test "classify_tokens: output with no token-dump line at all is None" {
     // Pure action-print without any `[@…]` row has no token-dump payload
     // for `to_lexer_string` to render against; not a claim (d) target.
-    assert classify_output_for_tokens("hello\nworld\n") matches { None };
+    assert classify_output_for_tokens("hello\nworld\n") matches { null };
 }
 
 test "classify_tokens: leading garbage before the token dump is kept" {

@@ -28,15 +28,15 @@ struct FormatSpec {
 fn align_name(align: Align) -> String {
     let mut result = "";
     return match align {
-        Left => {
+        _::Left => {
             result = "left";
             result;
         },
-        Center => {
+        _::Center => {
             result = "center";
             result;
         },
-        Right => {
+        _::Right => {
             result = "right";
             result;
         },
@@ -52,14 +52,14 @@ fn apply_padding(s: String, spec: FormatSpec) -> String {
     let pad_len = width - s.len();
     let mut result = String::with_capacity(width);
     return match spec.align {
-        Left => {
+        _::Left => {
             result.push_str(&s);
             for let mut i = 0; i < pad_len; i += 1 {
                 result.push(fill);
             }
             result;
         },
-        Center => {
+        _::Center => {
             let left_pad = pad_len / 2;
             let right_pad = pad_len - left_pad;
             for let mut i = 0; i < left_pad; i += 1 {
@@ -71,7 +71,7 @@ fn apply_padding(s: String, spec: FormatSpec) -> String {
             }
             result;
         },
-        Right => {
+        _::Right => {
             for let mut i = 0; i < pad_len; i += 1 {
                 result.push(fill);
             }
@@ -92,10 +92,10 @@ fn make_err() -> Result<String, ()> {
 test "a payload binding and a payload-less case" {
     let circle = Shape::Circle(5.0);
     let point = Shape::Point;
-    assert `${match circle { Circle(r) => 3.14159 * r * r, Point => 0.0 }}` == "78.53975";
-    assert `${match point { Circle(r) => 3.14159 * r * r, Point => 0.0 }}` == "0";
-    assert `${match circle { Circle(r) => r * r, Point => 0.0 }}` == "25";
-    assert `${match point { Circle(r) => r * r, Point => 0.0 }}` == "0";
+    assert `${match circle { Circle(r) => 3.14159 * r * r, _::Point => 0.0 }}` == "78.53975";
+    assert `${match point { Circle(r) => 3.14159 * r * r, _::Point => 0.0 }}` == "0";
+    assert `${match circle { Circle(r) => r * r, _::Point => 0.0 }}` == "25";
+    assert `${match point { Circle(r) => r * r, _::Point => 0.0 }}` == "0";
 }
 
 test "a block-bodied arm yields its tail" {
@@ -117,13 +117,13 @@ test "a match in statement position, arms with side effects only" {
     let dir = Direction::Center;
     let mut went = "";
     match dir {
-        Left => {
+        _::Left => {
             went = "go left";
         },
-        Center => {
+        _::Center => {
             went = "go center";
         },
-        Right => {
+        _::Right => {
             went = "go right";
         },
     };
@@ -146,7 +146,7 @@ test "a null arm infers its Option inner from the Some arm's payload" {
         Ok(s) => Option::Some(s),
         Err(_) => null,
     };
-    assert none_value matches { None };
+    assert none_value matches { null };
 }
 
 test "a null arm in front infers just the same" {
@@ -156,7 +156,7 @@ test "a null arm in front infers just the same" {
         Err(_) => null,
         Ok(s) => Option::Some(s),
     };
-    assert v matches { None };
+    assert v matches { null };
 }
 
 test "a null in a block-bodied arm" {
@@ -167,7 +167,7 @@ test "a null in a block-bodied arm" {
             null
         },
     };
-    assert v matches { None };
+    assert v matches { null };
 }
 
 test "a null in an if branch alongside Option::Some" {
@@ -177,5 +177,5 @@ test "a null in an if branch alongside Option::Some" {
     } else {
         Option::Some("x")
     };
-    assert v matches { None };
+    assert v matches { null };
 }

@@ -160,7 +160,7 @@ struct Config {
 test {
     let c = from_string::<Config>(`{"host":"h"}`).unwrap();
     assert c.port == 8080 && c.tags == [];
-    assert from_string::<Config>(`{"port":1}`).unwrap_err().kind matches { MissingField };
+    assert from_string::<Config>(`{"port":1}`).unwrap_err().kind matches { _::MissingField };
 }
 ```
 
@@ -337,7 +337,7 @@ struct Cli {
 test {
     let cli = parse::<Cli>(["--verbose", "add", "--all", "x"]).unwrap();
     assert cli.verbose && cli.command matches { Add(a) && a.all && a.path == "x" };
-    assert parse::<Cli>(["remote", "list"]).unwrap().command matches { Remote(List) };
+    assert parse::<Cli>(["remote", "list"]).unwrap().command matches { Remote(_::List) };
 }
 ```
 

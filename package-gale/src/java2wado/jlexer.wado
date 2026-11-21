@@ -71,7 +71,7 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
                 i += p.len();
                 out.push(JToken::Punct(p));
             },
-            None => {
+            null => {
                 return Result::Err(`java2wado: unexpected character '${char_at(&src, i)}' in action body`);
             },
         }

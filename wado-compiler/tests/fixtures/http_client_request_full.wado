@@ -35,15 +35,15 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     );
 
     // Test defaults before setting: all should be None
-    assert out_req.get_path_with_query() matches { None };
-    assert out_req.get_scheme() matches { None };
-    assert out_req.get_authority() matches { None };
+    assert out_req.get_path_with_query() matches { null };
+    assert out_req.get_scheme() matches { null };
+    assert out_req.get_authority() matches { null };
 
     // Test set_method → Ok
     let method_result = out_req.set_method(Method::Post);
     assert method_result matches { Ok(_) };
     let m = out_req.get_method();
-    assert m matches { Post };
+    assert m matches { _::Post };
 
     // Test get_options → Some(immutable RequestOptions)
     let req_opts = out_req.get_options();
@@ -59,7 +59,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
         let set_result = ro.set_connect_timeout(Option::<Duration>::Some(1000000000));
         assert set_result matches { Err(_) };
         if let Err(e) = set_result {
-            assert e matches { Immutable };
+            assert e matches { _::Immutable };
         }
     } else {
         panic("get_options should return Some");

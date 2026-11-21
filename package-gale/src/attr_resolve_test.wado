@@ -10,8 +10,8 @@ e returns [int v] : ID ;
     let body = " $v = $a.v; ";
     let refs = resolve_attrs(body, rule, &g.parser_rules).unwrap();
     assert refs.len() == 2;
-    assert refs[0].name == "v" && refs[0].target matches { RuleAttr }, "v is a returns attr";
-    assert refs[1].name == "a" && refs[1].target matches { RuleLabel }, "a is a rule label";
+    assert refs[0].name == "v" && refs[0].target matches { _::RuleAttr }, "v is a returns attr";
+    assert refs[1].name == "a" && refs[1].target matches { _::RuleLabel }, "a is a rule label";
     if let Some(m) = &refs[1].member {
         assert *m == "v";
     }
@@ -23,7 +23,7 @@ r : x=ID { print($x.text); } ;
 ").unwrap();
     let refs = resolve_attrs(" print($x.text); ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
-    assert refs[0].target matches { TokenLabel }, "x is a token label";
+    assert refs[0].target matches { _::TokenLabel }, "x is a token label";
 }
 
 test "resolve_attrs resolves unlabeled token and rule refs" {
@@ -33,8 +33,8 @@ e : ID ;
 ").unwrap();
     let refs = resolve_attrs(" $e.start $ID.text ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 2;
-    assert refs[0].name == "e" && refs[0].target matches { RuleRef }, "e is a rule ref";
-    assert refs[1].name == "ID" && refs[1].target matches { TokenRef }, "ID is a token ref";
+    assert refs[0].name == "e" && refs[0].target matches { _::RuleRef }, "e is a rule ref";
+    assert refs[1].name == "ID" && refs[1].target matches { _::TokenRef }, "ID is a token ref";
 }
 
 test "resolve_attrs reaches a token under `~`, as ANTLR4 does" {
@@ -44,7 +44,7 @@ ID : 'a' ;
 X : 'b' ;
 ").unwrap();
     let refs = resolve_attrs(" $ID.text ", &g.parser_rules[0], &g.parser_rules).unwrap();
-    assert refs.len() == 1 && refs[0].target matches { TokenRef }, "ID is a token ref";
+    assert refs.len() == 1 && refs[0].target matches { _::TokenRef }, "ID is a token ref";
 }
 
 test "resolve_attrs list label" {
@@ -53,7 +53,7 @@ r : (xs+=ID)* ;
 ").unwrap();
     let refs = resolve_attrs(" $xs ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
-    assert refs[0].target matches { ListLabel }, "xs is a list label";
+    assert refs[0].target matches { _::ListLabel }, "xs is a list label";
     // ANTLR4 error(63): a list label has no attributes.
     let res = resolve_attrs(" $xs.text ", &g.parser_rules[0], &g.parser_rules);
     assert res matches { Err(m) && m.contains("invalid member") };
@@ -82,7 +82,7 @@ e returns [int v] : ID ;
 ").unwrap();
     let refs = resolve_attrs(" print($e.v); ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
-    assert refs[0].target matches { RuleLabel }, "e resolves through the label q=e";
+    assert refs[0].target matches { _::RuleLabel }, "e resolves through the label q=e";
     assert refs[0].name == "q", "binding name should be the label q";
     assert refs[0].rule_name == "e";
     if let Some(m) = &refs[0].member {
@@ -97,7 +97,7 @@ e : ID ;
 ").unwrap();
     let refs = resolve_attrs(" $e = 0; ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
-    assert refs[0].target matches { RuleAttr }, "declared returns attr e wins, not the q=e label";
+    assert refs[0].target matches { _::RuleAttr }, "declared returns attr e wins, not the q=e label";
     assert refs[0].name == "e";
 }
 
@@ -107,7 +107,7 @@ s : x=ID { print($ID.text); } ;
 ").unwrap();
     let refs = resolve_attrs(" print($ID.text); ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
-    assert refs[0].target matches { TokenLabel }, "ID resolves through the label x=ID";
+    assert refs[0].target matches { _::TokenLabel }, "ID resolves through the label x=ID";
     assert refs[0].name == "x", "binding name should be the label x";
 }
 

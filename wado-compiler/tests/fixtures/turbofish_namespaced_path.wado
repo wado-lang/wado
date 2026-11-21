@@ -12,7 +12,7 @@ test "a namespaced turbofish pins a static call's parameter" {
 
 test "a namespaced turbofish pins a payload-less case" {
     let m = lib::Maybe::<i32>::Nothing;
-    assert m matches { Nothing };
+    assert m matches { _::Nothing };
 }
 
 test "a namespaced turbofish pins a struct literal" {
@@ -24,7 +24,7 @@ test "the same paths without a turbofish still infer" {
     let w = lib::Wrapper::make(5);
     assert w.value == 5;
     let m: lib::Maybe<i32> = lib::Maybe::Nothing;
-    assert m matches { Nothing };
+    assert m matches { _::Nothing };
 }
 
 test "a method's own turbofish rides alongside the path's" {

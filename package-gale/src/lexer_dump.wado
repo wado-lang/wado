@@ -149,12 +149,12 @@ fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule, route: &LexerRu
 
 fn count_route(o: &mut DumpOut, route: &LexerRuleRoute) {
     match route {
-        Matcher => o.route_matcher += 1,
-        RecursiveFragment => o.route_recursive_fragment += 1,
-        Unreached => o.route_unreached += 1,
-        CalledFragment => o.route_called_fragment += 1,
-        InlinedFragment => o.route_inlined_fragment += 1,
-        Virtual => o.route_virtual += 1,
+        _::Matcher => o.route_matcher += 1,
+        _::RecursiveFragment => o.route_recursive_fragment += 1,
+        _::Unreached => o.route_unreached += 1,
+        _::CalledFragment => o.route_called_fragment += 1,
+        _::InlinedFragment => o.route_inlined_fragment += 1,
+        _::Virtual => o.route_virtual += 1,
         Keyword(_) => o.route_keyword += 1,
         SharedLiteral(_) => o.route_literal += 1,
         Subsumed(_) => o.route_subsumed += 1,
@@ -164,12 +164,12 @@ fn count_route(o: &mut DumpOut, route: &LexerRuleRoute) {
 fn route_label(rule: &LexerRule, route: &LexerRuleRoute) -> String {
     let try_fn = lexer_try_fn_name(&rule.name);
     return match route {
-        Matcher => `matcher ${try_fn}`,
-        RecursiveFragment => `recursive fragment: matcher ${try_fn}`,
-        Unreached => "recursive fragment: only latn_match reaches it, no matcher",
-        CalledFragment => "fragment: a frag_ matcher per use context",
-        InlinedFragment => "fragment: inlined at each use site",
-        Virtual => "virtual token: no text to match",
+        _::Matcher => `matcher ${try_fn}`,
+        _::RecursiveFragment => `recursive fragment: matcher ${try_fn}`,
+        _::Unreached => "recursive fragment: only latn_match reaches it, no matcher",
+        _::CalledFragment => "fragment: a frag_ matcher per use context",
+        _::InlinedFragment => "fragment: inlined at each use site",
+        _::Virtual => "virtual token: no text to match",
         Keyword(k) => `keyword classifier (carrier ${k.carrier})${also_matcher_suffix(k.also_matcher, &try_fn)}`,
         SharedLiteral(l) => `shared literal matcher (${l.const_name})${also_matcher_suffix(l.also_matcher, &try_fn)}`,
         Subsumed(s) => `subsumed by ${s.by.join(", ")}: never the longest match${also_matcher_suffix(
@@ -198,8 +198,8 @@ fn render_body(o: &mut DumpOut, ctx: &DumpCtx, alts: &List<LexerAlternative>, pl
     match plan {
         Single(seq) => render_seq(o, ctx, &alts[0], seq),
         Alts(ap) => {
-            if top || !ap.emit matches { FirstMatchNotTail } {
-                if ap.emit matches { MaximalMunch } {
+            if top || !ap.emit matches { _::FirstMatchNotTail } {
+                if ap.emit matches { _::MaximalMunch } {
                     o.alts_maximal_munch += 1;
                 } else {
                     o.alts_first_match += 1;
@@ -228,7 +228,7 @@ fn render_group(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i
         panic("a group step plans something other than a group");
     };
     if let Some(label) = group_emit_label(plan.emit) {
-        if plan.emit matches { ArmScoring } {
+        if plan.emit matches { _::ArmScoring } {
             o.group_arm_scoring += 1;
         } else {
             o.group_first_match += 1;
@@ -252,13 +252,13 @@ fn render_repeat(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: 
         panic("a repeat step plans something other than a repeat");
     };
     match plan.emit {
-        NonGreedy => {
+        _::NonGreedy => {
             o.repeat_non_greedy += 1;
         },
-        LookaheadAware => {
+        _::LookaheadAware => {
             o.repeat_lookahead += 1;
         },
-        PlainNoSuffix | PlainInnerChooses | PlainSuffixDisjoint => {
+        _::PlainNoSuffix | _::PlainInnerChooses | _::PlainSuffixDisjoint => {
             o.repeat_plain += 1;
         },
     }
@@ -300,7 +300,7 @@ fn render_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, plan: &Lexer
                 );
             }
         },
-        Call(_) | Leaf => {
+        Call(_) | _::Leaf => {
         },
     }
 }
@@ -335,10 +335,10 @@ fn decision_line<S: AsStrSlice>(o: &mut DumpOut, text: S) {
 
 fn alts_emit_label(emit: LexerAltsEmit) -> String {
     return match emit {
-        MaximalMunch => "maximal munch: every arm scanned from the same start, longest wins",
-        FirstMatchNotTail => "first-match: not in tail position, a longer arm could strand what follows",
-        FirstMatchFixedLenArms => "first-match: every arm consumes the same fixed length",
-        FirstMatchArmsDisjoint => "first-match: no two arms can match at the same position",
+        _::MaximalMunch => "maximal munch: every arm scanned from the same start, longest wins",
+        _::FirstMatchNotTail => "first-match: not in tail position, a longer arm could strand what follows",
+        _::FirstMatchFixedLenArms => "first-match: every arm consumes the same fixed length",
+        _::FirstMatchArmsDisjoint => "first-match: no two arms can match at the same position",
     };
 }
 
@@ -347,20 +347,20 @@ fn alts_emit_label(emit: LexerAltsEmit) -> String {
 /// reports.
 fn group_emit_label(emit: LexerGroupEmit) -> Option<String> {
     return match emit {
-        ArmScoring => Option::Some("arm scoring: each arm scored on how far arm-plus-suffix reaches"),
-        FirstMatchSingleArm | FirstMatchNoSuffix => null,
-        FirstMatchFixedLenArms => Option::Some("first-match: every arm consumes the same fixed length"),
-        FirstMatchArmsDisjoint => Option::Some("first-match: no two arms can match at the same position"),
+        _::ArmScoring => Option::Some("arm scoring: each arm scored on how far arm-plus-suffix reaches"),
+        _::FirstMatchSingleArm | _::FirstMatchNoSuffix => null,
+        _::FirstMatchFixedLenArms => Option::Some("first-match: every arm consumes the same fixed length"),
+        _::FirstMatchArmsDisjoint => Option::Some("first-match: no two arms can match at the same position"),
     };
 }
 
 fn repeat_emit_label(emit: LexerRepeatEmit) -> String {
     return match emit {
-        NonGreedy => "non-greedy: min-match loop, the rest of the alternative is tried first",
-        LookaheadAware => "lookahead-aware: the inner can eat a char the suffix needs, or a predicate follows",
-        PlainNoSuffix => "plain: nothing follows the repeat",
-        PlainInnerChooses => "plain: an iteration of the inner can end in more than one place",
-        PlainSuffixDisjoint => "plain: the inner cannot eat the suffix's first char",
+        _::NonGreedy => "non-greedy: min-match loop, the rest of the alternative is tried first",
+        _::LookaheadAware => "lookahead-aware: the inner can eat a char the suffix needs, or a predicate follows",
+        _::PlainNoSuffix => "plain: nothing follows the repeat",
+        _::PlainInnerChooses => "plain: an iteration of the inner can end in more than one place",
+        _::PlainSuffixDisjoint => "plain: the inner cannot eat the suffix's first char",
     };
 }
 
@@ -429,7 +429,7 @@ fn elem_text(elem: &LexerElement, depth: i32) -> String {
             s;
         },
         CharClass(cc) => char_class_text(&cc),
-        AnyChar => ".",
+        _::AnyChar => ".",
         RuleRef(name) => name,
         Group(alts) => alts_text(&alts, depth + 1),
         Repeat(rep) => `${elem_text(&rep.element, depth)}${repeat_suffix(&rep)}`,
@@ -439,9 +439,9 @@ fn elem_text(elem: &LexerElement, depth: i32) -> String {
 
 fn repeat_suffix(rep: &LexerRepeatElement) -> String {
     let kind = match rep.kind {
-        Star => "*",
-        Plus => "+",
-        Optional => "?",
+        _::Star => "*",
+        _::Plus => "+",
+        _::Optional => "?",
     };
     return if rep.non_greedy { `${kind}?` } else { kind };
 }

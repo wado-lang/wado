@@ -42,12 +42,12 @@ pub fn wire_type_of(bits: u64) -> Option<WireType> {
 
 fn bits_of(wire_type: WireType) -> u64 {
     return match wire_type {
-        Varint => 0,
-        I64 => 1,
-        Len => 2,
-        SGroup => 3,
-        EGroup => 4,
-        I32 => 5,
+        _::Varint => 0,
+        _::I64 => 1,
+        _::Len => 2,
+        _::SGroup => 3,
+        _::EGroup => 4,
+        _::I32 => 5,
     };
 }
 
@@ -204,11 +204,11 @@ impl<M: Message + Default> Iterator for Messages<M> {
         }
         let read = match self.framing {
             Field([number, wire_type]) => self.next_value(number, wire_type),
-            Delimited => self.next_delimited(),
+            _::Delimited => self.next_delimited(),
         };
         return match read {
             Ok(Some(m)) => Option::Some(Result::Ok(m)),
-            Ok(None) => {
+            Ok(null) => {
                 self.done = true;
                 null;
             },
@@ -300,7 +300,7 @@ fn varint_held(input: &mut LinearBuffer, at: i32) -> Option<[u64, i32]> with Str
 fn varint_end(input: &mut LinearBuffer, at: i32) -> i32 with Stream {
     return match varint_held(input, at) {
         Some([_, end]) => end,
-        None => input.len(),
+        null => input.len(),
     };
 }
 
@@ -315,21 +315,21 @@ fn hold_value(
     depth: i32,
 ) -> Option<i32> with Stream {
     return match wire_type {
-        Varint => {
+        _::Varint => {
             let [_, end] = varint_held(input, at)?;
             Option::Some(end);
         },
-        I64 => held_to(input, at + 8),
-        I32 => held_to(input, at + 4),
-        Len => {
+        _::I64 => held_to(input, at + 8),
+        _::I32 => held_to(input, at + 4),
+        _::Len => {
             let [n, start] = varint_held(input, at)?;
             if n > (i32::MAX - start) as u64 {
                 return null;
             }
             held_to(input, start + n as i32);
         },
-        SGroup => group_held(input, at, number, depth),
-        EGroup => null,
+        _::SGroup => group_held(input, at, number, depth),
+        _::EGroup => null,
     };
 }
 
@@ -364,14 +364,14 @@ fn drop_field(input: &mut LinearBuffer, depth: i32) -> Result<(), DecodeError> w
     let mut header = reader_of(input, tag_end);
     header.next_field(0)?;
     return match header.wire_type {
-        Len => drop_length_delimited(input, tag_end),
-        SGroup => {
+        _::Len => drop_length_delimited(input, tag_end),
+        _::SGroup => {
             header.depth = depth;
             header.enter()?;
             input.consume(tag_end);
             drop_group(input, header.number, depth + 1);
         },
-        Varint | I64 | I32 => {
+        _::Varint | _::I64 | _::I32 => {
             hold_value(input, header.number, header.wire_type, tag_end, depth);
             let mut r = reader_of(input, input.len());
             r.next_field(0)?;
@@ -379,7 +379,7 @@ fn drop_field(input: &mut LinearBuffer, depth: i32) -> Result<(), DecodeError> w
             input.consume(r.pos - input.start());
             Result::Ok(());
         },
-        EGroup => unreachable(),
+        _::EGroup => unreachable(),
     };
 }
 
@@ -971,19 +971,19 @@ impl<B: Input> Reader<B> {
 
     fn skip_value(&mut self) -> Result<(), DecodeError> {
         match self.wire_type {
-            Varint => {
+            _::Varint => {
                 self.varint()?;
             },
-            I64 => {
+            _::I64 => {
                 self.advance(8)?;
             },
-            Len => {
+            _::Len => {
                 self.length_delimited()?;
             },
-            I32 => {
+            _::I32 => {
                 self.advance(4)?;
             },
-            SGroup => {
+            _::SGroup => {
                 let number = self.number;
                 self.enter()?;
                 while self.next_field(number)? {
@@ -991,7 +991,7 @@ impl<B: Input> Reader<B> {
                 }
                 self.depth -= 1;
             },
-            EGroup => unreachable(),
+            _::EGroup => unreachable(),
         }
         return Result::Ok(());
     }
@@ -1039,7 +1039,7 @@ impl<B: Input> Reader<B> {
                 let start = self.pos;
                 match T::take(self)? {
                     Some(v) => list.push(v),
-                    None => self.keep_unpacked(element, start),
+                    null => self.keep_unpacked(element, start),
                 }
             }
             self.end = outer;
@@ -1075,7 +1075,7 @@ impl<B: Input> Reader<B> {
         if self.wire_type != WireType::Len {
             return Result::Ok(false);
         }
-        if *slot matches { None } {
+        if *slot matches { null } {
             *slot = Option::Some(M::default());
         }
         if let Some(m) = slot {
@@ -1106,7 +1106,7 @@ impl<B: Input> Reader<B> {
         if self.wire_type != WireType::SGroup {
             return Result::Ok(false);
         }
-        if *slot matches { None } {
+        if *slot matches { null } {
             *slot = Option::Some(M::default());
         }
         if let Some(m) = slot {
@@ -1182,7 +1182,7 @@ impl<B: Input> Reader<B> {
                         key = k;
                         key_held = true;
                     },
-                    None => key_held = false,
+                    null => key_held = false,
                 }
             } else if self.number == 2 && self.wire_type == E::wire_type() {
                 value_held = E::read(self, &mut value)?;

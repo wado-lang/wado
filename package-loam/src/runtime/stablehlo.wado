@@ -113,7 +113,7 @@ pub fn in_place(recorded: &Recorded) -> List<[i32, i32]> {
 fn relabeled_from(recorded: &Recorded, looped: &HashSet<i32>, id: i32) -> i32 {
     let node = &recorded.nodes[id];
     let relabels = looped.contains(id)
-        || node.op matches { Reshape } && recorded.nodes[node.operands[0]].extents == node.extents;
+        || node.op matches { _::Reshape } && recorded.nodes[node.operands[0]].extents == node.extents;
     return if relabels { relabeled_from(recorded, looped, node.operands[0]) } else { id };
 }
 
@@ -131,22 +131,22 @@ fn node_name(id: i32) -> String {
 
 fn element_name(kind: ElementKind) -> String {
     return match kind {
-        F32 => "f32",
-        F16 => "f16",
-        BF16 => "bf16",
-        U8 => "ui8",
-        I64 => "i64",
-        I32 => "i32",
-        Bool => "i1",
+        _::F32 => "f32",
+        _::F16 => "f16",
+        _::BF16 => "bf16",
+        _::U8 => "ui8",
+        _::I64 => "i64",
+        _::I32 => "i32",
+        _::Bool => "i1",
     };
 }
 
 /// What a sum over `kind` accumulates in: f32 for a float, i64 for an integer.
 fn accumulator(kind: ElementKind) -> ElementKind {
     return match kind {
-        F32 | F16 | BF16 => ElementKind::F32,
-        U8 | I64 | I32 => ElementKind::I64,
-        Bool => unreachable(),
+        _::F32 | _::F16 | _::BF16 => ElementKind::F32,
+        _::U8 | _::I64 | _::I32 => ElementKind::I64,
+        _::Bool => unreachable(),
     };
 }
 
@@ -180,46 +180,46 @@ fn padding_attribute(padding: &List<i32>) -> String {
 
 fn unary_name(op: Unary) -> String {
     return match op {
-        Abs => "stablehlo.abs",
-        Erf => "chlo.erf",
-        Exponential => "stablehlo.exponential",
-        Log => "stablehlo.log",
-        Logistic => "stablehlo.logistic",
-        Negate => "stablehlo.negate",
-        Rsqrt => "stablehlo.rsqrt",
-        Sqrt => "stablehlo.sqrt",
-        Tanh => "stablehlo.tanh",
+        _::Abs => "stablehlo.abs",
+        _::Erf => "chlo.erf",
+        _::Exponential => "stablehlo.exponential",
+        _::Log => "stablehlo.log",
+        _::Logistic => "stablehlo.logistic",
+        _::Negate => "stablehlo.negate",
+        _::Rsqrt => "stablehlo.rsqrt",
+        _::Sqrt => "stablehlo.sqrt",
+        _::Tanh => "stablehlo.tanh",
     };
 }
 
 fn binary_name(op: Binary) -> String {
     return match op {
-        Add => "stablehlo.add",
-        Divide => "stablehlo.divide",
-        Maximum => "stablehlo.maximum",
-        Minimum => "stablehlo.minimum",
-        Multiply => "stablehlo.multiply",
-        Power => "stablehlo.power",
-        Subtract => "stablehlo.subtract",
+        _::Add => "stablehlo.add",
+        _::Divide => "stablehlo.divide",
+        _::Maximum => "stablehlo.maximum",
+        _::Minimum => "stablehlo.minimum",
+        _::Multiply => "stablehlo.multiply",
+        _::Power => "stablehlo.power",
+        _::Subtract => "stablehlo.subtract",
     };
 }
 
 fn direction_name(direction: Comparison) -> String {
     return match direction {
-        Eq => "EQ",
-        Ne => "NE",
-        Ge => "GE",
-        Gt => "GT",
-        Le => "LE",
-        Lt => "LT",
+        _::Eq => "EQ",
+        _::Ne => "NE",
+        _::Ge => "GE",
+        _::Gt => "GT",
+        _::Le => "LE",
+        _::Lt => "LT",
     };
 }
 
 fn comparison_type_name(kind: ElementKind) -> String {
     return match kind {
-        F32 | F16 | BF16 => "FLOAT",
-        I64 | I32 => "SIGNED",
-        U8 | Bool => "UNSIGNED",
+        _::F32 | _::F16 | _::BF16 => "FLOAT",
+        _::I64 | _::I32 => "SIGNED",
+        _::U8 | _::Bool => "UNSIGNED",
     };
 }
 
@@ -259,7 +259,7 @@ impl Writer {
     fn name(&self, id: i32) -> String {
         return match self.names.get(id) {
             Some(name) => name,
-            None => node_name(id),
+            null => node_name(id),
         };
     }
 
@@ -317,7 +317,7 @@ impl Writer {
                 } else {
                     parameters[*at] = match aliases.get(*at) {
                         Some(result) => `${name}: ${ty} {tf.aliasing_output = ${result} : i32}`,
-                        None => `${name}: ${ty}`,
+                        null => `${name}: ${ty}`,
                     };
                     self.names[id] = name;
                 }
@@ -349,18 +349,18 @@ impl Writer {
             },
             Constant(data) => self.constant(id, node, data),
             Iota(dimension) => self.line(id, node, "stablehlo.iota", "", ` {iota_dimension = ${*dimension} : i64}`),
-            Convert => self.line(id, node, "stablehlo.convert", "", ""),
+            _::Convert => self.line(id, node, "stablehlo.convert", "", ""),
             Unary(op) => self.computed(id, node, unary_name(*op)),
             Binary(op) => self.computed(id, node, binary_name(*op)),
             Compare(direction) => {
                 let kind = self.recorded.nodes[node.operands[0]].kind;
                 self.line(id, node, "stablehlo.compare", "", comparison_attributes(direction_name(*direction), kind));
             },
-            Select => self.line(id, node, "stablehlo.select", "", ""),
+            _::Select => self.line(id, node, "stablehlo.select", "", ""),
             BroadcastInDim(dims) => {
                 self.line(id, node, "stablehlo.broadcast_in_dim", "", ` {broadcast_dimensions = ${dense_array(dims)}}`);
             },
-            Reshape => self.line(id, node, "stablehlo.reshape", "", ""),
+            _::Reshape => self.line(id, node, "stablehlo.reshape", "", ""),
             Transpose(perm) => {
                 self.line(id, node, "stablehlo.transpose", "", ` {permutation = ${dense_array(perm)}}`);
             },
@@ -402,9 +402,9 @@ impl Writer {
             ArgMax(axis) => self.arg_max(id, node, *axis),
             Case([first, second]) => self.branched(id, node, first, second),
             Repeat(repeat) => self.repeated(id, node, repeat),
-            Carried => {
+            _::Carried => {
             },
-            Yield => {
+            _::Yield => {
                 self.names[id] = self.name(node.operands[0]);
             },
             Attention(_) | Part(_) | QuantizedProduct(_) | QuantizedGather(_) | Fetched(_) => unreachable(),
@@ -422,7 +422,7 @@ impl Writer {
             hex.push_str(`${b:02x}`);
         }
         hex.push_str("\"");
-        if !node.kind matches { Bool } {
+        if !node.kind matches { _::Bool } {
             self.scalar(node_name(id), hex, type_of(node.kind, &node.extents));
             return;
         }
@@ -439,7 +439,7 @@ impl Writer {
     /// it, which then never rounds, and a graph it computes in f16 lands a few
     /// f16 steps from one whose every operation rounds once.
     fn computed(&mut self, id: i32, node: &RecordedNode, op: String) {
-        if node.kind matches { BF16 | F16 } {
+        if node.kind matches { _::BF16 | _::F16 } {
             self.summed(id, node, op, "", "", "", "");
         } else {
             self.line(id, node, op, "", "");
@@ -499,7 +499,7 @@ impl Writer {
         let into = accumulator(node.kind);
         let scalar = type_of(into, &[]);
         let n = node_name(id);
-        let value = if into matches { F32 } { `0x${init.to_bits():08X}` } else { `${init as i64}` };
+        let value = if into matches { _::F32 } { `0x${init.to_bits():08X}` } else { `${init as i64}` };
         self.scalar(`${n}i`, value, scalar);
         let body = ` ({\n^bb0(${n}a: ${scalar}, ${n}b: ${scalar}):\n${n}r = "${binary_name(binary)}"(${n}a, ${n}b) : (${scalar}, ${scalar}) -> ${scalar}\n"stablehlo.return"(${n}r) : (${scalar}) -> ()\n})`;
         self.summed(id, node, op, `, ${n}i`, `, ${scalar}`, body, attributes);
@@ -543,7 +543,7 @@ impl Writer {
         let extents = &self.recorded.nodes[operand].extents;
         let mut compared = self.name(operand);
         let mut values = self.type_at(operand);
-        if !self.recorded.nodes[operand].kind matches { F32 } {
+        if !self.recorded.nodes[operand].kind matches { _::F32 } {
             // Widening a half is exact, so the order is the operand's own.
             compared = `${n}y`;
             values = self.widened(compared, operand, ElementKind::F32);

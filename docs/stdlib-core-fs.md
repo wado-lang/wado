@@ -23,7 +23,7 @@ let source = match fs::read_to_string("docs/spec-overview.md") {
 fs::write("build/spec.txt", &source).unwrap();
 
 for let entry of fs::read_dir("src")? {
-    if entry.type matches { Directory } {
+    if entry.type matches { _::Directory } {
         continue;
     }
 }

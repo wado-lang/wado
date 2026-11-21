@@ -223,7 +223,7 @@ fn build_in(parent: &mut Build, view: View) -> Element with (Track, Dom) {
             parent.report(`was served <${other.local_name()}> where its view builds <${made.local_name()}>`);
             parent.node.replace_child(made, other);
         },
-        None => {
+        null => {
             if parent.claiming {
                 parent.report(`was served without the <${made.local_name()}> its view builds`);
             }
@@ -277,7 +277,7 @@ impl View {
             observe(|| {
                 match value() {
                     Some(set) => target.set_attribute(name, set),
-                    None => target.remove_attribute(name),
+                    null => target.remove_attribute(name),
                 }
             });
         });

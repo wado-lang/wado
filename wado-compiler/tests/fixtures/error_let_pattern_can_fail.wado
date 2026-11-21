@@ -6,15 +6,15 @@ variant Two { A(i32), B }
 
 test {
     let o: Option<i32> = Some(7);
-    let [None, x] = [o, 1];
-    let [B, y] = [Two::A(1), 2];
+    let [null, x] = [o, 1];
+    let [_::B, y] = [Two::A(1), 2];
     for let A(z) of [Two::A(1), Two::B] {}
-    let mut [None, w] = [o, 1];
+    let mut [null, w] = [o, 1];
     let xs: List<[Option<i32>, i32]> = [[o, 1]];
-    for let mut [None, v] of xs {}
-    let None = o;
-    for let None of [o, o] {}
+    for let mut [null, v] of xs {}
+    let null = o;
+    for let null of [o, o] {}
 }
 
 __DATA__
-{"compile_error": ":9:5: analysis error: invalid pattern: refutable pattern in `let` binding: `None` may not match; use `let ... else` or `if let` instead; 10:5: invalid pattern: refutable pattern in `let` binding: `B` may not match; use `let ... else` or `if let` instead; 11:5: invalid pattern: refutable pattern in `for` binding: `A` may not match; match on the element in the loop body instead; 12:5: invalid pattern: refutable pattern in `let` binding: `None` may not match; use `let ... else` or `if let` instead; 14:5: invalid pattern: refutable pattern in `for` binding: `None` may not match; match on the element in the loop body instead; 15:5: invalid pattern: refutable pattern in `let` binding: `None` may not match; use `let ... else` or `if let` instead; 16:5: invalid pattern: refutable pattern in `for` binding: `None` may not match; match on the element in the loop body instead"}
+{"compile_error": ":9:5: analysis error: invalid pattern: refutable pattern in `let` binding: `null` may not match; use `let ... else` or `if let` instead; 10:5: invalid pattern: refutable pattern in `let` binding: `_::B` may not match; use `let ... else` or `if let` instead; 11:5: invalid pattern: refutable pattern in `for` binding: `A(z)` may not match; match on the element in the loop body instead; 12:5: invalid pattern: refutable pattern in `let` binding: `null` may not match; use `let ... else` or `if let` instead; 14:5: invalid pattern: refutable pattern in `for` binding: `null` may not match; match on the element in the loop body instead; 15:5: invalid pattern: refutable pattern in `let` binding: `null` may not match; use `let ... else` or `if let` instead; 16:5: invalid pattern: refutable pattern in `for` binding: `null` may not match; match on the element in the loop body instead"}

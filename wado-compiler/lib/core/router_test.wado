@@ -14,8 +14,8 @@ test "router: static routes" {
     assert r.match_path(Method::Get, &"/health").unwrap().handler == 1;
     assert r.match_path(Method::Get, &"/api/v1/users/list").unwrap().handler == 2;
     assert r.match_path(Method::Get, &"/api/v1/users/me").unwrap().handler == 3;
-    assert r.match_path(Method::Get, &"/missing") matches { None };
-    assert r.match_path(Method::Get, &"/api/v1/users") matches { None };
+    assert r.match_path(Method::Get, &"/missing") matches { null };
+    assert r.match_path(Method::Get, &"/api/v1/users") matches { null };
 }
 
 test "router: param + literal sibling, literal wins" {
@@ -45,9 +45,9 @@ test "router: no backtracking from literal dead-end" {
     r.get("/teams/:tid/new", 4);
     r.get("/teams/new/:x/y", 5);
 
-    assert r.match_path(Method::Get, &"/users/list/extra") matches { None };
+    assert r.match_path(Method::Get, &"/users/list/extra") matches { null };
     assert r.match_path(Method::Get, &"/users/7/extra") matches { Some(m) && m.handler == 3 };
-    assert r.match_path(Method::Get, &"/teams/new/new") matches { None };
+    assert r.match_path(Method::Get, &"/teams/new/new") matches { null };
 }
 
 test "router: a literal's method miss does not fall to a param sibling" {
@@ -55,10 +55,10 @@ test "router: a literal's method miss does not fall to a param sibling" {
     r.get("/users/me", 1);
     r.post("/users/:id", 2);
 
-    assert r.match_path(Method::Post, &"/users/me") matches { None };
+    assert r.match_path(Method::Post, &"/users/me") matches { null };
     assert r.allowed_methods("/users/me") == [Method::Get];
     r.get("/users/me/:x", 9);
-    assert r.match_path(Method::Post, &"/users/me") matches { None };
+    assert r.match_path(Method::Post, &"/users/me") matches { null };
     assert r.allowed_methods("/users/me") == [Method::Get];
 }
 
@@ -125,8 +125,8 @@ test "router: root pattern" {
 
     assert r.match_path(Method::Get, &"/").unwrap().handler == 7;
     assert r.match_path(Method::Get, &"/foo").unwrap().handler == 8;
-    assert r.match_path(Method::Get, &"/bar") matches { None };
-    assert r.match_path(Method::Post, &"/") matches { None };
+    assert r.match_path(Method::Get, &"/bar") matches { null };
+    assert r.match_path(Method::Post, &"/") matches { null };
     assert r.allowed_methods("/") == [Method::Get];
     r.post("/*rest", 9);
     assert r.match_path(Method::Post, &"/") matches { Some(m) && m.handler == 9 && m.params["rest"] == "" };
@@ -138,7 +138,7 @@ test "router: trailing slash differs from no slash" {
     r.get("/foo", 1);
 
     assert r.match_path(Method::Get, &"/foo").unwrap().handler == 1;
-    assert r.match_path(Method::Get, &"/foo/") matches { None };
+    assert r.match_path(Method::Get, &"/foo/") matches { null };
 }
 
 test "router: 405 vs 404 via allowed_methods" {
@@ -148,7 +148,7 @@ test "router: 405 vs 404 via allowed_methods" {
 
     assert r.match_path(Method::Get, &"/users").unwrap().handler == 1;
     assert r.match_path(Method::Post, &"/users").unwrap().handler == 2;
-    assert r.match_path(Method::Put, &"/users") matches { None };
+    assert r.match_path(Method::Put, &"/users") matches { null };
 
     let allowed = r.allowed_methods("/users");
     assert allowed.len() == 2;
@@ -215,7 +215,7 @@ test "router: route() escape hatch for non-shorthand methods" {
 
     assert r.match_path(Method::Head, &"/h").unwrap().handler == 1;
     assert r.match_path(Method::Other("PURGE"), &"/p").unwrap().handler == 2;
-    assert r.match_path(Method::Get, &"/p") matches { None };
+    assert r.match_path(Method::Get, &"/p") matches { null };
 }
 
 test "router: last-write-wins" {
@@ -245,13 +245,13 @@ test "router: many static routes, and many literal edges out of one state" {
     assert r.match_path(Method::Get, &"/mango").unwrap().handler == 3;
     assert r.match_path(Method::Get, &"/banana").unwrap().handler == 4;
     assert r.match_path(Method::Get, &"/cherry").unwrap().handler == 5;
-    assert r.match_path(Method::Get, &"/coconut") matches { None };
+    assert r.match_path(Method::Get, &"/coconut") matches { null };
     assert r.match_path(Method::Get, &"/zoo/7").unwrap().handler == 11;
     assert r.match_path(Method::Get, &"/apple/7").unwrap().handler == 12;
     assert r.match_path(Method::Get, &"/mango/7").unwrap().handler == 13;
     assert r.match_path(Method::Get, &"/banana/7").unwrap().handler == 14;
     assert r.match_path(Method::Get, &"/cherry/7").unwrap().handler == 15;
-    assert r.match_path(Method::Get, &"/coconut/7") matches { None };
+    assert r.match_path(Method::Get, &"/coconut/7") matches { null };
 }
 
 test "router: allowed_methods lists a path's methods in registration order" {
@@ -276,7 +276,7 @@ test "router: allowed_methods agrees with match_path" {
     r.any("/s", 5);
     r.put("/:name", 6);
 
-    assert r.match_path(Method::Post, &"/users/me") matches { None };
+    assert r.match_path(Method::Post, &"/users/me") matches { null };
     assert r.match_path(Method::Delete, &"/users/me") matches { Some(m) && m.handler == 4 };
     assert r.allowed_methods("/users/me") == [Method::Get, Method::Delete];
     assert r.allowed_methods("/users/7") == [Method::Post, Method::Get, Method::Delete];
@@ -548,7 +548,7 @@ test "router: params.get returns Option" {
 
     let m = r.match_path(Method::Get, &"/users/abc").unwrap();
     assert m.params.get("id") matches { Some(v) && v == "abc" };
-    assert m.params.get("missing") matches { None };
+    assert m.params.get("missing") matches { null };
 }
 
 test "router: deserialize rejects nested struct field" {
@@ -640,10 +640,10 @@ test "router: a path without a leading slash or with an empty segment" {
     r.get("/health", 2);
     r.get("/users/:id", 1);
     r.get("/files/*rest", 3);
-    assert r.match_path(Method::Get, &"health") matches { None };
-    assert r.match_path(Method::Get, &"users/42") matches { None };
-    assert r.match_path(Method::Get, &"") matches { None };
-    assert r.match_path(Method::Get, &"/users//42") matches { None };
+    assert r.match_path(Method::Get, &"health") matches { null };
+    assert r.match_path(Method::Get, &"users/42") matches { null };
+    assert r.match_path(Method::Get, &"") matches { null };
+    assert r.match_path(Method::Get, &"/users//42") matches { null };
     assert r.match_path(Method::Get, &"/files//a") matches { Some(m) && m.params["rest"] == "/a" };
     assert r.allowed_methods("users/42").is_empty();
     assert r.allowed_methods("/users//42").is_empty();
@@ -654,11 +654,11 @@ test "router: a wildcard or terminal that lacks the method" {
     r.post("/files/*rest", 1);
     r.post("/users/:id", 2);
     r.put("/users/:id", 3);
-    assert r.match_path(Method::Get, &"/files/a/b") matches { None };
-    assert r.match_path(Method::Get, &"/files/") matches { None };
-    assert r.match_path(Method::Get, &"/users/1") matches { None };
+    assert r.match_path(Method::Get, &"/files/a/b") matches { null };
+    assert r.match_path(Method::Get, &"/files/") matches { null };
+    assert r.match_path(Method::Get, &"/users/1") matches { null };
     assert r.match_path(Method::Put, &"/users/1") matches { Some(m) && m.handler == 3 };
-    assert r.match_path(Method::Get, &"/users/") matches { None };
+    assert r.match_path(Method::Get, &"/users/") matches { null };
     assert r.allowed_methods("/files/a/b") == [Method::Post];
     assert r.allowed_methods("/files/") == [Method::Post];
     assert r.allowed_methods("/users/").is_empty();

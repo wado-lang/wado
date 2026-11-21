@@ -26,9 +26,9 @@ enum Color {
 
 fn paint(intensity: i32, color: Color = Color::Red) -> i32 {
     let shift = match color {
-        Red => 100,
-        Green => 200,
-        Blue => 300,
+        _::Red => 100,
+        _::Green => 200,
+        _::Blue => 300,
     };
     return intensity + shift;
 }
@@ -66,7 +66,7 @@ test "a default may name an earlier parameter" {
 global N: i32 = 41;
 global FLAG: bool = true;
 
-fn with_match(_a: i32, y: i32 = match Option::<i32>::Some(N) { Some(v) => v + 1, None => 0 }) -> i32 {
+fn with_match(_a: i32, y: i32 = match Option::<i32>::Some(N) { Some(v) => v + 1, null => 0 }) -> i32 {
     return y;
 }
 
@@ -99,7 +99,7 @@ fn via_closure(x: i32, f: fn(i32) -> i32 = |x| x + 1) -> i32 {
     return f(x * 100);
 }
 
-fn via_match(x: i32, y: i32 = match OPT { Some(x) => x + 1, None => 0 }) -> i32 {
+fn via_match(x: i32, y: i32 = match OPT { Some(x) => x + 1, null => 0 }) -> i32 {
     return y;
 }
 

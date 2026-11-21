@@ -47,16 +47,16 @@ export fn run() with Stdout {
     // Test enum matching
     let kind = DeserializeErrorKind::MissingField;
     let label = match kind {
-        UnexpectedType => "unexpected type",
-        MissingField => "missing field",
-        UnknownVariant => "unknown variant",
-        DuplicateField => "duplicate field",
-        InvalidValue => "invalid value",
-        Overflow => "overflow",
-        MalformedInput => "malformed input",
-        TrailingData => "trailing data",
-        Eof => "eof",
-        Custom => "custom",
+        _::UnexpectedType => "unexpected type",
+        _::MissingField => "missing field",
+        _::UnknownVariant => "unknown variant",
+        _::DuplicateField => "duplicate field",
+        _::InvalidValue => "invalid value",
+        _::Overflow => "overflow",
+        _::MalformedInput => "malformed input",
+        _::TrailingData => "trailing data",
+        _::Eof => "eof",
+        _::Custom => "custom",
     };
     println(`Kind: ${label}`);
 }

@@ -16,7 +16,7 @@ test "Write and Run are offered only with a runner" {
 test "only Run has a limit on its calls" {
     let ws = Workspace { root: "src" };
     assert ws.call_limit(&"Run") matches { Some(n) && n > 0 };
-    assert ws.call_limit(&"Read") matches { None };
+    assert ws.call_limit(&"Read") matches { null };
 }
 
 test "Write creates the file and its directories inside the root" {
@@ -40,7 +40,7 @@ fn has_rg() -> bool with (Environment, Process) {
     if Command::new("rg").arg("--version").output().is_ok() {
         return true;
     }
-    assert env("CI") matches { None }, "CI must install ripgrep";
+    assert env("CI") matches { null }, "CI must install ripgrep";
     return false;
 }
 

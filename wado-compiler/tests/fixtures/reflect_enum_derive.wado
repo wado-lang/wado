@@ -61,14 +61,14 @@ test "case_name derives the live case's name" {
 test "by_name derives the reverse lookup through the bound" {
     assert parse::<Color>("Blue") matches { Some(c) && c == Color::Blue };
     assert parse::<Size>("Small") matches { Some(s) && s == Size::Small };
-    assert parse::<Color>("Chartreuse") matches { None };
+    assert parse::<Color>("Chartreuse") matches { null };
 }
 
 test "from_discriminant round-trips and rejects unknown tags through the bound" {
     assert parse_tag::<Color>(2) matches { Some(c) && c == Color::Blue };
-    assert parse_tag::<Color>(7) matches { None };
+    assert parse_tag::<Color>(7) matches { null };
     assert parse_tag::<Size>(0) matches { Some(s) && s == Size::Small };
-    assert parse_tag::<Size>(5) matches { None };
+    assert parse_tag::<Size>(5) matches { null };
 }
 
 __DATA__

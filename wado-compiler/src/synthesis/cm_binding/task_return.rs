@@ -332,7 +332,7 @@ fn walk_outside_closures(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -
     opt_walk_expr(visitor, expr)
 }
 
-/// `match $task_result { Some(v) => return v, None => unreachable() }`. A body
+/// `match $task_result { Some(v) => return v, null => unreachable() }`. A body
 /// that reaches the end without delivering has no result to give, which for the
 /// task entry is a CM protocol error either way.
 fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {

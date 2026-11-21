@@ -8,7 +8,7 @@ fn re(pattern: String) -> Regex {
 fn found(pattern: String, text: String) -> String {
     return match re(pattern).find(text) {
         Some(m) => `${m.start()}..${m.end()} ${m.as_str()}`,
-        None => "none",
+        null => "none",
     };
 }
 
@@ -21,7 +21,7 @@ fn groups(pattern: String, text: String) -> String {
     for let i of 0..<caps.len() {
         parts.push(match caps.get(i) {
             Some(m) => `${m.as_str()}`,
-            None => "-",
+            null => "-",
         });
     }
     return parts.join(",");
@@ -90,13 +90,13 @@ test "named groups" {
     let caps = re(#"(?<y>\d+)-(?<m>\d+)"#).captures("1-2").unwrap();
     assert caps["y"].unwrap().as_str() == "1";
     assert caps.name("m").unwrap().as_str() == "2";
-    assert caps["d"] matches { None };
+    assert caps["d"] matches { null };
 }
 
 test "find_at keeps the text before start as context" {
     let r = re(#"\bb"#);
     assert r.find_at("ab b", 1).unwrap().start() == 3;
-    assert re(#"^a"#).find_at("aa", 1) matches { None };
+    assert re(#"^a"#).find_at("aa", 1) matches { null };
     assert re(#"a"#).find_at("aa", 1).unwrap().start() == 1;
 }
 
@@ -201,7 +201,7 @@ test "the pieces and the matches spell the text again" {
                 }
             }
             assert spelled == *text;
-            assert seps.next() matches { None };
+            assert seps.next() matches { null };
         }
     }
 }

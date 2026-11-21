@@ -111,9 +111,9 @@ impl Packed {
     /// The half `h` two to a word.
     fn halves(h: Option<HalfFloat>) -> Option<Packed> {
         return match h {
-            Some(F16) => Option::Some(Packed::F16),
-            Some(BF16) => Option::Some(Packed::BF16),
-            None => null,
+            Some(_::F16) => Option::Some(Packed::F16),
+            Some(_::BF16) => Option::Some(Packed::BF16),
+            null => null,
         };
     }
 }
@@ -873,16 +873,16 @@ impl WebGpuBackend {
         encoder.copy_buffer_to_buffer(&p.resolved, null, &p.readable, null, Option::Some(size));
         let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
         self.queue.submit([&commands]);
-        let Ok(_) = p.readable.map_async(GpuMapMode::Read, null, Option::Some(size)).wait() else {
+        if p.readable.map_async(GpuMapMode::Read, null, Option::Some(size)).wait().is_err() {
             panic("loam: a profile's timestamps did not map for reading");
-        };
+        }
         let Ok(bytes) = p.readable.get_mapped_range_get_with_copy(null, Option::Some(size)) else {
             panic("loam: a profile's mapped timestamps gave no bytes");
         };
         let stamps = List::<u64>::from_le_bytes(bytes as ByteList);
-        let Ok(_) = p.readable.unmap() else {
+        if p.readable.unmap().is_err() {
             panic("loam: a profile's timestamps did not unmap");
-        };
+        }
         for let i of 0..<count {
             // A device may reset its counter between two stamps, and WebGPU
             // lets such a pass be ignored.
@@ -942,7 +942,7 @@ impl WebGpuBackend {
         }
         let slot = match self.owned_buffer(count) {
             Some(s) => s,
-            None => self.pass_buffer(count),
+            null => self.pass_buffer(count),
         };
         if let Some(commands) = &mut self.taping {
             commands.push(Command::Allocated([count, slot]));
@@ -1263,15 +1263,17 @@ impl WebGpuBackend {
                 words[i - at] = word(i);
             }
             let bytes = words.cast::<u8>();
-            let Ok(_) = self.queue.write_buffer_with_copy(
-                self.buffer(slot),
-                (at * 4) as u64 as GpuSize64,
-                &bytes,
-                null,
-                null,
-            ) else {
+            if self.queue
+                .write_buffer_with_copy(
+                    self.buffer(slot),
+                    (at * 4) as u64 as GpuSize64,
+                    &bytes,
+                    null,
+                    null,
+                )
+                .is_err() {
                 panic("loam: a host tensor did not write to the device");
-            };
+            }
         }
     }
 
@@ -1282,7 +1284,7 @@ impl WebGpuBackend {
     {
         let at = match &self.parameters {
             Some(p) => self.aligned(p.words.len()),
-            None => PARAMETER_WORDS,
+            null => PARAMETER_WORDS,
         };
         if at + params.len() > PARAMETER_WORDS {
             self.write_parameters();
@@ -1308,15 +1310,17 @@ impl WebGpuBackend {
             if c.from >= c.to {
                 continue;
             }
-            let Ok(_) = self.queue.write_buffer_with_copy(
-                self.buffer(c.slot),
-                (c.from * 4) as u64 as GpuSize64,
-                &c.bytes,
-                Option::Some((c.from * 4) as u64 as GpuSize64),
-                Option::Some(((c.to - c.from) * 4) as u64 as GpuSize64),
-            ) else {
+            if self.queue
+                .write_buffer_with_copy(
+                    self.buffer(c.slot),
+                    (c.from * 4) as u64 as GpuSize64,
+                    &c.bytes,
+                    Option::Some((c.from * 4) as u64 as GpuSize64),
+                    Option::Some(((c.to - c.from) * 4) as u64 as GpuSize64),
+                )
+                .is_err() {
                 panic("loam: a launch's parameters did not write to the device");
-            };
+            }
             c.from = PARAMETER_WORDS;
             c.to = 0;
         }
@@ -1334,7 +1338,7 @@ impl WebGpuBackend {
         t: &Tensor<E, Axes>,
         kept: bool,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
-        if E::kind() matches { U8 } {
+        if E::kind() matches { _::U8 } {
             let bytes = self.reserved_bytes(t.extents, kept);
             self.write_bytes(&bytes, |i| t.data[i].cast_to::<i64>() as u32);
             return bytes;
@@ -1398,15 +1402,15 @@ impl WebGpuBackend {
         match packed {
             Some(half) => {
                 let bits = |i: i32| match half {
-                    F16 => f16::from_f32(element(i)).to_bits() as u32,
-                    BF16 => element(i).to_bits() >> 16,
+                    _::F16 => f16::from_f32(element(i)).to_bits() as u32,
+                    _::BF16 => element(i).to_bits() >> 16,
                 };
                 self.write(slot, 0, words, |w| {
                     let high = if 2 * w + 1 < count { bits(2 * w + 1) << 16 } else { 0 };
                     return high | bits(2 * w);
                 });
             },
-            None => self.write(slot, 0, words, |i| element(i).to_bits()),
+            null => self.write(slot, 0, words, |i| element(i).to_bits()),
         }
         return DeviceTensor {
             slot,
@@ -1424,9 +1428,9 @@ impl WebGpuBackend {
         kind: ElementKind,
         extents: List<i32>,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer)
-        contract kind matches { U8 | F32 | F16 | BF16 }
+        contract kind matches { _::U8 | _::F32 | _::F16 | _::BF16 }
     {
-        if kind matches { U8 } {
+        if kind matches { _::U8 } {
             return self.reserved_bytes(extents, true);
         }
         return contiguous(self.reserved(element_count(&extents), true), 0, extents);
@@ -1438,7 +1442,7 @@ impl WebGpuBackend {
         let width = row.count();
         assert width * pool.extents[0] == element_count(&pool.extents), "a row fills one slot of the pool";
         let start = slot * width;
-        if row.kind matches { U8 } {
+        if row.kind matches { _::U8 } {
             assert width % 4 == 0, "a slot of bytes fills whole words";
             let bytes = row.bytes();
             self.write(
@@ -1469,7 +1473,7 @@ impl WebGpuBackend {
         t: &Tensor<E, Axes>,
         kept: bool,
     ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
-        if E::exact_in_f32() || E::kind() matches { U8 } {
+        if E::exact_in_f32() || E::kind() matches { _::U8 } {
             return Placed::Device(self.placed(t, kept));
         }
         return Placed::Host(*t);
@@ -1555,9 +1559,9 @@ impl WebGpuBackend {
         let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
         self.queue.submit([&commands]);
         self.queue.on_submitted_work_done().wait();
-        let Ok(_) = readback.map_async(GpuMapMode::Read, null, null).wait() else {
+        if readback.map_async(GpuMapMode::Read, null, null).wait().is_err() {
             panic("loam: a device buffer did not map for reading");
-        };
+        }
         let Ok(bytes) = readback.get_mapped_range_get_with_copy(null, null) else {
             panic("loam: a mapped device buffer gave no bytes");
         };
@@ -1585,7 +1589,7 @@ impl WebGpuBackend {
         &mut self,
         t: &DeviceTensor,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if is_contiguous(t) && t.packed matches { None } {
+        if is_contiguous(t) && t.packed matches { null } {
             return *t;
         }
         let out = contiguous(self.allocated(element_count(&t.extents), false), 0, t.extents);
@@ -1638,10 +1642,10 @@ impl WebGpuBackend {
     /// How a shader holds the elements of a binding `packed` packs.
     fn words(&self, packed: Option<Packed>) -> Words {
         return match packed {
-            None => Words::F32,
-            Some(BF16) => Words::PackedBF16,
-            Some(F16) => if self.f16 { Words::F16 } else { Words::PackedF16 },
-            Some(U8) => Words::Bytes,
+            null => Words::F32,
+            Some(_::BF16) => Words::PackedBF16,
+            Some(_::F16) => if self.f16 { Words::F16 } else { Words::PackedF16 },
+            Some(_::U8) => Words::Bytes,
         };
     }
 
@@ -1665,7 +1669,7 @@ impl WebGpuBackend {
         let shader = Shader { key, words };
         let found = match self.compiled.get(shader) {
             Some(at) => at,
-            None => self.compile(&shader),
+            null => self.compile(&shader),
         };
         let mut all = spans;
         all.push(self.parameters_for(found, &params));
@@ -1762,7 +1766,7 @@ impl WebGpuBackend {
                         end_of_pass_write_index: Option::Some((first + 1) as u32 as GpuSize32),
                     });
                 },
-                None => null,
+                null => null,
             };
             let pass = encoder.begin_compute_pass(Option::Some(GpuComputePassDescriptor {
                 timestamp_writes,
@@ -1772,9 +1776,9 @@ impl WebGpuBackend {
         }
         let pass = &self.recording[0].pass;
         pass.set_pipeline(&self.pipelines[pipeline].compiled);
-        let Ok(_) = pass.set_bind_group(0, Option::Some(&cached.group), null, null, null) else {
+        if pass.set_bind_group(0, Option::Some(&cached.group), null, null, null).is_err() {
             panic("loam: a kernel's buffers did not bind");
-        };
+        }
         pass.dispatch_workgroups(
             x as u32 as GpuSize32,
             Option::Some(y as u32 as GpuSize32),
@@ -1796,7 +1800,7 @@ impl WebGpuBackend {
         let key = self.group_key(pipeline, spans);
         return match self.group_at.get(key) {
             Some(at) => at,
-            None => self.bind_group(pipeline, spans, key),
+            null => self.bind_group(pipeline, spans, key),
         };
     }
 
@@ -2065,7 +2069,7 @@ impl WebGpuBackend {
         from: &DeviceTensor,
         to: &DeviceTensor,
     ) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
-        contract from.extents == to.extents, to.packed matches { None } || holds_f16(to) && self.f16
+        contract from.extents == to.extents, to.packed matches { null } || holds_f16(to) && self.f16
     {
         let count = element_count(&to.extents);
         if count == 0 {
@@ -2236,7 +2240,7 @@ impl WebGpuBackend {
             && count * rows * written <= self.max_binding;
         let epilogue: List<DeviceTensor> = match then {
             Some(e) => e.operands.into_iter().map(|o| o.view).collect(),
-            None => [],
+            null => [],
         };
         let chunk = if fits { self.inner_chunk(&lhs, &rhs) } else { null };
         if paired && !(narrow && across && chunk == Option::Some(inner)) {
@@ -2405,7 +2409,7 @@ impl WebGpuBackend {
         }
         let op = match then {
             Some(e) => e.op,
-            None => operand(0),
+            null => operand(0),
         };
         let width = word_width(&bound.views[1], across);
         let key = ShaderKey::NarrowProduct(
@@ -2659,7 +2663,7 @@ impl WebGpuBackend {
         let groups = rows * furthest.div_ceil(part);
         let half = match rotary {
             Some([c, _]) => c.extents[1],
-            None => 0,
+            null => 0,
         };
         let held = [batch, kv, capacity, d] as List<i32>;
         let strides = row_major(&held);
@@ -2727,7 +2731,7 @@ impl WebGpuBackend {
         }
         // Recorded where a later call can do it again: over the cache it
         // appends to in place, in a launch, outside another recording.
-        let key = if appending matches { Some(_) } && self.taping matches { None } {
+        let key = if appending matches { Some(_) } && self.taping matches { null } {
             self.attention_key(stored);
         } else {
             null;
@@ -2772,7 +2776,7 @@ impl WebGpuBackend {
 
         let cache = match appending {
             Some(slot) => slot,
-            None => {
+            null => {
                 // Only the positions the past holds: the append writes the
                 // next ones, and the attention reads none past them. A shared
                 // past is the present, which keeps what its rows hold past
@@ -2850,9 +2854,9 @@ impl WebGpuBackend {
             return null;
         };
         let format = match stored {
-            None => 0,
-            Some(F16) => 1,
-            Some(BF16) => 2,
+            null => 0,
+            Some(_::F16) => 1,
+            Some(_::BF16) => 2,
         };
         // A kernel's key starts with its program's serial, which is never
         // negative.
@@ -3306,7 +3310,7 @@ impl WebGpuBackend {
         if count > self.max_binding || !self.binds(operands) {
             return null;
         }
-        let out = self.new_tensor([operands[1].extents[0], width], half matches { Some(F16) });
+        let out = self.new_tensor([operands[1].extents[0], width], half matches { Some(_::F16) });
         let [x, y] = grid(count);
         let zero_points = operands.len() > 3;
         self.dispatch_bound(
@@ -3372,9 +3376,9 @@ struct Span {
 /// The elements of `t`'s buffer one word holds.
 fn elements_per_word(t: &DeviceTensor) -> i32 {
     return match t.packed {
-        None => 1,
-        Some(F16 | BF16) => 2,
-        Some(U8) => 4,
+        null => 1,
+        Some(_::F16 | _::BF16) => 2,
+        Some(_::U8) => 4,
     };
 }
 
@@ -3386,12 +3390,12 @@ fn rebased(t: &DeviceTensor, span: &Span) -> i32 {
 /// Whether the last step of `op` rounds to f16, which a kernel computing it
 /// may then store as f16s.
 fn rounds_to_f16(op: &Expr) -> bool {
-    return op.steps[op.steps.len() - 1] matches { Rounded([F16, _]) };
+    return op.steps[op.steps.len() - 1] matches { Rounded([_::F16, _]) };
 }
 
 /// Whether `t` holds f16s, which a kernel moving them may store as f16s.
 fn holds_f16(t: &DeviceTensor) -> bool {
-    return t.packed matches { Some(F16) };
+    return t.packed matches { Some(_::F16) };
 }
 
 /// `t`'s buffer from its offset, row-major under `extents`.
@@ -3762,8 +3766,8 @@ fn load${k}(i: u32) -> f32 {
 `);
     }
     let stored = match words[last] {
-        F32 => "v",
-        F16 => "f16(v)",
+        _::F32 => "v",
+        _::F16 => "f16(v)",
         _ => panic("loam: a kernel writes f32s or f16s alone"),
     };
     out.push_str(`@group(0) @binding(${last}) var<storage, read_write> out: array<${array_wgsl(words[last])}>;
@@ -3778,9 +3782,9 @@ fn put(i: u32, v: f32) {
 /// The WGSL type of an element of a buffer of `words`.
 fn array_wgsl(words: Words) -> String {
     return match words {
-        F32 => "f32",
-        F16 => "f16",
-        PackedF16 | PackedBF16 | U32 | Bytes => "u32",
+        _::F32 => "f32",
+        _::F16 => "f16",
+        _::PackedF16 | _::PackedBF16 | _::U32 | _::Bytes => "u32",
     };
 }
 
@@ -3788,11 +3792,11 @@ fn array_wgsl(words: Words) -> String {
 /// holding `words`, a half widened.
 fn element_wgsl(buffer: String, index: String, words: Words) -> String {
     return match words {
-        F32 => `${buffer}[${index}]`,
-        F16 | U32 => `f32(${buffer}[${index}])`,
-        PackedF16 => `unpack2x16float(${buffer}[(${index}) >> 1u])[(${index}) & 1u]`,
-        PackedBF16 => `bitcast<f32>((${buffer}[(${index}) >> 1u] >> (((${index}) & 1u) * 16u)) << 16u)`,
-        Bytes => `f32((${buffer}[(${index}) >> 2u] >> (((${index}) & 3u) * 8u)) & 0xFFu)`,
+        _::F32 => `${buffer}[${index}]`,
+        _::F16 | _::U32 => `f32(${buffer}[${index}])`,
+        _::PackedF16 => `unpack2x16float(${buffer}[(${index}) >> 1u])[(${index}) & 1u]`,
+        _::PackedBF16 => `bitcast<f32>((${buffer}[(${index}) >> 1u] >> (((${index}) & 1u) * 16u)) << 16u)`,
+        _::Bytes => `f32((${buffer}[(${index}) >> 2u] >> (((${index}) & 3u) * 8u)) & 0xFFu)`,
     };
 }
 
@@ -3800,18 +3804,18 @@ fn element_wgsl(buffer: String, index: String, words: Words) -> String {
 /// the one after it of binding `k`, which holds `words` of halves.
 fn pair_wgsl(words: Words, k: i32, index: String, indent: String) -> String {
     return match words {
-        F16 => `${indent}let v0 = load${k}(${index});
+        _::F16 => `${indent}let v0 = load${k}(${index});
 ${indent}let v1 = load${k}(${index} + 1u);
 `,
-        PackedF16 => `${indent}let v = unpack2x16float(o${k}[${index} >> 1u]);
+        _::PackedF16 => `${indent}let v = unpack2x16float(o${k}[${index} >> 1u]);
 ${indent}let v0 = v.x;
 ${indent}let v1 = v.y;
 `,
-        PackedBF16 => `${indent}let w = o${k}[${index} >> 1u];
+        _::PackedBF16 => `${indent}let w = o${k}[${index} >> 1u];
 ${indent}let v0 = bitcast<f32>(w << 16u);
 ${indent}let v1 = bitcast<f32>(w & 0xFFFF0000u);
 `,
-        F32 | U32 | Bytes => panic("loam: a lane reads two halves of a word that holds none"),
+        _::F32 | _::U32 | _::Bytes => panic("loam: a lane reads two halves of a word that holds none"),
     };
 }
 
@@ -4010,10 +4014,10 @@ test "a matrix packs in a half only where each value fits it" {
     let past_f16 = f32::from_bits(0x71000000);
     let past_bf16 = f32::from_bits(0x3F802000);
     let holding = |values: List<f32>| half_holding(values.len(), |i| values[i]);
-    assert holding([1.0, past_f16]) matches { Some(BF16) };
-    assert holding([1.0, past_bf16]) matches { Some(F16) };
-    assert holding([past_f16, past_bf16]) matches { None };
-    assert holding([1.0, f32::INFINITY, past_bf16]) matches { None };
+    assert holding([1.0, past_f16]) matches { Some(_::BF16) };
+    assert holding([1.0, past_bf16]) matches { Some(_::F16) };
+    assert holding([past_f16, past_bf16]) matches { null };
+    assert holding([1.0, f32::INFINITY, past_bf16]) matches { null };
 }
 
 /// The element of operand `k`, read from binding `bindings[k]`, whose view's
@@ -4342,20 +4346,20 @@ fn arg_max_shader(bindings: &List<i32>, rank: i32, stage: ArgMaxStage, words: &L
         let i = j;
 `;
     let [range, read, write] = match stage {
-        Whole => [
+        _::Whole => [
             `    let row = flat;
 ${coords_wgsl("row", 4, 0, rank - 1, "c", "    ")}    let first = 0u;
     let end = p[2];
 `, direct, "        out[row] = f32(indices[0]);\n",
         ],
-        Parts => [
+        _::Parts => [
             `    let row = flat / p[3];
     let first = flat % p[3] * ${ARG_MAX_PART}u;
     let end = min(p[2], first + ${ARG_MAX_PART}u);
 ${coords_wgsl("row", 4, 0, rank - 1, "c", "    ")}`, direct,
             "        out[2u * flat] = values[0];\n        out[2u * flat + 1u] = f32(indices[0]);\n",
         ],
-        Combine => [
+        _::Combine => [
             "    let row = flat;\n    let first = 0u;\n    let end = p[3];\n",
             `        let pair = p[${at}] + 2u * (row * p[3] + j);
         let x = load${bindings[0]}(pair);
@@ -4543,9 +4547,9 @@ global SEGMENT: i32 = 32;
 /// none.
 fn rounded_wgsl(half: Option<HalfFloat>, value: String) -> String {
     return match half {
-        Some(F16) => `to_f16(${value})`,
-        Some(BF16) => `to_bf16(${value})`,
-        None => value,
+        Some(_::F16) => `to_f16(${value})`,
+        Some(_::BF16) => `to_bf16(${value})`,
+        null => value,
     };
 }
 
@@ -4628,7 +4632,7 @@ fn quantized_product_shader(op: &Expr, bindings: &List<i32>, shape: &QuantizedSh
     // lane reads its words whole. A weight copied to bind holds a byte a word.
     let weight = bindings[1];
     let [unit, read]: [i32, fn(i32) -> String] = if aligned
-        && words[weight] matches { Bytes }
+        && words[weight] matches { _::Bytes }
         && segment_bytes % 4 == 0 {
         [4, |t| `o${weight}[(p[10] + n * p[11] + b * p[6] + within) / 4u + ${t}u]`];
     } else {
@@ -4922,7 +4926,7 @@ fn narrow_product_shader(
 ) -> String {
     assert width == 1 || width == 2;
     assert !paired || across && !continued && lanes % 2 == 0, "a pair's sums meet in one workgroup";
-    assert !continued || staged matches { None }, "a prologue reads the whole inner axis";
+    assert !continued || staged matches { null }, "a prologue reads the whole inner axis";
     let splits = NARROW_LANES / lanes;
     assert splits * lanes == NARROW_LANES && splits & splits - 1 == 0, "the parts add in halves";
     // The columns a lane sums, and the steps of the inner axis it reads at once.
@@ -4938,11 +4942,11 @@ fn narrow_product_shader(
             staged_wgsl(s),
             s.operands,
         ],
-        None => ["", "", 0],
+        null => ["", "", 0],
     };
     let lhs: fn(String) -> String = match staged {
         Some(s) => |k: String| `staged[b * ${s.inner}u + ${k}]`,
-        None => |k: String| `load${bindings[0]}(u32(a_base + i32(r0 + b) * a_row + i32(${k}) * a_inner))`,
+        null => |k: String| `load${bindings[0]}(u32(a_base + i32(r0 + b) * a_row + i32(${k}) * a_inner))`,
     };
     let sum = if width == 1 {
         `                let vb = ${right_wgsl(bindings, "k")};
@@ -5029,7 +5033,7 @@ ${ELEMENTWISE_OPERATORS}`;
 fn word_width(rhs: &DeviceTensor, across: bool) -> i32 {
     let r = rhs.extents.len();
     let unit = if across { r - 2 } else { r - 1 };
-    if !rhs.packed matches { Some(F16 | BF16) } || rhs.strides[unit] != 1 || rhs.offset % 2 != 0 {
+    if !rhs.packed matches { Some(_::F16 | _::BF16) } || rhs.strides[unit] != 1 || rhs.offset % 2 != 0 {
         return 1;
     }
     for let d of 0..<r {
@@ -5181,8 +5185,8 @@ fn fold_wgsl(
     indent: String,
 ) -> String {
     let [init, combine] = match kind {
-        Sum => ["0.0", "acc + v"],
-        Max => ["non_finite(0xff800000u)", "max(acc, v)"],
+        _::Sum => ["0.0", "acc + v"],
+        _::Max => ["non_finite(0xff800000u)", "max(acc, v)"],
     };
     let tree = combine.replace("acc", "partial[lid]").replace("v", "partial[lid + h]");
     return `${indent}var acc = ${init};
@@ -5262,33 +5266,33 @@ fn max_of(values: &List<i32>) -> i32
 
 fn unary_wgsl(op: UnaryOp, v: String) -> String {
     return match op {
-        Relu => `max(${v}, 0.0)`,
-        Sigmoid => `sigmoid_(${v})`,
-        Tanh => `tanh(${v})`,
-        Erf => `erf_(${v})`,
-        Exp => `exp(${v})`,
-        Log => `log(${v})`,
-        Sqrt => `sqrt(${v})`,
-        Neg => `-(${v})`,
-        Abs => `abs(${v})`,
+        _::Relu => `max(${v}, 0.0)`,
+        _::Sigmoid => `sigmoid_(${v})`,
+        _::Tanh => `tanh(${v})`,
+        _::Erf => `erf_(${v})`,
+        _::Exp => `exp(${v})`,
+        _::Log => `log(${v})`,
+        _::Sqrt => `sqrt(${v})`,
+        _::Neg => `-(${v})`,
+        _::Abs => `abs(${v})`,
     };
 }
 
 fn binary_wgsl(op: BinaryOp, a: String, b: String) -> String {
     return match op {
-        Add => `(${a} + ${b})`,
-        Sub => `(${a} - ${b})`,
-        Mul => `(${a} * ${b})`,
-        Div => `(${a} / ${b})`,
-        Pow => `pow_(${a}, ${b})`,
-        Maximum => `maximum_(${a}, ${b})`,
-        Minimum => `minimum_(${a}, ${b})`,
-        Eq => `holds_(ordered_(${a}, ${b}) && ${a} == ${b})`,
-        Ne => `holds_(!ordered_(${a}, ${b}) || ${a} != ${b})`,
-        Lt => `holds_(ordered_(${a}, ${b}) && ${a} < ${b})`,
-        Le => `holds_(ordered_(${a}, ${b}) && ${a} <= ${b})`,
-        Gt => `holds_(ordered_(${a}, ${b}) && ${a} > ${b})`,
-        Ge => `holds_(ordered_(${a}, ${b}) && ${a} >= ${b})`,
+        _::Add => `(${a} + ${b})`,
+        _::Sub => `(${a} - ${b})`,
+        _::Mul => `(${a} * ${b})`,
+        _::Div => `(${a} / ${b})`,
+        _::Pow => `pow_(${a}, ${b})`,
+        _::Maximum => `maximum_(${a}, ${b})`,
+        _::Minimum => `minimum_(${a}, ${b})`,
+        _::Eq => `holds_(ordered_(${a}, ${b}) && ${a} == ${b})`,
+        _::Ne => `holds_(!ordered_(${a}, ${b}) || ${a} != ${b})`,
+        _::Lt => `holds_(ordered_(${a}, ${b}) && ${a} < ${b})`,
+        _::Le => `holds_(ordered_(${a}, ${b}) && ${a} <= ${b})`,
+        _::Gt => `holds_(ordered_(${a}, ${b}) && ${a} > ${b})`,
+        _::Ge => `holds_(ordered_(${a}, ${b}) && ${a} >= ${b})`,
     };
 }
 

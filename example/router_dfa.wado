@@ -168,13 +168,13 @@ fn bsearch_label(edges: &List<DfaLiteralEdge>, key: &String) -> [i32, bool] {
     while lo < hi {
         let mid = (lo + hi) / 2;
         match edges[mid].label.cmp(key) {
-            Less => {
+            _::Less => {
                 lo = mid + 1;
             },
-            Greater => {
+            _::Greater => {
                 hi = mid;
             },
-            Equal => {
+            _::Equal => {
                 return [mid, true];
             },
         }
@@ -191,13 +191,13 @@ fn bsearch_target_by_bytes(edges: &List<DfaLiteralEdge>, segment: &StrSlice) -> 
     while lo < hi {
         let mid = (lo + hi) / 2;
         match edges[mid].label.as_str_slice().cmp(segment) {
-            Less => {
+            _::Less => {
                 lo = mid + 1;
             },
-            Greater => {
+            _::Greater => {
                 hi = mid;
             },
-            Equal => {
+            _::Equal => {
                 return edges[mid].target;
             },
         }

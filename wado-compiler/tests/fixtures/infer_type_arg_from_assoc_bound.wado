@@ -51,7 +51,7 @@ test "type param inferred solely from associated-type bound" {
 test "bound-only type param used in returned generic struct" {
     let g: Gen<i32> = Gen { items: [7, 8], idx: 0 };
     let mut h = hold(g);
-    assert h.seen matches { None };
+    assert h.seen matches { null };
     h.seen = h.inner.next();
     assert h.seen matches { Some(7) };
     assert h.inner.next() matches { Some(8) };

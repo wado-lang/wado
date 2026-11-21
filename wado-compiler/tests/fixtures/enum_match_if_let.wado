@@ -12,25 +12,25 @@ export fn run() with Stdout {
     let d = Direction::Up;
 
     // if let pattern
-    if let Up = d {
+    if let _::Up = d {
         println("is up");
     } else {
         println("not up");
     }
 
     // if let with non-matching case
-    if let Down = d {
+    if let _::Down = d {
         println("is down");
     } else {
         println("not down");
     }
 
     // matches operator
-    if d matches { Up } {
+    if d matches { _::Up } {
         println("matches up");
     }
 
-    if d matches { Left } {
+    if d matches { _::Left } {
         println("matches left");
     } else {
         println("not left");
@@ -38,8 +38,8 @@ export fn run() with Stdout {
 
     // match with wildcard
     let label = match d {
-        Up => "up!",
-        Down => "down!",
+        _::Up => "up!",
+        _::Down => "down!",
         _ => "other",
     };
     println(label);
@@ -48,8 +48,8 @@ export fn run() with Stdout {
     let x = Direction::Right;
     let val = 42;
     let msg = match x {
-        Right && val > 10 => "right and big",
-        Right => "right and small",
+        _::Right && val > 10 => "right and big",
+        _::Right => "right and small",
         _ => "other",
     };
     println(msg);

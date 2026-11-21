@@ -1180,10 +1180,32 @@ pub fn walk_pattern<'ast, V: AstVisitor<'ast>>(v: &mut V, pat: &'ast Pattern) {
             v.visit_pattern(pattern);
             v.visit_type(ty);
         }
+        // A bare-name bound is a constant reference, as an `==` operand is.
         Pattern::Range { start, end, .. } => {
-            v.visit_pattern(start);
-            v.visit_pattern(end);
+            for bound in [start, end] {
+                match &**bound {
+                    Pattern::Ident { id, span, .. } => v.visit_id(*id, *span),
+                    other => v.visit_pattern(other),
+                }
+            }
         }
+        // The operand names a constant and binds nothing, so it is walked as
+        // the reference it is rather than as a pattern.
+        Pattern::Equal { operand, .. } => match &**operand {
+            Pattern::Ident { id, span, .. } => v.visit_id(*id, *span),
+            Pattern::Variant {
+                name_id,
+                name_span,
+                variant_qualifier,
+                ..
+            } => {
+                v.visit_id(*name_id, *name_span);
+                if let Some(qualifier) = variant_qualifier {
+                    v.visit_type(qualifier);
+                }
+            }
+            other => unreachable!("the parser makes an `==` operand a path, not {other:?}"),
+        },
         Pattern::Literal(_) | Pattern::Wildcard | Pattern::Error(_) => {}
     }
 }
@@ -1941,6 +1963,8 @@ pub mod lint {
     pub const UNCONDITIONAL_TRAP: &str = "unconditional_trap";
     /// A hex literal ending in digits that read as a float type: `0x1_f32`.
     pub const HEX_SUFFIX_LOOKALIKE: &str = "hex_suffix_lookalike";
+    /// A `let … else` whose pattern binds no name: `let == X = y else { … }`.
+    pub const BINDING_FREE_LET_ELSE: &str = "binding_free_let_else";
     /// A pattern naming one float a rounding step can miss: `1.5 =>`.
     pub const FLOAT_LITERAL_PATTERN: &str = "float_literal_pattern";
 }
@@ -3849,6 +3873,9 @@ pub struct IdentExpr {
     pub type_args_on_prefix: bool,
 }
 
+/// The qualifier of `_::Case`, which leaves the case's type to inference.
+pub const INFERRED_QUALIFIER: &str = "_";
+
 impl IdentExpr {
     /// The segment naming the path's *owner*: `Color` in `Color::Red` and in
     /// `ns::Color::Red` — the one before the member, so a namespace qualifier
@@ -3861,7 +3888,15 @@ impl IdentExpr {
     /// Where [`Self::owner_segment`] sits, for a caller that also needs what
     /// qualifies it — the `ns` of `ns::Color::Red`.
     pub fn owner_index(&self) -> Option<usize> {
+        if self.has_inferred_qualifier() {
+            return None;
+        }
         self.segments.len().checked_sub(2)
+    }
+
+    /// Whether the path is `_::Case`, whose owner is the expected type.
+    pub fn has_inferred_qualifier(&self) -> bool {
+        matches!(self.segments.as_slice(), [qualifier, _] if qualifier.name == INFERRED_QUALIFIER)
     }
 
     /// The path's last segment, or the bare name: `Red` in `Color::Red` and in `Red`.
@@ -4176,6 +4211,9 @@ pub enum Pattern {
         /// `Option::Some(x)`, `shapes::Op` in `shapes::Op::Wildcard`, or
         /// `Result<i32, E>` in `Result<i32, E>::Ok(v)`.
         variant_qualifier: Option<Type>,
+        /// The `_` of `_::Case`, which leaves the qualifier to the scrutinee's
+        /// type as a call form (`Some(x)`) does.
+        inferred_qualifier: Option<Span>,
         /// `AstId` of the variant-name identifier in the pattern. Used to
         /// record use→def references for LSP navigation (cursor on `Some`
         /// inside a match arm jumps to the case's declaration site).
@@ -4203,6 +4241,12 @@ pub enum Pattern {
         start: Box<Pattern>,
         end: Box<Pattern>,
         kind: RangeKind,
+        span: Span,
+    },
+    /// Equality pattern: `== LIMIT` or `== tok::TK_FOO`. The operand is an
+    /// `Ident` or a payload-free `Variant`, naming a constant.
+    Equal {
+        operand: Box<Pattern>,
         span: Span,
     },
     /// Type pattern: `input: HtmlInputElement`. Matches a value of `ty`, which
@@ -4252,6 +4296,7 @@ impl Pattern {
             | Pattern::Struct { .. }
             | Pattern::Or(_)
             | Pattern::Range { .. }
+            | Pattern::Equal { .. }
             | Pattern::Typed { .. }
             | Pattern::Error(_) => None,
         }

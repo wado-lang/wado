@@ -303,7 +303,7 @@ pub enum Severity {
 
 impl Severity {
     pub fn label(&self) -> String {
-        return match *self { Error => "error" };
+        return match *self { _::Error => "error" };
     }
 }
 
@@ -319,12 +319,12 @@ pub enum DiagnosticCode {
 impl DiagnosticCode {
     pub fn name(&self) -> String {
         return match *self {
-            UnexpectedToken => "unexpected-token",
-            MissingToken => "missing-token",
-            ExtraToken => "extra-token",
-            NoViableAlternative => "no-viable-alternative",
-            UnterminatedConstruct => "unterminated-construct",
-            LexError => "lex-error",
+            _::UnexpectedToken => "unexpected-token",
+            _::MissingToken => "missing-token",
+            _::ExtraToken => "extra-token",
+            _::NoViableAlternative => "no-viable-alternative",
+            _::UnterminatedConstruct => "unterminated-construct",
+            _::LexError => "lex-error",
         };
     }
 }
@@ -363,7 +363,7 @@ impl Diagnostic {
     }
 
     pub fn is_error(&self) -> bool {
-        return self.severity matches { Error };
+        return self.severity matches { _::Error };
     }
 
     pub fn rule_path(&self) -> String {
@@ -489,20 +489,20 @@ impl CstStore {
     }
 
     pub fn is_node(&self, i: i32) -> bool {
-        return self.tag[i] matches { Open };
+        return self.tag[i] matches { _::Open };
     }
 
     pub fn is_token(&self, i: i32) -> bool {
-        return self.tag[i] matches { Tok | Miss | Skip };
+        return self.tag[i] matches { _::Tok | _::Miss | _::Skip };
     }
 
     pub fn child_kind(&self, i: i32) -> ChildKind {
         return match self.tag[i] {
-            Open => ChildKind::Node,
-            Miss => ChildKind::Missing,
-            Skip => ChildKind::Skipped,
-            Tok => ChildKind::Token,
-            Close => panic("CstStore::child_kind: Close is not a child row"),
+            _::Open => ChildKind::Node,
+            _::Miss => ChildKind::Missing,
+            _::Skip => ChildKind::Skipped,
+            _::Tok => ChildKind::Token,
+            _::Close => panic("CstStore::child_kind: Close is not a child row"),
         };
     }
 
@@ -512,15 +512,15 @@ impl CstStore {
 
     pub fn first_child(&self, i: i32) -> i32 {
         let c = i + 1;
-        if c >= self.tag.len() || self.tag[c] matches { Close } {
+        if c >= self.tag.len() || self.tag[c] matches { _::Close } {
             return -1;
         }
         return c;
     }
 
     pub fn next_sibling(&self, child: i32) -> i32 {
-        let c = if self.tag[child] matches { Open } { self.next[child] } else { child + 1 };
-        if c >= self.tag.len() || self.tag[c] matches { Close } {
+        let c = if self.tag[child] matches { _::Open } { self.next[child] } else { child + 1 };
+        if c >= self.tag.len() || self.tag[c] matches { _::Close } {
             return -1;
         }
         return c;
@@ -529,7 +529,7 @@ impl CstStore {
     pub fn find_child(&self, i: i32, kind: NodeKind) -> i32 {
         let k = kind as i32;
         for let mut c = self.first_child(i); c >= 0; c = self.next_sibling(c) {
-            if self.tag[c] matches { Open } && self.kind(c) as i32 == k {
+            if self.tag[c] matches { _::Open } && self.kind(c) as i32 == k {
                 return c;
             }
         }
@@ -693,7 +693,7 @@ impl TreeBuilder {
         if self.innermost_open() == row {
             return;
         }
-        assert self.last_finished == row && self.tag[self.tag.len() - 1] matches { Close }, "resume_node: a node no longer open is the last one closed";
+        assert self.last_finished == row && self.tag[self.tag.len() - 1] matches { _::Close }, "resume_node: a node no longer open is the last one closed";
         self.truncate(self.tag.len() - 1);
         self.open.push(row);
     }
@@ -707,7 +707,7 @@ impl TreeBuilder {
             return false;
         }
         for let mut r = self.error_row; r < self.tag.len(); r += 1 {
-            if self.tag[r] matches { Tok } {
+            if self.tag[r] matches { _::Tok } {
                 return false;
             }
         }
@@ -743,22 +743,22 @@ impl TreeBuilder {
         let mut stack: List<i32> = [];
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
-                Open => {
+                _::Open => {
                     if self.id[r] == K_ERROR as i32 {
                         flags[r] = NodeFlags::Error;
                     }
                     end[r] = self.offset[r];
                     stack.push(r);
                 },
-                Miss => {
+                _::Miss => {
                     let oi = stack[stack.len() - 1];
                     flags[oi] = flags[oi] | NodeFlags::Incomplete | NodeFlags::Error;
                 },
-                Skip => {
+                _::Skip => {
                     let oi = stack[stack.len() - 1];
                     flags[oi] |= NodeFlags::Error;
                 },
-                Close => {
+                _::Close => {
                     let oi = stack[stack.len() - 1];
                     let _ = stack.pop();
                     if self.offset[r] > end[oi] {
@@ -767,7 +767,7 @@ impl TreeBuilder {
                     next[oi] = r + 1;
                     bubble_to_parent(&stack, &mut end, &mut flags, oi);
                 },
-                Tok => {
+                _::Tok => {
                 },
             }
         }
@@ -794,7 +794,7 @@ impl TreeBuilder {
         rule_names: &List<String>,
         token_names: &List<String>,
     ) -> String {
-        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { Open } {
+        if row < 0 || row >= self.tag.len() || !self.tag[row] matches { _::Open } {
             return String::new();
         }
         return self.render_from(row, toks, rule_names, token_names);
@@ -849,7 +849,7 @@ fn render_node(
     token_names: &List<String>,
 ) -> i32 {
     let name = if id[i] == K_ERROR as i32 { "<error>" } else { rule_names[id[i]] };
-    if i + 1 >= tag.len() || tag[i + 1] matches { Close } {
+    if i + 1 >= tag.len() || tag[i + 1] matches { _::Close } {
         out.push_str(&name);
         if i + 1 < tag.len() {
             return i + 2;
@@ -861,26 +861,26 @@ fn render_node(
     let mut c = i + 1;
     while c < tag.len() {
         match tag[c] {
-            Open => {
+            _::Open => {
                 out.push_str(" ");
                 c = render_node(out, tag, id, c, toks, rule_names, token_names);
             },
-            Close => {
+            _::Close => {
                 out.push_str(")");
                 return c + 1;
             },
-            Tok => {
+            _::Tok => {
                 if !toks.is_empty_text(id[c]) {
                     out.push_str(" ");
                     toks.push_token_text_escaped(out, id[c]);
                 }
                 c += 1;
             },
-            Miss => {
+            _::Miss => {
                 out.push_str(` <missing ${token_names[toks.kind_at(id[c])]}>`);
                 c += 1;
             },
-            Skip => {
+            _::Skip => {
                 out.push_str(" <skip ");
                 toks.push_token_text_escaped(out, id[c]);
                 out.push_str(">");
@@ -3183,7 +3183,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             lexer.pos = error_end;
         } else {
             let tok_start = start;
-            let is_skip = best_kind matches { TK_WS };
+            let is_skip = best_kind matches { == TK_WS };
             if is_skip {
                 ts.push_trivia(best_kind, tok_start, best_end, 0);
             } else {
@@ -3199,11 +3199,11 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_A => "A",
-        TK_B => "B",
-        TK_WS => "WS",
-        TK_EOF => "Eof",
-        TK_ERROR => "Error",
+        == TK_A => "A",
+        == TK_B => "B",
+        == TK_WS => "WS",
+        == TK_EOF => "Eof",
+        == TK_ERROR => "Error",
         _ => "Unknown",
     };
 }
@@ -3689,17 +3689,17 @@ global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x02\x00\x15\x00\x05\x00\x00\x00\
 fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_A => {
+            == TK_A => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_A | TK_B => {
+                        == TK_A | == TK_B => {
                             return 0;
                         },
                         _ => {},
                     };
                 }
             },
-            TK_B => {
+            == TK_B => {
                 return 0;
             },
             _ => {},

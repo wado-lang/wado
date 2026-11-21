@@ -68,7 +68,7 @@ fn nested(o: Option<f64>) -> i32 {
         Some(4.5) => 1,
         Some(f64::NAN) => 2,
         Some(_) => 3,
-        None => 0,
+        null => 0,
     };
 }
 
@@ -124,27 +124,27 @@ type Meters = f64;
 global FAR: Meters = 1000.0;
 
 fn global_float(x: f32) -> bool {
-    return x matches { LIMIT };
+    return x matches { == LIMIT };
 }
 
 fn zero_or_missing(x: f64) -> i32 {
     return match x {
-        ZERO => 1,
-        MISSING => 2,
+        == ZERO => 1,
+        == MISSING => 2,
         _ => 0,
     };
 }
 
 fn nested_struct(o: Outer) -> bool {
-    return o matches { ORIGIN };
+    return o matches { == ORIGIN };
 }
 
 fn newtype(m: Meters) -> bool {
-    return m matches { FAR };
+    return m matches { == FAR };
 }
 
 fn in_payload(o: Option<f32>) -> bool {
-    return o matches { Some(LIMIT) };
+    return o matches { Some(== LIMIT) };
 }
 
 struct Gauge {}
@@ -202,11 +202,11 @@ __DATA__
     "`1.0..=1.00000001` matches one exact float",
     "`1.0..<1.0000000000000002` matches one exact float",
     "`0.75` matches one exact float",
-    "`LIMIT` matches one exact float",
-    "`ZERO` matches one exact float",
-    "`MISSING` matches one exact float",
-    "`ORIGIN` matches one exact float",
-    "`FAR` matches one exact float",
+    "`== LIMIT` matches one exact float",
+    "`== ZERO` matches one exact float",
+    "`== MISSING` matches one exact float",
+    "`== ORIGIN` matches one exact float",
+    "`== FAR` matches one exact float",
     "`0.625` matches one exact float",
     "`0.375` matches one exact float",
     "`0.875` matches one exact float",

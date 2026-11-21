@@ -479,7 +479,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Ter
 }
 
 test "options that cannot render are refused" {
-    assert Options {}.problem() matches { None };
+    assert Options {}.problem() matches { null };
     assert Options { height: 0 }.problem() matches { Some(_) };
     assert Options { samples: 0 }.problem() matches { Some(_) };
     assert Options { columns: -3 }.problem() matches { Some(_) };
@@ -507,7 +507,7 @@ test "an empty lane never reports a hit" {
         origin: v3(0.0, 0.0, 0.0),
         dir: v3(0.0, 0.0, 1.0),
     };
-    assert scene.nearest_sphere(&ray, T_MAX) matches { None };
+    assert scene.nearest_sphere(&ray, T_MAX) matches { null };
 }
 
 test "a ray from inside a sphere leaves through its far side" {

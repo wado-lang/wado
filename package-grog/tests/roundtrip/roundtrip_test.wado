@@ -395,7 +395,7 @@ test "proto2 writes every set field, zeros included" {
 test "a closed enum's undeclared number is an unknown field" {
     let input = unhex("08011009");
     let back = grog::decode::<legacy::Record>(&input).unwrap();
-    assert back.level matches { None };
+    assert back.level matches { null };
     assert grog::encode(&back).to_hex() == input.to_hex();
 }
 

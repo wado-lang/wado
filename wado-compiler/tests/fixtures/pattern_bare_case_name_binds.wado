@@ -1,0 +1,39 @@
+// A bare name binds in every pattern. One named after a case of the type it
+// matches is an error, since the case it reads as is never tested. The hint
+// spells the pattern that tests the case.
+
+enum Color { Red, Green }
+
+fn name(c: Color) -> String {
+    return match c {
+        Red => "red",
+        _ => "other",
+    };
+}
+
+fn named(c: Color) -> String {
+    return match c {
+        mut Green => "green",
+    };
+}
+
+fn some(o: Option<i32>) -> i32 {
+    return match o {
+        Some => 1,
+        None => 0,
+    };
+}
+
+test {
+    assert name(Color::Green) == "other";
+}
+
+__DATA__
+{
+    "compile_error": ":9:9: analysis error: invalid pattern: `Red` binds a new name, and the case of that name is never tested; write `_::Red` to match the case",
+    "compile_errors_contains": [
+        "`Green` binds a new name, and the case of that name is never tested; write `_::Green` to match the case",
+        "`Some` binds a new name, and the case of that name is never tested; write `Some(_)` to match the case",
+        "`None` binds a new name, and the case of that name is never tested; write `null` to match the case"
+    ]
+}

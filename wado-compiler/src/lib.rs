@@ -13,6 +13,7 @@ pub mod ast;
 pub mod ast_index;
 pub mod attribute;
 pub mod bind;
+pub mod binding_free_let_else;
 pub mod builtin_facts;
 pub mod builtin_registry;
 pub mod call_args;
@@ -150,6 +151,7 @@ pub use semantics::{
 };
 
 pub use affine_move_check::{AffineMoveError, check_affine_moves_semantic};
+use binding_free_let_else::binding_free_let_else_diagnostics;
 pub use compiler_host::InMemoryCompilerHost;
 use constant_arithmetic::constant_arithmetic_diagnostics;
 pub use effect_check::{
@@ -919,6 +921,7 @@ pub fn lint_diagnostics(
     out.extend(self_comparison_diagnostics(sem, lints));
     out.extend(constant_arithmetic_diagnostics(sem, lints));
     out.extend(hex_suffix_lookalike_diagnostics(sem, lints));
+    out.extend(binding_free_let_else_diagnostics(sem, lints));
     out.extend(float_literal_pattern_diagnostics(sem, lints));
     // An unused verdict reads the absence of a use, which a partial snapshot
     // cannot tell from one its error left unrecorded.

@@ -643,15 +643,15 @@ fn stacked_pass(r: &mut Recorder, extents: &List<List<i32>>, stacking: Stacking)
         return mixing(r, &first, &routers.1, &up, &down, 1, 2);
     };
     let out = match stacking {
-        Straight => layers(&x),
-        Looped => {
+        _::Straight => layers(&x),
+        _::Looped => {
             let last = r.repeated(&count, &[Any::F32(r.relabeled::<f32, [A, B], Untyped>(&x))], |_, state| {
                 let y = layers(&typed::<Recorder, f32, [A, B]>(r, &state[0]));
                 return [Any::F32(r.relabeled::<f32, [A, B], Untyped>(&y))];
             });
             typed::<Recorder, f32, [A, B]>(r, &last[0]);
         },
-        Branched => {
+        _::Branched => {
             let positive = r.compare(Comparison::Gt, &count, &scalar(r, 0 as i64));
             r.conditional(&positive, || r.yielded(&layers(&x)), || r.yielded(&x));
         },

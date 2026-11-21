@@ -61,7 +61,7 @@ impl Display for EmitError {
         match self {
             Dtype(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
-            NoOutput => f.write_str("the graph declares no output for `compute` to return"),
+            _::NoOutput => f.write_str("the graph declares no output for `compute` to return"),
             Unbound(symbol) => {
                 f.write_str(`${Poly::symbol(symbol)}: the run needs this length, and no input's axis gives it`);
             },
@@ -505,7 +505,7 @@ impl Symbols {
     internal fn lengths_along(&mut self, p: &Poly, shape: &Shape) -> Result<String, EmitError> {
         let rows = match self.rows_axis(shape, p) {
             Some(at) => `Option::Some(${at})`,
-            None => "null",
+            null => "null",
         };
         return Result::Ok(`&${self.row_lengths(p)?}, ${rows}`);
     }
@@ -622,16 +622,16 @@ impl Lowers for Symbols {
     fn derived(&mut self, op: Op, operands: List<String>) -> String {
         let a = operands[0];
         return match op {
-            Min => self.binary("Minimum", a, operands[1]),
-            Max => self.binary("Maximum", a, operands[1]),
-            CeilDiv | FloorDiv => self.quotient(a, operands[1], op matches { CeilDiv }),
-            FromEnd => if self.per_row() {
+            _::Min => self.binary("Minimum", a, operands[1]),
+            _::Max => self.binary("Maximum", a, operands[1]),
+            _::CeilDiv | _::FloorDiv => self.quotient(a, operands[1], op matches { _::CeilDiv }),
+            _::FromEnd => if self.per_row() {
                 `row_from_end::<${BACKEND_PARAM}>(backend, &${a}, &${operands[1]})`;
             } else {
                 `from_end_indices::<${BACKEND_PARAM}, []>(backend, &${a}, &${operands[1]})`;
             },
             // `a - 2^32 * floor((a + 2^31) / 2^32)`, as no tensor holds an `i32`.
-            Wrap32 => {
+            _::Wrap32 => {
                 let turn = self.held("4294967296");
                 let shifted = self.binary("Add", a, self.held("2147483648"));
                 let turns = self.quotient(shifted, turn, false);

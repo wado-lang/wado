@@ -43,7 +43,7 @@ with Log => &mut sink do {
 
 assert sink.events.len() == 1;
 assert sink.events[0].message == "disk full";
-assert sink.events[0].meta.level matches { Error };
+assert sink.events[0].meta.level matches { _::Error };
 assert sink.events[0].parent matches { Some(1) };
 ```
 

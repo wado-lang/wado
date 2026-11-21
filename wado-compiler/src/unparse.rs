@@ -2686,15 +2686,21 @@ impl<'a> Unparser<'a> {
             Pattern::Variant {
                 variant_name,
                 variant_qualifier,
+                inferred_qualifier,
                 bindings,
                 ..
             } => {
                 if let Some(qualifier) = variant_qualifier {
                     self.unparse_type(qualifier);
                     self.output.push_str("::");
+                } else if inferred_qualifier.is_some() {
+                    self.output.push_str("_::");
                 }
                 self.output.push_str(variant_name);
-                if !bindings.is_empty() {
+                // Unqualified, only the parentheses keep `Red()` from binding.
+                if !bindings.is_empty()
+                    || (variant_qualifier.is_none() && inferred_qualifier.is_none())
+                {
                     self.delimited("(", ")", bindings, Unparser::unparse_pattern);
                 }
             }
@@ -2734,6 +2740,10 @@ impl<'a> Unparser<'a> {
                 self.unparse_pattern(start);
                 self.output.push_str(kind.operator());
                 self.unparse_pattern(end);
+            }
+            Pattern::Equal { operand, .. } => {
+                self.output.push_str("== ");
+                self.unparse_pattern(operand);
             }
             Pattern::Typed { pattern, ty, .. } => {
                 self.unparse_pattern(pattern);
@@ -3817,6 +3827,20 @@ fn chain_operand_needs_parens(expr: &Expr) -> bool {
     needs_parens(expr, BinaryOp::And, false)
 }
 
+/// How a pattern names the case `name` before its payload, if any: a bare name
+/// would bind, so a case without a payload is `_::Case`, and `null` for an
+/// `Option`'s `None`.
+#[must_use]
+pub fn case_pattern_head(name: &str, has_payload: bool, is_null: bool) -> String {
+    if is_null {
+        "null".to_string()
+    } else if has_payload {
+        name.to_string()
+    } else {
+        format!("_::{name}")
+    }
+}
+
 /// One pattern as source.
 #[must_use]
 pub fn unparse_pattern_source(pattern: &Pattern) -> String {
@@ -4842,16 +4866,26 @@ impl<'a> TirUnparser<'a> {
                 self.output.push(']');
             }
             TirPattern::Variant {
+                enum_type,
                 variant_name,
                 bindings,
+                payload_type,
                 ..
             } => {
-                self.output.push_str(variant_name);
-                if !bindings.is_empty() {
+                let has_payload = *payload_type != TypeTable::UNIT;
+                let is_null = !has_payload && self.type_table.as_option(*enum_type).is_some();
+                self.output
+                    .push_str(&case_pattern_head(variant_name, has_payload, is_null));
+                if has_payload && bindings.is_empty() {
+                    self.output.push_str("(_)");
+                } else if has_payload {
                     self.delimited("(", ")", bindings, TirUnparser::unparse_tir_pattern);
                 }
             }
-            TirPattern::Enum { case_name, .. } => self.output.push_str(case_name),
+            TirPattern::Enum { case_name, .. } => {
+                self.output
+                    .push_str(&case_pattern_head(case_name, false, false));
+            }
             TirPattern::Struct { fields, .. } => {
                 self.braced(fields, |s, field| {
                     s.output.push_str(&field.field_name);
@@ -4866,7 +4900,13 @@ impl<'a> TirUnparser<'a> {
             TirPattern::Or(alternatives) => {
                 self.comma_sep_with(" | ", alternatives, TirUnparser::unparse_tir_pattern);
             }
-            TirPattern::ConstantValue { expr } => self.unparse_expr(expr),
+            TirPattern::ConstantValue { expr } => {
+                // A global's bare name would bind.
+                if matches!(expr.kind, TirExprKind::GlobalVarGet { .. }) {
+                    self.output.push_str("== ");
+                }
+                self.unparse_expr(expr);
+            }
             TirPattern::Narrow { shown, .. } if self.source_form => self.output.push_str(shown),
             TirPattern::Narrow {
                 name,

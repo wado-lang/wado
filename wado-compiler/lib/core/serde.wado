@@ -1850,9 +1850,9 @@ impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]> + FieldSchema, ..
         return Result::Ok(ReflectStruct::<T>::from_fields(
             [for let [i, slot] of slots.enumerate() { match slot {
                 Some(value) => value,
-                None => match ReflectStruct::<T>::default_slot(i)[i] {
+                null => match ReflectStruct::<T>::default_slot(i)[i] {
                     Some(fallback) => fallback,
-                    None => {
+                    null => {
                         return Result::Err(DeserializeError::missing_field(
                             wire_name(&members[i], policy),
                         ));
@@ -2027,11 +2027,11 @@ fn to_upper_byte(b: u8) -> u8 {
 /// The byte `style` joins words with, or `0` when it concatenates them.
 fn case_separator(style: CaseStyle) -> u8 {
     return match style {
-        Snake => 95,
-        ScreamingSnake => 95,
-        Kebab => 45,
-        ScreamingKebab => 45,
-        Identity | Camel | Pascal => 0,
+        _::Snake => 95,
+        _::ScreamingSnake => 95,
+        _::Kebab => 45,
+        _::ScreamingKebab => 45,
+        _::Identity | _::Camel | _::Pascal => 0,
     };
 }
 
@@ -2042,16 +2042,16 @@ fn case_separator(style: CaseStyle) -> u8 {
 /// uppercase directly before a lowercase starts one. Digits attach to the
 /// current word.
 pub fn apply_case<S: AsStrSlice>(style: CaseStyle, s: S) -> String {
-    if style matches { Identity } {
+    if style matches { _::Identity } {
         return s.to_string();
     }
     // Bytes, not chars: every rule above is ASCII, and a multi-byte sequence's
     // bytes are all >= 0x80, so they are neither separators nor case
     // transitions and stay in the word they sit in.
     let separator = case_separator(style);
-    let upper_all = style matches { ScreamingSnake | ScreamingKebab };
-    let upper_word_head = style matches { Camel | Pascal };
-    let lower_first_word = style matches { Camel };
+    let upper_all = style matches { _::ScreamingSnake | _::ScreamingKebab };
+    let upper_word_head = style matches { _::Camel | _::Pascal };
+    let lower_first_word = style matches { _::Camel };
 
     let n = s.len();
     let mut out = String::with_capacity(n + 4);

@@ -761,6 +761,7 @@ atom
     | compileTimeExpr
     | taggedTemplate
     | selfBoundCall
+    | '_' '::' identifier
     | exprPath
     | tupleOrArrayLiteral
     | closure
@@ -1006,7 +1007,9 @@ patternRange
     ;
 
 patternPrimary
-    : '_'
+    : '_' '::' identifier ('(' (pattern (',' pattern)*)? ')')?
+    | '==' patternPath
+    | '_'
     | 'mut'? bindingName
     | literal
     | '-' number

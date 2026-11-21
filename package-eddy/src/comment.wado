@@ -58,7 +58,7 @@ fn body(f: &Finding, commit: &String, id: &String, with_steps: bool) -> String {
             SUMMARY_LIMIT,
         )}`,
         Some(_) => "not reproduced: the reviewer's test did not fail this way when tried alone",
-        None => "not reproduced",
+        null => "not reproduced",
     };
     let mut out = `**${shortened(&f.summary, SUMMARY_LIMIT)}** — ${status}\n\n${shortened(&f.detail, DETAIL_LIMIT)}\n\n`;
     if let Some(r) = &f.repro && !r.patch.is_empty() {
@@ -108,7 +108,7 @@ pub fn review_comment(
         let room = budget - out.len() - open.len() - close.len();
         match comment_within(f, commit, &finding_id(commit, n), room) {
             Some(text) => out.push_str(`${open}${text}${close}`),
-            None => omitted.push(n),
+            null => omitted.push(n),
         }
     }
     if !omitted.is_empty() {

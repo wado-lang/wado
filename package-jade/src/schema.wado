@@ -366,7 +366,7 @@ struct DialectCheck {
 
 impl DialectCheck {
     fn visit(&mut self, s: &Schema, at: String) {
-        if self.error matches { None } && let Object(o) = s && o.dialect matches { Some(_) } && o.id matches { None } {
+        if self.error matches { null } && let Object(o) = s && o.dialect matches { Some(_) } && o.id matches { null } {
             self.error = Option::Some(SchemaError {
                 pointer: `${at}/$schema`,
                 message: "may appear only at a schema resource's root",
@@ -563,9 +563,9 @@ fn fail<T>(at: &String, message: String) -> Result<T, SchemaError> {
 
 fn read_schema(node: &Node, at: &String) -> Result<Schema, SchemaError> {
     return match node.kind() {
-        Bool => Result::Ok(Schema::Bool(node.as_bool().unwrap())),
-        Object => Result::Ok(Schema::Object(read_object(node, at)?)),
-        Null | Number | String | Array => fail(at, "a schema must be an object or a boolean"),
+        _::Bool => Result::Ok(Schema::Bool(node.as_bool().unwrap())),
+        _::Object => Result::Ok(Schema::Object(read_object(node, at)?)),
+        _::Null | _::Number | _::String | _::Array => fail(at, "a schema must be an object or a boolean"),
     };
 }
 
@@ -672,7 +672,7 @@ fn read_count(v: &Node, at: &String) -> Result<i32, SchemaError> {
 }
 
 fn read_values(v: &Node, at: &String) -> Result<List<Document>, SchemaError> {
-    if !v.kind() matches { Array } {
+    if !v.kind() matches { _::Array } {
         return fail(at, "must be an array");
     }
     let mut out: List<Document> = [];
@@ -686,7 +686,7 @@ fn read_types(v: &Node, at: &String) -> Result<JsonTypes, SchemaError> {
     if let Some(name) = v.as_str() {
         return type_named(name, at);
     }
-    if !v.kind() matches { Array } {
+    if !v.kind() matches { _::Array } {
         return fail(at, "must be a type name or an array of them");
     }
     if v.len() == 0 {
@@ -718,7 +718,7 @@ fn type_named(name: StrSlice, at: &String) -> Result<JsonTypes, SchemaError> {
 
 /// An array of strings, as `required` and `dependentRequired` hold.
 fn read_names(v: &Node, at: &String) -> Result<List<String>, SchemaError> {
-    if !v.kind() matches { Array } {
+    if !v.kind() matches { _::Array } {
         return fail(at, "must be an array of strings");
     }
     let mut names: List<String> = [];
@@ -729,7 +729,7 @@ fn read_names(v: &Node, at: &String) -> Result<List<String>, SchemaError> {
 }
 
 fn read_schema_list(v: &Node, at: &String) -> Result<List<Schema>, SchemaError> {
-    if !v.kind() matches { Array } || v.len() == 0 {
+    if !v.kind() matches { _::Array } || v.len() == 0 {
         return fail(at, "must be a non-empty array of schemas");
     }
     let mut out: List<Schema> = [];
@@ -747,7 +747,7 @@ fn read_map<T>(
     of: String,
     read: fn(&Node, &String) -> Result<T, SchemaError>,
 ) -> Result<HashMap<String, T>, SchemaError> {
-    if !v.kind() matches { Object } {
+    if !v.kind() matches { _::Object } {
         return fail(at, `must be an object of ${of}`);
     }
     let mut out = HashMap::<String, T>::new();

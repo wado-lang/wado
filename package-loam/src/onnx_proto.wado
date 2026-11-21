@@ -47,12 +47,12 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
         return Result::Ok(null);
     };
     let [width, stored] = match element {
-        Float => [4, Stored::Computed],
-        Int32 => [4, Stored::Int32],
-        Int64 => [8, Stored::Computed],
-        Bool => [1, Stored::Computed],
-        Float16 => [2, Stored::Float16],
-        Bfloat16 => [2, Stored::BFloat16],
+        _::Float => [4, Stored::Computed],
+        _::Int32 => [4, Stored::Int32],
+        _::Int64 => [8, Stored::Computed],
+        _::Bool => [1, Stored::Computed],
+        _::Float16 => [2, Stored::Float16],
+        _::Bfloat16 => [2, Stored::BFloat16],
         _ => {
             return Result::Ok(null);
         },
@@ -62,13 +62,13 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
     }
     let typed = raw.is_empty();
     let elements = match element {
-        Float => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
-        Int32 => {
+        _::Float => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
+        _::Int32 => {
             let values = if typed { t.int32_data } else { List::<i32>::from_le_bytes(raw) };
             Elements::Ints(values.into_iter().map(|v| v as i64).collect());
         },
-        Int64 => Elements::Ints(if typed { t.int64_data } else { List::<i64>::from_le_bytes(raw) }),
-        Bool => {
+        _::Int64 => Elements::Ints(if typed { t.int64_data } else { List::<i64>::from_le_bytes(raw) }),
+        _::Bool => {
             let values = if typed {
                 t.int32_data;
             } else {
@@ -76,7 +76,7 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
             };
             Elements::Bools(values.into_iter().map(|v| v != 0).collect());
         },
-        Float16 | Bfloat16 => {
+        _::Float16 | _::Bfloat16 => {
             let mut bits: List<u16> = [];
             if typed {
                 let dtype = dtype_name(element.number()).unwrap();
@@ -116,7 +116,7 @@ internal fn dtype_name(elem_type: i32) -> Option<String> {
     let Some(element) = onnx::TensorProtoDataType::from_number(elem_type) else {
         return null;
     };
-    if element matches { Undefined } || element.number() > onnx::TensorProtoDataType::Bfloat16.number() {
+    if element matches { _::Undefined } || element.number() > onnx::TensorProtoDataType::Bfloat16.number() {
         return null;
     }
     return Option::Some(`${element}`.to_ascii_lowercase());
@@ -134,7 +134,7 @@ fn read_dim(d: &onnx::TensorShapeProtoDimension, tensor: &String) -> Result<Dim,
     return match &d.value {
         Some(DimParam(name)) => Result::Ok(Dim::Symbol(*name)),
         Some(DimValue(value)) => Result::Ok(Dim::Static(extent(*value, tensor)?)),
-        None => Result::Ok(Dim::Unknown),
+        null => Result::Ok(Dim::Unknown),
     };
 }
 
@@ -158,7 +158,7 @@ fn read_value_info(vi: &onnx::ValueInfoProto) -> Result<ValueInfo, String> {
             }
             rank_of(dims);
         },
-        None => Rank::Unranked,
+        null => Rank::Unranked,
     };
     return Result::Ok(ValueInfo { name, dtype, rank });
 }
@@ -170,7 +170,7 @@ internal fn external_entry(t: &onnx::TensorProto, key: String) -> Option<String>
 }
 
 fn is_external(t: &onnx::TensorProto) -> bool {
-    return !t.external_data.is_empty() || t.data_location matches { Some(External) };
+    return !t.external_data.is_empty() || t.data_location matches { Some(_::External) };
 }
 
 /// The `external_data` entry `key` of `t` as a number, where `t` has one.

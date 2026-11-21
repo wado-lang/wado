@@ -57,21 +57,21 @@ fn match_guard_custom_variant() with Stdout {
         Circle(r) && r > 1.0 => "big circle",
         Circle(_) => "small circle",
         Rectangle(_) => "rectangle",
-        MGuardPoint => "point",
+        _::MGuardPoint => "point",
     };
     println(desc1);
     let desc2 = match s2 {
         Circle(r) && r > 1.0 => "big circle",
         Circle(_) => "small circle",
         Rectangle(_) => "rectangle",
-        MGuardPoint => "point",
+        _::MGuardPoint => "point",
     };
     println(desc2);
     let desc3 = match s3 {
         Circle(r) && r > 1.0 => "big circle",
         Circle(_) => "small circle",
         Rectangle(_) => "rectangle",
-        MGuardPoint => "point",
+        _::MGuardPoint => "point",
     };
     println(desc3);
 }
@@ -83,19 +83,19 @@ fn match_guard_variant() with Stdout {
     let msg1 = match opt1 {
         Some(x) && x > 10 => "large value",
         Some(_) => "small value",
-        None => "no value",
+        null => "no value",
     };
     println(msg1);
     let msg2 = match opt2 {
         Some(x) && x > 10 => "large value",
         Some(_) => "small value",
-        None => "no value",
+        null => "no value",
     };
     println(msg2);
     let msg3 = match none {
         Some(x) && x > 10 => "large value",
         Some(_) => "small value",
-        None => "no value",
+        null => "no value",
     };
     println(msg3);
 }
@@ -109,10 +109,10 @@ enum MExhDir {
 
 fn dir_name(d: MExhDir) -> String {
     return match d {
-        North => "north",
-        South => "south",
-        East => "east",
-        West => "west",
+        _::North => "north",
+        _::South => "south",
+        _::East => "east",
+        _::West => "west",
     };
 }
 
@@ -133,7 +133,7 @@ fn match_exhaustive() with Stdout {
     println(`${val}`);
     let c = MExhColor::Green;
     let name = match c {
-        Red => "red",
+        _::Red => "red",
         _ => "other",
     };
     println(name);
@@ -143,11 +143,11 @@ fn match_wildcard() with Stdout {
     let red = MWildColor::Red;
     let green = MWildColor::Green;
     let blue = MWildColor::Blue;
-    let name1 = match red { Red => "red", _ => "other" };
+    let name1 = match red { _::Red => "red", _ => "other" };
     println(name1);
-    let name2 = match green { Red => "red", _ => "other" };
+    let name2 = match green { _::Red => "red", _ => "other" };
     println(name2);
-    let name3 = match blue { Red => "red", Green => "green", _ => "other" };
+    let name3 = match blue { _::Red => "red", _::Green => "green", _ => "other" };
     println(name3);
 }
 
@@ -169,7 +169,7 @@ fn match_variant_tuple_payload() with Stdout {
     let area = match rect {
         Circle(r) => 3.14159 * r * r,
         Rectangle([w, h]) => w * h,
-        MTuplePoint => 0.0,
+        _::MTuplePoint => 0.0,
     };
     println(`Rectangle area: ${area}`);
 }

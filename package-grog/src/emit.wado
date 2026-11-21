@@ -480,7 +480,7 @@ impl Emitter {
             named_by[case] = value.name;
             match aliased {
                 Some(c) => aliases.push([case, c]),
-                None => {
+                null => {
                     case_of[value.number] = case;
                     cases.push(PlannedCase { name: case, number: value.number });
                 },
@@ -507,8 +507,8 @@ impl Emitter {
 
     fn enum_is_open(&self, decl: &EnumDecl) -> bool {
         return match &self.file.syntax {
-            Proto2 => false,
-            Proto3 => true,
+            _::Proto2 => false,
+            _::Proto3 => true,
             Edition(_) => !self.inherited(&decl.features, &decl.path, |f| f.enum_type) matches { Some(t) && t == "CLOSED" },
         };
     }
@@ -539,7 +539,7 @@ impl Emitter {
             if let Some(oneof) = &field.oneof {
                 let at = match oneof_at.get_str(oneof) {
                     Some(at) => at,
-                    None => {
+                    null => {
                         let wado_name = claim_field_name(oneof, &mut field_names, decl, field)?;
                         let sum = self.take(`${name}${pascal(oneof)}`, `${decl.path.join(".")}.${oneof}`, field.line)?;
                         let mut out = FieldSpec::new_pub(&wado_name, &`Option<${sum}>`);
@@ -588,7 +588,7 @@ impl Emitter {
             return self.plan_map(decl, field, key, value);
         }
         let resolved = self.resolve_type(decl, field, &field.type_)?;
-        if field.label matches { Repeated } {
+        if field.label matches { _::Repeated } {
             return match resolved {
                 Scalar(s) => {
                     let put = if self.packed(decl, field) { Call::Packed } else { Call::Repeated };
@@ -608,15 +608,15 @@ impl Emitter {
         return match resolved {
             Scalar(s) => {
                 match self.presence(decl, field) {
-                    Implicit && s.closed_enum => Result::Err(EmitError::Invalid(
+                    _::Implicit && s.closed_enum => Result::Err(EmitError::Invalid(
                         `${field.line}: ${field.name}: a closed enum field cannot have implicit presence`,
                     )),
-                    Implicit => Result::Ok([
+                    _::Implicit => Result::Ok([
                         s.wado,
                         s.zero,
                         access(n, Call::Implicit, Take::Stored("v"), `::<${s.runtime}>`),
                     ]),
-                    Explicit => {
+                    _::Explicit => {
                         let optional = access(n, Call::Optional, Take::Stored("Option::Some(v)"), `::<${s.runtime}>`);
                         Result::Ok([`Option<${s.wado}>`, "null", optional]);
                     },
@@ -691,7 +691,7 @@ impl Emitter {
                     );
                 };
                 return match named.kind {
-                    Message => Result::Ok(Resolved::Message([
+                    _::Message => Result::Ok(Resolved::Message([
                         named.name,
                         ty matches { Group(_) } || self.delimited(decl, field),
                     ])),
@@ -732,8 +732,8 @@ impl Emitter {
     /// `required` field has presence too.
     fn presence(&self, decl: &MessageDecl, field: &Field) -> Presence {
         return match &self.file.syntax {
-            Proto2 => Presence::Explicit,
-            Proto3 => if field.label matches { Optional } { Presence::Explicit } else { Presence::Implicit },
+            _::Proto2 => Presence::Explicit,
+            _::Proto3 => if field.label matches { _::Optional } { Presence::Explicit } else { Presence::Implicit },
             Edition(_) => match self.feature(decl, field, |f| f.field_presence) {
                 Some(p) && p == "IMPLICIT" => Presence::Implicit,
                 _ => Presence::Explicit,
@@ -743,12 +743,12 @@ impl Emitter {
 
     /// Whether a repeated scalar is written as one length-prefixed run.
     fn packed(&self, decl: &MessageDecl, field: &Field) -> bool {
-        if field.type_ matches { Scalar(Str) | Scalar(Bytes) } {
+        if field.type_ matches { Scalar(_::Str) | Scalar(_::Bytes) } {
             return false;
         }
         return match &self.file.syntax {
-            Proto2 => field.packed matches { Some(true) },
-            Proto3 => !field.packed matches { Some(false) },
+            _::Proto2 => field.packed matches { Some(true) },
+            _::Proto3 => !field.packed matches { Some(false) },
             Edition(_) => !self.feature(decl, field, |f| f.repeated_field_encoding) matches { Some(e) && e == "EXPANDED" },
         };
     }
@@ -834,15 +834,15 @@ fn is_assignable_field_number(n: i32) -> bool {
 
 fn scalar(t: ScalarType) -> ScalarPlan {
     let [wado, zero] = match t {
-        Double => ["f64", "0.0"],
-        Float => ["f32", "0.0"],
-        Int32 | SInt32 | SFixed32 => ["i32", "0"],
-        Int64 | SInt64 | SFixed64 => ["i64", "0"],
-        UInt32 | Fixed32 => ["u32", "0"],
-        UInt64 | Fixed64 => ["u64", "0"],
-        Bool => ["bool", "false"],
-        Str => ["String", "\"\""],
-        Bytes => ["ByteList", "b\"\""],
+        _::Double => ["f64", "0.0"],
+        _::Float => ["f32", "0.0"],
+        _::Int32 | _::SInt32 | _::SFixed32 => ["i32", "0"],
+        _::Int64 | _::SInt64 | _::SFixed64 => ["i64", "0"],
+        _::UInt32 | _::Fixed32 => ["u32", "0"],
+        _::UInt64 | _::Fixed64 => ["u64", "0"],
+        _::Bool => ["bool", "false"],
+        _::Str => ["String", "\"\""],
+        _::Bytes => ["ByteList", "b\"\""],
     };
     return ScalarPlan { wado, runtime: `${RUNTIME}::${t}`, zero };
 }

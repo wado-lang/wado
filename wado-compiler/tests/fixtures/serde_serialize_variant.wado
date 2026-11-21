@@ -87,7 +87,7 @@ impl Serialize for Shape {
                 }
                 return Result::<(), SerializeError>::Err(SerializeError { message: "begin_variant failed" });
             },
-            Point => s.serialize_unit_variant(&"Shape", &"Point", 1),
+            _::Point => s.serialize_unit_variant(&"Shape", &"Point", 1),
         };
     }
 }

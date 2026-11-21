@@ -23,9 +23,9 @@ fn hit_str(n: i32) -> i32 {
 #[inline(never)]
 fn by_const(x: i32, y: i32) -> i32 {
     match x {
-        A | B | C => {
+        == A | == B | == C => {
             match y {
-                A | B | C => {
+                == A | == B | == C => {
                     return hit_const(x + y);
                 },
                 _ => {},
@@ -39,9 +39,9 @@ fn by_const(x: i32, y: i32) -> i32 {
 #[inline(never)]
 fn by_str(x: String, y: String) -> i32 {
     match x {
-        S | "b" | "c" => {
+        == S | "b" | "c" => {
             match y {
-                S | "b" | "c" => {
+                == S | "b" | "c" => {
                     return hit_str(x.len() + y.len());
                 },
                 _ => {},

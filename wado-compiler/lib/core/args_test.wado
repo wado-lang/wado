@@ -60,7 +60,7 @@ test "positionals and options mixed" {
     assert c.rest[1] == "b";
     assert c.jobs == 4;
     assert c.verbose == true;
-    assert c.output matches { None };
+    assert c.output matches { null };
 }
 
 test "options may precede positionals" {
@@ -76,7 +76,7 @@ test "defaults fill omitted optional fields" {
     assert c.rest.len() == 0;
     assert c.jobs == 1;
     assert c.verbose == false;
-    assert c.output matches { None };
+    assert c.output matches { null };
 }
 
 test "inline --name=value and Option option" {
@@ -326,7 +326,7 @@ test "global options precede subcommand, then sub-options" {
 
 test "unit subcommand" {
     let c = app(parse::<App>(["Status"]));
-    assert c.command matches { Status };
+    assert c.command matches { _::Status };
 }
 
 test "subcommand payload defaults" {
@@ -620,6 +620,6 @@ impl Deserialize for Recovering;
 
 test "a failure an impl recovered from is not reported for a later one" {
     let e = parse::<Recovering>(["--a"]).unwrap_err();
-    assert e.kind matches { MissingArgument };
+    assert e.kind matches { _::MissingArgument };
     assert e.message == "missing field: b";
 }

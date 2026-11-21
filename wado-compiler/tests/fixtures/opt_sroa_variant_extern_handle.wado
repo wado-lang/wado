@@ -26,14 +26,14 @@ fn last_positive(ws: &List<Weight>) -> f64 {
     }
     return match found {
         Some(n) => n.backing::<Weight>().unwrap().value,
-        None => -1.0,
+        null => -1.0,
     };
 }
 
 test "a returned handle round-trips" {
     let heavy = builtin::black_box(Weight { value: 2.5 });
     assert maybe(heavy) matches { Some(n) && n.backing::<Weight>().unwrap().value == 2.5 };
-    assert maybe(builtin::black_box(Weight { value: -2.5 })) matches { None };
+    assert maybe(builtin::black_box(Weight { value: -2.5 })) matches { null };
 }
 
 test "a handle local round-trips" {

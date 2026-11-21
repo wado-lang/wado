@@ -123,7 +123,7 @@ test "text lookups find, miss, and skip a removed key" {
     let text = "xxkey7yy".as_str_slice();
     assert map.get_str(text.slice(2, 6)) == Some([7]);
     assert map.get_ref_str(text.slice(2, 6)) matches { Some(v) && v.len() == 1 };
-    assert map.get_ref_str("nope") matches { None };
+    assert map.get_ref_str("nope") matches { null };
     assert map.remove("key3");
     assert !map.contains_key_str("key3");
     assert map.get_str("key99") == null;
@@ -338,11 +338,11 @@ test "a map or a set passes on what its entries and its shape fail with" {
     set.insert(Unwritable { n: 1 });
     assert refused(&set);
     let mut out = String::new();
-    assert HashMap::<String, i32>::new().serialize(&mut TextKeySerializer { out: &mut out }) matches { Err };
-    assert HashSet::<i32>::new().serialize(&mut TextKeySerializer { out: &mut out }) matches { Err };
+    assert HashMap::<String, i32>::new().serialize(&mut TextKeySerializer { out: &mut out }) matches { _::Err };
+    assert HashSet::<i32>::new().serialize(&mut TextKeySerializer { out: &mut out }) matches { _::Err };
 
     assert from_string::<HashMap<String, i32>>("[]") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
-    assert from_string::<HashMap<i32, i32>>(`{"x":1}`) matches { Err };
+    assert from_string::<HashMap<i32, i32>>(`{"x":1}`) matches { _::Err };
     assert from_string::<HashMap<String, i32>>(`{"a":"x"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
     assert from_string::<HashSet<i32>>("{}") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
     assert from_string::<HashSet<i32>>(`["x"]`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };

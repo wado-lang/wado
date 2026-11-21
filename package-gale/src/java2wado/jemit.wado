@@ -160,9 +160,9 @@ enum ApiHost {
 
 fn api_host(call: ApiCall) -> ApiHost {
     return match call {
-        Text => ApiHost::Either,
-        CharPos | TokenStartCharPos | CharLa => ApiHost::Lexer,
-        RuleStack | InputText | TokenText | La | Lt => ApiHost::Parser,
+        _::Text => ApiHost::Either,
+        _::CharPos | _::TokenStartCharPos | _::CharLa => ApiHost::Lexer,
+        _::RuleStack | _::InputText | _::TokenText | _::La | _::Lt => ApiHost::Parser,
     };
 }
 
@@ -170,21 +170,21 @@ fn api_host(call: ApiCall) -> ApiHost {
 /// `pos`, or the parser's rule-start token. A `@members` method has neither.
 fn api_needs_frame(call: ApiCall) -> bool {
     return match call {
-        Text | CharPos | TokenStartCharPos | CharLa => true,
-        RuleStack | InputText | TokenText | La | Lt => false,
+        _::Text | _::CharPos | _::TokenStartCharPos | _::CharLa => true,
+        _::RuleStack | _::InputText | _::TokenText | _::La | _::Lt => false,
     };
 }
 
 fn api_name(call: ApiCall) -> String {
     return match call {
-        Text => "getText()",
-        CharPos => "getCharPositionInLine()",
-        TokenStartCharPos => "_tokenStartCharPositionInLine",
-        RuleStack => "getRuleInvocationStack()",
-        InputText => "_input.getText()",
-        TokenText => "<token>.getText()",
-        La | CharLa => "_input.LA()",
-        Lt => "_input.LT()",
+        _::Text => "getText()",
+        _::CharPos => "getCharPositionInLine()",
+        _::TokenStartCharPos => "_tokenStartCharPositionInLine",
+        _::RuleStack => "getRuleInvocationStack()",
+        _::InputText => "_input.getText()",
+        _::TokenText => "<token>.getText()",
+        _::La | _::CharLa => "_input.LA()",
+        _::Lt => "_input.LT()",
     };
 }
 
@@ -192,9 +192,9 @@ fn api_name(call: ApiCall) -> String {
 /// cannot reach it. Every spelling of every special goes through here.
 fn api_expr<S: AsStrSlice>(env: &JEnv, call: ApiCall, expr: S) -> Result<String, String> {
     let wrong_host = match api_host(call) {
-        Parser => env.lexer,
-        Lexer => !env.lexer,
-        Either => false,
+        _::Parser => env.lexer,
+        _::Lexer => !env.lexer,
+        _::Either => false,
     };
     if wrong_host {
         builtin::cold_path();
@@ -455,7 +455,7 @@ fn emit_stmt(
                 let w = emit_expr(rule, rules, e, vals_in_scope, bindings, env)?;
                 Result::Ok(`return ${w};`);
             },
-            None => Result::Ok("return;"),
+            null => Result::Ok("return;"),
         },
         // Java's assertions need `-ea`; Wado's always run. A live assert is the
         // stronger reading, and the one Gale takes everywhere else.
@@ -463,7 +463,7 @@ fn emit_stmt(
             let cond = emit_expr(rule, rules, &a.cond, vals_in_scope, bindings, env)?;
             match &a.message {
                 Some(m) => Result::Ok(wado`assert ${cond}, "${*m}";`),
-                None => Result::Ok(`assert ${cond};`),
+                null => Result::Ok(`assert ${cond};`),
             }
         },
     };
@@ -501,7 +501,7 @@ fn emit_local(
 ) -> Result<String, String> {
     let ty = match map_java_type(&l.ty) {
         Some(t) => t,
-        None => {
+        null => {
             return Result::Err(`java2wado: unsupported local type '${l.ty}'`);
         },
     };
@@ -823,8 +823,8 @@ fn text_presence_of(
 fn text_identity(presence: &[Option<String>, Option<String>]) -> Option<String> {
     return match presence {
         [Some(l), Some(r)] => Option::Some(`(!(${*l}) && !(${*r}))`),
-        [Some(_), None] | [None, Some(_)] => Option::Some("false"),
-        [None, None] => null,
+        [Some(_), null] | [null, Some(_)] => Option::Some("false"),
+        [null, null] => null,
     };
 }
 
@@ -915,7 +915,7 @@ fn token_occurrences_in(e: &Element, name: &String) -> i32 {
         Label(l) => token_occurrences_in(&l.element, name),
         Repeat(r) => {
             let once = token_occurrences_in(&r.element, name);
-            if r.kind matches { Optional } {
+            if r.kind matches { _::Optional } {
                 once;
             } else {
                 2 * once;
@@ -1022,7 +1022,7 @@ fn emit_member_call<S: AsStrSlice>(
         let eq = text_equals(&value_presence(rule, rules, &raw_args[0], bindings, env), &r, &a);
         return Result::Ok(match value_presence(rule, rules, &m.recv, bindings, env) {
             Some(p) => `(if ${p} { ${eq} } else { panic("NullPointerException") })`,
-            None => eq,
+            null => eq,
         });
     }
     check_member_call_reachable(env, &meth)?;
@@ -1080,10 +1080,10 @@ fn name_expr<S: AsStrSlice>(
         return api_expr(env, ApiCall::TokenStartCharPos, lexer_token_start_column_expr());
     }
     return match resolve_name(env, name) {
-        Local => Result::Ok(escape_ident(name)),
-        RuleArg => resolve_attr_ref(rule, rules, `$${name}`, vals_in_scope, bindings, &env.this_bind),
-        Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
-        Unknown => if env.lexer {
+        _::Local => Result::Ok(escape_ident(name)),
+        _::RuleArg => resolve_attr_ref(rule, rules, `$${name}`, vals_in_scope, bindings, &env.this_bind),
+        _::Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
+        _::Unknown => if env.lexer {
             builtin::cold_path();
             Result::Err(`java2wado: unsupported lexer name '${name}': not a @members field`);
         } else if is_upper_ident(name) {
@@ -1204,10 +1204,10 @@ fn is_java_string(
         Str(_) => true,
         Attr(text) => attr_is_string(rule, rules, text, bindings),
         Name(n) => match resolve_name(env, n) {
-            Local => env.string_locals.contains_str(n),
-            RuleArg => declares_string(&rule.args, n),
-            Field => env.members.string_fields.contains(&to_snake_case(n)),
-            Unknown => false,
+            _::Local => env.string_locals.contains_str(n),
+            _::RuleArg => declares_string(&rule.args, n),
+            _::Field => env.members.string_fields.contains(&to_snake_case(n)),
+            _::Unknown => false,
         },
         Member(m) => name_is(&m.recv, "this") && env.members.string_fields.contains(&to_snake_case(&m.name)),
         Call(c) => match &c.callee {
@@ -1382,7 +1382,7 @@ fn append_part(
             let chain = plus_chain(e);
             match concat_start(rule, rules, &chain, bindings, env) {
                 Some(start) => append_concat(rule, rules, &chain, start, vals_in_scope, bindings, env, out),
-                None => append_interp(rule, rules, e, vals_in_scope, bindings, env, out),
+                null => append_interp(rule, rules, e, vals_in_scope, bindings, env, out),
             }
         },
         Paren(p) && is_java_string(rule, rules, &p.inner, bindings, env) || p.inner matches { Char(_) | Paren(_) } => {

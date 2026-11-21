@@ -76,7 +76,7 @@ fn is_ctx_to_string_tree_ref<S: AsStrSlice>(name: S, member: &Option<String>) ->
 }
 
 fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
-    return r.target matches { ParserSpecial } && is_ctx_to_string_tree_ref(&r.name, &r.member);
+    return r.target matches { _::ParserSpecial } && is_ctx_to_string_tree_ref(&r.name, &r.member);
 }
 
 /// Whether `ref_text` is exactly the `$ctx.toStringTree` special. Its Wado form
@@ -131,7 +131,7 @@ fn swallow_trailing_call(src: &StrSlice, end: i32) -> i32 {
 fn binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, is_token: bool, base: S) -> AltBinding {
     return match bindings.iter_ref().find(|b: &AltBinding| b.binds(is_token, &base)) {
         Some(b) => *b,
-        None => AltBinding {
+        null => AltBinding {
             is_token,
             base: base.to_string(),
             field: base.to_string(),
@@ -144,15 +144,15 @@ fn binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, is_token: bool, base:
 /// `Option` for that.
 fn rule_value(b: &AltBinding) -> String {
     return match b.reach {
-        Bound => b.field,
-        Shared => `${b.field}.unwrap()`,
-        Unmatched => "unreachable()",
+        _::Bound => b.field,
+        _::Shared => `${b.field}.unwrap()`,
+        _::Unmatched => "unreachable()",
     };
 }
 
 /// The name a rule call's `.text` / `.ctx` captures are kept under.
 fn rule_capture(b: &AltBinding) -> String {
-    return if b.reach matches { Shared } { b.capture } else { b.field };
+    return if b.reach matches { _::Shared } { b.capture } else { b.field };
 }
 
 /// The rule's first token index, captured at rule entry; read by a `$text` /
@@ -242,7 +242,7 @@ pub fn rule_binding_reads(rule: &ParserRule, rules: &List<ParserRule>) -> Option
             return null;
         };
         for let r of &resolved {
-            if r.target matches { ParserSpecial } && r.name == "ctx" {
+            if r.target matches { _::ParserSpecial } && r.name == "ctx" {
                 return null;
             }
             push_unique(&mut reads, binding_name(&r.name));
@@ -366,7 +366,7 @@ fn push_element_action_bodies(elem: &Element, out: &mut List<String>) {
 fn body_uses_rule_span<S: AsStrSlice>(body: S, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
     if let Ok(resolved) = resolve_attrs(body, rule, rules) {
         for let r of &resolved {
-            if r.target matches { ParserSpecial } && (r.name == "text" || r.name == "start" || r.name == "stop") {
+            if r.target matches { _::ParserSpecial } && (r.name == "text" || r.name == "start" || r.name == "stop") {
                 return true;
             }
         }
@@ -384,11 +384,11 @@ fn action_attr_expr<S: AsStrSlice>(
     bindings: &List<AltBinding>,
     handle: S,
 ) -> Result<String, String> {
-    if r.target matches { ParserSpecial } {
+    if r.target matches { _::ParserSpecial } {
         return parser_special_expr(r, rule_is_left_recursive(rule), handle);
     }
     return match r.target {
-        RuleAttr => {
+        _::RuleAttr => {
             if is_arg(rule, &r.name) {
                 if !rule_threads_args(rule) {
                     Result::Err(
@@ -399,7 +399,7 @@ fn action_attr_expr<S: AsStrSlice>(
                 } else {
                     Result::Ok(`vals.${r.name}`);
                 }
-            } else if field_default(rule, &r.name) matches { None } {
+            } else if field_default(rule, &r.name) matches { null } {
                 Result::Err(
                     `$${r.name}: value-channel field type '${field_type(rule, &r.name)}' has no Wado default`,
                 );
@@ -409,10 +409,10 @@ fn action_attr_expr<S: AsStrSlice>(
                 Result::Ok(`vals.${r.name}`);
             }
         },
-        RuleLabel => rule_member_expr(rules, r, bindings, handle),
-        RuleRef => rule_member_expr(rules, r, bindings, handle),
-        TokenLabel => token_member_expr(r, bindings, handle),
-        TokenRef => token_member_expr(r, bindings, handle),
+        _::RuleLabel => rule_member_expr(rules, r, bindings, handle),
+        _::RuleRef => rule_member_expr(rules, r, bindings, handle),
+        _::TokenLabel => token_member_expr(r, bindings, handle),
+        _::TokenRef => token_member_expr(r, bindings, handle),
         _ => Result::Err(`$${r.name}: this attribute form is not yet emitted`),
     };
 }
@@ -425,7 +425,7 @@ fn action_attr_expr<S: AsStrSlice>(
 /// read the codegen-captured `_rule_start_tok`.
 fn parser_special_expr<S: AsStrSlice>(r: &ResolvedAttr, is_lr: bool, handle: S) -> Result<String, String> {
     return match r.name {
-        "text" && r.member matches { None } => Result::Ok(
+        "text" && r.member matches { null } => Result::Ok(
             `${handle}.rule_text(${RULE_START_TOK_LOCAL})`,
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
@@ -434,7 +434,7 @@ fn parser_special_expr<S: AsStrSlice>(r: &ResolvedAttr, is_lr: bool, handle: S) 
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
             Result::Ok(`${handle}.${method}()`);
         },
-        "_p" && r.member matches { None } => Result::Ok(if is_lr { MIN_PREC_LOCAL } else { "0" }),
+        "_p" && r.member matches { null } => Result::Ok(if is_lr { MIN_PREC_LOCAL } else { "0" }),
         _ => Result::Err(`$${r.name}: this parser special is not yet emitted`),
     };
 }
@@ -526,14 +526,14 @@ fn lexer_attr_expr(r: &AttrRef, env: &LexerAttrEnv, use_: AttrUse) -> Result<Str
         return Result::Err(`$${r.name}: a lexer attribute has no members`);
     }
     return match lexer_attr(&r.name) {
-        Window(expr) => if use_ matches { Read } {
+        Window(expr) => if use_ matches { _::Read } {
             Result::Ok(expr);
         } else {
             builtin::cold_path();
             Result::Err(`$${r.name}: this lexer attribute is a read of the match window, not a settable one`);
         },
-        Latch => lexer_latch_expr(r, env, use_),
-        Unsupported => {
+        _::Latch => lexer_latch_expr(r, env, use_),
+        _::Unsupported => {
             builtin::cold_path();
             Result::Err(`$${r.name}: this lexer attribute is not yet emitted`);
         },
@@ -557,11 +557,11 @@ fn lexer_latch_expr(r: &AttrRef, env: &LexerAttrEnv, use_: AttrUse) -> Result<St
         return Result::Err("$mode: this grammar declares no lexer mode to switch to");
     }
     return match use_ {
-        Read => Result::Ok(`${LEXER_HANDLE}.${LEXER_MODE_READER}()`),
-        Write => Result::Ok(`${LEXER_HANDLE}.${LEXER_SET_MODE_FIELD}`),
+        _::Read => Result::Ok(`${LEXER_HANDLE}.${LEXER_MODE_READER}()`),
+        _::Write => Result::Ok(`${LEXER_HANDLE}.${LEXER_SET_MODE_FIELD}`),
         // The current mode and the pending switch are separate fields, so one
         // site cannot be both. `$mode = <mode>` is the ANTLR spelling.
-        ReadWrite => Result::Err("$mode: read it and assign it in separate statements"),
+        _::ReadWrite => Result::Err("$mode: read it and assign it in separate statements"),
     };
 }
 
@@ -612,11 +612,11 @@ pub fn body_mode_attr_use<S: AsStrSlice>(body: S, out: &mut ModeAttrUse) {
             continue;
         }
         match attr_ref_use(&src, r) {
-            Read => out.reads = true,
-            Write => out.writes = true,
+            _::Read => out.reads = true,
+            _::Write => out.writes = true,
             // Refused by `lexer_attr_expr`; the body is dropped with a
             // diagnostic, so neither field is reached.
-            ReadWrite => {
+            _::ReadWrite => {
             },
         }
     }
@@ -667,18 +667,18 @@ fn token_member_expr<S: AsStrSlice>(r: &ResolvedAttr, bindings: &List<AltBinding
     // The jar reads a member of a token that never matched as `null`, and as
     // `0` where the member is a number.
     let unset = match r.member {
-        None => "-1",
+        null => "-1",
         Some("text") => "\"null\"",
         Some(_) => "0",
     };
     return Result::Ok(match b.reach {
-        Bound => read,
-        Shared => if r.member matches { None | Some("channel") } {
+        _::Bound => read,
+        _::Shared => if r.member matches { null | Some("channel") } {
             read;
         } else {
             `(if ${b.field} < 0 { ${unset} } else { ${read} })`;
         },
-        Unmatched => unset,
+        _::Unmatched => unset,
     });
 }
 
@@ -696,11 +696,11 @@ pub fn token_null_test<S: AsStrSlice>(
     };
     if resolved.len() != 1
         || resolved[0].member matches { Some(_) }
-        || !resolved[0].target matches { TokenLabel | TokenRef } {
+        || !resolved[0].target matches { _::TokenLabel | _::TokenRef } {
         return null;
     }
     let b = binding_for(bindings, true, &binding_name(&resolved[0].name));
-    if b.reach matches { Unmatched } {
+    if b.reach matches { _::Unmatched } {
         return Option::Some(if negated { "false" } else { "true" });
     }
     return Option::Some(if negated { `${b.field} >= 0` } else { `${b.field} < 0` });
@@ -723,17 +723,17 @@ pub fn text_presence<S: AsStrSlice>(
         return null;
     }
     let is_token = match resolved[0].target {
-        TokenLabel | TokenRef => true,
-        RuleLabel | RuleRef => false,
+        _::TokenLabel | _::TokenRef => true,
+        _::RuleLabel | _::RuleRef => false,
         _ => {
             return null;
         },
     };
     let b = binding_for(bindings, is_token, &binding_name(&resolved[0].name));
     return match b.reach {
-        Bound => Option::Some("true"),
-        Shared => Option::Some(if is_token { `${b.field} >= 0` } else { `${b.field} matches { Some(_) }` }),
-        Unmatched => Option::Some("false"),
+        _::Bound => Option::Some("true"),
+        _::Shared => Option::Some(if is_token { `${b.field} >= 0` } else { `${b.field} matches { Some(_) }` }),
+        _::Unmatched => Option::Some("false"),
     };
 }
 
@@ -742,7 +742,7 @@ pub fn text_presence<S: AsStrSlice>(
 fn token_member_of<S: AsStrSlice, S1: AsStrSlice>(idx: S, member: &Option<String>, handle: S1) -> Result<String, String> {
     let m = match member {
         Some(m) => *m,
-        None => {
+        null => {
             return Result::Ok(idx.to_string());
         },
     };
@@ -779,15 +779,15 @@ fn rule_member_expr<S: AsStrSlice>(
     };
     if let Some(read) = captured {
         return Result::Ok(match b.reach {
-            Bound => read,
-            Shared => `(if ${b.field} matches { None } { "null" } else { ${read} })`,
-            Unmatched => "\"null\"",
+            _::Bound => read,
+            _::Shared => `(if ${b.field} matches { null } { "null" } else { ${read} })`,
+            _::Unmatched => "\"null\"",
         });
     }
     let binding = rule_value(&b);
     let target = match rules.iter_ref().find(|c| c.name == r.rule_name) {
         Some(t) => t,
-        None => {
+        null => {
             builtin::cold_path();
             return Result::Err(`$${r.name}: unknown referenced rule '${r.rule_name}'`);
         },
@@ -800,7 +800,7 @@ fn rule_member_expr<S: AsStrSlice>(
     }
     return match &r.member {
         Some(m) => {
-            if b.reach matches { Unmatched } {
+            if b.reach matches { _::Unmatched } {
                 Result::Ok(binding);
             } else if field_default(target, m) matches { Some(_) } {
                 Result::Ok(`${binding}.${*m}`);
@@ -808,7 +808,7 @@ fn rule_member_expr<S: AsStrSlice>(
                 Result::Err(`$${r.name}.${*m}: not an emittable value-channel field of '${r.rule_name}'`);
             }
         },
-        None => Result::Ok(binding),
+        null => Result::Ok(binding),
     };
 }
 
@@ -817,14 +817,14 @@ fn rule_member_expr<S: AsStrSlice>(
 fn field_default<S: AsStrSlice>(rule: &ParserRule, name: S) -> Option<String> {
     return match find_field(rule, name) {
         Some(d) => wado_type_default(&d.type_text),
-        None => null,
+        null => null,
     };
 }
 
 fn field_type<S: AsStrSlice>(rule: &ParserRule, name: S) -> String {
     return match find_field(rule, name) {
         Some(d) => d.type_text,
-        None => "",
+        null => "",
     };
 }
 
@@ -875,7 +875,7 @@ pub fn rule_threads_args(rule: &ParserRule) -> bool {
         return false;
     }
     for let a of &rule.args {
-        if wado_type_default(&a.type_text) matches { None } {
+        if wado_type_default(&a.type_text) matches { null } {
             return false;
         }
     }

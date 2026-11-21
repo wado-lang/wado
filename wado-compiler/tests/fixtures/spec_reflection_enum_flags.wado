@@ -10,7 +10,7 @@ enum Color {
 test "an enum reads and builds a value by its discriminant" {
     assert ReflectEnum::<Color>::discriminant(&Color::Blue) == 2;
     assert ReflectEnum::<Color>::from_discriminant(1) == Option::Some(Color::Green);
-    assert ReflectEnum::<Color>::from_discriminant(7) matches { None };
+    assert ReflectEnum::<Color>::from_discriminant(7) matches { null };
 }
 
 test "an enum case handle holds its value" {
@@ -30,7 +30,7 @@ test "a flags value reads and builds its bits as a u64" {
     let p = Perm::Read | Perm::Exec;
     assert ReflectFlags::<Perm>::bits(&p) == 5;
     assert ReflectFlags::<Perm>::from_bits(3) == Option::Some(Perm::Read | Perm::Write);
-    assert ReflectFlags::<Perm>::from_bits(8) matches { None };
+    assert ReflectFlags::<Perm>::from_bits(8) matches { null };
 }
 
 test "a flags bit handle holds its single-bit value" {

@@ -78,7 +78,7 @@ fn collect_md_files<S: AsStrSlice>(dir: S) -> Result<List<String>, fs::FsError> 
     let mut out: List<String> = [];
     for let entry of fs::walk_dir(dir, |found| !is_excluded_dir(found))? {
         let entry = entry?;
-        if entry.type matches { File } && entry.path.ends_with(".md") {
+        if entry.type matches { _::File } && entry.path.ends_with(".md") {
             out.push(entry.path);
         }
     }
@@ -105,7 +105,7 @@ fn resolve_paths(paths: &List<String>) -> Result<List<String>, fs::FsError> with
         // A path the host will not stat is taken as a file, so the loop that
         // reads each one reports it and the rest are still formatted.
         let walk = match fs::metadata(path) {
-            Ok(found) => found.type matches { Directory },
+            Ok(found) => found.type matches { _::Directory },
             Err(_) => false,
         };
         if !walk {

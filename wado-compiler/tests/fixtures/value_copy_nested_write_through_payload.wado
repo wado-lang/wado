@@ -18,7 +18,7 @@ fn rename(e: &mut Element) {
         Ref(r) => {
             r.name = `renamed`;
         },
-        Wildcard => (),
+        _::Wildcard => (),
     }
 }
 
@@ -34,7 +34,7 @@ test "a field read out of the payload before the call keeps its value" {
     let mut e = Element::Ref(Named { name: `original` });
     let held = match e {
         Ref(r) => r.name,
-        Wildcard => ``,
+        _::Wildcard => ``,
     };
     rename(&mut e);
     assert held == `original`;

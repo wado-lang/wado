@@ -7,22 +7,28 @@ parameters. The statements themselves are in [Control Flow](./spec-control-flow.
 
 ## Pattern Syntax
 
-| Pattern       | Example                      | Description                                  |
-| ------------- | ---------------------------- | -------------------------------------------- |
-| Wildcard      | `_`                          | Matches anything                             |
-| Variable      | `x`                          | Binds matched value                          |
-| Mut variable  | `mut x`, `Some(mut x)`       | Binds as mutable                             |
-| Literal       | `0`, `"hello"`, `true`       | Matches exact value                          |
-| Constant      | `MAX_LEN`, `i32::MAX`        | Matches an immutable global / const by value |
-| Range         | `0..<60`, `'a'..='z'`        | Matches an integer, `char` or float in range |
-| Variant       | `Some(x)`, `None`            | Matches variant case                         |
-| Tuple         | `[a, b, c]`                  | Destructures tuple                           |
-| Nested tuple  | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple        |
-| Struct        | `{ x, y }`, `Point { x, y }` | Destructures struct                          |
-| Nested struct | `{ x: 0, y }`                | Literal/variant sub-patterns in struct       |
-| Or            | `Red \| Blue`                | Matches either pattern                       |
-| Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
-| Type          | `input: HtmlInputElement`    | Matches when the value is of the type        |
+| Pattern       | Example                           | Description                                  |
+| ------------- | --------------------------------- | -------------------------------------------- |
+| Wildcard      | `_`                               | Matches anything                             |
+| Variable      | `x`                               | Binds matched value                          |
+| Mut variable  | `mut x`, `Some(mut x)`            | Binds as mutable                             |
+| Literal       | `0`, `"hello"`, `true`, `null`    | Matches exact value                          |
+| Constant      | `== MAX_LEN`, `i32::MAX`          | Matches an immutable global / const by value |
+| Range         | `0..<60`, `'a'..='z'`             | Matches an integer, `char` or float in range |
+| Case          | `Some(x)`, `_::Red`, `Color::Red` | Matches a case of a variant or enum          |
+| Tuple         | `[a, b, c]`                       | Destructures tuple                           |
+| Nested tuple  | `[10, Some(x)]`                   | Literal/variant sub-patterns in tuple        |
+| Struct        | `{ x, y }`, `Point { x, y }`      | Destructures struct                          |
+| Nested struct | `{ x: 0, y }`                     | Literal/variant sub-patterns in struct       |
+| Or            | `_::Red \| _::Blue`               | Matches either pattern                       |
+| Guard         | `Some(x) && x > 0`                | Pattern with condition                       |
+| Type          | `input: HtmlInputElement`         | Matches when the value is of the type        |
+
+A pattern's shape alone says what each of its names does. A bare identifier
+binds, in every pattern, whatever the scrutinee's type and whatever the name
+reaches; a case is a call (`Some(x)`) or a path (`_::Red`, `Color::Red`); a
+constant is a path (`i32::MAX`) or follows `==`. A range bound names a constant
+too, since a bound never binds.
 
 A tuple pattern names every element of the tuple, or ends in `..` after at most
 that many. Over a tuple carrying a variadic pack, only the elements ahead of the
@@ -146,14 +152,13 @@ let opt: Option<i32> = Option::Some(1);
 let Some(y) = opt;
 ```
 
-A bare name in such a pattern, at its root or below it, is a case pattern when
-it names a case of the type it matches, and a binding otherwise. It never names
-a global: a constant pattern can always fail, so reading one here could only be
-rejected. So `let [None, n] = pair` tests its first element, and is an error
-since `None` may not match. `let limit = 1` binds even where a `global limit` is
-in scope, and [`shadowed_name`](./spec-diagnostics.md#the-shadowed_name-lint)
-warns. A refutable pattern reads such a name differently
-([Constant Patterns](#constant-patterns)).
+A bare name binds here as anywhere: `let limit = 1` binds even where a
+`global limit` is in scope, and
+[`shadowed_name`](./spec-diagnostics.md#the-shadowed_name-lint) warns.
+
+A binding whose name is a case of the type it matches is an error, since that
+case is never tested: `Red =>` over a `Color` would match every value. Write
+`_::Red`.
 
 An uninitialized `let x: T;` declares a single name, or `_`
 ([Deferred Initialization](./spec-expressions.md#deferred-initialization)).
@@ -167,8 +172,8 @@ other arms leave:
 
 ```wado
 let name = match color {
-    Red => "red",
-    Green => "green",
+    _::Red => "red",
+    _::Green => "green",
     _ => "other",  // Required for exhaustiveness
 };
 assert name == "other";
@@ -183,7 +188,7 @@ match misses `Some(-2147483648..=0)`, among others:
 ```wado
 let s = match opt {
     Some(1) => "one",
-    None => "none",
+    null => "none",
 };
 ```
 
@@ -232,8 +237,10 @@ assert discount == 0.3;
 
 ## Qualified Patterns
 
-A case may be written under the type that declares it: `Color::Green`. Two kinds
-of qualifier reach the same cases.
+A case may be written under the type that declares it: `Color::Green`. `_::Green`
+leaves the qualifier to the scrutinee's type, as a call form (`Some(x)`) does,
+and `null` names the `None` of an `Option`. A written qualifier takes one of two
+kinds, which reach the same cases.
 
 The first is a name that resolves to the scrutinee's type. An import alias
 (`M::Nothing` under `use { Maybe as M }`), `Self` inside an `impl`, and a
@@ -260,7 +267,10 @@ of that name.
 
 ## Constant Patterns
 
-A pattern identifier that resolves to an immutable `global` or an associated constant matches by value, instead of binding a new variable:
+`== NAME` matches by value, where `NAME` reaches an immutable `global` or an
+associated constant, bare or qualified. A qualified path naming an associated
+constant or a namespaced global (`i32::MAX`, `tok::TK_FOO`) matches by value
+without `==`, since no binding is spelled that way:
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -270,9 +280,9 @@ global TK_BAR: i32 = 2;
 
 fn token_kind(token: i32) -> String {
     return match token {
-        TK_FOO | TK_BAR => "keyword",
-        i32::MAX        => "max",
-        _               => "other",
+        == TK_FOO | == TK_BAR => "keyword",
+        i32::MAX              => "max",
+        _                     => "other",
     };
 }
 
@@ -294,20 +304,15 @@ runs, so it covers no value for [exhaustiveness](#exhaustiveness): a `match`
 over `TK_FOO` and `TK_BAR` alone still needs `_`, even if the two cover the
 type.
 
-Only a refutable pattern reads a bare name as a constant: a `match` arm,
-`if let`, `while let`, and `let ... else`. The two `let` forms differ on that
-alone:
+The operand of `==` is a path, so it ends before a `|` and a `&&` without the
+parser asking which was meant. A local, a parameter, or a closure capture that
+takes the name puts the global out of reach, and `==` then names no constant,
+which is an error. A local is compared by a guard instead (`v && v == limit`).
 
-- `let limit = v;` binds a new `limit`, whatever global the name reaches.
-- `let limit = v else { … }` compares `v` with the global `limit`, and runs the
-  `else` block unless `v == limit`.
-
-A local, a parameter, or a closure capture
-that takes the name puts the global out of reach, so the name binds there as it
-would anywhere else. What counts is what is in scope where the pattern starts.
-A name the pattern binds itself reaches none of its own sites, so
-`[mut limit, limit]` binds the first element and tests the second against the
-global.
+A `let … else` whose pattern binds no name, such as `let == LIMIT = v else`,
+warns under
+[`binding_free_let_else`](./spec-diagnostics.md#the-binding_free_let_else-lint):
+an `if` says the same thing plainly.
 
 ## Range Patterns
 
@@ -415,15 +420,15 @@ Or patterns match if any alternative matches. All alternatives must bind the sam
 ```wado
 // Enum or-patterns
 let tone = match color {
-    Red | Blue => "cool",
-    Green => "warm",
+    _::Red | _::Blue => "cool",
+    _::Green => "warm",
 };
 assert tone == "cool";
 
 // Variant or-patterns with bindings
 let value = match expr {
     Num(n) | Neg(n) => n,
-    Zero => 0,
+    _::Zero => 0,
 };
 assert value == 7;
 
@@ -458,8 +463,8 @@ assert axis == "y-axis";
 // Variant sub-patterns in tuples
 let sum = match [a, b] {
     [Some(p), Some(q)] => p + q,
-    [Some(p), None] => p,
-    [None, _] => 0,
+    [Some(p), null] => p,
+    [null, _] => 0,
 };
 assert sum == 3;
 
@@ -471,8 +476,8 @@ assert origin;
 
 // Enum sub-patterns in tuples
 let label = match [color, size] {
-    [Red, Large] => "big red",
-    [Blue, _] => "blue",
+    [_::Red, _::Large] => "big red",
+    [_::Blue, _] => "blue",
     _ => "other",
 };
 assert label == "big red";

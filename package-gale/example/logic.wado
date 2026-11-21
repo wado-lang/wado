@@ -41,20 +41,20 @@ fn eval_first_child(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Resu
 
 fn eval_expr(s: &bw::CstStore, node: i32, toks: &bw::TokenStream) -> Result<i64, String> {
     return match s.expr_alt(node) {
-        Some(Num) => int_value(s, node, toks),
-        Some(And) => {
+        Some(_::Num) => int_value(s, node, toks),
+        Some(_::And) => {
             let ops = operands(s, node, toks)?;
             Result::Ok(if ops.0 != 0 && ops.1 != 0 { 1 } else { 0 });
         },
-        Some(Or) => {
+        Some(_::Or) => {
             let ops = operands(s, node, toks)?;
             Result::Ok(if ops.0 != 0 || ops.1 != 0 { 1 } else { 0 });
         },
-        Some(Between) => {
+        Some(_::Between) => {
             let ops = operands(s, node, toks)?;
             Result::Ok(if ops.0 <= ops.1 { 1 } else { 0 });
         },
-        None => panic("expr: node has no stamped alternative"),
+        null => panic("expr: node has no stamped alternative"),
     };
 }
 

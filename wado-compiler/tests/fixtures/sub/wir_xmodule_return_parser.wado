@@ -90,7 +90,7 @@ impl LexerSlice {
         loop {
             let a_next = a_iter.next();
             if i >= b.end {
-                return a_next matches { None };
+                return a_next matches { null };
             }
             if let Some(ac) = a_next {
                 if ac != b.chars[i] {
@@ -434,10 +434,10 @@ pub enum Severity {
 impl Severity {
     pub fn label(&self) -> String {
         return match *self {
-            Error => "error",
-            Warning => "warning",
-            Info => "info",
-            Hint => "hint",
+            _::Error => "error",
+            _::Warning => "warning",
+            _::Info => "info",
+            _::Hint => "hint",
         };
     }
 }
@@ -456,12 +456,12 @@ pub enum DiagnosticCode {
 impl DiagnosticCode {
     pub fn name(&self) -> String {
         return match *self {
-            UnexpectedToken => "unexpected-token",
-            MissingToken => "missing-token",
-            ExtraToken => "extra-token",
-            NoViableAlternative => "no-viable-alternative",
-            UnterminatedConstruct => "unterminated-construct",
-            LexError => "lex-error",
+            _::UnexpectedToken => "unexpected-token",
+            _::MissingToken => "missing-token",
+            _::ExtraToken => "extra-token",
+            _::NoViableAlternative => "no-viable-alternative",
+            _::UnterminatedConstruct => "unterminated-construct",
+            _::LexError => "lex-error",
         };
     }
 }
@@ -515,7 +515,7 @@ impl Diagnostic {
     }
 
     pub fn is_error(&self) -> bool {
-        return self.severity matches { Error };
+        return self.severity matches { _::Error };
     }
 }
 
@@ -1167,7 +1167,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             lexer.pos = start + 1;
         } else {
             let tok_start = start;
-            let is_skip = best_kind matches { TK_WS };
+            let is_skip = best_kind matches { == TK_WS };
             if is_skip {
                 ts.push_trivia(best_kind, tok_start, best_end, 0);
             } else {
@@ -1183,12 +1183,12 @@ pub fn tokenize(input: &String) -> TokenStream {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_INT => "INT",
-        TK_WS => "WS",
-        TK_EOF => "Eof",
-        TK_ERROR => "Error",
-        TK_LIT_LPAREN => "TK_LIT_LPAREN",
-        TK_LIT_RPAREN => "TK_LIT_RPAREN",
+        == TK_INT => "INT",
+        == TK_WS => "WS",
+        == TK_EOF => "Eof",
+        == TK_ERROR => "Error",
+        == TK_LIT_LPAREN => "TK_LIT_LPAREN",
+        == TK_LIT_RPAREN => "TK_LIT_RPAREN",
         _ => "Unknown",
     };
 }

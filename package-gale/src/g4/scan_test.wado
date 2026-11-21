@@ -32,9 +32,9 @@ test "comment_end runs a block comment to end when unterminated" {
 
 test "comment_end is null where no comment opens" {
     let c = "a / b /".as_str_slice();
-    assert comment_end(&c, 0, c.len()) matches { None };
-    assert comment_end(&c, 2, c.len()) matches { None };
-    assert comment_end(&c, 6, c.len()) matches { None };
+    assert comment_end(&c, 0, c.len()) matches { null };
+    assert comment_end(&c, 2, c.len()) matches { null };
+    assert comment_end(&c, 6, c.len()) matches { null };
 }
 
 test "scan_string skips a single-quoted string" {
@@ -76,7 +76,7 @@ test "scan_char_class honors \\] escape" {
 
 test "scan_char_class returns None when unterminated" {
     let c = "[a-z".as_str_slice();
-    assert scan_char_class(&c, 0) matches { None };
+    assert scan_char_class(&c, 0) matches { null };
 }
 
 test "scan_balanced handles a simple brace block" {
@@ -111,7 +111,7 @@ test "scan_balanced nests brackets for arg-actions" {
 
 test "scan_balanced returns None when unterminated" {
     let c = "{ never closed".as_str_slice();
-    assert scan_balanced(&c, 0, b'{', b'}') matches { None };
+    assert scan_balanced(&c, 0, b'{', b'}') matches { null };
 }
 
 test "split_top_level_commas reads `<` as a comparison outside a type" {
