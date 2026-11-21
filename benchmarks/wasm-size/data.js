@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795265419587,
+  "lastUpdate": 1795277595022,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80621,6 +80621,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/422bc071e50f30d1c00c87a6d464f80ffe2bd28c"
         },
         "date": 1795265419234,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "081b134ab48ca110b2d07ab1dc1e32bbb8832147",
+          "message": "Merge pull request #2713 from wado-lang/gale/test-speed\n\nperf: run the Gale suite at -O2 in 0.86 times the time",
+          "timestamp": "2026-11-22T00:58:53+09:00",
+          "tree_id": "989cc3d0b7dca0ad8a73be1ecb6e768f89b0c7da",
+          "url": "https://github.com/wado-lang/wado/commit/081b134ab48ca110b2d07ab1dc1e32bbb8832147"
+        },
+        "date": 1795277594365,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
