@@ -2290,24 +2290,32 @@ impl SolverBridge {
         })
     }
 
-    /// The answer to `deferred`, asked of `closed`, the type it was put for
-    /// with its rows solved.
+    /// The answer to `deferred`, asked of `closed` at `asked`, the type and
+    /// the trait it was put for with their rows solved.
     pub(super) fn answer_deferred(
         &self,
         tysys: &TypeSystem,
         deferred: DeferredQuestion,
         closed: TypeId,
+        asked: &FqTraitName,
     ) -> Option<Vec<OwedBody>> {
         let DeferredQuestion {
             mut question,
             binders,
         } = deferred;
-        question.ty = {
+        {
             let table = tysys.type_table.borrow();
-            self.lowering
+            question.ty = self
+                .lowering
                 .type_id(&table, closed, &place_binder(&binders, &table))
-                .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"))
-        };
+                .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"));
+            let ParamBound { trait_, args } = self
+                .lowering
+                .bound_named(asked, &place_head(&binders, &table))
+                .unwrap_or_else(|_| panic!("the bound lowered before its rows were solved"));
+            question.trait_ = trait_;
+            question.args = args;
+        }
         self.answer(tysys, || binders, closed, &question)
     }
 

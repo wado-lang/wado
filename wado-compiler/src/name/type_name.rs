@@ -1165,6 +1165,18 @@ impl FqTypeName {
         out
     }
 
+    /// Whether a function type in this name, nested ones included, has a row
+    /// holding an effect variable.
+    #[must_use]
+    pub fn names_effect_var(&self) -> bool {
+        let found = std::cell::Cell::new(false);
+        let _ = self.map_rows(&|row| {
+            found.set(found.get() || row.iter().any(tir::EffectRef::is_var));
+            row.to_vec()
+        });
+        found.get()
+    }
+
     /// The spelling a diagnostic prints: the type as source writes it, modules
     /// dropped from the head and, recursively, from every type in it.
     #[must_use]
@@ -1488,6 +1500,14 @@ impl FqTraitName {
     #[must_use]
     pub fn args(&self) -> &[FqTypeName] {
         &self.args
+    }
+
+    /// The same trait with every row in its arguments replaced by what `row`
+    /// answers for it.
+    #[must_use]
+    pub fn map_rows(&self, row: &impl Fn(&[tir::EffectRef]) -> Vec<tir::EffectRef>) -> Self {
+        let args = self.args.iter().map(|arg| arg.map_rows(row)).collect();
+        self.clone().with_args(args)
     }
 
     /// Whether any type argument still names a binder, which makes this a

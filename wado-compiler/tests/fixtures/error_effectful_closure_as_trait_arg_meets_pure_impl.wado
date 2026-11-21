@@ -1,0 +1,33 @@
+// A bound whose trait argument is a closure literal's type is asked again with
+// the row the effect check solved, so an impl naming the pure function type
+// does not answer an effectful closure.
+
+use { println, Stdout } from "core:cli";
+
+trait Takes<F> with () {
+    fn take(&self, f: &F) -> i32;
+}
+
+impl Takes<fn() -> i32> for i32 {
+    fn take(&self, _f: &fn() -> i32) -> i32 {
+        return *self;
+    }
+}
+
+fn go<T: Takes<F>, F>(t: T, f: F) -> i32 {
+    return t.take(&f);
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(`${go(1, || loud())}`);
+}
+
+__DATA__
+{
+    "compile_error": ":27:16: analysis error: type 'i32' does not implement trait 'Takes<fn() -> i32 with Stdout>' required by bound on 'T'"
+}
