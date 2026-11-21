@@ -727,7 +727,10 @@ test "show and switch put back what they hold after other code emptied their par
         let _dispose = scope(|| {
             build(
                 View::of(box).children(
-                    [show(|| visible.get(), || element("p")), switch(|| mode.get(), |key| element(if key == 1 { "i" } else { "b" }))],
+                    [
+                        show(|| visible.get(), || element("p")),
+                        switch(|| mode.get(), |key| element(if key == 1 { "i" } else { "b" })),
+                    ],
                 ),
             );
         });
