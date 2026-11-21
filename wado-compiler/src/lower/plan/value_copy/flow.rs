@@ -106,7 +106,9 @@ impl Summary {
 pub struct Flow {
     pub summaries: Vec<Summary>,
     /// Each body's locals whose storage a reference outliving the frame may
-    /// name: one its caller can reach, one out of sight, or the result.
+    /// name: one its caller can reach or one out of sight. One the result
+    /// reaches leaves with the result, read in the frame only by what holds it
+    /// there, which liveness answers for.
     outlived: Vec<IndexSet<u32>>,
     functions: IndexMap<(ModuleSource, String), u32>,
 }
@@ -444,8 +446,7 @@ fn summarize(package: &Package<'_>, summaries: &[Summary], func: &TirFunction) -
     }
     let owner: IndexMap<u32, u32> = b.locals.iter().map(|(&local, &loc)| (loc, local)).collect();
     let mut outlived: IndexSet<u32> = IndexSet::default();
-    let mut work: Vec<u32> = b.g.solved(b.result);
-    work.extend(escaped.iter().copied());
+    let mut work: Vec<u32> = escaped.clone();
     for l in &params {
         work.extend([l.arg, l.deep]);
         if l.by_value {
