@@ -770,7 +770,8 @@ capturing `sink` are installed in a global, so `return sink.lines;` after the
 block deep-copies the list, though the restore uninstalls them on every exit
 (`effect_handler_open_method_install`).
 
-- [ ] Read the install as held until its restore.
+- [ ] Keep the install and its restore one scoped TIR form, lowered last, which
+  the analyses read as holding its value for its body.
 
 ### A field moved out of a live aggregate
 
