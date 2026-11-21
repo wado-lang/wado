@@ -1,0 +1,31 @@
+// Two calls wait on one variable nothing settles: it is reported once.
+
+struct Bx<T> { v: T }
+
+fn mk<T: Default>() -> Bx<T> {
+    return Bx { v: T::default() };
+}
+
+trait Me with () {
+    fn me(&self) -> i32;
+}
+
+impl Me for Bx<u64> {
+    fn me(&self) -> i32 { return 1; }
+}
+
+impl Me for Bx<i64> {
+    fn me(&self) -> i32 { return 2; }
+}
+
+test {
+    let b = mk();
+    b.me();
+    b.me();
+}
+
+__DATA__
+{
+    "compile_error": ":23:5: analysis error: cannot infer `Bx<T>` far enough to choose which `me` this calls; annotate it",
+    "compile_error_count": 1
+}
