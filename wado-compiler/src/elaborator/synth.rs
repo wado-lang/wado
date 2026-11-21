@@ -199,8 +199,12 @@ impl<'a> ArgProbe<'a> {
 pub(super) enum ArgSource<'probe, 'a> {
     /// A call's argument expressions, classified on demand.
     Exprs(&'probe mut ArgProbe<'a>),
-    /// Argument types already elaborated, as the callee will receive them.
-    Types(Vec<TypeId>),
+    /// Argument types already elaborated, as the callee will receive them, and
+    /// what the call's context expects of its result.
+    Types {
+        args: Vec<TypeId>,
+        expected: Option<TypeId>,
+    },
     /// The site passes no value argument, so nothing selects.
     NoArguments,
 }
@@ -209,7 +213,7 @@ impl<'a> ArgSource<'_, 'a> {
     pub(super) fn len(&self) -> usize {
         match self {
             Self::Exprs(probe) => probe.len(),
-            Self::Types(types) => types.len(),
+            Self::Types { args, .. } => args.len(),
             Self::NoArguments => 0,
         }
     }
@@ -222,7 +226,8 @@ impl<'a> ArgSource<'_, 'a> {
     pub(super) fn expected(&self) -> Option<TypeId> {
         match self {
             Self::Exprs(probe) => probe.expected,
-            Self::Types(_) | Self::NoArguments => None,
+            Self::Types { expected, .. } => *expected,
+            Self::NoArguments => None,
         }
     }
 
@@ -233,7 +238,7 @@ impl<'a> ArgSource<'_, 'a> {
     ) -> ArgClass {
         match self {
             Self::Exprs(probe) => probe.class(elaborator, index),
-            Self::Types(types) => ArgClass::Exact(types[index]),
+            Self::Types { args, .. } => ArgClass::Exact(args[index]),
             Self::NoArguments => unreachable!("`NoArguments` has no argument at {index}"),
         }
     }
@@ -242,7 +247,10 @@ impl<'a> ArgSource<'_, 'a> {
     pub(super) fn reborrow(&mut self) -> ArgSource<'_, 'a> {
         match self {
             Self::Exprs(probe) => ArgSource::Exprs(probe),
-            Self::Types(types) => ArgSource::Types(types.clone()),
+            Self::Types { args, expected } => ArgSource::Types {
+                args: args.clone(),
+                expected: *expected,
+            },
             Self::NoArguments => ArgSource::NoArguments,
         }
     }

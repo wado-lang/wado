@@ -1,0 +1,29 @@
+// A waiting call selects among one trait's overloads by the type its context
+// expects of the result once the receiver settles, as an immediate call does.
+
+struct Bx<T> { v: Option<T> }
+
+fn empty<T>() -> Bx<T> { return Bx { v: null }; }
+
+trait Make<R> with () {
+    fn make(&self) -> R;
+}
+
+impl Make<i32> for Bx<i32> {
+    fn make(&self) -> i32 { return 1; }
+}
+
+impl Make<String> for Bx<i32> {
+    fn make(&self) -> String { return "s"; }
+}
+
+impl Make<i32> for Bx<bool> {
+    fn make(&self) -> i32 { return 3; }
+}
+
+test {
+    let b = empty();
+    let s: String = b.make();
+    let _settled: Bx<i32> = b;
+    assert s == "s";
+}

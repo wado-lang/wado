@@ -1238,6 +1238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     args,
                     param_types: substituted_param_types,
                     return_type,
+                    expected: expected_type,
                     span,
                 });
             }

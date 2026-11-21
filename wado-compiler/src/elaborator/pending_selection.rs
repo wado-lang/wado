@@ -158,6 +158,9 @@ pub(super) struct PendingCall {
     /// What the call was typed with, from the trait's declaration.
     pub(super) param_types: Vec<TypeId>,
     pub(super) return_type: TypeId,
+    /// What the call's context expects of its result, which selects as at
+    /// an immediate call.
+    pub(super) expected: Option<TypeId>,
     pub(super) span: Span,
 }
 
@@ -501,7 +504,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(receiver),
             call.span,
             None,
-            Some(ArgSource::Types(call.args.clone())),
+            Some(ArgSource::Types {
+                args: call.args.clone(),
+                expected: call.expected,
+            }),
         );
         match lookup {
             TraitLookup::Undecided(_) => return Some(call),

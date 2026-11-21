@@ -2490,7 +2490,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<(FqTraitName, MethodInfo)> {
         let required = self.tysys.required_compiler_trait(item);
         let args = match rhs {
-            Some(rhs) => ArgSource::Types(vec![self.tysys.type_table.borrow_mut().make_ref(rhs)]),
+            Some(rhs) => ArgSource::Types {
+                args: vec![self.tysys.type_table.borrow_mut().make_ref(rhs)],
+                expected: None,
+            },
             None => ArgSource::NoArguments,
         };
         self.find_method_in_trait_bounds(
