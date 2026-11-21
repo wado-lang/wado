@@ -65,9 +65,9 @@ fn reachable_stmts(body: &Body) -> Vec<StmtId> {
 
 /// What a walk reads wherever in the arena it appears, whatever the walk
 /// performs: the arguments of a builtin that writes nothing, a parameter that
-/// only reads, and every statement's operand. Neither depends on the body's
-/// root, so the frames run over one body's regions and the runs of one callee
-/// share it while the body is unchanged.
+/// only reads, and every statement's operand. None of them depends on the
+/// body's root, so the frames over one body's regions and the runs of one
+/// callee share it while the body is unchanged.
 pub(super) struct ArenaReads {
     /// Recorded through [`peel_wrappers`], as [`Reached::record`] records.
     places: EntitySet<ExprId>,
