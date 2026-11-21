@@ -745,7 +745,8 @@ impl ClosureLowerer {
                         let placeholder_idx = locals.len() as u32;
                         locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNIT, false));
                     }
-                    locals[*idx as usize] = TirLocal::synth(*idx, *type_id, false);
+                    let is_mut = collected.body_locals[(*idx - param_count) as usize].is_mut;
+                    locals[*idx as usize] = TirLocal::synth(*idx, *type_id, is_mut);
                 }
             }
 

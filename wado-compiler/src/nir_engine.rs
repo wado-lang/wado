@@ -1062,17 +1062,6 @@ impl<'a> Engine<'a> {
         self.buf.uses.get(local as usize).and_then(|u| u.def)
     }
 
-    /// Whether `local` is read anywhere — i.e. has any mention that is not the
-    /// bare-`Local` target of an `Assign`. A bare `local = value` writes the
-    /// local without observing it; `&local`, `local.field = …`, and every
-    /// value-position `Local` are reads. This is the liveness signal the
-    /// write-only-local elimination rule keys on.
-    pub fn is_local_read(&self, local: u32) -> bool {
-        self.local_reads(local)
-            .iter()
-            .any(|&mention| !self.is_assign_target(mention))
-    }
-
     /// How many reachable promoted operands read `local` — the half of a use
     /// census that lives in the value pool rather than the skeleton, so
     /// [`Engine::local_reads`] cannot see it. A rule deciding a local is unused,
@@ -1318,7 +1307,8 @@ impl<'a> Engine<'a> {
     /// — the arena analogue of `*dst = *src` when a rewrite collapses a wrapper
     /// onto a node it contains (`{ expr; }` → `expr`). `dst`'s former subtree is
     /// discarded without deep-unregistering its `Local` mentions: a stale one
-    /// only reaches `is_local_read`, where an extra dead mention is conservative.
+    /// only reaches the write-only-local elimination's liveness check, where an
+    /// extra dead mention is conservative.
     pub fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         if dst == src {
             return;
@@ -2058,9 +2048,9 @@ mod tests {
     }
 
     #[test]
-    fn is_local_read_ignores_bare_assign_targets() {
-        // `{ let x = 1 + 2; x = 7; }` — local 0 is written but never read, so
-        // `is_local_read(0)` is false (its only mention is the assign target).
+    fn a_bare_assign_target_is_no_read() {
+        // `{ let x = 1 + 2; x = 7; }` — local 0 is written but never read: its
+        // only mention is the assign target.
         let mut body = mk_body(|b| {
             let one = lit(b, 1);
             let two = lit(b, 2);
@@ -2087,7 +2077,12 @@ mod tests {
             &[],
             &TEST_TYPES,
         );
-        assert!(!eng.is_local_read(0));
+        let is_read = |eng: &Engine| {
+            eng.local_reads(0)
+                .iter()
+                .any(|&mention| !eng.is_assign_target(mention))
+        };
+        assert!(!is_read(&eng));
 
         // The same body with a trailing `return x` makes local 0 read.
         let mut body2 = mk_body(|b| {
@@ -2107,7 +2102,7 @@ mod tests {
             &[],
             &TEST_TYPES,
         );
-        assert!(eng2.is_local_read(0));
+        assert!(is_read(&eng2));
     }
 
     #[test]

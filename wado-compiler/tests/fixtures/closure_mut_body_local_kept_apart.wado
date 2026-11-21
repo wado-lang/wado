@@ -1,0 +1,38 @@
+// A `let mut` inside a closure body stays mutable in the closure's `$call`: a
+// copy of it is a value of its own, not a second name for the list that
+// `&mut xs[i]` on a variant element then writes through.
+
+struct Named {
+    name: String,
+}
+
+variant Element {
+    Ref(Named),
+    Wildcard,
+}
+
+fn rename(elem: &mut Element) {
+    match elem {
+        Ref(r) => {
+            r.name = `renamed`;
+        },
+        _::Wildcard => (),
+    }
+}
+
+fn first_name(items: &List<Element>) -> String {
+    return match items[0] {
+        Ref(r) => r.name,
+        _::Wildcard => ``,
+    };
+}
+
+test "a copy taken before the write keeps the old element" {
+    let snapshot_of = || {
+        let mut items: List<Element> = [Element::Ref(Named { name: `original` })];
+        let snapshot = items;
+        rename(&mut items[0]);
+        return [first_name(&snapshot), first_name(&items)];
+    };
+    assert snapshot_of() == [`original`, `renamed`];
+}

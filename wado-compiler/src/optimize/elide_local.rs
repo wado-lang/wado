@@ -6,7 +6,7 @@
 //! `wir_optimize/elide_local.rs`; running here exposes the freshly dead
 //! expressions to the rest of the fixed-point loop, which the WIR pass cannot.
 
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
@@ -32,9 +32,9 @@ pub(super) struct ElideRule<'a> {
 }
 
 impl<'a> ElideRule<'a> {
-    /// Build the rule for one function. A live read comes from
-    /// `Engine::is_local_read`, so `address_taken_locals` — stale after `inline`
-    /// / `ref_elim` — is deliberately not consulted.
+    /// Build the rule for one function. A live read comes from the engine's use
+    /// index, so `address_taken_locals` — stale after `inline` / `ref_elim` — is
+    /// deliberately not consulted.
     pub(super) fn new(calls: CallFacts<'a>) -> Self {
         Self { calls }
     }
@@ -47,11 +47,18 @@ impl Rule for ElideRule<'_> {
         let mut changed = false;
         let mut elided: Vec<u32> = Vec::new();
         let len = stmts.len();
+        // Nothing this loop does moves a mention until `set_block_stmts`, so one
+        // answer per local serves every statement binding it, which keeps a
+        // local with k self-updates from costing k² checks.
+        let mut kept = Kept {
+            rule: self,
+            known: IndexMap::default(),
+        };
         for (i, stmt) in stmts.into_iter().enumerate() {
             let is_tail = i + 1 == len;
             // A dead store leaves its local bound and read.
-            let unbound = bound_local(engine, stmt).filter(|&local| !is_kept(engine, local, self));
-            match classify(engine, stmt, is_tail, self) {
+            let unbound = bound_local(engine, stmt).filter(|&local| !kept.get(engine, local));
+            match classify(engine, stmt, is_tail, &mut kept) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => {
                     elided.extend(unbound);
@@ -97,13 +104,14 @@ fn bound_local(engine: &Engine, stmt: StmtId) -> Option<u32> {
 /// `let x = value`, or a bare `x = value` (assign at statement position) where
 /// `x` is unread or the store is dead, is dropped when `value` is pure,
 /// otherwise demoted to `Expr(value)`.
-fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> Action {
+fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, kept: &mut Kept) -> Action {
+    let rule = kept.rule;
     match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
         } => {
             let (idx, value) = (*local_index, *value);
-            if is_kept(engine, idx, rule) {
+            if kept.get(engine, idx) {
                 Action::Keep
             } else if value.is_none_or(|value| deletable(engine, value, rule)) {
                 Action::Drop
@@ -140,7 +148,7 @@ fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) 
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
                 let index = *index;
-                if !is_kept(engine, index, rule) || is_dead_store(engine, stmt, index) {
+                if !kept.get(engine, index) || is_dead_store(engine, stmt, index) {
                     return if deletable(engine, value, rule) {
                         Action::Drop
                     } else {
@@ -164,14 +172,27 @@ fn deletable(engine: &Engine, value: Operand, rule: &ElideRule) -> bool {
     deletable_value(engine.body, value, engine.type_table(), rule.calls)
 }
 
-/// A local is kept (not elidable) when something other than its own updates
-/// reads it. One read only to compute its next value (`n = n + 1`) keeps
-/// nothing alive, and counting it would free one store per round, the last.
-fn is_kept(engine: &Engine, local: u32, rule: &ElideRule) -> bool {
-    engine.reads_promoted_local(local)
-        || engine.local_reads(local).iter().any(|&mention| {
-            !engine.is_assign_target(mention) && !feeds_own_store(engine, mention, local, rule)
+/// Which locals one block's statements keep, asked once each.
+struct Kept<'r, 'a> {
+    rule: &'r ElideRule<'a>,
+    known: IndexMap<u32, bool>,
+}
+
+impl Kept<'_, '_> {
+    /// A local is kept (not elidable) when something other than its own
+    /// updates reads it. One read only to compute its next value (`n = n + 1`)
+    /// keeps nothing alive, and counting it would free one store per round, the
+    /// last.
+    fn get(&mut self, engine: &Engine, local: u32) -> bool {
+        let rule = self.rule;
+        *self.known.entry(local).or_insert_with(|| {
+            engine.reads_promoted_local(local)
+                || engine.local_reads(local).iter().any(|&mention| {
+                    !engine.is_assign_target(mention)
+                        && !feeds_own_store(engine, mention, local, rule)
+                })
         })
+    }
 }
 
 /// Whether `read` sits in the deletable value of a statement-level store to
