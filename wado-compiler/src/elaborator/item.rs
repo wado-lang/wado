@@ -2862,7 +2862,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.clear_fn_local_items();
 
         self.settling_selections(Undecided::Report, |this| {
-            this.resolve_block(&test_decl.body, &mut ctx, None)
+            this.resolve_block(&test_decl.body, &mut ctx, None);
         });
     }
 

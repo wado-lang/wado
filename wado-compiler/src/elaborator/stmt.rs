@@ -2864,7 +2864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolve the body AST (each expansion gets its own resolution with
             // different element types) for its facts.
             self.settling_selections(Undecided::Wait, |this| {
-                this.resolve_block(&for_of.body, ctx, None)
+                this.resolve_block(&for_of.body, ctx, None);
             });
 
             // Capture this element's body annotations and reset the maps back to
