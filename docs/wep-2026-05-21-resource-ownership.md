@@ -759,12 +759,18 @@ caller's loop untouched even with the cloned array provably unread.
 ### A reference that dies before the `return`
 
 A returned local whose `&` persists in the frame is copied at the `return`, since
-the reference may still read it once the caller writes the result. The walk
-records that a reference persists, not until when, so one that dies first costs
-the copy too. A `with Sink => &mut sink do { … }` block is that case: the
-dispatch closure capturing `sink` is uninstalled when the block ends, yet
-`return sink.lines;` after it deep-copies the list
+the reference may still read it once the caller writes the result. A reference
+held by a local persists while that local is readable. That covers a call
+result read as a place or dropped by its statement, and a `let`-bound closure
+whose `$call` keeps nothing of it. A reference stored anywhere else persists
+for the whole frame.
+
+A `with Sink => &mut sink do { … }` block is that case. The dispatch closures
+capturing `sink` are installed in a global, so `return sink.lines;` after the
+block deep-copies the list, though the restore uninstalls them on every exit
 (`effect_handler_open_method_install`).
+
+- [ ] Read the install as held until its restore.
 
 ### A field moved out of a live aggregate
 
