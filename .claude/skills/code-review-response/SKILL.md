@@ -128,7 +128,5 @@ This is the second of the two reports, not the first. The class report goes out
 before any fix is written, under §"Start with the classes". This one is written
 after `/distill`, so what it describes is the code as it stands.
 
-One comment on the pull request: what was fixed, and what was skipped with its
-reason. The skips are half the answer, not an omission from it. A review that
-arrived outside a pull request, `/code-review` among them, is reported the same
-way in the session.
+What was fixed, and what was skipped with its reason. The skips are half the
+answer, not an omission from it.

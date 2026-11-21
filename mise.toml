@@ -60,9 +60,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cargo check
-cargo check -p wado-compiler --target wasm32-unknown-unknown
-cargo check -p wado-lsp --target wasm32-unknown-unknown
-cargo check -p wado-manifest --target wasm32-unknown-unknown
+cargo check -p wado-compiler -p wado-lsp -p wado-manifest --target wasm32-unknown-unknown
 """
 
 # The local entry point; CI spreads these over its jobs by whether they need
@@ -325,9 +323,12 @@ WADO=$(scripts/dev-bin.sh --path wado)
 WADO_PJRT_TPU_PLUGIN=$(scripts/fetch-pjrt-plugin.sh)
 export WADO WADO_PJRT_TPU_PLUGIN
 unset WADO_PJRT_PLUGIN
+# `--workspace`, not `-p`: one package resolves features without the rest of the
+# workspace, which compiles the crates under it again.
+cargo test --locked --workspace --test plugin --no-run
 # A run fetches the CPU plugin, saying so on stderr, which a test reads.
-cargo run --locked -p wado-run-pjrt -- wado-run-pjrt/tests/fixtures/add.wado > /dev/null
-cargo test --locked -p wado-run-pjrt -- --ignored
+scripts/dev-bin.sh wado-run-pjrt wado-run-pjrt/tests/fixtures/add.wado > /dev/null
+cargo test --locked --workspace --test plugin -- --ignored
 """
 
 [tasks.test-e2e]
@@ -493,19 +494,26 @@ PATH="/usr/bin:$PATH" exec "$@"
 # The oracle tasks run the ANTLR4 jar, so Java is installed for them alone. A
 # child the guest spawns reaches it only where `[process] read` in
 # ~/.config/wado/config.toml names mise's installs (~/.local/share/mise/installs).
+#
+# It is an exact version: mise re-resolves a task's `tools` on every
+# `mise install`, ignoring mise.lock. `mise ls-remote java` gives the name;
+# temurin-25.0.5+100000002.0.LTS is Temurin 25.0.5.1+2.
+[vars]
+java = "temurin-25.0.5+100000002.0.LTS"
+
 [tasks.oracle-gale]
 description = "Run the ANTLR4 jar on a grammar and the input on stdin (package-gale/scripts/antlr4_oracle.wado)"
-tools = { java = "lts" }
+tools = { java = "{{vars.java}}" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle.wado"
 
 [tasks.oracle-gale-selftest]
 description = "Check the ANTLR4 oracle's answers and refusals against the corpus grammars"
-tools = { java = "lts" }
+tools = { java = "{{vars.java}}" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle_selftest.wado"
 
 [tasks.oracle-gale-regen]
 description = "Regenerate Gale's oracle-pinned driver tests (sqlite, json, or all)"
-tools = { java = "lts" }
+tools = { java = "{{vars.java}}" }
 run = 'WADO="$(scripts/dev-bin.sh --path wado)" scripts/dev-bin.sh wado run package-gale/scripts/regen_oracle.wado'
 
 [tasks.oracle-re]
@@ -526,12 +534,12 @@ run = "scripts/dev-bin.sh wado run scripts/affine_matrix/main.wado"
 
 [tasks.oracle-gale-typescript]
 description = "List where Gale's TypeScript parse tree for a file differs from the ANTLR4 jar's"
-tools = { java = "lts" }
+tools = { java = "{{vars.java}}" }
 run = "scripts/dev-bin.sh wado run package-gale/tools/oracle_typescript.wado"
 
 [tasks.extract-gale-descriptors]
 description = "Regenerate Gale's ANTLR4 descriptor corpus (all categories, or those named)"
-tools = { java = "lts" }
+tools = { java = "{{vars.java}}" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/extract_antlr4_descriptors.wado"
 
 [tasks.test-gale-o2]

@@ -26,11 +26,14 @@
 
 use std::alloc::{Layout, alloc, dealloc};
 use std::future::Future;
+use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 use wado_compiler::compiler_host::{
-    CompilerHost, Diagnostic, InMemoryCompilerHost, ModuleDir, SourceError,
+    CompilerHost, Diagnostic, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
+    InMemoryCompilerHost, ModuleDir, ProbeRequest, SourceError, SourceReader,
 };
+use wado_compiler::remote::Integrity;
 use wado_compiler::{
     Code, CompilerOptions, DependencyIndex, LogLevel, OptLevel, Severity, compile_with_options,
 };
@@ -84,9 +87,48 @@ impl<F: Fn(&str) + Send + Sync> ProgressHost<F> {
     }
 }
 
+#[deny(clippy::missing_trait_methods)]
 impl<F: Fn(&str) + Send + Sync> CompilerHost for ProgressHost<F> {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
         self.inner.load_source(path).await
+    }
+
+    async fn source_exists(&self, path: &str) -> bool {
+        self.inner.source_exists(path).await
+    }
+
+    async fn open_source(
+        &self,
+        path: &str,
+        integrity: Option<Integrity>,
+    ) -> Result<Arc<dyn SourceReader>, SourceError> {
+        self.inner.open_source(path, integrity).await
+    }
+
+    async fn load_source_prefix(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+    ) -> Result<Vec<u8>, SourceError> {
+        self.inner.load_source_prefix(path, extent).await
+    }
+
+    async fn load_remote(
+        &self,
+        url: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> Result<Vec<u8>, SourceError> {
+        self.inner.load_remote(url, extent, integrity).await
+    }
+
+    async fn load_file(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> Result<Vec<u8>, SourceError> {
+        self.inner.load_file(path, extent, integrity).await
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
@@ -95,6 +137,38 @@ impl<F: Fn(&str) + Send + Sync> CompilerHost for ProgressHost<F> {
         } else if diagnostic.severity != Severity::Debug {
             self.inner.emit_diagnostic(diagnostic);
         }
+    }
+
+    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+        self.inner.save_internal_artifact(file_stem, bytes)
+    }
+
+    async fn run_generator(
+        &self,
+        component_wasm: &[u8],
+        request: GeneratorRequest,
+    ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+        self.inner.run_generator(component_wasm, request).await
+    }
+
+    async fn probe_generator(
+        &self,
+        component_wasm: &[u8],
+        request: &ProbeRequest,
+    ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+        self.inner.probe_generator(component_wasm, request).await
+    }
+
+    fn dependency_index(&self) -> DependencyIndex {
+        self.inner.dependency_index()
+    }
+
+    fn serves_core(&self) -> bool {
+        self.inner.serves_core()
+    }
+
+    fn env_var(&self, name: &str) -> Option<String> {
+        self.inner.env_var(name)
     }
 
     fn stdlib_module_read(&self, import_path: &str) {

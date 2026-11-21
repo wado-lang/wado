@@ -53,6 +53,11 @@ wado-wasm-embed = { path = "../../wado-wasm-embed" }
 cranelift-entity = { workspace = true }
 datatest-mini = { workspace = true }
 rand = { workspace = true }
+# Unused by name: `datatest-mini` reaches `regex` for the host alone, and the
+# test build reaches it for the program too, through `wado-cli`. Naming it here
+# compiles it alike in both, so the test build reuses the e2e build's units;
+# `mise run check-unit-graph` holds them to it.
+regex = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 wasmparser = { workspace = true }
