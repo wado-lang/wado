@@ -30,11 +30,11 @@ pub fn fold(
 /// computes it, and a half rounds each value to one it holds.
 fn in_width(k: Known, node: &Node) -> Known {
     let elements = match [k.stored, k.elements] {
-        [Computed, _] => {
+        [_::Computed, _] => {
             return k;
         },
-        [Int32, Ints(v)] => Elements::Ints(v.into_iter().map(|c| c as i32 as i64).collect()),
-        [Int32, Symbolic(v)] => {
+        [_::Int32, Ints(v)] => Elements::Ints(v.into_iter().map(|c| c as i32 as i64).collect()),
+        [_::Int32, Symbolic(v)] => {
             let site = node.site();
             Elements::integers(v.into_iter().map(|p| Poly::wrapped32(&p, &site)).collect());
         },
@@ -179,7 +179,7 @@ fn reshape_extents(
         let Some(extent) = e else {
             return Result::Err(`the target shape holds ${*w}`);
         };
-        if !allow_zero && w.as_constant() matches { None } {
+        if !allow_zero && w.as_constant() matches { null } {
             owe_not_zero(w, input.get(i), owed, site)?;
         }
         extents.push(extent);
@@ -219,7 +219,7 @@ fn owe_not_zero(w: &Poly, copied: Option<Extent>, owed: &mut List<Condition>, si
     }
     let instead = match copied {
         Some(e) => `which reads the input's extent ${e} instead`,
-        None => "which ONNX reads nowhere past the input's axes",
+        null => "which ONNX reads nowhere past the input's axes",
     };
     let above_zero = w.try_sub(&Poly::constant(1)).ok_or(`${*w} - 1 leaves i64`)?;
     return owe(owed, site, &above_zero, `the target's ${*w} must not be 0, ${instead}`);
@@ -292,7 +292,7 @@ fn shape_of(node: &Node, known: &HashMap<String, Known>, shapes: &HashMap<String
     let input = node.inputs[0];
     let extents: List<Poly> = match known.get(input) {
         Some(k) => k.extents.into_iter().map(|e| Poly::constant(e as i64)).collect(),
-        None => shapes[input].polys(),
+        null => shapes[input].polys(),
     };
     let rank = extents.len() as i64;
     let start = clamped(int_attr(node, "start", 0)?, rank, 0, rank);
@@ -393,7 +393,7 @@ fn squeezed(input: &List<Extent>, axes: Option<List<i64>>) -> Result<List<Option
                 dropped[i] = true;
             }
         },
-        None => {
+        null => {
             for let i of 0..<rank {
                 dropped[i] = input[i].is_one();
             }
@@ -459,7 +459,7 @@ pub fn slice_bounds(node: &Node, known: &HashMap<String, Known>) -> Result<Slice
     let sliced = starts.len();
     let axes = match axes_of(node, known, 3, "axes")? {
         Some(listed) => listed,
-        None => (0..<sliced).map(|i| i as i64).collect(),
+        null => (0..<sliced).map(|i| i as i64).collect(),
     };
     let steps = axes_of(node, known, 4, "steps")?.unwrap_or(List::<i64>::filled(sliced, 1));
     if ends.len() != sliced || axes.len() != sliced || steps.len() != sliced {
@@ -521,39 +521,39 @@ fn slice(x: &Known, node: &Node, known: &HashMap<String, Known>) -> Result<Optio
 fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
     let target = data_type(to);
     let stored = match target {
-        Some(Int32) => Stored::Int32,
-        Some(Float16) => Stored::Float16,
-        Some(Bfloat16) => Stored::BFloat16,
+        Some(_::Int32) => Stored::Int32,
+        Some(_::Float16) => Stored::Float16,
+        Some(_::Bfloat16) => Stored::BFloat16,
         _ => Stored::Computed,
     };
     if x.elements matches { Symbolic(_) } {
-        return Result::Ok(if target matches { Some(Int32 | Int64) } {
+        return Result::Ok(if target matches { Some(_::Int32 | _::Int64) } {
             Option::Some(Known { ..*x, stored });
         } else {
             null;
         });
     }
     // An integer would round to f32 and then to the half; the run rounds once.
-    if target matches { Some(Float16 | Bfloat16) } && !x.elements matches { Floats(_) } {
+    if target matches { Some(_::Float16 | _::Bfloat16) } && !x.elements matches { Floats(_) } {
         return Result::Ok(null);
     }
     let count = x.len();
     let elements = match target {
-        Some(Float | Float16 | Bfloat16) => {
+        Some(_::Float | _::Float16 | _::Bfloat16) => {
             let mut out = List::<f32>::with_capacity(count);
             for let i of 0..<count {
                 out.push(as_float(&x.elements, i));
             }
             Elements::Floats(out);
         },
-        Some(Int32 | Int64) => {
+        Some(_::Int32 | _::Int64) => {
             let mut out = List::<i64>::with_capacity(count);
             for let i of 0..<count {
                 out.push(as_int(&x.elements, i));
             }
             Elements::Ints(out);
         },
-        Some(Bool) => {
+        Some(_::Bool) => {
             let mut out = List::<bool>::with_capacity(count);
             for let i of 0..<count {
                 out.push(as_float(&x.elements, i) != 0.0);

@@ -159,7 +159,7 @@ impl Renderer {
     fn render_item(&mut self, item: &MdItem, loose: bool) -> String with RenderHook {
         let marker = match item.marker {
             Some(m) => if m.checked { "[x] " } else { "[ ] " },
-            None => "",
+            null => "",
         };
         let content = self.render_item_children(&item.children, loose, marker);
         if loose {
@@ -295,7 +295,7 @@ fn render_cells<S: AsStrSlice>(
     for let c of 0..<ncol {
         let inner = match row.cells.get(c) {
             Some(cell) => render_inline_seq(&cell, refs),
-            None => "",
+            null => "",
         };
         let a = align_str(&align_at(align, c));
         if a.len() > 0 {
@@ -310,7 +310,7 @@ fn render_cells<S: AsStrSlice>(
 fn align_at(align: &List<ColumnAlign>, idx: i32) -> ColumnAlign {
     return match align.get(idx) {
         Some(a) => a,
-        None => ColumnAlign::None,
+        null => ColumnAlign::None,
     };
 }
 
@@ -419,7 +419,7 @@ fn render_reference_link(link: &ReferenceLinkNode, refs: &RefTable, out: &mut St
         Some(def) => render_link(&def.url, &def.title, &link.children, refs, out),
         // The parser emits a reference/shortcut link only for a label that
         // already resolves, so a miss here is an invariant violation.
-        None => panic("marl-html: reference link label has no definition"),
+        null => panic("marl-html: reference link label has no definition"),
     }
 }
 
@@ -436,7 +436,7 @@ fn render_image<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(alt: S, url: S1, 
 fn render_reference_image(img: &ReferenceImageNode, refs: &RefTable, out: &mut String) {
     match ref_table_get(refs, &img.label) {
         Some(def) => render_image(&img.alt, &def.url, &def.title, out),
-        None => panic("marl-html: reference image label has no definition"),
+        null => panic("marl-html: reference image label has no definition"),
     }
 }
 

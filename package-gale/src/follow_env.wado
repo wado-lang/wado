@@ -342,7 +342,7 @@ fn plan_element(elem: &Element, analysis: &mut GrammarAnalysis, local: &PlanFoll
             let mut inner_outer = *local;
             // A `*` / `+` iteration can be followed by another, so the
             // inner also sees its own FIRST. An `?` cannot iterate.
-            if !rep.kind matches { Optional } {
+            if !rep.kind matches { _::Optional } {
                 accumulate_first_bits(analysis, &rep.element, &mut inner_outer.bits);
                 let mut visiting: List<String> = [];
                 inner_outer.open = inner_outer.open || analysis.element_reaches_open_end(&rep.element, &mut visiting);

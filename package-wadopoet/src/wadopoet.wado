@@ -178,7 +178,7 @@ impl CodeWriter {
     /// Emit a blank line.
     pub fn blank(&mut self) {
         let n = self.segs.len();
-        if n > 0 && self.segs[n - 1].kind matches { Close } && !self.segs[n - 1].blank_after && self.cur_is_empty() {
+        if n > 0 && self.segs[n - 1].kind matches { _::Close } && !self.segs[n - 1].blank_after && self.cur_is_empty() {
             self.segs[n - 1].blank_after = true;
             self.fresh_line = true;
             return;
@@ -268,8 +268,8 @@ impl CodeWriter {
         }
         seg.pre_end = self.buf.len();
         seg.form = match &call.form {
-            Discard => Form::Discard,
-            Return => Form::Return,
+            _::Discard => Form::Discard,
+            _::Return => Form::Return,
             Bind(prefix) => {
                 seg.bind_start = self.buf.len();
                 self.buf.push_str(prefix);
@@ -510,7 +510,7 @@ impl CodeWriter {
     pub fn references(&self) -> HashSet<String> {
         let mut found = HashSet::<String>::new();
         for let seg of &self.segs {
-            if seg.kind matches { Call } {
+            if seg.kind matches { _::Call } {
                 found.insert(self.slice(seg.text_start, seg.text_end).to_string());
             }
             for let mut i = seg.names_start; i < seg.names_end; i += 1 {
@@ -546,9 +546,9 @@ impl CodeWriter {
             if seg.depth != 0 {
                 continue;
             }
-            if seg.kind matches { FnOpen } {
+            if seg.kind matches { _::FnOpen } {
                 opened_at = Option::Some(i);
-            } else if seg.kind matches { Close } {
+            } else if seg.kind matches { _::Close } {
                 let Some(start) = opened_at else {
                     panic("CodeWriter: a function body closes that never opened");
                 };
@@ -575,7 +575,7 @@ impl CodeWriter {
         let mut changed = false;
         for let mut i = 0; i < self.segs.len(); i += 1 {
             let site = &self.segs[i];
-            if !site.kind matches { Call } {
+            if !site.kind matches { _::Call } {
                 continue;
             }
             let Some(k) = self.item_called(site, item_of) else {
@@ -598,7 +598,7 @@ impl CodeWriter {
         let mut body: List<i32> = [];
         for let mut i = item.start + 1; i < item.end; i += 1 {
             let seg = &self.segs[i];
-            if seg.kind matches { Text } {
+            if seg.kind matches { _::Text } {
                 names = self.join_names(names, [seg.names_start, seg.names_end]);
                 if seg.text_start == seg.text_end {
                     continue;
@@ -614,18 +614,18 @@ impl CodeWriter {
         }
         let first = &self.segs[body[0]];
         let call_forwards = if body.len() == 1 {
-            first.kind matches { Call } && first.form matches { Return };
+            first.kind matches { _::Call } && first.form matches { _::Return };
         } else {
-            if !self.segs[body[1]].kind matches { Return } {
+            if !self.segs[body[1]].kind matches { _::Return } {
                 return null;
             }
-            first.kind matches { Call } && first.form matches { Discard };
+            first.kind matches { _::Call } && first.form matches { _::Discard };
         };
         if call_forwards {
             let [start, end] = self.join_names(names, [first.names_start, first.names_end]);
             return Option::Some(Forward { call: Option::Some(*first), names_start: start, names_end: end });
         }
-        if body.len() == 2 && first.kind matches { Text } && first.lines == 1 && first.movable && !first.opaque {
+        if body.len() == 2 && first.kind matches { _::Text } && first.lines == 1 && first.movable && !first.opaque {
             return Option::Some(Forward {
                 call: null,
                 stmt_start: first.first_start,
@@ -654,7 +654,7 @@ impl CodeWriter {
             fw.names_start, fw.names_end,
         ]);
         let Some(inner) = &fw.call else {
-            if !passes_params || !site.form matches { Discard } {
+            if !passes_params || !site.form matches { _::Discard } {
                 return null;
             }
             return Option::Some(Seg {
@@ -673,7 +673,7 @@ impl CodeWriter {
         }
         // A body discarding the inner result forwards a value only where there is
         // none to discard.
-        if inner.form matches { Discard } && !site.form matches { Discard } {
+        if inner.form matches { _::Discard } && !site.form matches { _::Discard } {
             let Some(k) = self.item_called(inner, item_of) else {
                 return null;
             };
@@ -802,7 +802,7 @@ impl CodeWriter {
     ) {
         for let mut i = from; i <= to; i += 1 {
             let seg = &self.segs[i];
-            if seg.kind matches { Call } {
+            if seg.kind matches { _::Call } {
                 reach(self.slice(seg.text_start, seg.text_end), item_of, kept, queue);
             }
             for let mut n = seg.names_start; n < seg.names_end; n += 1 {
@@ -849,37 +849,37 @@ impl CodeWriter {
 
     fn print_seg(&self, seg: &Seg, out: &mut String) {
         match seg.kind {
-            Text => print_shifted(out, self.slice(seg.text_start, seg.text_end), seg.depth),
-            FnOpen => {
+            _::Text => print_shifted(out, self.slice(seg.text_start, seg.text_end), seg.depth),
+            _::FnOpen => {
                 push_indent(out, seg.depth);
                 out.push_str(self.slice(seg.text_start, seg.text_end));
                 out.push_str(" {\n");
             },
-            Close => {
+            _::Close => {
                 push_indent(out, seg.depth);
                 out.push_str(if seg.blank_after { "}\n\n" } else { "}\n" });
             },
-            Call => {
+            _::Call => {
                 print_lines(out, self.slice(seg.pre_start, seg.pre_end), seg.depth);
                 push_indent(out, seg.depth);
                 match seg.form {
-                    Discard => {
+                    _::Discard => {
                     },
-                    Return => out.push_str("return "),
-                    Bind => out.push_str(self.slice(seg.bind_start, seg.bind_end)),
+                    _::Return => out.push_str("return "),
+                    _::Bind => out.push_str(self.slice(seg.bind_start, seg.bind_end)),
                 }
                 out.push_str(self.slice(seg.text_start, seg.text_end));
                 out.push('(');
                 out.push_str(self.slice(seg.args_start, seg.args_end));
                 out.push_str(");\n");
             },
-            Line => {
+            _::Line => {
                 print_lines(out, self.slice(seg.pre_start, seg.pre_end), seg.depth);
                 push_indent(out, seg.depth);
                 out.push_str(self.slice(seg.text_start, seg.text_end));
                 out.push('\n');
             },
-            Return => {
+            _::Return => {
                 push_indent(out, seg.depth);
                 out.push_str("return;\n");
             },
@@ -1306,7 +1306,7 @@ impl StructSpec {
             let vis = if field.is_pub { "pub " } else { "" };
             match &field.default {
                 Some(d) => w.line(`${vis}${field.name}: ${field.type_str} = ${*d},`),
-                None => w.line(`${vis}${field.name}: ${field.type_str},`),
+                null => w.line(`${vis}${field.name}: ${field.type_str},`),
             }
         }
         w.end();
@@ -1480,7 +1480,7 @@ impl FnSpec {
 
     fn returns_unit(&self) -> bool {
         return match &self.return_type {
-            None => true,
+            null => true,
             Some(t) => *t == "()",
         };
     }

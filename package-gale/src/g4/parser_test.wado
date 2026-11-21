@@ -544,7 +544,7 @@ ESC : '\\\\' . ;";
     let g = parse(input).unwrap();
     let elems = &g.lexer_rules[0].body[0].elements;
     assert elems.len() == 2;
-    if let AnyChar = elems[1] {
+    if let _::AnyChar = elems[1] {
     } else {
         panic("expected AnyChar");
     }
@@ -556,9 +556,9 @@ test "spaced dots in a lexer rule are two wildcards, not a range" {
 A : 'a' . . 'b' ;
 B : . . 'x' ;").unwrap();
     let a = &g.lexer_rules[0].body[0].elements;
-    assert a.len() == 4 && a[1] matches { AnyChar } && a[2] matches { AnyChar };
+    assert a.len() == 4 && a[1] matches { _::AnyChar } && a[2] matches { _::AnyChar };
     let b = &g.lexer_rules[1].body[0].elements;
-    assert b.len() == 3 && b[0] matches { AnyChar } && b[1] matches { AnyChar };
+    assert b.len() == 3 && b[0] matches { _::AnyChar } && b[1] matches { _::AnyChar };
 }
 
 test "a token range in a parser rule is rejected" {
@@ -806,18 +806,18 @@ r returns [int i = 0, String s = \"x\"] locals [int n = f(1, 2)] : ID ;";
 test "prequel attr decl without an initializer has none" {
     let g = parse("grammar Test;\nr locals [int n, bool b = x >= 1] : ID ;").unwrap();
     let r = &g.parser_rules[0];
-    assert r.locals_decls[0].init matches { None };
+    assert r.locals_decls[0].init matches { null };
     assert r.locals_decls[1].name == "b" && r.locals_decls[1].init == Option::Some("x >= 1");
 }
 
 test "action language from string-literal option value" {
     let g = parse("grammar Test;\noptions { language = 'Wado'; }\nr : ID ;").unwrap();
-    assert g.action_language matches { Wado };
+    assert g.action_language matches { _::Wado };
 }
 
 test "action language matches Java case-insensitively" {
     let g = parse("grammar Test;\noptions { language = java; }\nr : ID ;").unwrap();
-    assert g.action_language matches { Java };
+    assert g.action_language matches { _::Java };
 }
 
 test "prequel throws list retained" {
@@ -875,10 +875,10 @@ r : A {act1();} B {p()}? C ;";
     let alt = &g.parser_rules[0].alternatives[0];
     assert alt.elements.len() == 3;
     assert alt.actions.len() == 2;
-    assert alt.actions[0].kind matches { Action }, "act1 kind";
+    assert alt.actions[0].kind matches { _::Action }, "act1 kind";
     assert alt.actions[0].before_index == 1;
     assert alt.actions[0].source.text == "act1();";
-    assert alt.actions[1].kind matches { Predicate }, "p kind";
+    assert alt.actions[1].kind matches { _::Predicate }, "p kind";
     assert alt.actions[1].before_index == 2;
 }
 
@@ -889,7 +889,7 @@ r : {isOk()}? A | B ;";
     let alt = &g.parser_rules[0].alternatives[0];
     assert alt.elements.len() == 1;
     assert alt.actions.len() == 1;
-    assert alt.actions[0].kind matches { Predicate };
+    assert alt.actions[0].kind matches { _::Predicate };
     assert alt.actions[0].before_index == 0;
 }
 
@@ -912,7 +912,7 @@ A : 'a' {true}?<fail={\"a<b>\"}> ;
 B : 'b' <assoc=right> 'c' ;").unwrap();
     let a = &g.lexer_rules[0].body[0];
     assert a.elements.len() == 1 && a.actions.len() == 1;
-    assert a.actions[0].kind matches { Predicate } && a.actions[0].source.text == "true";
+    assert a.actions[0].kind matches { _::Predicate } && a.actions[0].source.text == "true";
     assert g.lexer_rules[1].body[0].elements.len() == 2;
 }
 
@@ -928,12 +928,12 @@ start : 'a' ;";
 
 test "action language defaults to Java" {
     let g = parse("grammar Test;\nr : ID ;").unwrap();
-    assert g.action_language matches { Java };
+    assert g.action_language matches { _::Java };
 }
 
 test "action language from options language = Wado" {
     let g = parse("grammar Test;\noptions { language = Wado; }\nr : ID ;").unwrap();
-    assert g.action_language matches { Wado };
+    assert g.action_language matches { _::Wado };
 }
 
 test "parser rule with at_init and at_after" {
@@ -980,22 +980,22 @@ plain : ID ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 4;
     assert g.parser_rules[0].name == "expr";
-    if let Public = g.parser_rules[0].visibility {
+    if let _::Public = g.parser_rules[0].visibility {
     } else {
         panic("expected Public visibility on expr");
     }
     assert g.parser_rules[1].name == "nested";
-    if let Private = g.parser_rules[1].visibility {
+    if let _::Private = g.parser_rules[1].visibility {
     } else {
         panic("expected Private visibility on nested");
     }
     assert g.parser_rules[2].name == "helper";
-    if let Protected = g.parser_rules[2].visibility {
+    if let _::Protected = g.parser_rules[2].visibility {
     } else {
         panic("expected Protected visibility on helper");
     }
     assert g.parser_rules[3].name == "plain";
-    if let Default = g.parser_rules[3].visibility {
+    if let _::Default = g.parser_rules[3].visibility {
     } else {
         panic("expected Default visibility on plain");
     }
@@ -1129,11 +1129,11 @@ public ID : [a-z]+ ;
 private HELPER : [A-Z]+ ;";
     let g = parse(input).unwrap();
     assert g.lexer_rules.len() == 2;
-    if let Public = g.lexer_rules[0].visibility {
+    if let _::Public = g.lexer_rules[0].visibility {
     } else {
         panic("expected Public visibility on ID");
     }
-    if let Private = g.lexer_rules[1].visibility {
+    if let _::Private = g.lexer_rules[1].visibility {
     } else {
         panic("expected Private visibility on HELPER");
     }

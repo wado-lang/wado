@@ -18,7 +18,7 @@ fn rename(elem: &mut Element) {
         Ref(r) => {
             r.name = `renamed`;
         },
-        Wildcard => (),
+        _::Wildcard => (),
     }
 }
 
@@ -29,7 +29,7 @@ export fn run() with Stdout {
 
     let mut nested: List<Element> = [Element::Wildcard, Element::Ref(Named { name: `original` })];
     rename(&mut nested[1]);
-    assert nested[0] matches { Wildcard };
+    assert nested[0] matches { _::Wildcard };
     assert nested[1] matches { Ref(r) && r.name == `renamed` };
 
     println(`ok`);

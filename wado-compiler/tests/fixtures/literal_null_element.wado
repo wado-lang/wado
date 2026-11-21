@@ -8,14 +8,14 @@ use { to_string } from "core:json";
 export fn run() with Stdout {
     let opts: List<Option<i32>> = [null, null];
     assert opts.len() == 2;
-    assert opts[0] matches { None };
+    assert opts[0] matches { null };
 
     let fields: List<Option<String>> = [null];
-    assert fields[0] matches { None };
+    assert fields[0] matches { null };
 
     let v: Value = [1, null, "x"];
     assert v matches { List(items) && items.len() == 3 };
-    assert v matches { List(items) && items[1] matches { Null } };
+    assert v matches { List(items) && items[1] matches { _::Null } };
 
     let doc: Value = { name: "Alice", nickname: null };
     assert to_string(&doc) matches { Ok(s) && s == "{\"name\":\"Alice\",\"nickname\":null}" };

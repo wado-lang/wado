@@ -34,7 +34,7 @@ test "if let over a reference binds references" {
     let none_opt: Option<i32> = null;
     let rn = &none_opt;
     let mut saw_none = false;
-    if let None = rn {
+    if let null = rn {
         saw_none = true;
     }
     assert saw_none;
@@ -47,12 +47,12 @@ test "match over a reference" {
     // Enum patterns bind nothing, so a `&enum` matches directly.
     let c = Color::Red;
     let rc = &c;
-    assert match rc { Red => "red", Green => "green", Blue => "blue" } == "red";
+    assert match rc { _::Red => "red", _::Green => "green", _::Blue => "blue" } == "red";
 
     // `&Option<T>` binds `x` as `&i32`.
     let opt: Option<i32> = Option::<i32>::Some(42);
     let ro = &opt;
-    assert match ro { Some(x) => *x, None => 0 } == 42;
+    assert match ro { Some(x) => *x, null => 0 } == 42;
 
     // `&i32` with guards.
     let x = 50;
@@ -88,7 +88,7 @@ test "a &mut scrutinee writes through in match" {
             c.hits.push(20);
             c.hits.len()
         },
-        None => 0,
+        null => 0,
     };
     assert val == 2;
     if let Some(c) = &opt {
@@ -133,7 +133,7 @@ test "a mut binding copies: an i32" {
             n *= 2;
             n
         },
-        Empty => 0,
+        _::Empty => 0,
     };
     assert result == 200;
     if let Value(orig) = c {

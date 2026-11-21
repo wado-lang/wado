@@ -20,7 +20,7 @@ test {
     back.uses += 1;                              // `&mut`, through a handle no `mut` names
     assert node.backing::<Tag>() matches { Some(t) && t.uses == 1 };
     assert tag.uses == 0;                        // the handle holds its own value
-    assert node.backing::<String>() matches { None };
+    assert node.backing::<String>() matches { null };
     let copy = node;
     assert copy == node;                         // a copy is the same handle
     assert node != Element::backed_by(tag);      // each call makes another

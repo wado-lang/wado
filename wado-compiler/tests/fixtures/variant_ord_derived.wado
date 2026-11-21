@@ -30,12 +30,12 @@ test "payloads decide within a case" {
     assert Shape::Line(1) < Shape::Line(2);
     assert Shape::Label("b") > Shape::Label("a");
     assert Shape::Box([1, 9]) < Shape::Box([2, 0]);
-    assert Shape::Dot.cmp(&Shape::Dot) matches { Equal };
-    assert Shape::Line(3).cmp(&Shape::Line(3)) matches { Equal };
+    assert Shape::Dot.cmp(&Shape::Dot) matches { _::Equal };
+    assert Shape::Line(3).cmp(&Shape::Line(3)) matches { _::Equal };
 }
 
 test "a bound and sort reach it" {
-    assert least(Shape::Line(5), Shape::Dot) matches { Dot };
+    assert least(Shape::Line(5), Shape::Dot) matches { _::Dot };
     let mut shapes: List<Shape> = [Shape::Label("a"), Shape::Line(2), Shape::Dot, Shape::Line(1)];
     shapes.sort();
     assert shapes == [Shape::Dot, Shape::Line(1), Shape::Line(2), Shape::Label("a")];

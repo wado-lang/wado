@@ -83,13 +83,13 @@ test "get returns Some for in-bounds" {
 
 test "get returns None for out-of-bounds" {
     let arr: List<i32> = [10, 20, 30];
-    assert arr.get(3) matches { None };
-    assert arr.get(-1) matches { None };
+    assert arr.get(3) matches { null };
+    assert arr.get(-1) matches { null };
 }
 
 test "get on empty array" {
     let arr: List<i32> = [];
-    assert arr.get(0) matches { None };
+    assert arr.get(0) matches { null };
 }
 
 test "basic slice" {
@@ -105,8 +105,8 @@ test "slice get with bounds check" {
     let arr: List<i32> = [10, 20, 30, 40, 50];
     let s = arr.slice(1, 4);
     assert s.get(0) matches { Some(v) && v == 20 };
-    assert s.get(3) matches { None };
-    assert s.get(-1) matches { None };
+    assert s.get(3) matches { null };
+    assert s.get(-1) matches { null };
 }
 
 test "sub-slice" {
@@ -365,7 +365,7 @@ test "pop from non-empty array" {
 test "pop from empty array" {
     let mut arr: List<i32> = [];
     let v = arr.pop();
-    assert v matches { None };
+    assert v matches { null };
     assert arr.len() == 0;
 }
 
@@ -379,7 +379,7 @@ test "last on non-empty array" {
 test "last on empty array" {
     let arr: List<i32> = [];
     let v = arr.last();
-    assert v matches { None };
+    assert v matches { null };
 }
 
 test "truncate" {
@@ -418,7 +418,7 @@ test "first on non-empty array" {
 
 test "first on empty array" {
     let arr: List<i32> = [];
-    assert arr.first() matches { None };
+    assert arr.first() matches { null };
 }
 
 test "clear" {
@@ -610,7 +610,7 @@ test "windows" {
         assert s[0] == 3;
         assert s[2] == 5;
     }
-    assert wins.next() matches { None };
+    assert wins.next() matches { null };
 }
 
 test "a chunk or window size past the rest of a view does not wrap" {
@@ -643,7 +643,7 @@ test "chunks" {
         assert s.len() == 1;
         assert s[0] == 5;
     }
-    assert chs.next() matches { None };
+    assert chs.next() matches { null };
 }
 
 test "to_array copies the live prefix into a right-sized Array" {

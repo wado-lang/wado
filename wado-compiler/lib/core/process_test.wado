@@ -64,23 +64,23 @@ test "a missing program is NotFound" {
         return;
     }
     let err = Command::new("wado-no-such-program").status().unwrap_err();
-    assert err.kind matches { Spawn(NotFound) };
+    assert err.kind matches { Spawn(_::NotFound) };
     assert `${err}` == "wado-no-such-program: no such program";
-    assert Command::new("wado-no-such-program").output().unwrap_err().kind matches { Spawn(NotFound) };
+    assert Command::new("wado-no-such-program").output().unwrap_err().kind matches { Spawn(_::NotFound) };
 }
 
 test "a file that is no program is NotExecutable" {
     if availability() != Availability::Available {
         return;
     }
-    assert Command::new("/etc/hosts").status().unwrap_err().kind matches { Spawn(NotExecutable) };
+    assert Command::new("/etc/hosts").status().unwrap_err().kind matches { Spawn(_::NotExecutable) };
 }
 
 test "what the host cannot pass is InvalidArgument" {
     if availability() != Availability::Available {
         return;
     }
-    let invalid = |command: Command| command.status().unwrap_err().kind matches { Spawn(InvalidArgument) };
+    let invalid = |command: Command| command.status().unwrap_err().kind matches { Spawn(_::InvalidArgument) };
     assert invalid(Command::new("true").arg("a\u{0}b"));
     assert invalid(Command::new("true").env("A=B", "c"));
     assert invalid(Command::new("true").env("", "c"));
@@ -91,7 +91,7 @@ test "arguments past what the host can pass are ArgumentListTooLong" {
         return;
     }
     let err = Command::new("true").arg("x".repeat(4 << 20)).status().unwrap_err();
-    assert err.kind matches { Spawn(ArgumentListTooLong) };
+    assert err.kind matches { Spawn(_::ArgumentListTooLong) };
 }
 
 test "a failure names the program, the status and stderr" {
@@ -132,7 +132,7 @@ test "wait_timeout reports a child still running, and its end once it comes" {
         return;
     }
     let mut child = cmd`sleep 10`.spawn().unwrap();
-    assert child.wait_timeout(10_000_000).unwrap() matches { None };
+    assert child.wait_timeout(10_000_000).unwrap() matches { null };
     child.kill();
     assert child.wait_timeout(10_000_000_000).unwrap() == Option::Some(ExitStatus::Signaled(9));
     assert child.wait_timeout(0).unwrap() == Option::Some(ExitStatus::Signaled(9));
@@ -175,7 +175,7 @@ test "stdout past the capture limit is OutputTooLarge" {
         return;
     }
     let err = cmd`head -c 100000 /dev/zero`.capture_limit(1000).read().unwrap_err();
-    assert err.kind matches { OutputTooLarge };
+    assert err.kind matches { _::OutputTooLarge };
 }
 
 test "stderr past the capture limit keeps its tail" {
@@ -280,7 +280,7 @@ test "a grant the guest does not hold is NotPermitted" {
     if availability() != Availability::Available {
         return;
     }
-    let refused = |command: Command| command.status().unwrap_err().kind matches { Spawn(NotPermitted) };
+    let refused = |command: Command| command.status().unwrap_err().kind matches { Spawn(_::NotPermitted) };
     assert refused(Command::new("true").grant_write("/tmp"));
     assert refused(Command::new("true").grant_read("/tmp"));
     // The baseline lets a child read `/usr`, never write it.
@@ -303,7 +303,7 @@ test "a grant of a missing path is NotFound" {
     }
     let dir = scratch("missing");
     let err = Command::new("true").grant_write(`${dir}/absent`).status().unwrap_err();
-    assert err.kind matches { Spawn(NotFound) };
+    assert err.kind matches { Spawn(_::NotFound) };
 }
 
 test "the child reads the system configuration" {

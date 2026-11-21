@@ -45,11 +45,11 @@ test "a `_` slot is left to inference" {
 
 test "a `_` slot takes the expected type's argument" {
     let x: Option<Option<i32>> = Option::Some::<_>(null);
-    assert x matches { Some(None) };
+    assert x matches { Some(null) };
     let r: Result<i64, String> = Result::Ok::<_, String>(3);
     assert r.unwrap_or(0) == 3 as i64;
     let n: Option<i32> = Option::None::<_>;
-    assert n matches { None };
+    assert n matches { null };
 }
 
 test "a turbofish on the type reads the expected type too" {
@@ -61,7 +61,7 @@ test "a namespaced case takes the written type" {
     let e = lib::Either::Left::<i32, String>(7);
     assert e matches { Left(7) };
     let m = lib::Maybe::Nothing::<i32>;
-    assert m matches { Nothing };
+    assert m matches { _::Nothing };
 }
 
 __DATA__

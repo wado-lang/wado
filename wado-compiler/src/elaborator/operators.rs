@@ -285,7 +285,7 @@ pub(super) enum ExpectedTypeUse {
 /// miscompiles.
 pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> ExpectedTypeUse {
     let bare_case = |ident: &ast::IdentExpr| {
-        if tysys.bare_case_at(ident.id).is_some() {
+        if ident.has_inferred_qualifier() || tysys.bare_case_at(ident.id).is_some() {
             ExpectedTypeUse::Requires
         } else {
             ExpectedTypeUse::Ignores
@@ -297,7 +297,11 @@ pub(super) fn expected_type_use(expr: &ast::Expr, tysys: &TypeSystem) -> Expecte
         ast::Expr::Call(call) => match &call.callee {
             // A namespaced call (`Color::from_str(s)`) reads as a static path
             // too; a plain call's return type is its own.
-            ast::Expr::Ident(ident) if ident.segments.len() >= 2 => ExpectedTypeUse::Consults,
+            ast::Expr::Ident(ident)
+                if ident.segments.len() >= 2 && !ident.has_inferred_qualifier() =>
+            {
+                ExpectedTypeUse::Consults
+            }
             ast::Expr::Ident(ident) => bare_case(ident),
             _ => ExpectedTypeUse::Ignores,
         },

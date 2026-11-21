@@ -83,7 +83,7 @@ test "GPT-2's pipeline reads as byte-level BPE" {
         [97, 98, 257],
     ] as List<[i32, i32, i32]>;
     assert specials == ["<|endoftext|>"] as List<String>;
-    assert spelling matches { ByteLevel };
+    assert spelling matches { _::ByteLevel };
 }
 
 test "the tiny GPT-2's tokenizer.json reads whole" {
@@ -139,13 +139,13 @@ test "o200k's pipeline reads as byte-level BPE split by its pattern, its merges 
     let Ok(o200k) = read(&json) else {
         panic("the pipeline reads");
     };
-    assert o200k.split matches { O200k } && !o200k.ignore_merges;
+    assert o200k.split matches { _::O200k } && !o200k.ignore_merges;
     let ignoring = json.replace("\"fuse_unk\": false", "\"fuse_unk\": false, \"ignore_merges\": true");
     assert read(&ignoring).unwrap().ignore_merges;
     let Ok(plain) = read(&pipeline("", "")) else {
         panic("the pipeline is GPT-2's");
     };
-    assert plain.split matches { Gpt2 };
+    assert plain.split matches { _::Gpt2 };
 }
 
 test "a pre-tokenizer sequence other than o200k's names itself" {
@@ -224,7 +224,7 @@ test "Gemma's pipeline reads as SentencePiece's spelling, with its prefix" {
     let Ok(bpe) = read(&gemma("true")) else {
         panic("the pipeline is Gemma's");
     };
-    assert bpe.spelling matches { Pieces };
+    assert bpe.spelling matches { _::Pieces };
     assert bpe.tokens.len() == 262;
     assert bpe.tokens[261] == "<eot>";
     assert bpe.merges == [

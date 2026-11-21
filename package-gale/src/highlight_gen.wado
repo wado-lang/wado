@@ -115,9 +115,9 @@ fn build_kind_index(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>, 
         match &slots[i] {
             Rule(ri) => by_name[lexer_rules[*ri].name] = i,
             Lit(li) => by_literal[lit_tokens[*li].text] = i,
-            Eof => {
+            _::Eof => {
             },
-            Error => {
+            _::Error => {
             },
         }
     }
@@ -125,7 +125,7 @@ fn build_kind_index(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>, 
     // aliased text mints no `TK_LIT_*`, so it resolves through its rule's kind.
     for let rule of lexer_rules {
         if let Some(text) = lexer_alias_text(rule) {
-            if by_literal.get(text) matches { None } {
+            if by_literal.get(text) matches { null } {
                 if let Some(kind) = by_name.get(rule.name) {
                     by_literal[text] = kind;
                 }
@@ -179,13 +179,13 @@ fn rule_token_kinds(
         match &alt.elements[0] {
             TokenRef(t) => match idx.by_name.get(t.name) {
                 Some(k) => kinds.push(k),
-                None => {
+                null => {
                     return null;
                 },
             },
             Literal(l) => match idx.by_literal.get(l.text) {
                 Some(k) => kinds.push(k),
-                None => {
+                null => {
                     return null;
                 },
             },
@@ -203,7 +203,7 @@ fn rule_token_kinds(
                             kinds.push(*k);
                         }
                     },
-                    None => {
+                    null => {
                         return null;
                     },
                 }
@@ -283,7 +283,7 @@ fn resolve_query(
     };
     for let mut order = 0; order < query.len(); order += 1 {
         let rule = &query[order];
-        if rule.rule_context matches { None } {
+        if rule.rule_context matches { null } {
             if let Name(name) = &rule.selector {
                 let at = parser_rule_index(parser_rules, name);
                 if at >= 0 {
@@ -291,7 +291,7 @@ fn resolve_query(
                     let mut visiting: List<String> = [captured.name];
                     match rule_token_kinds(captured, parser_rules, idx, &mut visiting) {
                         Some(kinds) => resolved.push_rule_capture(at, kinds, rule.capture, order),
-                        None => diagnostics.warn(
+                        null => diagnostics.warn(
                             &DiagnosticOwner::host("highlight"),
                             DiagnosticKind::HighlightQuery,
                             `highlight query: '(${captured.name}) @${rule.capture}' needs every alternative of '${captured.name}' to be a single token, or a delegation to a rule that is`,
@@ -303,7 +303,7 @@ fn resolve_query(
         }
         let kind = match resolve_selector(idx, &rule.selector) {
             Some(k) => k,
-            None => {
+            null => {
                 diagnostics.warn(
                     &DiagnosticOwner::host("highlight"),
                     DiagnosticKind::HighlightQuery,
@@ -313,7 +313,7 @@ fn resolve_query(
             },
         };
         match &rule.rule_context {
-            None => {
+            null => {
                 resolved.default_by_kind[kind] = rule.capture;
             },
             Some(rctx) => {
@@ -336,8 +336,8 @@ fn resolve_query(
 fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
     return match slot {
         Rule(ri) => `TK_${lexer_rules[*ri].name}`,
-        Eof => "TK_EOF",
-        Error => "TK_ERROR",
+        _::Eof => "TK_EOF",
+        _::Error => "TK_ERROR",
         Lit(li) => lit_tokens[*li].const_name,
     };
 }
@@ -402,7 +402,7 @@ fn gen_highlight_mapping(
         default_rows.push(
             match resolved.default_by_kind.get(i) {
                 Some(c) => `${capture_ids[c]},  // ${slot} @${c}`,
-                None => `-1,  // ${slot}`,
+                null => `-1,  // ${slot}`,
             },
         );
     }

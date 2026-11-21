@@ -131,7 +131,7 @@ impl Regex {
     /// answer means nothing and `self.lazy.off` is set.
     fn end_by_dfa(&self, text: StrSlice, start: i32, earliest: bool) -> Option<i32> {
         let lazy = self.lazy;
-        if lazy.forward matches { None } {
+        if lazy.forward matches { null } {
             lazy.forward = Some(Dfa::new(self.program, Direction::Forward));
         }
         let Some(dfa) = &mut lazy.forward else {
@@ -148,7 +148,7 @@ impl Regex {
     /// `floor`, starts, by the reverse DFA and under `end_by_dfa`'s terms.
     fn start_by_dfa(&self, text: StrSlice, floor: i32, end: i32) -> i32 {
         let lazy = self.lazy;
-        if lazy.reverse matches { None } {
+        if lazy.reverse matches { null } {
             // The forward program compiled, and this one is no larger.
             let program = compile(&self.tree, self.names.len() - 1, Direction::Reverse).unwrap();
             lazy.reverse = Some(Dfa::new(program, Direction::Reverse));
@@ -174,7 +174,7 @@ impl Regex {
                 };
                 let from = match self.program.match_len {
                     Some(len) => end - len,
-                    None => self.start_by_dfa(text, start, end),
+                    null => self.start_by_dfa(text, start, end),
                 };
                 if !self.lazy.off {
                     if !groups || self.program.captures == 2 {
@@ -564,7 +564,7 @@ impl Iterator for Split {
         let text = self.matches.text;
         let may_cut = match self.cuts {
             Some(n) => n > 0,
-            None => true,
+            null => true,
         };
         if may_cut && let Some(slots) = self.matches.next_slots() {
             let piece = text.slice(self.piece, slots[0]);
@@ -599,7 +599,7 @@ test "a DFA with too many states hands over to the Pike VM, and is released" {
     let m = forward.find(&text).unwrap();
     assert m.start() == 0 && m.end() == last + 14;
     assert forward.lazy.off;
-    assert forward.lazy.forward matches { None };
+    assert forward.lazy.forward matches { null };
 
     let reverse = Regex::new(#"[ab]{13}a[ab]*"#).unwrap();
     let mut first = 13;
@@ -609,7 +609,7 @@ test "a DFA with too many states hands over to the Pike VM, and is released" {
     let tail = reverse.find(&text).unwrap();
     assert tail.start() == first - 13 && tail.end() == bytes.len();
     assert reverse.lazy.off;
-    assert reverse.lazy.reverse matches { None };
+    assert reverse.lazy.reverse matches { null };
 }
 
 test "a DFA whose states are large gives up before its tables are" {

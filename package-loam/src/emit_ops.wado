@@ -153,36 +153,36 @@ internal fn built_call(
         let a = stretched(checked, exprs, symbols, &node.inputs[0], &out, 0)?;
         let b = stretched(checked, exprs, symbols, &node.inputs[1], &out, trailing)?;
         let name = match binary {
-            Add => "Add",
-            Sub => "Subtract",
-            Mul => "Multiply",
-            Div => "Divide",
-            Pow => "Power",
-            Maximum => "Maximum",
-            Minimum => "Minimum",
+            _::Add => "Add",
+            _::Sub => "Subtract",
+            _::Mul => "Multiply",
+            _::Div => "Divide",
+            _::Pow => "Power",
+            _::Maximum => "Maximum",
+            _::Minimum => "Minimum",
             // A comparison yields no element of its operands' type.
-            Eq | Ne | Lt | Le | Gt | Ge => unreachable(),
+            _::Eq | _::Ne | _::Lt | _::Le | _::Gt | _::Ge => unreachable(),
         };
         return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::${name}, ${a}, ${b})`);
     }
     // Stage 0 refuses every operator the graph lowers no other way.
     let unary = case_named::<UnaryOp>(&op).unwrap();
-    if unary matches { Relu } {
+    if unary matches { _::Relu } {
         let zero = `&full::<${BACKEND_PARAM}, ${element}, [${axes}]>(backend, ${number_literal(&element, 0.0)}, ${symbols.spell_shape(
             &out,
         )?})`;
         return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::Maximum, ${operand(0)}, ${zero})`);
     }
     let name = match unary {
-        Relu => unreachable(),
-        Sigmoid => "Logistic",
-        Tanh => "Tanh",
-        Erf => "Erf",
-        Exp => "Exponential",
-        Log => "Log",
-        Sqrt => "Sqrt",
-        Neg => "Negate",
-        Abs => "Abs",
+        _::Relu => unreachable(),
+        _::Sigmoid => "Logistic",
+        _::Tanh => "Tanh",
+        _::Erf => "Erf",
+        _::Exp => "Exponential",
+        _::Log => "Log",
+        _::Sqrt => "Sqrt",
+        _::Neg => "Negate",
+        _::Abs => "Abs",
     };
     return Result::Ok(`backend.unary::<${element}, [${axes}]>(Unary::${name}, ${operand(0)})`);
 }
@@ -580,7 +580,7 @@ fn built_experts(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     };
     let [slots, layer, layers, step] = match &placed {
         Some(p) => [p.slots, `${p.layer}`, `${p.layers}`, `${p.step}`],
-        None => [shape_of(QMOE_UP).axes[0].name, "0", "1", "0"],
+        null => [shape_of(QMOE_UP).axes[0].name, "0", "1", "0"],
     };
     let mut turbofish: List<String> = [
         BACKEND_PARAM,
@@ -765,7 +765,7 @@ fn built_slice(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut S
     let mut gathered: Option<String> = null;
     let operand_of = |so_far: &Option<String>| match so_far {
         Some(call) => `&${*call}`,
-        None => exprs.reference(&node.inputs[0]),
+        null => exprs.reference(&node.inputs[0]),
     };
     for let cut of all {
         let length = cut.extent.poly();

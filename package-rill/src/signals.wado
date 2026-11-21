@@ -96,16 +96,16 @@ fn unchanged(deps: &List<Seen>) -> bool {
 
 fn refresh(core: &mut MemoCore) {
     match core.freshness {
-        Fresh => {
+        _::Fresh => {
         },
-        Check => {
+        _::Check => {
             if unchanged(&core.deps) {
                 core.freshness = Freshness::Fresh;
             } else {
                 (core.recompute)();
             }
         },
-        Stale => (core.recompute)(),
+        _::Stale => (core.recompute)(),
     }
 }
 
@@ -147,7 +147,7 @@ fn notify(dep: Dep) {
     for let observer of dep.readers.observers {
         match observer {
             Memo(core) => {
-                if core.freshness matches { Fresh } {
+                if core.freshness matches { _::Fresh } {
                     core.freshness = Freshness::Check;
                     notify(core.dep);
                 }

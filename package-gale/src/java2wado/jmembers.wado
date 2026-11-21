@@ -325,7 +325,7 @@ fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
 ) -> Result<MemberField, String> {
     let ty = match map_java_type(ty_java) {
         Some(t) => t,
-        None => {
+        null => {
             return Result::Err(`java2wado: @members: unsupported field type '${ty_java}'`);
         },
     };
@@ -437,7 +437,7 @@ fn parse_params(tokens: &List<JToken>, pos: &mut i32) -> Result<List<[String, St
         *pos += 1;
         let wty = match map_java_type(&ty) {
             Some(t) => t,
-            None => {
+            null => {
                 return Result::Err(`java2wado: @members: unsupported parameter type '${ty}'`);
             },
         };
@@ -463,14 +463,14 @@ fn skip_modifiers(tokens: &List<JToken>, pos: &mut i32) {
 fn is_modifier(tokens: &List<JToken>, pos: i32) -> bool {
     return match ident_at(tokens, pos) {
         Some(n) => n == "public" || n == "private" || n == "protected" || n == "static" || n == "final",
-        None => false,
+        null => false,
     };
 }
 
 fn member_ident<S: AsStrSlice>(tokens: &List<JToken>, pos: i32, what: S) -> Result<String, String> {
     return match ident_at(tokens, pos) {
         Some(n) => Result::Ok(n),
-        None => Result::Err(`java2wado: @members: expected ${what} identifier`),
+        null => Result::Err(`java2wado: @members: expected ${what} identifier`),
     };
 }
 

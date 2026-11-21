@@ -28,7 +28,7 @@ export fn run() with (Stdout, Stderr, Preopens, Descriptor) {
     if let Ok(_) = sym_result {
         println("symlink_at: created symlink");
     } else if let Err(err) = sym_result {
-        if err matches { Unsupported } {
+        if err matches { _::Unsupported } {
             println("symlink_at: not supported (skipping symlink tests)");
             // Try link_at instead
             test_link_at(&dir);
@@ -62,7 +62,7 @@ export fn run() with (Stdout, Stderr, Preopens, Descriptor) {
     if let Ok(linked_file) = open_via_link {
         let stat_result = linked_file.stat().wait();
         if let Ok(stat) = stat_result {
-            if stat.type matches { RegularFile } && stat.size == 14 as Filesize {
+            if stat.type matches { _::RegularFile } && stat.size == 14 as Filesize {
                 println("symlink follow: opened file has correct type and size (correct)");
             } else {
                 eprintln("symlink follow: unexpected type or size");
@@ -124,7 +124,7 @@ fn test_link_at(dir: &Descriptor) with (Stdout, Stderr, Descriptor) {
         // Clean up
         dir.unlink_file_at("test_hardlink").wait();
     } else if let Err(err) = link_result {
-        if err matches { Unsupported } {
+        if err matches { _::Unsupported } {
             println("link_at: not supported (skipping)");
         } else {
             eprintln("link_at: failed with unexpected error");

@@ -37,8 +37,6 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
         binders.extend(walk.found);
         writes.extend(walk.writes);
     }
-    // A binder the elaborator did not bind as a local is a constant or a case
-    // a pattern tests against, not a variable.
     binders.retain(|b| {
         b.ids.iter().any(|id| {
             matches!(
@@ -274,6 +272,7 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
             | Pattern::Tuple(..)
             | Pattern::Variant { .. }
             | Pattern::Range { .. }
+            | Pattern::Equal { .. }
             | Pattern::Typed { .. }
             | Pattern::Error(_) => {}
         }

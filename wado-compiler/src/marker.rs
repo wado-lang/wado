@@ -319,6 +319,7 @@ fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) ->
                 pattern: Pattern::Variant {
                     variant_name: case.clone(),
                     variant_qualifier: Some(named_type(fresh(), "Self", span)),
+                    inferred_qualifier: None,
                     name_id: fresh(),
                     name_span: span,
                     bindings,

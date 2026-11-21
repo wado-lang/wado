@@ -529,13 +529,16 @@ enum Color {
 
 let c = Color::Red;
 let d: Color = Red; // bare only where the expected type supplies it; `let e = Red;` is an error
+let f: Color = _::Red; // the same, and never a binding named `Red`
 
-// Pattern matching
+// Pattern matching: a bare name always binds, so a case takes `_::`, which
+// leaves its type to the scrutinee's
 let name = match c {
-    Red => "red",
-    Green => "green",
-    Blue => "blue",
+    _::Red => "red",
+    _::Green => "green",
+    _::Blue => "blue",
 };
+// match c { Red => … }   // Error: `Red` would bind, and match every value
 
 // A case may also be written under a qualifier: the scrutinee's type
 // (`Color::Red`), `Self` inside an `impl`, any name on the scrutinee's newtype
@@ -788,19 +791,19 @@ loop {
 // Match expression
 let result = match opt {
     Some(x) => x * 2,
-    None => 0,
+    null => 0,                // the `None` of an `Option`; `_::None` too
 };
 
 // Match statement with "or" patterns
 match color {
-    Red | Blue => "cool",
-    Green => "warm",
+    _::Red | _::Blue => "cool",
+    _::Green => "warm",
 }
 
 // Or patterns with bindings (all alternatives must bind the same names)
 match expr {
     Num(n) | Neg(n) => use(n),
-    Zero => 0,
+    _::Zero => 0,
 }
 
 // Or patterns in matches operator
@@ -815,7 +818,7 @@ let label = match value {
     Some(x) && x > 100 => "large",
     Some(x) && x > 10 => "medium",
     Some(_) => "small",
-    None => "none",
+    null => "none",
 };
 
 // Match with block body
@@ -824,7 +827,7 @@ let desc = match value {
         let doubled = n * 2;
         `value is ${doubled}`
     },
-    None => "no value",
+    null => "no value",
 };
 
 // Range patterns
@@ -851,15 +854,15 @@ let value = match node {
 };
 let input: HtmlInputElement = el else { return; };
 
-// Constant patterns: in a refutable pattern, an immutable global or associated
-// const matches by value, not a binding. TK_FOO/TK_BAR are `global`s, and a
-// namespace prefix reaches one the same way (`tok::TK_FOO`). In a `let` or
-// `for` binding a global's name binds instead, and `shadowed_name` warns.
+// Constant patterns: `== NAME` matches an immutable global or associated const
+// by value, and a qualified path (`i32::MAX`, `tok::TK_FOO`) does without `==`.
+// A bare name binds even where a global takes it, and `shadowed_name` warns.
 let kind = match token {
-    TK_FOO | TK_BAR => "keyword",
-    i32::MAX        => "max",
-    _               => "other",
+    == TK_FOO | == TK_BAR => "keyword",
+    i32::MAX              => "max",
+    _                     => "other",
 };
+// let == LIMIT = v else { … };   // warns (binding_free_let_else): write an `if`
 ```
 
 Semicolons do not have particular semantics; they are just separators to statements. Convention in `wado format`: single-line block does not use semicolon.
@@ -1900,7 +1903,7 @@ fs::try_exists("wado.toml")?;                    // absence only; anything else 
 let meta = fs::metadata("icon.png")?;            // Metadata { type, size, modified }
 
 for let entry of fs::read_dir("src")? {          // DirEntry { name, type }
-    if entry.type matches { Directory } { continue; }
+    if entry.type matches { _::Directory } { continue; }
 }
 for let found of fs::walk_dir("src")? {          // lists each directory as it reaches it
     println(`${found?.path}`);                   // Result<WalkEntry, FsError>, deep

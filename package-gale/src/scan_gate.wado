@@ -57,7 +57,7 @@ pub fn gate_assignment<S: AsStrSlice>(text: S) -> Option<[String, i32]> {
     }
     let [target, rhs] = match one_assignment(&stmts[0]) {
         Some(pair) => pair,
-        None => {
+        null => {
             return null;
         },
     };
@@ -94,7 +94,7 @@ fn parser_member<S: AsStrSlice>(target: S) -> Option<String> {
 fn one_assignment<S: AsStrSlice>(text: S) -> Option<[String, String]> {
     let [lhs, rhs] = match text.split_once("=") {
         Some(pair) => pair,
-        None => {
+        null => {
             return null;
         },
     };
@@ -186,7 +186,7 @@ pub fn runnable_gate_scope(rule: &ParserRule, bodies: &HashMap<i32, String>) -> 
 pub fn gate_body_of(bodies: &HashMap<i32, String>, action_id: i32) -> String {
     return match bodies.get(action_id) {
         Some(text) => text,
-        None => String::new(),
+        null => String::new(),
     };
 }
 
@@ -195,13 +195,13 @@ pub fn gate_body_of(bodies: &HashMap<i32, String>, action_id: i32) -> String {
 pub fn gate_scope(rule: &ParserRule, bodies: &HashMap<i32, String>) -> Option<GateScope> {
     let init = match &rule.init_action {
         Some(a) => gate_body_of(bodies, a.action_id),
-        None => {
+        null => {
             return null;
         },
     };
     let after = match &rule.after_action {
         Some(a) => gate_body_of(bodies, a.action_id),
-        None => {
+        null => {
             return null;
         },
     };
@@ -218,7 +218,7 @@ pub fn gate_scope_of<S: AsStrSlice, S1: AsStrSlice>(init: S, after: S1) -> Optio
     }
     let [restored, local] = match one_assignment(&restores[0]) {
         Some(pair) => pair,
-        None => {
+        null => {
             return null;
         },
     };
@@ -234,7 +234,7 @@ pub fn gate_scope_of<S: AsStrSlice, S1: AsStrSlice>(init: S, after: S1) -> Optio
     // `$L = <field>` — the save fills the local the restore reads.
     let [saved_into, saved_from] = match one_assignment(&stmts[0]) {
         Some(pair) => pair,
-        None => {
+        null => {
             return null;
         },
     };
@@ -246,7 +246,7 @@ pub fn gate_scope_of<S: AsStrSlice, S1: AsStrSlice>(init: S, after: S1) -> Optio
     };
     return match gate_assignment(&stmts[1]) {
         Some(w) => if w.0 == scoped { Option::Some(GateScope { field: w.0, value: w.1 }) } else { null },
-        None => null,
+        null => null,
     };
 }
 
@@ -282,14 +282,14 @@ pub fn scan_gate_fields(grammar: &Grammar, bodies: &HashMap<i32, String>) -> Lis
     let mut simulable: List<String> = [];
     let mut refused = Refusals {};
     for let rule of &grammar.parser_rules {
-        if runnable_gate_scope(rule, bodies) matches { None } {
+        if runnable_gate_scope(rule, bodies) matches { null } {
             for let text of rule_prequel_bodies(rule) {
                 refused.refuse(&text);
             }
         }
         for let alt of &rule.alternatives {
             for let a of &alt.actions {
-                if a.kind matches { Predicate } {
+                if a.kind matches { _::Predicate } {
                     continue;
                 }
                 let body = gate_body_of(bodies, a.source.action_id);
@@ -297,7 +297,7 @@ pub fn scan_gate_fields(grammar: &Grammar, bodies: &HashMap<i32, String>) -> Lis
                     Some(hit) => {
                         push_unique(&mut simulable, hit.0);
                     },
-                    None => {
+                    null => {
                         refused.refuse(&a.source.text);
                     },
                 }
@@ -344,7 +344,7 @@ fn reject_element_writes(e: &Element, refused: &mut Refusals) {
         Group(g) => {
             for let alt of &g.alternatives {
                 for let a of &alt.actions {
-                    if !a.kind matches { Predicate } {
+                    if !a.kind matches { _::Predicate } {
                         refused.refuse(&a.source.text);
                     }
                 }

@@ -34,11 +34,11 @@ pub fn eval<S: AsStrSlice>(input: S) -> Result<i64, String> {
 /// error-recovery node, say) — impossible here after `ok()`, so a codegen bug.
 fn eval_expr(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
     return match s.expr_alt(node) {
-        Some(Num) => int_value(s, node, toks),
-        Some(Paren) => eval_first_child(s, node, toks),
-        Some(MulDiv) => fold_binary(s, node, toks),
-        Some(AddSub) => fold_binary(s, node, toks),
-        None => panic("expr: node has no stamped alternative"),
+        Some(_::Num) => int_value(s, node, toks),
+        Some(_::Paren) => eval_first_child(s, node, toks),
+        Some(_::MulDiv) => fold_binary(s, node, toks),
+        Some(_::AddSub) => fold_binary(s, node, toks),
+        null => panic("expr: node has no stamped alternative"),
     };
 }
 
@@ -62,7 +62,7 @@ fn fold_binary(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Res
     let mut op = "";
     for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
         match s.child_kind(c) {
-            Node => {
+            _::Node => {
                 let v = eval_expr(s, c, toks)?;
                 if have_left {
                     right = v;
@@ -71,8 +71,8 @@ fn fold_binary(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Res
                     have_left = true;
                 }
             },
-            Token => op = toks.token_text(s.token_index(c)),
-            Missing | Skipped => {
+            _::Token => op = toks.token_text(s.token_index(c)),
+            _::Missing | _::Skipped => {
             },
         }
     }

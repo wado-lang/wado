@@ -7,11 +7,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Re
     let method = request.get_method();
 
     let status: u16 = match method {
-        Get => 200,
-        Post => 201,
-        Delete => 204,
-        Put => 200,
-        Patch => 200,
+        _::Get => 200,
+        _::Post => 201,
+        _::Delete => 204,
+        _::Put => 200,
+        _::Patch => 200,
         _ => 405,
     };
 

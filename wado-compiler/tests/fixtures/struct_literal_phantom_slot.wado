@@ -63,7 +63,7 @@ variant TaggedCase<M: Mark = Zero> {
 fn case_total<M: Mark>(t: &TaggedCase<M>) -> i32 {
     return match *t {
         Present(n) => n + M::tag(),
-        Absent => M::tag(),
+        _::Absent => M::tag(),
     };
 }
 

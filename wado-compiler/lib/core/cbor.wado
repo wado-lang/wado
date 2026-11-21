@@ -780,8 +780,8 @@ fn decode_half(bits: u64) -> f64 {
 /// bits. `ai` is `AI_8BYTE`, `AI_4BYTE` or `AI_2BYTE`.
 fn simple_float_to_f64(ai: u8, bits: u64) -> f64 {
     return match ai {
-        AI_8BYTE => f64::from_bits(bits),
-        AI_4BYTE => f32::from_bits(bits as u32) as f64,
+        == AI_8BYTE => f64::from_bits(bits),
+        == AI_4BYTE => f32::from_bits(bits as u32) as f64,
         _ => decode_half(bits),
     };
 }
@@ -888,15 +888,15 @@ impl CborDeserializer {
             // A compile-time `read_be` size keeps the hot path free of a runtime
             // width dispatch; `simple_float_to_f64` folds against the constant.
             match fai {
-                AI_8BYTE => {
+                == AI_8BYTE => {
                     self.pos += 1;
                     return Result::Ok(T::from_float(simple_float_to_f64(AI_8BYTE, self.read_be(8)?)));
                 },
-                AI_4BYTE => {
+                == AI_4BYTE => {
                     self.pos += 1;
                     return Result::Ok(T::from_float(simple_float_to_f64(AI_4BYTE, self.read_be(4)?)));
                 },
-                AI_2BYTE => {
+                == AI_2BYTE => {
                     self.pos += 1;
                     return Result::Ok(T::from_float(simple_float_to_f64(AI_2BYTE, self.read_be(2)?)));
                 },
@@ -911,17 +911,17 @@ impl CborDeserializer {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
-                MAJOR_SIMPLE => match ai {
-                    AI_8BYTE | AI_4BYTE | AI_2BYTE => {
+                == MAJOR_SIMPLE => match ai {
+                    == AI_8BYTE | == AI_4BYTE | == AI_2BYTE => {
                         return Result::Ok(T::from_float(simple_float_to_f64(ai, arg)));
                     },
                     _ => {
                     },
                 },
-                MAJOR_UINT | MAJOR_NINT => {
+                == MAJOR_UINT | == MAJOR_NINT => {
                     return Result::Ok(int_item::<T>(arg, major == MAJOR_NINT));
                 },
-                MAJOR_TAG && is_passthrough_tag(arg) => {
+                == MAJOR_TAG && is_passthrough_tag(arg) => {
                     continue;
                 },
                 _ => {
@@ -985,10 +985,10 @@ impl CborDeserializer {
         contract ai <= AI_8BYTE, "ai must carry an argument"
     {
         return match ai {
-            AI_1BYTE => Result::Ok(self.next_byte()? as u64),
-            AI_2BYTE => self.read_be(2),
-            AI_4BYTE => self.read_be(4),
-            AI_8BYTE => self.read_be(8),
+            == AI_1BYTE => Result::Ok(self.next_byte()? as u64),
+            == AI_2BYTE => self.read_be(2),
+            == AI_4BYTE => self.read_be(4),
+            == AI_8BYTE => self.read_be(8),
             _ => Result::Ok(ai as u64),
         };
     }
@@ -1002,11 +1002,11 @@ impl CborDeserializer {
         let ai = ib & 0x1f;
         // Codes < 24 carry the argument inline (the `_` arm).
         match ai {
-            AI_1BYTE | AI_2BYTE | AI_4BYTE | AI_8BYTE => {
+            == AI_1BYTE | == AI_2BYTE | == AI_4BYTE | == AI_8BYTE => {
                 let v = (unchecked self.read_arg(ai))?;
                 return Result::Ok([major, ai, v, false]);
             },
-            AI_INDEFINITE => {
+            == AI_INDEFINITE => {
                 // Indefinite length is only well-formed for byte/text strings,
                 // arrays, maps, and the major-7 break (RFC 8949 §3, Appendix F).
                 // For unsigned/negative integers (0/1) and tags (6) it is reserved.
@@ -1175,15 +1175,15 @@ impl CborDeserializer {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
-                MAJOR_UINT => {
+                == MAJOR_UINT => {
                     return Result::Ok(i128::from_pair(arg, 0));
                 },
                 // value = -1 - arg; the 128-bit two's-complement pattern is
                 // (~arg) in the low word, all-ones (-1) in the high word.
-                MAJOR_NINT => {
+                == MAJOR_NINT => {
                     return Result::Ok(i128::from_pair(~arg, -1));
                 },
-                MAJOR_TAG => {
+                == MAJOR_TAG => {
                     if is_passthrough_tag(arg) {
                         continue;
                     }
@@ -1220,17 +1220,17 @@ impl CborDeserializer {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
-                MAJOR_UINT => {
+                == MAJOR_UINT => {
                     return Result::Ok(u128::from_u64(arg));
                 },
-                MAJOR_NINT => {
+                == MAJOR_NINT => {
                     builtin::cold_path();
                     return Result::Err(DeserializeError::overflow(
                         "negative integer for an unsigned type",
                         self.pos as i64,
                     ));
                 },
-                MAJOR_TAG => {
+                == MAJOR_TAG => {
                     if is_passthrough_tag(arg) {
                         continue;
                     }
@@ -1316,20 +1316,20 @@ impl CborDeserializer {
         }
         let [major, ai, arg, indef] = head;
         match major {
-            MAJOR_UINT | MAJOR_NINT => {
+            == MAJOR_UINT | == MAJOR_NINT => {
                 return Result::Ok(());
             },
-            MAJOR_SIMPLE => {
+            == MAJOR_SIMPLE => {
                 if indef {
                     builtin::cold_path();
                     return Result::Err(self.unexpected_break());
                 }
                 return Result::Ok(());
             },
-            MAJOR_BYTES | MAJOR_TEXT => {
+            == MAJOR_BYTES | == MAJOR_TEXT => {
                 return self.skip_string_raw(arg, indef, major);
             },
-            MAJOR_ARRAY => {
+            == MAJOR_ARRAY => {
                 // The threaded `depth`, not `self.depth`: skipping does not
                 // move the deserializer's level.
                 let inner = deeper(depth, self.max_depth, self.pos as i64)?;
@@ -1517,7 +1517,7 @@ impl DeserializeStruct for CborStructAccess {
             let key_range = (unchecked self.de.read_text_key_range(head))?;
             let idx = match S::lookup(self.de.input.slice(key_range.0, key_range.0 + key_range.1)) {
                 Some(i) => i,
-                None => -1,
+                null => -1,
             };
             return Result::Ok(Option::Some(idx));
         }
@@ -1525,7 +1525,7 @@ impl DeserializeStruct for CborStructAccess {
         let key = self.de.deserialize_string()?;
         let idx = match S::lookup(key.as_bytes()) {
             Some(i) => i,
-            None => -1,
+            null => -1,
         };
         return Result::Ok(Option::Some(idx));
     }
@@ -1763,11 +1763,11 @@ impl Deserializer for CborDeserializer {
         // tolerant slow loop.
         let b = self.peek_byte()?;
         match b {
-            INIT_FALSE => {
+            == INIT_FALSE => {
                 self.pos += 1;
                 return Result::Ok(false);
             },
-            INIT_TRUE => {
+            == INIT_TRUE => {
                 self.pos += 1;
                 return Result::Ok(true);
             },
@@ -1779,17 +1779,17 @@ impl Deserializer for CborDeserializer {
             // Gate on `ai`, not `arg`: for a float head (ai 25/26/27) `arg` holds
             // the float bits, which could coincidentally equal 20/21.
             match major {
-                MAJOR_SIMPLE => match ai {
-                    SIMPLE_FALSE => {
+                == MAJOR_SIMPLE => match ai {
+                    == SIMPLE_FALSE => {
                         return Result::Ok(false);
                     },
-                    SIMPLE_TRUE => {
+                    == SIMPLE_TRUE => {
                         return Result::Ok(true);
                     },
                     _ => {
                     },
                 },
-                MAJOR_TAG && is_passthrough_tag(arg) => {
+                == MAJOR_TAG && is_passthrough_tag(arg) => {
                     continue;
                 },
                 _ => {
@@ -1812,7 +1812,7 @@ impl Deserializer for CborDeserializer {
                     Result::Ok(c);
                 }
             },
-            None => {
+            null => {
                 builtin::cold_path();
                 Result::Err(DeserializeError::invalid_value("empty string for char", self.pos as i64));
             },
@@ -1833,10 +1833,10 @@ impl Deserializer for CborDeserializer {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
-                MAJOR_TEXT => {
+                == MAJOR_TEXT => {
                     return self.read_text_body(arg, indef);
                 },
-                MAJOR_TAG && is_passthrough_tag(arg) => {
+                == MAJOR_TAG && is_passthrough_tag(arg) => {
                     continue;
                 },
                 _ => {
@@ -1851,12 +1851,12 @@ impl Deserializer for CborDeserializer {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
-                MAJOR_BYTES => {
+                == MAJOR_BYTES => {
                     return self.read_bytes_body(arg, indef);
                 },
                 // An unknown tag wrapping a byte string passes through (the
                 // content is the byte sequence); self-described too.
-                MAJOR_TAG => {
+                == MAJOR_TAG => {
                     continue;
                 },
                 _ => {
@@ -1938,15 +1938,15 @@ impl Deserializer for CborDeserializer {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
-                MAJOR_TAG && arg == TAG_SELF_DESCRIBED => {
+                == MAJOR_TAG && arg == TAG_SELF_DESCRIBED => {
                     continue;
                 },
-                MAJOR_TEXT => {
+                == MAJOR_TEXT => {
                     let name = self.read_text_body(arg, indef)?;
                     let depth = self.depth;
                     return Result::Ok(CborVariantAccess { de: self, depth, variant: name, is_map: false, indef: false });
                 },
-                MAJOR_MAP => {
+                == MAJOR_MAP => {
                     // External tagging encodes a payload-carrying variant as a map
                     // with exactly one pair; any other pair count would desync the
                     // decoder (the extra pairs re-parse as following items).
@@ -1986,37 +1986,37 @@ impl Deserializer for CborDeserializer {
             // delegate to `begin_seq` / `begin_map`, which retain `self`.
             let major = self.peek_byte()? >> 5;
             match major {
-                MAJOR_UINT => {
+                == MAJOR_UINT => {
                     let m = self.read_unsigned_u128()?;
                     if m.low() <= i64_max {
                         return visitor.visit_i64(m.low() as i64);
                     }
                     return visitor.visit_u64(m.low());
                 },
-                MAJOR_NINT => {
+                == MAJOR_NINT => {
                     let v = self.read_signed_i128()?;
                     if v >= i64_min128 {
                         return visitor.visit_i64(v.low() as i64);
                     }
                     return visitor.visit_i128(v);
                 },
-                MAJOR_BYTES => {
+                == MAJOR_BYTES => {
                     let bytes = self.deserialize_bytes()?;
                     return visitor.visit_bytes(bytes);
                 },
-                MAJOR_TEXT => {
+                == MAJOR_TEXT => {
                     let s = self.deserialize_string()?;
                     return visitor.visit_string(s);
                 },
-                MAJOR_ARRAY => {
+                == MAJOR_ARRAY => {
                     let mut seq = self.begin_seq()?;
                     return visitor.visit_seq(&mut seq);
                 },
-                MAJOR_MAP => {
+                == MAJOR_MAP => {
                     let mut map = self.begin_map()?;
                     return visitor.visit_map(&mut map);
                 },
-                MAJOR_TAG => {
+                == MAJOR_TAG => {
                     let start = self.pos;
                     let [tmajor, tai, tag, tindef] = self.read_head()?;
                     if tag == TAG_BIGNUM_POS {
@@ -2069,25 +2069,25 @@ impl Deserializer for CborDeserializer {
                     // `arg` holds the float bits, which must not be mistaken for a
                     // simple value.
                     match ai {
-                        SIMPLE_FALSE => {
+                        == SIMPLE_FALSE => {
                             return visitor.visit_bool(false);
                         },
-                        SIMPLE_TRUE => {
+                        == SIMPLE_TRUE => {
                             return visitor.visit_bool(true);
                         },
-                        SIMPLE_NULL => {
+                        == SIMPLE_NULL => {
                             return visitor.visit_null();
                         },
-                        SIMPLE_UNDEFINED => {
+                        == SIMPLE_UNDEFINED => {
                             return visitor.visit_undefined();
                         },
-                        AI_2BYTE => {
+                        == AI_2BYTE => {
                             return visitor.visit_f64(decode_half(arg));
                         },
-                        AI_4BYTE => {
+                        == AI_4BYTE => {
                             return visitor.visit_f64(f32::from_bits(arg as u32) as f64);
                         },
-                        AI_8BYTE => {
+                        == AI_8BYTE => {
                             return visitor.visit_f64(f64::from_bits(arg));
                         },
                         _ => {

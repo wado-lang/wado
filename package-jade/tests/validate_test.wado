@@ -151,7 +151,7 @@ test "a reference to a document nobody supplied is unresolved at compile" {
     let Unresolved(u) = e else {
         panic(`${e}`);
     };
-    assert u.uri matches { None };
+    assert u.uri matches { null };
     assert u.pointer == "/items/$ref";
     assert `${u.target}` == "https://x.test/other.json#/a";
 }
@@ -294,7 +294,7 @@ test "a schema built breaking a keyword's rule is an error at compile" {
 
 test "a pattern outside the supported syntax is an error at compile" {
     let e = invalid(Validator::compile(&Schema::parse(#"{"pattern": "(?<=a)b"}"#).unwrap()));
-    assert e.uri matches { None };
+    assert e.uri matches { null };
     assert e.pointer == "/pattern";
 }
 

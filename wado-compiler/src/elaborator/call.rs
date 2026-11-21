@@ -1693,7 +1693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A bare case constructs (`Some(x)`) only where the expected type
         // supplies it, and then ahead of any function of that name.
         if let CalleeIdentKind::AsIs(bare) = callee_kind
-            && !bare.name.contains("::")
+            && (!bare.name.contains("::") || bare.has_inferred_qualifier())
         {
             match self.bare_case(bare, expected_type) {
                 BareCase::Of { owner, spelled } => {

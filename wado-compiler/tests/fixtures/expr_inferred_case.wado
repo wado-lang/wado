@@ -1,0 +1,30 @@
+// `_::Case` names a case of the expected type in an expression, as it does in
+// a pattern. It never names a binding: a local spelled like the case is
+// passed over.
+
+enum Color {
+    Red,
+    Green,
+}
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+fn paint() -> Color {
+    let Red = 1;
+    assert Red == 1;
+    return _::Red;
+}
+
+test {
+    let c: Color = _::Green;
+    assert c matches { _::Green } && paint() matches { _::Red };
+    let s: Shape = _::Circle(2.0);
+    assert s matches { Circle(r) && r == 2.0 };
+    let o: Option<i32> = _::Some(1);
+    assert o == Option::Some(1);
+    let shapes: List<Shape> = [_::Point, _::Circle(1.0)];
+    assert shapes[0] matches { _::Point };
+}

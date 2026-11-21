@@ -63,13 +63,13 @@ fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
 fn f64_to_string_exp(f: f64) -> String {
     let [is_special, is_neg, kind] = check_special(f);
     if is_special {
-        if kind matches { Zero } {
+        if kind matches { _::Zero } {
             if is_neg {
                 return "-0e+00";
             }
             return "0e+00";
         }
-        if kind matches { Inf } {
+        if kind matches { _::Inf } {
             if is_neg {
                 return "-Inf";
             }

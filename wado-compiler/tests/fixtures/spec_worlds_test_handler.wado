@@ -22,7 +22,7 @@ fn request_for(path: String) -> [Request, FutureWritable<Result<Option<Trailers>
 
 test "only the root is served" {
     let [request, trailers_tx] = request_for("/admin");
-    assert handle(request) matches { Err(HttpRequestDenied) };
+    assert handle(request) matches { Err(_::HttpRequestDenied) };
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 

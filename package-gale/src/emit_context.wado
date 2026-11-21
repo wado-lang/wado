@@ -196,7 +196,7 @@ impl EmitCursor {
 
     /// The alternative's shared local for a label, where it has one.
     pub fn shared_label<S: AsStrSlice>(&self, is_token: bool, base: S) -> Option<&AltBinding> {
-        return self.alt_bindings.iter_ref().find(|b| b.reach matches { Shared } && b.binds(is_token, &base));
+        return self.alt_bindings.iter_ref().find(|b| b.reach matches { _::Shared } && b.binds(is_token, &base));
     }
 
     /// The rendered expected-token set the action about to be emitted would see.
@@ -744,7 +744,7 @@ impl EmitContext {
     /// Render what an `Admits` admits, as a condition on `expr`.
     pub fn admits_check_str<S: AsStrSlice>(&mut self, admits: &Admits, expr: S) -> String {
         return match admits {
-            Everything(_) | Untestable => "true",
+            Everything(_) | _::Untestable => "true",
             Kinds(kinds) => self.kind_check_str(kinds, expr),
         };
     }

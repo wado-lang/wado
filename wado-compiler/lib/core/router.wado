@@ -137,7 +137,7 @@ impl IndexValue<String> for PathParams {
     fn index_value(&self, name: String) -> String {
         return match self.get(name) {
             Some(v) => v,
-            None => panic(`path param '${name}' not found`),
+            null => panic(`path param '${name}' not found`),
         };
     }
 }
@@ -195,7 +195,7 @@ impl MethodTable {
     fn slot(&self, method_opt: &Option<Method>) -> i32 {
         return match method_opt {
             Some(method) => self.find(method),
-            None => self.any_idx,
+            null => self.any_idx,
         };
     }
 
@@ -509,7 +509,7 @@ impl<H> Router<H> {
         let method = request.get_method();
         let pq = match request.get_path_with_query() {
             Some(s) => s,
-            None => "/",
+            null => "/",
         };
         let path = strip_query(pq);
         return self.match_path(method, &path);
@@ -827,7 +827,7 @@ impl DeserializeStruct for PathParamsStructAccess {
         self.de.cursor += 1;
         let idx = match S::lookup(name.as_bytes()) {
             Some(v) => v,
-            None => -1,
+            null => -1,
         };
         return Result::Ok(Option::Some(idx));
     }

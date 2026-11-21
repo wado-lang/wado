@@ -34,22 +34,22 @@ struct P {
 
 fn describe_color(c: Color) -> String {
     return match c {
-        Red | Blue => "cool",
-        Green => "warm",
+        _::Red | _::Blue => "cool",
+        _::Green => "warm",
     };
 }
 
 fn is_horizontal(d: Direction) -> bool {
     return match d {
-        East | West => true,
-        North | South => false,
+        _::East | _::West => true,
+        _::North | _::South => false,
     };
 }
 
 fn describe_direction(d: Direction) -> String {
     return match d {
-        North | South => "vertical",
-        East | West => "horizontal",
+        _::North | _::South => "vertical",
+        _::East | _::West => "horizontal",
     };
 }
 
@@ -80,7 +80,7 @@ fn abs_value(e: Expr) -> i32 {
             }
             return n;
         },
-        Zero => 0,
+        _::Zero => 0,
     };
 }
 

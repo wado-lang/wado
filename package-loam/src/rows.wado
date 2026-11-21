@@ -43,7 +43,7 @@ impl Display for RowRefusal {
     fn fmt(&self, f: &mut Formatter) {
         match &self.node {
             Some([output, op]) => f.write_str(`refused at ${*output} = ${*op}: ${self.why}`),
-            None => f.write_str(&self.why),
+            null => f.write_str(&self.why),
         }
     }
 }
@@ -206,7 +206,7 @@ impl Judge {
         let lowered = lowerings(graph, checked);
         for let [at, node] of graph.nodes.into_iter().enumerate() {
             let read = match lowered[at] {
-                Folded | Attended => [] as List<String>,
+                _::Folded | _::Attended => [] as List<String>,
                 Attention(a) => a.operands(),
                 _ => graph_operands(&node).into_iter().filter(|i| node.has_operand(i)).map(|i| node.inputs[i]).collect(),
             };
@@ -214,18 +214,18 @@ impl Judge {
                 refused_at(&node, self.literal(&scopes, &tensor))?;
             }
             match lowered[at] {
-                Folded | Attended => {
+                _::Folded | _::Attended => {
                 },
-                Transposed => {
+                _::Transposed => {
                     transposed[node.outputs[0]] = node.inputs[0];
                     refused_at(&node, lifted_read(lifted, &node.inputs[0]))?;
                 },
-                Alias => {
+                _::Alias => {
                     if lifted.contains(node.inputs[0]) {
                         lifted.insert(node.outputs[0]);
                     }
                 },
-                Branch => {
+                _::Branch => {
                     refused_at(&node, lifted_read(lifted, &node.inputs[0]))?;
                     for let b of branches(&node, checked) {
                         let mut inner = *lifted;
@@ -240,7 +240,7 @@ impl Judge {
                         }
                     }
                 },
-                Operation => refused_at(&node, self.operation(&node, checked, lifted, &transposed, graph.opset))?,
+                _::Operation => refused_at(&node, self.operation(&node, checked, lifted, &transposed, graph.opset))?,
                 Attention(a) => {
                     for let tensor of a.operands() {
                         refused_at(&node, lifted_read(lifted, &tensor))?;
@@ -316,7 +316,7 @@ impl Judge {
                 "it attends with each row's lengths, and its query's rows are not its first axis",
             ),
             Ok(Some(_)) => self.value(p),
-            Ok(None) => null,
+            Ok(null) => null,
         };
     }
 
@@ -366,7 +366,7 @@ impl Judge {
                 lifted.insert(node.outputs[0]);
             } else {
                 for let tensor of read {
-                    if folded_rows(&shapes[tensor], &out, &self.rows) matches { None } {
+                    if folded_rows(&shapes[tensor], &out, &self.rows) matches { null } {
                         return Option::Some(
                             `it meets the rows of ${self.rows} with ${tensor}, which holds more than one element ahead of them`,
                         );

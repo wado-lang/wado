@@ -13,7 +13,7 @@ test "turbofish selects a payload-less case of a generic variant" {
     assert a != Option::<i32>::Some(7);
 
     let b = Maybe::<String>::Nothing;
-    assert b matches { Nothing };
+    assert b matches { _::Nothing };
 }
 
 test "turbofish pins the type parameter of a payload-less case" {
@@ -27,7 +27,7 @@ test "turbofish pins the type parameter of a payload-less case" {
 
 test "a `_` slot still infers from the expected type" {
     let a: Maybe<i32> = Maybe::<_>::Nothing;
-    assert a matches { Nothing };
+    assert a matches { _::Nothing };
 }
 
 test "the payload form still parses" {

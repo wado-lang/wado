@@ -16,31 +16,31 @@ impl W {
 
 test "a null with no context is an Option<!>" {
     let x = null;
-    assert x matches { None };
+    assert x matches { null };
 }
 
 test "a null through a generic parameter" {
-    assert id(null) matches { None };
-    assert wrap(null) matches { Some(None) };
+    assert id(null) matches { null };
+    assert wrap(null) matches { Some(null) };
 }
 
 test "a null as a case payload" {
-    assert Option::Some(null) matches { Some(None) };
-    assert Option::<_>::Some(null) matches { Some(None) };
+    assert Option::Some(null) matches { Some(null) };
+    assert Option::<_>::Some(null) matches { Some(null) };
 }
 
 test "a sibling argument says which Option a null is" {
     let p = pair(null, Option::Some(1));
-    assert p matches { None };
+    assert p matches { null };
     let q = pair(Option::Some(2), null);
     assert q matches { Some(2) };
-    assert W {}.first(null, Option::Some(3)) matches { None };
-    assert W::second(Option::Some(4), null) matches { None };
+    assert W {}.first(null, Option::Some(3)) matches { null };
+    assert W::second(Option::Some(4), null) matches { null };
 }
 
 test "a null takes its context's Option" {
     let x: Option<i32> = null;
-    assert x matches { None };
+    assert x matches { null };
 }
 
 __DATA__

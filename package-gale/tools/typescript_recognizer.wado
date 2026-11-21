@@ -56,7 +56,7 @@ impl TypeScriptParserBase for TsParserBase {
     /// An expression statement may not start with `{`, `function` or
     /// `interface` — those open a block, a declaration and a type instead.
     fn not_open_brace_and_not_function_and_not_interface(&self, p: &Parser) -> bool {
-        resume !p.la(1) matches { TK_OpenBrace | TK_Function_ | TK_Interface };
+        resume !p.la(1) matches { == TK_OpenBrace | == TK_Function_ | == TK_Interface };
     }
 
     /// The token just consumed is `a0` — `for (x of xs)` asks it of `of`.
@@ -94,7 +94,7 @@ struct TsBase {
 /// Whether a token ends an operand, so a following `/` is a division rather
 /// than the start of a regular expression.
 fn ends_operand(kind: i32) -> bool {
-    return kind matches { TK_Identifier | TK_NullLiteral | TK_BooleanLiteral | TK_This | TK_CloseBracket | TK_CloseParen | TK_OctalIntegerLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_StringLiteral | TK_PlusPlus | TK_MinusMinus };
+    return kind matches { == TK_Identifier | == TK_NullLiteral | == TK_BooleanLiteral | == TK_This | == TK_CloseBracket | == TK_CloseParen | == TK_OctalIntegerLiteral | == TK_DecimalLiteral | == TK_HexIntegerLiteral | == TK_StringLiteral | == TK_PlusPlus | == TK_MinusMinus };
 }
 
 impl TypeScriptLexerBase for TsBase {

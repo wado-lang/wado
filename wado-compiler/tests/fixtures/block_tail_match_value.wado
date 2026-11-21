@@ -16,12 +16,12 @@ test "if-expression with match branches" {
     let idx = if cond {
         match pick(1) {
             Some(i) => i,
-            None => -1,
+            null => -1,
         }
     } else {
         match pick(0) {
             Some(i) => i,
-            None => -1,
+            null => -1,
         }
     };
     assert idx == 42;
@@ -33,7 +33,7 @@ test "if-branch block: statements then a tail match" {
         let base = 1;
         match v {
             Some(i) => base + i,
-            None => base,
+            null => base,
         }
     } else {
         0
@@ -57,9 +57,9 @@ test "match arm body block ending in a match" {
     let total = match outer {
         Some(o) => match inner {
             Some(i) => o + i,
-            None => o,
+            null => o,
         },
-        None => -1,
+        null => -1,
     };
     assert total == 42;
 }

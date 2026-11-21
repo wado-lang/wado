@@ -47,8 +47,8 @@ impl Log for KilnLogSink {
     fn event(&mut self, event: Event) {
         if let Some([stream, line]) = kiln_line(&event) {
             match stream {
-                Stdout => log_stdout(line),
-                Stderr => log_stderr(line),
+                _::Stdout => log_stdout(line),
+                _::Stderr => log_stderr(line),
             }
         }
         resume ();
@@ -66,9 +66,9 @@ internal enum KilnStream {
 /// no stream.
 fn kiln_stream(level: Level) -> Option<KilnStream> {
     return match level {
-        Level::Error | Warn => Option::Some(KilnStream::Stderr),
-        Info => Option::Some(KilnStream::Stdout),
-        Debug | Trace => null,
+        Level::Error | _::Warn => Option::Some(KilnStream::Stderr),
+        _::Info => Option::Some(KilnStream::Stdout),
+        _::Debug | _::Trace => null,
     };
 }
 

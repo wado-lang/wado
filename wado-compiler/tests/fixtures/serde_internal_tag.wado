@@ -42,19 +42,19 @@ test "the tag is read wherever it stands" {
     assert read(`\{"use_regex":false,"type":"byte_level","add_prefix_space":true\}`) matches {
         Ok(ByteLevel(b)) && b.add_prefix_space && !b.use_regex
     };
-    assert read(`\{"extra":[1,\{"type":"ws"\}],"type":"ws"\}`) matches { Ok(Whitespace) };
+    assert read(`\{"extra":[1,\{"type":"ws"\}],"type":"ws"\}`) matches { Ok(_::Whitespace) };
 }
 
 test "a payload's missing fields take their defaults, and unknown keys are skipped" {
     assert read(`\{"type":"byte_level","trim_offsets":true\}`) matches {
         Ok(ByteLevel(b)) && !b.add_prefix_space && b.use_regex
     };
-    assert read(`\{"type":"split"\}`) matches { Err(MissingField) };
+    assert read(`\{"type":"split"\}`) matches { Err(_::MissingField) };
 }
 
 test "an unknown or a missing tag is refused" {
-    assert read(`\{"type":"Split","pattern":"x"\}`) matches { Err(UnknownVariant) };
-    assert read(`\{"pattern":"x"\}`) matches { Err(MissingField) };
+    assert read(`\{"type":"Split","pattern":"x"\}`) matches { Err(_::UnknownVariant) };
+    assert read(`\{"pattern":"x"\}`) matches { Err(_::MissingField) };
     assert read(`"ws"`) matches { Err(_) };
 }
 

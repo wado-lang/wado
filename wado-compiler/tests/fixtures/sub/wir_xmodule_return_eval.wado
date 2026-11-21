@@ -28,8 +28,8 @@ pub fn depth(input: &String) -> i32 {
 
 fn go(node: &mini::CstNode) -> i32 {
     return match mini::expr_alt(node) {
-        Num => 1,
-        Paren => {
+        _::Num => 1,
+        _::Paren => {
             let inner = first_node_child(node);
             1 + go(&inner)
         },

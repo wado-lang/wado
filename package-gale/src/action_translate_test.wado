@@ -246,7 +246,7 @@ test "wado_type_default covers the corpus surface" {
     assert wado_type_default("bool") matches { Some(_) };
     assert wado_type_default("String") matches { Some(_) };
     assert wado_type_default("List<String>") matches { Some(_) };
-    assert wado_type_default("SomeUserType") matches { None }, "unknown type has no default";
+    assert wado_type_default("SomeUserType") matches { null }, "unknown type has no default";
 }
 
 test "a lexer body reads $index and $pos off the match window" {
@@ -319,8 +319,8 @@ test "binding reads are unknown once a body reaches through $ctx or does not res
 r : x=ID { p.emit($ctx.toStringTree()); } ;
 s : x=ID { print($nope); } ;
 ").unwrap();
-    assert rule_binding_reads(&g.parser_rules[0], &g.parser_rules) matches { None };
-    assert rule_binding_reads(&g.parser_rules[1], &g.parser_rules) matches { None };
+    assert rule_binding_reads(&g.parser_rules[0], &g.parser_rules) matches { null };
+    assert rule_binding_reads(&g.parser_rules[1], &g.parser_rules) matches { null };
 }
 
 test "a body reads a call's node only through `$label.ctx`" {

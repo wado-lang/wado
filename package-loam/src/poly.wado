@@ -75,7 +75,7 @@ impl Eq for Symbol {
 impl Ord for Symbol {
     fn cmp(&self, other: &Symbol) -> Ordering {
         let by_name = self.name.cmp(&other.name);
-        if !by_name matches { Equal } {
+        if !by_name matches { _::Equal } {
             return by_name;
         }
         return (self.is_derived() as i32).cmp(&(other.is_derived() as i32));
@@ -99,11 +99,11 @@ impl Symbol {
         };
         let [a, b] = [&d.operands[0], d.operands.get(1)];
         return match d.op {
-            Min | Max => a.grows_with(name) && b.unwrap().grows_with(name),
-            CeilDiv | FloorDiv => a.grows_with(name) && !b.unwrap().symbols().contains_str(name),
+            _::Min | _::Max => a.grows_with(name) && b.unwrap().grows_with(name),
+            _::CeilDiv | _::FloorDiv => a.grows_with(name) && !b.unwrap().symbols().contains_str(name),
             // The index itself or the index past the extent, whichever it takes.
-            FromEnd => !a.symbols().contains_str(name) && b.unwrap().grows_with(name),
-            Wrap32 => false,
+            _::FromEnd => !a.symbols().contains_str(name) && b.unwrap().grows_with(name),
+            _::Wrap32 => false,
         };
     }
 
@@ -118,15 +118,15 @@ impl Symbol {
         }
         let a = operands[0];
         let presumed = match d.op {
-            Min => owes(conditions, &d.origin, operands[1].try_sub(&a), `${a} must be at most ${operands[1]}`),
-            Max => owes(conditions, &d.origin, a.try_sub(&operands[1]), `${a} must be at least ${operands[1]}`),
-            FromEnd => owes(conditions, &d.origin, Option::Some(a), `${a} must not be negative`),
-            Wrap32 => {
+            _::Min => owes(conditions, &d.origin, operands[1].try_sub(&a), `${a} must be at most ${operands[1]}`),
+            _::Max => owes(conditions, &d.origin, a.try_sub(&operands[1]), `${a} must be at least ${operands[1]}`),
+            _::FromEnd => owes(conditions, &d.origin, Option::Some(a), `${a} must not be negative`),
+            _::Wrap32 => {
                 let condition = `${a} must fit in int32`;
                 owes(conditions, &d.origin, Poly::constant(i32::MAX as i64).try_sub(&a), condition)
                     && owes(conditions, &d.origin, a.try_sub(&Poly::constant(i32::MIN as i64)), condition);
             },
-            CeilDiv | FloorDiv => {
+            _::CeilDiv | _::FloorDiv => {
                 return Option::Some(Poly::quotient(d.op, &a, &operands[1], &d.origin));
             },
         };
@@ -194,24 +194,24 @@ impl Derivation {
     fn written(&self, names: &HashMap<String, String>, code: bool) -> String {
         let args: List<String> = self.operands.into_iter().map(|o| o.written(names, code)).collect();
         return match self.op {
-            Min | Max => {
-                let name = if self.op matches { Min } { "min" } else { "max" };
+            _::Min | _::Max => {
+                let name = if self.op matches { _::Min } { "min" } else { "max" };
                 if code {
                     `i64::${name}(${args[0]}, ${args[1]})`;
                 } else {
                     `${name}(${args[0]}, ${args[1]})`;
                 }
             },
-            CeilDiv | FloorDiv => {
-                let rounding = if self.op matches { CeilDiv } { "ceil" } else { "floor" };
+            _::CeilDiv | _::FloorDiv => {
+                let rounding = if self.op matches { _::CeilDiv } { "ceil" } else { "floor" };
                 if code {
                     `${receiver(&self.operands[0], &args[0])}.div_${rounding}(${args[1]})`;
                 } else {
                     `${rounding}(${grouped(&self.operands[0], &args[0])} / ${grouped(&self.operands[1], &args[1])})`;
                 }
             },
-            FromEnd => `from_end(${args[0]}, ${args[1]})`,
-            Wrap32 => if code { `((${args[0]}) as i32 as i64)` } else { `wrap32(${args[0]})` },
+            _::FromEnd => `from_end(${args[0]}, ${args[1]})`,
+            _::Wrap32 => if code { `((${args[0]}) as i32 as i64)` } else { `wrap32(${args[0]})` },
         };
     }
 
@@ -219,14 +219,14 @@ impl Derivation {
     fn range(&self) -> [i128, i128] {
         let [low, high] = self.operands[0].bounds();
         return match self.op {
-            Min => {
+            _::Min => {
                 let [l, h] = self.operands[1].bounds();
                 [
                     i128::min(low, l),
                     i128::min(high, h),
                 ];
             },
-            Max => {
+            _::Max => {
                 let [l, h] = self.operands[1].bounds();
                 [
                     i128::max(low, l),
@@ -235,7 +235,7 @@ impl Derivation {
             },
             // A quotient is monotonic in each operand for a positive divisor,
             // so its bounds lie at the corners.
-            CeilDiv | FloorDiv => {
+            _::CeilDiv | _::FloorDiv => {
                 let [l, h] = self.operands[1].bounds();
                 let mut corners: List<i128> = [];
                 for let a of [low, high] {
@@ -251,14 +251,14 @@ impl Derivation {
                 [if low == -REACH_LIMIT { low } else { q_low }, if high == REACH_LIMIT { high } else { q_high }];
             },
             // The index where it is not negative, and past it the extent's reach.
-            FromEnd => {
+            _::FromEnd => {
                 let [l, h] = self.operands[1].bounds();
                 [
                     i128::min(0, lower_sum(low, l)),
                     i128::max(high, upper_sum(h, -1)),
                 ];
             },
-            Wrap32 => [i32::MIN as i128, i32::MAX as i128],
+            _::Wrap32 => [i32::MIN as i128, i32::MAX as i128],
         };
     }
 
@@ -268,20 +268,20 @@ impl Derivation {
     fn at_least(&self, x: &Poly, budget: &mut i32) -> bool {
         let a = &self.operands[0];
         return match self.op {
-            Min => x.at_most_within(a, budget) && x.at_most_within(&self.operands[1], budget),
-            Max => x.at_most_within(a, budget) || x.at_most_within(&self.operands[1], budget),
+            _::Min => x.at_most_within(a, budget) && x.at_most_within(&self.operands[1], budget),
+            _::Max => x.at_most_within(a, budget) || x.at_most_within(&self.operands[1], budget),
             // `floor(a / d) >= x` exactly where `a >= d * x`, and the ceiling is
             // never below the floor.
-            CeilDiv | FloorDiv => match x.try_mul(&self.operands[1]) {
+            _::CeilDiv | _::FloorDiv => match x.try_mul(&self.operands[1]) {
                 Some(dx) => dx.at_most_within(a, budget),
-                None => false,
+                null => false,
             },
-            FromEnd => x.at_most_within(a, budget)
+            _::FromEnd => x.at_most_within(a, budget)
                 && match a.try_add(&self.operands[1]) {
                     Some(past) => x.at_most_within(&past, budget),
-                    None => false,
+                    null => false,
                 },
-            Wrap32 => false,
+            _::Wrap32 => false,
         };
     }
 
@@ -289,20 +289,20 @@ impl Derivation {
     fn at_most(&self, x: &Poly, budget: &mut i32) -> bool {
         let a = &self.operands[0];
         return match self.op {
-            Min => a.at_most_within(x, budget) || self.operands[1].at_most_within(x, budget),
-            Max => a.at_most_within(x, budget) && self.operands[1].at_most_within(x, budget),
+            _::Min => a.at_most_within(x, budget) || self.operands[1].at_most_within(x, budget),
+            _::Max => a.at_most_within(x, budget) && self.operands[1].at_most_within(x, budget),
             // `ceil(a / d) <= x` exactly where `a <= d * x`, for an integer `x`.
-            CeilDiv => match x.try_mul(&self.operands[1]) {
+            _::CeilDiv => match x.try_mul(&self.operands[1]) {
                 Some(dx) => a.at_most_within(&dx, budget),
-                None => false,
+                null => false,
             },
-            FloorDiv => floor_at_most(a, &self.operands[1], x, budget).unwrap_or(false),
-            FromEnd => a.at_most_within(x, budget)
+            _::FloorDiv => floor_at_most(a, &self.operands[1], x, budget).unwrap_or(false),
+            _::FromEnd => a.at_most_within(x, budget)
                 && match a.try_add(&self.operands[1]) {
                     Some(past) => past.at_most_within(x, budget),
-                    None => false,
+                    null => false,
                 },
-            Wrap32 => false,
+            _::Wrap32 => false,
         };
     }
 }
@@ -322,7 +322,7 @@ fn quoted(name: &String) -> String {
     let identifier = match chars.next() {
         Some(first) => (first.is_ascii_alphabetic() || first == '_')
             && chars.all(|c| c.is_ascii_alphanumeric() || c == '_'),
-        None => false,
+        null => false,
     };
     if identifier {
         return *name;
@@ -643,7 +643,7 @@ impl Poly {
     fn at_most_within(&self, other: &Poly, budget: &mut i32) -> bool {
         return match other.try_sub(self) {
             Some(d) => d.nonnegative_within(budget),
-            None => false,
+            null => false,
         };
     }
 
@@ -680,7 +680,7 @@ impl Poly {
             let holds = if t.coefficient == 1 {
                 match Poly::constant(0).try_sub(&rest) {
                     Some(floor) => d.at_least(&floor, budget),
-                    None => false,
+                    null => false,
                 }
             } else {
                 d.at_most(&rest, budget);
@@ -701,7 +701,7 @@ impl Poly {
         }
         return match Poly::constant(-1).try_sub(self) {
             Some(below) => below.is_nonnegative(),
-            None => false,
+            null => false,
         };
     }
 
@@ -841,8 +841,8 @@ fn product(a: i128, b: i128) -> i128 {
 /// polynomial, and the span between any two `i64`, lie past `i64`.
 fn rounded(op: Op, a: i128, d: i128) -> i128 {
     return match op {
-        CeilDiv => a.div_ceil(d),
-        FloorDiv => a.div_floor(d),
+        _::CeilDiv => a.div_ceil(d),
+        _::FloorDiv => a.div_floor(d),
         _ => unreachable(),
     };
 }
@@ -895,7 +895,7 @@ impl Poly {
             for let s of t.symbols {
                 factors.push(match s.derivation {
                     Some(d) => d.written(names, code),
-                    None => if code { names.get(s.name).unwrap() } else { quoted(&s.name) },
+                    null => if code { names.get(s.name).unwrap() } else { quoted(&s.name) },
                 });
             }
             out.push_str(&factors.join(" * "));
@@ -941,16 +941,16 @@ impl Poly {
                         let operands: List<String> = d.operands.into_iter().map(|o| o.lowered(to)).collect();
                         to.derived(d.op, operands);
                     },
-                    None => to.symbol(&s.name),
+                    null => to.symbol(&s.name),
                 };
                 written = Option::Some(match written {
                     Some(p) => to.mul(p, factor),
-                    None => factor,
+                    null => factor,
                 });
             }
             sum = Option::Some(match sum {
                 Some(s) => to.add(s, written.unwrap()),
-                None => written.unwrap(),
+                null => written.unwrap(),
             });
         }
         return sum.unwrap();

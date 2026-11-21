@@ -5,7 +5,7 @@ variant G<T> { J(T), N }
 type Wrap<T> = G<T>;
 
 fn show(w: Wrap<i32>) -> i32 {
-    return match w as G<i32> { J(v) => v, N => 0 };
+    return match w as G<i32> { J(v) => v, _::N => 0 };
 }
 
 test {

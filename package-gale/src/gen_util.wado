@@ -13,6 +13,11 @@ pub fn open_chain_arm<S: AsStrSlice>(w: &mut CodeWriter, chained: bool, cond: S)
     }
 }
 
+/// An or-pattern matching any of the constants `names`, as `== A | == B`.
+pub fn constant_patterns(names: &List<String>) -> String {
+    return names.iter_ref().map(|name| `== ${name}`).collect().join(" | ");
+}
+
 pub fn rule_type_name<S: AsStrSlice>(name: S) -> String {
     let mut result = to_pascal_case(name);
     result.push_str("Node");

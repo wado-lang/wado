@@ -65,7 +65,7 @@ impl JavaScriptParserBase for JsParserBase {
     }
 
     fn not_open_brace_and_not_function(&self, p: &Parser) -> bool {
-        resume !p.la(1) matches { TK_OpenBrace | TK_Function_ };
+        resume !p.la(1) matches { == TK_OpenBrace | == TK_Function_ };
     }
 
     fn close_brace(&self, p: &Parser) -> bool {
@@ -91,7 +91,7 @@ struct JsLexerBase {
 /// Whether a token ends an operand, so a following `/` divides rather than
 /// opening a regular expression.
 fn ends_operand(kind: i32) -> bool {
-    return kind matches { TK_Identifier | TK_NullLiteral | TK_BooleanLiteral | TK_This | TK_CloseBracket | TK_CloseParen | TK_OctalIntegerLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_StringLiteral | TK_PlusPlus | TK_MinusMinus };
+    return kind matches { == TK_Identifier | == TK_NullLiteral | == TK_BooleanLiteral | == TK_This | == TK_CloseBracket | == TK_CloseParen | == TK_OctalIntegerLiteral | == TK_DecimalLiteral | == TK_HexIntegerLiteral | == TK_StringLiteral | == TK_PlusPlus | == TK_MinusMinus };
 }
 
 impl JavaScriptLexerBase for JsLexerBase {

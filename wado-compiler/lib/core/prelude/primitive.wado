@@ -625,8 +625,8 @@ impl ParseCharError {
 impl Display for ParseCharError {
     fn fmt(&self, f: &mut Formatter) {
         let message: String = match self.kind {
-            Empty => "cannot parse char from empty string",
-            TooManyChars => "too many characters in string",
+            _::Empty => "cannot parse char from empty string",
+            _::TooManyChars => "too many characters in string",
         };
         f.write_str(&message);
     }
@@ -638,8 +638,8 @@ impl Error for ParseCharError {
 impl From<ParseCharError> for LenientParseError {
     fn from(e: ParseCharError) -> LenientParseError {
         let reason: String = match e.kind() {
-            Empty => "empty char string",
-            TooManyChars => "char string holds more than one character",
+            _::Empty => "empty char string",
+            _::TooManyChars => "char string holds more than one character",
         };
         return LenientParseError::new(reason);
     }
@@ -1416,9 +1416,9 @@ impl LenientFromStr for u64 {
 /// Format a special float (NaN, Inf, or zero) with padding.
 fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_repr: String) {
     let mark = f.mark();
-    if kind matches { NaN } {
+    if kind matches { _::NaN } {
         f.buf.push_str("NaN");
-    } else if kind matches { Inf } {
+    } else if kind matches { _::Inf } {
         f.buf.push_str(&if is_neg { "-inf" } else { "inf" });
     } else {
         f.buf.push_str(&if is_neg { "-" } else { "" });
@@ -1926,7 +1926,7 @@ impl f64 {
         let value = *self;
         let [is_special, is_neg, kind] = check_special(value);
         if is_special {
-            if kind matches { NaN } || kind matches { Inf } {
+            if kind matches { _::NaN } || kind matches { _::Inf } {
                 fmt_float_special(f, is_neg, kind, "0");
                 return;
             }
@@ -1956,7 +1956,7 @@ impl f64 {
         let upper_bool = upper != 0;
         let [is_special, is_neg, kind] = check_special(value);
         if is_special {
-            if kind matches { NaN } || kind matches { Inf } {
+            if kind matches { _::NaN } || kind matches { _::Inf } {
                 fmt_float_special(f, is_neg, kind, "0");
                 return;
             }
