@@ -1791,8 +1791,11 @@ fn check_effects_and_moves<H: CompilerHost>(
         let _span = logger.span("effect-check/moves");
         affine_move_check::check_affine_moves_semantic(sem)
     };
-    let had_error = !diags.is_empty() || !move_errors.is_empty();
-    sem.write_back_effect_rows(&diags.rows);
+    let unmet_bounds = sem.write_back_effect_rows(&diags.rows);
+    let had_error = !diags.is_empty() || !move_errors.is_empty() || !unmet_bounds.is_empty();
+    for error in unmet_bounds {
+        let _ = logger.error(error);
+    }
     for error in diags.effects {
         let _ = logger.error(error);
     }

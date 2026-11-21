@@ -1,0 +1,33 @@
+// A trait that forbids effects is no way around it: an effectful closure meets
+// no impl written for the pure function type.
+
+use { println, Stdout } from "core:cli";
+
+trait Quiet with () {
+    fn run0(&self) -> i32;
+}
+
+impl Quiet for fn() -> i32 {
+    fn run0(&self) -> i32 {
+        return self();
+    }
+}
+
+fn through<T: Quiet>(t: &T) -> i32 {
+    return t.run0();
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    let h = || loud();
+    println(`${through(&h)}`);
+}
+
+__DATA__
+{
+    "compile_error": ":27:16: analysis error: type 'fn() -> i32 with Stdout' does not implement trait 'Quiet' required by bound on 'T'"
+}

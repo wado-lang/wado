@@ -253,87 +253,46 @@ impl View {
         return next;
     }
 
-    pub fn attribute(&self, name: String, value: String) -> View
+    /// Sets the attribute to `value`: a string sets it once, and a closure
+    /// keeps it at what the closure answers, absent where it answers `None`.
+    pub fn attr<V: IntoAttr>(&self, name: String, value: V) -> View
         contract is_stored_as_written(name), "an attribute name must be lowercase, as an HTML element stores it"
     {
-        return self.then(
-            |at: &mut Build| {
-                if at.claiming {
-                    at.attributes[name] = Option::Some(value);
-                }
-                at.node.set_attribute(name, value);
-            },
-        );
-    }
-
-    /// Keeps the attribute at what `value` answers, absent for `None`.
-    pub fn bind_attribute(&self, name: String, value: fn mut() -> Option<String> with Track) -> View
-        contract is_stored_as_written(name), "an attribute name must be lowercase, as an HTML element stores it"
-    {
-        let mut value = value;
+        let attr = value.into_attr();
         return self.then(|at: &mut Build| {
-            at.attributes[name] = null;
-            let target = at.node;
-            observe(|| {
-                match value() {
-                    Some(set) => target.set_attribute(name, set),
-                    null => target.remove_attribute(name),
-                }
-            });
+            match attr {
+                Static(value) => {
+                    if at.claiming {
+                        at.attributes[name] = Option::Some(value);
+                    }
+                    at.node.set_attribute(name, value);
+                },
+                Bound(value) => {
+                    let mut value = value;
+                    at.attributes[name] = null;
+                    let target = at.node;
+                    observe(|| {
+                        match value() {
+                            Some(set) => target.set_attribute(name, set),
+                            null => target.remove_attribute(name),
+                        }
+                    });
+                },
+            }
         });
     }
 
-    /// Adds a text node holding `content`.
-    pub fn text(&self, content: String) -> View {
-        return self.then(|at: &mut Build| at.insert(Dom::document().create_text_node(content)));
-    }
-
-    /// Adds a text node and keeps its text at what `content` answers, taking it
-    /// out when the binding is disposed of.
-    pub fn bind_text(&self, content: fn mut() -> String with Track) -> View {
-        let mut content = content;
+    /// Adds `kids` after the children added so far, in order. Each may be a
+    /// different kind of child; see [`IntoChild`].
+    pub fn children<..C: IntoChild>(&self, kids: [..C]) -> View {
+        let mut steps: List<fn mut(&mut Build) with (Track, Dom)> = [];
+        for let kid of kids {
+            steps.push(kid.into_child().step);
+        }
         return self.then(|at: &mut Build| {
-            let shown = Dom::document().create_text_node("");
-            at.insert(shown);
-            on_cleanup(|| detach(shown));
-            observe(|| shown.set_data(content()));
-        });
-    }
-
-    /// Shows what `render` makes at this point among the element's children
-    /// while `when` answers true. It renders anew each time it shows, and
-    /// disposes of what it hides.
-    pub fn show(&self, when: fn mut() -> bool with Track, render: fn mut() -> View with (Track, Dom)) -> View {
-        let mut render = render;
-        return self.place(when, |visible| visible, |_| render());
-    }
-
-    /// Shows what `render` makes for the key `key` answers, at this point
-    /// among the element's children. It keeps that subtree while the key stays
-    /// equal, and disposes of it for the next one when the key changes.
-    pub fn switch<K: Eq>(&self, key: fn mut() -> K with Track, render: fn mut(K) -> View with (Track, Dom)) -> View {
-        return self.place(key, |_| true, render);
-    }
-
-    fn place<K: Eq>(
-        &self,
-        key: fn mut() -> K with Track,
-        shows: fn(K) -> bool,
-        render: fn mut(K) -> View with (Track, Dom),
-    ) -> View {
-        return self.then(|at: &mut Build| place(at, key, shows, render));
-    }
-
-    pub fn child(&self, child: View) -> View {
-        return self.then(|at: &mut Build| {
-            build_in(at, child);
-        });
-    }
-
-    pub fn children(&self, children: List<View>) -> View {
-        return self.then(|at: &mut Build| {
-            for let child of children {
-                build_in(at, child);
+            for let step of steps {
+                let mut step = step;
+                step(at);
             }
         });
     }
@@ -342,21 +301,156 @@ impl View {
         return self.then(|at: &mut Build| on(at.node, type, handler));
     }
 
-    /// Hands the element to `use_node` once it is built or claimed.
-    pub fn with_node(&self, use_node: fn mut(Element) with (Track, Dom)) -> View {
-        let mut use_node = use_node;
-        return self.then(|at: &mut Build| use_node(at.node));
+    /// Hands the element to `target` once it is built or claimed.
+    pub fn node_ref(&self, target: NodeRef) -> View {
+        return self.then(|at: &mut Build| {
+            *target.slot = Option::Some(at.node);
+        });
     }
+}
 
-    /// Keeps the element's children at one per item, in the items' order. An
-    /// item equal to one already shown keeps its child, and whatever `render`
-    /// made for an item that left is disposed of.
-    pub fn each<T: Eq>(
-        &self,
-        items: fn mut() -> List<T> with Track,
-        render: fn mut(T) -> View with (Track, Dom),
-    ) -> View {
-        return self.then(|at: &mut Build| each(at, items, render));
+/// What an attribute is set to: once, or kept at what a closure answers.
+pub variant Attr {
+    Static(String),
+    Bound(fn mut() -> Option<String> with Track),
+}
+
+/// A value `View::attr` sets an attribute to.
+pub trait IntoAttr with () {
+    fn into_attr(self) -> Attr;
+}
+
+impl IntoAttr for String {
+    fn into_attr(self) -> Attr {
+        return Attr::Static(self);
+    }
+}
+
+impl IntoAttr for fn() -> String with Track {
+    fn into_attr(self) -> Attr {
+        return Attr::Bound(|| Option::Some(self()));
+    }
+}
+
+impl IntoAttr for fn mut() -> String with Track {
+    fn into_attr(self) -> Attr {
+        let mut value = self;
+        return Attr::Bound(|| Option::Some(value()));
+    }
+}
+
+impl IntoAttr for fn() -> Option<String> with Track {
+    fn into_attr(self) -> Attr {
+        return Attr::Bound(|| self());
+    }
+}
+
+impl IntoAttr for fn mut() -> Option<String> with Track {
+    fn into_attr(self) -> Attr {
+        return Attr::Bound(self);
+    }
+}
+
+/// One child of an element, built where the build has reached among the
+/// element's children.
+pub struct Child {
+    step: fn mut(&mut Build) with (Track, Dom),
+}
+
+/// A value `View::children` takes: a `View`, a `String` for a text node, a
+/// closure answering a `String` for a text node kept at what it answers, or a
+/// `Child` that `show`, `switch` or `each` made.
+pub trait IntoChild with () {
+    fn into_child(self) -> Child;
+}
+
+impl IntoChild for Child {
+    fn into_child(self) -> Child {
+        return self;
+    }
+}
+
+impl IntoChild for View {
+    fn into_child(self) -> Child {
+        return Child {
+            step: |at: &mut Build| {
+                build_in(at, self);
+            },
+        };
+    }
+}
+
+impl IntoChild for String {
+    fn into_child(self) -> Child {
+        return Child { step: |at: &mut Build| at.insert(Dom::document().create_text_node(self)) };
+    }
+}
+
+impl IntoChild for fn() -> String with Track {
+    fn into_child(self) -> Child {
+        return bound_text(|| self());
+    }
+}
+
+impl IntoChild for fn mut() -> String with Track {
+    fn into_child(self) -> Child {
+        return bound_text(self);
+    }
+}
+
+/// A text node kept at what `content` answers, taken out when the binding is
+/// disposed of.
+fn bound_text(content: fn mut() -> String with Track) -> Child {
+    let mut content = content;
+    return Child {
+        step: |at: &mut Build| {
+            let shown = Dom::document().create_text_node("");
+            at.insert(shown);
+            on_cleanup(|| detach(shown));
+            observe(|| shown.set_data(content()));
+        },
+    };
+}
+
+/// Shows what `render` makes while `when` answers true. It renders anew each
+/// time it shows, and disposes of what it hides.
+pub fn show(when: fn mut() -> bool with Track, render: fn mut() -> View with (Track, Dom)) -> Child {
+    let mut render = render;
+    return Child { step: |at: &mut Build| place(at, when, |visible| visible, |_| render()) };
+}
+
+/// Shows what `render` makes for the key `key` answers. It keeps that subtree
+/// while the key stays equal, and disposes of it for the next one when the key
+/// changes.
+pub fn switch<K: Eq>(key: fn mut() -> K with Track, render: fn mut(K) -> View with (Track, Dom)) -> Child {
+    return Child { step: |at: &mut Build| place(at, key, |_| true, render) };
+}
+
+/// Keeps one child per item, in the items' order. An item equal to one
+/// already shown keeps its child, and whatever `render` made for an item that
+/// left is disposed of.
+pub fn each<T: Eq>(items: fn mut() -> List<T> with Track, render: fn mut(T) -> View with (Track, Dom)) -> Child {
+    return Child { step: |at: &mut Build| keep_rows(at, items, render) };
+}
+
+/// The element a view hands over once it is built or claimed. A copy is the
+/// same reference.
+pub struct NodeRef {
+    slot: &mut Option<Element>,
+}
+
+pub fn node_ref() -> NodeRef {
+    let mut slot: Option<Element> = null;
+    return NodeRef { slot: &mut slot };
+}
+
+impl NodeRef {
+    /// The element, once the view naming this ref is built.
+    pub fn get(&self) -> Element {
+        let Some(node) = *self.slot else {
+            panic("a node ref is read before its view is built");
+        };
+        return node;
     }
 }
 
@@ -374,6 +468,14 @@ pub fn on(target: EventTarget, type: String, handler: fn mut(Event) with (Track,
 fn detach(node: Node) with Dom {
     if let Some(holder) = node.parent_node() {
         holder.remove_child(node);
+    }
+}
+
+/// Puts `anchor` back at the end of `parent` where other code took it out, so
+/// what it ends stands in the parent again.
+fn hold_in(parent: Element, anchor: Node) with Dom {
+    if anchor.parent_node() != Option::Some(parent as Node) {
+        parent.append_child(anchor);
     }
 }
 
@@ -419,6 +521,7 @@ fn place<K: Eq>(
     shows: fn(K) -> bool,
     render: fn mut(K) -> View with (Track, Dom),
 ) with (Track, Dom) {
+    let parent = at.node;
     let mut key = key;
     let mut render = render;
     // Holds the place, so siblings added later stay after the subtree.
@@ -460,8 +563,9 @@ fn place<K: Eq>(
             remove(made);
             return;
         }
-        if !in_place && let Some(holder) = anchor.parent_node() {
-            holder.insert_before(made.node, Option::Some(anchor as Node));
+        if !in_place {
+            hold_in(parent, anchor);
+            parent.insert_before(made.node, Option::Some(anchor as Node));
         }
         shown = Option::Some(made);
     });
@@ -489,7 +593,7 @@ fn clear_rows<T>(rows: &mut List<Row<T>>) with Dom {
     remove_rows(leaving);
 }
 
-fn each<T: Eq>(
+fn keep_rows<T: Eq>(
     at: &mut Build,
     items: fn mut() -> List<T> with Track,
     render: fn mut(T) -> View with (Track, Dom),
@@ -497,12 +601,15 @@ fn each<T: Eq>(
     let parent = at.node;
     let mut items = items;
     let mut render = render;
+    // Ends the rows, so siblings added later stay after them.
+    let anchor = Dom::document().create_text_node("");
     let mut building = true;
     let mut rows: List<Row<T>> = [];
     let mut disposed = false;
     on_cleanup(|| {
         disposed = true;
         clear_rows(&mut rows);
+        detach(anchor);
     });
     observe(|| {
         let in_place = building;
@@ -539,10 +646,10 @@ fn each<T: Eq>(
             remove_rows(kept);
             return;
         }
-        // The rows are all of the element's children, so served text after
-        // the last one goes before the order is checked.
-        if in_place && at.claiming {
-            at.finish();
+        if in_place {
+            at.insert(anchor);
+        } else {
+            hold_in(parent, anchor);
         }
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.
@@ -556,7 +663,7 @@ fn each<T: Eq>(
                 before[was[i]] = Option::Some(kept[i].rendered.node);
             }
         }
-        if !holds_in_order(parent, &before) {
+        if !holds_in_order(anchor, &before) {
             for let i of 0..<was.len() {
                 was[i] = -1;
             }
@@ -564,7 +671,7 @@ fn each<T: Eq>(
         // The rows already in their old order stay; the rest move in among
         // them, from the last row back.
         let stay = longest_increasing(&was);
-        let mut next: Option<Node> = null;
+        let mut next: Option<Node> = Option::Some(anchor as Node);
         for let mut i = kept.len() - 1; i >= 0; i -= 1 {
             let node = kept[i].rendered.node;
             if !stay[i] {
@@ -576,20 +683,20 @@ fn each<T: Eq>(
     });
 }
 
-// Whether `parent`'s children are exactly `nodes`, in order, the gaps skipped:
-// other code may have moved one.
-fn holds_in_order(parent: Element, nodes: &List<Option<Element>>) -> bool with Dom {
-    let mut child = parent.first_child();
-    for let slot of nodes {
-        let Some(expected) = slot else {
+// Whether the siblings just before `anchor` are exactly `nodes`, in order, the
+// gaps skipped: other code may have moved one.
+fn holds_in_order(anchor: Node, nodes: &List<Option<Element>>) -> bool with Dom {
+    let mut sibling = anchor.previous_sibling();
+    for let mut i = nodes.len() - 1; i >= 0; i -= 1 {
+        let Some(expected) = nodes[i] else {
             continue;
         };
-        if child != Option::Some(expected as Node) {
+        if sibling != Option::Some(expected as Node) {
             return false;
         }
-        child = child.unwrap().next_sibling();
+        sibling = sibling.unwrap().previous_sibling();
     }
-    return child == null;
+    return true;
 }
 
 // Marks a longest strictly increasing subsequence of `values`, skipping the

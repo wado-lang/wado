@@ -38,9 +38,7 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe, KeyedAccess};
-use super::trait_env::{
-    BlanketReceiver, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written, receiver_as_written,
-};
+use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
     MethodInfo, MethodOwner, TypeError, TypeLookup,
@@ -3079,36 +3077,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         span: Span,
     ) {
-        let env = Arc::clone(&self.tysys.trait_env);
-        let (blankets, heads): (Vec<DefId>, Vec<DefId>) = tied
-            .iter()
-            .flatten()
-            .copied()
-            .collect::<IndexSet<_>>()
-            .into_iter()
-            .partition(|&def| {
-                env.blanket_of_block(def)
-                    .is_some_and(|b| matches!(b.receiver, BlanketReceiver::Value))
-            });
-        let blankets: Vec<&ImplHeader> =
-            blankets.iter().map(|def| &env.impl_headers[def]).collect();
-        let heads: Vec<&ImplHeader> = heads.iter().map(|def| &env.impl_headers[def]).collect();
-        let receiver = self.tysys.type_id_to_string(receiver);
-        if let [_, _, ..] = blankets.as_slice() {
-            let _ = self.emit(TypeError::AmbiguousValueBlankets {
-                trait_name: trait_.to_display(),
-                receiver: receiver.clone(),
-                bounds: blankets.iter().map(|h| receiver_as_written(h)).collect(),
-                span,
-            });
-        }
-        if let [_, _, ..] = heads.as_slice() {
-            let _ = self.emit(TypeError::AmbiguousHeadImpls {
-                trait_name: trait_.to_display(),
-                receiver,
-                headers: heads.iter().map(|h| header_as_written(h)).collect(),
-                span,
-            });
+        for error in self.tysys.tied_impl_errors(tied, trait_, receiver, span) {
+            let _ = self.emit(error);
         }
     }
 
