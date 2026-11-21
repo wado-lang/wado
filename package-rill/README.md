@@ -59,6 +59,11 @@ The control-flow children stand among the others, where they are written:
   leaves the longest run of rows already in order where they are, and moves
   the rest.
 
+A control-flow child puts back what it holds only when it updates: `show` when
+`when` changes its answer, `switch` when the key changes, and `each` each time
+its items run. Until then, a subtree that other code removed stays removed, so
+a run that changes nothing checks no placement.
+
 ```wado
 use { Signal, each, element, show, signal } from "wado-lang:rill";
 
