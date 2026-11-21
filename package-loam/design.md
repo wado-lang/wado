@@ -407,8 +407,10 @@ layer `l` runs, the layer whose experts are needed last is `l` itself, then
 longest ago alone, `Recent`, is the worst order for a cycle: it gives up the
 experts of the layer that runs next.
 
-`HeldExperts` counts the experts the steps picked and how many a pool held, and
-records each host step's fetch. The routing reads nothing the pools hold, so
+`HeldExperts` counts the experts the steps picked and how many a pool held.
+After `record_fetches`, it also records each host step's fetch, with the shapes
+it planned the pools by. A replay counts each pick of a layer its budget gives
+its own experts as held, so every budget is measured over the same picks. The routing reads nothing the pools hold, so
 `replayed` reruns one record under any order and budget. `Farthest` knows when
 each expert is picked next, so no order holds more than it does.
 

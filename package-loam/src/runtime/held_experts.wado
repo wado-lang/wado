@@ -445,8 +445,12 @@ impl HeldExperts {
             return l.shape(|w| g.pool_slots(w.kind, &w.extents));
         }).collect();
         let plans = planned(&shapes, budget)?;
+        return Result::Ok(HeldExperts::of(layouts, shapes, plans));
+    }
+
+    fn of(layouts: List<ExpertLayout>, shapes: List<ExpertShape>, plans: List<List<LayerRun>>) -> HeldExperts {
         let [runs, of_step] = shared_runs(&shapes, &plans, EVICTION);
-        return Result::Ok(HeldExperts {
+        return HeldExperts {
             layouts,
             shapes,
             plans,
@@ -455,7 +459,7 @@ impl HeldExperts {
             counts: ExpertCounts {},
             recording: false,
             fetches: [],
-        });
+        };
     }
 
     /// Pools of `layouts`, each layer holding its own experts, as `g` holds
@@ -469,16 +473,7 @@ impl HeldExperts {
 
     /// No pools, for a model whose weights come whole.
     pub fn none() -> HeldExperts {
-        return HeldExperts {
-            layouts: [],
-            shapes: [],
-            plans: [],
-            runs: [],
-            of_step: HashMap::new(),
-            counts: ExpertCounts {},
-            recording: false,
-            fetches: [],
-        };
+        return HeldExperts::of([], [], []);
     }
 
     /// Records each host step's fetch from here on, for [`Self::fetches`].
