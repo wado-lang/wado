@@ -760,15 +760,15 @@ impl<'a> Interpreter<'a> {
     /// Least recently used last out: a frame's scratch copy is never asked
     /// for again, and must not push out a callee asked for on every call.
     fn arena_reads(&mut self, body: &Body) -> Rc<ArenaReads> {
-        let version = ArenaReads::key(body);
-        let entry = match self.arena_reads.iter().position(|(v, _)| *v == version) {
+        let key = ArenaReads::key(body);
+        let entry = match self.arena_reads.iter().position(|(k, _)| *k == key) {
             Some(at) => self.arena_reads.remove(at),
             None => {
                 if self.arena_reads.len() == MAX_ARENA_READS {
                     self.arena_reads.remove(0);
                 }
                 let reads = ArenaReads::of(body, self.facts.callees, self.facts.ctfe_builtins);
-                (version, Rc::new(reads))
+                (key, Rc::new(reads))
             }
         };
         let reads = Rc::clone(&entry.1);
