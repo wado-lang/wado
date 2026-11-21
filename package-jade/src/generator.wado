@@ -6,7 +6,7 @@ use { Error, InputFile, OutputFile, Request, Response, read_text } from "core:ki
 use { Uri } from "core:uri";
 use { percent_encode } from "core:url";
 use { ModuleSpec } from "lib:wadopoet";
-use { GenerateError, GenerateOptions, generate_in } from "./generate.wado";
+use { GenerateOptions, file_stem, generate_in } from "./generate.wado";
 use { Schema } from "./schema.wado";
 use { SchemaSet } from "./validate.wado";
 
@@ -19,7 +19,7 @@ export struct Options {
 export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream {
     let module = ModuleSpec::from_origin(&req.origin());
     let primary = file_uri(&req.primary.path);
-    let stem = stem(&req.primary.path);
+    let stem = file_stem(&req.primary.path);
     let mut set = SchemaSet::new();
     let mut pending: List<InputFile> = [req.primary];
     for let input of req.inputs {
@@ -59,18 +59,11 @@ fn file_uri(path: &String) -> Uri {
     return Uri::from_str(`file:///${segments.join("/")}`).unwrap();
 }
 
-/// `a/b/api.schema.json` as `api`.
-fn stem(path: &String) -> String {
-    let view = path.as_str_slice();
-    let name = view.slice(view.rfind("/").map(|i| i + 1).unwrap_or(0), view.len());
-    return name.slice(0, name.find(".").unwrap_or(name.len())).to_string();
-}
-
 test "a path's segments are percent-encoded into its URI" {
     assert `${file_uri(&"tests/a b/ü.json")}` == "file:///tests/a%20b/%C3%BC.json";
 }
 
 test "a file's stem drops every extension" {
-    assert stem(&"tests/api.schema.json") == "api";
-    assert stem(&"api") == "api";
+    assert file_stem(&"tests/api.schema.json") == "api";
+    assert file_stem(&"api") == "api";
 }

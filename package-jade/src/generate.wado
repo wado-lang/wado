@@ -109,13 +109,18 @@ fn root_name(root: &SchemaObject, uri: &Uri, root_option: &Option<String>) -> Re
     if `${*uri}` == DEFAULT_BASE {
         return Result::Ok(null);
     }
-    let text = uri.to_string();
-    let file = text.as_str_slice().slice(text.rfind("/").map(|i| i + 1).unwrap_or(0), text.len());
-    let stem = file.slice(0, file.find(".").unwrap_or(file.len()));
-    let Ok(decoded) = percent_decode(stem) else {
+    let Ok(stem) = percent_decode(file_stem(&uri.to_string())) else {
         return Result::Ok(null);
     };
-    return Result::Ok(Option::Some(decl_name(&decoded, &"")?));
+    return Result::Ok(Option::Some(decl_name(&stem, &"")?));
+}
+
+/// The name of the file `path` ends in, every extension left out:
+/// `a/b/api.schema.json` as `api`.
+internal fn file_stem(path: &String) -> String {
+    let view = path.as_str_slice();
+    let name = view.slice(view.rfind("/").map(|i| i + 1).unwrap_or(0), view.len());
+    return name.slice(0, name.find(".").unwrap_or(name.len())).to_string();
 }
 
 /// What a value of a generated type is written as, for a field's default.
@@ -161,9 +166,9 @@ impl Gen {
     fn start(&mut self, uri: &Uri, options: &GenerateOptions) -> Result<(), SchemaError> {
         self.doc = *uri;
         let root = self.set.get(uri).unwrap().into_object();
-        let bare = SchemaObject { ..root, dialect: null, defs: HashMap::new() };
-        if assertions(&bare) == ["$ref"] {
-            self.type_of(&Schema::Object(bare), &"", &"")?;
+        let bare = self.schema_at(&`${*uri}#`).unwrap();
+        if assertions(&bare.into_object()) == ["$ref"] {
+            self.type_of(&bare, &"", &"")?;
         } else {
             let Some(name) = root_name(&root, uri, &options.root)? else {
                 return fail(&"", "has no name: give the `root` option or a `title`");
@@ -659,7 +664,7 @@ impl Gen {
 
     /// `node`, the default of a field of type `ty`, as a Wado expression.
     fn literal(&mut self, ty: &Ty, node: &Node) -> String {
-        let is_null = node.kind() matches { _::Null };
+        let null_node = node.kind() matches { _::Null };
         if ty.lit matches { _::Bool } && let Some(b) = node.as_bool() {
             return `${b}`;
         }
@@ -672,10 +677,10 @@ impl Gen {
         if ty.lit matches { _::Text } && let Some(s) = node.as_str() {
             return wado`"${s.to_string()}"`;
         }
-        if ty.lit matches { _::Unit } && is_null {
+        if ty.lit matches { _::Unit } && null_node {
             return "()";
         }
-        if ty.lit matches { _::Optional } && is_null {
+        if ty.lit matches { _::Optional } && null_node {
             return "null";
         }
         if ty.lit matches { _::Enum } && let Some(s) = node.as_str() {

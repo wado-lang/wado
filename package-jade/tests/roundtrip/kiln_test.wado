@@ -29,6 +29,6 @@ test "a value built from the generated types is written as the schema describes"
         ship_to: Address { street: "t", zip: "y" },
         lines: [line],
     };
-    assert moved.status matches { _::Pending };
+    assert moved.status == OrderStatus::Pending;
     assert to_string(&moved.lines).unwrap() == ##"[{"sku":"b","quantity":1}]"##;
 }
