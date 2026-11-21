@@ -27,7 +27,7 @@ use crate::synthesis::common::{
     option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
 use crate::tir::{
-    CallArg, CaptureSource, EffectRef, ExitScope, FunctionKind, FunctionRef, GlobalInit,
+    CallArg, CaptureSource, EffectRef, ExitScope, FunctionKind, FunctionRef, GlobalInit, GlobalRole,
     InlineHint, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock,
     TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal,
     TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId,
@@ -524,6 +524,7 @@ fn synthesize_dispatch_global(
         visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
+        role: GlobalRole::HandlerSlot,
     };
     let entry_module = project
         .tir_modules

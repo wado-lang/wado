@@ -2655,6 +2655,18 @@ pub struct TirGlobal {
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
+    pub role: GlobalRole,
+}
+
+/// What a global's value may outlive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GlobalRole {
+    /// Held for the rest of the run.
+    Persistent,
+    /// An effect's handler slot. Only a `with` writes it, and every path out
+    /// of the `with` restores what it saved, so what it installs lives no
+    /// longer than the installing frame.
+    HandlerSlot,
 }
 
 #[derive(Debug, Clone)]

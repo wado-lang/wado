@@ -24,6 +24,7 @@
 //! ends, recursion included.
 
 use super::analyze::collect_pattern_bindings;
+use super::funcset::FuncKeySet;
 use super::last_use::collect_child_exprs;
 use super::points_to::{Args, Graph, Handle, HoldsHandle, Site, Slot, Target};
 use crate::flat_package::FlatPackage;
@@ -31,7 +32,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
-    ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
+    GlobalRole, ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::type_table::TypeTable;
@@ -146,6 +147,7 @@ struct Package<'a> {
     calls_by_receiver: IndexMap<TypeId, u32>,
     /// The functions a value of a function type may run, by the type's shape.
     minted: IndexMap<String, IndexSet<u32>>,
+    handler_slots: FuncKeySet,
 }
 
 struct Callee {
@@ -224,7 +226,15 @@ pub fn compute(
         closure_calls,
         calls_by_receiver,
         minted: IndexMap::default(),
+        handler_slots: FuncKeySet::default(),
     };
+    for global in &flat.globals {
+        if global.role == GlobalRole::HandlerSlot {
+            package
+                .handler_slots
+                .insert(global.module_source.clone(), global.name.clone());
+        }
+    }
     package.minted = minted_by_shape(flat, &package);
     let n = flat.functions.len();
     let mut summaries = vec![Summary::default(); n];
@@ -470,6 +480,9 @@ struct Body<'p, 'a> {
     hands_out_payload: bool,
     /// What escapes to code out of sight: its set is every location that may.
     escape: u32,
+    /// What a handler slot holds: code out of sight may run it while it is
+    /// installed, but nothing keeps it past the installing frame.
+    installed: u32,
     /// Each enclosing labeled block's value, and the storage it hands out.
     labels: Vec<(String, u32, u32)>,
     /// The value each expression evaluated to, by its address.
@@ -495,6 +508,7 @@ impl<'p, 'a> Body<'p, 'a> {
         let result = g.node();
         let returned = g.node();
         let escape = g.node();
+        let installed = g.node();
         let id = package.functions[&(func.module_source.clone(), func.name.clone())];
         let local_types = func
             .params
@@ -512,6 +526,7 @@ impl<'p, 'a> Body<'p, 'a> {
             returned,
             hands_out_payload: package.callees[id as usize].hands_out_payload,
             escape,
+            installed,
             labels: Vec::new(),
             values: IndexMap::default(),
             call_storage: IndexMap::default(),
@@ -523,17 +538,21 @@ impl<'p, 'a> Body<'p, 'a> {
         };
         // Whatever escapes may reach, and be stored in, whatever else escapes,
         // and may be called with it.
-        let reached = b.held_by(escape);
-        b.g.copy(reached, escape);
-        b.g.store(escape, escape);
-        b.g.call_site(
-            escape,
-            Site {
-                args: Args::Every(escape),
-                result: escape,
-                fallback: None,
-            },
-        );
+        for world in [escape, installed] {
+            let reached = b.held_by(world);
+            b.g.copy(reached, world);
+            b.g.store(world, escape);
+            b.g.call_site(
+                world,
+                Site {
+                    args: Args::Every(escape),
+                    result: escape,
+                    fallback: None,
+                },
+            );
+        }
+        // A caller's handler is installed when this body runs.
+        b.g.copy(escape, installed);
         if func.is_closure_call() {
             let first = func.params.first().expect("a `$call` takes `self`");
             b.this = Some(b.local(first.local_index));
@@ -553,6 +572,15 @@ impl<'p, 'a> Body<'p, 'a> {
             self.g.inert.insert(node);
         }
         node
+    }
+
+    /// The node standing for a global, both its storage and its value.
+    fn global(&self, module: &ModuleSource, name: &str) -> u32 {
+        if self.package.handler_slots.contains(module, name) {
+            self.installed
+        } else {
+            self.escape
+        }
     }
 
     fn naming(&mut self, loc: u32) -> u32 {
@@ -756,7 +784,10 @@ impl<'p, 'a> Body<'p, 'a> {
                 let loc = self.local(*index);
                 Some(self.naming(loc))
             }
-            TirExprKind::GlobalVarGet { .. } => Some(self.escape),
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => Some(self.global(module_source, name)),
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -1045,7 +1076,10 @@ impl<'p, 'a> Body<'p, 'a> {
                 let loc = self.local(*index);
                 Some(self.naming(loc))
             }
-            TirExprKind::GlobalVarGet { .. } => Some(self.escape),
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => Some(self.global(module_source, name)),
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -1255,10 +1289,18 @@ impl<'p, 'a> Body<'p, 'a> {
         let tt = self.package.type_table;
         match &expr.kind {
             TirExprKind::Local { index, .. } => Some(self.local(*index)),
-            TirExprKind::GlobalVarGet { .. } => Some(self.escape),
-            TirExprKind::GlobalVarSet { value, .. } => {
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => Some(self.global(module_source, name)),
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } => {
                 if let Some(v) = self.eval(value) {
-                    self.g.copy(v, self.escape);
+                    let global = self.global(module_source, name);
+                    self.g.copy(v, global);
                 }
                 None
             }

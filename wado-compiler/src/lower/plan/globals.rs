@@ -16,7 +16,7 @@ use crate::name::{
 };
 use crate::synthesis::common::cold_path_stmt;
 use crate::tir::{
-    FunctionRef, GlobalInit, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
+    FunctionRef, GlobalInit, GlobalRole, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
     TirStmt, TirStmtKind, is_constant_initializer,
 };
 use crate::tir_visitor::{TirRefVisitor, shift_locals};
@@ -502,6 +502,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
+        role: GlobalRole::Persistent,
     });
 
     let mut init_stmts: Vec<TirStmt> = Vec::new();
