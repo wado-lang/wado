@@ -1,0 +1,31 @@
+// The one impl that may answer is written for `Bx<u64>`, so committing to it
+// would settle `T`. The impl settles nothing, so the call asks for an
+// annotation: inferring `T` from it would let an impl written elsewhere later
+// turn the call into an error.
+struct Bx<T> {
+    v: List<T>,
+}
+
+fn mk<T>() -> Bx<T> {
+    return Bx { v: [] };
+}
+
+trait Me with () {
+    fn me(&self) -> Self;
+}
+
+impl Me for Bx<u64> {
+    fn me(&self) -> Self {
+        return Bx { v: [] };
+    }
+}
+
+export fn run() {
+    let c: Bx<u64> = mk().me();
+}
+
+__DATA__
+{
+    "compile_error": ":24:22: analysis error: cannot infer `Bx<T>` far enough to choose which `me` this calls; annotate it",
+    "compile_error_count": 1
+}

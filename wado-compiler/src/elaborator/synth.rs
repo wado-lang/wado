@@ -780,15 +780,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ref_kind =
             RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone());
         if let Some(ref_kind) = ref_kind
-            && let Some(found) = self.find_trait_method_for_type(
-                &ImplTargetKey::Ref(ref_kind),
-                method,
-                type_args.as_deref(),
-                Some(base),
-                span,
-                None,
-                None,
-            )
+            && let Some(found) = self
+                .find_trait_method_for_type(
+                    &ImplTargetKey::Ref(ref_kind),
+                    method,
+                    type_args.as_deref(),
+                    Some(base),
+                    span,
+                    None,
+                    None,
+                )
+                .found()
             && !found.is_blanket_ref_impl
         {
             let owner = found.owner_for(base, &self.tysys.type_table.borrow());
@@ -799,15 +801,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));
         }
         let target = self.impl_target_of(base);
-        let found = self.find_trait_method_for_type(
-            &target,
-            method,
-            type_args.as_deref(),
-            Some(base),
-            span,
-            None,
-            None,
-        )?;
+        let found = self
+            .find_trait_method_for_type(
+                &target,
+                method,
+                type_args.as_deref(),
+                Some(base),
+                span,
+                None,
+                None,
+            )
+            .found()?;
         let info = found.method_info;
         Some(self.return_type_for_receiver(info.return_type, info.owner, receiver))
     }

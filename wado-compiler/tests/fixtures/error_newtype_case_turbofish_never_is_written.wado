@@ -1,0 +1,13 @@
+// A turbofish through a newtype prefix writes `!` for `T`, which settles it as
+// written: the payload `1` must then be a `!`.
+
+type N<T> = Option<T>;
+
+test {
+    let _n = N::Some::<!>(1);
+}
+
+__DATA__
+{
+    "compile_error": ":7:27: analysis error: type mismatch: expected '!', found 'i32'"
+}

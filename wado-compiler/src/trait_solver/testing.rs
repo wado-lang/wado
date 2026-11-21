@@ -1,9 +1,31 @@
 //! What a solver test states a program with.
 
+use super::holds::{self, Holds};
 use super::program::{
-    Fact, ImplDef, ImplOrigin, ParamBound, ParamDef, Program, SolverType, TraitDeclId, TraitDef,
-    TypeDeclId,
+    Env, Fact, ImplDef, ImplOrigin, ParamBound, ParamDef, Program, SolverType, TraitDeclId,
+    TraitDef, TypeDeclId,
 };
+
+/// [`holds::holds`] of a question holding no inference variable.
+pub(super) fn holds(
+    program: &Program,
+    env: &Env,
+    ty: &SolverType,
+    trait_: TraitDeclId,
+) -> Option<Holds> {
+    holds::holds(program, env, ty, trait_).settled()
+}
+
+/// [`holds::holds_with_args`] of a question holding no inference variable.
+pub(super) fn holds_with_args(
+    program: &Program,
+    env: &Env,
+    ty: &SolverType,
+    trait_: TraitDeclId,
+    args: &[SolverType],
+) -> Option<Holds> {
+    holds::holds_with_args(program, env, ty, trait_, args).settled()
+}
 
 pub(super) fn decl(id: TypeDeclId) -> SolverType {
     SolverType::Decl(id, vec![])

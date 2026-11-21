@@ -1,0 +1,20 @@
+// An assignment settles the variable its target's type holds: `x = b` meets
+// `Bx<?T>` with `Bx<u8>`, so `T` is `u8` and the comparison reads a `u8`.
+
+struct Bx<T> {
+    v: List<T>,
+}
+
+impl<T> Bx<T> {
+    fn new() -> Bx<T> {
+        return Bx { v: [] };
+    }
+}
+
+test {
+    let a = Bx::new();
+    let b = Bx::<u8> { v: [200] };
+    let mut x = a;
+    x = b;
+    assert x.v[0] == 200;
+}

@@ -1,0 +1,34 @@
+// The bound of the impl a subscript committed to on an open receiver is
+// checked at what the receiver settles to.
+
+struct Bx<T> {
+    v: Option<T>,
+}
+
+fn mk<T>() -> Bx<T> {
+    return Bx { v: null };
+}
+
+impl<T: Default> IndexValue<i32> for Bx<T> {
+    type Output = T;
+    fn index_value(&self, index: i32) -> T {
+        return T::default();
+    }
+}
+
+struct NoDef {
+    x: i32,
+}
+
+fn takes(_n: NoDef) {}
+
+export fn run() {
+    let b = mk();
+    takes(b[0]);
+}
+
+__DATA__
+{
+    "compile_error": "type 'NoDef' does not implement trait 'Default' required by bound on 'T'",
+    "compile_error_count": 1
+}

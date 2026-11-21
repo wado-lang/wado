@@ -1,0 +1,22 @@
+// A `_` in a trait-qualified call leaves only its own position open: the
+// written `i32` still rules out `Rel<String, bool>`, so the blanket answers
+// and settles the `_` as `bool`. With every position a `_`, the one impl at
+// `Box<i32>` answers and settles it.
+
+struct Box<T> { v: T }
+
+trait Cap with () { fn c(&self) -> i32; }
+impl<T> Cap for Box<T> { fn c(&self) -> i32 { return 1; } }
+
+trait Rel<A, B> with () { fn m(&self) -> String; }
+impl Rel<String, bool> for Box<i32> { fn m(&self) -> String { return "string"; } }
+impl<T: Cap> Rel<i32, bool> for T { fn m(&self) -> String { return "blanket"; } }
+
+trait One<A> with () { fn one(&self) -> String; }
+impl One<i32> for Box<i32> { fn one(&self) -> String { return "one"; } }
+
+test {
+    let x = Box { v: 1 };
+    assert Rel::<i32, _>::m(&x) == "blanket";
+    assert One::<_>::one(&x) == "one";
+}

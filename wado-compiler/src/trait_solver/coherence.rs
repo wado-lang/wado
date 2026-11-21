@@ -40,14 +40,15 @@ pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     errors
 }
 
-/// Record every impl written again after its first copy in
-/// [`Program::duplicates`], which keeps it out of every candidate set.
-pub fn mark_duplicates(program: &mut Program) {
-    program.duplicates = coherence_errors(program)
+/// Record every impl a coherence error rejects in [`Program::rejected`],
+/// which keeps it out of every candidate set: one written again after its
+/// first copy, and a value blanket with no bound to select it.
+pub fn mark_rejected(program: &mut Program) {
+    program.rejected = coherence_errors(program)
         .into_iter()
-        .filter_map(|error| match error {
-            CoherenceError::DuplicateImpl { second, .. } => Some(second),
-            CoherenceError::UnboundedValueBlanket { .. } => None,
+        .map(|error| match error {
+            CoherenceError::DuplicateImpl { second, .. } => second,
+            CoherenceError::UnboundedValueBlanket { impl_ } => impl_,
         })
         .collect();
 }
@@ -107,6 +108,7 @@ fn is_unbounded_value_blanket(def: &ImplDef) -> bool {
         | SolverType::Tuple(_)
         | SolverType::Projection { .. }
         | SolverType::AnyRow => false,
+        SolverType::Var(_) => unreachable!("an impl target holds no inference variable"),
     }
 }
 

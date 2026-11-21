@@ -380,6 +380,61 @@ fn reject_misnumbered_classes<H: CompilerHost>(
     }
 }
 
+/// Each newtype whose base chain returns to it, reported once per cycle at its
+/// first-declared member.
+fn newtype_cycles(
+    modules: &IndexMap<ModuleSource, Module>,
+    resolutions: &Resolutions,
+) -> Vec<(ModuleSource, TypeError)> {
+    let newtypes: IndexMap<DefId, (&ModuleSource, &ast::Newtype)> = modules
+        .iter()
+        .flat_map(|(source, module)| {
+            module.items.iter().filter_map(move |item| {
+                let Item::Newtype(decl) = item else {
+                    return None;
+                };
+                Some((source, decl))
+            })
+        })
+        .map(|(source, decl)| (resolutions.defs().def_at(decl.id), (source, decl)))
+        .collect();
+    let base = |def: &DefId| {
+        let (_, decl) = newtypes.get(def)?;
+        resolutions
+            .head_decl(&decl.ty)
+            .filter(|base| newtypes.contains_key(base))
+    };
+    let mut cycles = Vec::new();
+    for (index, (start, (source, decl))) in newtypes.iter().enumerate() {
+        let mut chain = vec![*start];
+        while let Some(next) = base(chain.last().expect("seeded"))
+            && !chain.contains(&next)
+        {
+            chain.push(next);
+        }
+        let closes_here = base(chain.last().expect("seeded")) == Some(*start);
+        let first_on_it = chain
+            .iter()
+            .all(|def| newtypes.get_index_of(def).is_some_and(|i| i >= index));
+        if closes_here && first_on_it {
+            let names = chain
+                .iter()
+                .chain([start])
+                .map(|def| newtypes[def].1.name.clone())
+                .collect();
+            cycles.push((
+                (*source).clone(),
+                TypeError::CircularNewtype {
+                    name: decl.name.clone(),
+                    chain: names,
+                    span: decl.name_span,
+                },
+            ));
+        }
+    }
+    cycles
+}
+
 /// A child may not redeclare a method an ancestor declares: one name must
 /// reach one declaration.
 fn reject_overrides<H: CompilerHost>(
@@ -889,6 +944,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     _ => {}
                 }
             }
+        }
+        for (module, error) in newtype_cycles(modules, &resolutions) {
+            logger.error_in(&module, error)?;
         }
 
         let sorted_sources = Self::sorted_module_sources(modules);
