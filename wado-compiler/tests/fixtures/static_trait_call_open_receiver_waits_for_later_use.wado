@@ -1,0 +1,27 @@
+// `Bx::make()` names no instance, and either `Make` may answer while its
+// argument is open, so the call is typed by the trait's declaration and waits
+// for the line settling it to `Bx<u64>`.
+
+struct Bx<T> { v: T }
+
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for Bx<u64> {
+    fn make() -> Bx<u64> {
+        return Bx { v: 7 };
+    }
+}
+
+impl Make for Bx<i64> {
+    fn make() -> Bx<i64> {
+        return Bx { v: -7 };
+    }
+}
+
+test {
+    let a = Bx::make();
+    let d: Bx<u64> = a;
+    assert d.v == 7;
+}

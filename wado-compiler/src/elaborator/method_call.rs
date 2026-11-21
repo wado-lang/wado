@@ -4349,7 +4349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call_id: AstId,
         span: Span,
         expected_type: Option<TypeId>,
-        ctx: &mut FunctionContext,
+        ctx: Option<&mut FunctionContext>,
     ) -> TypeId {
         let struct_name = call_receiver
             .name(self.tysys.resolutions.defs())
@@ -4549,16 +4549,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             None => Vec::new(),
         };
-        self.record_default_walk(
-            call_id,
-            args,
-            &callee_params.param_types,
-            &callee_params.param_defaults,
-            defaults_module,
-            Some(self_binding),
-            &type_bindings,
-            ctx,
-        );
+        match ctx {
+            Some(ctx) => self.record_default_walk(
+                call_id,
+                args,
+                &callee_params.param_types,
+                &callee_params.param_defaults,
+                defaults_module,
+                Some(self_binding),
+                &type_bindings,
+                ctx,
+            ),
+            None => assert_eq!(
+                args.len(),
+                callee_params.param_types.len(),
+                "a call resolved past its body omits no default"
+            ),
+        }
 
         let StaticMethodRef {
             module: struct_module,

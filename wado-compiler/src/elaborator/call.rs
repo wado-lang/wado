@@ -27,12 +27,13 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{
     PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
 };
+use super::pending_selection::PendingStatic;
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
 use super::sig::{DeclSig, MethodSig, Param};
-use super::static_call::{ReceiverId, StaticQuery};
+use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::DerivedAt;
@@ -2073,6 +2074,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_args: method_type_args,
                     ..
                 } = static_args;
+                // A receiver spelled without its arguments is the instance at
+                // the ones the call inferred, each a variable where none did.
+                let declared_params = (impl_type_args_inferred.is_empty())
+                    .then(|| {
+                        let declared = self.declared_self_type(receiver.key().decl()?)?;
+                        let tt = self.tysys.type_table.borrow();
+                        let params = tt.nominal_type_args(declared)?;
+                        Some(params.iter().map(|&p| tt.name(p)).collect::<Vec<_>>())
+                    })
+                    .flatten();
+                let instance_args = match declared_params {
+                    Some(names) => names
+                        .iter()
+                        .map(|name| self.mint_infer_var_named(name))
+                        .collect(),
+                    None => impl_type_args_inferred.clone(),
+                };
+                let instance = self
+                    .declared_type_at(receiver.key(), &instance_args)
+                    .unwrap_or(receiver_type);
+                if method_type_args.is_empty()
+                    && let Some(info) = self.static_waits(instance, suffix, args.len())
+                {
+                    for (i, (&arg, &param)) in args.iter().zip(&info.param_types).enumerate() {
+                        self.typecheck_arg(arg, param, ArgSite::of(&call.args, i, call.span));
+                    }
+                    self.wait_for_static(PendingStatic {
+                        receiver: receiver.clone(),
+                        receiver_type,
+                        instance,
+                        method_name: suffix.to_string(),
+                        args: args.clone(),
+                        impl_args: instance_args,
+                        call: call.id,
+                        span: call.span,
+                        expected: expected_type,
+                        return_type: info.return_type,
+                    });
+                    return info.return_type;
+                }
                 if suffix == "from"
                     && !own_from
                     && let [arg_type] = args[..]
@@ -2219,7 +2260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     call.id,
                     call.span,
                     expected_type,
-                    ctx,
+                    Some(ctx),
                 );
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
@@ -5723,6 +5764,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected_return: expected_type,
             ..StaticQuery::of(receiver, method)
         });
+        // Impls of one trait no argument separates may be told apart by the
+        // instance the call settles, which the static call's own resolution
+        // waits for, and reports where it cannot.
+        if matches!(instance, UnappliedStatic::Open)
+            && matches!(ranked, StaticLookup::Overloaded { .. })
+        {
+            return None;
+        }
         if self.report_unresolved_static(&ranked, method, args, span) {
             return Some(TypeTable::ERROR);
         }

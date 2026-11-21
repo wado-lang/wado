@@ -929,7 +929,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The generic struct or variant `key`'s declaration declares, at the
     /// `args` the call settled: the receiver an inherited default reads as
     /// `Self`.
-    fn declared_type_at(&self, key: &ImplTargetKey, args: &[TypeId]) -> Option<TypeId> {
+    pub(super) fn declared_type_at(&self, key: &ImplTargetKey, args: &[TypeId]) -> Option<TypeId> {
         let def = key.decl()?;
         let params = self.type_lookup().declared_type_param_ids(def)?;
         if args.is_empty() {

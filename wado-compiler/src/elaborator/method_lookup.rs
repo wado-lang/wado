@@ -3237,15 +3237,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         required_trait: Option<&RequiredTrait>,
     ) -> bool {
-        matches!(
-            self.order_for_call(
-                &self.impl_target_of(receiver),
-                Some(receiver),
-                method_name,
-                required_trait,
-            ),
-            Some(Ordered::Undecided(_))
-        )
+        self.undecided_impls(receiver, method_name, required_trait)
+            .is_some()
+    }
+
+    /// The impls that may answer `method_name` on `receiver`, where which one
+    /// does waits on a variable the receiver holds.
+    pub(super) fn undecided_impls(
+        &self,
+        receiver: TypeId,
+        method_name: &str,
+        required_trait: Option<&RequiredTrait>,
+    ) -> Option<Vec<Option<DefId>>> {
+        match self.order_for_call(
+            &self.impl_target_of(receiver),
+            Some(receiver),
+            method_name,
+            required_trait,
+        )? {
+            Ordered::Undecided(live) => Some(live),
+            Ordered::One(_)
+            | Ordered::Nothing
+            | Ordered::OutOfScope { .. }
+            | Ordered::AmbiguousTraits(_)
+            | Ordered::AmbiguousBlankets(_)
+            | Ordered::Overloaded(_)
+            | Ordered::Duplicated(_) => None,
+        }
     }
 
     /// The winner among the matches the order named: the call's arguments

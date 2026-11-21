@@ -20,6 +20,7 @@ use super::Elaborator;
 use super::expr::IndexAccess;
 use super::infer_hole::Obligation;
 use super::method_call::InheritedFrame;
+use super::static_call::ReceiverId;
 use super::types::{
     MethodInfo, MethodOwner, RequiredTrait, TraitLookup, TraitMethodMatch, TypeError,
 };
@@ -70,6 +71,24 @@ pub(super) enum PendingSelection {
     Call(usize, PendingCall),
     /// An operator, which records its dispatch once it selects.
     Operator(PendingOperator),
+    /// A static call, which records its dispatch once it selects.
+    Static(PendingStatic),
+}
+
+/// A static call through a trait, typed by the trait's declaration.
+pub(super) struct PendingStatic {
+    pub(super) receiver: ReceiverId,
+    /// The receiver as written, which the call resolves on.
+    pub(super) receiver_type: TypeId,
+    /// The instance the impl is selected for.
+    pub(super) instance: TypeId,
+    pub(super) method_name: String,
+    pub(super) args: Vec<TypeId>,
+    pub(super) impl_args: Vec<TypeId>,
+    pub(super) call: AstId,
+    pub(super) span: Span,
+    pub(super) expected: Option<TypeId>,
+    pub(super) return_type: TypeId,
 }
 
 pub(super) enum PendingOp {
@@ -288,6 +307,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .require(Obligation::Pending(PendingSelection::Operator(pending)));
     }
 
+    /// The trait's declaration of the static `method_name` on `receiver`,
+    /// called with `arity` arguments, where which impl answers waits on a
+    /// variable the receiver holds and the call can wait for it: as
+    /// [`Self::trait_declared_info`] says, and omitting no default.
+    pub(super) fn static_waits(
+        &mut self,
+        receiver: TypeId,
+        method_name: &str,
+        arity: usize,
+    ) -> Option<MethodInfo> {
+        let receiver = self.apply_infer_holes(receiver);
+        let live = self.undecided_impls(receiver, method_name, None)?;
+        let (_, info) = self.trait_declared_info(&live, receiver, method_name)?;
+        (info.param_types.len() == arity).then_some(info)
+    }
+
+    /// Queue `pending`, which records its dispatch once it selects.
+    pub(super) fn wait_for_static(&mut self, pending: PendingStatic) {
+        self.infer_holes
+            .require(Obligation::Pending(PendingSelection::Static(pending)));
+    }
+
+    /// Resolve the static call `pending` waits for, or hand it back while its
+    /// receiver still leaves the impl undecided.
+    fn select_static(&mut self, pending: PendingStatic) -> Option<PendingStatic> {
+        let instance = self.apply_infer_holes(pending.instance);
+        if self.selection_undecided(instance, &pending.method_name, None) {
+            return Some(pending);
+        }
+        let receiver_type = self.apply_infer_holes(pending.receiver_type);
+        let args: Vec<TypeId> = pending
+            .args
+            .iter()
+            .map(|&a| self.apply_infer_holes(a))
+            .collect();
+        let impl_args: Vec<TypeId> = pending
+            .impl_args
+            .iter()
+            .map(|&a| self.apply_infer_holes(a))
+            .collect();
+        let owner = self.static_owner_key(pending.receiver.key(), &pending.method_name);
+        let inherited = self.inherited_static(pending.receiver.key(), &owner, &impl_args);
+        let answered = self.resolve_static_method_call_from_qualified(
+            &pending.receiver,
+            receiver_type,
+            &pending.method_name,
+            &args,
+            &impl_args,
+            &[],
+            inherited,
+            pending.call,
+            pending.span,
+            pending.expected,
+            None,
+        );
+        if answered != TypeTable::ERROR {
+            self.hold_to_selected(answered, pending.return_type, pending.span);
+        }
+        None
+    }
+
     /// Make each pending selection whose receiver has settled far enough,
     /// until none can be made, and report the rest as needing an annotation.
     /// A selection settles variables in turn, through the impl's signature, so
@@ -308,6 +388,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     PendingSelection::Operator(op) => {
                         self.select_operator(op).map(PendingSelection::Operator)
                     }
+                    PendingSelection::Static(call) => {
+                        self.select_static(call).map(PendingSelection::Static)
+                    }
                 })
                 .collect();
             if waiting.len() == asked {
@@ -325,6 +408,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 self.close_infer_var(op.result);
                             }
                         }
+                        PendingSelection::Static(call) => self.report_undecided_selection(
+                            call.instance,
+                            &call.method_name,
+                            call.span,
+                        ),
                     }
                 }
                 return;
