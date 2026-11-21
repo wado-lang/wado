@@ -1,0 +1,46 @@
+// Returning an element found through `find`, or a field of one, hands out a
+// copy: the element stays the list's, so a caller writing to the result
+// leaves the list as it was.
+
+use { println, Stdout } from "core:cli";
+
+struct Item {
+    key: i32,
+    name: String,
+}
+
+#[inline(never)]
+fn lookup(items: &List<Item>, key: i32) -> Item {
+    return match items.iter_ref().find(|it: &Item| it.key == key) {
+        Some(it) => *it,
+        None => Item { key, name: "none" },
+    };
+}
+
+#[inline(never)]
+fn intern(names: &mut List<[String, String]>, key: String) -> String {
+    if let Some(hit) = names.iter_ref().find(|kn| kn.0 == key) {
+        return hit.1;
+    }
+    let name = `f${names.len()}`;
+    names.push([key, name]);
+    return name;
+}
+
+export fn run() with Stdout {
+    let items: List<Item> = [Item { key: 1, name: "a" }];
+    let mut got = lookup(&items, 1);
+    got.name.push_str("!");
+    println(`${got.name} ${items[0].name}`);
+
+    let mut names: List<[String, String]> = [];
+    intern(&mut names, "k");
+    let mut hit = intern(&mut names, "k");
+    hit.push_str("!");
+    println(`${hit} ${intern(&mut names, "k")}`);
+}
+
+__DATA__
+{
+    "stdout": "a! a\nf0! f0\n"
+}
