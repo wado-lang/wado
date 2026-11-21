@@ -1169,24 +1169,9 @@ impl FqTypeName {
     /// holding an effect variable.
     #[must_use]
     pub fn names_effect_var(&self) -> bool {
-        let inner = match &self.head {
-            TypeHead::Projection(projected) => {
-                projected.base.names_effect_var()
-                    || projected
-                        .trait_args
-                        .iter()
-                        .flatten()
-                        .any(FqTypeName::names_effect_var)
-            }
-            TypeHead::Function {
-                signature, effects, ..
-            } => {
-                effects.iter().any(tir::EffectRef::is_var)
-                    || signature.iter().any(FqTypeName::names_effect_var)
-            }
-            _ => false,
-        };
-        inner || self.args.iter().any(FqTypeName::names_effect_var)
+        self.mentions(&|head| {
+            matches!(head, TypeHead::Function { effects, .. } if effects.iter().any(tir::EffectRef::is_var))
+        })
     }
 
     /// The spelling a diagnostic prints: the type as source writes it, modules

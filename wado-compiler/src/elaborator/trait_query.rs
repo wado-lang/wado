@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -26,8 +26,11 @@ use super::scope::{
     TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
-use super::solver_bridge::{DeferredQuestion, OwedBody};
-use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause, clause_writer};
+use super::solver_bridge::{DeferredAnswer, DeferredQuestion, OwedBody};
+use super::trait_env::{
+    ImplMethodHeader, InheritedBound, ViaClause, clause_writer, header_as_written,
+    receiver_as_written,
+};
 use super::type_resolution::ParamSpace;
 use super::types::{
     MethodInfo, MethodOwner, OperatorImpl, ParamList, ResolvedTraitMethod, SigPosition,
@@ -1001,7 +1004,10 @@ impl TypeSystem {
                 .solver()
                 .answer_deferred(self, bound.question, closed, &asked);
             match answer {
-                Some(bodies) => self.record_owed(bodies),
+                Some(DeferredAnswer { owed, tied }) => {
+                    self.record_owed(owed);
+                    unmet.extend(self.tied_impl_errors(&tied, &asked, closed, bound.span));
+                }
                 None => unmet.push(TypeError::TraitBoundNotSatisfied {
                     type_name: self.type_id_to_string(closed),
                     trait_name: bound_as_written(&bound.trait_name, &asked),
@@ -1013,6 +1019,54 @@ impl TypeSystem {
             }
         }
         unmet
+    }
+
+    /// The errors for a tie the order left among one trait's impls
+    /// (`docs/wep-2026-09-01-trait-resolution.md`), naming value blankets by
+    /// their bounds and every other impl, a variadic one included, by its header.
+    pub(super) fn tied_impl_errors(
+        &self,
+        tied: &[Option<DefId>],
+        trait_: &FqTraitName,
+        receiver: TypeId,
+        span: Span,
+    ) -> Vec<TypeError> {
+        let env = &self.trait_env;
+        let (blankets, heads): (Vec<DefId>, Vec<DefId>) = tied
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<IndexSet<_>>()
+            .into_iter()
+            .partition(|&def| {
+                env.blanket_of_block(def)
+                    .is_some_and(|b| matches!(b.receiver, BlanketReceiver::Value))
+            });
+        let receiver = self.type_id_to_string(receiver);
+        let mut errors = Vec::new();
+        if let [_, _, ..] = blankets.as_slice() {
+            errors.push(TypeError::AmbiguousValueBlankets {
+                trait_name: trait_.to_display(),
+                receiver: receiver.clone(),
+                bounds: blankets
+                    .iter()
+                    .map(|def| receiver_as_written(&env.impl_headers[def]))
+                    .collect(),
+                span,
+            });
+        }
+        if let [_, _, ..] = heads.as_slice() {
+            errors.push(TypeError::AmbiguousHeadImpls {
+                trait_name: trait_.to_display(),
+                receiver,
+                headers: heads
+                    .iter()
+                    .map(|def| header_as_written(&env.impl_headers[def]))
+                    .collect(),
+                span,
+            });
+        }
+        errors
     }
 
     /// The trait a bound names, with the arguments it writes for that trait's

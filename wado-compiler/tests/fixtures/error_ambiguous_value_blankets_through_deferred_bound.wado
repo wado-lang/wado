@@ -1,0 +1,56 @@
+// Two value blankets tie for a closure literal's type once its row is solved,
+// so the bound asked again then is as ambiguous as one asked at once.
+
+use { println, Stdout } from "core:cli";
+
+trait Limit with () {
+    fn limit(&self) -> i32;
+}
+
+trait Mark with () {
+    fn mark(&self) -> i32;
+}
+
+trait Describe with () {
+    fn describe(&self) -> String;
+}
+
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return "limit";
+    }
+}
+
+impl<T: Mark> Describe for T {
+    fn describe(&self) -> String {
+        return "mark";
+    }
+}
+
+impl Limit for fn() -> i32 with Stdout {
+    fn limit(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Mark for fn() -> i32 with Stdout {
+    fn mark(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn via<T: Describe>(x: T) -> String {
+    return x.describe();
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(via(|| loud()));
+}
+
+__DATA__
+{"compile_error": ":52:13: analysis error: ambiguous blanket impls of 'Describe' for 'fn() -> i32 with Stdout': 'T: Limit' and 'T: Mark' apply"}
