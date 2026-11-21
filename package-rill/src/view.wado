@@ -471,6 +471,14 @@ fn detach(node: Node) with Dom {
     }
 }
 
+/// Puts `anchor` back at the end of `parent` where other code took it out, so
+/// what it ends stands in the parent again.
+fn hold_in(parent: Element, anchor: Node) with Dom {
+    if anchor.parent_node() != Option::Some(parent as Node) {
+        parent.append_child(anchor);
+    }
+}
+
 /// A subtree and what disposes of what was made with it.
 struct Rendered {
     node: Element,
@@ -513,6 +521,7 @@ fn place<K: Eq>(
     shows: fn(K) -> bool,
     render: fn mut(K) -> View with (Track, Dom),
 ) with (Track, Dom) {
+    let parent = at.node;
     let mut key = key;
     let mut render = render;
     // Holds the place, so siblings added later stay after the subtree.
@@ -554,8 +563,9 @@ fn place<K: Eq>(
             remove(made);
             return;
         }
-        if !in_place && let Some(holder) = anchor.parent_node() {
-            holder.insert_before(made.node, Option::Some(anchor as Node));
+        if !in_place {
+            hold_in(parent, anchor);
+            parent.insert_before(made.node, Option::Some(anchor as Node));
         }
         shown = Option::Some(made);
     });
@@ -638,9 +648,8 @@ fn keep_rows<T: Eq>(
         }
         if in_place {
             at.insert(anchor);
-        } else if anchor.parent_node() != Option::Some(parent as Node) {
-            // Other code took the anchor out, so the rows end the parent again.
-            parent.append_child(anchor);
+        } else {
+            hold_in(parent, anchor);
         }
         // `render` and the cleanups have run, and either may have moved a row.
         // Nothing runs from here on, so the DOM now is the DOM the moves meet.

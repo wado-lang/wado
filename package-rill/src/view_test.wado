@@ -718,6 +718,30 @@ test "each puts its rows back after other code emptied its parent" {
     };
 }
 
+test "show and switch put back what they hold after other code emptied their parent" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let box = new_element("div");
+        let visible = signal(false);
+        let mode = signal(1);
+        let _dispose = scope(|| {
+            build(
+                View::of(box).children(
+                    [show(|| visible.get(), || element("p")), switch(|| mode.get(), |key| element(if key == 1 { "i" } else { "b" }))],
+                ),
+            );
+        });
+        while let Some(child) = box.first_child() {
+            box.remove_child(child);
+        }
+
+        visible.set(true);
+        mode.set(2);
+        flush();
+        assert box.get_html() == "<p></p><b></b>";
+    };
+}
+
 test "each restores its order after a row moved within its parent" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
