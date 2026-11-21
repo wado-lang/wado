@@ -2269,7 +2269,6 @@ impl SolverBridge {
                 tysys.type_table.borrow().name(type_id)
             ),
         };
-<<<<<<< HEAD
         self.answer(tysys, || binder_types(ctx), type_id, &q)
     }
 
@@ -2321,12 +2320,7 @@ impl SolverBridge {
         type_id: TypeId,
         q: &Question,
     ) -> Option<Vec<OwedBody>> {
-        let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args)?;
-||||||| 37a57b631d1
-        let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args)?;
-=======
         let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args).settled()?;
->>>>>>> origin/main
         let owed = owed(&self.program, &q.env, held.requests);
         let table = tysys.type_table.borrow();
         let shape_heads = [
