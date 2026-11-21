@@ -6182,13 +6182,7 @@ impl<'a> Reify<'a> {
         });
         for p in &closure.params {
             let type_id = self.ann_local_type(p.id).unwrap_or(TypeTable::UNKNOWN);
-            closure_ctx.add_local_at(
-                p.name.clone(),
-                type_id,
-                p.is_mut,
-                Some(p.id),
-                p.name_span,
-            );
+            closure_ctx.add_local_at(p.name.clone(), type_id, p.is_mut, Some(p.id), p.name_span);
         }
 
         // Step 4: reify the body in the closure scope.

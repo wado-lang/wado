@@ -28,7 +28,8 @@ use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
     RetainInto, RetainSpec, ReturnConvention, StructDef, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
