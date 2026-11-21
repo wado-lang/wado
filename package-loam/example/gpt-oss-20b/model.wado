@@ -156,13 +156,9 @@ pub fn checked<affine Bk: Backend>(
 /// arguments give them, else `budget` and `steps`.
 pub fn budget_and_steps(budget: i64, steps: i32) -> [i64, i32] with Environment {
     let given = args();
-    return [
-        if given.len() > 0 { i64::from_str(&given[0]).unwrap() } else { budget }, if given.len() > 1 {
-            i32::from_str(&given[1]).unwrap();
-        } else {
-            steps;
-        },
-    ];
+    let bytes = if given.len() > 0 { i64::from_str(&given[0]).unwrap() } else { budget };
+    let tokens = if given.len() > 1 { i32::from_str(&given[1]).unwrap() } else { steps };
+    return [bytes, tokens];
 }
 
 /// A monotonic clock's span of nanoseconds in seconds.

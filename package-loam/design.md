@@ -395,7 +395,7 @@ own. Otherwise each layout first gets one layer's experts and one more slot, and
 the rest of the budget is shared in proportion to the bytes each layout still
 lacks. A budget below that is a `LoadError`. A layout's layers then split into
 as few runs as keep each pool within what the backend holds in one tensor,
-`Backend::pool_slots`: `i32` elements, or on WebGPU one binding. A run of one
+`Backend::pool_slots`: bytes within `i32`, or on WebGPU one binding. A run of one
 layer holds its own experts.
 
 #### The eviction order

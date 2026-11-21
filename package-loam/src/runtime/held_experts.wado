@@ -9,7 +9,7 @@ use { Picked, Pool, Tokens } from "./experts.wado";
 use { Backend, One } from "./hlo.wado";
 use { Any, Untyped, typed } from "./recorded.wado";
 use { ElementKind, Tensor } from "./tensor.wado";
-use { HostWeight, stored_bytes } from "./weight.wado";
+use { HostWeight, slots_within_i32, stored_bytes } from "./weight.wado";
 use { LinearArray } from "core:linear";
 
 /// Where a layer's experts of one weight are stored, back to back: from a byte
@@ -64,6 +64,18 @@ impl ExpertLayout {
     /// The bytes a checkpoint stores one expert of these layers in.
     fn slot_bytes(&self) -> i64 {
         return self.layers[0].into_iter().map(|w| w.slice_bytes() as i64).sum().unwrap();
+    }
+
+    /// What planning reads of these layers, a pool of a weight holding at
+    /// most `most(weight)` slots.
+    fn shape(&self, most: fn(&StoredExperts) -> i32) -> ExpertShape {
+        return ExpertShape {
+            layers: self.layers.len(),
+            experts: self.experts,
+            slot_bytes: self.slot_bytes(),
+            steps: self.steps,
+            most_slots: self.layers[0].into_iter().map(|w| most(&w)).min().unwrap(),
+        };
     }
 }
 
@@ -422,13 +434,7 @@ impl HeldExperts {
     ) -> Result<HeldExperts, LoadError> {
         let shapes: List<ExpertShape> = layouts.into_iter().map(|l| {
             assert l.layers.len() == l.steps.len() && l.layers.len() == l.weights.len();
-            return ExpertShape {
-                layers: l.layers.len(),
-                experts: l.experts,
-                slot_bytes: l.slot_bytes(),
-                steps: l.steps,
-                most_slots: l.layers[0].into_iter().map(|w| most(&w)).min().unwrap(),
-            };
+            return l.shape(most);
         }).collect();
         let plans = planned(&shapes, budget)?;
         let [runs, of_step] = shared_runs(&shapes, &plans, EVICTION);
@@ -438,16 +444,7 @@ impl HeldExperts {
     /// Every host step's fetch so far, in order, and the shapes of the
     /// layouts, each pool as large as one tensor holds.
     pub fn fetches(&self) -> Fetches {
-        let shapes = self.layouts
-            .into_iter()
-            .map(|l| ExpertShape {
-                layers: l.layers.len(),
-                experts: l.experts,
-                slot_bytes: l.slot_bytes(),
-                steps: l.steps,
-                most_slots: l.layers[0].into_iter().map(|w| i32::MAX / w.slice_bytes()).min().unwrap(),
-            })
-            .collect();
+        let shapes = self.layouts.into_iter().map(|l| l.shape(|w| slots_within_i32(w.kind, &w.extents))).collect();
         return Fetches { shapes, fetches: self.fetches };
     }
 
@@ -516,10 +513,11 @@ impl HeldExperts {
         let picked: List<i32> = order.into_iter().map(|e| e as i32).collect();
         self.fetches.push(Fetch { step, tokens: picks.extents[0], experts: picked });
         let mut slot_of = List::<i64>::filled(experts, -1);
+        let slot_bytes = layout.slot_bytes();
         let placed = shared.slots.placed(layer - shared.run.first, &picked, |_| unreachable());
         for let [i, [slot, filled]] of placed.into_iter().enumerate() {
             slot_of[picked[i]] = slot as i64;
-            self.counts.counted(filled, layout.slot_bytes());
+            self.counts.counted(filled, slot_bytes);
             if !filled {
                 continue;
             }

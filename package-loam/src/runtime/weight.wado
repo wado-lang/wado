@@ -33,6 +33,11 @@ pub fn stored_bytes(kind: ElementKind, extents: &List<i32>) -> i32
     return element_count(extents) * stored_width(kind);
 }
 
+/// The most slots of `kind` and `slot`'s extents whose bytes stay within `i32`.
+pub fn slots_within_i32(kind: ElementKind, slot: &List<i32>) -> i32 {
+    return i32::MAX / stored_bytes(kind, slot);
+}
+
 impl HostWeight {
     /// `bytes`, which hold the `kind` elements of `extents` as a checkpoint
     /// stores them. A bool's nonzero byte becomes 1 here, so every backend
