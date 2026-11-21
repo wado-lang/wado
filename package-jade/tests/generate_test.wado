@@ -1,6 +1,6 @@
 use { GenerateOptions, Schema, generate } from "../src/lib.wado";
 use { eval, EvalHost } from "core:eval";
-use { ModuleSpec } from "lib:wadopoet";
+use { ModuleSpec, wado } from "lib:wadopoet";
 
 fn module() -> ModuleSpec {
     return ModuleSpec::new("lib:jade", ["api.schema.json"]);
@@ -39,11 +39,7 @@ fn reread(
     text: String,
     options: GenerateOptions = GenerateOptions {},
 ) -> String with EvalHost {
-    return printed(schema, `print(to_string(&from_string::<${name}>(${quoted(text)}).unwrap()).unwrap());`, options);
-}
-
-fn quoted(text: String) -> String {
-    return `"${text.replace("\\", "\\\\").replace("\"", "\\\"")}"`;
+    return printed(schema, wado`print(to_string(&from_string::<${name}>("${text}").unwrap()).unwrap());`, options);
 }
 
 test "a struct is declared under its definition's name, with the root only a reference" {

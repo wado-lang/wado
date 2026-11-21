@@ -47,7 +47,7 @@ pub fn generate(
     let defs = root.defs;
     root.dialect = null;
     root.defs = HashMap::new();
-    let mut gen = Gen { decls: CodeWriter::new() };
+    let mut gen = Gen {};
     for let [key, def] of defs.entries() {
         let name = gen.claim(decl_name(key, &`/$defs/${pointer_token(key)}`)?, &"/$defs")?;
         gen.defs[*key] = [name, *def];
@@ -108,7 +108,7 @@ enum Lit {
 struct Ty {
     text: String,
     lit: Lit = Lit::Json,
-    /// An enum's members, as `[wire name, Wado name]`.
+    /// An enum's members, as `[Wado name, wire name]`.
     members: List<[String, String]> = [],
 }
 
@@ -119,7 +119,7 @@ struct Gen {
     /// The names declared at the module's top level.
     taken: HashSet<String> = HashSet::new(),
     imports: List<String> = [],
-    decls: CodeWriter,
+    decls: CodeWriter = CodeWriter::new(),
 }
 
 impl Gen {
@@ -147,13 +147,13 @@ impl Gen {
         return Ty { text: `${self.namespace("core:value")}::Value` };
     }
 
-    /// Adds a declaration to the module, a blank line before each but the
-    /// first.
-    fn add(&mut self, decl: &CodeWriter) {
+    /// Where the next declaration goes, after a blank line where one came
+    /// before.
+    fn next_decl(&mut self) -> &mut CodeWriter {
         if !self.decls.is_empty() {
             self.decls.blank();
         }
-        self.decls.append(decl);
+        return &mut self.decls;
     }
 
     /// Declares `name` as the type `s` describes: a struct, enum, variant or
@@ -170,9 +170,7 @@ impl Gen {
         if let Some(d) = doc {
             spec.set_doc(d);
         }
-        let mut w = CodeWriter::new();
-        spec.emit(&mut w);
-        self.add(&w);
+        spec.emit(self.next_decl());
         return Result::Ok(());
     }
 
@@ -251,21 +249,11 @@ impl Gen {
             only(keys, [], at)?;
             return Result::Ok(self.value());
         }
-        if o.type == JsonTypes::Null {
-            only(keys, ["type"], at)?;
-            return Result::Ok(Ty { text: "()", lit: Lit::Unit });
-        }
-        if o.type == JsonTypes::Boolean {
-            only(keys, ["type"], at)?;
-            return Result::Ok(Ty { text: "bool", lit: Lit::Bool });
-        }
-        if o.type == JsonTypes::Integer {
-            only(keys, ["type"], at)?;
-            return Result::Ok(Ty { text: "i64", lit: Lit::Integer });
-        }
-        if o.type == JsonTypes::Number {
-            only(keys, ["type"], at)?;
-            return Result::Ok(Ty { text: "f64", lit: Lit::Float });
+        for let [t, ty] of &SCALARS {
+            if o.type == *t {
+                only(keys, ["type"], at)?;
+                return Result::Ok(*ty);
+            }
         }
         if o.type == JsonTypes::String {
             only(keys, ["type", "contentEncoding"], at)?;
@@ -332,6 +320,9 @@ impl Gen {
     /// The type a string's `x-wado-format` names, where it names a type of the
     /// standard library.
     fn wado_format(&mut self, o: &SchemaObject) -> Option<Ty> {
+        if o.type != JsonTypes::String {
+            return null;
+        }
         let Some(symbol) = o.extra.get("x-wado-format") else {
             return null;
         };
@@ -343,7 +334,7 @@ impl Gen {
         };
         let module = text.slice(0, hash).to_string();
         let name = text.slice(hash + 1, text.len()).to_string();
-        if o.type != JsonTypes::String || !module.starts_with("core:") || !is_identifier(&name) {
+        if !module.starts_with("core:") || !is_identifier(&name) {
             return null;
         }
         return Option::Some(Ty { text: `${self.namespace(module)}::${name}` });
@@ -354,16 +345,13 @@ impl Gen {
         return Result::Ok(Ty { text: `Option<${ty.text}>`, lit: Lit::Optional });
     }
 
-    /// The type declared as `name` from `o`.
+    /// The type declared as `name` from `o`. An enum whose members have no
+    /// names takes no literal; declaring it reports why.
     fn named(&self, name: String, o: &SchemaObject) -> Ty {
-        if !is_enum(o) {
-            return Ty { text: name };
+        if is_enum(o) && let Ok(members) = members(&enum_names(o), &"") {
+            return Ty { text: name, lit: Lit::Enum, members };
         }
-        let mut members: List<[String, String]> = [];
-        for let wire of enum_names(o) {
-            members.push([wire, member_name(&wire).unwrap_or("")]);
-        }
-        return Ty { text: name, lit: Lit::Enum, members };
+        return Ty { text: name };
     }
 
     /// The declaration `$ref`'s `r` names: one of the root's `$defs`, or the
@@ -433,7 +421,7 @@ impl Gen {
             pairs.push([field, *key]);
         }
         let [policy, names] = wire_policy(&pairs);
-        if let Some(attr) = policy && !attr.is_empty() {
+        if let Some(attr) = policy {
             spec.add_attr(attr);
         }
         for let [i, f] of fields.iter_ref().enumerate() {
@@ -443,9 +431,7 @@ impl Gen {
             }
             spec.add_field_spec(field);
         }
-        let mut w = CodeWriter::new();
-        spec.emit(&mut w);
-        self.add(&w);
+        spec.emit(self.next_decl());
         return Result::Ok(());
     }
 
@@ -457,7 +443,7 @@ impl Gen {
         }
         let pairs = members(&enum_names(o), &`${*at}/enum`)?;
         let [policy, names] = wire_policy(&pairs);
-        if let Some(attr) = policy && !attr.is_empty() {
+        if let Some(attr) = policy {
             spec.add_attr(attr);
         }
         for let [i, pair] of pairs.iter_ref().enumerate() {
@@ -467,9 +453,7 @@ impl Gen {
             };
             spec.add_member_spec(EnumMember { name: pair.0, trailing_comment: null, attrs });
         }
-        let mut w = CodeWriter::new();
-        spec.emit(&mut w);
-        self.add(&w);
+        spec.emit(self.next_decl());
         return Result::Ok(());
     }
 
@@ -488,22 +472,21 @@ impl Gen {
         let Ok(pairs) = members(&enum_names(&items), &"") else {
             return false;
         };
-        let [Some(attr), _] = wire_policy(&pairs) else {
+        let [policy, names] = wire_policy(&pairs);
+        if !names.iter_ref().all(|n| n matches { null }) {
             return false;
-        };
+        }
         let mut spec = FlagsSpec::new(name, Vis::Pub);
         if let Some(d) = doc {
             spec.set_doc(d);
         }
-        if !attr.is_empty() {
+        if let Some(attr) = policy {
             spec.add_attr(attr);
         }
         for let pair of &pairs {
             spec.add_member(pair.0);
         }
-        let mut w = CodeWriter::new();
-        spec.emit(&mut w);
-        self.add(&w);
+        spec.emit(self.next_decl());
         return true;
     }
 
@@ -551,7 +534,7 @@ impl Gen {
             pairs.push([c.name, wires[i]]);
         }
         let [policy, names] = wire_policy(&pairs);
-        if let Some(attr) = policy && !attr.is_empty() {
+        if let Some(attr) = policy {
             spec.add_attr(attr);
         }
         for let [i, c] of cases.iter_ref().enumerate() {
@@ -561,9 +544,7 @@ impl Gen {
             }
             spec.add_case_spec(case);
         }
-        let mut w = CodeWriter::new();
-        spec.emit(&mut w);
-        self.add(&w);
+        spec.emit(self.next_decl());
         return Result::Ok(());
     }
 
@@ -590,9 +571,9 @@ impl Gen {
         }
         if ty.lit matches { _::Enum } && let Some(s) = node.as_str() {
             let text = s.to_string();
-            for let pair of &ty.members {
-                if pair.0 == text {
-                    return `${ty.text}::${pair.1}`;
+            for let [member, wire] of &ty.members {
+                if *wire == text {
+                    return `${ty.text}::${*member}`;
                 }
             }
         }
@@ -704,6 +685,27 @@ fn leaves() -> List<[String, Ty]> {
     }
     return out;
 }
+
+/// The type of a schema holding `type` alone, by its value. An integer is
+/// unbounded, which no Wado type is: see the WEP's known gap.
+global SCALARS: List<[JsonTypes, Ty]> = [
+    [
+        JsonTypes::Null,
+        Ty { text: "()", lit: Lit::Unit },
+    ],
+    [
+        JsonTypes::Boolean,
+        Ty { text: "bool", lit: Lit::Bool },
+    ],
+    [
+        JsonTypes::Integer,
+        Ty { text: "i64", lit: Lit::Integer },
+    ],
+    [
+        JsonTypes::Number,
+        Ty { text: "f64", lit: Lit::Float },
+    ],
+];
 
 fn leaf_of(o: &SchemaObject) -> Option<Ty> {
     let bare = SchemaObject {
@@ -855,20 +857,22 @@ global POLICIES: List<[CaseStyle, String]> = [
 ];
 
 /// The attributes that make each `[Wado name, wire name]` of `pairs` come
-/// back: a `name_policy` all of them come back under, or else a `name` on each
-/// that does not as written. The policy is `""` when none is needed, and
-/// `null` when none fits.
+/// back: the type's `name_policy`, where one other than none brings them all
+/// back, and the `name` of each that comes back under none.
 fn wire_policy(pairs: &List<[String, String]>) -> [Option<String>, List<Option<String>>] {
+    let mut fits = false;
     let mut policy: Option<String> = null;
     for let [style, name] of &POLICIES {
-        if policy matches { null } && pairs.iter_ref().all(|p| apply_case(*style, p.0) == p.1) {
-            policy = Option::Some(if name.is_empty() { "" } else { wado`wire(name_policy = "${*name}")` });
+        if !fits && pairs.iter_ref().all(|p| apply_case(*style, p.0) == p.1) {
+            fits = true;
+            if !name.is_empty() {
+                policy = Option::Some(wado`wire(name_policy = "${*name}")`);
+            }
         }
     }
     let mut names: List<Option<String>> = [];
     for let [wado_name, wire] of pairs {
-        let kept = policy matches { Some(_) } || *wado_name == *wire;
-        names.push(if kept { null } else { Option::Some(wado`wire(name = "${*wire}")`) });
+        names.push(if fits || *wado_name == *wire { null } else { Option::Some(wado`wire(name = "${*wire}")`) });
     }
     return [policy, names];
 }
@@ -907,28 +911,33 @@ fn member_name(text: &String) -> Option<String> {
 }
 
 fn field_name(text: &String, at: &String) -> Result<String, SchemaError> {
-    let parts = words(text);
-    if parts.is_empty() || parts[0].byte_at(0).is_ascii_digit() {
+    let Some(parts) = name_words(text) else {
         return fail(at, `names \`${*text}\`, which has no word to name a field by`);
-    }
+    };
     let lower: List<String> = parts.iter_ref().map(|w| w.to_ascii_lowercase()).collect();
     let name = lower.join("_");
     return Result::Ok(if is_reserved(name) { `${name}_` } else { name });
 }
 
-/// `text`'s words, each with its first letter capitalized, or `null` where it
-/// has none or starts with a digit.
+/// `text`'s words, each with its first letter capitalized, or `null` where
+/// they name nothing.
 fn pascal(text: &String) -> Option<String> {
-    let parts = words(text);
-    if parts.is_empty() || parts[0].byte_at(0).is_ascii_digit() {
-        return null;
-    }
     let mut out = String::new();
-    for let w of parts {
+    for let w of name_words(text)? {
         out.push((w.byte_at(0) as char).to_ascii_uppercase());
         out.push_str(&w.substr_bytes(1, w.len()));
     }
     return Option::Some(out);
+}
+
+/// `text`'s words, or `null` where it has none or starts with a digit, as no
+/// identifier does.
+fn name_words(text: &String) -> Option<List<String>> {
+    let parts = words(text);
+    if parts.is_empty() || parts[0].byte_at(0).is_ascii_digit() {
+        return null;
+    }
+    return Option::Some(parts);
 }
 
 /// The words of free text: runs of ASCII letters and digits, split again
