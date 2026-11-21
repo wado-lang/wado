@@ -3282,11 +3282,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The solver reads an unsolved row as empty, so for a type or trait
         // argument carrying one, such as a closure literal's, neither answer
         // it gives now is final. The bound is asked again once the effect
-        // check has solved it.
+        // check has solved it, and a tie is reported then.
         let unsolved = self.tysys.type_table.borrow().contains_effect_var(type_arg)
             || trait_.args().iter().any(FqTypeName::names_effect_var);
         let deferred = unsolved && self.defer_bound(type_arg, trait_name, trait_, param_name, span);
-        if self.check_and_register_bound(type_arg, trait_) {
+        let held = self.check_and_register_bound(type_arg, trait_);
+        if deferred {
+            return true;
+        }
+        if held {
             let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
                 bridge.borrow().tied_through_bound(
                     &self.tysys,
@@ -3296,9 +3300,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             });
             self.report_tied_impls(&tied, trait_, type_arg, span);
-            return true;
-        }
-        if deferred {
             return true;
         }
         let type_name = self.tysys.type_id_to_string(type_arg);
