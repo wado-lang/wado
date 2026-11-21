@@ -119,6 +119,10 @@ change.
 
 ## After opening
 
+Read the title and description back with `gh pr view <N>`, after opening the
+PR and after each edit of either. Read what GitHub holds, not the draft: a
+`--body-file` left over from earlier work once posted another PR's description.
+
 Subscribe to the PR with `subscribe_pr_activity`. Handle every event it
 delivers; skipping one is a decision you state.
 
