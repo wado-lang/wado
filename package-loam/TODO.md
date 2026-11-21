@@ -11,12 +11,20 @@ leaves this file, and `design.md` states what it built.
 
 ## Roadmap
 
-The roadmap reached gpt-oss-20b, and holds no item yet. The next is chosen
-from Later.
+The roadmap leads from gpt-oss-20b running to it running at speed.
 
 The devices keep in step. An item is finished on `Cpu`, `WebGpuBackend` and
 `PjrtBackend` alike, the last under the CPU plugin. A run on a TPU is measured
 beside the roadmap and holds no item up.
+
+1. [ ] gpt-oss-20b at speed. A step token of `example/gpt-oss-20b/` takes as
+   long on the RTX 4060 Ti as on XLA's CPU plugin
+   ([measured](./devices.md#gpt-oss-20b-on-the-devices)), and its experts'
+   loads, about 1 GB a token at a budget of 3 GB, are a guess at why. Finished
+   when `devices.md` splits a step token's time on WebGPU and on the CPU plugin
+   into reading experts from the files, writing them to the device, the host
+   steps' waits, and computing; and on each device a step token takes at most
+   1.1× the larger of its computing and its loading of experts.
 
 ## Later
 
