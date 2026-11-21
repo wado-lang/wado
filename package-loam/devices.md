@@ -645,16 +645,17 @@ model, and it does not price 94 and 93 of each program's operations
 
 `example/gpt-oss-20b/` continues the two prompts `generate.json` records, its
 pools holding 3 GB of the 10 GB of experts, on the RTX 4060 Ti of 8 GB and on
-XLA's CPU plugin. Each picks the tokens onnxruntime picks:
+XLA's CPU plugin. Each picks the tokens onnxruntime picks. A time is WebGPU's
+over the CPU plugin's:
 
     wado run-webgpu webgpu.wado -- 3000000000
     wado run-pjrt pjrt.wado -- 3000000000
 
 | Entry                                     | WebGPU        | PJRT, CPU plugin |
 | ----------------------------------------- | ------------- | ---------------- |
-| load                                      | 79.2 s        | 5.7 s            |
-| prompt of 5, then 8 tokens                | 56.1 s        | 75.5 s           |
-| prompt of 13, then 8 tokens               | 64.3 s        | 63.4 s           |
+| load                                      | 13.9×         | 1×               |
+| prompt of 5, then 8 tokens                | 0.74×         | 1×               |
+| prompt of 13, then 8 tokens               | 1.01×         | 1×               |
 | experts the pools held, of those picked   | 955 of 2,045  | 955 of 2,045     |
 | experts' bytes loaded                     | 15.3 GB       | 15.3 GB          |
 | the device keeps (`kept_bytes`)           | 5,729,011,808 |                  |
