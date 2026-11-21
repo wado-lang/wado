@@ -21,7 +21,7 @@ use super::place::{
 use crate::nir_visitor::reachable_exprs;
 use crate::type_table::TypeTable;
 
-use super::ProgramFacts;
+use super::{CalleeMap, CtfeBuiltinMap, ProgramFacts};
 use crate::compiler_trace;
 
 /// The expressions a walk carries out: the operand each reachable statement
@@ -69,6 +69,8 @@ fn reachable_stmts(body: &Body) -> Vec<StmtId> {
 /// body's root, so the frames over one body's regions and the runs of one
 /// callee share it while the body is unchanged.
 pub(super) struct ArenaReads {
+    /// The arena's size, which a body read against these must share.
+    exprs: usize,
     /// Recorded through [`peel_wrappers`], as [`Reached::record`] records.
     places: EntitySet<ExprId>,
     /// As written: the operand a `Return`, `Break`, `Let` or `Expr` yields.
@@ -76,7 +78,11 @@ pub(super) struct ArenaReads {
 }
 
 impl ArenaReads {
-    pub(super) fn of(body: &Body, facts: ProgramFacts<'_>) -> Self {
+    pub(super) fn of(
+        body: &Body,
+        callees: Option<&CalleeMap>,
+        ctfe_builtins: Option<&CtfeBuiltinMap>,
+    ) -> Self {
         let mut places = EntitySet::with_capacity(body.exprs.len());
         let mut record = |op: Operand| {
             if let Some(e) = peel_wrappers(body, op) {
@@ -87,14 +93,14 @@ impl ArenaReads {
             let ExprKind::Call { func_id, args, .. } = &node.kind else {
                 continue;
             };
-            if let Some(builtin) = facts.ctfe_builtins.and_then(|map| map.get(func_id))
+            if let Some(builtin) = ctfe_builtins.and_then(|map| map.get(func_id))
                 && !builtin.is_write()
             {
                 for arg in args {
                     record(arg.expr);
                 }
             }
-            if let Some(callee) = facts.callees.and_then(|map| map.get(func_id))
+            if let Some(callee) = callees.and_then(|map| map.get(func_id))
                 && args.len() == callee.arity()
             {
                 for (index, arg) in args.iter().enumerate() {
@@ -122,6 +128,7 @@ impl ArenaReads {
             }
         }
         Self {
+            exprs: body.exprs.len(),
             places,
             stmt_operands,
         }
@@ -252,6 +259,10 @@ impl<'r> Reached<'r> {
         performed: &EntitySet<ExprId>,
     ) -> Self {
         let exprs = body.exprs.len();
+        assert_eq!(
+            arena.exprs, exprs,
+            "arena reads must come from a body sharing these nodes"
+        );
         let mut reached = Self {
             arena,
             reads: EntitySet::with_capacity(exprs),
@@ -740,7 +751,6 @@ pub(super) struct Trackability {
 
 impl Trackability {
     /// For a compile-time frame, which performs the writes it walks.
-    /// `arena` is [`ArenaReads::of`] a body with `body`'s nodes.
     pub(super) fn in_frame(
         body: &Body,
         facts: ProgramFacts<'_>,
@@ -764,10 +774,10 @@ impl Trackability {
     pub(super) fn outside_frame(
         body: &Body,
         facts: ProgramFacts<'_>,
+        arena: &ArenaReads,
         type_table: &TypeTable,
     ) -> Self {
-        let arena = ArenaReads::of(body, facts);
-        let reached = Reached::outside_frame(body, facts, &arena);
+        let reached = Reached::outside_frame(body, facts, arena);
         let reassigned = reassigned_locals(body);
         let const_views = const_view_locals(body, facts, &reassigned);
         Self {

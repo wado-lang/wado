@@ -86,10 +86,16 @@ fn is_linked(interface: &str) -> bool {
     CLI_INTERFACES.contains(&interface) || random::INTERFACES.contains(&interface)
 }
 
-/// The level every evaluated program compiles at, whatever the test runs at.
-/// A test evaluates a program per case, so the compile is most of its cost,
-/// and `-O2` compiles a generated Gale parser in 1.5 times what `-O1` takes.
-const EVAL_OPT_LEVEL: OptLevel = OptLevel::O1;
+/// The level an evaluated program compiles at: the test's, but no higher than
+/// `-O1`. A test evaluates a program per case, so the compile is most of its
+/// cost, and `-O2` compiles a generated Gale parser in 1.5 times what `-O1`
+/// takes.
+const fn eval_opt_level(test: OptLevel) -> OptLevel {
+    match test {
+        OptLevel::O0 => OptLevel::O0,
+        OptLevel::O1 | OptLevel::O2 | OptLevel::O3 | OptLevel::Os => OptLevel::O1,
+    }
+}
 
 /// The `core:eval` host for one `wado test` run, shared by every test in it.
 pub struct EvalHost {
@@ -138,7 +144,7 @@ impl Drop for EvalHost {
 }
 
 impl EvalHost {
-    /// A host compiling at [`EVAL_OPT_LEVEL`] and with the test's `-f` flags,
+    /// A host compiling at [`eval_opt_level`] and with the test's `-f` flags,
     /// on permits of `cpu`, which holds `parallelism` of them. `--no-cache`
     /// skips reading the outcome cache.
     #[must_use]
@@ -147,7 +153,7 @@ impl EvalHost {
         Self {
             compiler_digest: compiler_digest(),
             knobs: CompileKnobs {
-                opt_level: EVAL_OPT_LEVEL,
+                opt_level: eval_opt_level(knobs.opt_level),
                 ..knobs.clone()
             },
             engine: OnceLock::new(),
@@ -908,14 +914,20 @@ mod tests {
     }
 
     #[test]
-    fn a_program_compiles_at_o1_whatever_the_test_runs_at() {
-        for level in [Level::O0, Level::O2, Level::O3, Level::Os] {
+    fn a_program_compiles_at_the_tests_level_capped_at_o1() {
+        for (test, program) in [
+            (Level::O0, Level::O0),
+            (Level::O1, Level::O1),
+            (Level::O2, Level::O1),
+            (Level::O3, Level::O1),
+            (Level::Os, Level::O1),
+        ] {
             let knobs = CompileKnobs {
-                opt_level: level,
+                opt_level: test,
                 ..CompileKnobs::default()
             };
             let host = EvalHost::new(&knobs, Arc::new(Semaphore::new(1)), 1);
-            assert!(matches!(host.knobs.opt_level, Level::O1), "{level:?}");
+            assert_eq!(host.knobs.opt_level, program, "{test:?}");
         }
     }
 

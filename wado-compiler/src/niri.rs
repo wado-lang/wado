@@ -686,8 +686,7 @@ pub struct Interpreter<'a> {
     /// [`ArenaReads::of`] the bodies frames last ran over, by
     /// [`Body::version`]. A frame copies its body afresh each time, so the
     /// copy's own version never repeats; the source's does while it is
-    /// unchanged. Facts installed later read differently, so installing one
-    /// clears it.
+    /// unchanged. Installing either fact `ArenaReads::of` reads clears it.
     arena_reads: Vec<([(u64, u64); 8], Rc<ArenaReads>)>,
 }
 
@@ -758,16 +757,22 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// Least recently used last out: a frame's scratch copy is never asked
+    /// for again, and must not push out a callee asked for on every call.
     fn arena_reads(&mut self, body: &Body) -> Rc<ArenaReads> {
         let version = body.version();
-        if let Some((_, reads)) = self.arena_reads.iter().find(|(v, _)| *v == version) {
-            return Rc::clone(reads);
-        }
-        let reads = Rc::new(ArenaReads::of(body, self.facts));
-        if self.arena_reads.len() == MAX_ARENA_READS {
-            self.arena_reads.remove(0);
-        }
-        self.arena_reads.push((version, Rc::clone(&reads)));
+        let entry = match self.arena_reads.iter().position(|(v, _)| *v == version) {
+            Some(at) => self.arena_reads.remove(at),
+            None => {
+                if self.arena_reads.len() == MAX_ARENA_READS {
+                    self.arena_reads.remove(0);
+                }
+                let reads = ArenaReads::of(body, self.facts.callees, self.facts.ctfe_builtins);
+                (version, Rc::new(reads))
+            }
+        };
+        let reads = Rc::clone(&entry.1);
+        self.arena_reads.push(entry);
         reads
     }
 
@@ -908,7 +913,8 @@ impl<'a> Interpreter<'a> {
     /// ones nothing beyond their single read reaches. The driving visitor calls
     /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        let track = Trackability::outside_frame(body, self.facts, self.type_table);
+        let arena = self.arena_reads(body);
+        let track = Trackability::outside_frame(body, self.facts, &arena, self.type_table);
         self.frame.aggregate_locals = track.aggregate_locals;
         self.frame.unshared_locals = track.unshared;
         self.frame.const_views = track.const_views;
