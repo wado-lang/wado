@@ -1,0 +1,21 @@
+// `c` is a bare variable when `c.v` is read, so the field has no struct to be
+// read from, though a later line settles `c` to `Bx<u64>`.
+
+struct Bx<T> { v: T }
+
+fn hole<T>() -> T {
+    return panic("unreached");
+}
+
+test {
+    let c = hole();
+    let n = c.v;
+    let _d: Bx<u64> = c;
+    assert n == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":12:13: analysis error: cannot infer `T` far enough to read its field `v`; annotate it",
+    "compile_error_count": 1
+}

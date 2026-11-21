@@ -1984,10 +1984,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
             }
-            // An unsolved variable is reported where it stays unsolved, and the
-            // rest are either reported already or accepted anywhere.
-            ResolvedType::InferVar(_)
-            | ResolvedType::Unknown
+            // A variable may settle later, past the access typed without it.
+            ResolvedType::InferVar(_) => {
+                let answered = self.apply_infer_holes(struct_type);
+                if answered != struct_type {
+                    return self.lookup_field_type(answered, field_name, span);
+                }
+                let name = self.tysys.type_table.borrow().name(struct_type);
+                let _ = self.emit(TypeError::CannotInferType {
+                    message: format!(
+                        "cannot infer `{name}` far enough to read its field `{field_name}`; annotate it"
+                    ),
+                    span,
+                });
+                self.close_infer_var(struct_type);
+                return (0, TypeTable::ERROR);
+            }
+            // The rest are either reported already or accepted anywhere.
+            ResolvedType::Unknown
             | ResolvedType::Error
             | ResolvedType::Never => return (0, TypeTable::UNKNOWN),
             // Read on each instance the body is monomorphized at.
