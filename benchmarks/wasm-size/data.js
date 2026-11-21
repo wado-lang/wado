@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795299087637,
+  "lastUpdate": 1795305288676,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80753,6 +80753,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e550f0190b994bfc2faca4c9a75f7ff76c6d5584"
         },
         "date": 1795299086758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c4a0a3b0414345f61361ec45e7c0ce95ee72332b",
+          "message": "Merge pull request #2717 from wado-lang/loam/gpt-oss-20b-run\n\nfeat(loam): run gpt-oss-20b on WebGPU and PJRT, experts held within a budget",
+          "timestamp": "2026-11-22T08:40:16+09:00",
+          "tree_id": "c33c8babaa69b2d4173cdbdfb0dda91b7b800034",
+          "url": "https://github.com/wado-lang/wado/commit/c4a0a3b0414345f61361ec45e7c0ce95ee72332b"
+        },
+        "date": 1795305288216,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
