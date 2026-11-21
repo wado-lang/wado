@@ -221,13 +221,9 @@
 - [Resources Are Held Only by `with`](./wep-2026-11-17-resources-held-by-with.md)
 - [The `spec` Command and Reference Search](./wep-2026-11-17-spec-command.md)
 - [Every Resource Can Be Backed by a Guest Value](./wep-2026-11-19-guest-backed-resources.md)
-<<<<<<< HEAD
-- [A Bare Name in a Pattern Always Binds](./wep-2026-11-20-bare-names-bind.md)
-||||||| 704ce17a0
-=======
 - [Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md)
+- [A Bare Name in a Pattern Always Binds](./wep-2026-11-20-bare-names-bind.md)
 - [One Inference Context: Equations and Obligations](./wep-2026-11-20-inference-context.md)
->>>>>>> origin/main
 
 ## Standard Library
 
