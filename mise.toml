@@ -326,10 +326,8 @@ unset WADO_PJRT_PLUGIN
 # `--workspace`, not `-p`: one package resolves features without the rest of the
 # workspace, which compiles the crates under it again.
 cargo test --locked --workspace --test plugin --no-run
-# A run fetches the CPU plugin, saying so on stderr, which a test reads. The
-# binary is the one the line above built: `scripts/dev-bin.sh` builds it as one
-# package, which compiles the crates under it again.
-"${CARGO_TARGET_DIR:-target}/debug/wado-run-pjrt" wado-run-pjrt/tests/fixtures/add.wado > /dev/null
+# A run fetches the CPU plugin, saying so on stderr, which a test reads.
+scripts/dev-bin.sh wado-run-pjrt wado-run-pjrt/tests/fixtures/add.wado > /dev/null
 cargo test --locked --workspace --test plugin -- --ignored
 """
 
