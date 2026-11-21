@@ -63,6 +63,7 @@ pub fn analyze_ownership(
     resolver: &Resolver<'_>,
     plan: &ValueCopyPlan,
     points_to: &PointsTo,
+    outlived: &IndexSet<u32>,
     reach: &StorageReach<'_>,
 ) -> Ownership {
     let Some(body) = &func.body else {
@@ -145,6 +146,9 @@ pub fn analyze_ownership(
     };
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
+    for &local in outlived {
+        a.mark_escaped(local, None);
+    }
     let paths = a.alias_paths();
     let released = released_edges(&a.alias_sites);
     a.resolve_alias_chains(&paths, &released);
@@ -173,7 +177,7 @@ pub fn analyze_ownership(
     let owned: IndexSet<u32> = fresh
         .iter()
         .copied()
-        .filter(|idx| a.hands_on_storage(*idx))
+        .filter(|idx| a.hands_on_storage(*idx) && !outlived.contains(idx))
         .collect();
 
     let moved_places: Vec<&PlaceMove> = a

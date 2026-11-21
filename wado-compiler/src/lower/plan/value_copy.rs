@@ -7,6 +7,7 @@
 pub mod analyze;
 pub mod callgraph;
 pub mod confine;
+pub mod flow;
 pub mod funcset;
 pub mod last_use;
 pub mod modref;
@@ -117,6 +118,8 @@ impl<T> ValueCopyHelpers<T> {
 /// telling the fold whether a call result is owned (a move) or shared.
 pub struct ValueCopyPlan {
     pub helpers: ValueCopyHelpers<(ModuleSource, String)>,
+    /// What each function does with the storage its caller hands it.
+    pub flow: flow::Flow,
     /// What each call writes into its receiver, as fields of the receiver's
     /// type: a read of one field is undisturbed by a call that writes another.
     pub mod_ref: modref::ModRef,
@@ -179,6 +182,7 @@ pub fn plan(
     flat: &mut FlatPackage,
     builtins: BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
+    functors: &[tir::ClosureFunctor],
     profiler: &dyn SpanEmitter,
 ) -> ValueCopyPlan {
     // Again: closure lifting has added its environment structs since `plan`
@@ -224,7 +228,7 @@ pub fn plan(
             &builtins,
         )
     });
-    let conventions = in_span(profiler, "lower/value_copy/conventions", || {
+    let mut conventions = in_span(profiler, "lower/value_copy/conventions", || {
         ownership::compute_return_conventions(
             flat,
             &call_graph,
@@ -234,6 +238,17 @@ pub fn plan(
             &confined_params,
         )
     });
+    let flow = in_span(profiler, "lower/value_copy/flow", || {
+        flow::compute(
+            flat,
+            &tir::struct_fields(&flat.structs),
+            functors,
+            &|func| hands_out_payload(func, &return_paths),
+        )
+    });
+    conventions
+        .returns_owned
+        .retain(|module, name| flow.returns_owned(module, name));
     let list_index_assign = match flat
         .type_table
         .borrow()
@@ -295,6 +310,7 @@ pub fn plan(
     });
     ValueCopyPlan {
         helpers,
+        flow,
         mod_ref,
         observed_fields,
         closure_captures,

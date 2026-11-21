@@ -261,7 +261,7 @@ impl PointsTo {
 
 /// What a handle held in a value lets its holder do to another local's storage.
 #[derive(Clone, Copy)]
-enum Handle {
+pub(super) enum Handle {
     /// Name it: a `&T` or a function value.
     Names,
     /// Write it: a `&mut T` or a function value, or one of those read through
@@ -285,7 +285,7 @@ fn guarded(
 
 /// Whether a value of a type holds a [`Handle`] at any depth. Everything else
 /// is a value, which assignment copies.
-struct HoldsHandle<'a> {
+pub(super) struct HoldsHandle<'a> {
     type_table: &'a TypeTable,
     fields: &'a StructFields,
     handle: Handle,
@@ -293,7 +293,7 @@ struct HoldsHandle<'a> {
 }
 
 impl<'a> HoldsHandle<'a> {
-    fn new(type_table: &'a TypeTable, fields: &'a StructFields, handle: Handle) -> Self {
+    pub(super) fn new(type_table: &'a TypeTable, fields: &'a StructFields, handle: Handle) -> Self {
         Self {
             type_table,
             fields,
@@ -302,7 +302,7 @@ impl<'a> HoldsHandle<'a> {
         }
     }
 
-    fn of(&self, ty: TypeId) -> bool {
+    pub(super) fn of(&self, ty: TypeId) -> bool {
         self.known
             .get_or_compute(ty, || self.walk(ty, None, &mut UnderWay::new(false), 0))
     }
@@ -400,17 +400,17 @@ impl<'a> HoldsHandle<'a> {
 
 /// How a parameter takes its argument.
 #[derive(Clone, Copy)]
-struct Slot {
+pub(super) struct Slot {
     /// It takes the argument by reference, so the argument's own storage is
     /// handed too.
-    by_ref: bool,
+    pub(super) by_ref: bool,
     /// It is a `&mut`, so the callee may write that storage.
-    writes: bool,
+    pub(super) writes: bool,
 }
 
 impl Slot {
     /// A parameter the analysis knows nothing of.
-    const UNKNOWN: Slot = Slot {
+    pub(super) const UNKNOWN: Slot = Slot {
         by_ref: true,
         writes: true,
     };
@@ -427,28 +427,31 @@ struct Callee {
 }
 
 /// A function value's location: the function a call through it runs.
-struct Target {
+pub(super) struct Target {
     /// The value naming the closure itself, which its `$call` takes as `self`.
     /// `None` for a plain function.
-    this: Option<u32>,
-    params: Vec<u32>,
+    pub(super) this: Option<u32>,
+    pub(super) params: Vec<u32>,
     /// The node every argument flows into, for a function with no parameters
     /// the analysis sees.
-    sink: Option<u32>,
-    ret: u32,
+    pub(super) sink: Option<u32>,
+    pub(super) ret: u32,
 }
 
 /// What a call through a value hands each parameter.
-enum Args {
+pub(super) enum Args {
     Each(Vec<Option<u32>>),
     /// Every parameter takes this node: a caller the analysis cannot see.
     Every(u32),
 }
 
 /// A call through the value in some node.
-struct Site {
-    args: Args,
-    result: u32,
+pub(super) struct Site {
+    pub(super) args: Args,
+    pub(super) result: u32,
+    /// The function location an [`Graph::external`] location binds the call
+    /// to instead: every function a value of the call's type may run.
+    pub(super) fallback: Option<u32>,
 }
 
 /// A node's state in a cycle search, Tarjan's.
@@ -492,7 +495,7 @@ struct Carried {
 }
 
 #[derive(Default)]
-struct Graph {
+pub(super) struct Graph {
     /// Each set holds locations by their index in `locations`: about one node
     /// in ten is a location, so numbered apart they pack into dense words.
     pts: Vec<LocSet>,
@@ -513,9 +516,12 @@ struct Graph {
     /// `sites[n]`: calls through the value in `n`, bound to each target that
     /// reaches it.
     sites: Vec<Vec<Site>>,
-    targets: IndexMap<u32, Target>,
+    pub(super) targets: IndexMap<u32, Target>,
+    /// Locations a caller supplies, whose function a call through them runs
+    /// is the site's [`Site::fallback`].
+    pub(super) external: IndexSet<u32>,
     /// Locations whose value names no storage, which nothing flows into.
-    inert: IndexSet<u32>,
+    pub(super) inert: IndexSet<u32>,
     edges: IndexSet<(u32, u32)>,
     /// Copy edges found with equal sets at both ends, each searched for a
     /// cycle once: lazy cycle detection (Hardekopf and Lin, PLDI 2007).
@@ -537,7 +543,7 @@ struct Graph {
 }
 
 impl Graph {
-    fn node(&mut self) -> u32 {
+    pub(super) fn node(&mut self) -> u32 {
         let id = self.rep.push();
         self.pts.push(LocSet::default());
         self.copy_to.push(Vec::new());
@@ -549,7 +555,7 @@ impl Graph {
         id
     }
 
-    fn call_site(&mut self, callee: u32, site: Site) {
+    pub(super) fn call_site(&mut self, callee: u32, site: Site) {
         let callee = self.find(callee);
         self.sites[callee as usize].push(site);
         let at = self.sites[callee as usize].len() - 1;
@@ -560,10 +566,28 @@ impl Graph {
 
     /// Connect call `at` through `callee` to `loc`, where `loc` is a function.
     fn bind(&mut self, callee: u32, at: usize, loc: u32) {
+        let site = &self.sites[callee as usize][at];
+        let mut receiver = None;
+        let loc = match site.fallback {
+            Some(fallback) if self.external.contains(&loc) => {
+                receiver = Some(loc);
+                fallback
+            }
+            _ => loc,
+        };
+        // A function the caller supplies is its own `self`, should it be a
+        // closure.
+        if let Some(external) = receiver
+            && let Some(this) = self.targets.get(&loc).and_then(|t| t.this)
+        {
+            let naming = self.node();
+            self.add(naming, external);
+            self.copy(naming, this);
+        }
+        let site = &self.sites[callee as usize][at];
         let Some(target) = self.targets.get(&loc) else {
             return;
         };
-        let site = &self.sites[callee as usize][at];
         let mut flows = vec![(target.ret, site.result)];
         if let (Some(sink), Args::Each(args)) = (target.sink, &site.args) {
             flows.extend(args.iter().flatten().map(|&arg| (arg, sink)));
@@ -593,12 +617,18 @@ impl Graph {
     }
 
     /// The node holding `node`'s set.
-    fn find(&mut self, node: u32) -> u32 {
+    pub(super) fn find(&mut self, node: u32) -> u32 {
         self.rep.find(node)
     }
 
+    /// The location nodes in `node`'s set, once solved.
+    pub(super) fn solved(&mut self, node: u32) -> Vec<u32> {
+        let root = self.find(node);
+        self.locations_in(root)
+    }
+
     /// The location nodes in the set of `node`, a representative.
-    fn locations_in(&self, node: u32) -> Vec<u32> {
+    pub(super) fn locations_in(&self, node: u32) -> Vec<u32> {
         Locations {
             set: &self.pts[node as usize],
             nodes: &self.locations,
@@ -607,7 +637,7 @@ impl Graph {
         .collect()
     }
 
-    fn add(&mut self, node: u32, loc: u32) {
+    pub(super) fn add(&mut self, node: u32, loc: u32) {
         let node = self.find(node);
         if self.inert.contains(&node) {
             return;
@@ -643,7 +673,7 @@ impl Graph {
         }
     }
 
-    fn copy(&mut self, from: u32, to: u32) {
+    pub(super) fn copy(&mut self, from: u32, to: u32) {
         let (from, to) = (self.find(from), self.find(to));
         // An inert node's set stays empty, so an edge at either end carries
         // nothing.
@@ -661,7 +691,7 @@ impl Graph {
         self.pts[from as usize] = carried;
     }
 
-    fn load(&mut self, from: u32, to: u32) {
+    pub(super) fn load(&mut self, from: u32, to: u32) {
         let from = self.find(from);
         self.loads[from as usize].push(to);
         for loc in self.locations_in(from) {
@@ -669,7 +699,7 @@ impl Graph {
         }
     }
 
-    fn store(&mut self, into: u32, from: u32) {
+    pub(super) fn store(&mut self, into: u32, from: u32) {
         let into = self.find(into);
         self.stores[into as usize].push(from);
         for loc in self.locations_in(into) {
@@ -983,7 +1013,7 @@ impl Graph {
         self.numbered = true;
     }
 
-    fn solve(&mut self) {
+    pub(super) fn solve(&mut self) {
         self.number_locations_in_node_order();
         self.substitute();
         while let Some(node) = self.work.pop() {
@@ -1179,6 +1209,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         Site {
             args: Args::Every(b.escape),
             result: b.escape,
+            fallback: None,
         },
     );
     let unseen = b.g.node();
@@ -1812,6 +1843,7 @@ impl Builder<'_> {
                     Site {
                         args: Args::Each(args),
                         result,
+                        fallback: None,
                     },
                 );
                 Some(result)
