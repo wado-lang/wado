@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795223977754,
+  "lastUpdate": 1795224897633,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80313,6 +80313,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7ecc697d9af0a2a2547291d2e1be153adc21c64e"
         },
         "date": 1795223976690,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "728099ff4c562ee0f611256c33fbd0426fc9b39b",
+          "message": "Merge pull request #2705 from wado-lang/ci/faster-test-rust\n\nperf(compiler): generate the compiler once per build, halving CI's Rust test job",
+          "timestamp": "2026-11-21T09:55:13+09:00",
+          "tree_id": "2d0f13fefeef3f36828f11eb4163488ff9eed2e2",
+          "url": "https://github.com/wado-lang/wado/commit/728099ff4c562ee0f611256c33fbd0426fc9b39b"
+        },
+        "date": 1795224896767,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
