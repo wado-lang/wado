@@ -1,0 +1,36 @@
+// `Box::made(&b)` omits `Box`'s argument, so every impl that may answer it at
+// some instance decides its kind, whether or not its bounds will hold there.
+// One takes a receiver and one does not, so the call names the trait.
+trait Unmet with () {}
+
+trait Made with () {
+    fn made() -> i32;
+}
+
+trait Taken with () {
+    fn made(&self) -> i32;
+}
+
+struct Box<T> {
+    v: T,
+}
+
+impl<T: Unmet> Made for Box<T> {
+    fn made() -> i32 {
+        return 1;
+    }
+}
+
+impl Taken for Box<String> {
+    fn made(&self) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    let b: Box<String> = { v: "x" };
+    let _ = Box::made(&b);
+}
+
+__DATA__
+{"compile_error": ":32:13: analysis error: ambiguous method 'made': declared by 'Taken' and 'Made'"}

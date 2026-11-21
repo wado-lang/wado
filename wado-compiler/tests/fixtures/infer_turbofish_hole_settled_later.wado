@@ -1,0 +1,13 @@
+// A `_` in a receiver's turbofish is answered as the bare spelling answers the
+// slot it leaves out: by a later use, where the call itself settles nothing.
+use { TreeMap } from "core:collections";
+
+fn takes(m: TreeMap<String, i32>) -> i32 {
+    return m.len();
+}
+
+test "a later argument answers the hole" {
+    let map = TreeMap::<String, _>::new();
+    let n = map.len();
+    assert takes(map) == n;
+}

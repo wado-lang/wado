@@ -60,9 +60,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cargo check
-cargo check -p wado-compiler --target wasm32-unknown-unknown
-cargo check -p wado-lsp --target wasm32-unknown-unknown
-cargo check -p wado-manifest --target wasm32-unknown-unknown
+cargo check -p wado-compiler -p wado-lsp -p wado-manifest --target wasm32-unknown-unknown
 """
 
 # The local entry point; CI spreads these over its jobs by whether they need
@@ -325,9 +323,12 @@ WADO=$(scripts/dev-bin.sh --path wado)
 WADO_PJRT_TPU_PLUGIN=$(scripts/fetch-pjrt-plugin.sh)
 export WADO WADO_PJRT_TPU_PLUGIN
 unset WADO_PJRT_PLUGIN
+# `--workspace`, not `-p`: one package resolves features without the rest of the
+# workspace, which compiles the crates under it again.
+cargo test --locked --workspace --test plugin --no-run
 # A run fetches the CPU plugin, saying so on stderr, which a test reads.
-cargo run --locked -p wado-run-pjrt -- wado-run-pjrt/tests/fixtures/add.wado > /dev/null
-cargo test --locked -p wado-run-pjrt -- --ignored
+scripts/dev-bin.sh wado-run-pjrt wado-run-pjrt/tests/fixtures/add.wado > /dev/null
+cargo test --locked --workspace --test plugin -- --ignored
 """
 
 [tasks.test-e2e]

@@ -1,0 +1,26 @@
+// A subscript on a receiver whose argument is still open commits to the one
+// impl it may reach and checks that impl's bound once a later use settles it.
+
+struct Bx<T> {
+    v: Option<T>,
+}
+
+fn mk<T>() -> Bx<T> {
+    return Bx { v: null };
+}
+
+impl<T: Default> IndexValue<i32> for Bx<T> {
+    type Output = T;
+    fn index_value(&self, index: i32) -> T {
+        return T::default();
+    }
+}
+
+fn is_zero(n: i64) -> bool {
+    return n == 0;
+}
+
+test {
+    let b = mk();
+    assert is_zero(b[0]);
+}

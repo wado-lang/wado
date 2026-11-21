@@ -24,7 +24,7 @@ use super::scope::ScopedBound;
 use super::synth::KeyedAccess;
 use super::trait_query::primitive_has_operator;
 use super::transposition::{Clean, Path, Reading, Step, Transposition, field_path, target_reads};
-use super::typecheck::widens;
+use super::typecheck::{Settles, widens};
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
@@ -134,11 +134,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // concrete sibling before operator dispatch, which would otherwise
         // mangle a trait-method name against the hole.
         if self.type_has_infer_hole(left) ^ self.type_has_infer_hole(right) {
-            if self.type_has_infer_hole(left) {
-                self.solve_infer_holes_against(left, right);
-            } else {
-                self.solve_infer_holes_against(right, left);
-            }
+            self.equate(left, right);
             left = self.apply_infer_holes(left);
             right = self.apply_infer_holes(right);
         }
@@ -2492,7 +2488,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 referent
             };
-            self.typecheck_into_callee(arg, expected, arg_span);
+            self.typecheck_into_callee(arg, expected, arg_span, Settles::Variables);
             wrap_flags.push(wrap);
         }
 

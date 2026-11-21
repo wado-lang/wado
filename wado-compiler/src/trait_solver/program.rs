@@ -1,6 +1,7 @@
 //! The value trait resolution answers questions about. An id is a plain index,
 //! so a test writes the program it needs rather than compiling source.
 
+use super::holds::is_opaque;
 use crate::hashmap::{IndexMap, IndexSet};
 
 /// A type declaration — a struct, variant, enum, flags, newtype, resource, or
@@ -53,6 +54,23 @@ pub enum SolverType {
     /// A function type's row holding an effect parameter: it stands for
     /// whatever row meets it.
     AnyRow,
+    /// A type inference has yet to settle. Two occurrences of one variable are
+    /// one type.
+    Var(Var),
+}
+
+/// An inference variable: the elaborator's, or one a question mints for an
+/// impl parameter while it unifies the impl's target with the type asked.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum Var {
+    /// The elaborator's variable `id`. `literal` marks one standing for a
+    /// numeric literal's type: a default left to settle last, which the one
+    /// impl that could answer may choose earlier.
+    Infer { id: u32, literal: bool },
+    /// The parameter `param` of the impl matched at the question `depth`
+    /// deep. Nothing minted there outlives that match, so no other variable
+    /// alive shares the name.
+    Local { depth: u32, param: u32 },
 }
 
 /// An associated type of a trait: `Mul::Output`.
@@ -75,12 +93,118 @@ impl SolverType {
     pub fn mentions(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
-            Self::AnyRow => false,
+            Self::AnyRow | Self::Var(_) => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
             Self::Ref { inner, .. } => inner.mentions(pred),
             Self::Projection { base, args, .. } => {
                 base.mentions(pred) || args.iter().any(|t| t.mentions(pred))
             }
+        }
+    }
+
+    /// Whether an inference variable in `self` satisfies `pred`.
+    #[must_use]
+    pub fn mentions_var(&self, pred: &dyn Fn(Var) -> bool) -> bool {
+        match self {
+            Self::Var(var) => pred(*var),
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions_var(pred)),
+            Self::Ref { inner, .. } => inner.mentions_var(pred),
+            Self::Projection { base, args, .. } => {
+                base.mentions_var(pred) || args.iter().any(|t| t.mentions_var(pred))
+            }
+        }
+    }
+
+    /// Whether `self` holds an inference variable.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.mentions_var(&|_| true)
+    }
+
+    /// `self` with each variable replaced by what `var` gives for it; `None`
+    /// where `var` gives nothing for one.
+    pub fn try_map_vars(&self, var: &mut dyn FnMut(Var) -> Option<Self>) -> Option<Self> {
+        fn each(
+            inner: &[SolverType],
+            var: &mut dyn FnMut(Var) -> Option<SolverType>,
+        ) -> Option<Vec<SolverType>> {
+            inner.iter().map(|t| t.try_map_vars(var)).collect()
+        }
+        Some(match self {
+            Self::Var(v) => var(*v)?,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => self.clone(),
+            Self::Decl(head, inner) => Self::Decl(*head, each(inner, var)?),
+            Self::Tuple(inner) => Self::Tuple(each(inner, var)?),
+            Self::Ref { is_mut, inner } => Self::Ref {
+                is_mut: *is_mut,
+                inner: Box::new(inner.try_map_vars(var)?),
+            },
+            Self::Projection {
+                base,
+                trait_,
+                assoc,
+                args,
+            } => Self::Projection {
+                base: Box::new(base.try_map_vars(var)?),
+                trait_: *trait_,
+                assoc: *assoc,
+                args: each(args, var)?,
+            },
+        })
+    }
+
+    /// Whether `self` is `other` once each variable of one is renamed to a
+    /// variable of the other, one to one. `renaming` holds the pairs already
+    /// fixed, so several types are compared under one renaming.
+    pub fn alike(&self, other: &Self, renaming: &mut Vec<(Var, Var)>) -> bool {
+        let each = |a: &[Self], b: &[Self], renaming: &mut Vec<(Var, Var)>| {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.alike(b, renaming))
+        };
+        match (self, other) {
+            (Self::Var(a), Self::Var(b)) => {
+                if let Some(pair) = renaming.iter().find(|(x, y)| x == a || y == b) {
+                    *pair == (*a, *b)
+                } else {
+                    renaming.push((*a, *b));
+                    true
+                }
+            }
+            (Self::Decl(a, x), Self::Decl(b, y)) => a == b && each(x, y, renaming),
+            (Self::Tuple(x), Self::Tuple(y)) => each(x, y, renaming),
+            (
+                Self::Ref {
+                    is_mut: a,
+                    inner: x,
+                },
+                Self::Ref {
+                    is_mut: b,
+                    inner: y,
+                },
+            ) => a == b && x.alike(y, renaming),
+            (
+                Self::Projection {
+                    base: x,
+                    trait_: a,
+                    assoc: p,
+                    args: xs,
+                },
+                Self::Projection {
+                    base: y,
+                    trait_: b,
+                    assoc: q,
+                    args: ys,
+                },
+            ) => a == b && p == q && x.alike(y, renaming) && each(xs, ys, renaming),
+            (Self::Param(_) | Self::Pack(_) | Self::AnyRow, _) => self == other,
+            (
+                Self::Var(_)
+                | Self::Decl(..)
+                | Self::Tuple(_)
+                | Self::Ref { .. }
+                | Self::Projection { .. },
+                _,
+            ) => false,
         }
     }
 
@@ -91,7 +215,7 @@ impl SolverType {
     pub fn binds(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
-            Self::AnyRow | Self::Projection { .. } => false,
+            Self::AnyRow | Self::Var(_) | Self::Projection { .. } => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.binds(pred)),
             Self::Ref { inner, .. } => inner.binds(pred),
         }
@@ -102,7 +226,7 @@ impl SolverType {
     #[must_use]
     pub fn mentions_decl(&self, pred: &dyn Fn(TypeDeclId) -> bool) -> bool {
         match self {
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow | Self::Var(_) => false,
             Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Ref { inner, .. } => inner.mentions_decl(pred),
@@ -133,7 +257,7 @@ impl SolverType {
             }
             Self::Tuple(inner) => inner.iter().any(|t| t.projects_param(projecting)),
             Self::Ref { inner, .. } => inner.projects_param(projecting),
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow | Self::Var(_) => false,
         }
     }
 
@@ -157,7 +281,7 @@ impl SolverType {
         };
         Some(match self {
             Self::Param(index) | Self::Pack(index) => arg(*index)?,
-            Self::AnyRow => Self::AnyRow,
+            Self::AnyRow | Self::Var(_) => self.clone(),
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
             // A pack spread in a tuple splices its elements in: `[..T]` at
             // `T = [i32, bool]` is `[i32, bool]`, not `[[i32, bool]]`.
@@ -187,6 +311,34 @@ impl SolverType {
                 args: each(args)?,
             },
         })
+    }
+
+    /// `self` with each inference variable replaced by `var`'s answer for it.
+    #[must_use]
+    pub fn map_vars(&self, var: &dyn Fn(Var) -> Self) -> Self {
+        let each =
+            |inner: &[Self]| -> Vec<Self> { inner.iter().map(|t| t.map_vars(var)).collect() };
+        match self {
+            Self::Var(v) => var(*v),
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => self.clone(),
+            Self::Decl(head, inner) => Self::Decl(*head, each(inner)),
+            Self::Tuple(inner) => Self::Tuple(each(inner)),
+            Self::Ref { is_mut, inner } => Self::Ref {
+                is_mut: *is_mut,
+                inner: Box::new(inner.map_vars(var)),
+            },
+            Self::Projection {
+                base,
+                trait_,
+                assoc,
+                args,
+            } => Self::Projection {
+                base: Box::new(base.map_vars(var)),
+                trait_: *trait_,
+                assoc: *assoc,
+                args: each(args),
+            },
+        }
     }
 }
 
@@ -505,6 +657,8 @@ pub struct Program {
     pub declarations: IndexMap<TypeDeclId, Declaration>,
     /// The declarations [`SolverType::projects_param`] holds of a member of.
     pub projecting: IndexSet<TypeDeclId>,
+    /// The types a numeric literal may be, past the newtypes over them.
+    pub literal_types: IndexSet<TypeDeclId>,
     /// The sources of each structural trait's derived bodies, one per
     /// reflection kind. A derived impl stands for its source, so
     /// [`super::derive`] admits only a declaration one of them holds of
@@ -520,10 +674,11 @@ pub struct Program {
     /// The associated types a [`Fact`] binds to a declaration's members. A
     /// pin on one descends into the type, which the cycle rule admits.
     pub member_channels: IndexSet<AssocId>,
-    /// Every impl written again after its first copy. Coherence reports each
-    /// where it is written, and no candidate set holds one, so a copy never
-    /// ties with its original. Set by [`super::mark_duplicates`].
-    pub duplicates: IndexSet<ImplId>,
+    /// Every impl coherence rejects: one written again after its first copy,
+    /// and a value blanket with no bound. Coherence reports each where it is
+    /// written, and no candidate set holds one, so a copy never ties with its
+    /// original. Set by [`super::mark_rejected`].
+    pub rejected: IndexSet<ImplId>,
     /// Impls that answer at their own level alone, never through a newtype's
     /// or a `flags` type's base: the stated `From` impls. Inheriting
     /// `From<Meters> for i64` would make every newtype of `i64` convert from
@@ -545,7 +700,7 @@ fn matching<'p, A: Iterator<Item = ImplId>>(
     all: impl FnOnce() -> A,
     by_head: impl Fn(Option<TypeDeclId>) -> Option<&'p Vec<ImplId>>,
 ) -> Matching<'p, A> {
-    if matches!(ty, SolverType::AnyRow) {
+    if matches!(ty, SolverType::AnyRow) || is_opaque(ty) {
         return Matching::All(all());
     }
     let ids = |head| by_head(head).map_or(&[][..], Vec::as_slice);
@@ -648,7 +803,8 @@ impl Program {
             | SolverType::Tuple(_)
             | SolverType::Ref { .. }
             | SolverType::Projection { .. }
-            | SolverType::AnyRow => true,
+            | SolverType::AnyRow
+            | SolverType::Var(_) => true,
         };
         let undeclared = |ty: &SolverType| ty.mentions(&|p| !declared(p));
         assert!(
@@ -719,7 +875,7 @@ impl Program {
 
     /// The impls of `trait_` whose target could match `ty`, in the order they
     /// were added: a target naming a declaration matches only that one, or an
-    /// open row.
+    /// open row. An impl coherence rejected answers nothing.
     pub fn impls_for(
         &self,
         trait_: TraitDeclId,
@@ -730,11 +886,11 @@ impl Program {
             || self.impls_of(trait_).map(|(id, _)| id),
             |head| self.impls_by_target.get(&(trait_, head)),
         );
-        ids.map(|id| (id, &self.impls[&id]))
+        self.accepted(ids)
     }
 
     /// The trait impls whose target could match `ty`, of any trait, in the
-    /// order they were added.
+    /// order they were added. An impl coherence rejected answers nothing.
     pub fn trait_impls_for(&self, ty: &SolverType) -> impl Iterator<Item = (ImplId, &ImplDef)> {
         let ids = matching(
             ty,
@@ -744,7 +900,15 @@ impl Program {
             },
             |head| self.trait_impls_by_head.get(&head),
         );
-        ids.map(|id| (id, &self.impls[&id]))
+        self.accepted(ids)
+    }
+
+    fn accepted(
+        &self,
+        ids: impl Iterator<Item = ImplId>,
+    ) -> impl Iterator<Item = (ImplId, &ImplDef)> {
+        ids.filter(|id| !self.rejected.contains(id))
+            .map(|id| (id, &self.impls[&id]))
     }
 
     /// `given`, one entry per `trait_` parameter, with each it leaves unsaid

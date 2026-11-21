@@ -25,5 +25,12 @@ test "each receiver reaches its own static" {
     assert !q.a && q.b == 64;
 }
 
+test "an annotation reaches its own static" {
+    let p: Pair<String, i32> = Pair::make();
+    let q: Pair<bool, i64> = Pair::make();
+    assert p.a == "" && p.b == 32;
+    assert !q.a && q.b == 64;
+}
+
 __DATA__
 {"test": {}}

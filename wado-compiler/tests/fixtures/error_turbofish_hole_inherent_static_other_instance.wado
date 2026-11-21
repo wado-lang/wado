@@ -1,0 +1,19 @@
+// `missing` is declared only on `Pair<String, bool>`, which no answer to the
+// `_` makes `Pair<i32, _>`: the name is unknown at every instance the call
+// can reach, so the call reports that, not the `_` it leaves open.
+
+struct Pair<A, B> { a: A, b: B }
+
+impl Pair<String, bool> {
+    fn missing() -> i32 { return 1; }
+}
+
+export fn run() {
+    let _n = Pair::<i32, _>::missing();
+}
+
+__DATA__
+{
+    "compile_error": ":12:14: analysis error: unknown function 'Pair<i32, _>::missing'",
+    "compile_error_count": 1
+}

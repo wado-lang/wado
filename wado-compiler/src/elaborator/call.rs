@@ -37,7 +37,7 @@ use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::DerivedAt;
 use super::type_resolution::ParamSpace;
-use super::typecheck::{TypeCheckResult, check_assignable};
+use super::typecheck::{Settles, TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
@@ -186,7 +186,11 @@ pub(super) struct InheritedStatic {
 /// template's argument is the template itself, which no source spells.
 #[derive(Clone, Copy)]
 pub(super) enum ArgSite {
-    Written { span: Span, value: AstId },
+    Written {
+        span: Span,
+        value: AstId,
+        settles: Settles,
+    },
     Template(Span),
 }
 
@@ -202,6 +206,15 @@ impl ArgSite {
         Self::Written {
             span: value.span(),
             value: value.id(),
+            settles: Settles::of(value),
+        }
+    }
+
+    /// What the argument settles where it meets its parameter.
+    pub(super) fn settles(self) -> Settles {
+        match self {
+            Self::Written { settles, .. } => settles,
+            Self::Template(_) => Settles::Variables,
         }
     }
 
@@ -588,8 +601,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             self.record_reference_opt(ident.id, var_ref.defining_ast_id());
-            self.record_expression_type(ident.id, var_ref.value_type());
-            return Some((var_ref.value_type(), Some(var_ref)));
+            let ty = self.apply_infer_holes(var_ref.value_type());
+            self.record_expression_type(ident.id, ty);
+            return Some((ty, Some(var_ref)));
         }
         let ty = self.global_var_type(ident.id, &ident.name)?;
         self.record_item_reference_by_name(ident.id, &ident.name);
@@ -666,15 +680,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 let param = answered.map(|a| this.standing_in_open_packs(a, &mut stand_ins));
-                resolved[i] =
-                    Some(this.resolve_arg_against_param(arg, ctx, param, own_vars, &hints));
+                resolved[i] = Some(this.resolve_arg_against_param(arg, ctx, param, &hints));
             }
             for i in deferred {
                 let param = this
                     .packs_answered(&packs, param_types, &resolved, i)
                     .map(|a| this.standing_in_open_packs(a, &mut stand_ins));
-                resolved[i] =
-                    Some(this.resolve_arg_against_param(&args[i], ctx, param, own_vars, &hints));
+                resolved[i] = Some(this.resolve_arg_against_param(&args[i], ctx, param, &hints));
             }
             resolved
                 .into_iter()
@@ -689,9 +701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if TypeSystem::is_null_literal(arg)
                 && let Some(param) = param_types.get(i).copied()
             {
-                let expected = self.apply_infer_holes(param);
-                let answerable = self.answerable_vars(own_vars);
-                self.solve_own_infer_holes_against(expected, resolved[i], &answerable);
+                self.equate(resolved[i], param);
             }
         }
         resolved
@@ -834,7 +844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .mentions_any(answered, &slots)
             {
-                self.chain_infer_var(var, answered);
+                self.equate(var, answered);
             }
         }
     }
@@ -848,15 +858,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.type_has_infer_hole(settled)
     }
 
-    /// Resolve one argument and pin what it answers about `own_vars`. A numeric
-    /// literal pins later, in [`Self::resolve_args_against_params`]. `hints` is
-    /// what the call's site expects of `own_vars`.
+    /// Resolve one argument and equate it with its parameter. A numeric
+    /// literal settles later, in [`Self::resolve_args_against_params`].
+    /// `hints` is what the call's site expects of its own variables.
     fn resolve_arg_against_param(
         &mut self,
         arg: &ast::Expr,
         ctx: &mut FunctionContext,
         param: Option<ArgParam>,
-        own_vars: &[TypeId],
         hints: &IndexMap<InferVarId, TypeId>,
     ) -> TypeId {
         let Some(param) = param else {
@@ -874,9 +883,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let checked_against = self.context_literal_expected(arg, expected, hints);
         let resolved = self.resolve_expr(arg, ctx, Some(checked_against));
         if !answers_last(Some(arg)) {
-            let declared = self.apply_infer_holes(param.declared);
-            let answerable = self.answerable_vars(own_vars);
-            self.solve_own_infer_holes_against(declared, resolved, &answerable);
+            self.equate(resolved, param.declared);
         }
         resolved
     }
@@ -1220,7 +1227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
                 for (&hole, &arg) in holes.iter().zip(&args) {
-                    self.solve_infer_var(hole, arg);
+                    self.settle_as_written(hole, arg);
                 }
                 // An argument the turbofish left open is the construction's to infer.
                 Some(
@@ -1950,8 +1957,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
         };
 
-        if let Some(inst) = &arg_inst {
-            self.settle_onto_slots(inst, &mut args, ret);
+        if arg_inst.is_some() {
+            self.settle_onto_slots(&mut args, ret);
         }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
@@ -2087,8 +2094,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // re-check resolves a different declaration than the call was
                 // mangled to.
                 let typed = receiver.at_type(Some(receiver_type));
-                let resolved =
-                    self.static_callee_params(&typed, suffix, &args, (None, &[]), expected_type);
+                let resolved = self.resolve_static_callee(StaticQuery {
+                    arg_types: &args,
+                    receiver_args: &receiver_args,
+                    expected_return: expected_type,
+                    ..StaticQuery::of(&typed, suffix)
+                });
                 if self.report_unresolved_static(&resolved, suffix, &args, call.span) {
                     return TypeTable::ERROR;
                 }
@@ -2176,13 +2187,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return TypeTable::ERROR;
                 }
+                let scope = self.scope_type_param_ids();
                 for (i, arg) in args.iter().enumerate() {
                     // A slot neither the receiver nor the turbofish filled says
                     // only "whatever this instantiation binds", which every
                     // argument satisfies. Checking against it rejects the call
-                    // the declaration was written to accept.
+                    // the declaration was written to accept. The caller's own
+                    // parameter is no such slot: `5` is not a `T`.
                     if let Some(&expected) = substituted.get(i)
-                        && !self.tysys.is_unbound_type_param(expected)
+                        && !self.is_open_slot(expected, &scope)
                     {
                         self.typecheck_arg(*arg, expected, ArgSite::of(&call.args, i, call.span));
                     }
@@ -3342,7 +3355,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let expected = s.apply_infer_holes(default.expected);
                         let resolved = s.resolve_expr(&default.expr, ctx, Some(expected));
                         if let Some(span) = default.check_at {
-                            s.typecheck_into_callee(resolved, expected, span);
+                            let settles = Settles::of(&default.expr);
+                            s.typecheck_into_callee(resolved, expected, span, settles);
                         }
                         if let Some(name) = &default.binds {
                             bind(ctx, name, resolved);
@@ -3914,7 +3928,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     let bounds =
                         param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
-                    self.defer_slot(inferred, span, message.clone(), name.clone(), bounds)
+                    let var =
+                        self.defer_slot(inferred, span, message.clone(), name.clone(), bounds);
+                    if param.is_some_and(|p| p.is_pack) {
+                        self.mark_pack_var(var);
+                    }
+                    var
                 } else {
                     TypeTable::ERROR
                 };
@@ -3965,16 +3984,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a slot nothing at the call site answers waits for a sink the
     /// call's value reaches, a sibling branch's type among them. It does where
-    /// no type is expected of the call and its arguments hold no variable but
-    /// the call's own `type_args`, as a closure argument typed by them does.
-    fn defers_uninferred(
+    /// the type expected of the call is none or still holds a variable (an
+    /// enclosing call's argument), and its arguments hold no variable but the
+    /// call's own `type_args`, as a closure argument typed by them does.
+    pub(super) fn defers_uninferred(
         &self,
         args: &[TypeId],
         type_args: &[TypeId],
         expected_type: Option<TypeId>,
     ) -> bool {
+        let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
         let tt = self.tysys.type_table.borrow();
-        expected_type.is_none()
+        expected_type.is_none_or(|t| tt.contains_infer_var(t))
             && args.iter().all(|&a| {
                 tt.infer_vars_in(a)
                     .iter()
@@ -4026,12 +4047,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if names.is_empty() {
             return;
         }
-        let _ = self.emit(TypeError::cannot_infer(
-            &names,
-            &format!("`{prefix}::{suffix}`"),
-            &format!("`{prefix}::<...>::{suffix}()`"),
+        let _ = self.emit(TypeError::CannotInferType {
+            message: TypeError::receiver_args_uninferred_message(&names, &prefix, suffix),
             span,
-        ));
+        });
     }
 
     /// Substitute a declared default (`fn f<T = Fallback>`) into any dense
@@ -4195,6 +4214,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 p.name.clone(),
                 bounds,
             );
+            if p.is_pack {
+                self.mark_pack_var(stand_in);
+            }
             new_args.push(stand_in);
         }
         *type_args = new_args;
@@ -5071,7 +5093,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let answers: Vec<Option<TypeId>> = base_args.iter().copied().map(Some).collect();
         let solved = self.answer_receiver_vars(&vars, &shape, &answers);
         for (&var, &answer) in vars.iter().zip(&solved) {
-            self.chain_infer_var(var, answer);
+            self.equate(var, answer);
         }
         let open = vars.iter().zip(&solved).find(|(var, answer)| var == answer);
         let shaped = shape
@@ -5441,7 +5463,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(args) => args,
             None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret),
         };
-        self.settle_onto_slots(&inst, &mut args, ret);
+        self.settle_onto_slots(&mut args, ret);
         // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
         for (arg, &expected) in args.iter_mut().zip(&payload) {
             let expected = self.apply_infer_holes(expected);
@@ -5720,12 +5742,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|&param| self.tysys.type_id_to_string(param))
                 .collect();
-            let _ = self.emit(TypeError::cannot_infer(
-                &names,
-                &format!("`{prefix}::{method}`"),
-                &format!("`{prefix}::<...>::{method}()`"),
+            let _ = self.emit(TypeError::CannotInferType {
+                message: TypeError::receiver_args_uninferred_message(&names, &prefix, method),
                 span,
-            ));
+            });
             return Some(TypeTable::ERROR);
         };
         // The blanket would key on the argument-less head, which carries no

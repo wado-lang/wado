@@ -393,15 +393,37 @@ Where a method answers,
 `recv` must be of that type or a resource extending it. A trait's method that
 the spelling does not reach is reached as `Trait::method(recv, …)`.
 
-A generic type spelled without its arguments names no one instance. So
-`Pair::method(…)` names what an impl written for `Pair`'s head answers with,
-and what the instances of `Pair` an impl is written for answer with, a blanket
-whose bounds hold of one of them included. The receiver's own type then
-settles whether it answers. A static has no receiver, so the instance comes
-from the expected type or an argument, as a type parameter's would. Where
-neither says, it is the one instance an impl is written for that the static
-answers at. With two such instances or none, the type's arguments are left to
-infer, and the call reports that.
+A type argument the spelling omits is an inference variable, so
+`Pair::method(…)` means `Pair::<_, _>::method(…)`. A call holding an inference
+variable, this one or a method call on a receiver whose type holds one,
+resolves exactly as the spelling with every argument would at the instance
+inference settles. The order runs at the type as it stands, and an impl takes
+part while some instance of the variables could let it apply.
+
+Where every impl left takes a receiver, the call selects what `recv.method(…)`
+selects, and the receiver's type settles the variables. Where every one is a
+static, the expected type or an argument settles them, as a generic function's
+parameters are settled. Where impls of both kinds are left, the call cannot
+tell whether its first argument is a receiver, and names the trait or the
+type's arguments to say. Where several impls are left and the call must be
+resolved before inference settles them, it asks for a turbofish or an
+annotation; where none is, the method does not exist at any instance.
+
+The impl a call resolves to settles none of its variables. A variable nothing
+else settles is reported as one that cannot be inferred, even where only one
+impl could apply: inferring it from that impl would let an impl written
+elsewhere later make the call fail.
+
+A numeric literal's variable is the exception. Where one impl alone could
+answer a method on a receiver holding it, that impl settles it:
+`wrap(1).tag()` under `impl Tag for Bx<u64>` takes `1` as `u64`. The literal's
+type is a default that settles last, and the impl only chooses it earlier.
+
+> Not yet implemented: only selecting the method a call names reads a type
+> holding a variable as open. Every other question, a bound check among them,
+> reads it as a type that holds only what every type holds, so a call can be
+> refused before inference settles a variable that would let it apply. See
+> [WEP: Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md).
 
 An associated function with no `self` has no receiver argument to bind `Self`
 from, so the trait's turbofish binds it: `Trait::<Self = T>::method(…)`. The
@@ -421,7 +443,8 @@ assert Conv::<String, Self = S>::make() == "one";
 A reflection trait's one type argument is its subject, with no binding
 ([Trait-Qualified Calls](./spec-reflection.md#trait-qualified-calls)).
 
-Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md).
+Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md),
+[WEP: Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md).
 
 ### Default Method Implementations
 

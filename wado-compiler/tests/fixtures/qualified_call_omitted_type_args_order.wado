@@ -1,0 +1,79 @@
+// A spelling that omits an argument is asked with a variable for it, so a
+// blanket whose bound fails at every instance does not count toward the call:
+// the type's own declaration, or an impl written for it or for a reference to
+// it, answers alone.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Pair<T, i32> {
+    fn own(&self) -> i32 {
+        return 1;
+    }
+}
+
+type G<T> = Pair<T, i32>;
+
+trait Unmet with () {}
+
+trait Make with () {
+    fn own() -> i32;
+    fn tr() -> i32;
+    fn shown() -> i32;
+}
+
+impl<X: Unmet> Make for X {
+    fn own() -> i32 {
+        return 2;
+    }
+    fn tr() -> i32 {
+        return 2;
+    }
+    fn shown() -> i32 {
+        return 2;
+    }
+}
+
+test "the base type's own method" {
+    let g: G<i32> = { a: 1, b: 2 };
+    assert g.own() == 1;
+    assert G::own(&g) == 1;
+}
+
+trait Tr with () {
+    fn tr(&self) -> i32;
+    fn go(&self) -> i32;
+}
+
+impl Tr for Pair<i32, i32> {
+    fn tr(&self) -> i32 {
+        return 3;
+    }
+    fn go(&self) -> i32 {
+        return Self::tr(self);
+    }
+}
+
+test "an impl written for the type" {
+    let p: Pair<i32, i32> = { a: 1, b: 2 };
+    assert p.go() == 3;
+    assert Pair::tr(&p) == 3;
+}
+
+trait Show with () {
+    fn shown(self) -> i32;
+}
+
+impl<A, B> Show for &Pair<A, B> {
+    fn shown(self) -> i32 {
+        return 4;
+    }
+}
+
+test "an impl written for a reference to the type" {
+    let p: Pair<i32, bool> = { a: 1, b: true };
+    assert Pair::shown(&p) == 4;
+    assert Pair::<i32, bool>::shown(&p) == 4;
+}

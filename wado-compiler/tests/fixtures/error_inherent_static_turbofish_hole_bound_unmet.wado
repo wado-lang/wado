@@ -1,0 +1,29 @@
+// A `_` in a receiver turbofish that a later use settles is held to the bounds
+// of the impl the call committed to, as a written argument is.
+
+struct Duo<A, B> {
+    a: List<A>,
+    b: List<B>,
+}
+
+impl<A, B: Display> Duo<A, B> {
+    fn build() -> Duo<A, B> {
+        return Duo { a: [], b: [] };
+    }
+}
+
+struct NoDisp {
+    x: i32,
+}
+
+fn takes(_d: Duo<i32, NoDisp>) {}
+
+export fn run() {
+    let e = Duo::<i32, _>::build();
+    takes(e);
+}
+
+__DATA__
+{
+    "compile_error": "type 'NoDisp' does not implement trait 'Display' required by bound on 'B'"
+}

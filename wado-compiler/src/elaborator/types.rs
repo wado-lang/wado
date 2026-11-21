@@ -1066,6 +1066,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A newtype reaches itself through its base, so no type is at its root.
+    /// `chain` is the path back to it, starting and ending at it.
+    CircularNewtype {
+        name: String,
+        chain: Vec<String>,
+        span: Span,
+    },
+
     /// A trait reaches itself through its supertrait clause, so no type could
     /// ever satisfy the obligation. `chain` is the path back to the trait,
     /// starting and ending at it (`A -> B -> A`).
@@ -1783,6 +1791,20 @@ impl TypeError {
             message: Self::cannot_infer_message(names, owner, turbofish),
             span,
         }
+    }
+
+    /// [`Self::cannot_infer_message`] for the receiver's arguments of
+    /// `head::method(…)`, which a turbofish on `head` supplies.
+    pub(super) fn receiver_args_uninferred_message(
+        names: &[String],
+        head: &str,
+        method: &str,
+    ) -> String {
+        Self::cannot_infer_message(
+            names,
+            &format!("`{head}::{method}`"),
+            &format!("`{head}::<...>::{method}()`"),
+        )
     }
 
     /// [`Self::cannot_infer`]'s sentence, for a variable to raise if it is
@@ -2551,6 +2573,14 @@ impl TypeError {
             TypeError::UnknownBound { name, span } => (
                 Code::UnknownType,
                 format!("'{}' is not a declared trait", unalias_namespace_member(name)),
+                *span,
+            ),
+            TypeError::CircularNewtype { name, chain, span } => (
+                Code::UnknownType,
+                format!(
+                    "circular newtype: '{name}' is its own base via {}",
+                    chain.join(" -> ")
+                ),
                 *span,
             ),
             TypeError::CircularSupertrait {
@@ -4446,6 +4476,25 @@ pub(super) struct RequiredTrait {
     pub(super) decl: Resolution,
     pub(super) args: Option<Vec<TypeId>>,
     pub(super) display: String,
+}
+
+/// What `find_trait_method_for_type` found.
+pub(super) enum TraitLookup {
+    Found(Box<TraitMethodMatch>),
+    /// No impl answers the method.
+    Missing,
+    /// The lookup reported why it cannot answer, so the call reports nothing
+    /// more.
+    Reported,
+}
+
+impl TraitLookup {
+    pub(super) fn found(self) -> Option<TraitMethodMatch> {
+        match self {
+            Self::Found(found) => Some(*found),
+            Self::Missing | Self::Reported => None,
+        }
+    }
 }
 
 /// Result of finding a trait method for a type via `find_trait_method_for_type`.

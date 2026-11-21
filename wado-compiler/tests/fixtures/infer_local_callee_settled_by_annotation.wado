@@ -1,0 +1,19 @@
+// `f` holds `mk`'s variable until the annotation on `g` settles it as a
+// function type; the call through `f` reads that answer, as any later read
+// of `f` does. The `unwrap` of `null` traps before the call runs: what the
+// test holds is that the call compiles.
+
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn mk<T>(x: Option<T>) -> T {
+    return x.unwrap();
+}
+
+#[expect_trap]
+test {
+    let f = mk(none());
+    let g: fn(i32) -> i32 = f;
+    assert f(1) == g(1);
+}

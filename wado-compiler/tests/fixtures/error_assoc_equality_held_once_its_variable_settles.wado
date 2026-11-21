@@ -1,0 +1,25 @@
+// `S`'s `Src::Item` is `[i32, bool]`; the bound asks for `[String, Box<U>]`,
+// whose `U` the annotation settles after the call. The equality is held to
+// the answer then, and fails at `String`.
+
+struct Box<T> { v: T }
+
+trait Src with () { type Item; }
+
+struct S {}
+
+impl Src for S { type Item = [i32, bool]; }
+
+fn take<U, T: Src<Item = [String, Box<U>]>>(_t: T) -> Option<U> {
+    return null;
+}
+
+test {
+    let o = take(S {});
+    let _u: Option<i32> = o;
+}
+
+__DATA__
+{
+    "compile_error": ":18:13: analysis error: type 'S' does not satisfy the associated type 'Src::Item = [String, Box<i32>]': it is '[i32, bool]'"
+}

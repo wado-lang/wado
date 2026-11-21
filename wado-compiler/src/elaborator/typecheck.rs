@@ -15,6 +15,8 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::ArgSite;
+use super::coercion::is_literal_arithmetic;
+use super::infer_hole::{DeferredCheck, Obligation, says_nothing};
 use super::types::TypeError;
 use super::tysys::TypeSystem;
 
@@ -28,6 +30,25 @@ pub(super) enum TypeCheckResult {
     Deferred,
     /// Types are definitely incompatible.
     Incompatible,
+}
+
+/// Whether a value meeting its slot settles the variables either type holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Settles {
+    Variables,
+    /// A numeric literal's type is its default only until a later coercion
+    /// retypes it, so it settles nothing.
+    Nothing,
+}
+
+impl Settles {
+    pub(super) fn of(value: &Expr) -> Self {
+        if is_literal_arithmetic(value) {
+            Self::Nothing
+        } else {
+            Self::Variables
+        }
+    }
 }
 
 /// Whether a value of `type_id` may stand where a condition is read: a `bool`,
@@ -161,22 +182,9 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    // Two instances of one declaration, or two tuples, compare by their
-    // arguments (Rule 8), whatever their slots.
-    let same_declaration = match (type_table.get(actual_inner), type_table.get(expected_inner)) {
-        (ResolvedType::Tuple(actual_elems), ResolvedType::Tuple(expected_elems)) => {
-            Some((actual_elems.as_slice(), expected_elems.as_slice()))
-        }
-        _ => match (
-            declaration_instance(actual_inner, type_table),
-            declaration_instance(expected_inner, type_table),
-        ) {
-            (Some((a, actual_args)), Some((e, expected_args))) if a == e => {
-                Some((actual_args, expected_args))
-            }
-            _ => None,
-        },
-    };
+    // Two instances of one declaration, two arrays or two tuples, compare by
+    // their arguments (Rule 8), whatever their slots.
+    let same_declaration = same_constructor_args(actual_inner, expected_inner, type_table);
 
     // Rule 5: Newtype/flags distinctness, but for two instances of one newtype.
     let actual_is_newtype = matches!(
@@ -318,6 +326,74 @@ fn check_at(
     TypeCheckResult::Compatible
 }
 
+/// Each pair a value of `actual` meeting a slot of `expected` equates, where
+/// one side is an inference variable: the places [`check_at`] reaches by the
+/// same rules before an undecided type stops it. A place where no coercion
+/// can be chosen, since a head is still a variable, equates the two whole.
+/// A `!`, `unknown` or `error` side equates nothing, which every check admits.
+/// A tuple holding a variable `is_pack` says stands for a list there, whose
+/// elements meet no positions until it is answered.
+pub(super) fn meetings(
+    actual: TypeId,
+    expected: TypeId,
+    type_table: &TypeTable,
+    is_pack: &dyn Fn(TypeId) -> bool,
+    out: &mut Vec<(TypeId, TypeId)>,
+) {
+    if actual == expected || says_nothing(actual) || says_nothing(expected) {
+        return;
+    }
+    if type_table.is_infer_var(actual) || type_table.is_infer_var(expected) {
+        out.push((actual, expected));
+        return;
+    }
+    let pairwise = |actual: &[TypeId], expected: &[TypeId], out: &mut Vec<_>| {
+        if actual.len() == expected.len() {
+            for (&a, &e) in actual.iter().zip(expected) {
+                meetings(a, e, type_table, is_pack, out);
+            }
+        }
+    };
+    let (actual_inner, actual_is_ref) = unwrap_ref(actual, type_table);
+    let (expected_inner, expected_is_ref) = unwrap_ref(expected, type_table);
+    if actual_is_ref || expected_is_ref {
+        let into_mut = !type_table.is_mut_ref(actual) && type_table.is_mut_ref(expected);
+        if actual_is_ref && expected_is_ref && !into_mut {
+            meetings(actual_inner, expected_inner, type_table, is_pack, out);
+        }
+        return;
+    }
+    match (type_table.get(actual), type_table.get(expected)) {
+        (ResolvedType::Tuple(a), ResolvedType::Tuple(e)) => {
+            if !a.iter().chain(e).any(|&t| is_pack(t)) {
+                pairwise(a, e, out);
+            }
+        }
+        (
+            ResolvedType::Function {
+                params: a_params,
+                return_type: a_ret,
+                ..
+            },
+            ResolvedType::Function {
+                params: e_params,
+                return_type: e_ret,
+                ..
+            },
+        ) => {
+            if a_params.len() == e_params.len() {
+                pairwise(a_params, e_params, out);
+                meetings(*a_ret, *e_ret, type_table, is_pack, out);
+            }
+        }
+        _ => {
+            if let Some((a_args, e_args)) = same_constructor_args(actual, expected, type_table) {
+                pairwise(a_args, e_args, out);
+            }
+        }
+    }
+}
+
 /// Whether `actual` and `expected` are apart at their outermost type, which no
 /// rule here relates across: two declarations, two primitives, or two kinds of
 /// type. A reference, a resource and `!` are not judged here, since a rule
@@ -366,6 +442,29 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
 /// where the value cannot be rebuilt.
 fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
     fixed && actual == TypeTable::NEVER && expected != TypeTable::NEVER
+}
+
+/// The arguments of `actual` and `expected` where both are one constructor
+/// at their own arguments: two tuples, two arrays, or two instances of one
+/// declaration.
+fn same_constructor_args(
+    actual: TypeId,
+    expected: TypeId,
+    type_table: &TypeTable,
+) -> Option<(&[TypeId], &[TypeId])> {
+    match (type_table.get(actual), type_table.get(expected)) {
+        (ResolvedType::Tuple(a), ResolvedType::Tuple(e)) => Some((a.as_slice(), e.as_slice())),
+        (ResolvedType::BuiltinArray(a), ResolvedType::BuiltinArray(e)) => {
+            Some((std::slice::from_ref(a), std::slice::from_ref(e)))
+        }
+        _ => match (
+            declaration_instance(actual, type_table),
+            declaration_instance(expected, type_table),
+        ) {
+            (Some((a, a_args)), Some((e, e_args))) if a == e => Some((a_args, e_args)),
+            _ => None,
+        },
+    }
 }
 
 /// The declaration `id` instantiates and its type arguments, where it is a
@@ -530,14 +629,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Layer 3 wrapper over [`TypeSystem::typecheck`]: confines the
     /// `<H: CompilerHost>` plumbing to the `Elaborator` boundary so
     /// `TypeSystem` itself stays host-agnostic.
-    pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
-        self.typecheck_in(actual, expected, span, SlotFrame::Own);
+    pub(super) fn typecheck(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+        self.typecheck_in(actual, expected, span, SlotFrame::Own, Settles::Variables);
     }
 
     /// [`Self::typecheck`] on `value` meeting its slot, recording the rebuild
     /// an `Option<!>` it holds needs there.
     pub(super) fn typecheck_value(&mut self, value: &Expr, actual: TypeId, expected: TypeId) {
-        self.typecheck(actual, expected, value.span());
+        let settles = Settles::of(value);
+        self.typecheck_in(actual, expected, value.span(), SlotFrame::Own, settles);
         self.record_widening(value.id(), actual, expected);
     }
 
@@ -556,12 +656,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::typecheck`] on a value bound to a callee's parameter, whose type
     /// is written in the callee's frame.
-    pub(super) fn typecheck_into_callee(&self, actual: TypeId, expected: TypeId, span: Span) {
-        self.typecheck_in(actual, expected, span, SlotFrame::Callee);
+    pub(super) fn typecheck_into_callee(
+        &mut self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+        settles: Settles,
+    ) {
+        self.typecheck_in(actual, expected, span, SlotFrame::Callee, settles);
     }
 
-    fn typecheck_in(&self, actual: TypeId, expected: TypeId, span: Span, frame: SlotFrame) {
-        self.typecheck_worded(actual, expected, span, frame, |payload| {
+    fn typecheck_in(
+        &mut self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+        frame: SlotFrame,
+        settles: Settles,
+    ) {
+        self.typecheck_worded(actual, expected, span, frame, settles, move |payload| {
             TypeError::TypeMismatch {
                 expected: payload.expected,
                 found: payload.found,
@@ -578,7 +691,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected,
             site.span(),
             SlotFrame::Callee,
-            |payload| site.mismatch(payload.expected, payload.found),
+            site.settles(),
+            move |payload| site.mismatch(payload.expected, payload.found),
         );
         if let ArgSite::Written { value, .. } = site {
             self.record_widening(value, actual, expected);
@@ -586,17 +700,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn typecheck_worded(
-        &self,
+        &mut self,
         actual: TypeId,
         expected: TypeId,
         span: Span,
         frame: SlotFrame,
-        mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError,
+        settles: Settles,
+        mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError + 'static,
     ) {
+        let [actual, expected] = match settles {
+            Settles::Variables => self.equated(actual, expected),
+            Settles::Nothing => [actual, expected],
+        };
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
             let _ = self.emit(mismatch(payload));
             return;
         }
+        self.defer_check(actual, expected, mismatch);
         self.record_row_flows(actual, expected, span, frame);
         self.reject_pack_layout_mismatch(actual, expected, span);
     }
@@ -604,16 +724,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`check_assignable`], recording what [`Self::record_row_flows`] says
     /// where the value is admitted.
     pub(super) fn assignable(
-        &self,
+        &mut self,
         actual: TypeId,
         expected: TypeId,
         span: Span,
     ) -> TypeCheckResult {
+        let [actual, expected] = self.equated(actual, expected);
         let result = check_assignable(actual, expected, &self.tysys.type_table.borrow());
         if result != TypeCheckResult::Incompatible {
             self.record_row_flows(actual, expected, span, SlotFrame::Own);
         }
+        if result == TypeCheckResult::Deferred {
+            self.defer_check(actual, expected, move |payload| TypeError::TypeMismatch {
+                expected: payload.expected,
+                found: payload.found,
+                span,
+            });
+        }
         result
+    }
+
+    /// `actual` and `expected` once a value of the one meets a slot of the
+    /// other: [`Self::equate`]d, and what that settled put in.
+    fn equated(&mut self, actual: TypeId, expected: TypeId) -> [TypeId; 2] {
+        self.equate(actual, expected);
+        [
+            self.apply_infer_holes(actual),
+            self.apply_infer_holes(expected),
+        ]
+    }
+
+    /// Ask the check of `actual` against `expected` again once the variables
+    /// either holds settle, worded by `mismatch` if it fails then.
+    fn defer_check(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+        mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError + 'static,
+    ) {
+        if self.type_has_infer_hole(actual) || self.type_has_infer_hole(expected) {
+            self.infer_holes.require(Obligation::Check(DeferredCheck {
+                actual,
+                expected,
+                mismatch: Box::new(mismatch),
+            }));
+        }
     }
 
     /// Record each row of `actual` beside the row of `expected` it moves into,

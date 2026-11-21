@@ -1,0 +1,10 @@
+// A `_` that waits for a later use and meets none asks for its argument.
+use { TreeMap } from "core:collections";
+
+test {
+    let map = TreeMap::<String, _>::new();
+    assert map.len() == 0;
+}
+
+__DATA__
+{"compile_error": ":5:15: analysis error: cannot infer type parameter `V` of `TreeMap::new`; add a turbofish (`TreeMap::<...>::new()`) or a type annotation"}

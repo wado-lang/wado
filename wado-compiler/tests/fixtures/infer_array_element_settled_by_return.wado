@@ -1,0 +1,15 @@
+// An array meets an array element by element, as a tuple or a declaration's
+// instance does: returning `a` as `Array<i32>` settles `make`'s `T`.
+
+fn make<T: Default>() -> Array<T> {
+    return Array::<T>::new(2);
+}
+
+fn out() -> Array<i32> {
+    let a = make();
+    return a;
+}
+
+test {
+    assert out().len() == 2;
+}

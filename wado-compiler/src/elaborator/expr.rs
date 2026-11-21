@@ -643,6 +643,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_none_or(|home| *home == self.home_module(ast_id)),
             "a node written in another module reached a travelled walk"
         );
+        let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
         let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
         self.record_expression_type(ast_id, type_id);
         type_id
@@ -1207,6 +1208,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     inner_type_id
                 }
             };
+            // A variable the body answered since the binding was typed reads
+            // as its answer, as every later use of the binding means it.
+            let ty = self.apply_infer_holes(ty);
             return self.value_without_turbofish(ident, ty);
         }
 
@@ -2178,10 +2182,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let class = key_class.get_or_init(|| this.synthesize_arg_class(&index.index, ctx));
                 this.index_key_type(receiver, class, KeyedAccess::Read)
-                    .is_some_and(|key| {
-                        this.receiver_waits(receiver, "index_value", index.span, |this, def| {
-                            this.impl_takes_key(def, key)
-                        })
+                    .and_then(|key| this.subscript_trait(CompilerItem::IndexValue, key))
+                    .is_some_and(|required| {
+                        this.receiver_waits(receiver, "index_value", index.span, Some(&required))
                     })
             },
             |this, receiver, ctx| this.resolve_index_of(index, receiver, ctx, access, &key_class),
@@ -2908,7 +2911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         if let Some(target) = target {
             for &branch in &*branches {
-                self.solve_infer_holes_against(branch, target);
+                self.equate(branch, target);
             }
         } else {
             // No branch is decided alone, yet each may decide what another
@@ -2921,11 +2924,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let others = || (0..branches.len()).filter(move |&i| i != at);
             for i in others() {
                 let sibling = self.apply_infer_holes(branches[i]);
-                self.solve_infer_holes_against(branches[at], sibling);
+                self.equate(branches[at], sibling);
             }
             let hub = self.apply_infer_holes(branches[at]);
             for i in others() {
-                self.solve_infer_holes_against(branches[i], hub);
+                self.equate(branches[i], hub);
             }
         }
         for branch in branches {

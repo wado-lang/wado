@@ -1,0 +1,45 @@
+// A receiver holding a variable commits to the one impl whose target meets it
+// at every instance of the variable, and settles nothing: the annotation on the
+// result settles `T`, and the bound `T: Default` is checked at what it settled
+// to. An impl written for one instance answers once a turbofish names it.
+use { println, Stdout } from "core:cli";
+
+struct Bx<T> {
+    v: List<T>,
+}
+
+fn mk<T>() -> Bx<T> {
+    return Bx { v: [] };
+}
+
+trait First<T> with () {
+    fn first(&self) -> T;
+}
+
+impl<T: Default> First<T> for Bx<T> {
+    fn first(&self) -> T {
+        return T::default();
+    }
+}
+
+trait Me with () {
+    fn me(&self) -> Self;
+}
+
+impl Me for Bx<u64> {
+    fn me(&self) -> Self {
+        return Bx { v: [7] };
+    }
+}
+
+export fn run() with Stdout {
+    let n: u64 = mk().first();
+    println(`${n}`);
+    let b: Bx<u64> = mk::<u64>().me();
+    println(`${b.v[0]}`);
+}
+
+__DATA__
+{
+    "stdout": "0\n7\n"
+}

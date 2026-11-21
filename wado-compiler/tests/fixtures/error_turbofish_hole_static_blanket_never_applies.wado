@@ -1,0 +1,29 @@
+// A `_` left open in a static's turbofish asks for an annotation only where
+// some answer could make the call resolve. A blanket whose bound no instance
+// of the receiver meets offers none, so the static is unknown.
+
+trait Tag {}
+
+trait Mk {
+    fn make() -> i32;
+}
+
+impl<T: Tag> Mk for T {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+struct W<T> {
+    v: T,
+}
+
+export fn run() {
+    let _a = W::<_>::make();
+}
+
+__DATA__
+{
+    "compile_error": ":22:14: analysis error: unknown function 'W<_>::make'",
+    "compile_errors_not_contains": ["cannot infer"]
+}

@@ -1,11 +1,7 @@
-// `Pair::made()` writes no arguments for `Pair`, so a blanket's static answers
-// it at the instance the call settles: the expected type, an argument, or the
-// one instance the blanket's bounds hold of.
+// `Duo::build()` writes no arguments for `Duo`, so they are inference
+// variables, and a blanket's static answers at the instance the expected type
+// or an argument settles.
 trait Holds with () {}
-
-trait Make with () {
-    fn made() -> i32;
-}
 
 trait Build with () {
     fn build() -> Option<Self>;
@@ -15,25 +11,13 @@ trait Weigh with () {
     fn weigh(of: Self) -> i32;
 }
 
-struct Pair<A, B> {
-    a: A,
-    b: B,
-}
-
 struct Duo<A, B> {
     a: A,
     b: B,
 }
 
-impl Holds for Pair<i32, i32> {}
 impl Holds for Duo<i32, bool> {}
 impl Holds for Duo<bool, bool> {}
-
-impl<X: Holds> Make for X {
-    fn made() -> i32 {
-        return 7;
-    }
-}
 
 impl<X: Holds> Build for X {
     fn build() -> Option<X> {
@@ -45,10 +29,6 @@ impl<X: Holds> Weigh for X {
     fn weigh(of: X) -> i32 {
         return 9;
     }
-}
-
-test "the one instance the bounds hold of" {
-    assert Pair::made() == 7;
 }
 
 test "the expected type" {

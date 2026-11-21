@@ -756,6 +756,7 @@ impl<'a, H> DiagnosticCollector<'a, H> {
 // drop the host's dependency index (path *and* component deps), so
 // `use { … } from "<dep>"` would fail to resolve on the LSP path, and would turn
 // `source_exists`'s stat back into a full read.
+#[deny(clippy::missing_trait_methods)]
 impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, wado_compiler::SourceError> {
         self.inner.load_source(path).await
@@ -788,6 +789,19 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         integrity: Option<wado_compiler::remote::Integrity>,
     ) -> Result<Vec<u8>, wado_compiler::SourceError> {
         self.inner.load_remote(url, extent, integrity).await
+    }
+
+    async fn load_file(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+        integrity: Option<wado_compiler::remote::Integrity>,
+    ) -> Result<Vec<u8>, wado_compiler::SourceError> {
+        self.inner.load_file(path, extent, integrity).await
+    }
+
+    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+        self.inner.save_internal_artifact(file_stem, bytes)
     }
 
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {

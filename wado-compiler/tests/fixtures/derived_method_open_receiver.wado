@@ -1,0 +1,24 @@
+// A receiver holding a literal's variable waits for the call's arguments when
+// the one impl answering meets every instance of it, a derived impl as a
+// written one: `2 as u8` settles both `1`s.
+
+variant Tree<T> { Leaf(T), Empty }
+
+trait Same with () {
+    fn same(&self, o: &Self) -> bool;
+}
+
+impl<T> Same for Tree<T> {
+    fn same(&self, o: &Self) -> bool {
+        return true;
+    }
+}
+
+test "a written impl" {
+    assert Tree::Leaf(1).same(&Tree::Leaf(2 as u8));
+}
+
+test "a derived impl" {
+    assert !Tree::Leaf(1).eq(&Tree::Leaf(2 as u8));
+    assert Tree::Leaf(1).cmp(&Tree::Leaf(2 as u8)) == Ordering::Less;
+}
