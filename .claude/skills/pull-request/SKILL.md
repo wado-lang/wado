@@ -99,8 +99,8 @@ No need to include a test section. CI runs the full test suite.
 
 Angle brackets need nothing but a code span: `` `t_<Name>` `` renders as
 written. The GitHub MCP server drops them and HTML-escapes quotes in the text it
-reads back. Check the web UI before believing the description is broken, and
-never rewrite prose to work around it.
+reads back. Check `gh pr view <N>` before believing the description is broken,
+and never rewrite prose to work around it.
 
 Cut the draft before posting. A first draft follows the shape of the work: a
 heading for each thing that happened, at the length it took to do. Read it back
@@ -121,7 +121,8 @@ change.
 
 Read the title and description back with `gh pr view <N>`, after opening the
 PR and after each edit of either. Read what GitHub holds, not the draft: a
-`--body-file` left over from earlier work once posted another PR's description.
+reused `--body-file` posts whatever it last held. Check the text against this
+branch's diff, and correct a mismatch with `gh pr edit <N>`.
 
 Subscribe to the PR with `subscribe_pr_activity`. Handle every event it
 delivers; skipping one is a decision you state.
