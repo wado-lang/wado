@@ -566,8 +566,8 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
         let mut layers: List<String> = [];
         let mut pools: List<String> = [];
         for let layer of &group.layers {
-            let at: List<String> = (first..<first + layer.len()).map(|i| `${i}`).collect();
-            pools.push(`[${at.join(", ")}]`);
+            let positions: List<String> = (first..<first + layer.len()).map(|i| `${i}`).collect();
+            pools.push(`[${positions.join(", ")}]`);
             first += layer.len();
             let mut stored: List<String> = [];
             for let weight of layer {

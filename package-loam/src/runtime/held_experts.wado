@@ -160,15 +160,15 @@ fn runs_of(shape: &ExpertShape, slots: i32) -> Result<List<LayerRun>, LoadError>
             runs.push(LayerRun { first, count: end - first, slots: experts + 1 + share });
         }
         if runs.into_iter().all(|run| run.slots <= shape.most_slots) {
-            let mut planned: List<LayerRun> = [];
+            let mut kept: List<LayerRun> = [];
             for let run of runs {
                 if run.count == 1 || run.slots >= run.count * experts {
-                    planned.extend(&own(run.first, run.count));
+                    kept.extend(&own(run.first, run.count));
                 } else {
-                    planned.push(run);
+                    kept.push(run);
                 }
             }
-            return Result::Ok(planned);
+            return Result::Ok(kept);
         }
     }
     return Result::Err(
