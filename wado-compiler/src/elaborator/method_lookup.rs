@@ -37,7 +37,7 @@ use super::infer_hole::{DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
-use super::synth::{ArgClass, ArgProbe, KeyedAccess};
+use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess};
 use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
@@ -2439,7 +2439,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `probe`: the call's arguments, classified on demand to select
         // among one trait's argument lists. `None` from callers with no
         // argument list at hand.
-        probe: Option<&mut ArgProbe<'_>>,
+        probe: Option<ArgSource<'_, '_>>,
     ) -> TraitLookup {
         let receiver_display = type_key
             .display_name(self.tysys.resolutions.defs())
@@ -3250,7 +3250,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver: Option<TypeId>,
         span: Span,
-        probe: Option<&mut ArgProbe<'_>>,
+        probe: Option<ArgSource<'_, '_>>,
     ) -> Option<TraitMethodMatch> {
         // The overload set is the concrete candidates of one declaration.
         // Distinct traits never form one, and a blanket neither forms nor
@@ -3262,7 +3262,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(i, _)| i)
             .collect();
         let mut classes: Vec<ArgClass> = Vec::new();
-        if let Some(probe) = probe
+        if let Some(mut probe) = probe
             && concrete.len() > 1
             && concrete
                 .iter()
@@ -3291,7 +3291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .all(|(class, &param)| self.class_admits(param, class))
                 })
                 .collect();
-            if let Some(expected) = probe.expected {
+            if let Some(expected) = probe.expected() {
                 self.narrow_to_expected_return(&mut admitted, expected, |&i| {
                     found_traits[i].method_info.return_type
                 });
@@ -4295,7 +4295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(output_type),
                 method_call.span,
                 None,
-                Some(&mut probe),
+                Some(ArgSource::Exprs(&mut probe)),
             );
             match self.decide_now(lookup, output_type, &method_call.method, method_call.span) {
                 TraitLookup::Found(trait_match) => {

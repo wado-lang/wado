@@ -2109,6 +2109,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         args: args.clone(),
                         impl_args: instance_args,
                         call: call.id,
+                        method_id: ident.segments.get(1).map(|segment| segment.id),
                         span: call.span,
                         expected: expected_type,
                         return_type: info.return_type,

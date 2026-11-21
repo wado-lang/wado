@@ -21,6 +21,8 @@ use super::expr::IndexAccess;
 use super::infer_hole::Obligation;
 use super::method_call::InheritedFrame;
 use super::static_call::ReceiverId;
+use super::synth::ArgSource;
+use super::trait_env::ImplTargetKey;
 use super::types::{
     MethodInfo, MethodOwner, RequiredTrait, TraitLookup, TraitMethodMatch, TypeError,
 };
@@ -95,6 +97,8 @@ pub(super) struct PendingStatic {
     pub(super) args: Vec<TypeId>,
     pub(super) impl_args: Vec<TypeId>,
     pub(super) call: AstId,
+    /// The method name's token, whose use→def edge names the selected method.
+    pub(super) method_id: Option<AstId>,
     pub(super) span: Span,
     pub(super) expected: Option<TypeId>,
     pub(super) return_type: TypeId,
@@ -146,6 +150,9 @@ pub(super) struct PendingCall {
     pub(super) method_id: Option<AstId>,
     /// The receiver's value, as the lookup reads it.
     pub(super) receiver: TypeId,
+    /// Set where the impls waited on were written for `&T` / `&mut T`, which
+    /// the selection is then made among.
+    pub(super) ref_kind: Option<RefKind>,
     pub(super) method_name: String,
     pub(super) args: Vec<TypeId>,
     /// What the call was typed with, from the trait's declaration.
@@ -262,8 +269,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let &[decl] = traits.iter().collect::<Vec<_>>().as_slice() else {
             return None;
         };
-        let (sig, assoc_types) = self.trait_method_of(decl, method_name)?;
-        if !assoc_types.is_empty() || !sig.own_type_params().is_empty() {
+        let (sig, _) = self.trait_method_of(decl, method_name)?;
+        let reads_assoc_type = {
+            let tt = self.tysys.type_table.borrow();
+            sig.decl
+                .param_types
+                .iter()
+                .chain(&sig.decl.return_type)
+                .any(|&ty| tt.contains_assoc_type_projection(ty))
+        };
+        if reads_assoc_type || !sig.own_type_params().is_empty() {
             return None;
         }
         let arity = self.tysys.trait_env.decl_header_of(decl)?.type_params.len();
@@ -376,6 +391,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if answered != TypeTable::ERROR {
             self.hold_to_selected(answered, pending.return_type, pending.span);
         }
+        if let Some(method_id) = pending.method_id
+            && let Some(def) = self
+                .sem
+                .types
+                .static_method_dispatch
+                .get(&pending.call)
+                .and_then(|dispatch| dispatch.method_def)
+        {
+            self.record_reference_to_decl(method_id, def, pending.span);
+        }
         None
     }
 
@@ -463,14 +488,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// still leaves it undecided.
     fn select_call(&mut self, id: usize, call: PendingCall) -> Option<PendingCall> {
         let receiver = self.apply_infer_holes(call.receiver);
+        let target = match call.ref_kind {
+            Some(kind) => ImplTargetKey::Ref(kind),
+            None => self.impl_target_of(receiver),
+        };
         let lookup = self.find_trait_method_for_type(
-            &self.impl_target_of(receiver),
+            &target,
             &call.method_name,
             self.tysys.impl_position_args(receiver).as_deref(),
             Some(receiver),
             call.span,
             None,
-            None,
+            Some(ArgSource::Types(call.args.clone())),
         );
         match lookup {
             TraitLookup::Undecided(_) => return Some(call),
@@ -549,7 +578,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         found: TraitMethodMatch,
     ) {
-        let adopted = self.adopt_trait_match(found, receiver, None);
+        let ref_owner = selection
+            .ref_kind
+            .map(|_| found.owner_for(receiver, &self.tysys.type_table.borrow()));
+        let impl_struct_fq = found.impl_struct_fq.clone();
+        let mut adopted = self.adopt_trait_match(found, receiver, None);
+        if let Some(owner) = ref_owner {
+            adopted.info.is_ref_impl = true;
+            adopted.info.owner = owner;
+            adopted.trait_impl_struct_name = Some(impl_struct_fq);
+        }
         let info = adopted.info;
         let mut param_types = info.param_types.clone();
         let mut return_type = info.return_type;
@@ -591,7 +629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name: &selection.method_name,
             trait_name: Some(adopted.trait_name),
             matched_impl_decl: adopted.matched_impl_decl,
-            matched_ref_kind: None,
+            matched_ref_kind: selection.ref_kind,
             trait_impl_struct_name: adopted.trait_impl_struct_name,
             trait_impl_module_source: adopted.trait_impl_module_source,
             inherent_impl_module: info.impl_module,

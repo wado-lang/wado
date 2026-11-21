@@ -594,6 +594,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A lookup that reported why it cannot answer leaves the call nothing
         // more to report.
         let mut reported = false;
+        // A call that cannot choose its impl yet waits for the receiver to
+        // settle, typed by the trait's declaration meanwhile. It waits only
+        // where its dispatch is recorded, for the sweep to rewrite, and where
+        // no trait is named, which a qualified call would have to keep to.
+        let mut waits_for_selection = false;
+        let can_wait = call_id.is_some() && required_trait.is_none();
         if let Some(ref_kind) = subject_ref_kind
             && trait_answers_nearer(self, Some(ref_kind == RefKind::Mut))
         {
@@ -604,9 +610,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(base_type_id),
                 span,
                 required_trait,
-                Some(&mut probe),
+                Some(ArgSource::Exprs(&mut probe)),
             );
-            let result = self.decide_now(result, base_type_id, method_name, span);
+            let declared = match &result {
+                TraitLookup::Undecided(live) if can_wait => {
+                    let subject = subject.expect("a reference kind is read off the subject");
+                    self.trait_declared_info(live, subject, method_name)
+                }
+                TraitLookup::Undecided(_)
+                | TraitLookup::Found(_)
+                | TraitLookup::Missing
+                | TraitLookup::Reported => None,
+            };
+            let result = match declared {
+                Some((declared, mut info)) => {
+                    waits_for_selection = true;
+                    info.is_ref_impl = true;
+                    trait_name = Some(declared);
+                    matched_ref_kind = Some(ref_kind);
+                    method_info = Some(info);
+                    TraitLookup::Missing
+                }
+                None => self.decide_now(result, base_type_id, method_name, span),
+            };
             reported |= matches!(result, TraitLookup::Reported);
             // Only use ref-type impls that target a concrete container type
             // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
@@ -677,19 +703,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(base_type_id),
                 span,
                 required_trait,
-                Some(&mut probe),
+                Some(ArgSource::Exprs(&mut probe)),
             )
         } else {
             TraitLookup::Missing
         };
-        // A call that cannot choose its impl yet waits for the receiver to
-        // settle, typed by the trait's declaration meanwhile. It waits only
-        // where its dispatch is recorded, for the sweep to rewrite, and where
-        // no trait is named, which a qualified call would have to keep to.
-        let mut waits_for_selection = false;
         let lookup = match lookup {
             TraitLookup::Undecided(live) => {
-                let declared = (call_id.is_some() && required_trait.is_none())
+                let declared = can_wait
                     .then(|| self.trait_declared_info(&live, base_type_id, method_name))
                     .flatten();
                 match declared {
@@ -1220,6 +1241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     call: call_id.expect("a call waits only where its dispatch is recorded"),
                     method_id,
                     receiver: base_type_id,
+                    ref_kind: matched_ref_kind,
                     method_name: method_name.to_string(),
                     args,
                     param_types: substituted_param_types,
