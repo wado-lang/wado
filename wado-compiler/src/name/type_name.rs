@@ -817,6 +817,8 @@ impl FqTypeName {
         ret: FqTypeName,
         mut effects: Vec<tir::EffectRef>,
     ) -> Self {
+        // An impl is found by its target's name, so a row's order must not
+        // tell two names apart.
         tir::canonicalize_row(&mut effects);
         let mut signature = params;
         signature.push(ret);
