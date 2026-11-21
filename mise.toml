@@ -11,9 +11,6 @@ min_version = "2026.10.24"
 node = "26"
 # Node 26 bundles npm 11, and package-loam/package.json requires 12.
 npm = "12"
-#
-# A task's `tools` names an exact version: mise re-resolves a task tool on
-# every `mise install`, ignoring its mise.lock entry.
 
 [settings]
 auto_install = true
@@ -496,19 +493,26 @@ PATH="/usr/bin:$PATH" exec "$@"
 # The oracle tasks run the ANTLR4 jar, so Java is installed for them alone. A
 # child the guest spawns reaches it only where `[process] read` in
 # ~/.config/wado/config.toml names mise's installs (~/.local/share/mise/installs).
+#
+# It is an exact version: mise re-resolves a task's `tools` on every
+# `mise install`, ignoring mise.lock. `mise ls-remote java` gives the name;
+# temurin-25.0.5+100000002.0.LTS is Temurin 25.0.5.1+2.
+[vars]
+java = "temurin-25.0.5+100000002.0.LTS"
+
 [tasks.oracle-gale]
 description = "Run the ANTLR4 jar on a grammar and the input on stdin (package-gale/scripts/antlr4_oracle.wado)"
-tools = { java = "temurin-25.0.5+100000002.0.LTS" }
+tools = { java = "{{vars.java}}" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle.wado"
 
 [tasks.oracle-gale-selftest]
 description = "Check the ANTLR4 oracle's answers and refusals against the corpus grammars"
-tools = { java = "temurin-25.0.5+100000002.0.LTS" }
+tools = { java = "{{vars.java}}" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle_selftest.wado"
 
 [tasks.oracle-gale-regen]
 description = "Regenerate Gale's oracle-pinned driver tests (sqlite, json, or all)"
-tools = { java = "temurin-25.0.5+100000002.0.LTS" }
+tools = { java = "{{vars.java}}" }
 run = 'WADO="$(scripts/dev-bin.sh --path wado)" scripts/dev-bin.sh wado run package-gale/scripts/regen_oracle.wado'
 
 [tasks.oracle-re]
@@ -529,12 +533,12 @@ run = "scripts/dev-bin.sh wado run scripts/affine_matrix/main.wado"
 
 [tasks.oracle-gale-typescript]
 description = "List where Gale's TypeScript parse tree for a file differs from the ANTLR4 jar's"
-tools = { java = "temurin-25.0.5+100000002.0.LTS" }
+tools = { java = "{{vars.java}}" }
 run = "scripts/dev-bin.sh wado run package-gale/tools/oracle_typescript.wado"
 
 [tasks.extract-gale-descriptors]
 description = "Regenerate Gale's ANTLR4 descriptor corpus (all categories, or those named)"
-tools = { java = "temurin-25.0.5+100000002.0.LTS" }
+tools = { java = "{{vars.java}}" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/extract_antlr4_descriptors.wado"
 
 [tasks.test-gale-o2]
