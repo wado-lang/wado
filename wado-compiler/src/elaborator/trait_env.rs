@@ -1772,6 +1772,15 @@ impl TraitEnv {
         })
     }
 
+    /// Whether impl block `block` bounds a parameter, so it may answer some
+    /// instances of its target and not others.
+    pub(crate) fn is_bounded_impl(&self, block: DefId) -> bool {
+        self.impl_headers[&block]
+            .type_params
+            .iter()
+            .any(|param| !param.bounds.is_empty())
+    }
+
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         let header = &self.impl_headers[&entry];
         !header.methods.is_empty() && header.trait_def() == Some(trait_)

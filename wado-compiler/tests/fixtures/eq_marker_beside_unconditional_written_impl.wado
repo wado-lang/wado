@@ -1,0 +1,16 @@
+// The written impl answers every instance, so the marker beside it derives
+// nothing and `==` calls the written body.
+
+struct Point { x: i32 }
+
+impl Eq for Point {
+    fn eq(&self, other: &Self) -> bool {
+        return self.x % 10 == other.x % 10;
+    }
+}
+
+impl Eq for Point;
+
+test {
+    assert Point { x: 1 } == Point { x: 11 };
+}
