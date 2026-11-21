@@ -115,6 +115,13 @@ test "a layout's layers split into as few runs as keep each pool within what the
         ],
     ];
     assert runs([shape(4, 0, 3)], 24) matches { Err(_) };
+    // Slots past what the runs the budget affords hold are left unspent.
+    assert runs([shape(2, 0, 5)], 14).unwrap() == [
+        [
+            [0, 2, 5],
+        ],
+    ];
+    assert runs([shape(2, 0, 4)], 14) matches { Err(_) };
     // A run of one layer holds its own experts.
     assert runs([shape(3, 0, 6)], 22).unwrap() == [
         [
@@ -124,9 +131,10 @@ test "a layout's layers split into as few runs as keep each pool within what the
     ];
 }
 
-/// Rounds of three layers sharing 5 slots, each layer picking experts 0 and 1
-/// at every one-token step: the counts `eviction` gives.
-fn cycled(eviction: Eviction) -> ExpertCounts {
+/// Rounds of three layers within `budget` bytes, 5 slots at 10, each layer
+/// picking experts 0 and 1 at every one-token step: the counts `eviction`
+/// gives.
+fn cycled(eviction: Eviction, budget: i64 = 10) -> ExpertCounts {
     let mut fetches: List<Fetch> = [];
     for let _ of 0..<10 {
         for let layer of 0..<3 {
@@ -137,7 +145,7 @@ fn cycled(eviction: Eviction) -> ExpertCounts {
             });
         }
     }
-    let [prompts, steps] = replayed(&[shape(3, 0)], &fetches, 10, eviction).unwrap();
+    let [prompts, steps] = replayed(&[shape(3, 0)], &fetches, budget, eviction).unwrap();
     assert prompts.picked == 0;
     assert steps.picked == 60;
     assert steps.loaded_bytes == 2 * (steps.picked - steps.held);
@@ -149,6 +157,10 @@ test "layers taken in turn hold more under the layer that runs last from here th
     let in_order = cycled(Eviction::LayerOrder).held;
     assert recent < in_order;
     assert in_order <= cycled(Eviction::Farthest).held;
+}
+
+test "a replay counts the picks of layers holding their own experts as held" {
+    assert cycled(Eviction::Recent, i64::MAX).held == 60;
 }
 
 test "experts fetched into pools of fewer slots compute what pools of every slot do, in a loop or a branch too" {

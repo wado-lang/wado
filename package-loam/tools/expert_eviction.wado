@@ -62,11 +62,15 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     }
 }
 
-/// The tokens the recorded steps of one token ran, each counted once though
-/// every layer fetches for it.
+/// The tokens the recorded steps of one token ran: the fetches of one host
+/// step, which fetches once for each of them.
 fn step_tokens(record: &Fetches) -> i64 {
-    let layers = record.shapes.into_iter().map(|s| s.layers as i64).sum().unwrap_or(1);
-    return record.fetches.into_iter().filter(|f| f.tokens == 1).count() as i64 / layers;
+    let singles = record.fetches.into_iter().filter(|f| f.tokens == 1).collect();
+    if singles.is_empty() {
+        return 0;
+    }
+    let step = singles[0].step;
+    return singles.into_iter().filter(|f| f.step == step).count() as i64;
 }
 
 fn share(counts: &ExpertCounts) -> String {

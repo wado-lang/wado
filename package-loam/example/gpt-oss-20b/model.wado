@@ -133,6 +133,7 @@ pub fn checked<affine Bk: Backend>(
         },
     };
     println(`loaded in ${seconds((MonotonicClock::now() - started) as u64):.1} s`);
+    loaded.model.experts_mut().record_fetches();
     for let p of 0..<generate.len() {
         let g = &generate[p];
         let count = i32::min(steps, g.generated.len());
