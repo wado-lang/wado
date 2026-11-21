@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795298182777,
+  "lastUpdate": 1795299087637,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80709,6 +80709,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b9f0267e5d923ca5efbcacb8799c78fad2f0737f"
         },
         "date": 1795298181688,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e550f0190b994bfc2faca4c9a75f7ff76c6d5584",
+          "message": "Merge pull request #2714 from wado-lang/ccr-25ccfb89-atykhb\n\nfeat(jade): generate Wado types from a JSON Schema, through Kiln",
+          "timestamp": "2026-11-22T06:39:40+09:00",
+          "tree_id": "099c0dac0963b6056aab445bdb1af21cab4b23b3",
+          "url": "https://github.com/wado-lang/wado/commit/e550f0190b994bfc2faca4c9a75f7ff76c6d5584"
+        },
+        "date": 1795299086758,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
