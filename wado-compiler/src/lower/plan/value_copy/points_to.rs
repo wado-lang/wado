@@ -29,6 +29,7 @@ use loc_set::{Loc, LocSet};
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
 use super::last_use::collect_child_exprs;
+use super::place::carries_storage;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
 use crate::cut_memo::CutWalk;
 use crate::defs::DefId;
@@ -269,6 +270,15 @@ pub(super) enum Handle {
     Writes,
 }
 
+/// Whether what `spec` retains out of an argument of type `source` is storage:
+/// anything but the elements of an array of plain values, which are copied.
+pub(super) fn retains_storage<P>(spec: &RetainSpec<P>, source: TypeId, type_table: &TypeTable) -> bool {
+    match (spec.elements, type_table.get(type_table.peel_refs(source))) {
+        (true, ResolvedType::BuiltinArray(element)) => carries_storage(*element, type_table),
+        _ => true,
+    }
+}
+
 /// The types a walk is inside of: a struct by its type, a variant by its
 /// declaration and its arguments resolved to concrete types. A cycle back to
 /// one adds no path to a handle.
@@ -305,16 +315,6 @@ impl<'a> HoldsHandle<'a> {
     pub(super) fn of(&self, ty: TypeId) -> bool {
         self.known
             .get_or_compute(ty, || self.walk(ty, None, &mut UnderWay::new(false), 0))
-    }
-
-    /// Whether what `spec` retains out of an argument of type `source` may
-    /// hold one: the argument, or each element of an array it names.
-    pub(super) fn retained_by<P>(&self, spec: &RetainSpec<P>, source: TypeId) -> bool {
-        let source = self.type_table.peel_refs(source);
-        match (spec.elements, self.type_table.get(source)) {
-            (true, ResolvedType::BuiltinArray(element)) => self.of(*element),
-            _ => self.of(source),
-        }
     }
 
     /// `env` is what the template parameters `ty` is written in take.
@@ -1602,7 +1602,7 @@ impl Builder<'_> {
             let Some(source) = handed[spec.source] else {
                 continue;
             };
-            if !self.names.retained_by(spec, args[spec.source].type_id) {
+            if !retains_storage(spec, args[spec.source].type_id, self.type_table) {
                 continue;
             }
             let kept = if spec.elements {

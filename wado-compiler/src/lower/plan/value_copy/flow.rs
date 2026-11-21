@@ -26,7 +26,9 @@
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncKeySet;
 use super::last_use::collect_child_exprs;
-use super::points_to::{Args, Graph, Handle, HoldsHandle, Site, Slot, Target};
+use super::points_to::{
+    Args, Graph, Handle, HoldsHandle, Site, Slot, Target, retains_storage,
+};
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -960,7 +962,7 @@ impl<'p, 'a> Body<'p, 'a> {
             let Some(source) = handed[spec.source] else {
                 continue;
             };
-            if !self.package.names.retained_by(spec, args[spec.source].type_id) {
+            if !retains_storage(spec, args[spec.source].type_id, self.package.type_table) {
                 continue;
             }
             let kept = if spec.elements {
