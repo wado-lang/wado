@@ -275,11 +275,10 @@ impl Gen {
         }
         // A struct, enum or variant written in place inside an `Option` takes a
         // name of its own, as the declaration holds the `Option`.
-        let hint = if let Object(o) = s && non_null(o) matches { Some(_) } {
-            `${name}Value`;
-        } else {
-            name;
-        };
+        let mut hint = name;
+        if let Object(o) = s && non_null(o) matches { Some(_) } {
+            hint = `${name}Value`;
+        }
         let ty = self.type_of(s, at, &hint)?;
         let mut spec = NewtypeSpec::new(name, ty.text, Vis::Pub);
         if let Some(d) = doc {
@@ -892,11 +891,8 @@ fn leaf_of(o: &SchemaObject) -> Option<Ty> {
 /// Pointer to it within `o`.
 fn non_null(o: &SchemaObject) -> Option<[Schema, String]> {
     if o.any_of.len() == 2 {
-        for let [i, j] of [
-            [0, 1],
-            [1, 0],
-        ] {
-            if is_null(&o.any_of[j]) {
+        for let i of 0..<2 {
+            if is_null(&o.any_of[1 - i]) {
                 return Option::Some([o.any_of[i], `/anyOf/${i}`]);
             }
         }
