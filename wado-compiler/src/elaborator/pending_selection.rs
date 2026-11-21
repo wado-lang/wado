@@ -1,9 +1,9 @@
-//! A method call whose impl depends on what the receiver's variables settle
-//! to. The call is typed by the trait's declaration of the method, with `Self`
-//! the receiver, and its selection waits as an [`Obligation::Pending`]. Once the
-//! body ends the receiver is settled as far as it will be: the selection is made
-//! there, the impl's signature is held to what the call was typed with, and the
-//! recorded dispatch is pointed at the impl.
+//! A method call or comparison whose impl depends on what the receiver's
+//! variables settle to. The call is typed by the trait's declaration of the
+//! method, with `Self` the receiver, and its selection waits as an
+//! [`Obligation::Pending`]. Once the body ends the receiver is settled as far as
+//! it will be: the selection is made there, the impl's signature is held to what
+//! the call was typed with, and the recorded dispatch is pointed at the impl.
 
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
@@ -11,8 +11,7 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, RefKind};
 use crate::tir::{
-    EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId,
-    slots_from_impl_args,
+    EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId, slots_from_impl_args,
 };
 use crate::token::Span;
 
@@ -178,8 +177,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// call's arguments may settle, and the impl selected settles otherwise.
     ///
     /// `None` where the call cannot wait: an impl written for no block, a
-    /// receiver whose head is open or that names a parameter, or a method whose signature reads an
-    /// associated type or a type parameter of its own.
+    /// receiver whose head is open or that names a parameter, or a method whose
+    /// signature reads an associated type or a type parameter of its own.
     pub(super) fn trait_declared_info(
         &mut self,
         live: &[Option<DefId>],
@@ -210,7 +209,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for index in 1..=arity {
             let var = self.mint_infer_var();
             let index = u32::try_from(index).expect("a trait's parameters fit a slot index");
-            slots.insert(TypeParamId { owner: *decl, index }, var);
+            slots.insert(
+                TypeParamId {
+                    owner: *decl,
+                    index,
+                },
+                var,
+            );
             trait_args.push(var);
         }
         let instantiated = sig.instantiate_received(

@@ -4294,7 +4294,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // as on the plain method-call path.
         let mut probe = ArgProbe::new(&method_call.args, ctx, expected_type);
         if method_info.is_none() {
-            match self.find_trait_method_for_type(
+            let lookup = self.find_trait_method_for_type(
                 &self.impl_target_of(output_base_type_id),
                 &method_call.method,
                 output_type_args.as_deref(),
@@ -4302,7 +4302,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_call.span,
                 None,
                 Some(&mut probe),
-            ) {
+            );
+            match self.decide_now(lookup, output_type, &method_call.method, method_call.span) {
                 TraitLookup::Found(trait_match) => {
                     method_trait_name = Some(trait_match.trait_name);
                     method_info = Some(trait_match.method_info);
@@ -4310,14 +4311,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TraitLookup::Missing => {}
                 TraitLookup::Reported => return Some(TypeTable::ERROR),
-                TraitLookup::Undecided(_) => {
-                    self.report_undecided_selection(
-                        output_type,
-                        &method_call.method,
-                        method_call.span,
-                    );
-                    return Some(TypeTable::ERROR);
-                }
+                TraitLookup::Undecided(_) => unreachable!("decided now"),
             }
         }
 

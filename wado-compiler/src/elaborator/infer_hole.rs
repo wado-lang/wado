@@ -14,8 +14,8 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::assoc_target_slot;
-use super::scope::{ParamRef, ScopeParams};
 use super::pending_selection::{PendingSelection, SelectedDispatch};
+use super::scope::{ParamRef, ScopeParams};
 use super::solver_bridge::Commitment;
 use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
