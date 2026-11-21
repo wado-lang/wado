@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795234922639,
+  "lastUpdate": 1795241708683,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80445,6 +80445,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c7de68d64786c83ac58b917870c06fa9827d1aca"
         },
         "date": 1795234921640,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e3fa3be7d030d7db41ccea964c4dcbc3d1a94396",
+          "message": "Merge pull request #2709 from wado-lang/ccr-c4532329-09v6dr\n\nfeat!: a bare name in a pattern always binds",
+          "timestamp": "2026-11-21T14:57:28+09:00",
+          "tree_id": "bbee33e37edffb7283bb8057b8fc00c22ca440ce",
+          "url": "https://github.com/wado-lang/wado/commit/e3fa3be7d030d7db41ccea964c4dcbc3d1a94396"
+        },
+        "date": 1795241708211,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
