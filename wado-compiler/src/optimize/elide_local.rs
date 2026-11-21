@@ -49,7 +49,7 @@ impl Rule for ElideRule<'_> {
         for (i, stmt) in stmts.into_iter().enumerate() {
             let is_tail = i + 1 == len;
             // A dead store leaves its local bound and read.
-            let unbound = bound_local(engine, stmt).filter(|&local| !is_kept(engine, local));
+            let unbound = bound_local(engine, stmt).filter(|&local| !is_kept(engine, local, self));
             match classify(engine, stmt, is_tail, self) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => {
@@ -102,7 +102,7 @@ fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) 
             local_index, value, ..
         } => {
             let (idx, value) = (*local_index, *value);
-            if is_kept(engine, idx) {
+            if is_kept(engine, idx, rule) {
                 Action::Keep
             } else if value.is_none_or(|value| deletable(engine, value, rule)) {
                 Action::Drop
@@ -139,7 +139,7 @@ fn classify(engine: &mut Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) 
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
                 let index = *index;
-                if !is_kept(engine, index) || is_dead_store(engine, stmt, index) {
+                if !is_kept(engine, index, rule) || is_dead_store(engine, stmt, index) {
                     return if deletable(engine, value, rule) {
                         Action::Drop
                     } else {
@@ -163,9 +163,32 @@ fn deletable(engine: &Engine, value: Operand, rule: &ElideRule) -> bool {
     deletable_value(engine.body, value, engine.type_table(), rule.calls)
 }
 
-/// A local is kept (not elidable) when it is read anywhere in the body.
-fn is_kept(engine: &Engine, local: u32) -> bool {
-    engine.is_local_read(local) || engine.reads_promoted_local(local)
+/// A local is kept (not elidable) when something other than its own updates
+/// reads it. One read only to compute its next value (`n = n + 1`) keeps
+/// nothing alive, and counting it would free one store per round, the last.
+fn is_kept(engine: &Engine, local: u32, rule: &ElideRule) -> bool {
+    engine.reads_promoted_local(local)
+        || engine.local_reads(local).iter().any(|&mention| {
+            !engine.is_assign_target(mention) && !feeds_own_store(engine, mention, local, rule)
+        })
+}
+
+/// Whether `read` sits in the deletable value of a statement-level store to
+/// `local`, which goes with that store.
+fn feeds_own_store(engine: &Engine, read: ExprId, local: u32, rule: &ElideRule) -> bool {
+    let Some(NodeRef::Stmt(stmt)) =
+        ancestors(engine, NodeRef::Expr(read)).find(|n| !matches!(n, NodeRef::Expr(_)))
+    else {
+        return false;
+    };
+    let StmtKind::Expr(Operand::Expr(e)) = engine.body.stmts[stmt].kind else {
+        return false;
+    };
+    let ExprKind::Assign { target, value } = engine.body.exprs[e].kind else {
+        return false;
+    };
+    matches!(engine.body.exprs[target].kind, ExprKind::Local { index, .. } if index == local)
+        && deletable(engine, value, rule)
 }
 
 /// Whether no read of `local` can observe what `store` writes into it. A move
