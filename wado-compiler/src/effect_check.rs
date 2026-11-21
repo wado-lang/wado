@@ -62,7 +62,7 @@ impl EffectKind {
 }
 
 /// What the effect checker found at the reported position.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EffectFault {
     /// The caller does not hold what its callee requires.
     Missing(EffectKind),
@@ -82,8 +82,13 @@ pub enum EffectFault {
     /// does not declare.
     BeyondExpectedType(EffectKind),
     /// A function value performs an effect beyond a row an earlier expression
-    /// read, at this line and column, and so closed.
-    WidensClosedRow { line: usize, column: usize },
+    /// read, at this line and column, and so closed. `module` names the file
+    /// the expression is in where it is not the one reported.
+    WidensClosedRow {
+        module: Option<String>,
+        line: usize,
+        column: usize,
+    },
 }
 
 /// Error from effect checking
@@ -162,11 +167,16 @@ impl From<EffectError> for Diagnostic {
                     e.missing_effect,
                 ),
             ),
-            EffectFault::WidensClosedRow { line, column } => (
+            EffectFault::WidensClosedRow {
+                module,
+                line,
+                column,
+            } => (
                 Code::MissingEffect,
                 format!(
-                    "this function value performs '{}', beyond the row of the slot it moves into, which the expression at {line}:{column} read and so closed",
+                    "this function value performs '{}', beyond the row of the slot it moves into, which the expression at {}{line}:{column} read and so closed",
                     e.missing_effect,
+                    module.map(|m| format!("{m}:")).unwrap_or_default(),
                 ),
             ),
         };
@@ -599,6 +609,14 @@ fn run_effect_checks(
     lints: Lints,
     warnings: &mut Vec<UnhandledOperation>,
 ) {
+    // A walk of a trait default body per impl solved its own closure literals
+    // while it was elaborated; the walks below read that body once.
+    solved.extend(
+        sem.types
+            .early_effect_rows()
+            .iter()
+            .map(|(var, row)| (var.clone(), row.clone())),
+    );
     let mut log = ReachLog::default();
     let log = &mut log;
     for (src, module) in &sem.modules {
@@ -3650,10 +3668,10 @@ impl Rows {
     }
 
     /// Report each effect a value performs beyond the row of the slot a flow
-    /// moved it into, where that row names no variable to grow or a closed
-    /// one. An effect
-    /// parameter there admits only itself: the function holds for every row
-    /// its caller may pick for it, the empty one among them.
+    /// moved it into, where that row names no variable to grow, or names one
+    /// an expression read and so closed. An effect parameter there admits only
+    /// itself: the function holds for every row its caller may pick for it,
+    /// the empty one among them.
     fn bound_flows(&self, index: &EffectIndex<'_>, out: &mut Vec<EffectError>) {
         let closed = index.types.effect_row_closings();
         for flow in index.flows_of(self) {
@@ -3661,30 +3679,11 @@ impl Rows {
                 .into
                 .iter()
                 .find_map(|e| e.is_var().then(|| closed.get(e.name())).flatten());
-            if let Some(closing) = closing {
-                let admitted = self.row(&flow.into);
-                for effect in self.row(&flow.from) {
-                    if effect.is_var() || admitted.contains(&effect) {
-                        continue;
-                    }
-                    out.push(EffectError {
-                        callee: String::new(),
-                        missing_effect: effect.name().to_string(),
-                        fault: EffectFault::WidensClosedRow {
-                            line: closing.span.line,
-                            column: closing.span.column,
-                        },
-                        span: flow.span,
-                        module: flow.module.clone(),
-                    });
-                }
-                continue;
-            }
-            if flow.into.iter().any(EffectRef::is_var) {
+            if closing.is_none() && flow.into.iter().any(EffectRef::is_var) {
                 continue;
             }
             let admitted =
-                expand_through_closure(&flow.into.iter().cloned().collect(), index.closure);
+                expand_through_closure(&self.row(&flow.into).into_iter().collect(), index.closure);
             for effect in self.row(&flow.from) {
                 assert!(
                     !effect.is_var(),
@@ -3693,10 +3692,18 @@ impl Rows {
                 if admitted.contains(&effect) {
                     continue;
                 }
+                let fault = match closing {
+                    Some(closing) => EffectFault::WidensClosedRow {
+                        module: (closing.module != flow.module).then(|| closing.module.clone()),
+                        line: closing.span.line,
+                        column: closing.span.column,
+                    },
+                    None => EffectFault::BeyondExpectedType(index.kind_of(&effect)),
+                };
                 out.push(EffectError {
                     callee: String::new(),
                     missing_effect: effect.name().to_string(),
-                    fault: EffectFault::BeyondExpectedType(index.kind_of(&effect)),
+                    fault,
                     span: flow.span,
                     module: flow.module.clone(),
                 });

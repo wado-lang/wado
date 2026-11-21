@@ -1,0 +1,32 @@
+// A closure literal calling a function value of an effect parameter carries
+// that parameter in its row, which meets an impl for any row.
+
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+fn wrap2<effect E>(g: fn() with E) with (E, Stdout) {
+    let f = || g();
+    println(f.name());
+}
+
+export fn run() with Stdout {
+    wrap2(|| {});
+}
+
+__DATA__
+{"stdout": "pure\n"}

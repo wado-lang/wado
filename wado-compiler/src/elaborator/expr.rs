@@ -646,14 +646,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
         let reads = self.tysys.type_table.borrow().effect_vars_read();
         let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
-        let closing = RowClosing {
-            span: expr.span(),
-            module: self.current_module_source.source_path(),
-        };
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .close_effect_rows_read_since(reads, &closing);
+        if self.tysys.type_table.borrow().effect_vars_read() > reads {
+            let closing = RowClosing {
+                span: expr.span(),
+                module: self.home_module(ast_id).source_path(),
+            };
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .close_effect_rows_read_since(reads, &closing);
+        }
         self.record_expression_type(ast_id, type_id);
         type_id
     }

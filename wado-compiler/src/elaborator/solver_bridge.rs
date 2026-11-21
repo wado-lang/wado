@@ -363,19 +363,19 @@ impl Lowering {
         SolverType::Decl(head, signature)
     }
 
-    /// A row of named effects as the solver spells it. One holding an effect
-    /// parameter is [`SolverType::AnyRow`]: it stands for whatever row meets
-    /// it. A variable is what `table` has it solved to
-    /// ([`TypeTable::read_effect_row`]). One not solved yet selects nothing
-    /// here: an impl is chosen as if it performed nothing.
+    /// A row of named effects as the solver spells it, each variable read as
+    /// what `table` has it solved to ([`TypeTable::read_effect_row`]). One
+    /// holding an effect parameter, there or through a variable's solution, is
+    /// [`SolverType::AnyRow`]: it stands for whatever row meets it. A variable
+    /// not solved yet selects nothing here: an impl is chosen as if it
+    /// performed nothing.
     fn effect_row(&self, table: &TypeTable, effects: &[EffectRef]) -> SolverType {
-        if effects.iter().any(EffectRef::is_param) {
+        let row = table.read_effect_row(effects);
+        if row.iter().any(EffectRef::is_param) {
             return SolverType::AnyRow;
         }
         SolverType::Tuple(
-            table
-                .read_effect_row(effects)
-                .iter()
+            row.iter()
                 .filter(|e| !e.is_var())
                 .map(|e| SolverType::Decl(self.effect_head(e), Vec::new()))
                 .collect(),
