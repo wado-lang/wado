@@ -5,7 +5,11 @@ use {
     FieldSpec,
     StructSpec,
     VariantSpec,
+    WadoVariantCase,
     EnumSpec,
+    EnumMember,
+    FlagsSpec,
+    NewtypeSpec,
     ParamSpec,
     FnSpec,
     GlobalSpec,
@@ -458,6 +462,67 @@ test "an enum member's attributes precede it" {
     let mut w = CodeWriter::new();
     e.emit(&mut w);
     assert w.to_string() == "enum Corpus {\n    #[wire(name = \"web\")]\n    Web,\n}\n";
+}
+
+test "a declaration's doc comment and attributes precede it, and its members' theirs" {
+    let mut s = StructSpec::new("Point", Vis::Pub);
+    s.set_doc("A point.\n\nIn the plane.").add_attr("wire(name_policy = \"camelCase\")");
+    s.add_field_spec(FieldSpec { ..FieldSpec::new_pub("x_pos", "i32"), doc: Option::Some("Across.") });
+    let mut e = EnumSpec::new("Color");
+    e.set_doc("A hue.");
+    e.add_member_spec(EnumMember { name: "Red", trailing_comment: null, attrs: ["wire(name = \"red\")"], doc: Option::Some("Warm.") });
+    let mut v = VariantSpec::new("Shape");
+    v.add_attr("wire(tag = \"kind\")");
+    v.add_case_spec(WadoVariantCase { name: "Dot", payload: null, attrs: ["wire(name = \"dot\")"], doc: Option::Some("No size.") });
+    let mut f = FlagsSpec::new("Perms", Vis::Pub);
+    f.set_doc("Access.").add_attr("wire(name_policy = \"kebab-case\")").add_member("Read").add_member("Write");
+    let mut n = NewtypeSpec::new("Meters", "f64", Vis::Pub);
+    n.set_doc("A length.");
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    e.emit(&mut w);
+    v.emit(&mut w);
+    f.emit(&mut w);
+    n.emit(&mut w);
+    assert w.to_string() == "/// A point.
+///
+/// In the plane.
+#[wire(name_policy = \"camelCase\")]
+pub struct Point {
+    /// Across.
+    pub x_pos: i32,
+}
+/// A hue.
+enum Color {
+    /// Warm.
+    #[wire(name = \"red\")]
+    Red,
+}
+#[wire(tag = \"kind\")]
+variant Shape {
+    /// No size.
+    #[wire(name = \"dot\")]
+    Dot,
+}
+/// Access.
+#[wire(name_policy = \"kebab-case\")]
+pub flags Perms {
+    Read,
+    Write,
+}
+/// A length.
+pub type Meters = f64;
+";
+}
+
+test "a doc comment reaches reflection as written" {
+    let mut s = StructSpec::new("Point");
+    s.set_doc("Title\n\n  indented\nlast");
+    s.add_field("x", "i32");
+    let mut items = CodeWriter::new();
+    s.emit(&mut items);
+    assert printed("print(Reflect::<Point>::doc().unwrap());", items.to_string()) == "Title\n\n  indented\nlast";
 }
 
 test "VariantSpec unit cases" {
