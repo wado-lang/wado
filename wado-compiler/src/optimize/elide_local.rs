@@ -1,5 +1,6 @@
-//! Write-only local elimination for Wado NIR: a `let x = expr;` whose `x` is
-//! never read, address-taken, or escaped loses its binding — the whole statement
+//! Write-only local elimination for Wado NIR: a `let x = expr;` whose `x`
+//! nothing but its own updates reads, and which is neither address-taken nor
+//! escaped, loses its binding — the whole statement
 //! when `expr` is pure, else a bare `Expr(expr)`. A store `x = expr;` no later
 //! read observes goes the same way. The NIR analog of
 //! `wir_optimize/elide_local.rs`; running here exposes the freshly dead

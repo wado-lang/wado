@@ -19,9 +19,9 @@ use crate::nir_arena::{
     PatNode, StmtId, StmtKind, StmtNode, SubtreeCopy, Tracked,
 };
 use crate::nir_value_graph::builder::AliasSets;
-use crate::optimize::arena_query::operand_local;
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder, constant_kind};
 use crate::niri::CtfeBuiltinMap;
+use crate::optimize::arena_query::operand_local;
 use crate::tir::{ObjectTypes, ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
