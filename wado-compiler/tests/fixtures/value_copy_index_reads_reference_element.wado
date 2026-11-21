@@ -10,6 +10,7 @@ struct Node {
 
 struct Graph {
     held: List<&mut Node>,
+    views: List<&List<&mut Node>>,
 }
 
 impl Graph {
@@ -42,7 +43,7 @@ fn caller(g: &mut Graph, n: &mut Node) -> List<&mut Node> {
 }
 
 export fn run() with Stdout {
-    let mut g = Graph { held: [] };
+    let mut g = Graph { held: [], views: [] };
     let mut n = Node { v: 7 };
     let xs = caller(&mut g, &mut n);
     println(`${xs.len()} ${g.held.len()} ${xs[0].v}`);
@@ -51,8 +52,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "wir_pass": {"O2": ["lower/value_copy/share"]},
-    "wir_contrast": {"O2": [{"g.keep_all(&terms);": "g.keep_all(&out);"}]},
+    "wir_contrast": {"O2": [{"self.held.push(xs[i]);": "self.views.push(xs);"}]},
     "stdout": "2 1 7\n",
-    "wir_scope": "value_copy_index_reads_reference_element.wado/caller\"",
+    "wir_scope": "value_copy_index_reads_reference_element.wado/caller$sroa",
     "wir_not_expect:O2": ["array_clone"]
 }
