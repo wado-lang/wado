@@ -1,7 +1,7 @@
-// The one impl that may answer is written for `Bx<u64>`, so committing to it
-// would settle `T`. The impl settles nothing, so the call asks for an
-// annotation: inferring `T` from it would let an impl written elsewhere later
-// turn the call into an error.
+// The one impl that may answer is written for `Bx<u64>`, so the call cannot
+// choose it while `T` is open: the impl settles nothing. The selection waits,
+// typed by the trait's declaration, and the annotation settles `T`, which
+// selects the impl.
 struct Bx<T> {
     v: List<T>,
 }
@@ -16,16 +16,12 @@ trait Me with () {
 
 impl Me for Bx<u64> {
     fn me(&self) -> Self {
-        return Bx { v: [] };
+        return Bx { v: [7] };
     }
 }
 
-export fn run() {
+test {
     let c: Bx<u64> = mk().me();
-}
-
-__DATA__
-{
-    "compile_error": ":24:22: analysis error: cannot infer `Bx<T>` far enough to choose which `me` this calls; annotate it",
-    "compile_error_count": 1
+    assert c.v.len() == 1;
+    assert c.v[0] == 7;
 }

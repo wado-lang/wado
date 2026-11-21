@@ -30,6 +30,7 @@ use super::expr::IndexAccess;
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
+use super::pending_selection::{DispatchSite, PendingCall};
 use super::reflect::ReflectDispatch;
 use super::scope::{BoundsOf, ParamRef, ScopedBound};
 use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
@@ -205,9 +206,9 @@ pub(super) struct DispatchedMethod {
 /// A method a newtype inherits from `base`, as the call on `newtype` reads it
 /// (`spec-types`, "Method Signature Substitution").
 #[derive(Clone, Copy)]
-struct InheritedFrame {
-    base: TypeId,
-    newtype: TypeId,
+pub(super) struct InheritedFrame {
+    pub(super) base: TypeId,
+    pub(super) newtype: TypeId,
 }
 
 impl InheritedFrame {
@@ -215,11 +216,11 @@ impl InheritedFrame {
         tysys.substitute_newtype_in_type(ty, self.newtype, self.base)
     }
 
-    fn to_newtype(self, tysys: &TypeSystem, ty: TypeId) -> TypeId {
+    pub(super) fn to_newtype(self, tysys: &TypeSystem, ty: TypeId) -> TypeId {
         tysys.substitute_newtype_in_type(ty, self.base, self.newtype)
     }
 
-    fn to_newtype_in(self, tysys: &TypeSystem, types: &mut [TypeId]) {
+    pub(super) fn to_newtype_in(self, tysys: &TypeSystem, types: &mut [TypeId]) {
         for ty in types {
             *ty = self.to_newtype(tysys, *ty);
         }
@@ -605,6 +606,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 required_trait,
                 Some(&mut probe),
             );
+            let result = self.decide_now(result, base_type_id, method_name, span);
             reported |= matches!(result, TraitLookup::Reported);
             // Only use ref-type impls that target a concrete container type
             // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
@@ -680,62 +682,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             TraitLookup::Missing
         };
+        // A call that cannot choose its impl yet waits for the receiver to
+        // settle, typed by the trait's declaration meanwhile. It waits only
+        // where its dispatch is recorded, for the sweep to rewrite, and where
+        // no trait is named, which a qualified call would have to keep to.
+        let mut waits_for_selection = false;
+        let lookup = match lookup {
+            TraitLookup::Undecided(live) => {
+                let declared = (call_id.is_some() && required_trait.is_none())
+                    .then(|| self.trait_declared_info(&live, base_type_id, method_name))
+                    .flatten();
+                match declared {
+                    Some((declared, info)) => {
+                        waits_for_selection = true;
+                        trait_name = Some(declared);
+                        method_info = Some(info);
+                        TraitLookup::Missing
+                    }
+                    None => self.decide_now(
+                        TraitLookup::Undecided(live),
+                        base_type_id,
+                        method_name,
+                        span,
+                    ),
+                }
+            }
+            TraitLookup::Found(_) | TraitLookup::Missing | TraitLookup::Reported => lookup,
+        };
         reported |= matches!(lookup, TraitLookup::Reported);
         if let Some(trait_match) = lookup.found() {
-            let mut info = trait_match.method_info;
-            // A blanket answers a parameter's call only until the instance
-            // names its type, where an impl written for that type outranks it.
-            // So a call naming the trait's arguments goes as one through a
-            // bound does: on the receiver, to the trait at those arguments,
-            // dispatched there. It keeps the blanket's block, which the body
-            // is checked against and the instance's impl must agree with.
-            if trait_match.blanket_binder.is_some()
-                && self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .receiver_head_awaits_substitution(base_type_id)
-                && let Some(asked) = required_trait.and_then(|r| r.args.clone())
-            {
-                let names: Vec<FqTypeName> = {
-                    let tt = self.tysys.type_table.borrow();
-                    asked.iter().map(|&arg| tt.fq_type_name(arg)).collect()
-                };
-                trait_name = Some(trait_match.trait_name.with_args(names));
-                info.impl_slot_args = Vec::new();
-                info.trait_args = asked;
-                method_info = Some(info);
-            } else {
-                matched_impl_decl = trait_match.impl_struct_fq.head().def();
-                trait_name = Some(trait_match.trait_name);
-                // A newtype inherits a trait impl its base wrote, and the impl
-                // spells `Self` as that base. Name the link the impl sits on, so
-                // the signature re-types to the receiver the way an inherited
-                // inherent method's does, and the call is named as a call on the
-                // link: a block written at one instantiation keeps its arguments
-                // (issue #2644).
-                if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
-                    && let Some(link) = match info.impl_block {
-                        Some(block) => self.tysys.block_link(base_type_id, trait_def, block),
-                        None => self.tysys.impl_link(base_type_id, trait_def),
-                    }
-                    && link != base_type_id
-                    && info.owner == MethodOwner::Receiver
-                {
-                    info.owner = if self.tysys.link_behind_reference(base_type_id, link) {
-                        MethodOwner::Referent(link)
-                    } else {
-                        MethodOwner::InheritedFrom(link)
-                    };
-                } else if trait_match.impl_struct_fq.head()
-                    != self.tysys.fq_receiver_head(base_type_id).head()
-                {
-                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
-                }
-                method_info = Some(info);
-                trait_impl_module_source = Some(trait_match.impl_module_source);
-                blanket_binder = trait_match.blanket_binder;
-            }
+            let adopted = self.adopt_trait_match(trait_match, base_type_id, required_trait);
+            matched_impl_decl = adopted.matched_impl_decl;
+            trait_impl_struct_name = adopted.trait_impl_struct_name;
+            trait_name = Some(adopted.trait_name);
+            method_info = Some(adopted.info);
+            trait_impl_module_source = adopted.trait_impl_module_source;
+            blanket_binder = adopted.blanket_binder;
         }
 
         // `T: Ord` gives `T` its `cmp`, and `type Seq: SerializeSeq` gives
@@ -1173,7 +1155,120 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Get struct name and monomorph info from base type for mangled method name.
+        let func = self.dispatch_function_ref(DispatchSite {
+            owner,
+            base_type_id,
+            method_name,
+            trait_name,
+            matched_impl_decl,
+            matched_ref_kind,
+            trait_impl_struct_name,
+            trait_impl_module_source: trait_impl_module_source.clone(),
+            inherent_impl_module: inherent_impl_module.clone(),
+            struct_module: struct_module.clone(),
+            blanket_binder,
+            dispatched_method_def,
+            dispatched_impl_block,
+            from_concrete_impl,
+            is_ref_impl,
+            cm_name,
+            impl_slot_args,
+            trait_args,
+            method_type_args: method_type_args.clone(),
+        });
+
+        // Record use->def for jump-to-definition on the method name token.
+        // Synthetic call sites (e.g. for-of's `.into_iter()` / `.next()`) pass
+        // `method_id == None` so no edge is recorded — the call has no
+        // source-level method name to navigate from.
+        // The target is the declaration dispatch selected, carried on its
+        // signature. A name scan cannot stand in: two impls on one type can
+        // declare the same method, and only dispatch knows which answered.
+        if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def) {
+            self.record_reference_to_decl(method_id, def, span);
+        }
+        // Record the dispatch decision so reify can emit the same TIR without
+        // re-running trait lookup or mangling. Only a qualified caller, which
+        // files the call under its own site, reads the signature facts back,
+        // so an ordinary call skips the clones.
+        let signature = (method_found && defaults_site.is_some()).then(|| MethodSignatureFacts {
+            param_is_mut: param_is_mut.clone(),
+            param_names: param_names.clone(),
+            param_defaults: param_defaults.clone(),
+            param_types: substituted_param_types.clone(),
+            type_args: method_type_args.clone(),
+            self_kind,
+            defaults_module: defaults_module.clone(),
+        });
+        let dispatch = if method_found {
+            self.record_method_dispatch(
+                call_id,
+                dispatched_method_def,
+                &func,
+                self_kind,
+                matches!(owner, MethodOwner::Referent(_)),
+                param_is_mut,
+                defaults,
+                substituted_param_types.clone(),
+                callee_module,
+                return_type,
+                method_type_args,
+                consumes_self,
+            );
+            if waits_for_selection {
+                self.wait_for_selection(PendingCall {
+                    call: call_id.expect("a call waits only where its dispatch is recorded"),
+                    receiver: base_type_id,
+                    method_name: method_name.to_string(),
+                    args,
+                    param_types: substituted_param_types,
+                    return_type,
+                    span,
+                });
+            }
+            // The `method_found` gate keeps the error-recovery placeholder
+            // from leaking into the returned dispatch.
+            Some(DispatchedMethod {
+                self_kind,
+                is_ref_impl,
+                func,
+                method_def: dispatched_method_def,
+            })
+        } else {
+            None
+        };
+
+        MethodCallOutcome {
+            type_id: return_type,
+            dispatch,
+            signature,
+        }
+    }
+
+    /// The function a call dispatches to once its declaration is chosen,
+    /// named after the receiver and the impl that answers it.
+    pub(super) fn dispatch_function_ref(&mut self, site: DispatchSite<'_>) -> FunctionRef {
+        let DispatchSite {
+            owner,
+            base_type_id,
+            method_name,
+            trait_name,
+            matched_impl_decl,
+            matched_ref_kind,
+            trait_impl_struct_name,
+            trait_impl_module_source,
+            inherent_impl_module,
+            struct_module,
+            blanket_binder,
+            dispatched_method_def,
+            dispatched_impl_block,
+            from_concrete_impl,
+            is_ref_impl,
+            cm_name,
+            impl_slot_args,
+            trait_args,
+            method_type_args,
+        } = site;
         // For inherited methods (Newtype/Flags), use the actual implementation type's name,
         // since the function is defined on the base type (e.g., Point::sum, not Location::sum).
         let method_impl_type_id = owner.declaring(base_type_id);
@@ -1405,71 +1500,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .inherited()
                     .and_then(|base_id| self.tysys.type_table.borrow().impl_home(base_id))
             })
-            .unwrap_or_else(|| struct_module.clone());
+            .unwrap_or(struct_module);
 
-        // Record use->def for jump-to-definition on the method name token.
-        // Synthetic call sites (e.g. for-of's `.into_iter()` / `.next()`) pass
-        // `method_id == None` so no edge is recorded — the call has no
-        // source-level method name to navigate from.
-        // The target is the declaration dispatch selected, carried on its
-        // signature. A name scan cannot stand in: two impls on one type can
-        // declare the same method, and only dispatch knows which answered.
-        if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def) {
-            self.record_reference_to_decl(method_id, def, span);
-        }
-
-        let func = FunctionRef {
+        FunctionRef {
             module_source: method_module_source,
             name: mangled_method_name,
             template,
             monomorph_info,
             method_info: Some(method_info),
-        };
-
-        // Record the dispatch decision so reify can emit the same TIR without
-        // re-running trait lookup or mangling. Only a qualified caller, which
-        // files the call under its own site, reads the signature facts back,
-        // so an ordinary call skips the clones.
-        let signature = (method_found && defaults_site.is_some()).then(|| MethodSignatureFacts {
-            param_is_mut: param_is_mut.clone(),
-            param_names: param_names.clone(),
-            param_defaults: param_defaults.clone(),
-            param_types: substituted_param_types.clone(),
-            type_args: method_type_args.clone(),
-            self_kind,
-            defaults_module: defaults_module.clone(),
-        });
-        let dispatch = if method_found {
-            self.record_method_dispatch(
-                call_id,
-                dispatched_method_def,
-                &func,
-                self_kind,
-                matches!(owner, MethodOwner::Referent(_)),
-                param_is_mut,
-                defaults,
-                substituted_param_types.clone(),
-                callee_module,
-                return_type,
-                method_type_args,
-                consumes_self,
-            );
-            // The `method_found` gate keeps the error-recovery placeholder
-            // from leaking into the returned dispatch.
-            Some(DispatchedMethod {
-                self_kind,
-                is_ref_impl,
-                func,
-                method_def: dispatched_method_def,
-            })
-        } else {
-            None
-        };
-
-        MethodCallOutcome {
-            type_id: return_type,
-            dispatch,
-            signature,
         }
     }
 

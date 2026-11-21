@@ -2485,24 +2485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 impls
             }
-            Some(Ordered::Undecided(_)) => {
-                let receiver = receiver_type_id.expect("the order answers a receiver it can say");
-                let receiver = self.apply_infer_holes(receiver);
-                let (name, open) = {
-                    let table = self.tysys.type_table.borrow();
-                    (table.name(receiver), table.infer_vars_in(receiver))
-                };
-                let _ = self.emit(TypeError::CannotInferType {
-                    message: format!(
-                        "cannot infer `{name}` far enough to choose which `{method_name}` this calls; annotate it"
-                    ),
-                    span,
-                });
-                for var in open {
-                    self.close_infer_var(var);
-                }
-                return TraitLookup::Reported;
-            }
+            Some(Ordered::Undecided(live)) => return TraitLookup::Undecided(live.clone()),
             Some(Ordered::Nothing) | None => &[],
         };
         let asked = required_trait.and_then(|wanted| wanted.args.as_deref());
@@ -2565,6 +2548,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe) {
             Some(found) => TraitLookup::Found(Box::new(found)),
             None => TraitLookup::Missing,
+        }
+    }
+
+    /// `lookup`, with an undecided selection reported at `span` as needing an
+    /// annotation, for a site that cannot wait for the receiver to settle.
+    pub(super) fn decide_now(
+        &mut self,
+        lookup: TraitLookup,
+        receiver: TypeId,
+        method_name: &str,
+        span: Span,
+    ) -> TraitLookup {
+        if !matches!(lookup, TraitLookup::Undecided(_)) {
+            return lookup;
+        }
+        self.report_undecided_selection(receiver, method_name, span);
+        TraitLookup::Reported
+    }
+
+    /// Report that `receiver` must settle further before a call of
+    /// `method_name` can choose its impl, and close its variables so nothing
+    /// reports them again.
+    pub(super) fn report_undecided_selection(
+        &mut self,
+        receiver: TypeId,
+        method_name: &str,
+        span: Span,
+    ) {
+        let receiver = self.apply_infer_holes(receiver);
+        let (name, open) = {
+            let table = self.tysys.type_table.borrow();
+            (table.name(receiver), table.infer_vars_in(receiver))
+        };
+        let _ = self.emit(TypeError::CannotInferType {
+            message: format!(
+                "cannot infer `{name}` far enough to choose which `{method_name}` this calls; annotate it"
+            ),
+            span,
+        });
+        for var in open {
+            self.close_infer_var(var);
         }
     }
 
@@ -3203,6 +3227,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.infer_holes.require(Obligation::Selection(commitment));
         }
         Some(ordered)
+    }
+
+    /// Whether which impl answers `method_name` on `receiver` waits on a
+    /// variable the receiver holds.
+    pub(super) fn selection_undecided(
+        &self,
+        receiver: TypeId,
+        method_name: &str,
+        required_trait: Option<&RequiredTrait>,
+    ) -> bool {
+        matches!(
+            self.order_for_call(
+                &self.impl_target_of(receiver),
+                Some(receiver),
+                method_name,
+                required_trait,
+            ),
+            Some(Ordered::Undecided(_))
+        )
     }
 
     /// The winner among the matches the order named: the call's arguments
@@ -4267,6 +4310,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TraitLookup::Missing => {}
                 TraitLookup::Reported => return Some(TypeTable::ERROR),
+                TraitLookup::Undecided(_) => {
+                    self.report_undecided_selection(
+                        output_type,
+                        &method_call.method,
+                        method_call.span,
+                    );
+                    return Some(TypeTable::ERROR);
+                }
             }
         }
 

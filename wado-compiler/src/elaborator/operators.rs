@@ -19,7 +19,9 @@ use super::coercion::{
 };
 use super::control_flow::break_values;
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
+use super::infer_hole::Obligation;
 use super::method_lookup::replace_on_assign_place;
+use super::pending_selection::{PendingOperator, PendingSelection};
 use super::scope::ScopedBound;
 use super::synth::KeyedAccess;
 use super::trait_query::primitive_has_operator;
@@ -534,6 +536,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             )
         );
+        // A comparison answers `bool` whichever impl it selects, so one whose
+        // impl waits on the left operand's variables is typed now and resolved
+        // once the body has settled them. The right operand is held to the
+        // selected impl then.
+        if !both_refs
+            && let Some(origin) = origin
+            && self.operator_waits(left, op)
+        {
+            self.infer_holes
+                .require(Obligation::Pending(PendingSelection::Operator(
+                    PendingOperator {
+                        op,
+                        left,
+                        right,
+                        right_span,
+                        span,
+                        origin,
+                    },
+                )));
+            return TypeTable::BOOL;
+        }
+
         if both_refs {
             let type_name = self.tysys.type_table.borrow().name(left);
             let _ = self.emit(TypeError::OperatorNotApplicable {
@@ -2097,6 +2121,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         });
         TypeTable::ERROR
+    }
+
+    /// The trait method `op` dispatches to.
+    pub(super) fn operator_method(&self, op: BinaryOp) -> String {
+        let item = operator_compiler_item(&op).expect("`&&` and `||` dispatch to no trait");
+        self.tysys.operator_method_name(item)
+    }
+
+    /// Whether the impl answering comparison `op` on `left` waits on a
+    /// variable `left` holds.
+    pub(super) fn operator_waits(&self, left: TypeId, op: BinaryOp) -> bool {
+        let left = self.apply_infer_holes(left);
+        {
+            let tt = self.tysys.type_table.borrow();
+            if !op.is_comparison()
+                || !tt.head_is_known(left)
+                || !tt.contains_infer_var(left)
+                || tt.contains_rigid_param(left)
+            {
+                return false;
+            }
+        }
+        let item = operator_compiler_item(&op).expect("a comparison dispatches to a trait");
+        let Some(required) = self.tysys.required_compiler_trait(item) else {
+            return false;
+        };
+        self.selection_undecided(left, &self.operator_method(op), Some(&required))
     }
 
     /// A comparison operator's trait method on `struct_name`, named through

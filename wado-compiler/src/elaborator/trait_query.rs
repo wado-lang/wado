@@ -2034,7 +2034,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The header answers whether the method exists, the digest what it says.
     /// A method the header lists but the digest lacks is a decl-pass bug, so it
     /// panics rather than reading as "no such method".
-    fn trait_method_of(
+    pub(super) fn trait_method_of(
         &self,
         key: &DefId,
         method_name: &str,

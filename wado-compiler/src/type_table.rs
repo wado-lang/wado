@@ -6045,6 +6045,13 @@ impl TypeTable {
         matches!(self.get(id), ResolvedType::InferVar(_))
     }
 
+    /// Whether `id` names its head, below any references: neither a variable
+    /// nor a type a substitution or projection is yet to answer.
+    pub fn head_is_known(&self, id: TypeId) -> bool {
+        let head = self.peel_refs(id);
+        !self.is_infer_var(head) && !self.receiver_head_awaits_substitution(head)
+    }
+
     /// The inference variables [`Self::contains_infer_var`] finds in `id`,
     /// each once, in the order it meets them.
     pub fn infer_vars_in(&self, id: TypeId) -> Vec<TypeId> {
