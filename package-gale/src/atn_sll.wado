@@ -27,6 +27,7 @@ use {
 } from "./runtime/atn.wado";
 use { HashMap } from "core:collections";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
+use { constant_patterns } from "./gen_util.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 
 /// How many tokens a DFA reads before it leaves the decision to the simulator.
@@ -867,7 +868,7 @@ fn prune_asking(nodes: List<SllNode>) -> List<SllNode> {
                     } else {
                         e.to;
                     };
-                    if !out[to] matches { Ask } {
+                    if !out[to] matches { _::Ask } {
                         for let t of &e.tokens {
                             add_edge(&mut kept, *t, to);
                         }
@@ -998,11 +999,11 @@ global ATN_PICKERS: List<AtnPicker> = [
 
 fn atn_picker_name(picker: AtnPicker) -> String {
     return match picker {
-        Tournament => "the tournament",
-        Repeat => "the repeat",
-        LookaheadDfa => "the lookahead DFA",
-        LrTable => "the LR table",
-        LrLoop => "the left-recursion loop",
+        _::Tournament => "the tournament",
+        _::Repeat => "the repeat",
+        _::LookaheadDfa => "the lookahead DFA",
+        _::LrTable => "the LR table",
+        _::LrLoop => "the left-recursion loop",
     };
 }
 
@@ -1166,7 +1167,7 @@ fn asking_tokens(edges: &List<SllEdge>, kinds: i32) -> List<i32> {
 fn gen_sll_node(w: &mut CodeWriter, forest: &SllForest, node: i32, depth: i32, analysis: &GrammarAnalysis) {
     match &forest.nodes[node] {
         Alt(a) => w.line(`return ${*a};`),
-        Ask => {
+        _::Ask => {
         },
         Branch(_) => {
             if forest.shared(node) {
@@ -1201,7 +1202,7 @@ fn gen_sll_branch(w: &mut CodeWriter, forest: &SllForest, node: i32, depth: i32,
     w.begin(`match tokens[${at}]`);
     for let mut i = 0; i < edges.len(); i += 1 {
         if i != fallback {
-            w.begin(`${analysis.token_names_of(&edges[i].tokens).join(" | ")} =>`);
+            w.begin(`${constant_patterns(&analysis.token_names_of(&edges[i].tokens))} =>`);
             gen_sll_node(w, forest, edges[i].to, depth + 1, analysis);
             w.end_with(",");
         }
@@ -1210,7 +1211,7 @@ fn gen_sll_branch(w: &mut CodeWriter, forest: &SllForest, node: i32, depth: i32,
         w.line("_ => {},");
     } else {
         if !asking.is_empty() {
-            w.line(`${analysis.token_names_of(&asking).join(" | ")} => {},`);
+            w.line(`${constant_patterns(&analysis.token_names_of(&asking))} => {},`);
         }
         w.begin("_ =>");
         gen_sll_node(w, forest, edges[fallback].to, depth + 1, analysis);

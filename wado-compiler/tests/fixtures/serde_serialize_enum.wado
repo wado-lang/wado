@@ -40,9 +40,9 @@ enum Color {
 impl Serialize for Color {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return match *self {
-            Red => s.serialize_unit_variant(&"Color", &"Red", 0),
-            Green => s.serialize_unit_variant(&"Color", &"Green", 1),
-            Blue => s.serialize_unit_variant(&"Color", &"Blue", 2),
+            _::Red => s.serialize_unit_variant(&"Color", &"Red", 0),
+            _::Green => s.serialize_unit_variant(&"Color", &"Green", 1),
+            _::Blue => s.serialize_unit_variant(&"Color", &"Blue", 2),
         };
     }
 }

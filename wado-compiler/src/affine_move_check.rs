@@ -1384,6 +1384,7 @@ impl MoveWalker<'_, '_> {
             | Pattern::Literal(_)
             | Pattern::Wildcard
             | Pattern::Range { .. }
+            | Pattern::Equal { .. }
             | Pattern::Error(_) => {}
         }
     }
@@ -2631,6 +2632,7 @@ fn keeps_whole(pattern: &Pattern) -> bool {
         | Pattern::Struct { .. }
         | Pattern::Literal(_)
         | Pattern::Range { .. }
+        | Pattern::Equal { .. }
         | Pattern::Error(_) => false,
     }
 }

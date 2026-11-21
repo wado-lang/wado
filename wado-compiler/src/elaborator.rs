@@ -625,6 +625,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.record_case_owner(ident.id, owner);
         match ident.segments.as_slice() {
             [] => self.record_reference_to_def(ident.id, case_ast_id),
+            [_, case] if ident.has_inferred_qualifier() => {
+                self.record_reference_to_def(case.id, case_ast_id);
+            }
             [prefix, case] => {
                 self.record_type_name_reference(prefix.id);
                 self.record_reference_to_def(case.id, case_ast_id);

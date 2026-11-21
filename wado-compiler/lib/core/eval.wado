@@ -64,7 +64,7 @@ pub fn eval(source: String, fuel: u64 = DEFAULT_FUEL) -> Result<Output, EvalErro
             status: ran.status,
         }),
         CompileFailed(failure) => Result::Err(EvalError::CompileFailed(failure)),
-        CompileTimedOut => Result::Err(EvalError::CompileTimedOut),
+        _::CompileTimedOut => Result::Err(EvalError::CompileTimedOut),
         Unavailable(name) => Result::Err(EvalError::Unavailable(name)),
     };
 }
@@ -73,7 +73,7 @@ impl Display for EvalError {
     fn fmt(&self, f: &mut Formatter) {
         let message: String = match *self {
             CompileFailed(failure) => failure.rendered,
-            CompileTimedOut => "the compile ran past its time limit",
+            _::CompileTimedOut => "the compile ran past its time limit",
             Unavailable(name) => `the program imports \`${name}\`, which eval does not link`,
         };
         f.write_str(&message);
@@ -88,8 +88,8 @@ impl Display for Status {
         let message: String = match *self {
             Exited(code) => `exited with ${code}`,
             Trapped(kind) => `trapped: ${kind}`,
-            OutOfFuel => "ran out of fuel",
-            OutOfMemory => "ran out of memory",
+            _::OutOfFuel => "ran out of fuel",
+            _::OutOfMemory => "ran out of memory",
         };
         f.write_str(&message);
     }
@@ -98,20 +98,20 @@ impl Display for Status {
 impl Display for TrapKind {
     fn fmt(&self, f: &mut Formatter) {
         let message = match *self {
-            Unreachable => "unreachable",
-            StackOverflow => "stack overflow",
-            MemoryOutOfBounds => "memory access out of bounds",
-            TableOutOfBounds => "table access out of bounds",
-            IndirectCallToNull => "indirect call to null",
-            BadSignature => "indirect call signature mismatch",
-            IntegerOverflow => "integer overflow",
-            IntegerDivisionByZero => "integer division by zero",
-            BadConversionToInteger => "invalid conversion to integer",
-            NullReference => "null reference",
-            ArrayOutOfBounds => "array access out of bounds",
-            AllocationTooLarge => "allocation too large",
-            CastFailure => "cast failure",
-            Other => "other trap",
+            _::Unreachable => "unreachable",
+            _::StackOverflow => "stack overflow",
+            _::MemoryOutOfBounds => "memory access out of bounds",
+            _::TableOutOfBounds => "table access out of bounds",
+            _::IndirectCallToNull => "indirect call to null",
+            _::BadSignature => "indirect call signature mismatch",
+            _::IntegerOverflow => "integer overflow",
+            _::IntegerDivisionByZero => "integer division by zero",
+            _::BadConversionToInteger => "invalid conversion to integer",
+            _::NullReference => "null reference",
+            _::ArrayOutOfBounds => "array access out of bounds",
+            _::AllocationTooLarge => "allocation too large",
+            _::CastFailure => "cast failure",
+            _::Other => "other trap",
         };
         f.write_str(message);
     }

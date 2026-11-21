@@ -1,5 +1,129 @@
 # Changelog
 
+## [v0.0.39](https://github.com/wado-lang/wado/compare/v0.0.38...v0.0.39) - 2026-11-21
+
+- feat(jade): validate numbers exactly, at any size and precision by @gfx in https://github.com/wado-lang/wado/pull/2575
+- feat(loam): GPT-2's attention runs as the composite on every backend by @gfx in https://github.com/wado-lang/wado/pull/2573
+- fix(gale): parse nested mid operands as ANTLR4 does by @gfx in https://github.com/wado-lang/wado/pull/2577
+- perf(eddy): load a SCIP index a document at a time, out of linear memory by @gfx in https://github.com/wado-lang/wado/pull/2578
+- feat(jade): resolve remote references among supplied documents and the bundled meta-schemas by @gfx in https://github.com/wado-lang/wado/pull/2580
+- docs(jade): state that a document searched for an `$id` must be well formed by @gfx in https://github.com/wado-lang/wado/pull/2586
+- refactor(compiler): equal TypeIds mean one type by @gfx in https://github.com/wado-lang/wado/pull/2582
+- feat(loam): serve requests side by side in slots, each row at its own lengths by @gfx in https://github.com/wado-lang/wado/pull/2581
+- feat(jade)!: compile a schema whose remote references a caller's loader fetches by @gfx in https://github.com/wado-lang/wado/pull/2588
+- fix(gale): evaluate predicates and labels where ANTLR4 does by @gfx in https://github.com/wado-lang/wado/pull/2583
+- fix(compiler): decide each temporary's owner once, from the source's statements by @gfx in https://github.com/wado-lang/wado/pull/2587
+- feat(jade): assert every Draft 2020-12 format that needs no IDNA by @gfx in https://github.com/wado-lang/wado/pull/2589
+- perf(compiler): build no Option or tuple for a let-else's bindings by @gfx in https://github.com/wado-lang/wado/pull/2591
+- fix(gale): weigh the predicates prediction meets, as ANTLR4 does by @gfx in https://github.com/wado-lang/wado/pull/2592
+- feat(core:uri)!: tell a URI from a URI reference in the type by @gfx in https://github.com/wado-lang/wado/pull/2593
+- perf(gale): emit each lookahead DFA node once, cutting `atn: "always"` parsers to a third by @gfx in https://github.com/wado-lang/wado/pull/2594
+- feat(reflect): doc comments reach reflection, and Jade's schemas carry them by @gfx in https://github.com/wado-lang/wado/pull/2595
+- fix(EMI): a `mut` fn param whose address is taken, and closure-local deferred lets, no longer miscompile by @gfx in https://github.com/wado-lang/wado/pull/2596
+- fix(elaborator): identify a type parameter by its owner, not its name by @gfx in https://github.com/wado-lang/wado/pull/2590
+- feat(gale)!: build ANTLR4's tree by default, with a prediction option by @gfx in https://github.com/wado-lang/wado/pull/2598
+- perf(compiler): fold payload-less cases as constants, and tighten counted loops by @gfx in https://github.com/wado-lang/wado/pull/2597
+- perf(optimize): remove struct fields no code reads by @gfx in https://github.com/wado-lang/wado/pull/2599
+- fix(compiler): bind impl parameters only the trait reference names by @gfx in https://github.com/wado-lang/wado/pull/2600
+- fix(compiler): default bodies call through projections bounded at the trait's own parameters by @gfx in https://github.com/wado-lang/wado/pull/2601
+- fix(EMI): reuse a cached specialization only when its parameters are the callee's by @gfx in https://github.com/wado-lang/wado/pull/2602
+- fix(compiler): generic code calls through impls on projections and projected blanket slots by @gfx in https://github.com/wado-lang/wado/pull/2603
+- fix(compiler): let an impl written for an instance outrank a value blanket in generic code by @gfx in https://github.com/wado-lang/wado/pull/2604
+- refactor(loam): build, erase and restore the generated structs by runtime field walks by @gfx in https://github.com/wado-lang/wado/pull/2605
+- feat(gale): longest prediction follows the caller's full continuation by @gfx in https://github.com/wado-lang/wado/pull/2606
+- fix(EMI): three miscompiles the EMI campaign found on main by @gfx in https://github.com/wado-lang/wado/pull/2609
+- fix(elaborator): an impl parameter only the trait's arguments name works in every call form by @gfx in https://github.com/wado-lang/wado/pull/2608
+- feat(compiler): settle a parameter an associated type pins once a later arm settles its owner by @gfx in https://github.com/wado-lang/wado/pull/2607
+- fix(elaborator): a pack spread beside fixed elements binds in impl targets and bounds by @gfx in https://github.com/wado-lang/wado/pull/2610
+- perf: Gale parses and generates faster, and field stores forward to the next read by @gfx in https://github.com/wado-lang/wado/pull/2611
+- fix(elaborator): an ambiguous-impl hint names the generic trait's arguments by @gfx in https://github.com/wado-lang/wado/pull/2612
+- fix(compiler): static calls infer their type arguments as instance calls do by @gfx in https://github.com/wado-lang/wado/pull/2613
+- fix(compiler): an inherited method returns the newtype however its type parameters are settled by @gfx in https://github.com/wado-lang/wado/pull/2614
+- perf: cut what Test (packages) compiles and evaluates by @gfx in https://github.com/wado-lang/wado/pull/2615
+- fix(compiler): one newtype link answers a static call, decided before its arguments by @gfx in https://github.com/wado-lang/wado/pull/2616
+- feat(kiln): generators write their own #![generated] header, and Kiln checks it by @gfx in https://github.com/wado-lang/wado/pull/2618
+- chore: build on Rust 1.100 and adopt what it stabilized by @gfx in https://github.com/wado-lang/wado/pull/2619
+- fix(compiler): a newtype's blanket static ranks at the link its bound holds at by @gfx in https://github.com/wado-lang/wado/pull/2617
+- perf(core:zlib): inflate and deflate in linear memory, decompress ahead of C zlib on Wasm by @gfx in https://github.com/wado-lang/wado/pull/2620
+- refactor(compiler): identify a type parameter by its declaration, not its name by @gfx in https://github.com/wado-lang/wado/pull/2621
+- perf(optimize): cut param_spec's per-round cost by re-deriving only what a round wrote by @gfx in https://github.com/wado-lang/wado/pull/2623
+- fix(compiler): resolve a default argument in its declaration's frame, Self included by @gfx in https://github.com/wado-lang/wado/pull/2622
+- feat(re): match case-insensitively under `i`, on general simple case mapping in core:icu by @gfx in https://github.com/wado-lang/wado/pull/2624
+- perf(optimize): scalarize a struct's fields across calls that take it `&mut` by @gfx in https://github.com/wado-lang/wado/pull/2625
+- perf(compiler): seed core:eval compiles from a snapshot of the caller's dependencies by @gfx in https://github.com/wado-lang/wado/pull/2626
+- perf(compiler): serve a dependency's Kiln-generated modules from the dependency snapshot by @gfx in https://github.com/wado-lang/wado/pull/2628
+- fix(gale): match caseInsensitive across all of Unicode, as the jar does by @gfx in https://github.com/wado-lang/wado/pull/2627
+- chore(jade): pin a pattern's `i` modifier to ignoring case only where it reaches by @gfx in https://github.com/wado-lang/wado/pull/2629
+- perf(compiler): halve a dependency snapshot's memory by sharing the stdlib it seeds from by @gfx in https://github.com/wado-lang/wado/pull/2630
+- refactor(compiler): resolve static calls from the receiver's identity, never its spelling by @gfx in https://github.com/wado-lang/wado/pull/2631
+- perf(kiln): halve the test cycle that rebuilds a generator by @gfx in https://github.com/wado-lang/wado/pull/2632
+- perf(sroa): scalarize a struct handed `&mut` to a cold call by @gfx in https://github.com/wado-lang/wado/pull/2633
+- perf(re): search within an order of magnitude of Node's RegExp by @gfx in https://github.com/wado-lang/wado/pull/2634
+- feat(web): the collector reclaims web handles, which are `externref` by @gfx in https://github.com/wado-lang/wado/pull/2636
+- feat(loam): run a graph in its own element types, half graphs on every device by @gfx in https://github.com/wado-lang/wado/pull/2635
+- perf(codegen): call closures with no cast, and cast to final struct types by @gfx in https://github.com/wado-lang/wado/pull/2637
+- feat(eddy): review a branch on demand, with a test that reproduces each finding by @gfx in https://github.com/wado-lang/wado/pull/2638
+- feat(eddy): print what a review cost, in total and for each model by @gfx in https://github.com/wado-lang/wado/pull/2641
+- feat(loam)!: load a model larger than the guest, a tensor at a time by @gfx in https://github.com/wado-lang/wado/pull/2639
+- feat(web)!: a handle holds its backing value, so a node `SurfaceDom` dropped is collected by @gfx in https://github.com/wado-lang/wado/pull/2642
+- feat(loam): run onnxruntime's int4 operators on every device, weights kept packed by @gfx in https://github.com/wado-lang/wado/pull/2645
+- fix: call a concrete trait impl through a newtype without an ICE by @gfx in https://github.com/wado-lang/wado/pull/2646
+- docs: name the example type Box, not Box_ by @gfx in https://github.com/wado-lang/wado/pull/2647
+- refactor(optimizer): settle the NIR value tier as a constant pool and post-loop extractor by @gfx in https://github.com/wado-lang/wado/pull/2648
+- feat(loam): run half quantized products and gathers in WebGPU kernels by @gfx in https://github.com/wado-lang/wado/pull/2649
+- fix(compiler): a closure holds the resources its captures mention by @gfx in https://github.com/wado-lang/wado/pull/2651
+- fix(EMI): a cold SROA write-back keeps the value its block yields by @gfx in https://github.com/wado-lang/wado/pull/2652
+- feat(eddy): confine the reviewed change's code to its checkout by @gfx in https://github.com/wado-lang/wado/pull/2654
+- refactor(compiler): give a value-less `let` its own form in TIR and NIR by @gfx in https://github.com/wado-lang/wado/pull/2655
+- feat(compiler)!: signals are a library, and `reactive` is an ordinary identifier by @gfx in https://github.com/wado-lang/wado/pull/2657
+- feat(cli): read and search the specification and the API from the `wado` binary by @gfx in https://github.com/wado-lang/wado/pull/2656
+- refactor(compiler): mint every compiler name through name.rs by @gfx in https://github.com/wado-lang/wado/pull/2658
+- perf(gale): parse Rust 5–7× faster by sharing prediction states across nesting depths by @gfx in https://github.com/wado-lang/wado/pull/2660
+- feat(rill): fine-grained reactivity ships as the package wado-lang:rill by @gfx in https://github.com/wado-lang/wado/pull/2661
+- refactor(compiler): split name.rs by concern and move module paths out by @gfx in https://github.com/wado-lang/wado/pull/2662
+- feat(eddy): review a pull request from a comment by @gfx in https://github.com/wado-lang/wado/pull/2663
+- feat(rill): bindings touch only the DOM nodes they own by @gfx in https://github.com/wado-lang/wado/pull/2664
+- feat(traits): resolve method, type-qualified and Self-bound calls in one order by @gfx in https://github.com/wado-lang/wado/pull/2667
+- feat(grammar): hold Wado.g4 to every syntax error the parser reports by @gfx in https://github.com/wado-lang/wado/pull/2665
+- perf(loam): decode Gemma 3 faster than llama.cpp, quantized or not by @gfx in https://github.com/wado-lang/wado/pull/2666
+- fix(parser): build main again by giving the Self-binding errors a kind by @gfx in https://github.com/wado-lang/wado/pull/2668
+- chore(traits): pin that derived traits meet a blanket's bound by @gfx in https://github.com/wado-lang/wado/pull/2669
+- fix(EMI): a live closure keeps the types its wrapper is built from by @gfx in https://github.com/wado-lang/wado/pull/2670
+- chore(eddy): keep the records of the first pull request reviews by @gfx in https://github.com/wado-lang/wado/pull/2671
+- fix(eddy): mint and renew the federated token in Eddy by @gfx in https://github.com/wado-lang/wado/pull/2672
+- feat(loam): lower the last of gpt-oss-20b's operators by @gfx in https://github.com/wado-lang/wado/pull/2673
+- chore(ci): silence the create-github-app-token app-id deprecation warning by @gfx in https://github.com/wado-lang/wado/pull/2677
+- fix(eddy): run only an Eddy that matches the workflow by @gfx in https://github.com/wado-lang/wado/pull/2679
+- fix: let `N::m(&x)` on a newtype select a blanket impl by @gfx in https://github.com/wado-lang/wado/pull/2678
+- feat(eddy): keep review records in the wiki by @gfx in https://github.com/wado-lang/wado/pull/2681
+- feat(rill): build a page as one expression with the View builder by @gfx in https://github.com/wado-lang/wado/pull/2680
+- feat(rill): show a subtree only while a condition holds by @gfx in https://github.com/wado-lang/wado/pull/2683
+- feat(loam): hold a mixture of experts within a device budget by @gfx in https://github.com/wado-lang/wado/pull/2684
+- feat(grammar): state compile-time literals, Self bindings and format specifiers in Wado.g4 by @gfx in https://github.com/wado-lang/wado/pull/2682
+- fix(loam): hold the held-experts conformance case to the bound its conditioning allows by @gfx in https://github.com/wado-lang/wado/pull/2686
+- feat(rill): switch keeps a subtree per key, and a memo that comes out the same wakes nothing by @gfx in https://github.com/wado-lang/wado/pull/2685
+- fix(effects)!: a function holds only the resources its with clause declares by @gfx in https://github.com/wado-lang/wado/pull/2676
+- fix(eddy): keep the checkout tests under the timeout on a loaded CI runner by @gfx in https://github.com/wado-lang/wado/pull/2689
+- feat(lexer): report every bad escape in one compile, as a lexer error by @gfx in https://github.com/wado-lang/wado/pull/2688
+- feat(loam): gpt-oss-20b on Cpu, its experts held within a budget by @gfx in https://github.com/wado-lang/wado/pull/2691
+- feat: every resource can be backed by a guest value by @gfx in https://github.com/wado-lang/wado/pull/2692
+- chore(wado-run-webgpu): update wasi-webgpu-wasmtime to 0.5.2, one crate fewer by @gfx in https://github.com/wado-lang/wado/pull/2693
+- perf(inline): price callees by what they splice, cutting Loam compile time 9% by @gfx in https://github.com/wado-lang/wado/pull/2694
+- feat(wado-run-pjrt): run on XLA's CPU plugin with no setup by @gfx in https://github.com/wado-lang/wado/pull/2695
+- feat(rill): hydrate served HTML, toward publishing apps as static pages by @gfx in https://github.com/wado-lang/wado/pull/2696
+- feat(rill): ship the to-do example as a static page hydrated in the browser by @gfx in https://github.com/wado-lang/wado/pull/2697
+- perf(value_copy): stop copying TreeMap keys and serde error paths twice by @gfx in https://github.com/wado-lang/wado/pull/2698
+- perf(compiler): check and lower a loop nest in linear time by @gfx in https://github.com/wado-lang/wado/pull/2699
+- fix(format): keep an attribute on a trait's associated type by @gfx in https://github.com/wado-lang/wado/pull/2700
+- perf(compiler): reach the heap-effect fixpoint in fewer, still parallel, sweeps by @gfx in https://github.com/wado-lang/wado/pull/2701
+- feat(elaborator): omitted type arguments are inference variables by @gfx in https://github.com/wado-lang/wado/pull/2703
+- perf(compiler): generate the compiler once per build, halving CI's Rust test job by @gfx in https://github.com/wado-lang/wado/pull/2705
+- chore(mise): pin the Gale oracle tasks to Temurin 25.0.5.1+2 and stop mise.lock churn by @gfx in https://github.com/wado-lang/wado/pull/2707
+- perf: run CI's package tests in half the time, at wado test's default -O1 by @gfx in https://github.com/wado-lang/wado/pull/2708
+- docs(skills): catch a pull request posted with the wrong text by @gfx in https://github.com/wado-lang/wado/pull/2710
+- feat!: a bare name in a pattern always binds by @gfx in https://github.com/wado-lang/wado/pull/2709
+- feat(rill): declare a page as nested children, without `dyn` by @gfx in https://github.com/wado-lang/wado/pull/2706
+
 ## [v0.0.38](https://github.com/wado-lang/wado/compare/v0.0.37...v0.0.38) - 2026-11-07
 
 - perf(nir): pass a &S read past an early exit as its fields, so f64::from_str allocates no StrSlice by @gfx in https://github.com/wado-lang/wado/pull/2381

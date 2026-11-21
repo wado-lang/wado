@@ -62,7 +62,7 @@ test "a copy a set reported finishes on what the set took" {
     set.insert(reader.start_read(4));
     let writing = writer.start_write([7, 8]);
     let ready = set.wait();
-    assert ready.event matches { Copied(Completed) };
+    assert ready.event matches { Copied(_::Completed) };
     let [rx, chunk] = ready.member.finish();
     rx.drop();
     let [tx, _] = writing.finish();
@@ -97,7 +97,7 @@ test "a copy that settled as it started enters ready with its result" {
     let mut set = WaitableSet::<ReadCopy<u8>>::new();
     set.insert(reader.start_read(4));
     let ready = set.wait();
-    assert ready.event matches { Copied(Completed) };
+    assert ready.event matches { Copied(_::Completed) };
     let [rx, chunk] = ready.member.finish();
     rx.drop();
     let [tx, _] = writing.finish();
@@ -113,7 +113,7 @@ test "a copy one set reported enters another ready" {
     let mut second = WaitableSet::<ReadCopy<u8>>::new();
     second.insert(first.wait().member);
     let ready = second.wait();
-    assert ready.event matches { Copied(Completed) };
+    assert ready.event matches { Copied(_::Completed) };
     let [rx, chunk] = ready.member.finish();
     rx.drop();
     let [tx, _] = writing.finish();

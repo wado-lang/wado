@@ -6,7 +6,7 @@
 use { EmitContext } from "./emit_context.wado";
 use { follow_site_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
 use { HashSet } from "core:collections";
-use { FOLLOW_SITE_LIMIT, FOLLOW_TABLES } from "./gen_util.wado";
+use { FOLLOW_SITE_LIMIT, FOLLOW_TABLES, constant_patterns } from "./gen_util.wado";
 use { bits_ids, bits_union_into, sets_overlap } from "./token_kinds.wado";
 use { Reading } from "./readings.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
@@ -57,17 +57,17 @@ fn join_lookahead_condition(ctx: &mut EmitContext, sig: &List<List<i32>>, depth:
             result.push_str(" && ");
         }
         let part = match access {
-            ScanKind && d == 0 => ctx.kind_check_str(&sig[d], DISPATCH_KIND_LOCAL),
-            Scan | ScanKind => {
+            _::ScanKind && d == 0 => ctx.kind_check_str(&sig[d], DISPATCH_KIND_LOCAL),
+            _::Scan | _::ScanKind => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + ${d}` };
                 let check = ctx.kind_check_str(&sig[d], `tokens[${idx_expr}]`);
                 `${idx_expr} < tokens.len() && ${check}`;
             },
-            Parse => {
+            _::Parse => {
                 let check_expr = if d == 0 { `p.peek_kind()` } else { `p.peek_at(${d})` };
                 ctx.kind_check_str(&sig[d], &check_expr);
             },
-            ParseKind => {
+            _::ParseKind => {
                 let check_expr = if d == 0 { DISPATCH_KIND_LOCAL } else { `p.peek_at(${d})` };
                 ctx.kind_check_str(&sig[d], &check_expr);
             },
@@ -228,16 +228,7 @@ fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
     f.add_param("k", "i32");
     f.set_return_type("bool");
     f.emit_begin(w);
-    let mut body = String::with_capacity(64);
-    body.push_str("return k matches { ");
-    for let mut i = 0; i < tokens.len(); i += 1 {
-        if i > 0 {
-            body.push_str(" | ");
-        }
-        body.push_str(&tokens[i]);
-    }
-    body.push_str(" };");
-    w.line(&body);
+    w.line(`return k matches { ${constant_patterns(tokens)} };`);
     w.end();
     w.blank();
 }

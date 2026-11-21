@@ -78,11 +78,11 @@ struct Viewport {
 impl Preset {
     fn viewport(&self) -> Viewport {
         return match *self {
-            Full => Viewport { center_x: -0.6, center_y: 0.0, zoom: 1.0 },
-            Seahorse => Viewport { center_x: -0.7453, center_y: 0.1127, zoom: 150.0 },
-            Elephant => Viewport { center_x: 0.2849, center_y: 0.0113, zoom: 120.0 },
-            Spiral => Viewport { center_x: -0.761574, center_y: -0.0847596, zoom: 1800.0 },
-            Dendrite => Viewport { center_x: -0.1011, center_y: 0.9563, zoom: 60.0 },
+            _::Full => Viewport { center_x: -0.6, center_y: 0.0, zoom: 1.0 },
+            _::Seahorse => Viewport { center_x: -0.7453, center_y: 0.1127, zoom: 150.0 },
+            _::Elephant => Viewport { center_x: 0.2849, center_y: 0.0113, zoom: 120.0 },
+            _::Spiral => Viewport { center_x: -0.761574, center_y: -0.0847596, zoom: 1800.0 },
+            _::Dendrite => Viewport { center_x: -0.1011, center_y: 0.9563, zoom: 60.0 },
         };
     }
 }
@@ -100,7 +100,7 @@ global BAILOUT: f64 = 256.0;
 /// escaped. Lanes are frozen as they escape, so the loop runs until both have.
 fn escape_time(set: &Set, x: f64x2, y: f64x2, max_iter: i32) -> [Option<f64>, Option<f64>] {
     let [mut zr, mut zi, cr, ci] = match *set {
-        Mandelbrot => [
+        _::Mandelbrot => [
             f64x2::splat(0.0),
             f64x2::splat(0.0),
             x,
@@ -155,10 +155,10 @@ fn colorize(palette: Palette, time: Option<f64>) -> [f64, f64, f64] {
     };
     let s = f64::sqrt(t) * 0.18;
     let [d0, d1, d2] = match palette {
-        Fire => [0.0, 0.15, 0.25],
-        Ocean => [0.5, 0.6, 0.7],
-        Neon => [0.8, 0.9, 0.3],
-        Mono => [0.0, 0.0, 0.0],
+        _::Fire => [0.0, 0.15, 0.25],
+        _::Ocean => [0.5, 0.6, 0.7],
+        _::Neon => [0.8, 0.9, 0.3],
+        _::Mono => [0.0, 0.0, 0.0],
     };
     let wave = |d: f64| 0.5 + 0.5 * f64::cos(6.283185307179586 * (s + d));
     return [
@@ -220,14 +220,14 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Ter
     }
     let set = match [opts.julia_re, opts.julia_im] {
         [Some(re), Some(im)] => Set::Julia([re, im]),
-        [None, None] => Set::Mandelbrot,
+        [null, null] => Set::Mandelbrot,
         _ => fail("--julia-re and --julia-im go together"),
     };
     // The Mandelbrot set leans left of the origin; a Julia set is centred on it.
-    let default_x = if set matches { Mandelbrot } { -0.6 } else { 0.0 };
+    let default_x = if set matches { _::Mandelbrot } { -0.6 } else { 0.0 };
     let view = match opts.preset {
         Some(p) => p.viewport(),
-        None => Viewport { center_x: opts.center_x.unwrap_or(default_x), center_y: opts.center_y, zoom: opts.zoom },
+        null => Viewport { center_x: opts.center_x.unwrap_or(default_x), center_y: opts.center_y, zoom: opts.zoom },
     };
 
     let start = MonotonicClock::now();
@@ -244,7 +244,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Ter
 }
 
 test "options that cannot render are refused" {
-    assert Options {}.problem() matches { None };
+    assert Options {}.problem() matches { null };
     assert Options { width: 0 }.problem() matches { Some(_) };
     assert Options { samples: -1 }.problem() matches { Some(_) };
     assert Options { columns: 0 }.problem() matches { Some(_) };
@@ -254,8 +254,8 @@ test "options that cannot render are refused" {
 
 test "points inside the set never escape" {
     let [a, b] = escape_time(&Set::Mandelbrot, [0.0, -1.0], f64x2::splat(0.0), 200);
-    assert a matches { None };
-    assert b matches { None };
+    assert a matches { null };
+    assert b matches { null };
 }
 
 test "points outside escape, farther ones sooner" {
@@ -271,12 +271,12 @@ test "a point far outside escapes at once, and still counts as outside" {
 
 test "lanes escape independently" {
     let [inside, outside] = escape_time(&Set::Mandelbrot, [0.0, 2.0], f64x2::splat(0.0), 200);
-    assert inside matches { None };
+    assert inside matches { null };
     assert outside matches { Some(t) && t > 0.0 };
 }
 
 test "the Julia set of c = 0 is the unit disk" {
     let [inside, outside] = escape_time(&Set::Julia([0.0, 0.0]), [0.9, 1.1], f64x2::splat(0.0), 200);
-    assert inside matches { None };
+    assert inside matches { null };
     assert outside matches { Some(t) && t > 0.0 };
 }

@@ -227,6 +227,8 @@ pub enum Code {
     UnconditionalTrap,
     /// A hex literal ending in digits that read as a float type: `0x1_f32`.
     HexSuffixLookalike,
+    /// A `let … else` whose pattern binds no name: `let == X = y else { … }`.
+    BindingFreeLetElse,
     /// A pattern naming one float a rounding step can miss: `1.5 =>`.
     FloatLiteralPattern,
 
@@ -379,6 +381,7 @@ impl std::fmt::Display for Code {
             Code::ArithmeticOverflow => "ARITHMETIC_OVERFLOW",
             Code::UnconditionalTrap => "UNCONDITIONAL_TRAP",
             Code::HexSuffixLookalike => "HEX_SUFFIX_LOOKALIKE",
+            Code::BindingFreeLetElse => "BINDING_FREE_LET_ELSE",
             Code::FloatLiteralPattern => "FLOAT_LITERAL_PATTERN",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",

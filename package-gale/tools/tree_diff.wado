@@ -181,10 +181,10 @@ fn divergences(jar: &Tree, gale: &Tree) -> List<Divergence> {
             if s.end > d.end {
                 d.end = s.end;
             }
-            if from_jar && d.jar_rule matches { None } {
+            if from_jar && d.jar_rule matches { null } {
                 d.jar_rule = Some(s.rule);
             }
-            if !from_jar && d.gale_rule matches { None } {
+            if !from_jar && d.gale_rule matches { null } {
                 d.gale_rule = Some(s.rule);
             }
             continue;
@@ -296,7 +296,7 @@ test "a moved subtree is one divergence" {
 
 test "identical trees agree" {
     let t = parse_tree(&"(s (e a) ;)");
-    assert first_leaf_mismatch(&t, &t) matches { None };
+    assert first_leaf_mismatch(&t, &t) matches { null };
     assert divergences(&t, &t).is_empty();
 }
 

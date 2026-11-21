@@ -82,11 +82,11 @@ fn space() -> List<[u32, u32]> {
 
 fn named(set: &NamedSet, ignore_case: bool) -> List<[u32, u32]> {
     let positive: List<[u32, u32]> = match set.kind {
-        Digit => [
+        _::Digit => [
             [0x30, 0x39],
         ],
-        Word => if ignore_case { FOLDED_WORD } else { ascii_word() },
-        Space => space(),
+        _::Word => if ignore_case { FOLDED_WORD } else { ascii_word() },
+        _::Space => space(),
         Property(p) => p.ranges,
     };
     if set.negated {

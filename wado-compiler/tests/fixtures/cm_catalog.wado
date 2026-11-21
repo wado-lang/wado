@@ -628,13 +628,13 @@ export fn id_record_future(v: FutureCell) -> FutureCell {
 // wider than its CM size writes past its slot, and past the end.
 export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perms, s: Status) -> u32 {
     let tag: u32 = match c {
-        Red => 1,
-        Green => 2,
-        Blue => 3,
+        _::Red => 1,
+        _::Green => 2,
+        _::Blue => 3,
     };
     let seen: u32 = match s {
-        Active => 1,
-        Inactive => 2,
+        _::Active => 1,
+        _::Inactive => 2,
     };
     // Each field gets a band wider than its own range, so one slot read wrong
     // cannot land on a total another set of inputs would reach.

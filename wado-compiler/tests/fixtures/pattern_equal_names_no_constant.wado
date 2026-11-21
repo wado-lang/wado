@@ -1,0 +1,12 @@
+// `==` takes a constant; a local is compared by a guard instead.
+
+fn is_limit(v: i32, limit: i32) -> bool {
+    return v matches { == limit };
+}
+
+test {
+    assert is_limit(1, 1);
+}
+
+__DATA__
+{"compile_error": ":4:24: analysis error: invalid pattern: `==` takes a constant, and `limit` names none"}

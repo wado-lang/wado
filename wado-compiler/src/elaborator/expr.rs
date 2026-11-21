@@ -1545,8 +1545,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         expected: Option<TypeId>,
     ) -> BareCase {
-        if let Some((owner, spelled)) = self.bare_case_in(expected, &ident.name) {
+        if let Some((owner, spelled)) = self.bare_case_in(expected, ident.case_name()) {
             return BareCase::Of { owner, spelled };
+        }
+        if ident.has_inferred_qualifier() {
+            let expected = expected
+                .filter(|&t| t != TypeTable::ERROR && t != TypeTable::UNKNOWN)
+                .map(|t| self.tysys.type_table.borrow().name(t));
+            let _ = self.emit(TypeError::InferredCaseUnresolved {
+                case: ident.case_name().to_string(),
+                expected,
+                span: ident.span,
+            });
+            return BareCase::NeedsContext;
         }
         let Some(qualified) = self.tysys.bare_case_at(ident.id) else {
             return BareCase::None;
@@ -3248,15 +3259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(match pattern {
             ast::Pattern::Error(_) => return None,
             ast::Pattern::Wildcard => Pat::Wild,
-            ast::Pattern::Ident { id, name, .. } | ast::Pattern::MutIdent { id, name, .. } => {
-                if self.pattern_name_bound(*id) {
-                    Pat::Wild
-                } else if self.is_known_case_of_type(scrutinee_type, name, None) {
-                    return self.exh_case(scrutinee_type, name, None);
-                } else {
-                    Pat::Opaque
-                }
-            }
+            ast::Pattern::Ident { .. } | ast::Pattern::MutIdent { .. } => Pat::Wild,
             ast::Pattern::Literal(lit) => return self.exh_literal(lit, scrutinee_type),
             ast::Pattern::Variant {
                 variant_name,
@@ -3280,6 +3283,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Range {
                 start, end, kind, ..
             } => return self.exh_range(start, end, *kind, scrutinee_type),
+            // A global shows its value only when the match runs.
+            ast::Pattern::Equal { operand, .. } => match &**operand {
+                ast::Pattern::Ident { .. } => Pat::Opaque,
+                _ => return self.exh_pattern(operand, written_type),
+            },
             ast::Pattern::Tuple(patterns, _) => {
                 let types = self
                     .tysys
@@ -3521,6 +3529,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: c.name.clone(),
                     has_payload: false,
                     inhabited: true,
+                    is_null: false,
                 })
                 .collect();
             let index = cases.iter().position(|c| c.name == name)?;
@@ -3533,6 +3542,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let variant_info = self.tysys.variant_of_type(scrutinee_type).cloned()?;
         let (index, _) = variant_info.case_named(name)?;
         let payload_types = self.tysys.case_payload_types(scrutinee_type)?;
+        let is_option = self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(scrutinee_type)
+            .is_some();
         let cases: Rc<[Case]> = variant_info
             .cases
             .iter()
@@ -3543,6 +3558,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: c.name.clone(),
                     has_payload,
                     inhabited: !self.is_uninhabited(payload_type),
+                    is_null: is_option && !has_payload,
                 }
             })
             .collect();
@@ -3578,8 +3594,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(variant_name)
             .to_string();
 
-        // A name that is no case: an associated constant is its value, a
-        // namespaced global an opaque constant; a bare one binds.
+        // A path that is no case: an associated constant is its value, a
+        // namespaced global an opaque constant.
         if bindings.is_empty()
             && !self.is_known_case_of_type(written_type, &normalized, variant_qualifier)
         {
@@ -5331,7 +5347,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// success case and returns early on failure: `Result<T, E>` in a function
     /// returning `Result<U, F>` becomes
     /// `match expr { Ok(v) => v, Err(e) => return Result::Err(F::from(e)) }`,
-    /// and `Option<T>` becomes `match expr { Some(v) => v, None => return null }`.
+    /// and `Option<T>` becomes `match expr { Some(v) => v, null => return null }`.
     pub(super) fn resolve_question_mark(
         &mut self,
         qm: &ast::TryOpExpr,

@@ -223,7 +223,7 @@ fn patch_of(w: &Workspace, commit: &String, paths: &List<String>) -> Result<Stri
     for let p of paths {
         match w.resolve(p)?.strip_prefix(`${w.root}/`) {
             Some(relative) => inside.push(relative.to_string()),
-            None => {
+            null => {
                 return Err(`${*p} names the whole tree, not a file of the reproduction`);
             },
         }
@@ -236,7 +236,7 @@ fn patch_of(w: &Workspace, commit: &String, paths: &List<String>) -> Result<Stri
     let mut add = ["add", "--force", "--intent-to-add", "--"] as List<String>;
     add.extend(&inside);
     let tree = Worktree::of(&w.repo, &w.root);
-    if try_git(tree.args(add)) matches { None } {
+    if try_git(tree.args(add)) matches { null } {
         return Err("a file of the reproduction is not in the tree");
     }
     let mut diff = ["diff", "--binary", *commit, "--"] as List<String>;
@@ -263,7 +263,7 @@ fn apply(w: &Workspace, patch: &String) -> Result<(), String> with (Preopens, Pr
     fs::remove_file(&path).map_err(|e| `${e}`)?;
     return match applied {
         Some(_) => Ok(()),
-        None => Err("the patch does not apply to the reviewed commit"),
+        null => Err("the patch does not apply to the reviewed commit"),
     };
 }
 
@@ -368,7 +368,7 @@ test "the reporter may leave a finding without a reproduction" {
             {"line": 12, "repro": {"paths": ["tests/b.rs"], "run": ["test", "--test", "b"], "expect": "boom"}}
         ]}`,
     ).unwrap();
-    assert answer.findings[0].repro matches { None };
+    assert answer.findings[0].repro matches { null };
     assert answer.findings[1].line == 12;
     assert answer.findings[1].repro matches { Some(r) && r.paths == ["tests/b.rs"] && r.expect == "boom" };
 }

@@ -167,7 +167,7 @@ test "the policy is reported, not applied" {
     assert Reflect::<Plain>::wire_name_policy() == CaseStyle::Identity;
     let fs = ReflectStruct::<Account>::members();
     assert fs.0.name() == "user_id";
-    assert fs.0.wire_name_override() matches { None };
+    assert fs.0.wire_name_override() matches { null };
     assert fs.1.wire_name_override() matches { Some(n) && n == "mail" };
 }
 ```
@@ -205,7 +205,7 @@ variant Plain {
 
 test "the tag is reported as written" {
     assert ReflectVariant::<Tagged>::wire_tag() matches { Some(t) && t == "type" };
-    assert ReflectVariant::<Plain>::wire_tag() matches { None };
+    assert ReflectVariant::<Plain>::wire_tag() matches { null };
 }
 ```
 
@@ -292,7 +292,7 @@ A flags member cannot carry `#[wire]`, so its override is always `None`:
 
 ```wado
 test "a flags member has no wire override" {
-    assert ReflectFlags::<Perm>::members().0.wire_name_override() matches { None };
+    assert ReflectFlags::<Perm>::members().0.wire_name_override() matches { null };
 }
 ```
 
@@ -353,10 +353,10 @@ returns every slot empty. `default_slot(i)` returns every slot empty except slot
 ```wado
 test "the slots start empty and default_slot fills one default" {
     let empty = ReflectStruct::<Config>::empty_slots();
-    assert empty.0 matches { None } && empty.1 matches { None };
+    assert empty.0 matches { null } && empty.1 matches { null };
     let slots = ReflectStruct::<Config>::default_slot(1);
     assert slots.1 matches { Some(8080) };
-    assert slots.0 matches { None } && slots.2 matches { None };
+    assert slots.0 matches { null } && slots.2 matches { null };
 }
 ```
 
@@ -489,7 +489,7 @@ case has:
 test "an enum reads and builds a value by its discriminant" {
     assert ReflectEnum::<Color>::discriminant(&Color::Blue) == 2;
     assert ReflectEnum::<Color>::from_discriminant(1) == Option::Some(Color::Green);
-    assert ReflectEnum::<Color>::from_discriminant(7) matches { None };
+    assert ReflectEnum::<Color>::from_discriminant(7) matches { null };
 }
 ```
 
@@ -521,7 +521,7 @@ test "a flags value reads and builds its bits as a u64" {
     let p = Perm::Read | Perm::Exec;
     assert ReflectFlags::<Perm>::bits(&p) == 5;
     assert ReflectFlags::<Perm>::from_bits(3) == Option::Some(Perm::Read | Perm::Write);
-    assert ReflectFlags::<Perm>::from_bits(8) matches { None };
+    assert ReflectFlags::<Perm>::from_bits(8) matches { null };
 }
 ```
 
@@ -769,7 +769,7 @@ variant Shape {
 test "a static method that is not a case name reaches the blanket" {
     assert Shape::parse("Circle") == Option::Some(Shape::Circle(0));
     assert Shape::parse("Empty") == Option::Some(Shape::Empty);
-    assert Shape::parse("Square") matches { None };
+    assert Shape::parse("Square") matches { null };
 }
 ```
 

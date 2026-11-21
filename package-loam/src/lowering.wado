@@ -75,7 +75,7 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
         for let o of node.outputs {
             made[o] = at;
         }
-        if lowered[at] matches { Folded } {
+        if lowered[at] matches { _::Folded } {
             continue;
         }
         for let t of node.reads() {
@@ -86,7 +86,7 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
         reads.returned.insert(vi.name);
     }
     for let [at, node] of graph.nodes.into_iter().enumerate() {
-        if node.op != "Softmax" || !lowered[at] matches { Operation } {
+        if node.op != "Softmax" || !lowered[at] matches { _::Operation } {
             continue;
         }
         let mut walk = Walk { graph, checked, lowered: &lowered, made: &made, reads: &reads, taken: [] };
@@ -98,7 +98,7 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
         }
     }
     for let [at, node] of graph.nodes.into_iter().enumerate() {
-        if node.op != "MatMul" || !lowered[at] matches { Operation } || checked.shapes[node.inputs[0]].rank() < 2 {
+        if node.op != "MatMul" || !lowered[at] matches { _::Operation } || checked.shapes[node.inputs[0]].rank() < 2 {
             continue;
         }
         let Some(t) = made.get(node.inputs[1]) else {
@@ -107,7 +107,7 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> List<Lowering> {
         let transpose = &graph.nodes[t];
         let weight = &transpose.inputs[0];
         if transpose.op == "Transpose"
-            && lowered[t] matches { Operation }
+            && lowered[t] matches { _::Operation }
             && checked.shapes[*weight].rank() == 2
             && settled(transpose_perm(transpose, 2)) == [1, 0] as List<i32>
             && graph.initializers.into_iter().any(|vi| vi.name == *weight)
@@ -183,7 +183,7 @@ impl Walk {
         let hidden = self.scalar(&self.node(hiding).inputs[2])?;
         let scaling = match self.taking(&scored, "Div") {
             Some(at) => at,
-            None => self.taking(&scored, "Mul")?,
+            null => self.taking(&scored, "Mul")?,
         };
         let divides = self.node(scaling).op == "Div";
         let scale = self.scalar(&self.node(scaling).inputs[1])?;
@@ -281,12 +281,12 @@ impl Walk {
         let mut name = *tensor;
         let mut passed: List<i32> = [];
         while let Some(at) = self.made.get(name) {
-            if self.lowered[at] matches { Alias } {
+            if self.lowered[at] matches { _::Alias } {
                 passed.push(at);
                 name = self.node(at).inputs[0];
                 continue;
             }
-            if self.node(at).op != op || !self.lowered[at] matches { Operation } {
+            if self.node(at).op != op || !self.lowered[at] matches { _::Operation } {
                 return null;
             }
             self.taken.extend(&passed);
@@ -301,7 +301,7 @@ impl Walk {
         let mut name = *tensor;
         loop {
             let at = self.reads.sole(&name)?;
-            if !self.lowered[at] matches { Alias } {
+            if !self.lowered[at] matches { _::Alias } {
                 if self.node(at).op != op {
                     return null;
                 }
@@ -486,7 +486,7 @@ pub fn is_alias(node: &Node, checked: &Checked) -> bool {
     let primitives = &checked.primitives;
     return node.op == "Identity"
         || node.op == "Cast"
-            && !data_type(settled(node.required_int_attr("to"))) matches { Some(Int32) }
+            && !data_type(settled(node.required_int_attr("to"))) matches { Some(_::Int32) }
             && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
 }
 

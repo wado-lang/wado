@@ -215,7 +215,7 @@ fn label_named<S: AsStrSlice>(env: &AttrEnv, name: S, bindings: &List<AltBinding
         if lab.name != name.as_str_slice() {
             continue;
         }
-        if first matches { None } {
+        if first matches { null } {
             first = Option::Some(*lab);
         }
         for let b of bindings {
@@ -291,21 +291,21 @@ fn check_member<S: AsStrSlice>(
 ) -> Result<(), String> {
     let member = match &r.member {
         Some(m) => *m,
-        None => {
+        null => {
             return Result::Ok(());
         },
     };
     let ok = match *target {
-        TokenLabel => is_token_member(&member),
-        TokenRef => is_token_member(&member),
-        RuleLabel => is_rule_member(&member, rule_name, rules),
-        RuleRef => is_rule_member(&member, rule_name, rules),
+        _::TokenLabel => is_token_member(&member),
+        _::TokenRef => is_token_member(&member),
+        _::RuleLabel => is_rule_member(&member, rule_name, rules),
+        _::RuleRef => is_rule_member(&member, rule_name, rules),
         // `$start` / `$stop` are the rule's first / last token, so they take the
         // token member set; `$ctx` exposes `toStringTree`; `$text` / `$_p` take
         // no member.
-        ParserSpecial => r.name matches { "start" | "stop" } && is_token_member(&member)
+        _::ParserSpecial => r.name matches { "start" | "stop" } && is_token_member(&member)
             || r.name == "ctx" && member == "toStringTree",
-        LexerSpecial | RuleAttr | ListLabel => false,
+        _::LexerSpecial | _::RuleAttr | _::ListLabel => false,
     };
     if ok {
         return Result::Ok(());

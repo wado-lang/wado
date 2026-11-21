@@ -7,12 +7,12 @@ use { HighlightVisitor } from "./highlight.wado";
 pub fn highlight_walk(visitor: &mut HighlightVisitor, toks: &TokenStream, s: &CstStore) {
     for let mut r = 0; r < s.row_count(); r += 1 {
         match s.tag[r] {
-            Open => {
+            _::Open => {
                 if s.kind(r) as i32 != K_ERROR as i32 {
                     visitor.hl_enter(s.kind(r) as i32);
                 }
             },
-            Close => {
+            _::Close => {
                 if s.kind(r) as i32 != K_ERROR as i32 {
                     visitor.hl_exit();
                 }

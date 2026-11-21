@@ -216,7 +216,7 @@ impl Parser {
 
     /// Consume the current `@capture` pair and return the capture name.
     fn expect_capture(&mut self) -> Result<String, HighlightQueryError> {
-        if !self.cur.tok matches { At } {
+        if !self.cur.tok matches { _::At } {
             return Result::Err(self.mk_err("expected '@capture'"));
         }
         self.advance()?;
@@ -234,7 +234,7 @@ impl Parser {
         let mut rules: List<HighlightRule> = [];
         loop {
             match &self.cur.tok {
-                Eof => {
+                _::Eof => {
                     break;
                 },
                 Str(s) => {
@@ -247,7 +247,7 @@ impl Parser {
                         capture: cap,
                     });
                 },
-                LParen => rules.push(self.parse_paren()?),
+                _::LParen => rules.push(self.parse_paren()?),
                 _ => {
                     return Result::Err(self.mk_err("expected a pattern: '(' or a string literal"));
                 },
@@ -268,7 +268,7 @@ impl Parser {
         };
         self.advance()?;
         match &self.cur.tok {
-            RParen => {
+            _::RParen => {
                 self.advance()?;
                 let cap = self.expect_capture()?;
                 return Result::Ok(HighlightRule {
@@ -277,7 +277,7 @@ impl Parser {
                     capture: cap,
                 });
             },
-            LParen => {
+            _::LParen => {
                 let sel = self.parse_inner_selector()?;
                 let cap = self.expect_capture()?;
                 self.expect_rparen()?;
@@ -316,7 +316,7 @@ impl Parser {
             },
         };
         self.advance()?;
-        if self.cur.tok matches { LParen } || self.cur.tok matches { Str(_) } {
+        if self.cur.tok matches { _::LParen } || self.cur.tok matches { Str(_) } {
             return Result::Err(self.mk_err("nesting deeper than one rule context is not supported"));
         }
         self.expect_rparen()?;
@@ -324,7 +324,7 @@ impl Parser {
     }
 
     fn expect_rparen(&mut self) -> Result<(), HighlightQueryError> {
-        if !self.cur.tok matches { RParen } {
+        if !self.cur.tok matches { _::RParen } {
             return Result::Err(self.mk_err("expected ')'"));
         }
         self.advance()?;

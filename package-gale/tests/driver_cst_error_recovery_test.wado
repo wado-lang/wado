@@ -46,19 +46,19 @@ test "tree: insert missing terminal" {
 test "an insertion names the wanted kind, the token found, and the edit" {
     let r = errrec::parse_single("let x = ;");
     let d = &r.diagnostics[0];
-    assert d.code matches { MissingToken };
-    assert d.recovery matches { Inserted };
+    assert d.code matches { _::MissingToken };
+    assert d.recovery matches { _::Inserted };
     assert d.expected == [errrec::TK_ID];
     assert d.found == r.tokens.kind_at(3);
 }
 
 test "a deletion and a skipped run name their edits" {
     let del = errrec::parse_single("let x y = z ;");
-    assert del.diagnostics[0].code matches { ExtraToken };
-    assert del.diagnostics[0].recovery matches { Deleted };
+    assert del.diagnostics[0].code matches { _::ExtraToken };
+    assert del.diagnostics[0].recovery matches { _::Deleted };
     assert del.diagnostics[0].found == errrec::TK_ID;
     let skip = errrec::parse_single("let x = } } ;");
-    assert skip.diagnostics[0].recovery matches { SkippedTo };
+    assert skip.diagnostics[0].recovery matches { _::SkippedTo };
 }
 
 // A spurious extra ID before `=`; peek(1) is the expected `=`, so the extra

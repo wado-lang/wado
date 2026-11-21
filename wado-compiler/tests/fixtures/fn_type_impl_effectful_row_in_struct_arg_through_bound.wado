@@ -1,0 +1,39 @@
+// A bound deferred on a struct whose argument is a closure literal is asked
+// again with the solved row standing in that argument, so an impl whose target
+// writes the row answers it.
+
+use { println, Stdout } from "core:cli";
+
+struct Wrap<F, G> {
+    f: F,
+    g: G,
+}
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for Wrap<fn() -> i32 with Stdout, fn() -> i32> {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn through<T: Tag>(t: &T) -> i32 {
+    return t.tag();
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    let w = Wrap { f: || loud(), g: || 1 };
+    println(`${through(&w)}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n"
+}

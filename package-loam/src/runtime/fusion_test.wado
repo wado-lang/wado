@@ -12,7 +12,7 @@ fn plan_of(recorded: &Recorded) -> Plan {
 fn spelled(plan: &Plan) -> List<String> {
     let from = |k: &Kernel| match k.prologue {
         Some(p) => ` from ${p.root}`,
-        None => "",
+        null => "",
     };
     return plan.launches.into_iter().map(|l| match l {
         Node(id) => `node ${id}`,
@@ -81,8 +81,8 @@ test "a plan reused at other extents is the one planning them gives" {
 
 test "extents one recording tells apart and another does not plan apart" {
     // 4 rows of 4 meet where 5 rows of 4 do not, and a row of 1 is no row.
-    assert replanned_from(&centered(4, 4), &centered(5, 4)) matches { None };
-    assert replanned_from(&centered(1, 4), &centered(3, 4)) matches { None };
+    assert replanned_from(&centered(4, 4), &centered(5, 4)) matches { null };
+    assert replanned_from(&centered(1, 4), &centered(3, 4)) matches { null };
 }
 
 test "a normalization is one row kernel, its constants folded in and its weight's broadcast a view" {

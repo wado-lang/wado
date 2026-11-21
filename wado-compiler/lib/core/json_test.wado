@@ -235,7 +235,7 @@ test "serialize pretty with custom indent field" {
         depth: 0,
     };
     let r = v.serialize::<PrettyJsonSerializer>(&mut ser);
-    assert r matches { Ok };
+    assert r matches { _::Ok };
     assert buf == "[
     [
         1
@@ -997,7 +997,7 @@ test "Option<()> collapses, as it does in Rust serde" {
     assert to_string(&none_unit).unwrap() == `null`;
 
     let back: Result<Option<()>, DeserializeError> = from_string(some_unit);
-    assert back matches { Ok(None) };
+    assert back matches { Ok(null) };
 }
 
 fn nested(depth: i32, open: char, close: char) -> String {
@@ -1785,17 +1785,17 @@ test "JsonDeserializer reads a token stream by hand" {
     assert de.peek_after_whitespace() == b'[';
     de.advance();
     assert de.parse_i32_direct() == Result::Ok(i32::MIN);
-    assert de.expect_char(b',') matches { Ok };
+    assert de.expect_char(b',') matches { _::Ok };
     assert de.parse_u64_direct() == Result::Ok(u64::MAX);
-    assert de.expect_char(b',') matches { Ok };
+    assert de.expect_char(b',') matches { _::Ok };
     assert de.parse_i64_direct() == Result::Ok(i64::MIN);
-    assert de.expect_char(b',') matches { Ok };
+    assert de.expect_char(b',') matches { _::Ok };
     assert de.parse_f64_direct() == Result::Ok(-1500.0);
-    assert de.expect_char(b',') matches { Ok };
+    assert de.expect_char(b',') matches { _::Ok };
     assert de.parse_f32_direct() == Result::Ok(0.1 as f32);
-    assert de.expect_char(b',') matches { Ok };
-    assert de.skip_value(0) matches { Ok };
-    assert de.expect_char(b']') matches { Ok };
+    assert de.expect_char(b',') matches { _::Ok };
+    assert de.skip_value(0) matches { _::Ok };
+    assert de.expect_char(b']') matches { _::Ok };
     assert de.peek() == -1;
 
     let mut huge = JsonDeserializer::new("1e400");
@@ -1888,7 +1888,7 @@ test "a skipped number is held to the read path's grammar" {
     assert de_err::<Utf8Rec>(`{"skip":-,"a":"x"}`) == DeserializeError::unexpected_type("expected number", 9);
 
     let mut number = JsonDeserializer::new("-1.5e+3,");
-    assert number.skip_number() matches { Ok };
+    assert number.skip_number() matches { _::Ok };
     assert number.pos == 7;
     let mut zeros = JsonDeserializer::new("00");
     assert zeros.skip_number().unwrap_err() == DeserializeError::malformed("leading zero in number", 0);

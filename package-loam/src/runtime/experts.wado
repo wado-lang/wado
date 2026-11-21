@@ -321,7 +321,7 @@ fn routed<affine G: Graph, E: Float, T, X>(
         let column = g.relabeled::<i64, [Picked, Pool], [Tokens, Picks]>(&at);
         picks = Option::Some(match &picks {
             Some(p) => g.concatenate(p, &column, 1),
-            None => column,
+            null => column,
         });
         hits.push(hit);
     }
@@ -338,7 +338,7 @@ fn routed<affine G: Graph, E: Float, T, X>(
         );
         weights = Option::Some(match &weights {
             Some(w) => g.concatenate(w, &weight, 1),
-            None => weight,
+            null => weight,
         });
     }
     return [
@@ -367,18 +367,18 @@ fn projection_of<affine G: Graph, E: Float, S, N, P, Blocks, Z>(
         scales: g.reshape(scales, flat(g.extents_of(scales))),
         bias: match bias {
             Some(b) => Option::Some(g.reshape(b, flat(g.extents_of(b)))),
-            None => null,
+            null => null,
         },
         zero_points: match zero_points {
             Some(z) => Option::Some(g.reshape(z, flat(g.extents_of(z)))),
-            None => null,
+            null => null,
         },
         rows,
         blocks,
         blob: bytes / blocks,
         zero_bytes: match zero_points {
             Some(z) => g.extents_of(z)[2],
-            None => 0,
+            null => 0,
         },
     };
 }
@@ -415,7 +415,7 @@ fn projected<affine G: Graph, E: Float, C>(
     );
     let zero_points: Option<G::Tensor<u8, [Width, Pair]>> = match &p.zero_points {
         Some(z) => Option::Some(g.reshape(&rows_at::<G, u8, Slots, Flat, One>(g, z, at), [p.rows, p.zero_bytes])),
-        None => null,
+        null => null,
     };
     let product = g.quantized_product::<f32, [Picked, C], Width, Flat, Pair, Pair, [Picked, Width]>(
         rows,

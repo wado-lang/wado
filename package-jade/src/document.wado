@@ -133,7 +133,7 @@ impl Document {
         for let i of node.at..<src.ends[node.at] {
             let kind = src.kinds[i];
             let slot = match kind {
-                Number => {
+                _::Number => {
                     let s = src.slots[i];
                     if s >= 0 {
                         self.numbers.push(src.numbers[s]);
@@ -143,11 +143,11 @@ impl Document {
                         -self.decimals.len();
                     }
                 },
-                String => {
+                _::String => {
                     self.strings.push(src.strings[src.slots[i]]);
                     self.strings.len() - 1;
                 },
-                Null | Bool | Array | Object => src.slots[i],
+                _::Null | _::Bool | _::Array | _::Object => src.slots[i],
             };
             self.kinds.push(kind);
             self.slots.push(slot);
@@ -181,14 +181,14 @@ impl Node {
     }
 
     pub fn as_bool(&self) -> Option<bool> {
-        if self.kind() matches { Bool } {
+        if self.kind() matches { _::Bool } {
             return Option::Some(self.doc.slots[self.at] == 1);
         }
         return null;
     }
 
     pub fn as_number(&self) -> Option<Number> {
-        if !self.kind() matches { Number } {
+        if !self.kind() matches { _::Number } {
             return null;
         }
         let s = self.doc.slots[self.at];
@@ -199,7 +199,7 @@ impl Node {
     }
 
     pub fn as_str(&self) -> Option<StrSlice> {
-        if self.kind() matches { String } {
+        if self.kind() matches { _::String } {
             return Option::Some(self.doc.strings[self.doc.slots[self.at]].as_str_slice());
         }
         return null;
@@ -209,21 +209,21 @@ impl Node {
     /// other value.
     pub fn len(&self) -> i32 {
         return match self.kind() {
-            Array | Object => self.doc.slots[self.at],
-            Null | Bool | Number | String => 0,
+            _::Array | _::Object => self.doc.slots[self.at],
+            _::Null | _::Bool | _::Number | _::String => 0,
         };
     }
 
     /// An array's elements in order; nothing for any other value.
     pub fn items(&self) -> Elements {
-        let n = if self.kind() matches { Array } { self.len() } else { 0 };
+        let n = if self.kind() matches { _::Array } { self.len() } else { 0 };
         return Elements { doc: self.doc, next: self.at + 1, left: n };
     }
 
     /// An object's members as key and value, in document order; nothing for any
     /// other value.
     pub fn entries(&self) -> Members {
-        let n = if self.kind() matches { Object } { self.len() } else { 0 };
+        let n = if self.kind() matches { _::Object } { self.len() } else { 0 };
         return Members { doc: self.doc, next: self.at + 1, left: n };
     }
 
@@ -255,11 +255,11 @@ impl Eq for Node {
             return false;
         }
         return match kind {
-            Null => true,
-            Bool => self.as_bool() == other.as_bool(),
-            Number => self.as_number().unwrap() == other.as_number().unwrap(),
-            String => self.as_str().unwrap() == other.as_str().unwrap(),
-            Array => {
+            _::Null => true,
+            _::Bool => self.as_bool() == other.as_bool(),
+            _::Number => self.as_number().unwrap() == other.as_number().unwrap(),
+            _::String => self.as_str().unwrap() == other.as_str().unwrap(),
+            _::Array => {
                 if self.len() != other.len() {
                     return false;
                 }
@@ -271,7 +271,7 @@ impl Eq for Node {
                 }
                 true;
             },
-            Object => {
+            _::Object => {
                 if self.len() != other.len() {
                     return false;
                 }
@@ -301,18 +301,18 @@ impl Eq for Node {
 impl Serialize for Node {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return match self.kind() {
-            Null => s.serialize_null(),
-            Bool => s.serialize_bool(self.as_bool().unwrap()),
-            Number => self.as_number().unwrap().serialize(s),
-            String => s.serialize_string(self.as_str().unwrap()),
-            Array => {
+            _::Null => s.serialize_null(),
+            _::Bool => s.serialize_bool(self.as_bool().unwrap()),
+            _::Number => self.as_number().unwrap().serialize(s),
+            _::String => s.serialize_string(self.as_str().unwrap()),
+            _::Array => {
                 let mut seq = s.begin_seq(self.len())?;
                 for let item of self.items() {
                     seq.element(&item)?;
                 }
                 seq.end();
             },
-            Object => {
+            _::Object => {
                 let mut map = s.begin_map(self.len())?;
                 for let [k, v] of self.entries() {
                     map.key(&k)?;

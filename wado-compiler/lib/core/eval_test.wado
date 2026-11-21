@@ -7,7 +7,7 @@ export fn run() with Stdout {
     println("before");
     panic("boom");
 }`).unwrap();
-    assert out.status matches { Trapped(Unreachable) };
+    assert out.status matches { Trapped(_::Unreachable) };
     assert out.stdout == "before\n";
     assert out.stderr.contains("boom");
 }
@@ -54,7 +54,7 @@ export fn run() with (Stdout, Insecure) {
 
 test "fuel bounds the run" {
     let out = eval(`export fn run() { let mut i = 0; loop { i += 1; } }`, 10_000).unwrap();
-    assert out.status matches { OutOfFuel };
+    assert out.status matches { _::OutOfFuel };
 }
 
 test "the memory ceiling bounds the run" {
@@ -63,7 +63,7 @@ test "the memory ceiling bounds the run" {
     let big = builtin::black_box(List::<u8>::with_capacity(2_000_000_000));
     assert big.is_empty();
 }`).unwrap();
-    assert out.status matches { OutOfMemory };
+    assert out.status matches { _::OutOfMemory };
 }
 
 test "Display renders each outcome" {
@@ -116,7 +116,7 @@ impl EvalHost for CannedHost {
 test "a compile past the host's time limit never runs" {
     let host = CannedHost { outcome: Outcome::CompileTimedOut };
     with EvalHost => &host do {
-        assert eval("") matches { Err(CompileTimedOut) };
+        assert eval("") matches { Err(_::CompileTimedOut) };
     };
 }
 

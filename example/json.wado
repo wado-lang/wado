@@ -159,7 +159,7 @@ test "parser-peek-and-advance" {
     p.advance();
     assert p.peek() matches { Some(b) && b == b'c' };
     p.advance();
-    assert p.peek() matches { None };
+    assert p.peek() matches { null };
 }
 
 test "parser-skip-whitespace" {
@@ -320,7 +320,7 @@ impl Parser {
 test "parse-null-valid" {
     let mut p = Parser::new("null");
     if let Some(v) = p.parse_null() {
-        assert v matches { Null };
+        assert v matches { _::Null };
     } else {
         assert false;
     }
@@ -329,7 +329,7 @@ test "parse-null-valid" {
 test "parse-null-with-whitespace" {
     let mut p = Parser::new("  null");
     if let Some(v) = p.parse_null() {
-        assert v matches { Null };
+        assert v matches { _::Null };
     } else {
         assert false;
     }
@@ -337,7 +337,7 @@ test "parse-null-with-whitespace" {
 
 test "parse-null-invalid" {
     let mut p = Parser::new("nul");
-    assert p.parse_null() matches { None };
+    assert p.parse_null() matches { null };
 }
 
 
@@ -382,7 +382,7 @@ test "parse-bool-false" {
 
 test "parse-bool-invalid" {
     let mut p = Parser::new("tru");
-    assert p.parse_bool() matches { None };
+    assert p.parse_bool() matches { null };
 }
 
 
@@ -529,7 +529,7 @@ test "parse-number-zero" {
 
 test "parse-number-invalid" {
     let mut p = Parser::new("abc");
-    assert p.parse_number() matches { None };
+    assert p.parse_number() matches { null };
 }
 
 
@@ -662,7 +662,7 @@ test "parse-string-empty" {
 
 test "parse-string-unclosed" {
     let mut p = Parser::new("\"hello");
-    assert p.parse_string() matches { None };
+    assert p.parse_string() matches { null };
 }
 
 test "parse-string-escape-newline" {
@@ -1076,7 +1076,7 @@ fn parse_json(input: String) -> Option<JsonValue> {
 
 test "parse-value-null" {
     if let Some(v) = parse_json("null") {
-        assert v matches { Null };
+        assert v matches { _::Null };
     } else {
         assert false;
     }
@@ -1228,11 +1228,11 @@ test "parse-unicode-escape-in-object" {
 }
 
 test "parse-trailing-garbage" {
-    assert parse_json("null extra") matches { None };
+    assert parse_json("null extra") matches { null };
 }
 
 test "parse-empty-input" {
-    assert parse_json("") matches { None };
+    assert parse_json("") matches { null };
 }
 
 
@@ -1288,7 +1288,7 @@ fn format_number(n: f64) -> String {
 
 pub fn stringify(value: &JsonValue) -> String {
     return match *value {
-        Null => "null",
+        _::Null => "null",
         Bool(b) => if b { "true" } else { "false" },
         Number(n) => format_number(n),
         Str(s) => escape_json_string(&s),
@@ -1334,7 +1334,7 @@ fn make_indent(level: i32, size: i32) -> String {
 
 fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String {
     return match *value {
-        Null => "null",
+        _::Null => "null",
         Bool(b) => if b { "true" } else { "false" },
         Number(n) => format_number(n),
         Str(s) => escape_json_string(&s),

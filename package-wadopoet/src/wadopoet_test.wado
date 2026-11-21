@@ -666,7 +666,7 @@ test "variant + global composition" {
     GlobalSpec::new("TK_EOF", "i32", "1").emit(&mut w);
     GlobalSpec::new("TK_ERROR", "i32", "2").emit(&mut w);
 
-    let run = "let k: TokenKind = Eof; print(match k { Number => `${TK_Number}`, Eof => `${TK_EOF}`, Error => `${TK_ERROR}` });";
+    let run = "let k: TokenKind = Eof; print(match k { _::Number => `${TK_Number}`, _::Eof => `${TK_EOF}`, _::Error => `${TK_ERROR}` });";
     assert printed(run, w.to_string()) == "1";
 }
 

@@ -264,9 +264,9 @@ impl Command {
     fn start(&self, stdin: Stdio, out: Stdio, err: Stdio) -> Result<Child, ProcessError> with Process {
         let mut writer: Option<StreamWritable<u8>> = null;
         let input = match stdin {
-            Null => Input::Null,
-            Inherit => Input::Inherit,
-            Piped => {
+            _::Null => Input::Null,
+            _::Inherit => Input::Inherit,
+            _::Piped => {
                 let [rx, tx] = Stream::<u8>::new();
                 writer = Option::Some(tx);
                 Input::Piped(rx);
@@ -302,16 +302,16 @@ impl Command {
 /// `output` and `status`: a pipe nobody reads or writes would block the child.
 fn unhanded(stdio: Stdio) -> Stdio {
     return match stdio {
-        Piped => Stdio::Null,
+        _::Piped => Stdio::Null,
         other => other,
     };
 }
 
 fn output_mode(stdio: Stdio) -> types::Output {
     return match stdio {
-        Null => types::Output::Null,
-        Inherit => types::Output::Inherit,
-        Piped => types::Output::Piped,
+        _::Null => types::Output::Null,
+        _::Inherit => types::Output::Inherit,
+        _::Piped => types::Output::Piped,
     };
 }
 
@@ -512,7 +512,7 @@ impl Display for ProcessError {
         let reason: String = match self.kind {
             Spawn(code) => spawn_reason(code),
             Failed([status, stderr]) => `${status:?}: ${String::from_utf8_lossy(stderr)}`,
-            OutputTooLarge => "its stdout passed the capture limit",
+            _::OutputTooLarge => "its stdout passed the capture limit",
         };
         f.write_str(`${self.program}: ${reason}`);
     }
@@ -523,15 +523,15 @@ impl Error for ProcessError {
 
 fn spawn_reason(code: ErrorCode) -> String {
     return match code {
-        NotFound => "no such program",
-        NotPermitted => "the host does not let a child run it",
-        NotExecutable => "not a program the host can run",
-        InvalidArgument => "an argument or environment variable the host cannot pass",
-        ArgumentListTooLong => "the arguments and environment are too long",
-        NotDirectory => "the directory to start in is not one",
-        ResourceExhausted => "the host is out of the resources a child takes",
+        _::NotFound => "no such program",
+        _::NotPermitted => "the host does not let a child run it",
+        _::NotExecutable => "not a program the host can run",
+        _::InvalidArgument => "an argument or environment variable the host cannot pass",
+        _::ArgumentListTooLong => "the arguments and environment are too long",
+        _::NotDirectory => "the directory to start in is not one",
+        _::ResourceExhausted => "the host is out of the resources a child takes",
         Other(Some(message)) => message,
-        Other(None) => "the host failed to run it",
+        Other(null) => "the host failed to run it",
     };
 }
 
@@ -629,14 +629,14 @@ impl Words {
     }
 
     fn join(&mut self, part: &String) {
-        assert self.list matches { None }, "a List<String> hole in a cmd template must stand alone";
+        assert self.list matches { null }, "a List<String> hole in a cmd template must stand alone";
         let mut word = self.word.take().unwrap_or("");
         word.push_str(part);
         self.word = Option::Some(word);
     }
 
     fn each(&mut self, args: List<String>) {
-        assert self.word matches { None } && self.list matches { None }, "a List<String> hole in a cmd template must stand alone";
+        assert self.word matches { null } && self.list matches { null }, "a List<String> hole in a cmd template must stand alone";
         self.list = Option::Some(args);
     }
 

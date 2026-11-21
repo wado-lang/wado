@@ -33,19 +33,19 @@ impl Number {
 
     pub fn is_integer(&self) -> bool {
         return match &self.decimal {
-            None => self.nearest == f64::trunc(self.nearest),
+            null => self.nearest == f64::trunc(self.nearest),
             Some(d) => d.exp >= 0,
         };
     }
 
     /// Whether the f64 `to_f64` answers is the number itself.
     internal fn is_f64(&self) -> bool {
-        return self.decimal matches { None };
+        return self.decimal matches { null };
     }
 
     fn to_decimal(&self) -> Decimal {
         return match &self.decimal {
-            None => Decimal::of_f64(self.nearest),
+            null => Decimal::of_f64(self.nearest),
             Some(d) => *d,
         };
     }
@@ -54,7 +54,7 @@ impl Number {
     internal fn read(de: &mut JsonDeserializer) -> Result<Number, DeserializeError> {
         let start = de.pos;
         let rounded = de.parse_f64_direct();
-        if let Err(e) = &rounded && !e.kind matches { Overflow } {
+        if let Err(e) = &rounded && !e.kind matches { _::Overflow } {
             return Result::Err(*e);
         }
         // On overflow too, `core:json` leaves the cursor past the token it
@@ -87,7 +87,7 @@ impl From<f64> for Number {
 
 impl Eq for Number {
     fn eq(&self, other: &Number) -> bool {
-        return self.cmp(other) matches { Equal };
+        return self.cmp(other) matches { _::Equal };
     }
 }
 
@@ -96,7 +96,7 @@ impl Eq for Number {
 impl Ord for Number {
     fn cmp(&self, other: &Number) -> Ordering {
         let rounded = self.nearest.cmp(&other.nearest);
-        if !rounded matches { Equal } || self.is_f64() && other.is_f64() {
+        if !rounded matches { _::Equal } || self.is_f64() && other.is_f64() {
             return rounded;
         }
         return self.to_decimal().cmp(&other.to_decimal());
@@ -318,7 +318,7 @@ impl Ord for Decimal {
             return sign.cmp(&other.signum());
         }
         let mut magnitude = self.point().cmp(&other.point());
-        if magnitude matches { Equal } {
+        if magnitude matches { _::Equal } {
             magnitude = self.digits.cmp(&other.digits);
         }
         return if sign < 0 { other_way(magnitude) } else { magnitude };
@@ -327,9 +327,9 @@ impl Ord for Decimal {
 
 fn other_way(o: Ordering) -> Ordering {
     return match o {
-        Less => Ordering::Greater,
-        Equal => Ordering::Equal,
-        Greater => Ordering::Less,
+        _::Less => Ordering::Greater,
+        _::Equal => Ordering::Equal,
+        _::Greater => Ordering::Less,
     };
 }
 

@@ -222,6 +222,7 @@
 - [The `spec` Command and Reference Search](./wep-2026-11-17-spec-command.md)
 - [Every Resource Can Be Backed by a Guest Value](./wep-2026-11-19-guest-backed-resources.md)
 - [Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md)
+- [A Bare Name in a Pattern Always Binds](./wep-2026-11-20-bare-names-bind.md)
 - [One Inference Context: Equations and Obligations](./wep-2026-11-20-inference-context.md)
 
 ## Standard Library

@@ -13,9 +13,9 @@ fn after_catch_all(o: Option<i32>) -> i32 {
 
 fn case_named_twice(c: Color) -> i32 {
     return match c {
-        Red | Green => 1,
-        Blue => 2,
-        Green => 3,
+        _::Red | _::Green => 1,
+        _::Blue => 2,
+        _::Green => 3,
     };
 }
 
@@ -39,7 +39,7 @@ fn after_guard(o: Option<i32>) -> i32 {
     return match o {
         Some(x) && x > 1 => x,
         Some(x) => x,
-        None => 0,
+        null => 0,
     };
 }
 

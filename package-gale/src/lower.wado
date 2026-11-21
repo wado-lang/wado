@@ -168,7 +168,7 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
     return match elem {
         RuleRef(_) => true,
         Label(lab) => element_consumes_follow_arg(&lab.element),
-        Repeat(rep) => rep.kind matches { Optional } && element_consumes_follow_arg(&rep.element),
+        Repeat(rep) => rep.kind matches { _::Optional } && element_consumes_follow_arg(&rep.element),
         Group(g) => if let Some(inner) = transparent_inner(g) {
             element_consumes_follow_arg(inner);
         } else {
@@ -181,7 +181,7 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
 /// The one element a Transparent group `(e)` wraps, which sits where the group
 /// does and so continues as it does.
 fn transparent_inner(g: &GroupElement) -> Option<&Element> {
-    if classify_group(&g.alternatives) matches { Transparent } {
+    if classify_group(&g.alternatives) matches { _::Transparent } {
         return Option::Some(&g.alternatives[0].elements[0]);
     }
     return null;
@@ -215,8 +215,8 @@ fn compute_follow_arg(ctx: &mut LowerContext, elements: &List<Element>, i: i32) 
 /// edge in the fixpoint `lower` closes, not a verdict.
 fn forwarding_into(ctx: &mut LowerContext, callee: &Element, arg: FollowArg) -> FollowArg {
     let forwards = match &arg {
-        NoFollow => false,
-        Forward => true,
+        _::NoFollow => false,
+        _::Forward => true,
         Site(site) => site.ends,
     };
     if forwards {
@@ -268,7 +268,7 @@ fn continuation_arg(ctx: &mut LowerContext, elements: &List<Element>, from: i32)
 /// What a repeat's body continues into: a `?` runs it once, so what follows
 /// the repeat; a loop runs it again, so the loop and then that.
 fn repeat_body_suffix(rep: &RepeatElement, outer_suffix: &List<Element>) -> List<Element> {
-    if rep.kind matches { Optional } {
+    if rep.kind matches { _::Optional } {
         return *outer_suffix;
     }
     return follow_elements_of(&[Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star })], outer_suffix);
@@ -283,7 +283,7 @@ fn repeat_body_follow(
     follow_arg: FollowArg,
     body_suffix: &List<Element>,
 ) -> FollowArg {
-    if rep.kind matches { Optional } {
+    if rep.kind matches { _::Optional } {
         return follow_arg;
     }
     if !element_consumes_follow_arg(&rep.element) {
@@ -712,7 +712,7 @@ fn stamp_lr_self_ref_min_prec(
             // suffix.ops[k] / scan_suffix.elements[k] correspond to
             // alt.elements[k+1]. A scalar `Label` is collapsed by
             // `lower_label_op`, so only a `ListLabel` wraps an operand.
-            if find_self_ref_rule_call(&lr_alts[i].suffix.ops[k], rule_name) matches { None } {
+            if find_self_ref_rule_call(&lr_alts[i].suffix.ops[k], rule_name) matches { null } {
                 continue;
             }
             let mut prec = compute_self_ref_prec_from_ops(
@@ -791,7 +791,7 @@ fn stamp_lr_atom_mid_operands(
         let scan_len = atom.scan_alts[a].elements.len();
         assert scan_len == ops_len, "LR atom walk length mismatch";
         for let mut k = 0; k + 1 < ops_len; k += 1 {
-            if find_self_ref_rule_call(&atom.alts[a].ops[k], &rule.name) matches { None } {
+            if find_self_ref_rule_call(&atom.alts[a].ops[k], &rule.name) matches { null } {
                 continue;
             }
             if !mid_operand_rest_contested(elements, k + 1, &lr_suffix_first_tokens, ctx) {
@@ -841,7 +841,7 @@ fn forward_lr_cont_to_trailing_operand<S: AsStrSlice, S1: AsStrSlice>(
     rule_snake: S1,
 ) {
     let last = ops.len() - 1;
-    if last < 0 || find_self_ref_rule_call(&ops[last], rule_name) matches { None } {
+    if last < 0 || find_self_ref_rule_call(&ops[last], rule_name) matches { null } {
         return;
     }
     ops[last] = rebind_self_ref_lr_cont(ops[last], LrCont::Forward);
@@ -851,7 +851,7 @@ fn forward_lr_cont_to_trailing_operand<S: AsStrSlice, S1: AsStrSlice>(
 /// Set `lr_cont` on a self-ref `RuleCall`, peeling the `ListLabel` wrapper
 /// `rebind_self_ref_min_prec` also handles.
 fn rebind_self_ref_lr_cont(op: Op, lr_cont: LrCont) -> Op {
-    if lr_cont matches { Unset } {
+    if lr_cont matches { _::Unset } {
         return op;
     }
     if let RuleCall(rc) = op {
@@ -865,7 +865,7 @@ fn rebind_self_ref_lr_cont(op: Op, lr_cont: LrCont) -> Op {
 
 /// Scan mirror of `rebind_self_ref_lr_cont`.
 fn rebind_scan_self_ref_lr_cont<S: AsStrSlice>(se: ScanElement, rule_snake: S, lr_cont: LrCont) -> ScanElement {
-    if lr_cont matches { Unset } {
+    if lr_cont matches { _::Unset } {
         return se;
     }
     if let RuleCall(rc) = se {
@@ -935,7 +935,7 @@ fn nested_operand_meets_operator<S: AsStrSlice>(op: &Op, rule_name: S, operators
         ListLabel(ll) => nested_operand_meets_operator(&ll.inner, rule_name, operators, follow_has),
         Repeat(r) => {
             // A `*` / `+` body is also followed by its own next iteration.
-            let reiterates = r.kind matches { Star | Plus } && op_first_has_lr(&r.body, operators);
+            let reiterates = r.kind matches { _::Star | _::Plus } && op_first_has_lr(&r.body, operators);
             nested_operand_meets_operator(&r.body, rule_name, operators, reiterates || follow_has);
         },
         Group(g) => {
@@ -1420,7 +1420,7 @@ fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDis
 {
     let mut branches: List<DispatchBranch> = [];
     for let mut k = 0; k < indices.len(); k += 1 {
-        if !classes[k] matches { Subsumed } {
+        if !classes[k] matches { _::Subsumed } {
             branches.push(DispatchBranch { alt_class: classes[k], alt_index: indices[k] });
         }
     }
@@ -1483,7 +1483,7 @@ fn build_overlap_dispatch(
 
     let mut sorted: List<i32> = [];
     for let k of 0..<n_indices {
-        if !classes[k] matches { Subsumed } {
+        if !classes[k] matches { _::Subsumed } {
             sorted.push(indices[k]);
         }
     }
@@ -1622,7 +1622,7 @@ fn scan_gates_for(alt: &Alternative, ctx: &mut LowerContext, from: i32 = 0) -> L
             }
         }
         for let a of &alt.actions {
-            if a.kind matches { Predicate } || a.before_index != at {
+            if a.kind matches { _::Predicate } || a.before_index != at {
                 continue;
             }
             let body = settings.gate_body(a.source.action_id);
@@ -1703,7 +1703,7 @@ fn lower_scan_group(
 ) -> ScanElement {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        Transparent => {
+        _::Transparent => {
             // The wrapper adds nothing, so the outer follow, its FollowArg and
             // gate, its exactness and the enclosing suffix pass through — the
             // parse side reads them here too (invariant 9). A predicate on the
@@ -1728,7 +1728,7 @@ fn lower_scan_group(
                 alt_classes: [alt_class_of(&alts[0], &mut ctx.analysis)],
             });
         },
-        SingleAlt => {
+        _::SingleAlt => {
             let alt = &alts[0];
             let mut elements: List<ScanElement> = [];
             for let mut i = 0; i < alt.elements.len(); i += 1 {
@@ -1748,7 +1748,7 @@ fn lower_scan_group(
                 alt_classes: [alt_class_of(alt, &mut ctx.analysis)],
             });
         },
-        TokenOnly => {
+        _::TokenOnly => {
             let mut bodies: List<ScanBody> = [];
             let mut classes: List<AltClass> = [];
             for let alt of alts {
@@ -1763,11 +1763,11 @@ fn lower_scan_group(
                 alt_classes: classes,
             });
         },
-        SimpleCst => {
+        _::SimpleCst => {
             let se = lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact, outer_suffix);
             return with_scan_group_atn_site(se, g, outer_follow, follow_is_exact, ctx);
         },
-        General => {
+        _::General => {
             let se = lower_general_scan_group(
                 alts,
                 ctx,
@@ -2035,7 +2035,7 @@ fn repeat_body_admits(
     ctx: &mut LowerContext,
 ) -> Admits {
     let admits = repeat_inner_admits(&rep.element, inner_first, ctx);
-    if rep.non_greedy || !rep.kind matches { Optional } || !follow_is_exact || outer_follow.is_empty() {
+    if rep.non_greedy || !rep.kind matches { _::Optional } || !follow_is_exact || outer_follow.is_empty() {
         return admits;
     }
     let mut visiting: List<String> = [];
@@ -2060,7 +2060,7 @@ fn lower_scan_repeat(
 ) -> ScanElement {
     let inner = peel_labels(&rep.element);
     if !rep.non_greedy
-        && rep.kind matches { Optional }
+        && rep.kind matches { _::Optional }
         && optional_takes_shapes(inner, element_has_field(&rep.element), ctx)
         && let Group(g) = inner {
         let plain = lower_scan_plain_repeat(rep, ctx, outer_follow, follow_arg, gate_caller_follow, outer_suffix);
@@ -2315,7 +2315,7 @@ fn lookahead_shapes(
 
 fn surface_is_optional_repeat(elem: &Element) -> bool {
     return match elem {
-        Repeat(rep) => rep.kind matches { Optional },
+        Repeat(rep) => rep.kind matches { _::Optional },
         Label(lab) => surface_is_optional_repeat(&lab.element),
         Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => false,
     };
@@ -2327,7 +2327,7 @@ fn surface_contains_variable_repeat(elem: &Element) -> bool {
     return match elem {
         // A Star/Plus nested in an `Optional` (`( a (',' a)* )?`) defeats
         // shape enumeration too, so recurse through the optional's inner.
-        Repeat(rep) => if rep.kind matches { Star | Plus } {
+        Repeat(rep) => if rep.kind matches { _::Star | _::Plus } {
             true;
         } else {
             surface_contains_variable_repeat(&rep.element);
@@ -2438,7 +2438,7 @@ fn lower_scan_shape_body(
 
 fn surface_unwrap_optional(elem: &Element) -> &Element {
     return match elem {
-        Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
+        Repeat(rep) => if rep.kind matches { _::Optional } { &rep.element } else { elem },
         Label(lab) => surface_unwrap_optional(&lab.element),
         Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => elem,
     };
@@ -2824,7 +2824,7 @@ fn lower_group_op<S: AsStrSlice>(
 ) -> Op {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        Transparent => {
+        _::Transparent => {
             return lower_transparent_group(
                 &alts[0],
                 name_counts,
@@ -2838,7 +2838,7 @@ fn lower_group_op<S: AsStrSlice>(
                 outer_suffix,
             );
         },
-        SingleAlt => {
+        _::SingleAlt => {
             return lower_single_alt_group(
                 &alts[0],
                 name_counts,
@@ -2849,14 +2849,14 @@ fn lower_group_op<S: AsStrSlice>(
                 outer_suffix,
             );
         },
-        TokenOnly => {
+        _::TokenOnly => {
             return lower_token_only_group(alts, name_counts, ctx);
         },
-        SimpleCst => {
+        _::SimpleCst => {
             let op = lower_simple_cst_group(alts, name_counts, ctx, outer_follow, follow_is_exact, outer_suffix);
             return with_group_atn_site(op, g, ctx);
         },
-        General => {
+        _::General => {
             let op = lower_general_group(
                 alts,
                 name_counts,
@@ -3536,7 +3536,7 @@ fn lower_repeat_op<S: AsStrSlice>(
     let body_has_field = element_has_field(&rep.element);
     let mut opt_specialised: Option<RepeatStrategy> = null;
     if !rep.non_greedy {
-        if let Optional = rep.kind {
+        if let _::Optional = rep.kind {
             let owner = DiagnosticOwner {
                 rule: rule_name.to_string(),
                 site: DiagnosticSite::Optional(outer_field),
@@ -3557,7 +3557,7 @@ fn lower_repeat_op<S: AsStrSlice>(
         // prefer-skip decision is taken at runtime by the ATN simulator,
         // so it never uses a specialised static Optional strategy. `*?` /
         // `+?` keep the dedicated non-greedy strategy.
-        if let Optional = rep.kind {
+        if let _::Optional = rep.kind {
             // Always `Plain` — the specialised Optional strategies are
             // greedy-only (`opt_specialised` is computed only under
             // `!non_greedy`).
@@ -3698,7 +3698,7 @@ fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
         RuleCall(_) => RepeatBodyShape::LeafRuleCall,
         Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => RepeatBodyShape::LeafOther,
         Group(g_op) => match &g_op.shape {
-            Transparent => RepeatBodyShape::TransparentGroup,
+            _::Transparent => RepeatBodyShape::TransparentGroup,
             SingleAlt(_) | TokenOnly(_) | SimpleCst(_) | General(_) => RepeatBodyShape::StorableGroup,
         },
         // Lower never produces these as a Repeat body: ListLabel is
@@ -3949,7 +3949,7 @@ fn optional_body_decided_by_first(inner: &Element) -> bool {
     } else {
         return false;
     };
-    if !classify_group(alts) matches { TokenOnly } {
+    if !classify_group(alts) matches { _::TokenOnly } {
         return false;
     }
     return !alts.iter_ref().any(|alt: &Alternative| alt_is_eof_token(alt));
@@ -4031,7 +4031,7 @@ pub fn non_greedy_static_undecided(
 /// of the input matches, which ANTLR4 predicts on, so the runtime simulator
 /// decides each exit on the parse and the scan alike.
 fn non_greedy_exit_by_atn(non_greedy: bool, kind: RepeatKind, body: &Admits) -> bool {
-    return non_greedy && kind matches { Star | Plus } && admits_is_everything(body);
+    return non_greedy && kind matches { _::Star | _::Plus } && admits_is_everything(body);
 }
 
 /// Whether a Repeat's body and what follows it in its alternative can start on
@@ -4137,7 +4137,7 @@ fn repeat_continuations(
     }
     let rest = follow_elements_of(&elements_from(alt_elements, index + 1), outer_suffix);
     let exit = continuation_arg(ctx, &rest, 0);
-    if kind matches { Optional } {
+    if kind matches { _::Optional } {
         return [exit, exit];
     }
     let again = Element::Repeat(RepeatElement { ..*repeat_at(&alt_elements[index]), kind: RepeatKind::Star });
@@ -4313,7 +4313,7 @@ fn lower_reserve_scan(
     index: i32,
     ctx: &mut LowerContext,
 ) -> Option<List<ScanElement>> {
-    if non_greedy || !kind matches { Star | Plus } {
+    if non_greedy || !kind matches { _::Star | _::Plus } {
         return null;
     }
     if index + 1 >= alt_elements.len() || ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1) {
@@ -4336,7 +4336,7 @@ fn lower_continuation_scan<S: AsStrSlice>(
     reaches_rule_tail: bool,
     rule_name: S,
 ) -> ContinuationScan {
-    let wants_scan = non_greedy || kind matches { Optional };
+    let wants_scan = non_greedy || kind matches { _::Optional };
     // Only a tail walk may ask the caller (invariant 10: a group's walk ends at
     // the group, `use foo::*`); elsewhere the continuation must consume.
     if !wants_scan || !reaches_rule_tail && ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1) {
@@ -4364,7 +4364,7 @@ fn optional_continuation_contested(
     index: i32,
     ctx: &mut LowerContext,
 ) -> bool {
-    if non_greedy || !kind matches { Optional } || admits_is_untestable(body) {
+    if non_greedy || !kind matches { _::Optional } || admits_is_untestable(body) {
         return false;
     }
     return ctx.analysis.elements_reach_open_end(alt_elements, index + 1) || admits_overlap(body, follow);
@@ -4394,8 +4394,8 @@ fn repeat_inner_is_list_label(elem: &Element) -> bool {
 fn repeat_outer_base_name(elem: &Element, kind: RepeatKind, gc_speculative: i32) -> String {
     let base = repeat_inner_base_name(elem, gc_speculative);
     return match kind {
-        Optional => base,
-        Star | Plus => `${base}_list`,
+        _::Optional => base,
+        _::Star | _::Plus => `${base}_list`,
     };
 }
 
@@ -4422,22 +4422,22 @@ fn repeat_inner_base_name(elem: &Element, gc_speculative: i32) -> String {
 fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String {
     let alts = &g.alternatives;
     match classify_group(alts) {
-        Transparent => {
+        _::Transparent => {
             return repeat_inner_base_name(&alts[0].elements[0], gc_speculative);
         },
-        SingleAlt => {
+        _::SingleAlt => {
             return single_alt_group_field_name(&alts[0]);
         },
-        TokenOnly => {
+        _::TokenOnly => {
             return token_group_field_name(alts);
         },
-        SimpleCst => {
+        _::SimpleCst => {
             return group_field_base_name(alts);
         },
         // Repeat is the first visitor of its inner Group but defers the
         // group_counter increment to the inner-Op lowering, so embed the
         // same speculative value the increment will use.
-        General => {
+        _::General => {
             return general_group_field_name(gc_speculative);
         },
     }
@@ -4617,12 +4617,12 @@ fn repeat_field_decl(rep: &RepeatOp) -> Option<FieldDecl> {
         },
     };
     return match rep.kind {
-        Optional => Option::Some(FieldDecl {
+        _::Optional => Option::Some(FieldDecl {
             name: rep.field,
             type_str: `Option<${inner_type}>`,
             kind: FieldKind::Optional,
         }),
-        Star | Plus => Option::Some(FieldDecl {
+        _::Star | _::Plus => Option::Some(FieldDecl {
             name: rep.field,
             type_str: `List<${inner_type}>`,
             kind: FieldKind::List,
@@ -4639,7 +4639,7 @@ fn repeat_field_decl(rep: &RepeatOp) -> Option<FieldDecl> {
 fn op_field_decl_for_repeat_inner(op: &Op) -> Option<FieldDecl> {
     if let Group(g) = op {
         return match &g.shape {
-            Transparent => transparent_group_inner_decl(g),
+            _::Transparent => transparent_group_inner_decl(g),
             TokenOnly(to) => Option::Some(FieldDecl {
                 name: to.field,
                 type_str: "i32",
@@ -4673,7 +4673,7 @@ fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
         // — except… it wasn't, because the Group op IS the only
         // entry in the alt's op list at that position. We need to
         // hand back the inner's decl directly.
-        Transparent => transparent_group_inner_decl(g),
+        _::Transparent => transparent_group_inner_decl(g),
         TokenOnly(to) => Option::Some(FieldDecl {
             name: to.field,
             type_str: "i32",
@@ -4783,7 +4783,7 @@ pub fn rebind_op_field<S: AsStrSlice, S1: AsStrSlice>(op: Op, new_field: S, new_
 
 fn rebind_group_shape<S: AsStrSlice, S1: AsStrSlice>(shape: GroupShape, new_field: S, new_dedup_base: S1) -> GroupShape {
     return match shape {
-        Transparent => GroupShape::Transparent,
+        _::Transparent => GroupShape::Transparent,
         TokenOnly(mut to) => {
             to.field = new_field.to_string();
             to.dedup_base = new_dedup_base.to_string();

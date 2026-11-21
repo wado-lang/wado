@@ -162,7 +162,7 @@ fn checked_model(
             let text = fs::read_to_string(&file).map_err(|e| `loam: ${e}`)?;
             from_string::<Options>(&text).map_err(|e| `loam: '${file}': ${e}`)?;
         },
-        None => Options {},
+        null => Options {},
     };
     if options.embed {
         return check(path, spelling, read_file(path)?, &options);
@@ -186,7 +186,7 @@ fn read_stream<T>(path: &String, read: fn(Stream<u8>) -> T with Stream) -> Resul
     let root = fs::root().map_err(|e| `loam: ${e}`)?;
     let file = match root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait() {
         Ok(file) => file,
-        Err(NoEntry) => {
+        Err(_::NoEntry) => {
             return Result::Err(`loam: ${FsError { path: *path, kind: FsErrorKind::NotFound }}`);
         },
         Err(code) => {

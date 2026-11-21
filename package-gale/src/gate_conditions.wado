@@ -64,7 +64,7 @@ pub fn predicate_condition_for(
     site: &PredicateSite,
     handle: &String = &PARSER_HANDLE,
 ) -> Option<String> {
-    if a.kind matches { Action } {
+    if a.kind matches { _::Action } {
         return null;
     }
     if body_names_unwired_base(&a.source.text, settings) {
@@ -277,7 +277,7 @@ fn placed_at(actions: &List<AltAction>, j: i32, site: &PredicateSite, out: &mut 
         if a.before_index != j {
             continue;
         }
-        if a.kind matches { Action } {
+        if a.kind matches { _::Action } {
             return false;
         }
         push_met(out, a, site);
@@ -313,7 +313,7 @@ fn walk_element_decisions(
             extend_met(&mut met, cont);
             walk.out.record(rep.atn_decision, met);
             // Past an iteration, a loop re-enters its body or leaves.
-            let body_cont = if rep.kind matches { Optional } { cont } else { &met };
+            let body_cont = if rep.kind matches { _::Optional } { cont } else { &met };
             walk_element_decisions(&rep.element, site, body_cont, analysis, edges, walk);
         },
         RuleRef(r) => {
@@ -450,7 +450,7 @@ fn met_at(
             if a.before_index < index {
                 continue;
             }
-            if a.kind matches { Action } {
+            if a.kind matches { _::Action } {
                 return false;
             }
             push_met(out, a, site);
@@ -497,7 +497,7 @@ fn element_met(
 fn empties_freely(elem: &Element, analysis: &GrammarAnalysis, edges: &RuleLeftEdges) -> bool {
     return match elem {
         Label(l) => empties_freely(&l.element, analysis, edges),
-        Repeat(r) => r.kind matches { Optional | Star } || empties_freely(&r.element, analysis, edges),
+        Repeat(r) => r.kind matches { _::Optional | _::Star } || empties_freely(&r.element, analysis, edges),
         Group(g) => any_alt_empties_freely(&g.alternatives, analysis, edges),
         RuleRef(r) => edges.empties_freely[analysis.rule_index_of(&r.name)],
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
@@ -508,7 +508,7 @@ fn any_alt_empties_freely(alts: &List<Alternative>, analysis: &GrammarAnalysis, 
     return alts
         .iter_ref()
         .any(
-            |alt| !alt.actions.iter_ref().any(|a| a.kind matches { Action })
+            |alt| !alt.actions.iter_ref().any(|a| a.kind matches { _::Action })
                 && alt.elements.iter_ref().all(|e| empties_freely(e, analysis, edges)),
         );
 }
@@ -594,7 +594,7 @@ pub fn alt_scan_escapes(
             out.after_elements.push([i + 1, cond]);
         }
     }
-    let Some(action) = alt.actions.iter_ref().find(|a| a.kind matches { Action }) else {
+    let Some(action) = alt.actions.iter_ref().find(|a| a.kind matches { _::Action }) else {
         return out;
     };
     let answers_after = (action.before_index..<alt.elements.len()).any(|i| !element_is_terminal(&alt.elements[i]));
@@ -624,8 +624,8 @@ fn element_is_terminal(elem: &Element) -> bool {
 fn scan_escape_condition(settings: &GenSettings, when: &ScanCond) -> Option<String> {
     let at_edge = `${SCAN_GATE_HANDLE}.${settings.scan_edge_field} == pos`;
     return match *when {
-        Never => null,
-        Always => Option::Some(at_edge),
+        _::Never => null,
+        _::Always => Option::Some(at_edge),
         When(c) => Option::Some(`${at_edge} && ${and_operand(&c)}`),
     };
 }
@@ -638,10 +638,10 @@ variant ScanCond {
 }
 
 fn cond_and(a: ScanCond, b: ScanCond) -> ScanCond {
-    if a matches { Never } || b matches { Always } {
+    if a matches { _::Never } || b matches { _::Always } {
         return a;
     }
-    if b matches { Never } || a matches { Always } {
+    if b matches { _::Never } || a matches { _::Always } {
         return b;
     }
     let When(x) = a else {
@@ -654,10 +654,10 @@ fn cond_and(a: ScanCond, b: ScanCond) -> ScanCond {
 }
 
 fn cond_or(a: ScanCond, b: ScanCond) -> ScanCond {
-    if a matches { Always } || b matches { Never } {
+    if a matches { _::Always } || b matches { _::Never } {
         return a;
     }
-    if b matches { Always } || a matches { Never } {
+    if b matches { _::Always } || a matches { _::Never } {
         return b;
     }
     let When(x) = a else {
@@ -694,7 +694,7 @@ fn element_empty_paths(
         Label(l) => element_empty_paths(&l.element, settings, analysis, site, visited),
         Repeat(r) => {
             let inner = element_empty_paths(&r.element, settings, analysis, site, visited);
-            let free = if r.kind matches { Optional | Star } { ScanCond::Always } else { inner.free };
+            let free = if r.kind matches { _::Optional | _::Star } { ScanCond::Always } else { inner.free };
             EmptyPaths { escapes: inner.escapes, free };
         },
         Group(g) => alts_empty_paths(&g.alternatives, settings, analysis, site, visited),
@@ -750,17 +750,17 @@ fn alt_empty_paths(
         while k < alt.actions.len() && alt.actions[k].before_index <= i {
             let a = &alt.actions[k];
             k += 1;
-            if a.kind matches { Action } {
+            if a.kind matches { _::Action } {
                 let past_action = if analysis.tail_is_nullable_deep(&alt.elements, i) { reach } else { ScanCond::Never };
                 return EmptyPaths { escapes: cond_or(escapes, past_action), free: ScanCond::Never };
             }
             let holds = match scan_gate_condition_for(a, settings, analysis, site) {
                 Some(code) => ScanCond::When(code),
-                None => ScanCond::Always,
+                null => ScanCond::Always,
             };
             reach = cond_and(reach, holds);
         }
-        if i == alt.elements.len() || reach matches { Never } {
+        if i == alt.elements.len() || reach matches { _::Never } {
             break;
         }
         let paths = element_empty_paths(&alt.elements[i], settings, analysis, site, visited);
@@ -873,7 +873,7 @@ pub fn pred_fn_name(id: i32) -> String {
 /// Whether a Wado body names `this` with no parser base wired to receive it.
 /// A Java body's `this` is java2wado's, resolved over `@parser::members`.
 pub fn body_names_unwired_base<S: AsStrSlice>(text: S, settings: &GenSettings) -> bool {
-    return settings.action_language matches { Wado } && !settings.has_parser_superclass() && body_names_this(text);
+    return settings.action_language matches { _::Wado } && !settings.has_parser_superclass() && body_names_this(text);
 }
 
 /// Whether a body is already Wado — written in it, or turned into base calls by
@@ -882,7 +882,7 @@ pub fn body_needs_no_translator<S: AsStrSlice>(text: S, settings: &GenSettings) 
     if find_attr_refs(text).len() != 0 {
         return false;
     }
-    return settings.action_language matches { Wado }
+    return settings.action_language matches { _::Wado }
         || settings.has_parser_superclass() && body_is_base_calls_only(text, &settings.parser_superclass_name);
 }
 

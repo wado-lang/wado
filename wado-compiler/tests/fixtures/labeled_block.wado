@@ -226,7 +226,7 @@ test "a null break takes its Option inner type from a sibling break" {
     // The unresolved `Option<UNKNOWN>` used to reach WIR translation and
     // crash the compiler.
     assert pick_option(false) matches { Some(5) };
-    assert pick_option(true) matches { None };
+    assert pick_option(true) matches { null };
 }
 
 test "a null tail resolves against the block's unified type" {
@@ -234,7 +234,7 @@ test "a null tail resolves against the block's unified type" {
     // type to resolve its `Option<T>`; without it the tail reified to a bare
     // nullref and the module failed validation.
     assert tail_null(builtin::black_box(true)) matches { Some(1) };
-    assert tail_null(builtin::black_box(false)) matches { None };
+    assert tail_null(builtin::black_box(false)) matches { null };
 }
 
 test "a reused label binds to the innermost block carrying it" {

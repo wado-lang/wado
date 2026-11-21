@@ -172,7 +172,7 @@ fn match_arm_binding_definition() {
             "fn f(opt: Option<i32>) -> i32 {\n",
             "    return match opt {\n",
             "        Some(v) => v,\n",
-            "        None => 0,\n",
+            "        null => 0,\n",
             "    };\n",
             "}\n",
         );
@@ -273,7 +273,7 @@ fn match_or_pattern_binding_definition() {
             "fn f(s: Sign) -> i32 {\n",
             "    return match s {\n",
             "        Pos(n) | Neg(n) => n,\n",
-            "        Zero => 0,\n",
+            "        _::Zero => 0,\n",
             "    };\n",
             "}\n",
         );
@@ -430,12 +430,43 @@ fn variant_case_in_pattern_definition() {
             "fn f(m: Maybe<i32>) -> i32 {\n",
             "    return match m {\n",
             "        Just(v) => v,\n",
-            "        Nothing => 0,\n",
+            "        _::Nothing => 0,\n",
             "    };\n",
             "}\n",
         );
         let result = def_at(source, 3, 10).await.expect("Just pattern");
         assert_range(&result, 0, 19, 23);
+    });
+}
+
+#[test]
+fn inferred_case_in_pattern_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "variant Maybe<T> { Just(T), Nothing }\n",
+            "fn f(m: Maybe<i32>) -> i32 {\n",
+            "    return match m {\n",
+            "        Just(v) => v,\n",
+            "        _::Nothing => 0,\n",
+            "    };\n",
+            "}\n",
+        );
+        let result = def_at(source, 4, 12).await.expect("_::Nothing pattern");
+        assert_range(&result, 0, 28, 35);
+    });
+}
+
+#[test]
+fn inferred_case_in_expression_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "enum Color { Red, Green, Blue }\n",
+            "fn f() -> Color {\n",
+            "    return _::Green;\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 15).await.expect("_::Green expression");
+        assert_range(&result, 0, 18, 23);
     });
 }
 

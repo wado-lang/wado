@@ -763,7 +763,7 @@ test "parse ll_non_greedy_plus_loop.g4" {
     // `x+?` — a non-greedy Plus over a rule reference.
     let rep = &g.parser_rules[0].alternatives[0].elements[0];
     if let Repeat(r) = rep {
-        assert r.kind matches { Plus };
+        assert r.kind matches { _::Plus };
         assert r.non_greedy;
     } else {
         panic("s's first element should be a Repeat");
@@ -892,7 +892,7 @@ test "parse lr_suffix_non_greedy_opt.g4" {
     // The LR suffix ends in `('else' e)??`.
     let suffix = &g.parser_rules[1].alternatives[1].elements;
     if let Repeat(r) = &suffix[suffix.len() - 1] {
-        assert r.kind matches { Optional };
+        assert r.kind matches { _::Optional };
         assert r.non_greedy;
     } else {
         panic("the suffix's last element should be a non-greedy Repeat");
@@ -910,7 +910,7 @@ test "parse lr_suffix_opt_shape.g4" {
     let suffix = &g.parser_rules[1].alternatives[1].elements;
     assert suffix.len() == 4;
     if let Repeat(r) = &suffix[2] {
-        assert r.kind matches { Optional };
+        assert r.kind matches { _::Optional };
         assert !r.non_greedy;
         if let Group(gr) = &r.element {
             assert gr.alternatives.len() == 1;
@@ -934,7 +934,7 @@ test "parse lr_optional_close_atom.g4" {
     let atom = &g.parser_rules[1].alternatives[1].elements;
     assert atom.len() == 3;
     if let Repeat(r) = &atom[2] {
-        assert r.kind matches { Optional };
+        assert r.kind matches { _::Optional };
         assert !r.non_greedy;
     } else {
         panic("the atom's last element should be an Optional Repeat");

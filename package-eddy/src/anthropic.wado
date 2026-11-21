@@ -70,7 +70,7 @@ impl Usage {
 
     /// Adds `one`, the usage of one request.
     pub fn add_request(&mut self, one: &Usage) {
-        assert one.long_prompts matches { None }, "the API reports one request's usage";
+        assert one.long_prompts matches { null }, "the API reports one request's usage";
         let prompt = one.input_tokens + one.cache_creation_input_tokens + one.cache_read_input_tokens;
         self.add(&Usage { ..*one, long_prompts: if prompt > LONG_PROMPT { Some(*one) } else { null } });
     }
@@ -82,7 +82,7 @@ test "a sum keeps apart what its long prompts took" {
     sum.add_request(&Usage { input_tokens: 5, cache_read_input_tokens: LONG_PROMPT, output_tokens: 2 });
     assert sum.input_tokens == 15 && sum.output_tokens == 3 && sum.cache_read_input_tokens == LONG_PROMPT;
     let long = sum.long_prompts.unwrap();
-    assert long.input_tokens == 5 && long.output_tokens == 2 && long.long_prompts matches { None };
+    assert long.input_tokens == 5 && long.output_tokens == 2 && long.long_prompts matches { null };
 
     let mut both = Usage { input_tokens: 1 };
     both.add(&sum);

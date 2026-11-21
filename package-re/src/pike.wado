@@ -112,7 +112,7 @@ internal fn search(
     let fresh = cache.unset_slots(program);
     cache.current.clear();
     let [len, anchored] = match within {
-        Text => [text.len(), false],
+        _::Text => [text.len(), false],
         Span(end) => [end, true],
     };
     let mut matched: Option<List<i32>> = null;
@@ -138,7 +138,7 @@ internal fn search(
                         }
                     }
                 },
-                Match => {
+                _::Match => {
                     let mut slots = t.slots;
                     slots.truncate(program.captures);
                     if goal == Goal::Any {
@@ -170,7 +170,7 @@ fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List
         let inst = program.insts[t.pc];
         // Past a `Byte` no `Progress` fails, so how many iterations a thread
         // entered no longer matters there.
-        let entered = if inst matches { Byte(_) | Match } { 0 } else { t.entered };
+        let entered = if inst matches { Byte(_) | _::Match } { 0 } else { t.entered };
         let state = program.state_base[t.pc] + entered;
         assert state < program.state_base[t.pc + 1];
         if to.seen[state] == to.stamp {
@@ -207,23 +207,23 @@ fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List
                     stack.push(t.at(t.pc + 1, t.slots));
                 }
             },
-            Fail => {
+            _::Fail => {
             },
-            Byte(_) | Match => to.list.push(t),
+            Byte(_) | _::Match => to.list.push(t),
         }
     }
 }
 
 internal fn holds(look: Look, text: StrSlice, pos: i32) -> bool {
     return match look {
-        StartText => pos == 0,
-        EndText => pos == text.len(),
-        StartLine => pos == 0 || terminator_ends_at(text, pos),
-        EndLine => pos == text.len() || terminator_starts_at(text, pos),
-        WordBoundary => word_before(text, pos) != word_after(text, pos),
-        NotWordBoundary => word_before(text, pos) == word_after(text, pos),
-        FoldedWordBoundary => folded_word_before(text, pos) != folded_word_after(text, pos),
-        FoldedNotWordBoundary => folded_word_before(text, pos) == folded_word_after(text, pos),
+        _::StartText => pos == 0,
+        _::EndText => pos == text.len(),
+        _::StartLine => pos == 0 || terminator_ends_at(text, pos),
+        _::EndLine => pos == text.len() || terminator_starts_at(text, pos),
+        _::WordBoundary => word_before(text, pos) != word_after(text, pos),
+        _::NotWordBoundary => word_before(text, pos) == word_after(text, pos),
+        _::FoldedWordBoundary => folded_word_before(text, pos) != folded_word_after(text, pos),
+        _::FoldedNotWordBoundary => folded_word_before(text, pos) == folded_word_after(text, pos),
     };
 }
 

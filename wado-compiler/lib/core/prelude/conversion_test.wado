@@ -321,10 +321,10 @@ impl From<Direction> for i32 {
 }
 
 test "enum TryFrom<i32>: valid discriminants" {
-    assert Direction::try_from(0) matches { Ok(North) };
-    assert Direction::try_from(1) matches { Ok(East) };
-    assert Direction::try_from(2) matches { Ok(South) };
-    assert Direction::try_from(3) matches { Ok(West) };
+    assert Direction::try_from(0) matches { Ok(_::North) };
+    assert Direction::try_from(1) matches { Ok(_::East) };
+    assert Direction::try_from(2) matches { Ok(_::South) };
+    assert Direction::try_from(3) matches { Ok(_::West) };
 }
 
 test "enum TryFrom<i32>: invalid discriminant" {
@@ -533,7 +533,7 @@ impl Display for PortError {
     fn fmt(&self, f: &mut Formatter) {
         let message: String = match *self {
             Digits(e) => `bad port: ${e}`,
-            OutOfRange => "port out of range",
+            _::OutOfRange => "port out of range",
         };
         f.write_str(&message);
     }

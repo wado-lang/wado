@@ -577,7 +577,7 @@ stands as a statement:
 // Match expression (produces a value)
 let result = match opt {
     Some(x) => x * 2,
-    None => 0,
+    null => 0,
 };
 assert result == 42;
 
@@ -585,14 +585,14 @@ assert result == 42;
 let area = match shape {
     Circle(r) => 3.14159 * r * r,
     Rectangle([w, h]) => w * h,
-    Point => 0.0,
+    _::Point => 0.0,
 };
 assert area == 6.0;
 
 // Match statement (no value produced)
 match command {
-    Start => engine.start(),
-    Stop => engine.stop(),
+    _::Start => engine.start(),
+    _::Stop => engine.stop(),
 }
 assert engine.running;
 ```

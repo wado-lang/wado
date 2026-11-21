@@ -142,7 +142,7 @@ test "lower simple rule with RuleRef" {
             assert r.target_name == "expr";
             assert r.target_snake == "expr";
             assert r.field == "expr";
-            assert r.min_prec_arg matches { None };
+            assert r.min_prec_arg matches { null };
         } else {
             panic("expected Op::RuleCall");
         }
@@ -371,7 +371,7 @@ test "lower transparent Group wraps single leaf element" {
     if let Simple(s) = &lowered.parser_rules[0] {
         assert s.body.ops.len() == 1;
         if let Group(go) = &s.body.ops[0] {
-            if let Transparent = &go.shape {
+            if let _::Transparent = &go.shape {
                 assert true;
             } else {
                 panic("expected GroupShape::Transparent");
@@ -1130,7 +1130,7 @@ test "lower Transparent Group wrapping Repeat" {
     let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[0] {
-            if let Transparent = &go.shape {
+            if let _::Transparent = &go.shape {
                 assert true;
             } else {
                 panic("expected Transparent shape");
@@ -1173,12 +1173,12 @@ test "lower Optional Repeat with TokenRef inner uses Plain strategy" {
     let [lowered, an] = lower_keeping_kinds(&g);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
-            if let Optional = rep.kind {
+            if let _::Optional = rep.kind {
                 assert true;
             } else {
                 panic("expected RepeatKind::Optional");
             }
-            if let Plain = rep.strategy {
+            if let _::Plain = rep.strategy {
                 assert true;
             } else {
                 panic("expected RepeatStrategy::Plain");
@@ -1221,13 +1221,13 @@ test "lower greedy Star Repeat with TokenRef inner" {
         assert s.body.ops.len() == 1;
         if let Repeat(r) = &s.body.ops[0] {
             // RepeatKind round-trips from surface IR to GIR.
-            if let Star = r.kind {
+            if let _::Star = r.kind {
                 assert true;
             } else {
                 panic("expected Star");
             }
             // Strategy is Plain at Phase 2.x.partial.
-            if let Plain = &r.strategy {
+            if let _::Plain = &r.strategy {
                 assert true;
             } else {
                 panic("expected Plain");
@@ -1273,7 +1273,7 @@ test "lower greedy Plus Repeat with RuleRef inner" {
     let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(r) = &s.body.ops[0] {
-            if let Plus = r.kind {
+            if let _::Plus = r.kind {
                 assert true;
             } else {
                 panic("expected Plus");
@@ -1316,7 +1316,7 @@ test "lower Repeat scan body mirrors parse body" {
     let [lowered, an] = lower_keeping_kinds(&g);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(r) = &s.scan_body.elements[0] {
-            if let Star = r.kind {
+            if let _::Star = r.kind {
                 assert true;
             } else {
                 panic("expected Star (scan)");
@@ -1382,7 +1382,7 @@ test "lower simple rule produces scan body mirroring leaf ops" {
         } else {
             panic("scan_body[2] != RuleCall");
         }
-        if let Wildcard = &s.scan_body.elements[3] {
+        if let _::Wildcard = &s.scan_body.elements[3] {
             assert true;
         } else {
             panic("scan_body[3] != Wildcard");
@@ -1582,7 +1582,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
     if let Simple(s) = &lowered.parser_rules[0] {
         assert s.body.fields.len() == 4;
         assert s.body.fields[0].name == "span";
-        if let Span = &s.body.fields[0].kind {
+        if let _::Span = &s.body.fields[0].kind {
             assert true;
         } else {
             panic("expected Span kind for leading field");
@@ -1593,7 +1593,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
         assert s.body.fields[2].type_str == "i32";
         assert s.body.fields[3].name == "expr";
         assert s.body.fields[3].type_str == "ExprNode";
-        if let Plain = &s.body.fields[3].kind {
+        if let _::Plain = &s.body.fields[3].kind {
             assert true;
         } else {
             panic("expected Plain kind for RuleCall field");
@@ -1635,14 +1635,14 @@ test "lower enumerates Repeat field decls with List/Optional kinds" {
         assert s.body.fields.len() == 3;
         assert s.body.fields[1].name == "int_list";
         assert s.body.fields[1].type_str == "List<i32>";
-        if let List = &s.body.fields[1].kind {
+        if let _::List = &s.body.fields[1].kind {
             assert true;
         } else {
             panic("expected List kind for Star Repeat");
         }
         assert s.body.fields[2].name == "int";
         assert s.body.fields[2].type_str == "Option<i32>";
-        if let Optional = &s.body.fields[2].kind {
+        if let _::Optional = &s.body.fields[2].kind {
             assert true;
         } else {
             panic("expected Optional kind for Optional Repeat");
@@ -1762,7 +1762,7 @@ test "lower SingleAlt Group body enumerates inner FieldDecls without span" {
                 // None of them is the Span sentinel — the outer rule
                 // struct already carries the span.
                 for let f of inner_fields {
-                    if let Span = &f.kind {
+                    if let _::Span = &f.kind {
                         panic(`SingleAlt inner field '${f.name}' must not be Span`);
                     }
                 }
@@ -2150,7 +2150,7 @@ test "lower non-greedy single-element Group Repeat lowers body to TransparentGro
     let [lowered, an] = lower_keeping_kinds(&g);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
-            if let TransparentGroup = rep.body_shape {
+            if let _::TransparentGroup = rep.body_shape {
                 assert true;
             } else {
                 panic("expected RepeatBodyShape::TransparentGroup");
@@ -2263,7 +2263,7 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
             // body_shape classifies the body op for emit's exhaustive
             // dispatch. The inner is a single-alt Group of two leaves
             // → SingleAlt shape → StorableGroup.
-            if let StorableGroup = rep.body_shape {
+            if let _::StorableGroup = rep.body_shape {
                 assert true;
             } else {
                 panic("expected RepeatBodyShape::StorableGroup");
@@ -2342,7 +2342,7 @@ test "lower warns once when overlapping alts fall back to a tournament" {
     let d = &lowered.diagnostics[0];
     // The owner names the rule structurally, so tooling matches by equality.
     assert d.owner == DiagnosticOwner::rule_dispatch("r");
-    if let OverlapTournament = &d.kind {
+    if let _::OverlapTournament = &d.kind {
     } else {
         panic("expected DiagnosticKind::OverlapTournament");
     }
@@ -2382,7 +2382,7 @@ test "lower warns when an optional falls back to a scan guard" {
 
     let mut found = 0;
     for let d of &lowered.diagnostics {
-        if d.kind matches { OptionalScanGuardFallback } {
+        if d.kind matches { _::OptionalScanGuardFallback } {
             found += 1;
             assert d.owner.rule == "r", "expected the warning to name rule 'r'";
             assert d.owner.site matches { Optional(_) };
@@ -2400,7 +2400,7 @@ test "lower raises no scan-guard warning for a token-led optional" {
     let lowered = lower(&g, &lit);
 
     for let d of &lowered.diagnostics {
-        assert !d.kind matches { OptionalScanGuardFallback };
+        assert !d.kind matches { _::OptionalScanGuardFallback };
     }
 }
 
@@ -2516,7 +2516,7 @@ test "lower: RuleCall at the rule tail forwards the runtime follow" {
     let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let RuleCall(rc) = &s.body.ops[0] {
-            assert rc.follow_arg matches { Forward }, "expected Forward FollowArg at a tail call";
+            assert rc.follow_arg matches { _::Forward }, "expected Forward FollowArg at a tail call";
         } else {
             panic("expected RuleCall");
         }
@@ -2626,7 +2626,7 @@ test "lower Optional Repeat with single-token inner stays Plain" {
     let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
-            if let Plain = &rep.strategy {
+            if let _::Plain = &rep.strategy {
                 assert true;
             } else {
                 panic("expected RepeatStrategy::Plain for single-token leaf Optional");
@@ -2678,7 +2678,7 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
     let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
-            if let OptionalScanGuard = &rep.strategy {
+            if let _::OptionalScanGuard = &rep.strategy {
                 assert true;
             } else {
                 panic("expected RepeatStrategy::OptionalScanGuard");
@@ -2746,7 +2746,7 @@ test "lower Optional Repeat over a token-only Group inner stays Plain" {
 
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
-            assert rep.strategy matches { Plain }, "expected RepeatStrategy::Plain for a token-only Group inner";
+            assert rep.strategy matches { _::Plain }, "expected RepeatStrategy::Plain for a token-only Group inner";
         } else {
             panic("expected Op::Repeat");
         }
@@ -2754,7 +2754,7 @@ test "lower Optional Repeat over a token-only Group inner stays Plain" {
         panic("expected Rule::Simple");
     }
     for let d of &lowered.diagnostics {
-        assert !d.kind matches { OptionalScanGuardFallback };
+        assert !d.kind matches { _::OptionalScanGuardFallback };
     }
 }
 
@@ -2769,7 +2769,7 @@ test "lower Optional Repeat over a token-only Group containing EOF keeps the sca
 
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
-            assert rep.strategy matches { OptionalScanGuard }, "expected the EOF alternative to keep RepeatStrategy::OptionalScanGuard";
+            assert rep.strategy matches { _::OptionalScanGuard }, "expected the EOF alternative to keep RepeatStrategy::OptionalScanGuard";
         } else {
             panic("expected Op::Repeat");
         }
@@ -2944,7 +2944,7 @@ test "lower Transparent Group does not contribute a CST field" {
     if let Simple(s) = &lowered.parser_rules[0] {
         // [span] — the Transparent group does not surface a field.
         assert s.body.fields.len() == 1, "expected 1 field (span only)";
-        if let Span = &s.body.fields[0].kind {
+        if let _::Span = &s.body.fields[0].kind {
             assert true;
         } else {
             panic("expected leading Span field");
@@ -4465,7 +4465,7 @@ WS : ' ' -> skip ;
 /// The action id of the predicate opening `rule`'s alternative `index`.
 fn left_edge_pred_id(g: &Grammar, rule: i32, index: i32) -> i32 {
     let opening = g.parser_rules[rule].alternatives[index].prediction_guards()[0];
-    assert opening.before_index == 0 && opening.kind matches { Predicate };
+    assert opening.before_index == 0 && opening.kind matches { _::Predicate };
     return opening.source.action_id;
 }
 

@@ -217,7 +217,7 @@ ${tests}`;
     }
     let wado = match env("WADO") {
         Some(path) => path,
-        None => "target/debug/wado",
+        null => "target/debug/wado",
     };
     if let Err(e) = Command::new(wado).args(["format", "-w", out]).read() {
         return Err(`${e}`);

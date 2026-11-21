@@ -23,7 +23,7 @@ test "a symbol proves nothing about a number" {
 test "a polynomial with no symbol left is a static extent" {
     let seq = Poly::symbol(&"seq");
     assert Extent::of(seq.try_sub(&seq).unwrap().try_add(&Poly::constant(3)).unwrap()) matches { Some(Static(3)) };
-    assert Extent::of(Poly::constant(-1)) matches { None };
+    assert Extent::of(Poly::constant(-1)) matches { null };
     let doubled = Extent::of(seq.try_mul(&Poly::constant(2)).unwrap()).unwrap();
     assert doubled.agrees(&Extent::of(seq.try_add(&seq).unwrap()).unwrap());
 }

@@ -172,10 +172,6 @@ struct Scopes {
     /// hide the prelude's `List`.
     cases: IndexMap<ModuleSource, IndexMap<String, DefId>>,
     prelude_cases: IndexMap<String, DefId>,
-    /// Every case name the tiers above hold, from whichever module holds it.
-    /// A bare case pattern reads against the scrutinee's type, which the
-    /// pattern's module need not import, so this is what a pattern can mean.
-    case_names: hashmap::IndexSet<String>,
 }
 
 impl Scopes {
@@ -282,7 +278,6 @@ impl Scopes {
         }
         out.prelude = surface;
         out.prelude_cases = Self::collect_cases(defs, &out.prelude);
-        out.case_names.extend(out.prelude_cases.keys().cloned());
 
         for module in modules.keys() {
             let imports: IndexMap<String, DefId> = symbols
@@ -305,7 +300,6 @@ impl Scopes {
             for (name, def) in Self::collect_cases(defs, &own) {
                 cases.entry(name).or_insert(def);
             }
-            out.case_names.extend(cases.keys().cloned());
             out.imports.insert(module.clone(), imports);
             out.own.insert(module.clone(), own);
             out.cases.insert(module.clone(), cases);
@@ -781,11 +775,8 @@ enum PatternSite {
     /// A `match` arm, an `if let` or `while let`, a `matches`: a test whose
     /// names only the construct itself sees.
     Test,
-    /// A `let … else`: refutable, and its names enter the enclosing scope.
-    RefutableDeclaration,
-    /// A `let` without `else`, a `for let … of`, a tuple comprehension: its
-    /// names enter the enclosing scope, and it cannot be refutable, so a bare
-    /// identifier in it never names a `global`.
+    /// A `let`, with or without `else`, a `for let … of`, a tuple
+    /// comprehension: its names enter the enclosing scope.
     Declaration,
 }
 
@@ -814,7 +805,8 @@ struct Resolver<'a> {
     locals: Vec<IndexMap<String, DefId>>,
     /// Value bindings in scope — parameters and `let`s, innermost scope last —
     /// each with where it was bound. Held for the shadowing lint, for the
-    /// redeclaration check, and for deciding what a bare name in a pattern is:
+    /// redeclaration check, and for deciding whether an `==` operand or a range
+    /// bound reaches a global:
     /// an expression's reference to a local resolves through the elaborator,
     /// not here.
     bindings: Vec<IndexMap<String, Span>>,
@@ -1116,17 +1108,27 @@ impl Resolver<'_> {
     fn bind_pattern_name(&mut self, name: &str, span: Span) {
         match self.pattern_site {
             PatternSite::Test => self.bind_name(name, span),
-            PatternSite::RefutableDeclaration | PatternSite::Declaration => {
-                self.declare_name(name, span);
-            }
+            PatternSite::Declaration => self.declare_name(name, span),
         }
     }
 
-    /// The immutable `global` a bare `name` in the pattern being walked tests
-    /// against: in a refutable pattern, where no binding in scope as the
-    /// pattern starts has taken the name.
-    fn pattern_constant(&self, name: &str) -> Option<DefId> {
-        if self.pattern_site == PatternSite::Declaration || self.bound_before_pattern(name) {
+    /// Record the immutable `global` a bare name standing for a constant
+    /// reaches. Answers whether `operand` is a bare name.
+    fn record_bare_constant(&mut self, operand: &ast::Pattern) -> bool {
+        let ast::Pattern::Ident { id, name, .. } = operand else {
+            return false;
+        };
+        if let Some(def) = self.immutable_global(name) {
+            self.record(*id, name, Resolution::Def(def));
+        }
+        true
+    }
+
+    /// The immutable `global` a bare `name` in an `==` operand or a range
+    /// bound reaches, where no binding in scope as the pattern starts has taken
+    /// the name.
+    fn immutable_global(&self, name: &str) -> Option<DefId> {
+        if self.bound_before_pattern(name) {
             return None;
         }
         let Resolution::Def(def) = self.resolve_value_name(name) else {
@@ -1396,9 +1398,9 @@ impl AstVisitor<'_> for Resolver<'_> {
     /// `if let`'s pattern, a `while let`'s — scopes those bindings to itself.
     fn visit_stmt(&mut self, stmt: &ast::Stmt) {
         match stmt {
-            // Only the `let`'s own pattern is irrefutable: a `match` inside its
-            // value binds refutably. The pattern is walked last because the
-            // name it binds reaches nothing written before it, `else` included.
+            // The `let`'s own pattern declares; a `match` inside its value
+            // binds for itself. The pattern is walked last because the name it
+            // binds reaches nothing written before it, `else` included.
             ast::Stmt::Let(l) => self.visit_attributed(&l.attrs, |s| {
                 let derived = l
                     .value
@@ -1415,12 +1417,8 @@ impl AstVisitor<'_> for Resolver<'_> {
                 if let Some(block) = &l.else_block {
                     s.visit_block(block);
                 }
-                let site = match l.else_block {
-                    Some(_) => PatternSite::RefutableDeclaration,
-                    None => PatternSite::Declaration,
-                };
                 s.in_binder(derived, |s| {
-                    s.in_pattern_site(site, |s| s.visit_pattern(&l.pattern));
+                    s.in_pattern_site(PatternSite::Declaration, |s| s.visit_pattern(&l.pattern));
                 });
             }),
             // The element binding is irrefutable, and the frame is the loop's.
@@ -1516,22 +1514,22 @@ impl AstVisitor<'_> for Resolver<'_> {
             self.pattern_names = names;
             return;
         }
-        // A bare name that a case answers binds nothing, and neither does one
-        // the constant answers. A case answers here even where a type of the
-        // same name outranks it for a reference, and even where the module does
-        // not import its type: only the elaborator knows the scrutinee's type.
-        // `case_names` rather than the module's own tier, since the lint had
-        // better miss a binder than order a rename of a pattern that binds
-        // nothing.
         match pat {
-            ast::Pattern::MutIdent { name, span, .. } => self.bind_pattern_name(name, *span),
-            ast::Pattern::Ident { id, name, span } => match self.pattern_constant(name) {
-                Some(def) => self.record(*id, name, Resolution::Def(def)),
-                None if !self.scopes.case_names.contains(name) => {
-                    self.bind_pattern_name(name, *span);
+            ast::Pattern::Ident { name, span, .. } | ast::Pattern::MutIdent { name, span, .. } => {
+                self.bind_pattern_name(name, *span);
+            }
+            // A bound and an `==` operand name a constant and bind nothing.
+            ast::Pattern::Range { start, end, .. } => {
+                for bound in [start, end] {
+                    if !self.record_bare_constant(bound) {
+                        ast::walk_pattern(self, bound);
+                    }
                 }
-                None => {}
-            },
+                return;
+            }
+            ast::Pattern::Equal { operand, .. } => {
+                self.record_bare_constant(operand);
+            }
             _ => {}
         }
         ast::walk_pattern(self, pat);
@@ -1600,6 +1598,16 @@ impl AstVisitor<'_> for Resolver<'_> {
             && let (Some(name), Some(name_id)) = (lit.name.as_deref(), lit.name_id)
         {
             self.record_name(name_id, &name.replace("::", "$"));
+        }
+        // `_::Case` names no declaration in scope: its case is the expected
+        // type's, which only the elaborator knows.
+        if let ast::Expr::Ident(ident) = expr
+            && ident.has_inferred_qualifier()
+        {
+            for site in std::iter::once(ident.id).chain(ident.segments.iter().map(|s| s.id)) {
+                self.refs.insert(site, Resolution::Unresolved);
+            }
+            return;
         }
         // `ns::member` resolves under the `ns$member` alias; a path that is no
         // such import answers `Unresolved` and its segments below name it.

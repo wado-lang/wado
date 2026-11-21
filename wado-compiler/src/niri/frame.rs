@@ -1304,8 +1304,9 @@ impl Interpreter<'_> {
         self.trace_call(&key, "running");
         self.charge(1)?;
         self.call_stack.push(key);
+        let arena = self.arena_reads(callee_body);
         let mut scratch = callee_body.nodes_only_clone();
-        let track = Trackability::in_frame(&scratch, self.facts, self.type_table);
+        let track = Trackability::in_frame(&scratch, self.facts, &arena, self.type_table);
         let caller = self.swap_frame(FrameState::for_call(track, bound));
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
@@ -1427,9 +1428,10 @@ impl Interpreter<'_> {
             seeds.push((index, value));
         }
         self.charge(1)?;
+        let arena = self.arena_reads(body);
         let mut scratch = body.nodes_only_clone();
         scratch.set_root(block);
-        let track = Trackability::in_frame(&scratch, self.facts, self.type_table);
+        let track = Trackability::in_frame(&scratch, self.facts, &arena, self.type_table);
         let caller = self.swap_frame(FrameState::for_call(track, seeds));
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);

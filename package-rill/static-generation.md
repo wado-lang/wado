@@ -38,7 +38,7 @@ Claim mode walks the served DOM from the root down, so `mount` has to build in
 that order too. A `View` therefore describes the tree rather than building it:
 each method adds a step, and `build` or `hydrate` runs the steps in one pass,
 parent before children, siblings in order. A node exists only once that pass
-reaches it, so code that needs one takes it from `with_node`.
+reaches it, so code that needs one takes it from a `node_ref`.
 
 This is a prototype, not a final decision. The API may change: Rill has no
 users outside this repository.
@@ -72,7 +72,7 @@ for later, not part of this work.
 A node's identity matters where something holds the node: a listener, a
 binding, focus, an input's value. That is an element. Text has none of it, and
 the HTML round trip does not keep text nodes apart: adjacent texts merge, and
-an empty one (a `bind_text` before its first run, an anchor) is not serialized
+an empty one (a text child before its first run, an anchor) is not serialized
 at all.
 
 So claim mode claims elements and builds text afresh.
@@ -83,7 +83,7 @@ So claim mode claims elements and builds text afresh.
   neither is one the view does not set: a browser or its extensions add
   attributes of their own.
   A mismatch is like any other.
-- A `text` or `bind_text`, and the anchor of a `show` or `switch`, creates its
+- A text child, and the anchor of a `show`, `switch` or `each`, creates its
   node. The served text between two elements is removed once the elements
   around it are claimed.
 - A bound attribute or text runs its first computation as usual. Writing a

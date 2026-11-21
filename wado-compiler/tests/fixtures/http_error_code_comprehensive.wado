@@ -13,32 +13,32 @@ use { Request, Response, ErrorCode, Fields, Headers, Trailers, DnsErrorPayload, 
 
 fn error_tag(e: &ErrorCode) -> String {
     return match *e {
-        DnsTimeout => "dns-timeout",
+        _::DnsTimeout => "dns-timeout",
         DnsError(_) => "dns-error",
-        DestinationNotFound => "destination-not-found",
-        DestinationUnavailable => "destination-unavailable",
-        DestinationIpProhibited => "destination-ip-prohibited",
-        DestinationIpUnroutable => "destination-ip-unroutable",
-        ConnectionRefused => "connection-refused",
-        ConnectionTerminated => "connection-terminated",
-        ConnectionTimeout => "connection-timeout",
-        ConnectionReadTimeout => "connection-read-timeout",
-        ConnectionWriteTimeout => "connection-write-timeout",
-        ConnectionLimitReached => "connection-limit-reached",
-        TlsProtocolError => "tls-protocol-error",
-        TlsCertificateError => "tls-certificate-error",
+        _::DestinationNotFound => "destination-not-found",
+        _::DestinationUnavailable => "destination-unavailable",
+        _::DestinationIpProhibited => "destination-ip-prohibited",
+        _::DestinationIpUnroutable => "destination-ip-unroutable",
+        _::ConnectionRefused => "connection-refused",
+        _::ConnectionTerminated => "connection-terminated",
+        _::ConnectionTimeout => "connection-timeout",
+        _::ConnectionReadTimeout => "connection-read-timeout",
+        _::ConnectionWriteTimeout => "connection-write-timeout",
+        _::ConnectionLimitReached => "connection-limit-reached",
+        _::TlsProtocolError => "tls-protocol-error",
+        _::TlsCertificateError => "tls-certificate-error",
         TlsAlertReceived(_) => "tls-alert-received",
-        HttpRequestDenied => "http-request-denied",
-        HttpRequestLengthRequired => "http-request-length-required",
+        _::HttpRequestDenied => "http-request-denied",
+        _::HttpRequestLengthRequired => "http-request-length-required",
         HttpRequestBodySize(_) => "http-request-body-size",
-        HttpRequestMethodInvalid => "http-request-method-invalid",
-        HttpRequestUriInvalid => "http-request-uri-invalid",
-        HttpRequestUriTooLong => "http-request-uri-too-long",
+        _::HttpRequestMethodInvalid => "http-request-method-invalid",
+        _::HttpRequestUriInvalid => "http-request-uri-invalid",
+        _::HttpRequestUriTooLong => "http-request-uri-too-long",
         HttpRequestHeaderSectionSize(_) => "http-request-header-section-size",
         HttpRequestHeaderSize(_) => "http-request-header-size",
         HttpRequestTrailerSectionSize(_) => "http-request-trailer-section-size",
         HttpRequestTrailerSize(_) => "http-request-trailer-size",
-        HttpResponseIncomplete => "http-response-incomplete",
+        _::HttpResponseIncomplete => "http-response-incomplete",
         HttpResponseHeaderSectionSize(_) => "http-response-header-section-size",
         HttpResponseHeaderSize(_) => "http-response-header-size",
         HttpResponseBodySize(_) => "http-response-body-size",
@@ -46,11 +46,11 @@ fn error_tag(e: &ErrorCode) -> String {
         HttpResponseTrailerSize(_) => "http-response-trailer-size",
         HttpResponseTransferCoding(_) => "http-response-transfer-coding",
         HttpResponseContentCoding(_) => "http-response-content-coding",
-        HttpResponseTimeout => "http-response-timeout",
-        HttpUpgradeFailed => "http-upgrade-failed",
-        HttpProtocolError => "http-protocol-error",
-        LoopDetected => "loop-detected",
-        ConfigurationError => "configuration-error",
+        _::HttpResponseTimeout => "http-response-timeout",
+        _::HttpUpgradeFailed => "http-upgrade-failed",
+        _::HttpProtocolError => "http-protocol-error",
+        _::LoopDetected => "loop-detected",
+        _::ConfigurationError => "configuration-error",
         InternalError(_) => "internal-error",
     };
 }
@@ -163,10 +163,10 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Res
     let he4 = HeaderError::SizeExceeded;
     let he5 = HeaderError::Other(Option::<String>::Some("custom"));
     let he6 = HeaderError::Other(null);
-    assert he1 matches { InvalidSyntax };
-    assert he2 matches { Forbidden };
-    assert he3 matches { Immutable };
-    assert he4 matches { SizeExceeded };
+    assert he1 matches { _::InvalidSyntax };
+    assert he2 matches { _::Forbidden };
+    assert he3 matches { _::Immutable };
+    assert he4 matches { _::SizeExceeded };
     assert he5 matches { Other(_) };
     assert he6 matches { Other(_) };
 
@@ -174,8 +174,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Res
     let roe1 = RequestOptionsError::NotSupported;
     let roe2 = RequestOptionsError::Immutable;
     let roe3 = RequestOptionsError::Other(Option::<String>::Some("custom"));
-    assert roe1 matches { NotSupported };
-    assert roe2 matches { Immutable };
+    assert roe1 matches { _::NotSupported };
+    assert roe2 matches { _::Immutable };
     assert roe3 matches { Other(_) };
 
     // Return success

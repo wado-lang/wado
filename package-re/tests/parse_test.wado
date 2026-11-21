@@ -27,9 +27,9 @@ fn item(i: &ClassItem) -> String {
         Range([lo, hi]) => if lo == hi { code(lo) } else { `${code(lo)}-${code(hi)}` },
         Named(set) => {
             let [letter, rest] = match set.kind {
-                Digit => ['d', ""],
-                Word => ['w', ""],
-                Space => ['s', ""],
+                _::Digit => ['d', ""],
+                _::Word => ['w', ""],
+                _::Space => ['s', ""],
                 Property(p) => ['p', `{${p.name}}`],
             };
             `\\${if set.negated { letter.to_ascii_uppercase() } else { letter }}${rest}`;
@@ -49,11 +49,11 @@ fn seq(nodes: &List<Node>) -> String {
 fn show(node: &Node) -> String {
     return match *node {
         Char(c) => code(c),
-        Any => ".",
-        Start => "^",
-        End => "$",
-        WordBoundary => #"\b"#,
-        NotWordBoundary => #"\B"#,
+        _::Any => ".",
+        _::Start => "^",
+        _::End => "$",
+        _::WordBoundary => #"\b"#,
+        _::NotWordBoundary => #"\B"#,
         Set(set) => {
             let mut parts: List<String> = [];
             for let i of &set.items {
@@ -65,9 +65,9 @@ fn show(node: &Node) -> String {
             let head = match g.index {
                 Some(n) => match g.name {
                     Some(name) => `${n}<${name}>`,
-                    None => `${n}`,
+                    null => `${n}`,
                 },
-                None => "?:",
+                null => "?:",
             };
             `(${head} ${show(&g.body)})`;
         },
@@ -75,7 +75,7 @@ fn show(node: &Node) -> String {
         Repeat(r) => {
             let max = match r.max {
                 Some(m) => `${m}`,
-                None => "",
+                null => "",
             };
             `{${r.min},${max}${if r.greedy { "" } else { "?" }} ${show(&r.body)}}`;
         },

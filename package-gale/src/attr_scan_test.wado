@@ -4,7 +4,7 @@ test "find_attr_refs locates bare and member references in order" {
     let refs = find_attr_refs("$v = $a.v * $b.v;");
     assert refs.len() == 3;
     assert refs[0].name == "v";
-    assert refs[0].member matches { None }, "0 no member";
+    assert refs[0].member matches { null }, "0 no member";
     assert refs[1].name == "a" && refs[1].member matches { Some(_) }, "1 a.member";
     if let Some(m) = &refs[1].member {
         assert *m == "v";
@@ -58,7 +58,7 @@ test "find_attr_refs treats a lone dollar as host text" {
 test "find_attr_refs special names resolve as bare identifiers" {
     let refs = find_attr_refs("$text $_p $start.line");
     assert refs.len() == 3;
-    assert refs[0].name == "text" && refs[0].member matches { None };
+    assert refs[0].name == "text" && refs[0].member matches { null };
     assert refs[1].name == "_p";
     assert refs[2].name == "start";
     if let Some(m) = &refs[2].member {
@@ -70,7 +70,7 @@ test "find_attr_refs stops member at a non-identifier after the dot" {
     let refs = find_attr_refs("$a.5");
     assert refs.len() == 1;
     assert refs[0].name == "a";
-    assert refs[0].member matches { None }, "no member for $a.5";
+    assert refs[0].member matches { null }, "no member for $a.5";
     assert refs[0].end == 2;
 }
 

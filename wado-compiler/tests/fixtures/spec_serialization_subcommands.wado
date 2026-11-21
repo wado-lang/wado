@@ -21,5 +21,5 @@ struct Cli {
 test {
     let cli = parse::<Cli>(["--verbose", "add", "--all", "x"]).unwrap();
     assert cli.verbose && cli.command matches { Add(a) && a.all && a.path == "x" };
-    assert parse::<Cli>(["remote", "list"]).unwrap().command matches { Remote(List) };
+    assert parse::<Cli>(["remote", "list"]).unwrap().command matches { Remote(_::List) };
 }

@@ -34,10 +34,10 @@ test "a polynomial linear in a symbol splits into its coefficient and the rest" 
     ];
     assert plus(times(c(2), n), minus(m, c(1))).linear_in(&"n") == Option::Some([2 as i64, minus(m, c(1))]);
     assert n.linear_in(&"n") == Option::Some([1 as i64, c(0)]);
-    assert times(n, n).linear_in(&"n") matches { None };
-    assert times(n, m).linear_in(&"n") matches { None };
-    assert m.linear_in(&"n") matches { None };
-    assert Poly::min_of(&n, &c(8), &"Slice").linear_in(&"n") matches { None };
+    assert times(n, n).linear_in(&"n") matches { null };
+    assert times(n, m).linear_in(&"n") matches { null };
+    assert m.linear_in(&"n") matches { null };
+    assert Poly::min_of(&n, &c(8), &"Slice").linear_in(&"n") matches { null };
 }
 
 test "equal polynomials are equal however they were built" {
@@ -57,9 +57,9 @@ test "a monomial divides out of every term" {
     ];
     let total = times(times(batch, seq), c(6));
     assert total.divided_by(&seq) == Option::Some(times(batch, c(6)));
-    assert total.divided_by(&c(4)) matches { None };
+    assert total.divided_by(&c(4)) matches { null };
     assert total.divided_by(&total) == Option::Some(c(1));
-    assert seq.divided_by(&batch) matches { None };
+    assert seq.divided_by(&batch) matches { null };
 }
 
 test "a polynomial of no negative coefficient is never negative" {

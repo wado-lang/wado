@@ -124,18 +124,18 @@ fn copy_field(c: &mut Cursor, tag: u64, out: &mut ByteList) -> Result<(), String
         return Result::Err(`wire type ${tag & 7} at byte ${c.pos()}, which protobuf does not define`);
     };
     return match wire_type {
-        Varint => {
+        _::Varint => {
             grog::push_varint(out, c.varint()?);
             Result::Ok(());
         },
-        I64 => c.copy(8, out),
-        I32 => c.copy(4, out),
-        Len => {
+        _::I64 => c.copy(8, out),
+        _::I32 => c.copy(4, out),
+        _::Len => {
             let length = c.varint()?;
             grog::push_varint(out, length);
             c.copy_len(length, out);
         },
-        SGroup | EGroup => Result::Err(`a group at byte ${c.pos()}, which ONNX does not write`),
+        _::SGroup | _::EGroup => Result::Err(`a group at byte ${c.pos()}, which ONNX does not write`),
     };
 }
 

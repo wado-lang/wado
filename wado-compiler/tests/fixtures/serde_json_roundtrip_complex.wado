@@ -76,12 +76,12 @@ test "full struct roundtrip with None fields" {
             assert p.score == 0.0;
             assert p.active == false;
             assert p.tags.len() == 0;
-            if let None = p.address {
+            if let null = p.address {
                 // OK
             } else {
                 panic("expected None address");
             }
-            if let None = p.rating {
+            if let null = p.rating {
                 // OK
             } else {
                 panic("expected None rating");
@@ -287,7 +287,7 @@ test "enum roundtrip" {
         assert json == `"North"`;
         let parsed_r = from_string::<Direction>(json);
         if let Ok(d) = parsed_r {
-            if let North = d {
+            if let _::North = d {
                 // OK
             } else {
                 panic("expected North");
@@ -336,7 +336,7 @@ test "variant unit case roundtrip" {
         assert json == `"Point"`;
         let parsed_r = from_string::<Shape>(json);
         if let Ok(parsed) = parsed_r {
-            if let Point = parsed {
+            if let _::Point = parsed {
                 // OK
             } else {
                 panic("expected Point");
@@ -494,7 +494,7 @@ test "Option None List roundtrip" {
         assert json == "null";
         let parsed_r = from_string::<Option<List<i32>>>(json);
         if let Ok(p) = parsed_r {
-            if let None = p {
+            if let null = p {
                 // OK
             } else {
                 panic("expected None");
@@ -526,7 +526,7 @@ test "List of Options roundtrip" {
             } else {
                 panic("expected Some at 0");
             }
-            if let None = arr[1] {
+            if let null = arr[1] {
                 // OK
             } else {
                 panic("expected None at 1");

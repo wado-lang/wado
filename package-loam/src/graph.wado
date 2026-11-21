@@ -52,8 +52,8 @@ pub fn rank_of(dims: List<Dim>) -> Rank {
 pub fn dims_of(rank: &Rank) -> Option<List<Dim>> {
     return match rank {
         Dims(d) => Option::Some(*d),
-        Scalar => Option::Some([] as List<Dim>),
-        Unranked => null,
+        _::Scalar => Option::Some([] as List<Dim>),
+        _::Unranked => null,
     };
 }
 
@@ -95,7 +95,7 @@ pub fn is_float(primitive: &String) -> bool {
 /// Whether `op` computes on a signed integer as ONNX defines it, which a kernel
 /// computes exactly in i64, wrapping to the element.
 pub fn computes_integers(op: &String) -> bool {
-    return *op == "ReduceSum" || binary_operator(op) matches { Some(b) && !b matches { Pow } };
+    return *op == "ReduceSum" || binary_operator(op) matches { Some(b) && !b matches { _::Pow } };
 }
 
 pub fn is_signed_integer(primitive: &String) -> bool {
@@ -220,8 +220,8 @@ impl Stored {
     /// A half's bit pattern as the f32 that holds it.
     pub fn widened(&self, bits: u16) -> f32 {
         return match self {
-            Float16 => f32::from(f16::from_bits(bits)),
-            BFloat16 => f32::from(bf16::from_bits(bits)),
+            _::Float16 => f32::from(f16::from_bits(bits)),
+            _::BFloat16 => f32::from(bf16::from_bits(bits)),
             _ => unreachable(),
         };
     }
@@ -229,8 +229,8 @@ impl Stored {
     /// The bit pattern of the half `widened` gave `v` for.
     pub fn narrowed(&self, v: f32) -> u16 {
         return match self {
-            Float16 => f16::from_f32(v).to_bits(),
-            BFloat16 => bf16::from_f32(v).to_bits(),
+            _::Float16 => f16::from_f32(v).to_bits(),
+            _::BFloat16 => bf16::from_f32(v).to_bits(),
             _ => unreachable(),
         };
     }
@@ -457,7 +457,7 @@ impl Node {
     pub fn int_attr<S: AsStrSlice>(&self, name: S, fallback: i64) -> Result<i64, AttrError> {
         return match self.attr(name) {
             Some(a) => a.int(),
-            None => Result::Ok(fallback),
+            null => Result::Ok(fallback),
         };
     }
 
@@ -465,7 +465,7 @@ impl Node {
     pub fn required_int_attr<S: AsStrSlice>(&self, name: S) -> Result<i64, AttrError> {
         return match self.attr(name) {
             Some(a) => a.int(),
-            None => Result::Err(absent(name.as_str_slice().to_string())),
+            null => Result::Err(absent(name.as_str_slice().to_string())),
         };
     }
 
@@ -473,7 +473,7 @@ impl Node {
     pub fn float_attr<S: AsStrSlice>(&self, name: S, fallback: f32) -> Result<f32, AttrError> {
         return match self.attr(name) {
             Some(a) => a.float(),
-            None => Result::Ok(fallback),
+            null => Result::Ok(fallback),
         };
     }
 
@@ -481,7 +481,7 @@ impl Node {
     pub fn string_attr<S: AsStrSlice>(&self, name: S, fallback: String) -> Result<String, AttrError> {
         return match self.attr(name) {
             Some(a) => a.string(),
-            None => Result::Ok(fallback),
+            null => Result::Ok(fallback),
         };
     }
 }
@@ -605,7 +605,7 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
             out.extend(&body);
             continue;
         }
-        if version < 4 && node.op == "Concat" && node.attr("axis") matches { None } {
+        if version < 4 && node.op == "Concat" && node.attr("axis") matches { null } {
             let mut attrs = node.attrs;
             attrs.push(Attr {
                 name: "axis",
@@ -971,7 +971,7 @@ pub fn case_named<E: ReflectEnum + Display>(name: &String) -> Option<E> {
 pub fn trailing_axes(node: &Node, a_rank: i32, b_rank: i32) -> Result<i32, String>
     contract is_binary_elementwise(&node.op)
 {
-    if node.attr("axis") matches { None } {
+    if node.attr("axis") matches { null } {
         return Result::Ok(0);
     }
     let axis = node.int_attr("axis", 0).map_err(|e| `${e}`)?;
@@ -1026,7 +1026,7 @@ impl Display for Dim {
             Static(n) => f.write_str(`${n}`),
             Bound([_, n]) => f.write_str(`${n}`),
             Symbol(s) => f.write_str(s),
-            Unknown => f.write_str("?"),
+            _::Unknown => f.write_str("?"),
         }
     }
 }

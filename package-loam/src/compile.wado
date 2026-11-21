@@ -72,7 +72,7 @@ fn text_of(path: &String, bytes: ByteList) -> Result<String, String> {
 }
 
 fn read_graph(path: &String, spelling: Spelling, bytes: ByteList) -> Result<Graph, String> {
-    if spelling matches { Proto } {
+    if spelling matches { _::Proto } {
         return onnx_proto::read(bytes).map_err(|e| at(path, &e));
     }
     return onnx_text::read(&text_of(path, bytes)?).map_err(|e| at(path, &e));
@@ -116,7 +116,7 @@ pub fn check_in_place(
     content: Stream<u8>,
     options: &Options,
 ) -> Result<Model, String> with Stream {
-    if spelling matches { Text } {
+    if spelling matches { _::Text } {
         content.drop();
         return Result::Err(
             at(
@@ -174,7 +174,7 @@ pub fn weights_of(indexes: List<[String, ByteList]>, files: List<CheckpointFile>
     }
     return Result::Ok(match files.into_iter().next() {
         Some(file) => Weights::File(file),
-        None => Weights::Unchecked,
+        null => Weights::Unchecked,
     });
 }
 
@@ -189,20 +189,20 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
         |e| at(path, &e),
     );
     if let Some(in_place) = graph.in_place {
-        if !weights matches { Unchecked } {
+        if !weights matches { _::Unchecked } {
             return Result::Err(
                 at(path, &`the weights are left in place in ${in_place.files().join(", ")}, so no checkpoint is given`),
             );
         }
         for let vi of &graph.initializers {
-            if vi.data matches { None } {
+            if vi.data matches { null } {
                 check_left_in_place(vi, &in_place).map_err(|e| at(path, &e))?;
             }
         }
         return emit_with(Placement::InPlace(in_place));
     }
     return match weights {
-        Unchecked => emit_with(Placement::Unplaced),
+        _::Unchecked => emit_with(Placement::Unplaced),
         File(file) => {
             let generated = emit_with(Placement::File(fs::file_name(&file.path).unwrap().to_string()))?;
             let checkpoint = header_of(file.header).map_err(|e| at(&file.path, &e))?;

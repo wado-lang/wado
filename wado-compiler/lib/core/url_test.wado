@@ -11,9 +11,9 @@ test "parse simple http" {
         assert url.path == "/";
         assert url.username == "";
         assert url.password == "";
-        assert url.port matches { None };
-        assert url.query matches { None };
-        assert url.fragment matches { None };
+        assert url.port matches { null };
+        assert url.query matches { null };
+        assert url.fragment matches { null };
     } else {
         panic("parse failed");
     }
@@ -139,7 +139,7 @@ test "parse with explicit port" {
 
 test "parse default port normalized to None" {
     if let Ok(url) = Url::from_str("http://example.com:80/path") {
-        assert url.port matches { None };
+        assert url.port matches { null };
     } else {
         panic("parse failed");
     }
@@ -147,7 +147,7 @@ test "parse default port normalized to None" {
 
 test "parse https default port" {
     if let Ok(url) = Url::from_str("https://example.com:443/") {
-        assert url.port matches { None };
+        assert url.port matches { null };
     } else {
         panic("parse failed");
     }
@@ -193,8 +193,8 @@ test "parse IPv6 host" {
 }
 
 test "parse an empty port, which names no port" {
-    assert Url::from_str("http://example.com:/") matches { Ok(url) && url.port matches { None } };
-    assert Url::from_str("http://[::1]:/") matches { Ok(url) && url.host == "::1" && url.port matches { None } };
+    assert Url::from_str("http://example.com:/") matches { Ok(url) && url.port matches { null } };
+    assert Url::from_str("http://[::1]:/") matches { Ok(url) && url.host == "::1" && url.port matches { null } };
 }
 
 test "parse full URL with all components" {
@@ -215,31 +215,31 @@ test "parse full URL with all components" {
 // --- Parse errors ---
 
 test "parse empty input" {
-    assert Url::from_str("") matches { Err(EmptyInput) };
+    assert Url::from_str("") matches { Err(_::EmptyInput) };
 }
 
 test "parse invalid scheme" {
-    assert Url::from_str("mailto:user@host") matches { Err(InvalidScheme) };
+    assert Url::from_str("mailto:user@host") matches { Err(_::InvalidScheme) };
 }
 
 test "parse ftp rejected" {
-    assert Url::from_str("ftp://files.example.com/") matches { Err(InvalidScheme) };
+    assert Url::from_str("ftp://files.example.com/") matches { Err(_::InvalidScheme) };
 }
 
 test "parse missing host" {
-    assert Url::from_str("http://") matches { Err(MissingHost) };
+    assert Url::from_str("http://") matches { Err(_::MissingHost) };
 }
 
 test "parse no scheme" {
-    assert Url::from_str("/path/to/resource") matches { Err(InvalidScheme) };
+    assert Url::from_str("/path/to/resource") matches { Err(_::InvalidScheme) };
 }
 
 test "parse invalid port" {
-    assert Url::from_str("http://example.com:99999/") matches { Err(InvalidPort) };
+    assert Url::from_str("http://example.com:99999/") matches { Err(_::InvalidPort) };
 }
 
 test "parse non-numeric port" {
-    assert Url::from_str("http://example.com:abc/") matches { Err(InvalidPort) };
+    assert Url::from_str("http://example.com:abc/") matches { Err(_::InvalidPort) };
 }
 
 // --- to_string ---
@@ -388,7 +388,7 @@ test "query_get" {
     if let Ok(url) = Url::from_str("http://example.com/?name=Alice&age=30") {
         assert url.query_get("name") matches { Some("Alice") };
         assert url.query_get("age") matches { Some("30") };
-        assert url.query_get("missing") matches { None };
+        assert url.query_get("missing") matches { null };
     } else {
         panic("parse failed");
     }
@@ -575,7 +575,7 @@ test "parse normalizes scheme and host to lowercase" {
 
 test "parse normalizes default port to None" {
     if let Ok(url) = Url::from_str("http://example.com:80/") {
-        assert url.port matches { None };
+        assert url.port matches { null };
     } else {
         panic("parse failed");
     }
@@ -639,7 +639,7 @@ test "from_parts simple" {
     assert url.host == "example.com";
     assert url.path == "/path";
     assert url.query matches { Some("q=1") };
-    assert url.fragment matches { None };
+    assert url.fragment matches { null };
     assert url.to_string() == "https://example.com/path?q=1";
 }
 
@@ -750,11 +750,11 @@ test "percent_decode empty" {
 }
 
 test "percent_decode invalid hex" {
-    assert percent_decode("%GG") matches { Err(InvalidPercentEncoding) };
+    assert percent_decode("%GG") matches { Err(_::InvalidPercentEncoding) };
 }
 
 test "percent_decode truncated" {
-    assert percent_decode("%2") matches { Err(InvalidPercentEncoding) };
+    assert percent_decode("%2") matches { Err(_::InvalidPercentEncoding) };
 }
 
 test "percent_encode roundtrip" {
@@ -1047,7 +1047,7 @@ test "query parts that are empty are skipped" {
     assert url.query_get_all("a") == ["1", "2"];
     assert parse_query("a=1&&b=2").len() == 2;
     assert Url::from_str("http://h/").unwrap().query_get_all("a").is_empty();
-    assert url.with_query_pairs(TreeMap::new()).query matches { None };
+    assert url.with_query_pairs(TreeMap::new()).query matches { null };
 }
 
 test "a query component keeps a stray percent and an undecodable escape" {

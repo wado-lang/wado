@@ -49,10 +49,10 @@ fn buffered<I: Iterator>(iter: I) -> Buffered<I> {
 test "projected assoc type stored in a generic struct field" {
     let g: Gen<i32> = Gen { items: [10, 20, 30], idx: 0 };
     let mut b = buffered(g);
-    assert b.take_last() matches { None };
+    assert b.take_last() matches { null };
     b.fill();
     assert b.take_last() matches { Some(10) };
-    assert b.take_last() matches { None };
+    assert b.take_last() matches { null };
     b.fill();
     assert b.take_last() matches { Some(20) };
     assert b.inner.next() matches { Some(30) };

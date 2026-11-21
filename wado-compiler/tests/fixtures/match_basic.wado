@@ -135,7 +135,7 @@ fn drive_modes() -> i32 {
     let mut result = 0;
     while !leave {
         match mode {
-            Fill => {
+            _::Fill => {
                 let mut i = 0;
                 loop {
                     if i >= 3 {
@@ -146,7 +146,7 @@ fn drive_modes() -> i32 {
                 }
                 mode = Mode::Process;
             },
-            Process => {
+            _::Process => {
                 // This arm's `break` must leave the `while`, not just the match.
                 let mut i = 0;
                 while i < 5 {
@@ -164,7 +164,7 @@ fn drive_modes() -> i32 {
                 result += 1000;
                 mode = Mode::Done;
             },
-            Done => {
+            _::Done => {
                 leave = true;
             },
         };
@@ -178,12 +178,12 @@ fn drive_states() -> i32 {
     let mut result = 0;
     while !leave {
         match state {
-            S0 => { result += 1; state = State::S1; },
-            S1 => { result += 2; state = State::S2; },
-            S2 => { result += 3; state = State::S3; },
-            S3 => { result += 4; state = State::S4; },
-            S4 => { result += 5; state = State::S5; },
-            S5 => {
+            _::S0 => { result += 1; state = State::S1; },
+            _::S1 => { result += 2; state = State::S2; },
+            _::S2 => { result += 3; state = State::S3; },
+            _::S3 => { result += 4; state = State::S4; },
+            _::S4 => { result += 5; state = State::S5; },
+            _::S5 => {
                 // Deep in the if-else chain: the `break` must leave the
                 // `while`, not a match if-else.
                 let mut i = 0;
@@ -201,11 +201,11 @@ fn drive_states() -> i32 {
                 result += 9999;
                 state = State::S6;
             },
-            S6 => { result += 7; state = State::S7; },
-            S7 => { result += 8; state = State::S8; },
-            S8 => { result += 9; state = State::S9; },
-            S9 => { result += 10; state = State::Done; },
-            Done => { leave = true; },
+            _::S6 => { result += 7; state = State::S7; },
+            _::S7 => { result += 8; state = State::S8; },
+            _::S8 => { result += 9; state = State::S9; },
+            _::S9 => { result += 10; state = State::Done; },
+            _::Done => { leave = true; },
             _ => { leave = true; },
         };
     }
@@ -217,12 +217,12 @@ test "match on an Option" {
     let none_val: Option<i32> = null;
     let x = match some_val {
         Some(v) => v * 2,
-        None => 0,
+        null => 0,
     };
     assert x == 84;
     let y = match none_val {
         Some(v) => v * 2,
-        None => -1,
+        null => -1,
     };
     assert y == -1;
 }
@@ -254,12 +254,12 @@ test "a diverging arm takes the other arms' type" {
     let a: Option<i32> = Option::<i32>::Some(1);
     let x: i32 = match a {
         Some(v) => v,
-        None => panic("unreachable"),
+        null => panic("unreachable"),
     };
     assert x == 1;
     let b: Option<i32> = Option::<i32>::Some(2);
     let y: i32 = match b {
-        None => panic("unreachable"),
+        null => panic("unreachable"),
         Some(v) => v,
     };
     assert y == 2;
@@ -308,7 +308,7 @@ test "match on a variant with guards" {
             Leaf(n) && n < 10 => `small leaf(${n})`,
             Leaf(n) => `leaf(${n})`,
             Node(pair) => `node(${pair.0},${pair.1})`,
-            Empty => "empty",
+            _::Empty => "empty",
         });
     }
     assert out == ["small leaf(1)", "node(10,20)", "empty", "leaf(99)"];
@@ -326,7 +326,7 @@ test "match in a loop" {
     for let item of items {
         match item {
             Some(n) => { sum += n; },
-            None => {},
+            null => {},
         };
     }
     assert sum == 9;
@@ -373,7 +373,7 @@ test "a match spanning wider than i64 does not overflow the range analysis" {
 test "a statement-position match whose arms disagree on their type" {
     let x = Foo::A;
     match x {
-        A => {
+        _::A => {
             helper();
         },
         _ => {},
@@ -384,15 +384,15 @@ test "`;` stays a separator, not a discard marker" {
     // A bare expression body, a block ending in an expression with `;`, and
     // one without: all three arms have type i32 in Wado.
     match Foo::A {
-        A => helper(),
+        _::A => helper(),
         _ => {},
     }
     match Foo::A {
-        A => { helper(); },
+        _::A => { helper(); },
         _ => {},
     }
     match Foo::A {
-        A => { helper() },
+        _::A => { helper() },
         _ => {},
     }
 }

@@ -1,0 +1,33 @@
+// A bound whose trait argument is a closure literal's type waits for the
+// effect check to solve the closure's row, as one whose bounded type is does:
+// an impl naming the row in its trait argument answers it.
+
+use { println, Stdout } from "core:cli";
+
+trait Takes<F> with () {
+    fn take(&self, f: &F) -> i32;
+}
+
+impl Takes<fn() -> i32 with Stdout> for i32 {
+    fn take(&self, _f: &fn() -> i32 with Stdout) -> i32 {
+        return *self;
+    }
+}
+
+fn go<T: Takes<F>, F>(t: T, f: F) -> i32 {
+    return t.take(&f);
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(`${go(1, || loud())}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n"
+}

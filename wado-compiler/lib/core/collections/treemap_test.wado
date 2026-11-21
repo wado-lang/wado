@@ -50,7 +50,7 @@ test "get returns Some for existing key" {
 
 test "get returns None for missing key" {
     let map: TreeMap<String, i32> = TreeMap::new();
-    assert map.get("missing") matches { None };
+    assert map.get("missing") matches { null };
 }
 
 test "clear empties map" {
@@ -699,7 +699,7 @@ test "i32 key remove" {
     assert map.remove(2);
     assert !map.contains_key(2);
     assert map.len() == 2;
-    assert map.get(2) matches { None };
+    assert map.get(2) matches { null };
 }
 
 test "serde Serializer" {
@@ -903,7 +903,7 @@ test "get_str and contains_key_str look up by a view" {
     assert map.get_str(text.slice(3, 7)) matches { Some(v) && v == 2 };
 
     assert !map.contains_key_str(text.slice(0, 2));
-    assert map.get_str(text.slice(0, 2)) matches { None };
+    assert map.get_str(text.slice(0, 2)) matches { null };
 
     assert map.get_str("alpha") matches { Some(v) && v == 1 };
 }
@@ -913,7 +913,7 @@ test "get_str sees a removed key as absent" {
     map["alpha"] = 1;
     map.remove("alpha");
     assert !map.contains_key_str("alpha".as_str_slice());
-    assert map.get_str("alpha".as_str_slice()) matches { None };
+    assert map.get_str("alpha".as_str_slice()) matches { null };
 }
 
 test "get_ref_str refers to the stored value" {
@@ -922,10 +922,10 @@ test "get_ref_str refers to the stored value" {
 
     let text = "xx-alpha-xx".as_str_slice();
     assert map.get_ref_str(text.slice(3, 8)) matches { Some(v) && v.len() == 2 };
-    assert map.get_ref_str("beta") matches { None };
+    assert map.get_ref_str("beta") matches { null };
 
     map.remove("alpha");
-    assert map.get_ref_str("alpha") matches { None };
+    assert map.get_ref_str("alpha") matches { null };
 }
 
 test "index_swap exchanges the values of two keys" {

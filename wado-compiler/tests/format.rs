@@ -4176,6 +4176,15 @@ fn test_format_type_pattern_roundtrips() {
     assert_eq!(formatted, source);
 }
 
+/// `_::Case` and `== CONST` keep their spelling wherever a pattern stands.
+#[test]
+fn test_format_inferred_case_and_equal_patterns_roundtrip() {
+    let source = "fn run() {\n    let kind = match n {\n        _::Red | Color::Blue => 1,\n        _::Circle(r) => r,\n        == LIMIT | == i32::MAX => 2,\n        _ => 0,\n    };\n    let [== TK_FOO, n] = pair else {\n        return;\n    };\n    let c: Shape = _::Circle(_::Red);\n    let p = shape matches { Point() };\n}\n";
+    assert_format_preserves_ast(source);
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
 /// `;` separates statements, so a block's last one may drop it and a stray `;`
 /// is an empty statement. Neither carries meaning, so the formatter normalises
 /// both to the canonical one-`;`-per-statement form.

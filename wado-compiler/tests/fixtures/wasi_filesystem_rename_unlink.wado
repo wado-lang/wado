@@ -59,7 +59,7 @@ export fn run() with (Stdout, Stderr, Preopens) {
         DescriptorFlags::Read,
     ).wait();
     if let Err(err) = old_result {
-        if err matches { NoEntry } {
+        if err matches { _::NoEntry } {
             println("rename: old path returns NoEntry (correct)");
         } else {
             eprintln("rename: old path returned unexpected error");
@@ -105,7 +105,7 @@ export fn run() with (Stdout, Stderr, Preopens) {
         DescriptorFlags::Read,
     ).wait();
     if let Err(err) = gone_result {
-        if err matches { NoEntry } {
+        if err matches { _::NoEntry } {
             println("unlink: file is gone (correct)");
         } else {
             eprintln("unlink: unexpected error after removal");

@@ -145,7 +145,7 @@ pub fn call_args(rc: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
     }
     let callee = match ctx.analysis.find_rule(&rc.target_name) {
         Some(r) => r,
-        None => {
+        null => {
             return [];
         },
     };
@@ -154,7 +154,7 @@ pub fn call_args(rc: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
     }
     let src = match &rc.arg_action {
         Some(s) => s,
-        None => {
+        null => {
             return [];
         },
     };
@@ -162,7 +162,7 @@ pub fn call_args(rc: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
     for let e of &split_top_level_commas(&src.text.as_str_slice(), false) {
         let code = match translate_caller_arg(e, ctx) {
             Some(c) => c,
-            None => *e,
+            null => *e,
         };
         out.push(code.trim().to_string());
     }
@@ -174,7 +174,7 @@ pub fn call_args(rc: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
 /// ref-free expression passes through; an untranslatable one is returned raw
 /// (a later type error is clearer than a silent drop).
 fn translate_caller_arg<S: AsStrSlice>(expr: S, ctx: &EmitContext) -> Option<String> {
-    if ctx.settings.action_language matches { Wado } && find_attr_refs(expr).len() == 0 {
+    if ctx.settings.action_language matches { _::Wado } && find_attr_refs(expr).len() == 0 {
         return Option::Some(expr.to_string());
     }
     let rule = ctx.current_rule();
@@ -235,7 +235,7 @@ fn rule_gate_sources(rule: &ParserRule) -> List<ActionSource> {
     }
     for let alt of &rule.alternatives {
         for let a of &alt.actions {
-            if a.kind matches { Predicate } {
+            if a.kind matches { _::Predicate } {
                 continue;
             }
             out.push(a.source);
@@ -344,7 +344,7 @@ fn collect_rule_action_ids(rule: &ParserRule, out: &mut List<i32>) {
 pub fn entry_emits_vals<S: AsStrSlice>(ctx: &EmitContext, rule_name: S) -> bool {
     return match ctx.analysis.find_rule(rule_name) {
         Some(r) => ctx.rule_emits_vals(r),
-        None => false,
+        null => false,
     };
 }
 
@@ -521,7 +521,7 @@ fn captured_field(op: &Op, ctx: &EmitContext, want_node: bool) -> Option<String>
     // Every call a shared label binds captures into one place, so the last wins.
     return match ctx.cursor.shared_label(false, &rc.dedup_base) {
         Some(label) => Option::Some(label.capture),
-        None => Option::Some(rc.field),
+        null => Option::Some(rc.field),
     };
 }
 
@@ -536,7 +536,7 @@ pub fn gen_alt_actions_at(w: &mut CodeWriter, actions: &List<AltAction>, before:
     let mut behind_action = false;
     for let a of actions {
         let here = a.before_index == before;
-        let is_action = a.kind matches { Action };
+        let is_action = a.kind matches { _::Action };
         if here && is_action {
             gen_action_body(w, &a.source, ctx);
         } else if here {
@@ -560,7 +560,7 @@ fn predicate_selects_alternative(before: i32, ctx: &EmitContext) -> bool {
     }
     return match ctx.cursor.in_alt_choice() {
         Some(multi_alt) => multi_alt,
-        None => current_rule_is_multi_alt(ctx),
+        null => current_rule_is_multi_alt(ctx),
     };
 }
 
@@ -893,7 +893,7 @@ pub fn emit_alt_helper_exit<S: AsStrSlice>(w: &mut CodeWriter, fn_name: S, idx: 
     }
     let form = match ctx.cursor.alt_exit_label() {
         Some(label) => CallForm::Bind(`break ${label}: `),
-        None => CallForm::Return,
+        null => CallForm::Return,
     };
     w.call(CallStmt { form, callee: `${fn_name}_alt_${idx}`, args });
 }
@@ -1017,7 +1017,7 @@ fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut EmitCon
     ctx.cursor.mark_action_seen(src.action_id);
     let cond = match translate_action_or_warn(src, true, ctx) {
         Some(c) => c,
-        None => {
+        null => {
             return;
         },
     };

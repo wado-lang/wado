@@ -244,13 +244,13 @@ impl Recorder {
 /// `v`'s elements, as `Data` holds them.
 internal fn data_of<E: Element>(v: &List<E>) -> Data {
     return match E::kind() {
-        F32 => Data::F32(v.into_iter().map(|x| x.cast_to::<f32>()).collect()),
-        F16 => Data::F16(v.into_iter().map(|x| x.cast_to::<f16>()).collect()),
-        BF16 => Data::BF16(v.into_iter().map(|x| x.cast_to::<bf16>()).collect()),
-        U8 => Data::U8(v.into_iter().map(|x| x.cast_to::<u8>()).collect()),
-        I64 => Data::I64(v.into_iter().map(|x| x.cast_to::<i64>()).collect()),
-        I32 => Data::I32(v.into_iter().map(|x| x.cast_to::<i32>()).collect()),
-        Bool => Data::Bool(v.into_iter().map(|x| x.cast_to::<bool>()).collect()),
+        _::F32 => Data::F32(v.into_iter().map(|x| x.cast_to::<f32>()).collect()),
+        _::F16 => Data::F16(v.into_iter().map(|x| x.cast_to::<f16>()).collect()),
+        _::BF16 => Data::BF16(v.into_iter().map(|x| x.cast_to::<bf16>()).collect()),
+        _::U8 => Data::U8(v.into_iter().map(|x| x.cast_to::<u8>()).collect()),
+        _::I64 => Data::I64(v.into_iter().map(|x| x.cast_to::<i64>()).collect()),
+        _::I32 => Data::I32(v.into_iter().map(|x| x.cast_to::<i32>()).collect()),
+        _::Bool => Data::Bool(v.into_iter().map(|x| x.cast_to::<bool>()).collect()),
     };
 }
 
@@ -678,13 +678,13 @@ fn node_of(a: &Any<Recorder>) -> i32 {
 /// The node `id`, of an element of `kind`.
 fn any_at(kind: ElementKind, id: i32) -> Any<Recorder> {
     return match kind {
-        F32 => Any::F32(Value { id }),
-        F16 => Any::F16(Value { id }),
-        BF16 => Any::BF16(Value { id }),
-        U8 => Any::U8(Value { id }),
-        I64 => Any::I64(Value { id }),
-        I32 => Any::I32(Value { id }),
-        Bool => Any::Bool(Value { id }),
+        _::F32 => Any::F32(Value { id }),
+        _::F16 => Any::F16(Value { id }),
+        _::BF16 => Any::BF16(Value { id }),
+        _::U8 => Any::U8(Value { id }),
+        _::I64 => Any::I64(Value { id }),
+        _::I32 => Any::I32(Value { id }),
+        _::Bool => Any::Bool(Value { id }),
     };
 }
 
@@ -824,13 +824,13 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Any<Cpu> {
 /// Zeros of `kind` and `extents`, as `Cpu` holds them.
 pub fn zeros_on_host(kind: ElementKind, extents: List<i32>) -> Any<Cpu> {
     return match kind {
-        F32 => zeros_of::<f32>(extents),
-        F16 => zeros_of::<f16>(extents),
-        BF16 => zeros_of::<bf16>(extents),
-        U8 => zeros_of::<u8>(extents),
-        I64 => zeros_of::<i64>(extents),
-        I32 => zeros_of::<i32>(extents),
-        Bool => zeros_of::<bool>(extents),
+        _::F32 => zeros_of::<f32>(extents),
+        _::F16 => zeros_of::<f16>(extents),
+        _::BF16 => zeros_of::<bf16>(extents),
+        _::U8 => zeros_of::<u8>(extents),
+        _::I64 => zeros_of::<i64>(extents),
+        _::I32 => zeros_of::<i32>(extents),
+        _::Bool => zeros_of::<bool>(extents),
     };
 }
 
@@ -1106,7 +1106,7 @@ impl Splitting {
             let node = &self.recorded.nodes[id];
             match &node.op {
                 // Every program takes the parameters, and the host sets the rest.
-                Parameter(_) | Carried | Yield => {
+                Parameter(_) | _::Carried | _::Yield => {
                 },
                 Fetched([step, k]) => {
                     if *k == 0 {
@@ -1166,7 +1166,7 @@ fn weights_only(recorded: &Recorded, arguments: i32) -> List<bool> {
     for let node of &recorded.nodes {
         only.push(match &node.op {
             Parameter(i) => *i >= arguments,
-            Fetched(_) | Carried | Yield | Repeat(_) | Case(_) | Attention(_) | Part(_) => false,
+            Fetched(_) | _::Carried | _::Yield | Repeat(_) | Case(_) | Attention(_) | Part(_) => false,
             _ => node.operands.into_iter().all(|o| only[o]),
         });
     }
@@ -1369,7 +1369,7 @@ impl<affine G: Backend> Programs<G> {
         weights: fn() -> List<Any<G>> with _,
         mut host: fn mut(i32, &List<Any<G>>, &mut List<Any<G>>) -> List<Any<G>> with _,
     ) -> List<Any<G>> with _ {
-        if self.weights matches { None } {
+        if self.weights matches { null } {
             self.weights = Option::Some(weights());
         }
         let Some(erased) = &mut self.weights else {
@@ -1491,7 +1491,7 @@ pub fn constants(cpu: &mut Cpu, recorded: &Recorded) -> HashMap<i32, Any<Cpu>> {
     for let id of 0..<recorded.nodes.len() {
         let node = &recorded.nodes[id];
         let reads_none = match &node.op {
-            Parameter(_) | Case(_) | Repeat(_) | Carried | Yield | Attention(_) | Part(_) => false,
+            Parameter(_) | Case(_) | Repeat(_) | _::Carried | _::Yield | Attention(_) | Part(_) => false,
             _ => node.operands.into_iter().all(|o| state.values.holds(o)),
         };
         if reads_none {
@@ -1625,12 +1625,12 @@ impl<affine G: Graph> Run<G> {
     /// computed.
     internal fn ran(&mut self, g: &mut G, id: i32, node: &RecordedNode) with _ {
         match &node.op {
-            Parameter(_) | Carried => {
+            Parameter(_) | _::Carried => {
             },
             Part(k) => {
                 self.values[id] = self.parts[node.operands[0]][*k - 1];
             },
-            Yield => {
+            _::Yield => {
                 self.values[id] = self.values[node.operands[0]];
             },
             _ => {
@@ -1668,27 +1668,27 @@ impl<affine G: Graph> Run<G> {
                 Bool(v) => Any::Bool(g.upload(&Tensor::<bool, Untyped> { data: *v, extents: node.extents })),
             };
         }
-        let over = if node.op matches { Convert | Compare(_) | ArgMax(_) } {
+        let over = if node.op matches { _::Convert | Compare(_) | ArgMax(_) } {
             kind_of(self.operand(node, 0));
         } else {
             node.kind;
         };
         if node.op matches { Unary(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) } {
             return match over {
-                F32 => self.computed_in::<f32>(g, id, node),
-                F16 => self.computed_in::<f16>(g, id, node),
-                BF16 => self.computed_in::<bf16>(g, id, node),
-                U8 | I64 | I32 | Bool => unreachable(),
+                _::F32 => self.computed_in::<f32>(g, id, node),
+                _::F16 => self.computed_in::<f16>(g, id, node),
+                _::BF16 => self.computed_in::<bf16>(g, id, node),
+                _::U8 | _::I64 | _::I32 | _::Bool => unreachable(),
             };
         }
         return match over {
-            F32 => self.computed_of::<f32>(g, node),
-            F16 => self.computed_of::<f16>(g, node),
-            BF16 => self.computed_of::<bf16>(g, node),
-            U8 => self.computed_of::<u8>(g, node),
-            I64 => self.computed_of::<i64>(g, node),
-            I32 => self.computed_of::<i32>(g, node),
-            Bool => self.computed_of::<bool>(g, node),
+            _::F32 => self.computed_of::<f32>(g, node),
+            _::F16 => self.computed_of::<f16>(g, node),
+            _::BF16 => self.computed_of::<bf16>(g, node),
+            _::U8 => self.computed_of::<u8>(g, node),
+            _::I64 => self.computed_of::<i64>(g, node),
+            _::I32 => self.computed_of::<i32>(g, node),
+            _::Bool => self.computed_of::<bool>(g, node),
         };
     }
 
@@ -1696,14 +1696,14 @@ impl<affine G: Graph> Run<G> {
     fn computed_of<E: Erasable>(&self, g: &mut G, node: &RecordedNode) -> Any<G> with _ {
         return match &node.op {
             Iota(dimension) => E::any::<G>(g.iota::<E, Untyped>(node.extents, *dimension)),
-            Convert => match node.kind {
-                F32 => Any::F32(g.convert::<E, f32, Untyped>(self.of::<E>(node, 0))),
-                F16 => Any::F16(g.convert::<E, f16, Untyped>(self.of::<E>(node, 0))),
-                BF16 => Any::BF16(g.convert::<E, bf16, Untyped>(self.of::<E>(node, 0))),
-                U8 => Any::U8(g.convert::<E, u8, Untyped>(self.of::<E>(node, 0))),
-                I64 => Any::I64(g.convert::<E, i64, Untyped>(self.of::<E>(node, 0))),
-                I32 => Any::I32(g.convert::<E, i32, Untyped>(self.of::<E>(node, 0))),
-                Bool => Any::Bool(g.convert::<E, bool, Untyped>(self.of::<E>(node, 0))),
+            _::Convert => match node.kind {
+                _::F32 => Any::F32(g.convert::<E, f32, Untyped>(self.of::<E>(node, 0))),
+                _::F16 => Any::F16(g.convert::<E, f16, Untyped>(self.of::<E>(node, 0))),
+                _::BF16 => Any::BF16(g.convert::<E, bf16, Untyped>(self.of::<E>(node, 0))),
+                _::U8 => Any::U8(g.convert::<E, u8, Untyped>(self.of::<E>(node, 0))),
+                _::I64 => Any::I64(g.convert::<E, i64, Untyped>(self.of::<E>(node, 0))),
+                _::I32 => Any::I32(g.convert::<E, i32, Untyped>(self.of::<E>(node, 0))),
+                _::Bool => Any::Bool(g.convert::<E, bool, Untyped>(self.of::<E>(node, 0))),
             },
             Reduce([op, init, dims]) => E::any::<G>(g.reduce::<E, Untyped, Untyped>(
                 self.of::<E>(node, 0),
@@ -1717,12 +1717,12 @@ impl<affine G: Graph> Run<G> {
                 self.of::<E>(node, 0),
                 self.of::<E>(node, 1),
             )),
-            Select => E::any::<G>(g.select::<E, Untyped>(
+            _::Select => E::any::<G>(g.select::<E, Untyped>(
                 bools(self.operand(node, 0)),
                 self.of::<E>(node, 1),
                 self.of::<E>(node, 2),
             )),
-            BroadcastInDim(_) | Reshape | Transpose(_) | Slice(_) | Reverse(_) => E::any::<G>(regrouped::<G, E>(
+            BroadcastInDim(_) | _::Reshape | Transpose(_) | Slice(_) | Reverse(_) => E::any::<G>(regrouped::<G, E>(
                 g,
                 node,
                 self.of::<E>(node, 0),
@@ -1901,7 +1901,7 @@ fn regrouped<affine G: Graph, E: Element>(
 ) -> G::Tensor<E, Untyped> with _ {
     return match node.op {
         BroadcastInDim(dims) => g.broadcast_in_dim::<E, Untyped, Untyped>(t, node.extents, dims),
-        Reshape => g.reshape::<E, Untyped, Untyped>(t, node.extents),
+        _::Reshape => g.reshape::<E, Untyped, Untyped>(t, node.extents),
         Transpose(perm) => g.transpose::<E, Untyped, Untyped>(t, perm),
         Slice([start, limit, strides]) => g.slice::<E, Untyped, Untyped>(t, start, limit, strides),
         Reverse(dims) => g.reverse::<E, Untyped>(t, dims),

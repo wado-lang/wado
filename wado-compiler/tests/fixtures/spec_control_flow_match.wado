@@ -37,7 +37,7 @@ test "match" {
     // Match expression (produces a value)
     let result = match opt {
         Some(x) => x * 2,
-        None => 0,
+        null => 0,
     };
     assert result == 42;
 
@@ -45,14 +45,14 @@ test "match" {
     let area = match shape {
         Circle(r) => 3.14159 * r * r,
         Rectangle([w, h]) => w * h,
-        Point => 0.0,
+        _::Point => 0.0,
     };
     assert area == 6.0;
 
     // Match statement (no value produced)
     match command {
-        Start => engine.start(),
-        Stop => engine.stop(),
+        _::Start => engine.start(),
+        _::Stop => engine.stop(),
     }
     assert engine.running;
 }
@@ -84,8 +84,8 @@ enum Color {
 test "exhaustiveness" {
     let color = Color::Blue;
     let name = match color {
-        Red => "red",
-        Green => "green",
+        _::Red => "red",
+        _::Green => "green",
         _ => "other",  // Required for exhaustiveness
     };
     assert name == "other";
@@ -119,9 +119,9 @@ global TK_BAR: i32 = 2;
 
 fn token_kind(token: i32) -> String {
     return match token {
-        TK_FOO | TK_BAR => "keyword",
-        i32::MAX        => "max",
-        _               => "other",
+        == TK_FOO | == TK_BAR => "keyword",
+        i32::MAX              => "max",
+        _                     => "other",
     };
 }
 
@@ -162,15 +162,15 @@ test "or patterns" {
 
     // Enum or-patterns
     let tone = match color {
-        Red | Blue => "cool",
-        Green => "warm",
+        _::Red | _::Blue => "cool",
+        _::Green => "warm",
     };
     assert tone == "cool";
 
     // Variant or-patterns with bindings
     let value = match expr {
         Num(n) | Neg(n) => n,
-        Zero => 0,
+        _::Zero => 0,
     };
     assert value == 7;
 
@@ -215,8 +215,8 @@ test "nested sub-patterns" {
     // Variant sub-patterns in tuples
     let sum = match [a, b] {
         [Some(p), Some(q)] => p + q,
-        [Some(p), None] => p,
-        [None, _] => 0,
+        [Some(p), null] => p,
+        [null, _] => 0,
     };
     assert sum == 3;
 
@@ -228,8 +228,8 @@ test "nested sub-patterns" {
 
     // Enum sub-patterns in tuples
     let label = match [color, size] {
-        [Red, Large] => "big red",
-        [Blue, _] => "blue",
+        [_::Red, _::Large] => "big red",
+        [_::Blue, _] => "blue",
         _ => "other",
     };
     assert label == "big red";

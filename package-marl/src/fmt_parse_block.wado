@@ -764,7 +764,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &Re
             base_delim = m.delim;
             start_number = m.number;
         },
-        None => {
+        null => {
             return start;
         },
     }
@@ -790,7 +790,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &Re
                     }
                 }
             },
-            None => {
+            null => {
             },
         }
         if content_col < 0 {
@@ -810,7 +810,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &Re
                 let continues = j + 1 < end
                     && !is_blank(&lines[j + 1])
                     && line_indent(&lines[j + 1]) >= content_col
-                    && parse_list_marker(&lines[j + 1].to_chars()) matches { None };
+                    && parse_list_marker(&lines[j + 1].to_chars()) matches { null };
                 if continues {
                     inner.claim("");
                     j += 1;
@@ -898,7 +898,7 @@ internal fn interrupts_paragraph(chars: &List<char>, lazy: bool) -> bool {
     }
     return match parse_list_marker(chars) {
         Some(m) => lazy || (!m.ordered || m.number == 1) && !is_blank(slice_chars(chars, m.content_col, len)),
-        None => false,
+        null => false,
     };
 }
 
@@ -1145,7 +1145,7 @@ fn cells_to_nodes(cells: &List<String>, ncol: i32, refs: &RefTable) -> List<List
     for let idx of 0..<ncol {
         let text = match cells.get(idx) {
             Some(c) => c,
-            None => "",
+            null => "",
         };
         out.push(parse_inline(&text, refs));
     }

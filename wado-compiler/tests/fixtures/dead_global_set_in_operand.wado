@@ -16,11 +16,11 @@ export fn run() with Stdout {
     let o: Option<i32> = Some(builtin::black_box(2));
     match o {
         Some(v) => COUNTER = v,
-        None => COUNTER = 9,
+        null => COUNTER = 9,
     }
     match o {
         Some(_) => COUNTER = bump(),
-        None => {},
+        null => {},
     }
     if (c: { FLAG = true; builtin::black_box(true) }) {
         println("then");

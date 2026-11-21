@@ -171,13 +171,13 @@ test "compose_grammars leaves a grammar with no import on the merge path" {
     assert composed.name == merged.name;
     assert rule_names(&composed) == rule_names(&merged);
     assert token_names(&composed) == token_names(&merged);
-    assert composed.kind matches { Combined };
+    assert composed.kind matches { _::Combined };
 }
 
 test "compose_grammars keeps the master's name and kind" {
     let g = compose(["lexer grammar M;\nimport S;\nB : 'b' ;", "lexer grammar S;\nA : 'a' ;"]);
     assert g.name == "M";
-    assert g.kind matches { Lexer };
+    assert g.kind matches { _::Lexer };
 }
 
 test "compose_grammars puts master rules ahead of imported ones" {
@@ -262,7 +262,7 @@ test "compose_grammars keeps the master's action language" {
     // `language` is an option, so it is not inherited either — a composite
     // holds one action language, and the master picks it.
     let g = compose(["grammar M;\nimport S;\ns : 'b' ;", "parser grammar S;\noptions { language = Wado; }\na : B ;"]);
-    assert g.action_language matches { Java };
+    assert g.action_language matches { _::Java };
 }
 
 test "compose_grammars walks nested imports depth-first" {

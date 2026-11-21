@@ -61,7 +61,7 @@ impl SchemaSet {
     /// Holds `schema` as the document retrieved from `uri`, in place of any
     /// held there before.
     pub fn insert(&mut self, uri: Uri, schema: Schema)
-        contract uri.fragment() matches { None }, "a document's URI has no fragment"
+        contract uri.fragment() matches { null }, "a document's URI has no fragment"
     {
         if let Some(k) = self.find(&uri) {
             self.documents[k].1 = schema;
@@ -301,9 +301,9 @@ impl Validator {
         self.assert_value(n, inst, ip, run);
         self.apply_logic(n, inst, ip, run, &mut out);
         match inst.kind() {
-            Array => self.eval_array(n, inst, ip, run, &mut out),
-            Object => self.eval_object(n, inst, ip, run, &mut out),
-            Null | Bool | Number | String => {
+            _::Array => self.eval_array(n, inst, ip, run, &mut out),
+            _::Object => self.eval_object(n, inst, ip, run, &mut out),
+            _::Null | _::Bool | _::Number | _::String => {
             },
         }
         if entered {
@@ -574,14 +574,14 @@ impl Validator {
             run.fail(ip, n, "maxProperties", `must have at most ${m} properties`);
         }
         for let name of n.required {
-            if inst.get(&name) matches { None } {
+            if inst.get(&name) matches { null } {
                 run.fail(ip, n, "required", `must have the property ${name:?}`);
             }
         }
         for let [key, names] of n.dependent_required.entries() {
             if inst.get(key) matches { Some(_) } {
                 for let name of *names {
-                    if inst.get(&name) matches { None } {
+                    if inst.get(&name) matches { null } {
                         run.fail(
                             ip,
                             n,
@@ -1133,7 +1133,7 @@ impl Compiler {
     fn resolve_reached(&mut self) -> Result<(), CompileError> {
         while self.resolved < self.reached.len() {
             for let k of self.added[self.reached[self.resolved]].refs {
-                if self.refs[k].found matches { None } {
+                if self.refs[k].found matches { null } {
                     let r = self.refs[k];
                     let found = self.resolve(&r)?;
                     self.reach(self.node_document[found.0]);
@@ -1202,12 +1202,12 @@ fn regex(pattern: &String, at: String) -> Result<Regex, SchemaError> {
 
 fn has_type(inst: &Node, types: JsonTypes) -> bool {
     let t = match inst.kind() {
-        Null => JsonTypes::Null,
-        Bool => JsonTypes::Boolean,
-        Object => JsonTypes::Object,
-        Array => JsonTypes::Array,
-        String => JsonTypes::String,
-        Number => if inst.as_number().unwrap().is_integer() {
+        _::Null => JsonTypes::Null,
+        _::Bool => JsonTypes::Boolean,
+        _::Object => JsonTypes::Object,
+        _::Array => JsonTypes::Array,
+        _::String => JsonTypes::String,
+        _::Number => if inst.as_number().unwrap().is_integer() {
             JsonTypes::Number | JsonTypes::Integer;
         } else {
             JsonTypes::Number;

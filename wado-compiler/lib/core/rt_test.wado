@@ -116,7 +116,7 @@ test "a future whose reader is gone hands its value back" {
 test "a future write the reader has not read yet is pending" {
     let [rx, tx] = Future::<i32>::new();
     let written = tx.write(1);
-    assert written.rest matches { None };
+    assert written.rest matches { null };
     assert written.result == FutureWriteResult::Pending;
     assert rx.read() == Option::Some(1);
 }
@@ -166,7 +166,7 @@ test "poll reports a host member once the host resolved it" {
     let [rx, tx] = Future::<i32>::new();
     let mut set = WaitableSet::<Raced>::new();
     set.insert(Raced::Value(rx.start_read()));
-    assert set.poll() matches { None };
+    assert set.poll() matches { null };
     assert tx.write(4).result == FutureWriteResult::Completed;
     let Value(read) = set.poll().unwrap().member else {
         unreachable();
@@ -176,7 +176,7 @@ test "poll reports a host member once the host resolved it" {
 
 test "an empty waitable set has nothing to poll" {
     let mut ws = WaitableSet::<Subtask>::new();
-    assert ws.poll() matches { None };
+    assert ws.poll() matches { null };
 }
 
 /// Members the host does not know, so each is ready the moment it is inserted.
@@ -194,8 +194,8 @@ test "a member ready without the host comes back in insertion order" {
     ws.insert(Settled::Second);
     assert ws.len() == 2;
     let first = ws.poll().unwrap();
-    assert first.member matches { First } && first.event matches { Unreported };
-    assert ws.wait().member matches { Second };
+    assert first.member matches { _::First } && first.event matches { _::Unreported };
+    assert ws.wait().member matches { _::Second };
     assert ws.is_empty();
 }
 
@@ -207,9 +207,7 @@ test "a drained set hands back every member, the ready ones first" {
     ws.insert(Raced::Value(rx.start_read()));
     let mut drained = ws.drain();
     assert ws.is_empty();
-    let Some(Timer(_)) = drained.pop() else {
-        unreachable();
-    };
+    assert drained.pop() matches { Some(Timer(_)) };
     let Some(Value(read)) = drained.pop() else {
         unreachable();
     };
@@ -241,7 +239,7 @@ fn delivered_call() -> AsyncCall<()> with MonotonicClock {
     let mut set = WaitableSet::<AsyncCall<()>>::new();
     set.insert(MonotonicClock::wait_for(1_000_000));
     let ready = set.wait();
-    assert ready.event matches { Call(Returned) };
+    assert ready.event matches { Call(_::Returned) };
     return ready.member;
 }
 
@@ -254,7 +252,7 @@ test "a call a set delivered ends by a wait, a drop, or another set" {
     let mut again = WaitableSet::<AsyncCall<()>>::new();
     again.insert(delivered_call());
     let ready = again.wait();
-    assert ready.event matches { Call(Returned) };
+    assert ready.event matches { Call(_::Returned) };
     ready.member.wait();
 }
 
