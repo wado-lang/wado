@@ -1547,7 +1547,11 @@ pub struct NewtypeSpec {
 
 impl NewtypeSpec {
     pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, base: S1, visibility: Vis = Vis::Private) -> NewtypeSpec {
-        return NewtypeSpec { name: name.to_string(), base: base.to_string(), visibility };
+        return NewtypeSpec {
+            name: name.to_string(),
+            base: base.to_string(),
+            visibility,
+        };
     }
 
     /// Sets the doc comment, written as `///` lines above the declaration.

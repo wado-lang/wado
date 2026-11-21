@@ -34,6 +34,21 @@ for let e of validator.validate(&doc.root()).unwrap_err() {
 }
 ```
 
+## Generating Types
+
+`generate` writes the Wado declarations a schema describes, as one module. Each
+`$defs` entry becomes a `pub` declaration named by its key. The code uses
+`core:serde`'s derived `Serialize` and `Deserialize`, and nothing of Jade's, and
+deriving the schema of a generated type gives the schema back.
+
+```wado
+use { Schema, generate } from "lib:jade";
+use { ModuleSpec } from "lib:wadopoet";
+
+let schema = Schema::parse(#"{"title": "Point", "type": "object", "properties": {"x": {"type": "number"}}, "required": ["x"]}"#).unwrap();
+let source = generate(&schema, &ModuleSpec::new("my-script", ["point.schema.json"])).unwrap();
+```
+
 ## Formats
 
 Jade treats `format` strictly. A format means what Draft 2020-12 defines, by

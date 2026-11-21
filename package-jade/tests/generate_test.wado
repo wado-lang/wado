@@ -1,0 +1,173 @@
+use { GenerateOptions, Schema, generate } from "../src/lib.wado";
+use { eval, EvalHost } from "core:eval";
+use { ModuleSpec } from "lib:wadopoet";
+
+fn module() -> ModuleSpec {
+    return ModuleSpec::new("lib:jade", ["api.schema.json"]);
+}
+
+fn generated(schema: String, options: GenerateOptions = GenerateOptions {}) -> String {
+    return generate(&Schema::parse(schema).unwrap(), &module(), options).unwrap();
+}
+
+/// The error `generate` gives for `schema`, as displayed.
+fn refused(schema: String, options: GenerateOptions = GenerateOptions {}) -> String {
+    let Err(e) = generate(&Schema::parse(schema).unwrap(), &module(), options) else {
+        panic("the schema generates");
+    };
+    return `${e}`;
+}
+
+/// What a command prints when `body` is its `run`, after the module generated
+/// from `schema`.
+fn printed(schema: String, body: String, options: GenerateOptions = GenerateOptions {}) -> String with EvalHost {
+    let out = eval(`${generated(schema, options)}
+use { print, Stdout } from "core:cli";
+use { from_string, to_string } from "core:json";
+
+export fn run() with Stdout {
+${body}
+}`).unwrap();
+    assert out.status matches { Exited(0) }, out.stderr;
+    return out.stdout;
+}
+
+/// What the type `name` writes for the JSON `text` it reads.
+fn reread(
+    schema: String,
+    name: String,
+    text: String,
+    options: GenerateOptions = GenerateOptions {},
+) -> String with EvalHost {
+    return printed(schema, `print(to_string(&from_string::<${name}>(${quoted(text)}).unwrap()).unwrap());`, options);
+}
+
+fn quoted(text: String) -> String {
+    return `"${text.replace("\\", "\\\\").replace("\"", "\\\"")}"`;
+}
+
+test "a struct is declared under its definition's name, with the root only a reference" {
+    let schema = ##"{
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$ref": "#/$defs/Point",
+        "$defs": {
+            "Point": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+                    "y": {"type": "number", "default": 0}
+                },
+                "required": ["x"]
+            }
+        }
+    }"##;
+    assert generated(schema) == "#![generated(by = \"lib:jade\", sources = [\"api.schema.json\"])]
+
+pub struct Point {
+    pub x: i32,
+    pub y: f64 = 0,
+}
+";
+}
+
+test "a generated struct reads and writes its JSON" {
+    let schema = ##"{
+        "title": "Create user (v2)",
+        "type": "object",
+        "properties": {
+            "userName": {"type": "string", "description": "The login."},
+            "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "address": {
+                "type": "object",
+                "properties": {"zip": {"type": "string"}},
+                "required": ["zip"]
+            },
+            "nick": {"type": "string"}
+        },
+        "required": ["userName", "tags", "address"]
+    }"##;
+    let text = ##"{"userName":"ann","tags":["b","a"],"address":{"zip":"1"}}"##;
+    assert reread(schema, "CreateUserV2", text) == ##"{"userName":"ann","tags":["b","a"],"address":{"zip":"1"},"nick":null}"##;
+}
+
+test "the root takes the root option before its title, and its title before the file's name" {
+    let schema = ##"{"title": "Titled", "type": "string"}"##;
+    assert generated(schema, GenerateOptions {
+        root: Option::Some("given name"),
+        file_stem: Option::Some("file"),
+    }).contains("pub type GivenName = String;");
+    assert generated(schema, GenerateOptions { file_stem: Option::Some("file") }).contains("pub type Titled = String;");
+    assert generated(##"{"type": "string"}"##, GenerateOptions { file_stem: Option::Some("create-user") }).contains(
+        "pub type CreateUser = String;",
+    );
+    assert refused(##"{"type": "string"}"##) == "has no name: give the `root` option, a `title`, or a file name";
+}
+
+test "a reserved field name takes a suffix, and its wire name back" {
+    let schema = ##"{"title": "Q", "type": "object", "properties": {"in": {"type": "boolean"}, "fn": {"type": "boolean"}}, "required": ["in", "fn"]}"##;
+    assert generated(schema).contains("    pub in_: bool,");
+    assert reread(schema, "Q", ##"{"in":true,"fn":false}"##) == ##"{"in":true,"fn":false}"##;
+}
+
+test "wire names that all come back under one policy take it" {
+    let schema = ##"{"title": "E", "type": "object", "properties": {"createdAt": {"type": "string"}, "updatedAt": {"type": "string"}}, "required": ["createdAt", "updatedAt"]}"##;
+    assert generated(schema).contains(
+        "#[wire(name_policy = \"camelCase\")]\npub struct E {\n    pub created_at: String,",
+    );
+}
+
+test "an enum, a variant and a flags read and write their JSON" {
+    let schema = ##"{
+        "$defs": {
+            "Color": {"type": "string", "enum": ["red", "dark_blue"]},
+            "Shape": {"oneOf": [
+                {"const": "Dot"},
+                {"type": "object", "properties": {"Circle": {"type": "number"}}, "required": ["Circle"], "maxProperties": 1}
+            ]},
+            "Perms": {"type": "array", "items": {"type": "string", "enum": ["Read", "Write"]}, "uniqueItems": true}
+        },
+        "title": "All",
+        "type": "object",
+        "properties": {
+            "color": {"$ref": "#/$defs/Color"},
+            "shapes": {"type": "array", "items": {"$ref": "#/$defs/Shape"}},
+            "perms": {"$ref": "#/$defs/Perms"},
+            "pair": {"type": "array", "prefixItems": [{"type": "boolean"}, {"type": "null"}], "minItems": 2, "maxItems": 2},
+            "fallback": {"$ref": "#/$defs/Color", "default": "red"}
+        },
+        "required": ["color", "shapes", "perms", "pair"]
+    }"##;
+    let text = ##"{"color":"dark_blue","shapes":["Dot",{"Circle":2.5}],"perms":["Write"],"pair":[true,null]}"##;
+    assert reread(schema, "All", text) == ##"{"color":"dark_blue","shapes":["Dot",{"Circle":2.5}],"perms":["Write"],"pair":[true,null],"fallback":"red"}"##;
+    assert generated(schema).contains("pub fallback: Color = Color::Red,");
+}
+
+test "a tagged variant reads and writes its JSON" {
+    let schema = ##"{
+        "$defs": {
+            "Moved": {"type": "object", "properties": {"x": {"type": "number"}}, "required": ["x"]},
+            "Event": {"oneOf": [
+                {"type": "object", "properties": {"kind": {"const": "Stop"}}, "required": ["kind"]},
+                {"$ref": "#/$defs/Moved", "properties": {"kind": {"const": "Move"}}, "required": ["kind"]}
+            ]}
+        },
+        "$ref": "#/$defs/Event"
+    }"##;
+    assert generated(schema).contains("#[wire(tag = \"kind\")]\npub variant Event {");
+    assert reread(schema, "List<Event>", ##"[{"kind":"Stop"},{"kind":"Move","x":1}]"##) == ##"[{"kind":"Stop"},{"kind":"Move","x":1}]"##;
+}
+
+test "a keyword D reads no type from is refused at its pointer" {
+    let schema = ##"{"$defs": {"Name": {"type": "string", "maxLength": 3}}, "$ref": "#/$defs/Name"}"##;
+    assert refused(schema) == "/$defs/Name/maxLength: has no Wado type D generates";
+}
+
+test "a reference to anything but a definition is refused" {
+    let schema = ##"{"$ref": "other.json#/$defs/A"}"##;
+    assert refused(schema) == "/$ref: names no entry of the root's `$defs`, the one reference D resolves";
+}
+
+test "two names converting to one Wado name are refused" {
+    let schema = ##"{"$defs": {"a-b": {"type": "string"}, "aB": {"type": "string"}}, "$ref": "#/$defs/a-b"}"##;
+    assert refused(schema) == "/$defs: names `AB`, which another declaration takes";
+}
