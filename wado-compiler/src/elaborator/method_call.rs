@@ -612,18 +612,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 required_trait,
                 Some(ArgSource::Exprs(&mut probe)),
             );
-            let declared = match &result {
-                TraitLookup::Undecided(live) if can_wait => {
-                    let subject = subject.expect("a reference kind is read off the subject");
-                    self.trait_declared_info(live, subject, method_name)
-                }
-                TraitLookup::Undecided(_)
-                | TraitLookup::Found(_)
-                | TraitLookup::Missing
-                | TraitLookup::Reported => None,
-            };
-            let result = match declared {
-                Some((declared, mut info)) => {
+            let subject = subject.expect("a reference kind is read off the subject");
+            let result = match self.wait_or_decide(
+                result,
+                can_wait,
+                subject,
+                base_type_id,
+                method_name,
+                span,
+            ) {
+                Ok((declared, mut info)) => {
                     waits_for_selection = true;
                     info.is_ref_impl = true;
                     trait_name = Some(declared);
@@ -631,7 +629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info = Some(info);
                     TraitLookup::Missing
                 }
-                None => self.decide_now(result, base_type_id, method_name, span),
+                Err(result) => result,
             };
             reported |= matches!(result, TraitLookup::Reported);
             // Only use ref-type impls that target a concrete container type
@@ -708,27 +706,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             TraitLookup::Missing
         };
-        let lookup = match lookup {
-            TraitLookup::Undecided(live) => {
-                let declared = can_wait
-                    .then(|| self.trait_declared_info(&live, base_type_id, method_name))
-                    .flatten();
-                match declared {
-                    Some((declared, info)) => {
-                        waits_for_selection = true;
-                        trait_name = Some(declared);
-                        method_info = Some(info);
-                        TraitLookup::Missing
-                    }
-                    None => self.decide_now(
-                        TraitLookup::Undecided(live),
-                        base_type_id,
-                        method_name,
-                        span,
-                    ),
-                }
+        let lookup = match self.wait_or_decide(
+            lookup,
+            can_wait,
+            base_type_id,
+            base_type_id,
+            method_name,
+            span,
+        ) {
+            Ok((declared, info)) => {
+                waits_for_selection = true;
+                trait_name = Some(declared);
+                method_info = Some(info);
+                TraitLookup::Missing
             }
-            TraitLookup::Found(_) | TraitLookup::Missing | TraitLookup::Reported => lookup,
+            Err(lookup) => lookup,
         };
         reported |= matches!(lookup, TraitLookup::Reported);
         if let Some(trait_match) = lookup.found() {

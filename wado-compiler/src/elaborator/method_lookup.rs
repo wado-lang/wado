@@ -2555,6 +2555,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TraitLookup::Reported
     }
 
+    /// The trait's declaration a call waiting on `lookup` is typed by, with
+    /// `Self` as `declared_self`, where `lookup` leaves the impl undecided and
+    /// the call `can_wait`; otherwise `lookup`, decided now.
+    pub(super) fn wait_or_decide(
+        &mut self,
+        lookup: TraitLookup,
+        can_wait: bool,
+        declared_self: TypeId,
+        receiver: TypeId,
+        method_name: &str,
+        span: Span,
+    ) -> Result<(FqTraitName, MethodInfo), TraitLookup> {
+        if let TraitLookup::Undecided(live) = &lookup
+            && can_wait
+            && let Some(declared) = self.trait_declared_info(live, declared_self, method_name)
+        {
+            return Ok(declared);
+        }
+        Err(self.decide_now(lookup, receiver, method_name, span))
+    }
+
     /// Report that `receiver` must settle further before a call of
     /// `method_name` can choose its impl, and close its variables so nothing
     /// reports them again.
