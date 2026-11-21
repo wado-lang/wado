@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.0.40](https://github.com/wado-lang/wado/compare/v0.0.39...v0.0.40) - 2026-11-21
+
+- docs: state only the current pattern-binding rule by @gfx in https://github.com/wado-lang/wado/pull/2711
+
 ## [v0.0.39](https://github.com/wado-lang/wado/compare/v0.0.38...v0.0.39) - 2026-11-21
 
 - feat(jade): validate numbers exactly, at any size and precision by @gfx in https://github.com/wado-lang/wado/pull/2575
