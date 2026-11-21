@@ -1,0 +1,37 @@
+// A closure bound by `let` and only ever called keeps what it captures for as
+// long as it is readable. `push` is dead at the `return`, so `out` is returned
+// without a copy.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn collect(n: i32) -> List<List<i32>> {
+    let mut out: List<List<i32>> = [];
+    let mut push = |v: i32| {
+        out.push([v]);
+    };
+    for let i of 0..<n {
+        push(i);
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    let mut c = collect(builtin::black_box(3));
+    c[0].push(7);
+    println(`${c.len()} ${c[0].len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3 2\n",
+    "wir_scope": "value_copy_return_after_closure_capture.wado/collect",
+    "wir_not_expect:O2": ["$value_copy$"],
+    "wir_contrast": {"O2": [
+        {
+            "fn collect(n: i32)": "fn collect(n: i32, sink: &mut List<&List<List<i32>>>)",
+            "        out.push([v]);": "        out.push([v]);\n        sink.push(&out);",
+            "collect(builtin::black_box(3))": "collect(builtin::black_box(3), &mut [])"
+        }
+    ]}
+}

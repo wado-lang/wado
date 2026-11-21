@@ -1,0 +1,112 @@
+// A returned local whose reference outlives the frame still has a reader: the
+// caller's writes to the result must not reach it. Returning the local itself
+// and returning a binding that shares it both copy at the `return`.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn direct(sink: &mut List<&List<i32>>) -> List<i32> {
+    let a: List<i32> = [1];
+    sink.push(&a);
+    return a;
+}
+
+#[inline(never)]
+fn via_share(sink: &mut List<&List<i32>>) -> List<i32> {
+    let a: List<i32> = [1];
+    sink.push(&a);
+    let r = a;
+    return r;
+}
+
+// Every value a control form hands on is the returned value.
+#[inline(never)]
+fn via_branch(sink: &mut List<&List<i32>>, n: i32) -> List<i32> {
+    let a: List<i32> = [1];
+    let b: List<i32> = [5];
+    sink.push(&a);
+    return match n {
+        0 => if n == 0 { a } else { b },
+        1 => found: { break found: a; },
+        _ => b,
+    };
+}
+
+// A closure stores into its capture what the specialized callee hands it.
+#[inline(never)]
+fn via_closure(sink: &mut List<&List<i32>>) -> List<List<i32>> {
+    let a: List<List<i32>> = [[1]];
+    let _ = a.iter_ref().position(|l| { sink.push(l); return true; });
+    return a;
+}
+
+// A pass-through builtin hands on the storage of what it selects.
+#[inline(never)]
+fn via_select(sink: &mut List<&List<i32>>, flag: bool) -> List<i32> {
+    let a: List<i32> = [1];
+    sink.push(&a);
+    return builtin::select(flag, a, a);
+}
+
+// A closure's `$call` hands back what the closure captured.
+#[inline(never)]
+fn apply(f: fn() -> &List<i32>) -> &List<i32> {
+    return f();
+}
+
+#[inline(never)]
+fn via_closure_result(sink: &mut List<&List<i32>>) -> List<i32> {
+    let a: List<i32> = [1];
+    sink.push(apply(|| &a));
+    return a;
+}
+
+// Storage behind a parameter is the caller's, which copies the result itself.
+#[inline(never)]
+fn through_param(sink: &mut List<&List<i32>>, p: &List<i32>) -> List<i32> {
+    sink.push(p);
+    return *p;
+}
+
+export fn run() with Stdout {
+    let l: List<i32> = builtin::black_box([1]);
+    let mut u: List<&List<i32>> = [];
+    let mut z = through_param(&mut u, &l);
+    z.push(2);
+    assert l.len() == 1 && u[0].len() == 1 && z.len() == 2;
+    let mut p: List<&List<i32>> = [];
+    let mut q = via_select(&mut p, builtin::black_box(true));
+    q.push(2);
+    assert p[0].len() == 1;
+    let mut e: List<&List<i32>> = [];
+    let mut g = via_closure_result(&mut e);
+    g.push(2);
+    assert e[0].len() == 1;
+    let mut v: List<&List<i32>> = [];
+    let mut c = via_closure(&mut v);
+    c[0].push(2);
+    assert v[0].len() == 1;
+    for let n of 0..<2 {
+        let mut w: List<&List<i32>> = [];
+        let mut r = via_branch(&mut w, builtin::black_box(n));
+        r.push(2);
+        assert w[0].len() == 1;
+    }
+    let mut s: List<&List<i32>> = [];
+    let mut x = direct(&mut s);
+    x.push(2);
+    let mut t: List<&List<i32>> = [];
+    let mut y = via_share(&mut t);
+    y.push(2);
+    println(`${s[0].len()} ${t[0].len()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1\n",
+    "wir_scope": "value_copy_return_escaped_storage.wado/through_param\"",
+    "wir_not_expect:O2": ["array_copy"],
+    "wir_contrast": {"O2": [
+        {"    sink.push(p);\n    return *p;": "    let a = *p;\n    sink.push(&a);\n    return a;"}
+    ]}
+}
