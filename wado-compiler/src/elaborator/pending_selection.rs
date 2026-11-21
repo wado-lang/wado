@@ -444,7 +444,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn report_stuck_selection(&mut self, selection: PendingSelection) {
         let (receiver, method, span) = match &selection {
             PendingSelection::Call(_, call) => (call.receiver, call.method_name.clone(), call.span),
-            PendingSelection::Operator(op) => (op.left, self.operator_method(op.item), op.span),
+            PendingSelection::Operator(op) => {
+                (op.left, self.tysys.operator_method_name(op.item), op.span)
+            }
             PendingSelection::Static(call) => (call.instance, call.method_name.clone(), call.span),
         };
         if self.type_has_infer_hole(self.apply_infer_holes(receiver)) {

@@ -450,7 +450,7 @@ impl TypeSystem {
     }
 
     /// The one method an operator trait declares.
-    fn operator_method_name(&self, item: CompilerItem) -> String {
+    pub(super) fn operator_method_name(&self, item: CompilerItem) -> String {
         self.type_table
             .borrow()
             .compiler_items()
@@ -2185,11 +2185,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
-    /// The method of the operator trait `item`.
-    pub(super) fn operator_method(&self, item: CompilerItem) -> String {
-        self.tysys.operator_method_name(item)
-    }
-
     /// Whether the impl answering operator trait `item` on `left` waits on a
     /// variable `left` holds. An indexing trait is asked at the subscript's
     /// `key`.
@@ -2216,7 +2211,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(required) = required else {
             return false;
         };
-        self.selection_undecided(left, &self.operator_method(item), Some(&required))
+        self.selection_undecided(
+            left,
+            &self.tysys.operator_method_name(item),
+            Some(&required),
+        )
     }
 
     /// A comparison operator's trait method on `struct_name`, named through

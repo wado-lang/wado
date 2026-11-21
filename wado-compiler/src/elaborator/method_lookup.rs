@@ -1298,7 +1298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (&var, &answer) in &binding.answers {
             self.equate(var, answer);
         }
-        self.defer_open_impl_bounds(def, &binding.slots, span);
+        self.defer_impl_bounds(def, &binding.slots, &binding.slots, span, OwedBounds::Open);
         true
     }
 
@@ -1314,13 +1314,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied();
         let tt = self.tysys.type_table.borrow();
         written.is_some_and(|written| tt.binds_type_params(&[written], &[key]))
-    }
-
-    /// Check the bounds impl `def` places on its parameters, where the
-    /// parameter or an argument of its bound is still open, once they are
-    /// answered.
-    pub(super) fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
-        self.defer_impl_bounds(def, slots, slots, span, OwedBounds::Open);
     }
 
     /// Check that `receiver` derives the trait declaring `method_name` once
