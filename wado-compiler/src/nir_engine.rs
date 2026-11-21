@@ -19,6 +19,7 @@ use crate::nir_arena::{
     PatNode, StmtId, StmtKind, StmtNode, SubtreeCopy, Tracked,
 };
 use crate::nir_value_graph::builder::AliasSets;
+use crate::optimize::arena_query::operand_local;
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder, constant_kind};
 use crate::niri::CtfeBuiltinMap;
 use crate::tir::{ObjectTypes, ResolvedType, TypeId};
@@ -614,9 +615,14 @@ impl<'a> Engine<'a> {
         // borrows the engine.
         let mut classes: Vec<(ExprId, ValueId, u32, u32)> = Vec::new();
         for (e, sv) in scoped.values {
-            if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
+            let ExprKind::FieldAccess {
+                expr: read_receiver,
+                field_index: read_field,
+                ..
+            } = self.body.exprs[e].kind
+            else {
                 continue;
-            }
+            };
             // The extractor re-emits a `StructGet` keyed by field index, which
             // a tuple receiver — where the index means an element — has no
             // re-emission for. Asked nowhere else.
@@ -634,6 +640,12 @@ impl<'a> Engine<'a> {
             let Some(i) = scratch.opaque_local(*o) else {
                 continue;
             };
+            // A read whose value was forwarded from another slot (`Node { at }.at`
+            // is the earlier `cursor.next`) does not load that slot, so its
+            // version says nothing about what the slot holds where it is pinned.
+            if operand_local(self.body, read_receiver) != Some(i) || read_field != field_index {
+                continue;
+            }
             if !self.local_is_struct_typed(i) {
                 continue;
             }
