@@ -14,6 +14,7 @@ use crate::tir::{
     EffectRows, FunctionRef, SlotProjections, TypeArgMap, TypeId, TypeParamId, slots_from_impl_args,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::infer_hole::Obligation;
@@ -21,7 +22,8 @@ use super::method_call::InheritedFrame;
 use super::types::{
     MethodInfo, MethodOwner, RequiredTrait, TraitLookup, TraitMethodMatch, TypeError,
 };
-use crate::ast::{AstId, BinaryOp};
+use crate::ast::{AstId, BinaryOp, UnaryOp};
+use crate::compiler_item::CompilerItem;
 
 /// What [`Elaborator::dispatch_function_ref`] names a call's function after.
 pub(super) struct DispatchSite<'a> {
@@ -69,13 +71,25 @@ pub(super) enum PendingSelection {
     Operator(PendingOperator),
 }
 
+pub(super) enum PendingOp {
+    Binary {
+        op: BinaryOp,
+        right: TypeId,
+        right_span: Span,
+    },
+    Unary(UnaryOp),
+}
+
 pub(super) struct PendingOperator {
-    pub(super) op: BinaryOp,
+    pub(super) op: PendingOp,
+    /// The operator trait the impl is selected for.
+    pub(super) item: CompilerItem,
+    /// The operand the impl is selected on.
     pub(super) left: TypeId,
-    pub(super) right: TypeId,
-    pub(super) right_span: Span,
     pub(super) span: Span,
     pub(super) origin: AstId,
+    /// What the operator was typed with: `bool`, or a variable for `Output`.
+    pub(super) result: TypeId,
 }
 
 pub(super) struct PendingCall {
@@ -248,6 +262,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .require(Obligation::Pending(PendingSelection::Call(id, pending)));
     }
 
+    /// Queue `pending`, which records its dispatch once it selects.
+    pub(super) fn wait_for_operator(&mut self, pending: PendingOperator) {
+        self.infer_holes
+            .require(Obligation::Pending(PendingSelection::Operator(pending)));
+    }
+
     /// Make each pending selection whose receiver has settled far enough,
     /// until none can be made, and report the rest as needing an annotation.
     /// A selection settles variables in turn, through the impl's signature, so
@@ -279,8 +299,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             call.span,
                         ),
                         PendingSelection::Operator(op) => {
-                            let method = self.operator_method(op.op);
+                            let method = self.operator_method(op.item);
                             self.report_undecided_selection(op.left, &method, op.span);
+                            if self.tysys.type_table.borrow().is_infer_var(op.result) {
+                                self.close_infer_var(op.result);
+                            }
                         }
                     }
                 }
@@ -331,18 +354,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// while its left operand still leaves the impl undecided.
     fn select_operator(&mut self, pending: PendingOperator) -> Option<PendingOperator> {
         let left = self.apply_infer_holes(pending.left);
-        if self.operator_waits(left, pending.op) {
+        if self.operator_waits(left, pending.item) {
             return Some(pending);
         }
-        let right = self.apply_infer_holes(pending.right);
-        self.resolve_binary_op(
-            left,
-            pending.op,
-            right,
-            pending.right_span,
-            pending.span,
-            Some(pending.origin),
-        );
+        let answered = match pending.op {
+            PendingOp::Binary {
+                op,
+                right,
+                right_span,
+            } => {
+                let right = self.apply_infer_holes(right);
+                self.resolve_binary_op(
+                    left,
+                    op,
+                    right,
+                    right_span,
+                    pending.span,
+                    Some(pending.origin),
+                )
+            }
+            PendingOp::Unary(op) => self
+                .dispatch_unary_operator(op, left, pending.span, pending.origin)
+                .expect("an operand whose impl waited dispatches through a trait"),
+        };
+        if answered != TypeTable::ERROR {
+            self.hold_to_selected(answered, pending.result, pending.span);
+        }
         None
     }
 

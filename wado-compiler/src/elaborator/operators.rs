@@ -19,9 +19,8 @@ use super::coercion::{
 };
 use super::control_flow::break_values;
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
-use super::infer_hole::Obligation;
 use super::method_lookup::replace_on_assign_place;
-use super::pending_selection::{PendingOperator, PendingSelection};
+use super::pending_selection::{PendingOp, PendingOperator};
 use super::scope::ScopedBound;
 use super::synth::KeyedAccess;
 use super::trait_query::primitive_has_operator;
@@ -536,26 +535,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             )
         );
-        // A comparison answers `bool` whichever impl it selects, so one whose
-        // impl waits on the left operand's variables is typed now and resolved
-        // once the body has settled them. The right operand is held to the
+        // An operator whose impl waits on the left operand's variables is
+        // resolved once the body has settled them. A comparison answers `bool`
+        // whichever impl it selects; any other operator answers its impl's
+        // `Output`, a variable until then. The right operand is held to the
         // selected impl then.
         if !both_refs
             && let Some(origin) = origin
-            && self.operator_waits(left, op)
+            && let Some(item) = operator_compiler_item(&op)
+            && self.operator_waits(left, item)
         {
-            self.infer_holes
-                .require(Obligation::Pending(PendingSelection::Operator(
-                    PendingOperator {
-                        op,
-                        left,
-                        right,
-                        right_span,
-                        span,
-                        origin,
-                    },
-                )));
-            return TypeTable::BOOL;
+            let result = if is_comparison {
+                TypeTable::BOOL
+            } else {
+                self.mint_infer_var_named("Output")
+            };
+            self.wait_for_operator(PendingOperator {
+                op: PendingOp::Binary {
+                    op,
+                    right,
+                    right_span,
+                },
+                item,
+                left,
+                span,
+                origin,
+                result,
+            });
+            return result;
         }
 
         if both_refs {
@@ -1153,6 +1160,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if self.tysys.type_table.borrow().is_never(expr_type) {
             return Some(expr_type);
+        }
+        if self.operator_waits(expr_type, item) {
+            let result = self.mint_infer_var_named("Output");
+            self.wait_for_operator(PendingOperator {
+                op: PendingOp::Unary(op),
+                item,
+                left: expr_type,
+                span,
+                origin: id,
+                result,
+            });
+            return Some(result);
         }
         let trait_name = self
             .tysys
@@ -2123,31 +2142,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
-    /// The trait method `op` dispatches to.
-    pub(super) fn operator_method(&self, op: BinaryOp) -> String {
-        let item = operator_compiler_item(&op).expect("`&&` and `||` dispatch to no trait");
+    /// The method of the operator trait `item`.
+    pub(super) fn operator_method(&self, item: CompilerItem) -> String {
         self.tysys.operator_method_name(item)
     }
 
-    /// Whether the impl answering comparison `op` on `left` waits on a
+    /// Whether the impl answering operator trait `item` on `left` waits on a
     /// variable `left` holds.
-    pub(super) fn operator_waits(&self, left: TypeId, op: BinaryOp) -> bool {
+    pub(super) fn operator_waits(&self, left: TypeId, item: CompilerItem) -> bool {
         let left = self.apply_infer_holes(left);
         {
             let tt = self.tysys.type_table.borrow();
-            if !op.is_comparison()
-                || !tt.head_is_known(left)
+            if !tt.head_is_known(left)
                 || !tt.contains_infer_var(left)
                 || tt.contains_rigid_param(left)
             {
                 return false;
             }
         }
-        let item = operator_compiler_item(&op).expect("a comparison dispatches to a trait");
         let Some(required) = self.tysys.required_compiler_trait(item) else {
             return false;
         };
-        self.selection_undecided(left, &self.operator_method(op), Some(&required))
+        self.selection_undecided(left, &self.operator_method(item), Some(&required))
     }
 
     /// A comparison operator's trait method on `struct_name`, named through
