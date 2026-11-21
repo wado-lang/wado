@@ -131,9 +131,7 @@ effect row is not yet known, and the effect check solves it.
   the effect check has solved its row, and takes the row to be empty. Where
   impls exist for the same signature with and without an effect, a closure
   performing that effect is dispatched to the pure one, while the effect check
-  reads the one its row names. A bound naming an effect outright
-  (`G: fn() with Stderr`) rejects a closure literal that performs it: only a
-  value annotated with that row meets it.
+  reads the one its row names.
 - An associated type a bound reaches through a closure literal's impl is
   resolved from the empty row too. Where only an impl for an effectful
   signature answers, `T::Out` stays unresolved, and only an annotation on the
