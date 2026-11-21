@@ -6,7 +6,9 @@
 //! performs it — inside a compile-time frame, which either carries the write
 //! out or abandons the evaluation. An ordinary walk performs nothing at all.
 
-use crate::hashmap::{IndexMap, IndexSet};
+use cranelift_entity::EntitySet;
+
+use crate::hashmap::IndexMap;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtId, StmtKind,
@@ -26,8 +28,8 @@ use crate::compiler_trace;
 /// performs. Reachable from the body root, because an orphaned statement never
 /// runs — counting one as performed would credit the walk with a write it will
 /// never carry out.
-fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
-    let mut performed = IndexSet::default();
+fn performed_exprs(body: &Body) -> EntitySet<ExprId> {
+    let mut performed = EntitySet::with_capacity(body.exprs.len());
     for s in reachable_stmts(body) {
         let op = match &body.stmts[s].kind {
             StmtKind::Expr(op)
@@ -65,10 +67,10 @@ fn reachable_stmts(body: &Body) -> Vec<StmtId> {
 /// the local that mention roots at.
 #[derive(Default)]
 pub(super) struct Reached {
-    reads: IndexSet<ExprId>,
-    writes: IndexSet<ExprId>,
+    reads: EntitySet<ExprId>,
+    writes: EntitySet<ExprId>,
     /// Reached through an `Assign`'s target rather than through an operand.
-    place_assigns: IndexSet<ExprId>,
+    place_assigns: EntitySet<ExprId>,
 }
 
 impl Reached {
@@ -80,11 +82,11 @@ impl Reached {
     ) -> Self {
         let performed = performed_exprs(body);
         let mut reached = Self::collect(body, facts, &performed);
-        for e in &performed {
-            if let ExprKind::Assign { target, .. } = &body.exprs[*e].kind
+        for e in performed.iter() {
+            if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
                 && place_of(body, (*target).into()).is_some()
             {
-                reached.place_assigns.insert(*e);
+                reached.place_assigns.insert(e);
             }
         }
         reached.record_alias_refs(body, reassigned, type_table);
@@ -162,8 +164,13 @@ impl Reached {
     /// What the walk reaches, given the expressions it performs. Collected
     /// over the whole arena, not the reachable tree — [`aggregate_safe_locals`]
     /// owns the rule.
-    fn collect(body: &Body, facts: ProgramFacts<'_>, performed: &IndexSet<ExprId>) -> Self {
-        let mut reached = Self::default();
+    fn collect(body: &Body, facts: ProgramFacts<'_>, performed: &EntitySet<ExprId>) -> Self {
+        let exprs = body.exprs.len();
+        let mut reached = Self {
+            reads: EntitySet::with_capacity(exprs),
+            writes: EntitySet::with_capacity(exprs),
+            place_assigns: EntitySet::with_capacity(exprs),
+        };
         reached.collect_builtin_reaches(body, facts.ctfe_builtins, performed);
         reached.collect_call_reaches(body, facts.callees, performed);
         reached
@@ -175,7 +182,7 @@ impl Reached {
         &mut self,
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
-        performed: &IndexSet<ExprId>,
+        performed: &EntitySet<ExprId>,
     ) {
         let Some(map) = ctfe_builtins else {
             return;
@@ -193,7 +200,7 @@ impl Reached {
                 }
                 continue;
             }
-            if !performed.contains(&e) {
+            if !performed.contains(e) {
                 continue;
             }
             for (i, arg) in args.iter().enumerate() {
@@ -212,7 +219,7 @@ impl Reached {
         &mut self,
         body: &Body,
         callees: Option<&CalleeMap>,
-        performed: &IndexSet<ExprId>,
+        performed: &EntitySet<ExprId>,
     ) {
         let Some(callees) = callees else {
             return;
@@ -227,7 +234,7 @@ impl Reached {
             if args.len() != callee.arity() {
                 continue;
             }
-            let at_statement = performed.contains(&e);
+            let at_statement = performed.contains(e);
             for (index, arg) in args.iter().enumerate() {
                 match (callee.writes_param(index), at_statement) {
                     (false, _) if callee.reads_only(index) => {
@@ -247,7 +254,7 @@ impl Reached {
         let Some(e) = peel_wrappers(body, op) else {
             return false;
         };
-        self.reads.contains(&e) || self.writes.contains(&e)
+        self.reads.contains(e) || self.writes.contains(e)
     }
 
     /// Records the place `op` names.
@@ -301,12 +308,12 @@ pub(super) fn aggregate_safe_locals(
             set.insert(index);
         }
     };
-    fn read_value(op: Operand, reads: &mut IndexSet<ExprId>) {
+    fn read_value(op: Operand, reads: &mut EntitySet<ExprId>) {
         if let Some(e) = op.as_expr() {
             reads.insert(e);
         }
     }
-    let mut value_reads: IndexSet<ExprId> = IndexSet::default();
+    let mut value_reads = EntitySet::with_capacity(body.exprs.len());
     let mut local_mentions: Vec<(ExprId, u32)> = Vec::new();
     let mut disqualified = LocalSet::default();
     let projected = projected_borrows(body);
@@ -344,7 +351,7 @@ pub(super) fn aggregate_safe_locals(
                 // A store the frame performs replaces a value. Over a reference
                 // it would repoint an alias instead, which stays a disqualifying
                 // mention.
-                if !reached.place_assigns.contains(&e) {
+                if !reached.place_assigns.contains(e) {
                     disqualify_root(body, (*target).into(), &mut disqualified);
                 } else if !type_table.is_reference(body.exprs[*target].type_id) {
                     read_value((*target).into(), &mut value_reads);
@@ -392,9 +399,9 @@ pub(super) fn aggregate_safe_locals(
             _ => {}
         }
     }
-    value_reads.extend(reached.reads.iter().chain(&reached.writes).copied());
+    value_reads.extend(reached.reads.iter().chain(reached.writes.iter()));
     for (e, index) in &local_mentions {
-        if !value_reads.contains(e) {
+        if !value_reads.contains(*e) {
             compiler_trace!(
                 "region_seed",
                 "not aggregate-safe: local {index} mentioned at {e:?} outside a read position"
@@ -435,7 +442,7 @@ pub(super) fn clobbered_locals(
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Assign { target, .. } => {
-                if !reached.place_assigns.contains(&e) {
+                if !reached.place_assigns.contains(e) {
                     disqualify(body, (*target).into(), &mut set);
                 }
             }
