@@ -1180,9 +1180,15 @@ pub fn walk_pattern<'ast, V: AstVisitor<'ast>>(v: &mut V, pat: &'ast Pattern) {
             v.visit_pattern(pattern);
             v.visit_type(ty);
         }
+        // A bound named by a bare name is a constant and binds nothing, so it is
+        // walked as the reference it is, as an `==` operand is.
         Pattern::Range { start, end, .. } => {
-            v.visit_pattern(start);
-            v.visit_pattern(end);
+            for bound in [start, end] {
+                match &**bound {
+                    Pattern::Ident { id, span, .. } => v.visit_id(*id, *span),
+                    other => v.visit_pattern(other),
+                }
+            }
         }
         // The operand names a constant and binds nothing, so it is walked as
         // the reference it is rather than as a pattern.
@@ -1227,14 +1233,10 @@ pub fn for_each_pattern_name(pat: &Pattern, f: &mut impl FnMut(&str, Span)) {
 
     impl<F: FnMut(&str, Span)> AstVisitor<'_> for Names<'_, F> {
         fn visit_pattern(&mut self, pat: &Pattern) {
-            match pat {
-                Pattern::Ident { name, span, .. } | Pattern::MutIdent { name, span, .. } => {
-                    (self.0)(name, *span);
-                }
-                // A bound names a constant and binds nothing.
-                Pattern::Range { .. } => {}
-                _ => walk_pattern(self, pat),
+            if let Pattern::Ident { name, span, .. } | Pattern::MutIdent { name, span, .. } = pat {
+                (self.0)(name, *span);
             }
+            walk_pattern(self, pat);
         }
     }
 

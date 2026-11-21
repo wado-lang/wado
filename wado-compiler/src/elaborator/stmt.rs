@@ -1204,11 +1204,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 == Some(def)
     }
 
-    fn format_pattern_case_name(&self, case_name: &str, qualifier: Option<&Type>) -> String {
-        let Some(qualifier) = qualifier else {
-            return case_name.to_string();
-        };
-        format!("{}::{case_name}", written_type_source(qualifier))
+    /// The case path as written, `_::` included.
+    fn format_pattern_case_name(
+        &self,
+        case_name: &str,
+        qualifier: Option<&Type>,
+        inferred_qualifier: Option<Span>,
+    ) -> String {
+        match (qualifier, inferred_qualifier) {
+            (Some(qualifier), _) => format!("{}::{case_name}", written_type_source(qualifier)),
+            (None, Some(_)) => format!("_::{case_name}"),
+            (None, None) => case_name.to_string(),
+        }
     }
 
     /// `type_id` wrapped in the scrutinee's reference kind — the one place that
@@ -1530,8 +1537,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .immutable_global_type(name)
                     .expect("the resolver answers only an immutable global");
                 self.record_reference_to_decl(*id, global, *name_span);
+                // Only an `==` operand shows: a range bound reports itself.
                 Some(PatternConstant {
-                    shown: name.clone(),
+                    shown: format!("== {name}"),
                     ty,
                 })
             }
@@ -1543,7 +1551,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
                 ..
             } if bindings.is_empty() => {
-                let shown = self.format_pattern_case_name(variant_name, variant_qualifier.as_ref());
+                let shown =
+                    self.format_pattern_case_name(variant_name, variant_qualifier.as_ref(), None);
                 if let Some(assoc) = self
                     .tysys
                     .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
@@ -1768,7 +1777,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Variant {
                 variant_name,
                 variant_qualifier,
-                inferred_qualifier: _,
+                inferred_qualifier,
                 name_id,
                 name_span: _,
                 bindings,
@@ -1784,11 +1793,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let normalized_variant_name = self
                     .strip_ns_prefix(variant_name)
                     .unwrap_or(variant_name.as_str());
-                let qualified_variant_name =
-                    self.format_pattern_case_name(variant_name, variant_qualifier.as_ref());
-                // Bare uppercase identifier that is not a known case of the scrutinee type.
-                // Check if it's an associated constant (e.g., `i32::MAX`) before falling back
-                // to a variable binding.
+                let qualified_variant_name = self.format_pattern_case_name(
+                    variant_name,
+                    variant_qualifier.as_ref(),
+                    *inferred_qualifier,
+                );
+                // A path that is no case of the scrutinee may name a constant
+                // (`i32::MAX`), which matches by value.
                 if bindings.is_empty()
                     && !self.is_known_case_of_type(
                         scrutinee_type,
@@ -1895,8 +1906,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .collect::<Vec<_>>()
                                     .join(", ")
                             ),
-                            found: self
-                                .format_pattern_case_name(variant_name, variant_qualifier.as_ref()),
+                            found: qualified_variant_name,
                             span: *span,
                         });
                         return Vec::new();
@@ -3322,7 +3332,7 @@ fn refutable_shape(pattern: &Pattern) -> Option<String> {
     match pattern {
         Pattern::Literal(ast::Literal::Null) => Some("`null` may not match".to_string()),
         Pattern::Literal(_) => Some("literal patterns may not match".to_string()),
-        Pattern::Variant { variant_name, .. } => Some(format!("`{variant_name}` may not match")),
+        Pattern::Variant { .. } => Some(format!("`{}` may not match", unparse_pattern_source(pattern))),
         Pattern::Or(_) => Some("or-patterns may not match".to_string()),
         Pattern::Range { .. } => Some("range patterns may not match".to_string()),
         Pattern::Equal { .. } => Some("`==` patterns may not match".to_string()),

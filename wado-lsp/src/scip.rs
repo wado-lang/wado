@@ -17,7 +17,6 @@ use wado_compiler::ast::{
     walk_pattern,
 };
 use wado_compiler::module_source::ModuleSource;
-use wado_compiler::semantics::Semantics;
 use wado_compiler::token::Span;
 use wado_compiler::unparse::unparse_type_into;
 
@@ -220,7 +219,6 @@ impl SymbolNames<'_, '_> {
             return IndexMap::new();
         };
         let mut collector = DeclCollector {
-            sem: self.ctx.sem,
             module: format!("wado . {} . ", escape_package(&self.package_name(module))),
             decls: IndexMap::new(),
             owners: Vec::new(),
@@ -322,8 +320,7 @@ fn head_name(ty: &ast::Type) -> String {
 }
 
 /// Names each declaration of one module as an AST walk reaches it.
-struct DeclCollector<'s> {
-    sem: &'s Semantics,
+struct DeclCollector {
     /// The symbol prefix: scheme and package.
     module: String,
     decls: IndexMap<AstId, Decl>,
@@ -338,7 +335,7 @@ struct DeclCollector<'s> {
     overloads: IndexMap<String, u32>,
 }
 
-impl DeclCollector<'_> {
+impl DeclCollector {
     fn path(&self) -> &str {
         self.owners.last().map_or("", String::as_str)
     }
@@ -501,7 +498,7 @@ impl DeclCollector<'_> {
     }
 }
 
-impl AstVisitor<'_> for DeclCollector<'_> {
+impl AstVisitor<'_> for DeclCollector {
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Function(_) => walk_item(self, item),
@@ -632,12 +629,8 @@ impl AstVisitor<'_> for DeclCollector<'_> {
         self.owners.pop();
     }
 
-    /// A bare name in a pattern binds only where it names no case or constant,
-    /// which resolution alone knows.
     fn visit_pattern(&mut self, pat: &Pattern) {
-        if let Pattern::Ident { id, name, span } | Pattern::MutIdent { id, name, span } = pat
-            && self.sem.symbol_at(*id).is_some()
-        {
+        if let Pattern::Ident { id, name, span } | Pattern::MutIdent { id, name, span } = pat {
             self.local(*id, name, SymbolKind::Variable, *span);
         }
         walk_pattern(self, pat);

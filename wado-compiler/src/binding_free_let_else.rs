@@ -10,7 +10,7 @@ use crate::ast::{
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::semantics::Semantics;
 use crate::token::Span;
-use crate::unparse::unparse_pattern_source;
+use crate::unparse::{unparse_pattern_source, unparse_type_into};
 
 pub fn binding_free_let_else_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
@@ -56,7 +56,12 @@ impl AstVisitor<'_> for Tests {
             && !attrs_allow(&l.attrs, lint::BINDING_FREE_LET_ELSE)
             && !binds_a_name(&l.pattern)
         {
-            self.0.push((unparse_pattern_source(&l.pattern), l.span));
+            let mut written = unparse_pattern_source(&l.pattern);
+            if let Some(ty) = &l.ty {
+                written.push_str(": ");
+                unparse_type_into(ty, &mut written);
+            }
+            self.0.push((written, l.span));
         }
         walk_stmt(self, stmt);
     }

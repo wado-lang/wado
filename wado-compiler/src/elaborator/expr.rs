@@ -3524,8 +3524,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(variant_name)
             .to_string();
 
-        // A name that is no case: an associated constant is its value, a
-        // namespaced global an opaque constant; a bare one binds.
+        // A path that is no case: an associated constant is its value, a
+        // namespaced global an opaque constant.
         if bindings.is_empty()
             && !self.is_known_case_of_type(written_type, &normalized, variant_qualifier)
         {

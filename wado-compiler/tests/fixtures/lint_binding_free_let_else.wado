@@ -21,6 +21,11 @@ fn first_at_limit(pair: [i32, i32]) -> i32 {
     return n;
 }
 
+fn has_value(o: Option<i32>) -> bool {
+    let _::Some(_): Option<i32> = o else { return false; };
+    return true;
+}
+
 #[allow(binding_free_let_else)]
 fn is_some(o: Option<i32>) -> bool {
     let _::Some(_) = o else { return false; };
@@ -31,13 +36,15 @@ test {
     assert some_second(builtin::black_box([1, Option::Some(2)])) == 1;
     assert first_at_limit(builtin::black_box([3, 9])) == 9;
     assert is_some(builtin::black_box(Option::Some(1)));
+    assert has_value(builtin::black_box(Option::Some(1)));
 }
 
 __DATA__
 {
     "test": {},
     "warnings_contains": [
-        "`let == LIMIT = … else` binds no name"
+        "`let == LIMIT = … else` binds no name",
+        "`let _::Some(_): Option<i32> = … else` binds no name"
     ],
-    "warnings_not_contains": ["`let [first", "`let [== LIMIT, n]", "`let _::Some(_)"]
+    "warnings_not_contains": ["`let [first", "`let [== LIMIT, n]", "`let _::Some(_) ="]
 }

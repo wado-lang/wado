@@ -2121,14 +2121,18 @@ impl TypeError {
                 case,
                 expected,
                 span,
-            } => (
-                Code::NeedsTypeAnnotation,
-                match expected {
-                    Some(expected) => format!("`{expected}` has no case `{case}`"),
-                    None => format!("`_::{case}` needs an expected type to name its case"),
-                },
-                *span,
-            ),
+            } => match expected {
+                Some(expected) => (
+                    Code::UndefinedVariable,
+                    format!("`{expected}` has no case `{case}`"),
+                    *span,
+                ),
+                None => (
+                    Code::NeedsTypeAnnotation,
+                    format!("`_::{case}` needs an expected type to name its case"),
+                    *span,
+                ),
+            },
 
             TypeError::BareCaseNeedsContext {
                 case,

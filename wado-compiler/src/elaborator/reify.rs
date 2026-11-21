@@ -3821,7 +3821,7 @@ impl<'a> Reify<'a> {
                             id,
                             name,
                             span: binding_span,
-                        } if this.ann_local_type(*id).is_some() => {
+                        } => {
                             let is_mut = for_of.is_mut
                                 || matches!(&for_of.binding, ast::Pattern::MutIdent { .. });
                             let local_index = ctx.add_local_at(
@@ -9051,7 +9051,7 @@ impl<'a> Reify<'a> {
     }
 
     /// A read of the immutable global `name`, defined here or imported. A
-    /// mutable global is no constant, so its name binds in a pattern.
+    /// mutable global is no constant, so no pattern matches against it.
     fn immutable_global_expr(&self, name: &str, span: Span) -> Option<TirExpr> {
         let (module_source, name, ty) = match self.sem.decls.current_module_globals.get(name) {
             Some(&(ty, false)) => (self.current_module_source.clone(), name.to_string(), ty),
