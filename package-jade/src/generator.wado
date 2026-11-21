@@ -18,7 +18,7 @@ export struct Options {
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream {
     let module = ModuleSpec::from_origin(&req.origin());
-    let primary = file_uri(&req.primary.path);
+    let primary = input_uri(&req.primary.path);
     let stem = file_stem(&req.primary.path);
     let mut set = SchemaSet::new();
     let mut pending: List<InputFile> = [req.primary];
@@ -34,7 +34,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream
             },
         };
         let schema = Schema::parse(text).map_err(|e| Error::InvalidSchema(`jade: '${path}': ${e}`))?;
-        set.insert(file_uri(&path), schema);
+        set.insert(input_uri(&path), schema);
     }
     let source = match generate_in(&set, &primary, &module, GenerateOptions { root: req.options.root }) {
         Ok(source) => source,
@@ -52,15 +52,23 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream
     });
 }
 
-/// The `file:` URI of a path from the package root, each segment
+/// The URI an input is retrieved from: a remote input's URL, or else the
+/// `file:` URI of its path from the package root, each segment
 /// percent-encoded, so that a relative `$ref` resolves to the file beside it.
-fn file_uri(path: &String) -> Uri {
+fn input_uri(path: &String) -> Uri {
+    if path.starts_with("https://") || path.starts_with("http://") {
+        return Uri::from_str(path).unwrap();
+    }
     let segments: List<String> = path.split("/").map(|s| percent_encode(s)).collect();
     return Uri::from_str(`file:///${segments.join("/")}`).unwrap();
 }
 
 test "a path's segments are percent-encoded into its URI" {
-    assert `${file_uri(&"tests/a b/ü.json")}` == "file:///tests/a%20b/%C3%BC.json";
+    assert `${input_uri(&"tests/a b/ü.json")}` == "file:///tests/a%20b/%C3%BC.json";
+}
+
+test "a remote input is retrieved from its URL" {
+    assert `${input_uri(&"https://example.com/s/a.json")}` == "https://example.com/s/a.json";
 }
 
 test "a file's stem drops every extension" {

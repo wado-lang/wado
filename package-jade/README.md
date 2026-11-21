@@ -38,8 +38,9 @@ for let e of validator.validate(&doc.root()).unwrap_err() {
 
 `generate` writes the Wado declarations a schema describes, as one module. Each
 `$defs` entry becomes a `pub` declaration named by its key. The code uses
-`core:serde`'s derived `Serialize` and `Deserialize`, and nothing of Jade's, and
-deriving the schema of a generated type gives the schema back.
+`core:serde`'s derived `Serialize` and `Deserialize`, and nothing of Jade's.
+Deriving the schema of a generated type gives back the keywords `generate` read,
+with each declaration under `$defs`.
 
 ```wado
 use { Schema, generate } from "lib:jade";

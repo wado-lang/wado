@@ -266,9 +266,25 @@ test "an enum of more members than a flags holds is a set" {
     assert generated(schema).contains("pub type T = collections::TreeSet<TItem>;");
 }
 
-test "a default its own schema rejects is refused" {
+test "a default its own schema rejects is refused, its format asserted" {
     let schema = ##"{"title": "T", "type": "object", "properties": {"c": {"type": "integer", "default": "none"}}}"##;
     assert refused(schema) == "/properties/c/default: is a value its own schema rejects";
+    let uuid = ##"{"title": "T", "type": "object", "properties": {"id": {"type": "string", "format": "uuid", "default": "x"}}}"##;
+    assert refused(uuid) == "/properties/id/default: is a value its own schema rejects";
+}
+
+test "an untagged case's payload may be a reference" {
+    let schema = ##"{
+        "$defs": {
+            "C": {"type": "object", "properties": {"r": {"type": "number"}}, "required": ["r"]},
+            "Shape": {"oneOf": [
+                {"const": "Dot"},
+                {"type": "object", "properties": {"Circle": {"$ref": "#/$defs/C"}}, "required": ["Circle"], "maxProperties": 1}
+            ]}
+        },
+        "$ref": "#/$defs/Shape"
+    }"##;
+    assert generated(schema).contains("    Circle(C),");
 }
 
 test "a type named by x-wado-format takes no assertion beside it" {

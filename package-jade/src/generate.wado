@@ -26,7 +26,7 @@ use {
 use { Node } from "./document.wado";
 use { JsonSchema, SchemaGenerator } from "./derive.wado";
 use { JsonTypes, Schema, SchemaError, SchemaObject, pointer_token } from "./schema.wado";
-use { CompileError, DEFAULT_BASE, SchemaSet, Validator } from "./validate.wado";
+use { CompileError, CompileOptions, DEFAULT_BASE, SchemaSet, Validator } from "./validate.wado";
 
 /// Where the root's name comes from when it declares a type: `root` first,
 /// then its `title`, then the name of the file it was read from.
@@ -641,7 +641,7 @@ impl Gen {
                 message: `names a case \`${wire}\` with no word to name it by`,
             })?;
             let payload = match payload {
-                Some(p) => Option::Some(self.type_of(&p, &bat, &`${name}${case}`)?.text),
+                Some([p, within]) => Option::Some(self.type_of(&p, &`${bat}${within}`, &`${name}${case}`)?.text),
                 null => null,
             };
             cases.push(WadoVariantCase { name: case, payload, doc: doc_of(&b) });
@@ -670,7 +670,8 @@ impl Gen {
         return Result::Ok(());
     }
 
-    /// Fails unless the schema at `at` admits `node`, its default. Draft
+    /// Fails unless the schema at `at` admits `node`, its default, `format`
+    /// asserted, as the type a format gives reads no other string. Draft
     /// 2020-12 lets a default be any value, and a field holding one its type
     /// cannot hold would fail to compile or trap where it falls back to it.
     fn check_default(&self, at: &String, node: &Node) -> Result<(), SchemaError> {
@@ -678,7 +679,7 @@ impl Gen {
         let probe = Uri::from_str("jade:default").unwrap();
         let mut set = self.set;
         set.insert(probe, Schema::Object(SchemaObject { reference: Option::Some(`${self.doc}#${tokens.join("/")}`) }));
-        let validator = Validator::compile_in(&set, &probe).unwrap();
+        let validator = Validator::compile_in(&set, &probe, CompileOptions { assert_format: true }).unwrap();
         if validator.validate(node) matches { Err(_) } {
             return fail(&`${*at}/default`, "is a value its own schema rejects");
         }
@@ -980,8 +981,9 @@ fn tag_of(branches: &List<Schema>) -> Option<String> {
     return Option::Some(tag);
 }
 
-/// A branch's case: its wire name, and its payload's schema if it has one.
-fn case_of(b: &SchemaObject, tag: &Option<String>) -> Option<[String, Option<Schema>]> {
+/// A branch's case: its wire name, and its payload's schema if it has one,
+/// with the JSON Pointer to it within the branch.
+fn case_of(b: &SchemaObject, tag: &Option<String>) -> Option<[String, Option<[Schema, String]>]> {
     if let Some(t) = tag {
         let Some(Object(c)) = b.properties.get(*t) else {
             return null;
@@ -995,7 +997,7 @@ fn case_of(b: &SchemaObject, tag: &Option<String>) -> Option<[String, Option<Sch
         }
         if keys == ["$ref", "properties", "required"] {
             let payload = SchemaObject { reference: b.reference };
-            return Option::Some([name, Option::Some(Schema::Object(payload))]);
+            return Option::Some([name, Option::Some([Schema::Object(payload), ""])]);
         }
         return null;
     }
@@ -1005,7 +1007,7 @@ fn case_of(b: &SchemaObject, tag: &Option<String>) -> Option<[String, Option<Sch
     let Some([name, value]) = one_property(b) else {
         return null;
     };
-    return Option::Some([name, Option::Some(value)]);
+    return Option::Some([name, Option::Some([value, `/properties/${pointer_token(&name)}`])]);
 }
 
 fn constant_string(o: &SchemaObject) -> Option<String> {
