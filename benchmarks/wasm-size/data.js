@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795224897633,
+  "lastUpdate": 1795230679694,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80357,6 +80357,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/728099ff4c562ee0f611256c33fbd0426fc9b39b"
         },
         "date": 1795224896767,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ddf80d8a28e63bdceffa3c97613952a91210dcf8",
+          "message": "Merge pull request #2707 from wado-lang/ccr-c814286b-ws3tde\n\nchore(mise): pin the Gale oracle tasks to Temurin 25.0.5.1+2 and stop mise.lock churn",
+          "timestamp": "2026-11-21T11:53:52+09:00",
+          "tree_id": "a5aa4bf05cef49d54bc3a01a7498eb3140aca1ca",
+          "url": "https://github.com/wado-lang/wado/commit/ddf80d8a28e63bdceffa3c97613952a91210dcf8"
+        },
+        "date": 1795230678644,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
