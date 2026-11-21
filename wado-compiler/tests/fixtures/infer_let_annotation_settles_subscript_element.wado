@@ -1,0 +1,23 @@
+// An annotated `let` settles the variable a subscript's element type stands
+// for, and with it the receiver's argument it came from.
+
+struct Bx<T> {
+    v: List<T>,
+}
+
+fn mk<T>() -> Bx<T> {
+    return Bx::<T> { v: [] };
+}
+
+impl<T: Default> IndexValue<i32> for Bx<T> {
+    type Output = T;
+    fn index_value(&self, index: i32) -> T {
+        return T::default();
+    }
+}
+
+test {
+    let b = mk();
+    let n: i64 = b[0];
+    assert n == 0;
+}

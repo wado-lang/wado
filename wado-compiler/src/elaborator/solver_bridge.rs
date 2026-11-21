@@ -11,14 +11,14 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::synthesis::traits::REFLECT_FIELD_INPUTS_ASSOC;
-use crate::tir::{EffectRef, ResolvedType, TypeId, TypeParamId};
+use crate::tir::{EffectRef, InferVarId, ResolvedType, TypeId, TypeParamId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId,
     ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
-    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, answering_link,
+    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, answering_link,
     bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
-    holds_with_args, instance_candidates, mark_duplicates, owed, pair_comparisons, rank, sourced,
-    written_comparison, written_over,
+    holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons, rank, rank_open,
+    sourced, written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -160,6 +160,18 @@ enum Binder {
     /// A generic associated type's own parameter, by its identity: an impl
     /// may write it under a name of its own.
     Family(TypeId),
+}
+
+/// Whether a lowering hands the solver the elaborator's inference variables.
+/// Only a question whose answer is checked again once inference settles may
+/// ask with them.
+#[derive(Clone, Copy)]
+enum Variables<'a> {
+    Refused,
+    /// `literal` says which variables stand for a numeric literal's type.
+    Asked {
+        literal: &'a dyn Fn(TypeId) -> bool,
+    },
 }
 
 /// The interning both directions share, so an impl lowered from its header
@@ -628,13 +640,24 @@ impl Lowering {
     }
 
     /// One resolved type as the solver reads it. `param` gives a rigid binder
-    /// its position.
+    /// its position. An inference variable is open.
     fn type_id(
         &self,
         table: &TypeTable,
         id: TypeId,
         param: &dyn Fn(Binder) -> Option<u32>,
     ) -> Result<SolverType, Unsaid> {
+        self.lower_type(table, id, param, Variables::Refused)
+    }
+
+    fn lower_type(
+        &self,
+        table: &TypeTable,
+        id: TypeId,
+        param: &dyn Fn(Binder) -> Option<u32>,
+        variables: Variables,
+    ) -> Result<SolverType, Unsaid> {
+        let lower = |a: TypeId| self.lower_type(table, a, param, variables);
         let decl = |key: DeclKey, args: Vec<SolverType>| {
             self.known_type(&key)
                 .map(|id| SolverType::Decl(id, args))
@@ -648,7 +671,7 @@ impl Lowering {
                 id, mapped_elem, ..
             } = table.get(a)
             else {
-                return self.type_id(table, a, param);
+                return lower(a);
             };
             let pack = placed(*id)?;
             match mapped_elem {
@@ -659,14 +682,14 @@ impl Lowering {
         let instance = |def: DefId, type_args: &[TypeId]| {
             decl(
                 DeclKey::Def(def),
-                said(type_args.iter().map(|&a| self.type_id(table, a, param)))?,
+                said(type_args.iter().map(|&a| lower(a)))?,
             )
         };
         match table.get(id) {
             ResolvedType::Primitive(p) => decl(DeclKey::Builtin(p.as_str().to_string()), vec![]),
             ResolvedType::BuiltinArray(elem) => decl(
                 DeclKey::Builtin(ARRAY_TYPE_NAME.to_string()),
-                vec![self.type_id(table, *elem, param)?],
+                vec![lower(*elem)?],
             ),
             // `()` is the unit declaration, not the empty tuple
             // (WEP 2026-09-01, "The candidates").
@@ -685,7 +708,7 @@ impl Lowering {
             } => {
                 if let Some(template) = table.template_shape(*shape) {
                     let fields = said(template.holes.iter().map(|hole| {
-                        let held = self.type_id(table, hole.ty, param)?;
+                        let held = lower(hole.ty)?;
                         Ok(if table.hole_held_by_ref(hole.ty) {
                             SolverType::Ref {
                                 is_mut: false,
@@ -704,7 +727,7 @@ impl Lowering {
                     table
                         .anon_struct_fields(*shape)
                         .iter()
-                        .map(|(_, ty)| self.type_id(table, *ty, param)),
+                        .map(|(_, ty)| lower(*ty)),
                 )?;
                 decl(DeclKey::AnonymousStruct, vec![SolverType::Tuple(fields)])
             }
@@ -717,7 +740,7 @@ impl Lowering {
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
                 is_mut: table.is_mut_ref(id),
-                inner: Box::new(self.type_id(table, *inner, param)?),
+                inner: Box::new(lower(*inner)?),
             }),
             ResolvedType::TypeParam { id, .. } => placed(*id).map(SolverType::Param),
             // Outside a tuple, a pack stands for one of its elements: a rigid
@@ -731,8 +754,8 @@ impl Lowering {
             ResolvedType::TypePack {
                 mapped_elem: Some(mapped),
                 ..
-            } => self.type_id(table, *mapped, param),
-            ResolvedType::PackElement { pack, .. } => self.type_id(table, *pack, param),
+            } => lower(*mapped),
+            ResolvedType::PackElement { pack, .. } => lower(*pack),
             ResolvedType::Function {
                 is_mut,
                 params,
@@ -743,7 +766,7 @@ impl Lowering {
                     params
                         .iter()
                         .chain(std::iter::once(return_type))
-                        .map(|&a| self.type_id(table, a, param)),
+                        .map(|&a| lower(a)),
                 )?;
                 Ok(self.fn_type(*is_mut, signature, self.effect_row(effects)))
             }
@@ -759,8 +782,8 @@ impl Lowering {
                 owning_trait,
                 ..
             } => {
-                let base = self.type_id(table, *param_id, param)?;
-                let args = said(args.iter().map(|&a| self.type_id(table, a, param)))?;
+                let base = lower(*param_id)?;
+                let args = said(args.iter().map(|&a| lower(a)))?;
                 let trait_ = self.known_trait(*owning_trait).ok_or(Unsaid::Unsayable)?;
                 Ok(SolverType::Projection {
                     base: Box::new(base),
@@ -774,7 +797,13 @@ impl Lowering {
             ResolvedType::AssocParam { .. } => param(Binder::Family(id))
                 .map(SolverType::Param)
                 .ok_or(Unsaid::Open),
-            ResolvedType::InferVar(_) => Err(Unsaid::Open),
+            ResolvedType::InferVar(var) => match variables {
+                Variables::Refused => Err(Unsaid::Open),
+                Variables::Asked { literal } => Ok(SolverType::Var(Var::Infer {
+                    id: var.0,
+                    literal: literal(id),
+                })),
+            },
             ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
         }
     }
@@ -1044,6 +1073,30 @@ impl SolverBridge {
         CompilerItem::Shr,
     ];
 
+    /// The declarations a numeric literal may be: the numeric primitives,
+    /// the halves, and the wide integers.
+    fn literal_types(table: &TypeTable, lowering: &mut Lowering) -> IndexSet<TypeDeclId> {
+        let mut types: IndexSet<TypeDeclId> = PrimitiveType::all_primitive_names()
+            .into_iter()
+            .filter(|name| {
+                PrimitiveType::from_name(name).is_some_and(|p| {
+                    !matches!(
+                        p,
+                        PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128
+                    )
+                })
+            })
+            .map(|name| lowering.builtin(name))
+            .collect();
+        types.extend(
+            [CompilerItem::I128, CompilerItem::U128]
+                .into_iter()
+                .filter_map(|item| table.compiler_item_def(item))
+                .map(|def| lowering.type_decl(def)),
+        );
+        types
+    }
+
     pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
         let mut lowering = Lowering::over(&tysys.resolutions);
         let mut program = Program::default();
@@ -1053,6 +1106,7 @@ impl SolverBridge {
         Self::intern_declarations(tysys, modules, &mut lowering);
         program.copyable = Self::derived_trait(tysys, &mut lowering, CompilerItem::Copyable);
         program.never = Some(lowering.builtin(NEVER_TYPE_NAME));
+        program.literal_types = Self::literal_types(&table, &mut lowering);
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
             let header = &tysys.trait_env.impl_headers[&def];
@@ -1080,8 +1134,10 @@ impl SolverBridge {
             &tysys.resolutions,
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
+        mark_rejected(&mut program);
+        // Stated past coherence: as a blanket with no bound it would be
+        // rejected, and the source cannot write it.
         Self::state_reflexive_from(tysys, &mut lowering, &mut program);
-        mark_duplicates(&mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
         if let (Some(eq), Some(ord)) = (
@@ -2004,6 +2060,7 @@ impl SolverBridge {
         tysys: &TypeSystem,
         ctx: &scope::Scope,
         type_id: TypeId,
+        variables: Variables,
     ) -> Result<(Env, SolverType), Unsaid> {
         // Every parameter in scope takes a position, bounded or not: an
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
@@ -2096,7 +2153,9 @@ impl SolverBridge {
             }
             env.param_bounds.push(ids);
         }
-        let ty = self.lowering.type_id(&table, type_id, &placed)?;
+        let ty = self
+            .lowering
+            .lower_type(&table, type_id, &placed, variables)?;
         said(
             unstated
                 .into_iter()
@@ -2131,7 +2190,7 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Result<Question, Unsaid> {
-        let (env, ty) = self.env_for(tysys, ctx, type_id)?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id, Variables::Refused)?;
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return Err(Unsaid::Unsayable);
         }
@@ -2210,6 +2269,7 @@ impl SolverBridge {
                 tysys.type_table.borrow().name(type_id)
             ),
         };
+<<<<<<< HEAD
         self.answer(tysys, || binder_types(ctx), type_id, &q)
     }
 
@@ -2262,6 +2322,11 @@ impl SolverBridge {
         q: &Question,
     ) -> Option<Vec<OwedBody>> {
         let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args)?;
+||||||| 37a57b631d1
+        let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args)?;
+=======
+        let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args).settled()?;
+>>>>>>> origin/main
         let owed = owed(&self.program, &q.env, held.requests);
         let table = tysys.type_table.borrow();
         let shape_heads = [
@@ -2393,6 +2458,7 @@ impl SolverBridge {
             | Selection::AmbiguousTraits(_)
             | Selection::Overloaded(_)
             | Selection::Duplicated(_) => Vec::new(),
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
         })
     }
 
@@ -2413,6 +2479,7 @@ impl SolverBridge {
             | Selection::AmbiguousTraits(_)
             | Selection::AmbiguousBlankets(_)
             | Selection::Overloaded(_) => Vec::new(),
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
         })
         .into_iter()
         .flatten()
@@ -2456,8 +2523,8 @@ impl SolverBridge {
         method_name: &str,
         required_trait: Option<DefId>,
         required_args: &[TypeId],
-    ) -> Option<Ordered> {
-        let (found, _) = self.call_candidates(
+    ) -> Option<(Ordered, Option<Commitment>)> {
+        let question = self.call_question(
             tysys,
             ctx,
             module,
@@ -2467,12 +2534,27 @@ impl SolverBridge {
             required_trait,
             required_args,
         )?;
+        let found = self.question_candidates(tysys, &question);
         let named = |live: &[usize]| {
             live.iter()
                 .map(|&i| self.impl_def_of(found.in_scope[i].impl_))
                 .collect()
         };
-        Some(match rank(&found.in_scope) {
+        let selection = rank_open(&found.in_scope);
+        let commitment = match &selection {
+            Selection::One(index) if question.ty.is_open() => Some(Commitment {
+                chosen: found.in_scope[*index].impl_,
+                question,
+            }),
+            Selection::One(_)
+            | Selection::None
+            | Selection::AmbiguousTraits(_)
+            | Selection::AmbiguousBlankets(_)
+            | Selection::Overloaded(_)
+            | Selection::Duplicated(_)
+            | Selection::Undecided(_) => None,
+        };
+        let ordered = match selection {
             Selection::One(index) => Ordered::One(self.impl_def_of(found.in_scope[index].impl_)),
             Selection::None if !found.out_of_scope.is_empty() => {
                 let mut traits: Vec<DefId> = Vec::new();
@@ -2500,7 +2582,9 @@ impl SolverBridge {
             // One trait at several argument lists is the call's arguments to
             // settle (WEP 2026-07-31), which the order does not answer.
             Selection::Overloaded(live) => Ordered::Overloaded(named(&live)),
-        })
+            Selection::Undecided(live) => Ordered::Undecided(named(&live)),
+        };
+        Some((ordered, commitment))
     }
 
     /// The link of `type_id`'s newtype chain where an impl the call site can
@@ -2526,6 +2610,31 @@ impl SolverBridge {
             &[],
         )?;
         answering_link(&self.program, &receiver, &found.in_scope).map(|(link, _)| link)
+    }
+
+    /// Whether an impl of a trait in scope may answer `method_name` on
+    /// `type_id` at some instance of its variables.
+    pub(super) fn may_answer(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        module: &ModuleSource,
+        type_id: TypeId,
+        method_name: &str,
+        required_trait: Option<DefId>,
+        required_args: &[TypeId],
+    ) -> bool {
+        self.call_candidates(
+            tysys,
+            ctx,
+            module,
+            type_id,
+            None,
+            method_name,
+            required_trait,
+            required_args,
+        )
+        .is_some_and(|(found, _)| !found.in_scope.is_empty())
     }
 
     /// The impl blocks answering `method_name` on `type_id` at the nearest
@@ -2577,6 +2686,31 @@ impl SolverBridge {
         required_trait: Option<DefId>,
         required_args: &[TypeId],
     ) -> Option<(Candidates, SolverType)> {
+        let q = self.call_question(
+            tysys,
+            ctx,
+            module,
+            type_id,
+            through_ref,
+            method_name,
+            required_trait,
+            required_args,
+        )?;
+        Some((self.question_candidates(tysys, &q), q.ty))
+    }
+
+    /// The question [`Self::call_candidates`] asks, as the solver reads it.
+    fn call_question(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        module: &ModuleSource,
+        type_id: TypeId,
+        through_ref: Option<bool>,
+        method_name: &str,
+        required_trait: Option<DefId>,
+        required_args: &[TypeId],
+    ) -> Option<CallQuestion> {
         let method = MethodId(*self.lowering.methods.get(method_name)?);
         // A trait-qualified call named its trait, so the order runs within it:
         // every rank still applies, and the cross-trait question does not.
@@ -2584,7 +2718,10 @@ impl SolverBridge {
             Some(def) => Some(self.lowering.known_trait(def)?),
             None => None,
         };
-        let (env, ty) = self.env_for(tysys, ctx, type_id).ok()?;
+        let literal = |var: TypeId| ctx.awaits_literal(var);
+        let (env, ty) = self
+            .env_for(tysys, ctx, type_id, Variables::Asked { literal: &literal })
+            .ok()?;
         let ty = match through_ref {
             Some(is_mut) => SolverType::Ref {
                 is_mut,
@@ -2594,19 +2731,44 @@ impl SolverBridge {
         };
         let scope = self.lowering.known_module(module)?;
         // The arguments only bind what the impl leaves to its trait reference,
-        // so a list the lowering cannot say is asked as none, as an unqualified
-        // call asks.
-        let asked: Vec<SolverType> = {
+        // so one the lowering cannot say, a `_` among them, is asked as none,
+        // as an unqualified call asks, and the rest still are.
+        let binders = binder_types(ctx);
+        let asked: Vec<Option<SolverType>> = {
             let table = tysys.type_table.borrow();
-            let binders = binder_types(ctx);
             let place = place_binder(&binders, &table);
             required_args
                 .iter()
-                .map(|&arg| self.lowering.type_id(&table, arg, &place))
-                .collect::<Result<_, _>>()
-                .unwrap_or_default()
+                .map(|&arg| self.lowering.type_id(&table, arg, &place).ok())
+                .collect()
         };
-        let mut found = candidates(&self.program, &env, &ty, method, scope, &asked);
+        Some(CallQuestion {
+            env,
+            binders,
+            ty,
+            method,
+            scope,
+            module: module.clone(),
+            required,
+            asked,
+            through_ref,
+        })
+    }
+
+    /// The candidates `q` collects, kept to what the call can name.
+    fn question_candidates(&self, tysys: &TypeSystem, q: &CallQuestion) -> Candidates {
+        let CallQuestion {
+            env,
+            ty,
+            method,
+            scope,
+            module,
+            required,
+            asked,
+            through_ref,
+            binders: _,
+        } = q;
+        let mut found = candidates(&self.program, env, ty, *method, *scope, asked);
         // An out-of-scope candidate suggests importing its trait, so a trait the
         // call site cannot name is dropped and the call reads as a missing method.
         let defs = tysys.resolutions.defs();
@@ -2616,7 +2778,7 @@ impl SolverBridge {
         // Both sets: an out-of-scope candidate of another trait would otherwise
         // stand in for the named one, asking for an import that cannot make the
         // named trait apply.
-        if let Some(required) = required {
+        if let Some(required) = *required {
             found.in_scope.retain(|c| c.trait_ == required);
             found.out_of_scope.retain(|c| c.trait_ == required);
         }
@@ -2633,7 +2795,55 @@ impl SolverBridge {
             found.in_scope.retain(on_ref);
             found.out_of_scope.retain(on_ref);
         }
-        Some((found, ty))
+        found
+    }
+
+    /// Ask `commitment` again with its variables settled as `solution` says,
+    /// and require the impl it committed to. A variable left unsettled, or
+    /// settled to a type the lowering cannot say, was reported where it
+    /// failed, so there is nothing to ask.
+    pub(super) fn check_commitment(
+        &self,
+        tysys: &TypeSystem,
+        commitment: &Commitment,
+        solution: &dyn Fn(InferVarId) -> TypeId,
+    ) {
+        let Commitment { question, chosen } = commitment;
+        let settled = {
+            let table = tysys.type_table.borrow();
+            let place = place_binder(&question.binders, &table);
+            question.ty.try_map_vars(&mut |var| match var {
+                Var::Infer { id, .. } => self
+                    .lowering
+                    .type_id(&table, solution(InferVarId(id)), &place)
+                    .ok(),
+                Var::Local { .. } => unreachable!("a question's own variables end with it"),
+            })
+        };
+        let Some(ty) = settled else {
+            return;
+        };
+        let again = CallQuestion {
+            ty,
+            ..question.clone()
+        };
+        let found = self.question_candidates(tysys, &again);
+        let answer = match rank(&found.in_scope) {
+            Selection::One(index) => Some(found.in_scope[index].impl_),
+            Selection::None
+            | Selection::AmbiguousTraits(_)
+            | Selection::AmbiguousBlankets(_)
+            | Selection::Overloaded(_)
+            | Selection::Duplicated(_)
+            | Selection::Undecided(_) => None,
+        };
+        assert_eq!(
+            answer,
+            Some(*chosen),
+            "a call committed to an impl with its receiver's variables open must \
+             select that impl once they settle: {question:?} at {:?}",
+            again.ty
+        );
     }
 
     /// Which of `Eq` and `Ord` is written for `instance` without the other,
@@ -2716,6 +2926,7 @@ impl SolverBridge {
                     .map(|&i| self.impl_def_of(found[i].impl_))
                     .collect(),
             ),
+            Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
         })
     }
 
@@ -2822,6 +3033,32 @@ pub(super) enum Ordered {
     /// Several impls written for the receiver at one argument list, kept apart
     /// only by bounds that all hold here.
     Duplicated(Vec<Option<DefId>>),
+    /// The impls that may answer would answer differently at different
+    /// instances of the receiver's inference variables.
+    Undecided(Vec<Option<DefId>>),
+}
+
+/// A method call's question as the solver reads it.
+#[derive(Clone, Debug)]
+struct CallQuestion {
+    env: Env,
+    /// The binders the lowering placed the receiver's parameters among.
+    binders: Vec<TypeId>,
+    ty: SolverType,
+    method: MethodId,
+    scope: ModuleId,
+    module: ModuleSource,
+    required: Option<TraitDeclId>,
+    asked: Vec<Option<SolverType>>,
+    through_ref: Option<bool>,
+}
+
+/// An impl a call committed to while its receiver held inference variables,
+/// asked again once they settle ([`SolverBridge::check_commitment`]).
+#[derive(Debug)]
+pub(super) struct Commitment {
+    question: CallQuestion,
+    chosen: ImplId,
 }
 
 /// Where the binder a [`TypeHead::Binder`] names sits among `binders` (a

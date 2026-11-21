@@ -1,0 +1,30 @@
+// `A` and `B` are each other's base, so neither reaches a type. The cycle is
+// reported once, at the first newtype on it, and a literal meeting an impl
+// for `Box<A>` does not walk the chain forever.
+
+type A = B;
+type B = A;
+
+struct Box<T> { v: T }
+
+fn wrap<T>(v: T) -> Box<T> {
+    return Box { v };
+}
+
+trait Tag with () { fn tag(&self) -> i32; }
+
+impl Tag for Box<A> {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+test {
+    assert wrap(1).tag() == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":5:6: analysis error: circular newtype: 'A' is its own base via A -> B -> A",
+    "compile_error_count": 1
+}

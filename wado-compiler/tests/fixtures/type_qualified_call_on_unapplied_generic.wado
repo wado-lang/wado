@@ -1,6 +1,7 @@
-// `Pair::span(&p)` writes no arguments for `Pair`, so the spelling asks what
-// the instances an impl is written for answer `span` with: a blanket whose
-// bound holds of one of them answers, and the receiver's own type settles it.
+// `Pair::span(&p)` writes no arguments for `Pair`, so they are inference
+// variables: a blanket whose bound may hold of `Pair` answers, and the
+// receiver's own type settles it. `Spanned` has no impl that may apply, so its
+// static `span` leaves the call a method call.
 trait Holds with () {}
 
 trait Spanned with () {

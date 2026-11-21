@@ -14,6 +14,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
+use super::infer_hole::Obligation;
 use super::method_call::{MethodSignatureFacts, StaticReceiver, primitive_receiver_type};
 use super::method_lookup::narrow_to_reaching;
 use super::sem::types::CalleeParams;
@@ -187,6 +188,12 @@ pub(super) enum StaticLookup {
         blocks: Vec<DefId>,
         trait_args: Vec<TypeId>,
     },
+    /// Several of the receiver's own blocks declare the name, and neither the
+    /// arguments nor the receiver's settled arguments separate them. The call
+    /// site asks for the receiver's arguments `message` names.
+    Unseparated {
+        message: String,
+    },
     /// The rules picked this value blanket impl. Its template is written
     /// against its receiver parameter, so the blanket resolver, not this
     /// resolution, instantiates it at the receiver.
@@ -256,6 +263,8 @@ enum Selection {
         blocks: Vec<DefId>,
         trait_args: Vec<TypeId>,
     },
+    /// Several of the receiver's own blocks, which nothing told apart.
+    Unseparated,
     None,
 }
 
@@ -386,6 +395,7 @@ impl StaticLookup {
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Unseparated { .. }
             | Self::Blanket(_)
             | Self::NotStatic => None,
         }
@@ -399,6 +409,7 @@ impl StaticLookup {
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Unseparated { .. }
             | Self::NotStatic => None,
         }
     }
@@ -412,6 +423,7 @@ impl StaticLookup {
             Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Unseparated { .. }
             | Self::Blanket(_)
             | Self::NotStatic => TypeTable::UNKNOWN,
         }
@@ -427,6 +439,7 @@ impl StaticLookup {
             | Self::Ambiguous(_)
             | Self::OutOfScope { .. }
             | Self::Tied { .. }
+            | Self::Unseparated { .. }
             | Self::Blanket(_)
             | Self::NotStatic => (CalleeParams::default(), false),
         }
@@ -716,6 +729,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 blocks,
                 trait_args,
             }),
+            Selection::Unseparated => {
+                Some(self.unseparated_lookup(receiver, method_name, declaring_args))
+            }
             Selection::None => None,
         }
     }
@@ -1226,6 +1242,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.report_blocks_tied(blocks, trait_args, receiver, span);
                 return true;
             }
+            StaticLookup::Unseparated { message } => TypeError::CannotInferType {
+                message: message.clone(),
+                span,
+            },
             StaticLookup::Found(_)
             | StaticLookup::Overloaded { .. }
             | StaticLookup::Blanket(_)
@@ -1337,7 +1357,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     return Selection::Tied { blocks, trait_args };
                 }
-                _ => {}
+                // The arguments and the count below decide these: the order
+                // left more than one, or named no block of its own.
+                Some(
+                    Ordered::One(None)
+                    | Ordered::Nothing
+                    | Ordered::OutOfScope { .. }
+                    | Ordered::AmbiguousTraits(_)
+                    | Ordered::Overloaded(_)
+                    | Ordered::Duplicated(_)
+                    | Ordered::Undecided(_),
+                )
+                | None => {}
             }
         }
         // At `!` every blanket reaches the receiver and the call traps once
@@ -1353,6 +1384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 Selection::One(Box::new(candidates.remove(0)))
             }
+            _ if candidates.iter().all(|c| c.supply.is_none()) => Selection::Unseparated,
             // One trait, several impls, and no argument that separated them.
             _ => Selection::Overloaded(
                 candidates
@@ -1382,7 +1414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let method = self.tysys.resolutions.defs().name(candidates[0].method_id);
         let bridge = self.tysys.solver.as_ref()?.borrow();
-        bridge.select(
+        let (ordered, commitment) = bridge.select(
             &self.tysys,
             &self.annotate_ctx,
             self.frame_module(),
@@ -1391,7 +1423,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             Some(trait_decl),
             &[],
-        )
+        )?;
+        if let Some(commitment) = commitment {
+            self.infer_holes.require(Obligation::Selection(commitment));
+        }
+        Some(ordered)
     }
 
     /// The rule a method call's selection applies, over the static
@@ -1510,6 +1546,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         StaticLookup::Overloaded {
             return_type: agreed,
             traits,
+        }
+    }
+
+    /// The report for the receiver's own blocks that nothing told apart: the
+    /// receiver's arguments `declaring_args` leaves open are what would.
+    fn unseparated_lookup(
+        &self,
+        receiver: &ReceiverId,
+        method_name: &str,
+        declaring_args: &[TypeId],
+    ) -> StaticLookup {
+        let params = receiver
+            .key
+            .decl()
+            .and_then(|def| self.type_lookup().declared_generic_params(def))
+            .unwrap_or_default();
+        let scope = self.scope_type_param_ids();
+        let names: Vec<String> = params
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| {
+                declaring_args
+                    .get(i)
+                    .is_none_or(|&arg| self.slot_unanswered(arg, &scope))
+            })
+            .map(|(_, param)| param.name.clone())
+            .collect();
+        // Blocks no argument of the receiver tells apart declare the name twice
+        // at one instance, which is reported where they are declared.
+        if names.is_empty() {
+            assert!(
+                self.logger.has_errors(),
+                "two inherent blocks reaching one instance are reported where declared"
+            );
+            return self.overloaded_callee(&receiver.key, method_name, Vec::new());
+        }
+        let head = receiver.spelled(self.tysys.resolutions.defs());
+        StaticLookup::Unseparated {
+            message: TypeError::receiver_args_uninferred_message(&names, head, method_name),
         }
     }
 

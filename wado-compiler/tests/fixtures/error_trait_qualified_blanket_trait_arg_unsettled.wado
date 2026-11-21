@@ -1,0 +1,43 @@
+// A blanket's trait-qualified call that omits a trait argument nothing in the
+// call settles asks for it, on a projection receiver as on any other.
+
+trait Back with () {
+    fn name() -> String;
+}
+
+trait Left with () {
+    type Out;
+}
+
+struct Count {}
+
+impl Left for Count {
+    type Out = i32;
+}
+
+trait Defaulted<G: Back> with () {
+    fn defaulted(&self) -> String;
+}
+
+impl<T: Left<Out = X>, X: Default + Display, G: Back> Defaulted<G> for T {
+    fn defaulted(&self) -> String {
+        return `[${X::default()}] on ${G::name()}`;
+    }
+}
+
+trait Holder with () {
+    type Item: Left<Out = i32>;
+    fn item(&self) -> Self::Item;
+}
+
+fn through<H: Holder>(h: &H) -> String {
+    let i = h.item();
+    return Defaulted::defaulted(&i);
+}
+
+export fn run() {
+    let _ = Defaulted::defaulted(&Count {});
+}
+
+__DATA__
+{"compile_error": ":35:12: analysis error: cannot infer type parameter `G` of `impl<T: Left<Out = X>, X: Default + Display, G: Back> Defaulted<G> for T`"}

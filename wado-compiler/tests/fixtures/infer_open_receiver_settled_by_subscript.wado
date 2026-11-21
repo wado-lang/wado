@@ -1,0 +1,29 @@
+// A subscript on a receiver whose arguments are still open commits to the one
+// impl serving it, as a method call does: its key answers the receiver's key
+// argument, and a later use answers the rest.
+use { TreeMap } from "core:collections";
+
+fn takes(m: TreeMap<String, i32>) -> i32 {
+    return m.len();
+}
+
+test "a write" {
+    let mut map = TreeMap::new();
+    map["a"] = 1;
+    assert takes(map) == 1;
+}
+
+test "a method call after the key is answered" {
+    let mut map = TreeMap::new();
+    map["a"] = 1;
+    let n = map.len();
+    assert takes(map) == n;
+}
+
+test "a read" {
+    let mut map = TreeMap::new();
+    map["a"] = 2;
+    let v = map["a"];
+    assert takes(map) == 1;
+    assert v == 2;
+}

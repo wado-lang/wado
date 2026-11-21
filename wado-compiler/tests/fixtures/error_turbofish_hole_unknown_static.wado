@@ -1,0 +1,15 @@
+// A static that does not exist is reported as unknown, even where a `_` in
+// the receiver's turbofish is left open: no answer to the `_` could make it
+// exist, so asking for one points at the wrong fix.
+
+use { TreeMap } from "core:collections";
+
+test {
+    let map = TreeMap::<String, _>::nwe();
+}
+
+__DATA__
+{
+    "compile_error": ":8:15: analysis error: unknown function 'TreeMap<String, _>::nwe'",
+    "compile_errors_not_contains": ["cannot infer"]
+}

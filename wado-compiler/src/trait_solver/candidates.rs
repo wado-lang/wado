@@ -3,8 +3,8 @@
 //! between them is [`rank`](super::rank).
 
 use super::holds::{
-    answers_args, answers_named_args, comparison_row, impl_applies, newtype_base, peels_to_never,
-    withheld_at, written_only_at,
+    Verdict, answers_args, answers_named_args, comparison_row, impl_applies, newtype_base,
+    peels_to_never, settles_nothing, withheld_at, written_only_at,
 };
 use super::program::{
     Env, ImplId, ImplOrigin, MethodId, ModuleId, Program, SolverType, TraitDeclId,
@@ -25,7 +25,8 @@ pub struct Candidates {
 }
 
 /// Every impl that could answer a call of `method` on `receiver` made in
-/// `scope`, a trait-qualified call naming the trait's arguments `asked`.
+/// `scope`, a trait-qualified call naming the trait's arguments `asked`, `None`
+/// at one it leaves open.
 #[must_use]
 pub fn candidates(
     program: &Program,
@@ -33,15 +34,14 @@ pub fn candidates(
     receiver: &SolverType,
     method: MethodId,
     scope: ModuleId,
-    asked: &[SolverType],
+    asked: &[Option<SolverType>],
 ) -> Candidates {
     let in_scope: &[TraitDeclId] = program
         .scopes
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
     let decl = |trait_: TraitDeclId| program.traits.get(&trait_);
-    let asked: Vec<Option<SolverType>> = asked.iter().cloned().map(Some).collect();
-    let answered = collect(program, env, receiver, in_scope, &asked, |trait_, own| {
+    let answered = collect(program, env, receiver, in_scope, asked, |trait_, own| {
         decl(trait_).is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
     if !answered.in_scope.is_empty() {
@@ -49,7 +49,7 @@ pub fn candidates(
     }
     // A method the call site cannot name answers nothing, so an imported
     // reservation speaks before the "not imported" hint does.
-    let reserved = collect(program, env, receiver, in_scope, &asked, |trait_, _| {
+    let reserved = collect(program, env, receiver, in_scope, asked, |trait_, _| {
         decl(trait_).is_some_and(|d| d.reserved.contains(&method))
     });
     if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
@@ -101,6 +101,8 @@ pub fn bound_candidates(
                 &c.trait_args,
                 args,
             )
+            .settled()
+            .is_some()
         })
         .collect()
 }
@@ -167,8 +169,18 @@ fn collect(
 ) -> Candidates {
     let mut found = Candidates::default();
     // What a level withholds, no impl on it answers and no level below it
-    // lends.
+    // lends; what it may withhold, at some instances of the receiver's
+    // variables, no impl answers at every instance.
     let mut withheld: Vec<TraitDeclId> = Vec::new();
+    let mut maybe_withheld: Vec<TraitDeclId> = Vec::new();
+    let withhold = |verdict: Verdict<TraitDeclId>,
+                    unknown: Option<TraitDeclId>,
+                    withheld: &mut Vec<TraitDeclId>,
+                    maybe_withheld: &mut Vec<TraitDeclId>| match verdict {
+        Verdict::Holds(trait_) => withheld.push(trait_),
+        Verdict::Unknown => maybe_withheld.extend(unknown),
+        Verdict::Fails => {}
+    };
     let own_levels = own_levels(receiver);
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         // `!` holds every trait with no impl answering, so not even a blanket
@@ -177,14 +189,17 @@ fn collect(
             break;
         }
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
-        withheld.extend(withheld_at(program, ty));
+        withhold(
+            withheld_at(program, ty),
+            program.comparisons.map(|(_, ord)| ord),
+            &mut withheld,
+            &mut maybe_withheld,
+        );
         for (impl_, def) in program.trait_impls_for(ty) {
             let Some(trait_) = def.trait_ else {
                 continue;
             };
-            if program.duplicates.contains(&impl_)
-                || (depth >= own_levels && program.not_inherited.contains(&impl_))
-            {
+            if depth >= own_levels && program.not_inherited.contains(&impl_) {
                 continue;
             }
             let own = program
@@ -194,9 +209,12 @@ fn collect(
             if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
-            let Some(trait_args) = impl_applies(program, env, impl_, def, ty, asked) else {
-                continue;
-            };
+            let (trait_args, applies_everywhere) =
+                match impl_applies(program, env, impl_, def, ty, asked) {
+                    Verdict::Holds(trait_args) => (trait_args, true),
+                    Verdict::Unknown => (def.trait_args.clone(), false),
+                    Verdict::Fails => continue,
+                };
             let candidate = Candidate {
                 impl_,
                 trait_,
@@ -208,6 +226,8 @@ fn collect(
                     .iter()
                     .any(|arg| arg.mentions(&|p| !def.target.binds(&|q| q == p))),
                 is_variadic: is_variadic(&def.target),
+                known: applies_everywhere && !maybe_withheld.contains(&trait_),
+                settles_nothing: applies_everywhere || settles_nothing(program, def, ty),
             };
             if in_scope.contains(&trait_) {
                 found.in_scope.push(candidate);
@@ -215,13 +235,19 @@ fn collect(
                 found.out_of_scope.push(candidate);
             }
         }
-        withheld.extend(written_only_at(program, ty));
+        withhold(
+            written_only_at(program, ty),
+            program.hash,
+            &mut withheld,
+            &mut maybe_withheld,
+        );
     }
     // A marker asks for a body, which any other impl answering at its level
-    // already gives: beside one it is a no-op.
+    // at every instance already gives: beside one it is a no-op.
     let answered_besides = |c: &Candidate, all: &[Candidate]| {
-        all.iter()
-            .any(|o| o.trait_ == c.trait_ && o.depth == c.depth && !is_marker(program, o))
+        all.iter().any(|o| {
+            o.known && o.trait_ == c.trait_ && o.depth == c.depth && !is_marker(program, o)
+        })
     };
     for list in [&mut found.in_scope, &mut found.out_of_scope] {
         let all = list.clone();
@@ -278,7 +304,8 @@ fn linked_chain(program: &Program, receiver: &SolverType) -> Vec<(SolverType, u3
         | SolverType::Pack(_)
         | SolverType::Tuple(_)
         | SolverType::Projection { .. }
-        | SolverType::AnyRow => (None, Some(receiver.clone())),
+        | SolverType::AnyRow
+        | SolverType::Var(_) => (None, Some(receiver.clone())),
     };
     let mut chain: Vec<(SolverType, u32)> = Vec::new();
     let mut wrapped = false;
@@ -329,6 +356,7 @@ fn generality(target: &SolverType) -> Generality {
                 Generality::Exact
             }
         }
+        SolverType::Var(_) => unreachable!("an impl target holds no inference variable"),
     }
 }
 
@@ -394,7 +422,8 @@ mod tests {
             | Selection::AmbiguousTraits(_)
             | Selection::AmbiguousBlankets(_)
             | Selection::Overloaded(_)
-            | Selection::Duplicated(_) => None,
+            | Selection::Duplicated(_)
+            | Selection::Undecided(_) => None,
         }
     }
 

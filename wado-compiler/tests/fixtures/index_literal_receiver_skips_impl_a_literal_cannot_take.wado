@@ -1,0 +1,31 @@
+// `wrap(1)` is `Box<_>` with the literal still waiting. The one `IndexValue`
+// impl is for `Box<String>`, which a literal cannot be, so it is not the one
+// that answers: the literal settles as `i32` first, and `Box<i32>`'s
+// `IndexRef` reads the element.
+
+struct Box<T> { v: T, c: Cell }
+
+struct Cell { n: i32 }
+
+fn wrap<T>(v: T) -> Box<T> {
+    return Box { v, c: Cell { n: 7 } };
+}
+
+impl IndexValue<i32> for Box<String> {
+    type Output = String;
+    fn index_value(&self, _i: i32) -> String {
+        return "string";
+    }
+}
+
+impl IndexRef<i32> for Box<i32> {
+    type Output = Cell;
+    fn index_ref(&self, _i: i32) -> &Cell {
+        return &self.c;
+    }
+}
+
+test {
+    let x = wrap(1)[0];
+    assert x.n == 7;
+}

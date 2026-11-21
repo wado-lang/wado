@@ -38,6 +38,13 @@ pub struct Candidate {
     pub opens_trait_args: bool,
     /// Whether the impl's target is a bare pack (`impl<..T> Tr for [..T]`).
     pub is_variadic: bool,
+    /// Whether it applies at every instance of the receiver's inference
+    /// variables, rather than at some.
+    pub known: bool,
+    /// Whether its target meets the receiver at every instance of those
+    /// variables, so that committing to it settles none of them. One not
+    /// [`Self::known`] for a bound alone does.
+    pub settles_nothing: bool,
 }
 
 /// What the order says about a candidate set. Every variant but [`Self::One`]
@@ -60,10 +67,117 @@ pub enum Selection {
     Overloaded(Vec<usize>),
     /// Several impls written for the receiver at one argument list, kept apart
     /// only by their bounds, which hold together here. A copy of one impl never
-    /// gets here: [`Program::duplicates`] keeps it out of the candidates.
+    /// gets here: [`Program::rejected`] keeps it out of the candidates.
     ///
-    /// [`Program::duplicates`]: super::Program::duplicates
+    /// [`Program::rejected`]: super::Program::rejected
     Duplicated(Vec<usize>),
+    /// The order answers differently at different instances of the receiver's
+    /// inference variables, so the call waits on an annotation.
+    Undecided(Vec<usize>),
+}
+
+impl Selection {
+    /// `self` over a subset of candidates, its indices replaced by the
+    /// positions `indices` gives them in the whole set.
+    fn at(self, indices: &[usize]) -> Self {
+        let each = |live: Vec<usize>| live.into_iter().map(|i| indices[i]).collect();
+        match self {
+            Self::None => Self::None,
+            Self::One(i) => Self::One(indices[i]),
+            Self::AmbiguousTraits(live) => Self::AmbiguousTraits(each(live)),
+            Self::AmbiguousBlankets(live) => Self::AmbiguousBlankets(each(live)),
+            Self::Overloaded(live) => Self::Overloaded(each(live)),
+            Self::Duplicated(live) => Self::Duplicated(each(live)),
+            Self::Undecided(live) => Self::Undecided(each(live)),
+        }
+    }
+}
+
+/// [`rank`] where some candidates apply only at some instances of the
+/// receiver's variables. Every such instance applies the known ones and some
+/// of the rest, so the call answers only what the known ones with any of the
+/// rest answer alike.
+///
+/// Adding candidates only drops more: each step of the order drops for a
+/// survivor or by a minimum, and a survivor of the larger set survives the
+/// smaller one. So the known ones with any of the rest answer what the known
+/// ones answer exactly where the known ones with each of the rest alone do.
+#[must_use]
+pub fn rank_open(candidates: &[Candidate]) -> Selection {
+    // Whatever its arguments, a candidate a known one outranks at rank 1 or 2
+    // loses wherever it applies, so nothing it leaves open decides the call.
+    // Rank 2 is reached only where its level holds one trait, and a loser
+    // still drops a variadic impl of its trait at rank 0, whatever its level.
+    let one_trait_at = |c: &Candidate| {
+        candidates
+            .iter()
+            .all(|o| o.depth != c.depth || o.trait_ == c.trait_)
+    };
+    let drops_variadic = |c: &Candidate| {
+        !c.is_variadic
+            && candidates
+                .iter()
+                .any(|o| o.is_variadic && o.trait_ == c.trait_)
+    };
+    let outranked = |c: &Candidate| {
+        !drops_variadic(c)
+            && candidates.iter().any(|k| {
+                k.known
+                    && !k.is_variadic
+                    && (k.depth < c.depth
+                        || (k.depth == c.depth && k.generality < c.generality && one_trait_at(c)))
+            })
+    };
+    let contending: Vec<usize> = (0..candidates.len())
+        .filter(|&i| candidates[i].known || !outranked(&candidates[i]))
+        .collect();
+    if contending.len() < candidates.len() {
+        let subset: Vec<Candidate> = contending.iter().map(|&i| candidates[i].clone()).collect();
+        let selection = rank_open(&subset);
+        return if matches!(selection, Selection::Undecided(_)) {
+            Selection::Undecided((0..candidates.len()).collect())
+        } else {
+            selection.at(&contending)
+        };
+    }
+    let (known, unknown): (Vec<usize>, Vec<usize>) =
+        (0..candidates.len()).partition(|&i| candidates[i].known);
+    if unknown.is_empty() {
+        return rank(candidates);
+    }
+    let undecided = Selection::Undecided((0..candidates.len()).collect());
+    // The one impl that may answer is committed to only where that settles no
+    // variable: choosing one from it would let an impl written elsewhere turn
+    // the call into an error.
+    if let [only] = candidates {
+        return if only.settles_nothing {
+            Selection::One(0)
+        } else {
+            undecided
+        };
+    }
+    // An argument list an impl answers at only once the variables settle, one
+    // naming the impl's own parameters, names no overload set yet.
+    let open = |arg: &SolverType| arg.is_open() || arg.mentions(&|_| true);
+    if unknown
+        .iter()
+        .any(|&i| candidates[i].trait_args.iter().any(open))
+    {
+        return undecided;
+    }
+    let ranked = |extra: Option<usize>| {
+        let indices: Vec<usize> = known.iter().copied().chain(extra).collect();
+        let set: Vec<Candidate> = indices.iter().map(|&i| candidates[i].clone()).collect();
+        rank(&set).at(&indices)
+    };
+    // With no known candidate, each one not yet known answers alone at some
+    // instance, and there are several.
+    let answer = ranked(None);
+    if answer != Selection::None && unknown.iter().all(|&u| ranked(Some(u)) == answer) {
+        answer
+    } else {
+        undecided
+    }
 }
 
 /// Apply the order to `candidates`.
@@ -195,6 +309,8 @@ mod tests {
                 generality,
                 opens_trait_args: false,
                 is_variadic,
+                known: true,
+                settles_nothing: true,
             });
             self
         }
@@ -228,8 +344,163 @@ mod tests {
             self
         }
 
+        fn unknown(mut self) -> Self {
+            self.0.last_mut().expect("a candidate to arm").known = false;
+            self
+        }
+
+        /// Not yet known because its target meets the receiver only where a
+        /// variable becomes a particular type.
+        fn settling(mut self) -> Self {
+            let last = self.0.last_mut().expect("a candidate to arm");
+            last.known = false;
+            last.settles_nothing = false;
+            self
+        }
+
         fn done(self) -> Vec<Candidate> {
             self.0
+        }
+    }
+
+    #[test]
+    fn a_candidate_outranking_at_every_instance_answers() {
+        let found = Build::new().concrete(TR, 0).blanket(TR, 0).unknown().done();
+        assert_eq!(rank_open(&found), Selection::One(0));
+    }
+
+    #[test]
+    fn the_only_candidate_answers_though_its_bound_is_not_yet_known() {
+        let found = Build::new().concrete(TR, 0).unknown().done();
+        assert_eq!(rank_open(&found), Selection::One(0));
+    }
+
+    #[test]
+    fn the_only_candidate_settling_a_variable_leaves_the_call_undecided() {
+        let found = Build::new().concrete(TR, 0).settling().done();
+        assert_eq!(rank_open(&found), Selection::Undecided(vec![0]));
+    }
+
+    #[test]
+    fn candidates_answering_at_different_instances_are_undecided() {
+        let found = Build::new()
+            .concrete(TR, 0)
+            .unknown()
+            .concrete(OTHER, 0)
+            .unknown()
+            .done();
+        assert_eq!(rank_open(&found), Selection::Undecided(vec![0, 1]));
+    }
+
+    #[test]
+    fn a_nearer_candidate_not_yet_known_leaves_the_call_undecided() {
+        let found = Build::new()
+            .concrete(TR, 1)
+            .concrete(OTHER, 0)
+            .unknown()
+            .done();
+        assert_eq!(rank_open(&found), Selection::Undecided(vec![0, 1]));
+    }
+
+    #[test]
+    fn a_candidate_losing_at_every_instance_leaves_no_argument_list_open() {
+        let found = Build::new()
+            .head(TR, 0)
+            .with_args(vec![arg(I32)])
+            .blanket(TR, 0)
+            .with_args(vec![SolverType::Param(0)])
+            .opening_trait_args()
+            .unknown()
+            .done();
+        assert_eq!(rank_open(&found), Selection::One(0));
+    }
+
+    #[test]
+    fn an_argument_list_not_yet_known_names_no_overload_set() {
+        let found = Build::new()
+            .concrete(TR, 0)
+            .with_args(vec![arg(I32)])
+            .concrete(TR, 0)
+            .with_args(vec![SolverType::Param(0)])
+            .unknown()
+            .done();
+        assert_eq!(rank_open(&found), Selection::Undecided(vec![0, 1]));
+    }
+
+    /// What `rank_open` decides by definition: every set of the candidates not
+    /// yet known, with the known ones, ranks alike or the call is undecided.
+    fn rank_every_instance(candidates: &[Candidate]) -> Selection {
+        let unknown: Vec<usize> = (0..candidates.len())
+            .filter(|&i| !candidates[i].known)
+            .collect();
+        let mut decided: Option<Selection> = None;
+        for mask in 0..1_u32 << unknown.len() {
+            let applying: Vec<usize> = (0..candidates.len())
+                .filter(|&i| {
+                    unknown
+                        .iter()
+                        .position(|&u| u == i)
+                        .is_none_or(|bit| mask & (1 << bit) != 0)
+                })
+                .collect();
+            let subset: Vec<Candidate> = applying.iter().map(|&i| candidates[i].clone()).collect();
+            let selection = rank(&subset).at(&applying);
+            match selection {
+                Selection::None => continue,
+                Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
+                Selection::One(_)
+                | Selection::AmbiguousTraits(_)
+                | Selection::AmbiguousBlankets(_)
+                | Selection::Overloaded(_)
+                | Selection::Duplicated(_) => {}
+            }
+            match &decided {
+                None => decided = Some(selection),
+                Some(earlier) if *earlier == selection => {}
+                Some(_) => return Selection::Undecided((0..candidates.len()).collect()),
+            }
+        }
+        decided.unwrap_or(Selection::None)
+    }
+
+    #[test]
+    fn ranking_each_unknown_alone_decides_as_every_instance_does() {
+        let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut next = |bound: u64| {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (seed >> 33) % bound
+        };
+        for _ in 0..50_000 {
+            let mut build = Build::new();
+            for _ in 0..=next(5) {
+                let trait_ = if next(2) == 0 { TR } else { OTHER };
+                let generality = match next(3) {
+                    0 => Generality::Exact,
+                    1 => Generality::Head,
+                    _ => Generality::Any,
+                };
+                build = build.add(
+                    trait_,
+                    u32::try_from(next(2)).unwrap(),
+                    generality,
+                    next(4) == 0,
+                );
+                build = build.with_args(match next(3) {
+                    0 => vec![],
+                    1 => vec![arg(I32)],
+                    _ => vec![arg(STRING)],
+                });
+                if next(3) == 0 {
+                    build = build.opening_trait_args();
+                }
+                if next(2) == 0 {
+                    build = build.unknown();
+                }
+            }
+            let found = build.done();
+            assert_eq!(rank_open(&found), rank_every_instance(&found), "{found:?}");
         }
     }
 

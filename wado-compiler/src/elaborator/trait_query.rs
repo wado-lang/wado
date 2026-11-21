@@ -19,6 +19,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::callee::CalleeRef;
+use super::infer_hole::{Obligation, ProjectionLink};
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
     BinderInScope, BoundSelf, BoundsOf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
@@ -3364,6 +3365,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(expected) = self.equality_requirement(&constraint.ty, self_binding) else {
                 continue;
             };
+            // A variable the requirement spells settles later, and the
+            // requirement is held to the answer then.
+            if self.tysys.type_table.borrow().contains_undecided(expected) {
+                let written = (!bound.type_args.is_empty()).then(|| {
+                    self.under_self_binding(self_binding, |e| e.written_bound_args(bound))
+                });
+                self.infer_holes
+                    .require(Obligation::Projection(ProjectionLink {
+                        owner: type_arg,
+                        each_element: false,
+                        target: expected,
+                        trait_,
+                        written,
+                        assoc: constraint.clone(),
+                        trait_name: bound.written_name(),
+                        span,
+                    }));
+                continue;
+            }
             // A reference is not its referent: `from_iter` pushes the items it
             // is handed.
             if expected == actual || !self.decides_equality(expected, actual) {

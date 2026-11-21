@@ -1,0 +1,44 @@
+// A static two inherent blocks declare is reported where it is declared, and
+// a call of it then adds nothing, at a plain type or a generic one.
+struct S {
+    v: i32,
+}
+
+impl S {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+impl S {
+    fn make() -> i32 {
+        return 2;
+    }
+}
+
+struct W<T> {
+    v: T,
+}
+
+impl<T: Default> W<T> {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Display> W<T> {
+    fn make() -> i32 {
+        return 2;
+    }
+}
+
+test {
+    assert S::make() == 1;
+    assert W::<i32>::make() == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":14:5: analysis error: duplicate definition of `make` for `S`",
+    "compile_errors_not_contains": ["ambiguous", "cannot infer"]
+}

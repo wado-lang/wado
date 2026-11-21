@@ -1,0 +1,37 @@
+// A `_` in the turbofish of a static a blanket answers is a variable, as the
+// bare spelling's omitted argument is, and asks for an annotation where the
+// bare spelling does, rather than reaching the instance unknown.
+
+struct Duo<A, B> {
+    a: List<A>,
+    b: List<B>,
+}
+
+trait Holds {}
+
+impl Holds for Duo<i32, bool> {}
+
+trait Build {
+    fn build() -> Option<Self>;
+}
+
+impl<X: Holds> Build for X {
+    fn build() -> Option<X> {
+        return null;
+    }
+}
+
+fn takes(d: Option<Duo<i32, bool>>) -> bool {
+    return d matches { None };
+}
+
+export fn run() {
+    let e = Duo::<i32, _>::build();
+    let _ = takes(e);
+}
+
+__DATA__
+{
+    "compile_error": ":29:13: analysis error: cannot infer type parameter `B` of `Duo::build`",
+    "compile_error_count": 1
+}
