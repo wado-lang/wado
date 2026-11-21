@@ -2284,7 +2284,9 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Option<DeferredQuestion> {
-        let question = self.question(tysys, ctx, type_id, asked).ok()?;
+        let question = self
+            .question(tysys, ctx, type_id, asked, Variables::Refused)
+            .ok()?;
         Some(DeferredQuestion {
             question,
             binders: binder_types(ctx),
