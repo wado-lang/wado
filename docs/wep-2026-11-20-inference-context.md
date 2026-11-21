@@ -90,13 +90,17 @@ one candidate left, whose target meets the receiver at every instance.
 A selection not yet known types its site by the trait's declaration of the
 method, with `Self` the receiver. Once the impl is selected, its signature is
 held to those types. A comparison operator answers `bool` whichever impl it
-selects. A site waits only where:
+selects. Any other operator and a subscript answer the trait's `Output`, a
+variable until the impl is selected. A static call on a receiver spelled
+without its arguments (`Bx::make()`) is asked at the instance whose arguments
+are variables. A site waits only where:
 
 - the receiver's head is known: a bare variable, or a projection off an open
   variable, needs its head resolved first;
 - every candidate is of one trait;
-- the method's declaration reads no associated type and no type parameter of
-  its own.
+- a method call's or a static call's declaration reads no associated type and
+  no type parameter of its own;
+- a static call omits no default.
 
 Elsewhere an undecided selection reports at once that the receiver needs an
 annotation.
@@ -139,15 +143,13 @@ Each step keeps every fixture passing and deletes what it replaces.
 - [x] One obligation queue holds bounds, projection links, commitments and the
   checks `equate` leaves undecided. It is asked again each time a variable
   settles, so a site that needs a head finds it at its fixed point.
-- [x] Method and comparison operator selection are obligations. A selection
-  not yet known stays queued until the body's end (`Obligation::Pending`), so a
-  later use settles which impl a call on `Box<_>` reaches, and `a.eq(&a)` and
-  `a == a` select alike.
-- [ ] Static, subscript and arithmetic operator selection are obligations too.
-  Until then, a selection admits a variable awaiting its report as meeting
-  every bound (`bounded_at_answer`), and each selection site requires the
-  committed impl's bounds itself (`defer_awaited_impl_bounds`); this step
-  deletes both.
+- [x] Method, static, subscript and operator selection are obligations. A
+  selection not yet known stays queued until the body's end
+  (`Obligation::Pending`), so a later use settles which impl a call on
+  `Box<_>` reaches, and `a.eq(&a)` and `a == a` select alike.
+- [ ] A selection admits a variable awaiting its report as meeting every bound
+  (`bounded_at_answer`), and each selection site requires the committed impl's
+  bounds itself (`defer_awaited_impl_bounds`); this step deletes both.
 - [ ] A numeric literal's variable has a kind and a default. The open item of
   [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
   closes with it, and so does `Settles::Nothing`, which until then keeps a
