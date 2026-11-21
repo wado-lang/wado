@@ -21,36 +21,37 @@ impl Vis {
     }
 }
 
-/// What a declaration or a member writes above itself: its doc comment, one
-/// `///` line per line of text, then its attributes, one `#[body]` line each.
+/// A declaration's doc comment and attributes.
 struct DeclHead {
     doc: Option<String> = null,
     attrs: List<String> = [],
 }
 
 impl DeclHead {
-    fn lines(&self) -> List<String> {
-        let mut out: List<String> = [];
-        if let Some(text) = &self.doc {
-            for let line of text.lines() {
-                out.push(if line.is_empty() { "///" } else { `/// ${line}` });
-            }
-        }
-        for let attr of &self.attrs {
-            out.push(`#[${attr}]`);
-        }
-        return out;
-    }
-
     fn emit(&self, w: &mut CodeWriter) {
-        for let line of self.lines() {
-            w.line(line);
-        }
+        emit_head(w, &self.doc, &self.attrs);
     }
 }
 
-fn member_head(doc: &Option<String>, attrs: &List<String>) -> DeclHead {
-    return DeclHead { doc: *doc, attrs: *attrs };
+/// What a declaration or a member writes above itself: its doc comment, one
+/// `///` line per line of text, then its attributes, one `#[body]` line each.
+fn head_lines(doc: &Option<String>, attrs: &List<String>) -> List<String> {
+    let mut out: List<String> = [];
+    if let Some(text) = doc {
+        for let line of text.lines() {
+            out.push(if line.is_empty() { "///" } else { `/// ${line}` });
+        }
+    }
+    for let attr of attrs {
+        out.push(`#[${attr}]`);
+    }
+    return out;
+}
+
+fn emit_head(w: &mut CodeWriter, doc: &Option<String>, attrs: &List<String>) {
+    for let line of head_lines(doc, attrs) {
+        w.line(line);
+    }
 }
 
 /// A struct field.
@@ -149,7 +150,7 @@ impl StructSpec {
         }
         w.begin(head);
         for let field of &self.fields {
-            member_head(&field.doc, &field.attrs).emit(w);
+            emit_head(w, &field.doc, &field.attrs);
             let decl = `${field.vis.prefix()}${field.name}: ${field.type_str}`;
             match &field.default {
                 Some(d) => w.line(`${decl} = ${*d},`),
@@ -207,7 +208,7 @@ impl VariantSpec {
         self.head.emit(w);
         w.begin(`${self.vis.prefix()}variant ${self.name}${generic_list(&self.generics)}`);
         for let case of &self.cases {
-            member_head(&case.doc, &case.attrs).emit(w);
+            emit_head(w, &case.doc, &case.attrs);
             if let Some(p) = &case.payload {
                 w.line(`${case.name}(${*p}),`);
             } else {
@@ -303,7 +304,7 @@ impl FlagsSpec {
 fn emit_members(w: &mut CodeWriter, opener: String, members: &List<MemberSpec>) {
     w.begin(opener);
     for let member of members {
-        member_head(&member.doc, &member.attrs).emit(w);
+        emit_head(w, &member.doc, &member.attrs);
         w.line(`${member.name},`);
     }
     w.end();
@@ -439,7 +440,7 @@ impl FnSpec {
     /// closes it with `w.end()`.
     pub fn emit_begin(&self, w: &mut CodeWriter) {
         let mut pre = String::new();
-        for let line of self.head.lines() {
+        for let line of head_lines(&self.head.doc, &self.head.attrs) {
             pre.push_str(&line);
             pre.push('\n');
         }
