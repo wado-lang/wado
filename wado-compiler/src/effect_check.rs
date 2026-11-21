@@ -609,8 +609,9 @@ fn run_effect_checks(
     lints: Lints,
     warnings: &mut Vec<UnhandledOperation>,
 ) {
-    // A walk of a trait default body per impl solved its own closure literals
-    // while it was elaborated; the walks below read that body once.
+    // A row solved while the bodies were elaborated is part of the solution
+    // even where no walk below reaches the closure literal that minted it, as
+    // for one in a trait default body.
     solved.extend(
         sem.types
             .early_effect_rows()
