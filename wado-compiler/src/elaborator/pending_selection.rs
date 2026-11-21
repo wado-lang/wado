@@ -17,6 +17,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
+use super::expr::IndexAccess;
 use super::infer_hole::Obligation;
 use super::method_call::InheritedFrame;
 use super::types::{
@@ -78,6 +79,25 @@ pub(super) enum PendingOp {
         right_span: Span,
     },
     Unary(UnaryOp),
+    Index {
+        /// The subscripted value, references and all.
+        receiver: TypeId,
+        access: IndexAccess,
+        key: TypeId,
+    },
+    IndexAssign {
+        key: TypeId,
+    },
+}
+
+impl PendingOp {
+    /// The key an indexing trait is asked at.
+    fn key(&self) -> Option<TypeId> {
+        match self {
+            Self::Index { key, .. } | Self::IndexAssign { key } => Some(*key),
+            Self::Binary { .. } | Self::Unary(_) => None,
+        }
+    }
 }
 
 pub(super) struct PendingOperator {
@@ -354,7 +374,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// while its left operand still leaves the impl undecided.
     fn select_operator(&mut self, pending: PendingOperator) -> Option<PendingOperator> {
         let left = self.apply_infer_holes(pending.left);
-        if self.operator_waits(left, pending.item) {
+        let key = pending.op.key().map(|key| self.apply_infer_holes(key));
+        if self.selection_waits(left, pending.item, key) {
             return Some(pending);
         }
         let answered = match pending.op {
@@ -376,6 +397,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             PendingOp::Unary(op) => self
                 .dispatch_unary_operator(op, left, pending.span, pending.origin)
                 .expect("an operand whose impl waited dispatches through a trait"),
+            PendingOp::Index {
+                receiver,
+                access,
+                key,
+            } => {
+                let receiver = self.apply_infer_holes(receiver);
+                let key = self.apply_infer_holes(key);
+                self.dispatch_index(pending.origin, pending.span, receiver, access, key)
+            }
+            PendingOp::IndexAssign { .. } => {
+                let key = key.expect("a subscript selects at its key");
+                self.dispatch_index_assign(pending.origin, pending.span, left, key)
+            }
         };
         if answered != TypeTable::ERROR {
             self.hold_to_selected(answered, pending.result, pending.span);

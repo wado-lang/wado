@@ -1,0 +1,30 @@
+// Either `IndexAssign` may answer `a[0] = x` while `T` is open, so the store
+// waits for the line settling `T` to `u64`.
+
+struct Bx<T> { v: T }
+
+impl IndexAssign<i32> for Bx<u64> {
+    type Output = u64;
+    fn index_assign(&mut self, _i: i32, x: u64) {
+        self.v = x + 1;
+    }
+}
+
+impl IndexAssign<i32> for Bx<i64> {
+    type Output = i64;
+    fn index_assign(&mut self, _i: i32, x: i64) {
+        self.v = x - 1;
+    }
+}
+
+fn mk<T: Default>() -> Bx<T> {
+    return Bx { v: T::default() };
+}
+
+test {
+    let mut a = mk();
+    let x: u64 = 4;
+    a[0] = x;
+    let d: Bx<u64> = a;
+    assert d.v == 5;
+}
