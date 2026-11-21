@@ -127,8 +127,7 @@ take their defaults, and the queue runs again. Then:
 ### What goes
 
 The deferred machinery that exists only because sites decide alone:
-`DeferredCheck`, `defer_awaited_impl_bounds` and the other deferred impl bound
-paths, `Commitment` and `commit_to`, `close_infer_var` and `close_uninferred`,
+`DeferredCheck`, the deferred impl bound paths, `Commitment` and `commit_to`, `close_infer_var` and `close_uninferred`,
 and every branch that tests a type for `unknown` standing for an omitted
 argument. `unknown` remains only as error recovery.
 
@@ -147,9 +146,10 @@ Each step keeps every fixture passing and deletes what it replaces.
   selection not yet known stays queued until the body's end
   (`Obligation::Pending`), so a later use settles which impl a call on
   `Box<_>` reaches, and `a.eq(&a)` and `a == a` select alike.
-- [ ] A selection admits a variable awaiting its report as meeting every bound
-  (`bounded_at_answer`), and each selection site requires the committed impl's
-  bounds itself (`defer_awaited_impl_bounds`); this step deletes both.
+- [x] A selection asks an impl's bounds in three values (`Unsettled::MayHold`):
+  one an open variable may yet meet keeps the candidate, and the selected impl
+  requires it (`require_selected_impl_bounds`). This replaces standing a
+  variable awaiting its report in as the error type, which met every bound.
 - [ ] A numeric literal's variable has a kind and a default. The open item of
   [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
   closes with it, and so does `Settles::Nothing`, which until then keeps a

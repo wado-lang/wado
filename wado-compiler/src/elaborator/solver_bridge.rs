@@ -15,7 +15,7 @@ use crate::tir::{EffectRef, InferVarId, ResolvedType, TypeId, TypeParamId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId,
     ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
-    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, answering_link,
+    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, Verdict, answering_link,
     bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
     holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons, rank, rank_open,
     sourced, written_comparison, written_over,
@@ -2189,8 +2189,9 @@ impl SolverBridge {
         ctx: &scope::Scope,
         type_id: TypeId,
         asked: &FqTraitName,
+        variables: Variables<'_>,
     ) -> Result<Question, Unsaid> {
-        let (env, ty) = self.env_for(tysys, ctx, type_id, Variables::Refused)?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id, variables)?;
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return Err(Unsaid::Unsayable);
         }
@@ -2249,7 +2250,7 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Option<Vec<OwedBody>> {
-        let q = match self.question(tysys, ctx, type_id, asked) {
+        let q = match self.question(tysys, ctx, type_id, asked, Variables::Refused) {
             Ok(q) => q,
             // Its failure was reported where it failed, so it meets every
             // bound rather than failing them over again.
@@ -2326,6 +2327,35 @@ impl SolverBridge {
             })
             .collect();
         Some(bodies)
+    }
+
+    /// Whether `type_id` may satisfy `asked` once its variables settle: the
+    /// solver's answer in three values, where only a refutation says no.
+    pub(super) fn may_hold(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> bool {
+        let literal = |var: TypeId| ctx.awaits_literal(var);
+        match self.question(
+            tysys,
+            ctx,
+            type_id,
+            asked,
+            Variables::Asked { literal: &literal },
+        ) {
+            Ok(q) => !matches!(
+                holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args),
+                Verdict::Fails
+            ),
+            Err(Unsaid::Failed | Unsaid::Open) => true,
+            Err(Unsaid::Unsayable) => panic!(
+                "the lowering states no `{}: {asked}`",
+                tysys.type_table.borrow().name(type_id)
+            ),
+        }
     }
 
     /// Each anonymous shape `id` is built over, with its lowering: what a
@@ -2439,7 +2469,7 @@ impl SolverBridge {
         asked: &FqTraitName,
         pick: impl FnOnce(Selection) -> Vec<usize>,
     ) -> Vec<Option<DefId>> {
-        let Ok(q) = self.question(tysys, ctx, type_id, asked) else {
+        let Ok(q) = self.question(tysys, ctx, type_id, asked, Variables::Refused) else {
             return Vec::new();
         };
         let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, &q.args);

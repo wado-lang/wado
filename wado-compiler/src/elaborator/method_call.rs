@@ -664,7 +664,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if method_info.is_none() && inherent.is_some() && !trait_answers_nearer(self, None) {
             method_info = inherent.map(|(_, info)| info);
             if let Some(def) = method_info.as_ref().and_then(|info| info.impl_block) {
-                self.defer_awaited_impl_bounds(def, base_type_id, span);
+                self.require_selected_impl_bounds(def, base_type_id, span);
             }
         }
 

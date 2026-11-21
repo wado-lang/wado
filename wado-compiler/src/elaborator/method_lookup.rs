@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ParamRef, ScopeParams, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
+use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind, Unsettled};
 use super::type_resolution::ParamSpace;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -999,58 +999,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
-        // The call committing to the impl checks the bounds against the
-        // answer (`Self::defer_awaited_impl_bounds`).
-        let bounded = receiver_type_args.map(|args| self.bounded_at_answer(args));
         self.tysys.impl_reaches(def, receiver_type_args)
             && self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
                 def,
                 Some(receiver),
-                bounded.as_deref(),
+                receiver_type_args,
+                Unsettled::MayHold,
             )
     }
 
-    /// `args` with each awaiting its report standing as the error type a
-    /// report leaves, which meets every bound: the variable carries its bounds
-    /// to its answer.
-    fn bounded_at_answer(&self, args: &[TypeId]) -> Vec<TypeId> {
-        let tt = self.tysys.type_table.borrow();
-        args.iter()
-            .map(|&arg| {
-                if self.awaits_report(&tt, arg) {
-                    TypeTable::ERROR
-                } else {
-                    arg
-                }
-            })
-            .collect()
-    }
-
-    /// Check the bounds impl `def` places on `receiver`'s arguments still
-    /// awaiting their report against what answers them, as
-    /// [`Self::inherent_impl_applies`] let them meet every bound.
-    pub(super) fn defer_awaited_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
+    /// Require the bounds impl `def`, selected for `receiver`, places on what
+    /// is still open in its arguments: the selection asked them in three
+    /// values, and one it could not answer yet holds or fails once settled.
+    pub(super) fn require_selected_impl_bounds(
+        &mut self,
+        def: DefId,
+        receiver: TypeId,
+        span: Span,
+    ) {
         // As the block reads them, which for a newtype is at its base where
         // the block is the base's.
         if let Some(type_args) = self
             .tysys
             .receiver_args_at_impl(Some(receiver), &[], Some(def))
         {
-            self.defer_awaited_bounds_at(def, &type_args, span);
+            self.require_impl_bounds_at(def, &type_args, span);
         }
     }
 
-    /// [`Self::defer_awaited_impl_bounds`] at `type_args`, block `def`'s
+    /// [`Self::require_selected_impl_bounds`] at `type_args`, block `def`'s
     /// arguments as it reads them.
-    fn defer_awaited_bounds_at(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
+    fn require_impl_bounds_at(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
+        let type_args: Vec<TypeId> = type_args
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
         let binding = {
             let tt = self.tysys.type_table.borrow();
-            if !type_args.iter().any(|&arg| self.awaits_report(&tt, arg)) {
+            let open = |ty: TypeId| !tt.infer_vars_in(ty).is_empty();
+            if !type_args.iter().any(|&arg| open(arg)) {
                 return;
             }
-            let open = |ty: TypeId| self.awaits_report(&tt, ty);
-            tt.open_impl_target_binding(tt.impl_target_args(def), type_args, &open)
+            tt.open_impl_target_binding(tt.impl_target_args(def), &type_args, &open)
         };
         if let Some(binding) = binding {
             let binding = self.tysys.type_table.borrow_mut().settle_runs(binding);
@@ -1141,6 +1132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             def,
                             Some(receiver),
                             Some(&args),
+                            Unsettled::MayHold,
                         )
                     });
                 if let Some(unmet) = unmet {
@@ -1158,8 +1150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Enforce the bounds of the impl block a static call selected at the
     /// receiver arguments it names, which no lookup filtered the block by:
-    /// now where they are decided, and once answered where an argument awaits
-    /// its report.
+    /// now where they are decided, and once settled where they are open.
     pub(super) fn enforce_static_block_bounds(
         &mut self,
         block: Option<DefId>,
@@ -1169,11 +1160,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(block) = block else {
             return;
         };
-        self.defer_awaited_bounds_at(block, receiver_args, span);
-        let receiver_args = self.bounded_at_answer(receiver_args);
+        self.require_impl_bounds_at(block, receiver_args, span);
         let unmet = self
             .tysys
-            .unmet_impl_bound(&self.annotate_ctx, block, None, Some(&receiver_args))
+            .unmet_impl_bound(
+                &self.annotate_ctx,
+                block,
+                None,
+                Some(receiver_args),
+                Unsettled::MayHold,
+            )
             .or_else(|| {
                 // A list past the receiver's positions spells the slots only
                 // the trait arguments name, whose bounds no position reaches.
@@ -1181,10 +1177,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !table.impl_trait_sets_params(block) {
                     return None;
                 }
-                let slots = table.impl_spelled_slots(block, &receiver_args);
+                let slots = table.impl_spelled_slots(block, receiver_args);
                 drop(table);
                 self.tysys
-                    .unmet_slot_bound(&self.annotate_ctx, block, &slots)
+                    .unmet_slot_bound(&self.annotate_ctx, block, &slots, Unsettled::MayHold)
             });
         if let Some(unmet) = unmet {
             self.report_unmet(unmet, span);
@@ -1399,9 +1395,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             let bounds = self.declared_bounds(param, None, &impl_args);
-            let owes = matches!(owed, OwedBounds::All) || self.awaits_pending_call(*arg) || {
+            let owes = matches!(owed, OwedBounds::All) || {
                 let tt = self.tysys.type_table.borrow();
-                self.awaits_report(&tt, *arg)
+                !tt.infer_vars_in(*arg).is_empty()
                     || bounds
                         .iter()
                         .any(|b| self.annotate_ctx.trait_awaits_pending_call(&tt, &b.trait_))
@@ -1467,7 +1463,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|&(_, arg)| !self.type_has_infer_hole(arg))
             .collect();
         self.tysys
-            .unmet_slot_bound(&self.annotate_ctx, block, &settled)
+            .unmet_slot_bound(&self.annotate_ctx, block, &settled, Unsettled::Fails)
             .is_none()
     }
 
@@ -1666,6 +1662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     def,
                     Some(receiver),
                     Some(&args),
+                    Unsettled::MayHold,
                 )
             })
             .collect()
@@ -2462,7 +2459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(Ordered::One(Some(def))) = order
             && let Some(receiver) = receiver_type_id
         {
-            self.defer_awaited_impl_bounds(def, receiver, span);
+            self.require_selected_impl_bounds(def, receiver, span);
         }
         let named: &[Option<DefId>] = match &order {
             Some(Ordered::One(def)) => std::slice::from_ref(def),
@@ -3660,7 +3657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let container = self.tysys.type_id_to_string(info.container);
             self.report_blocks_tied(&blocks, &key, &container, span);
         }
-        self.defer_awaited_impl_bounds(info.impl_def, info.container, span);
+        self.require_selected_impl_bounds(info.impl_def, info.container, span);
         self.defer_impl_bounds(
             info.impl_def,
             &info.trait_arg_slots,
@@ -3774,6 +3771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_ref.0,
                         Some(base_type_id),
                         Some(&concrete_type_args),
+                        Unsettled::Fails,
                     );
                 if !(open && reaches) {
                     return None;
@@ -3884,6 +3882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_ref.0,
                     Some(receiver),
                     Some(&concrete_type_args),
+                    Unsettled::Fails,
                 ) {
                     return None;
                 }
@@ -4153,14 +4152,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
                 let receiver = s.impl_receiver(header, base_type_id);
-                // The dispatch committing to the impl checks the bounds against
-                // the answer (`Self::indexing_function_ref`).
                 if !concrete_type_args.is_empty()
                     && !s.tysys.check_impl_block_bounds(
                         &s.annotate_ctx,
                         impl_ref.0,
                         Some(base_type_id),
-                        Some(&s.bounded_at_answer(&concrete_type_args)),
+                        Some(&concrete_type_args),
+                        Unsettled::MayHold,
                     )
                 {
                     return None;
