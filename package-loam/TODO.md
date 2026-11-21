@@ -11,54 +11,16 @@ leaves this file, and `design.md` states what it built.
 
 ## Roadmap
 
-The roadmap leads to gpt-oss-20b, from onnx-community's `q4f16` export: a
-graph beside seven data files, 12.6 GB together.
+The roadmap reached gpt-oss-20b, and holds no item yet. The next is chosen
+from Later.
 
 The devices keep in step. An item is finished on `Cpu`, `WebGpuBackend` and
 `PjrtBackend` alike, the last under the CPU plugin. A run on a TPU is measured
 beside the roadmap and holds no item up.
 
-A weight stays as the checkpoint stores it. Unpacked to bf16, the model's 20
-billion weights outgrow a TPU chip of 16 GB. Packed, they are under it.
-
-What the model asks of Loam, as
-`wado run tools/onnx_inventory.wado model_q4f16.onnx` reports it. The graph
-holds no function and no branch. An operator below with nothing missing is one
-Loam lowers, though the build stops before it reaches any of them.
-
-| Operator                                       | Nodes | What Loam lacks |
-| ---------------------------------------------- | ----- | --------------- |
-| `QMoE`, 32 experts of 4 bits, 4 to a token     | 24    | Nothing.        |
-| `GroupQueryAttention`, a window of 128 or none | 24    | Nothing.        |
-| `SkipSimplifiedLayerNormalization`             | 48    | Nothing.        |
-| `MatMulNBits`, 4 bits in blocks of 32          | 73    | Nothing.        |
-| `Add`, `Reshape`, `Cast`, `Constant`, `Gather` | 103   | Nothing.        |
-| `ReduceSum`, `Shape`, `Sub`                    | 3     | Nothing.        |
-| `SimplifiedLayerNormalization`                 | 1     | Nothing.        |
-
-| Weights                    | Tensors | Bytes          |
-| -------------------------- | ------- | -------------- |
-| `float16`                  | 317     | 2,459,526,784  |
-| `uint8`, packed int4       | 121     | 10,164,326,400 |
-| In the graph               | 289     | 54,999,168     |
-| In the largest data file   | 62      | 2,096,824,320  |
-| One layer's `gate_up_proj` | 1       | 265,420,800    |
-
-The embedding is a `float16` table a `Gather` reads, so the model has no
-`GatherBlockQuantized`. The inputs and outputs are `int64` and `float16`, and
-the two `Cast`s give `int32`.
-
-1. [ ] gpt-oss-20b, a mixture of experts. Finished when
-   `example/gpt-oss-20b/` continues a prompt with the tokens onnxruntime picks
-   from onnx-community's `q4f16` export on `Cpu`, under `wado run-webgpu` on a
-   device with 8 GB, and under `wado run-pjrt`, with no line that names a
-   layer. `design.md` records how often a routed expert was already held, with
-   the eviction order it chose and why, and what
-   `PjrtBackend::analyzing("v5e:1x1")` reports for the model.
-
 ## Later
 
-Work the road to gpt-oss-20b does not pass. It is unordered.
+Work no roadmap item holds yet. It is unordered.
 
 - [ ] A data file of 2 GiB or more. A range into a data file fits 32 bits,
   which each of gpt-oss-20b's seven does. Finished when a tensor stored past

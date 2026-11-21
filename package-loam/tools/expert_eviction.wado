@@ -51,10 +51,13 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         for let [name, eviction] of ORDERS {
             match replayed(&record.shapes, &record.fetches, bytes, eviction) {
                 Ok([prompts, steps]) => println(
-                    `| ${bytes} | ${name} | ${share(&prompts)} | ${share(&steps)} | ${steps.loaded_bytes / i64::max(step_tokens, 1)} |`,
+                    `| ${bytes} | ${name} | ${share(&prompts)} | ${share(&steps)} | ${steps.loaded_bytes / i64::max(
+                        step_tokens,
+                        1,
+                    )} |`,
                 ),
                 Err(e) => println(`| ${bytes} | ${name} | ${e} | | |`),
-            };
+            }
         }
     }
 }

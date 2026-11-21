@@ -124,7 +124,9 @@ pub fn planned(shapes: &List<ExpertShape>, budget: i64) -> Result<List<List<Laye
 fn runs_of(shape: &ExpertShape, slots: i32) -> Result<List<LayerRun>, LoadError> {
     let [layers, experts] = [shape.layers, shape.experts];
     if experts > shape.most_slots {
-        return Result::Err(LoadError { reason: `one layer's ${experts} experts outgrow a pool of ${shape.most_slots} slots` });
+        return Result::Err(
+            LoadError { reason: `one layer's ${experts} experts outgrow a pool of ${shape.most_slots} slots` },
+        );
     }
     let own = |first: i32, count: i32| -> List<LayerRun> {
         return (first..<first + count).map(|l| LayerRun { first: l, count: 1, slots: experts }).collect();
@@ -436,13 +438,16 @@ impl HeldExperts {
     /// Every host step's fetch so far, in order, and the shapes of the
     /// layouts, each pool as large as one tensor holds.
     pub fn fetches(&self) -> Fetches {
-        let shapes = self.layouts.into_iter().map(|l| ExpertShape {
-            layers: l.layers.len(),
-            experts: l.experts,
-            slot_bytes: l.slot_bytes(),
-            steps: l.steps,
-            most_slots: l.layers[0].into_iter().map(|w| i32::MAX / w.slice_bytes()).min().unwrap(),
-        }).collect();
+        let shapes = self.layouts
+            .into_iter()
+            .map(|l| ExpertShape {
+                layers: l.layers.len(),
+                experts: l.experts,
+                slot_bytes: l.slot_bytes(),
+                steps: l.steps,
+                most_slots: l.layers[0].into_iter().map(|w| i32::MAX / w.slice_bytes()).min().unwrap(),
+            })
+            .collect();
         return Fetches { shapes, fetches: self.fetches };
     }
 

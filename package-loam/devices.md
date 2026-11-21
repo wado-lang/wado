@@ -641,8 +641,49 @@ vectors and scalars that bf16 would round. A topology's `optimal_seconds` is a
 model, and it does not price 94 and 93 of each program's operations
 ([research §7](../docs/research-tpu.md#7-the-compilers-cost-model)).
 
+### gpt-oss-20b on the devices
+
+`example/gpt-oss-20b/` continues the two prompts `generate.json` records, its
+pools holding 3 GB of the 10 GB of experts, on the RTX 4060 Ti of 8 GB and on
+XLA's CPU plugin. Each picks the tokens onnxruntime picks:
+
+    wado run-webgpu webgpu.wado -- 3000000000
+    wado run-pjrt pjrt.wado -- 3000000000
+
+| Entry                                     | WebGPU        | PJRT, CPU plugin |
+| ----------------------------------------- | ------------- | ---------------- |
+| load                                      | 79.2 s        | 5.7 s            |
+| prompt of 5, then 8 tokens                | 56.1 s        | 75.5 s           |
+| prompt of 13, then 8 tokens               | 64.3 s        | 63.4 s           |
+| experts the pools held, of those picked   | 955 of 2,045  | 955 of 2,045     |
+| experts' bytes loaded                     | 15.3 GB       | 15.3 GB          |
+| the device keeps (`kept_bytes`)           | 5,729,011,808 |                  |
+| `nvidia-smi`'s peak above the idle device | 5,896 MiB     |                  |
+
+### gpt-oss-20b compiled for a TPU
+
+`example/gpt-oss-20b/analyzed.wado` compiles a prompt's program and a step's
+for a `v5e:1x1`, every expert held, the step run from the host. A weight there
+is its shape alone, so the guest holds none of the model's 12.6 GB:
+
+| What the plugin reports                       | Prompt of 8    | Step           |
+| --------------------------------------------- | -------------- | -------------- |
+| argument bytes                                | 12,709,249,536 | 12,709,249,536 |
+| alias bytes                                   | 1,179,648      | 1,179,648      |
+| temporary bytes                               | 1,768,325,120  | 1,768,357,888  |
+| `optimal_seconds`, unmodeled operations aside | 0.161          | 0.0993         |
+| operations unmodeled                          | 84             | 82             |
+
+The steps that `decode` runs in a loop on the device do not compile for the
+chip: the plugin asks 34.74 GB of temporaries for that program, past its
+15.75 GB.
+
 ## Known gaps
 
+- `decode`'s program over gpt-oss-20b asks 34.74 GB of temporaries of a
+  `v5e:1x1` where a step run from the host asks 1.77 GB, so a loop on the device
+  holds the weights' bytes in temporaries over again. A model whose weights
+  take most of the chip decodes from the host there.
 - Where a node takes one length for every row, the rows share their lengths,
   and the module offers no `Requests`.
 - Only GPT-2's spelling of attention is matched. Any other, a mask that is no

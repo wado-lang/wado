@@ -55,31 +55,73 @@ fn shape(layers: i32, first_step: i32, most_slots: i32 = i32::MAX) -> ExpertShap
 
 /// Each run of each layout `planned` makes, as `[first, count, slots]`.
 fn runs(shapes: List<ExpertShape>, budget: i64) -> Result<List<List<[i32, i32, i32]>>, LoadError> {
-    return Result::Ok(planned(&shapes, budget)?.into_iter().map(|plan| plan.into_iter().map(|r| [
-        r.first,
-        r.count,
-        r.slots,
-    ]).collect()).collect());
+    return Result::Ok(
+        planned(&shapes, budget)?
+            .into_iter()
+            .map(|plan| plan.into_iter().map(|r| [r.first, r.count, r.slots]).collect())
+            .collect(),
+    );
 }
 
 test "a budget holds one layer's experts and one more of each layout, then shares the rest by each layout's bytes" {
-    let two_layouts = || [shape(3, 0), shape(2, 3)] as List<ExpertShape>;
+    let two_layouts = || [
+        shape(3, 0),
+        shape(2, 3),
+    ] as List<ExpertShape>;
     assert runs(two_layouts(), 19) matches { Err(_) };
-    assert runs(two_layouts(), 20).unwrap() == [[[0, 3, 5]], [[0, 2, 5]]];
-    assert runs(two_layouts(), 30).unwrap() == [[[0, 3, 8]], [[0, 2, 6]]];
-    let own: List<List<[i32, i32, i32]>> = [[[0, 1, 4], [1, 1, 4], [2, 1, 4]], [[0, 1, 4], [1, 1, 4]]];
+    assert runs(two_layouts(), 20).unwrap() == [
+        [
+            [0, 3, 5],
+        ],
+        [
+            [0, 2, 5],
+        ],
+    ];
+    assert runs(two_layouts(), 30).unwrap() == [
+        [
+            [0, 3, 8],
+        ],
+        [
+            [0, 2, 6],
+        ],
+    ];
+    let own: List<List<[i32, i32, i32]>> = [
+        [
+            [0, 1, 4],
+            [1, 1, 4],
+            [2, 1, 4],
+        ],
+        [
+            [0, 1, 4],
+            [1, 1, 4],
+        ],
+    ];
     assert runs(two_layouts(), 40).unwrap() == own;
     assert runs(two_layouts(), i64::MAX).unwrap() == own;
     // One layer shares with none, so it holds its own experts or nothing.
     assert runs([shape(1, 0)], 7) matches { Err(_) };
-    assert runs([shape(1, 0)], 8).unwrap() == [[[0, 1, 4]]];
+    assert runs([shape(1, 0)], 8).unwrap() == [
+        [
+            [0, 1, 4],
+        ],
+    ];
 }
 
 test "a layout's layers split into as few runs as keep each pool within what the backend holds" {
-    assert runs([shape(4, 0, 7)], 24).unwrap() == [[[0, 2, 6], [2, 2, 6]]];
+    assert runs([shape(4, 0, 7)], 24).unwrap() == [
+        [
+            [0, 2, 6],
+            [2, 2, 6],
+        ],
+    ];
     assert runs([shape(4, 0, 3)], 24) matches { Err(_) };
     // A run of one layer holds its own experts.
-    assert runs([shape(3, 0, 6)], 22).unwrap() == [[[0, 1, 4], [1, 2, 6]]];
+    assert runs([shape(3, 0, 6)], 22).unwrap() == [
+        [
+            [0, 1, 4],
+            [1, 2, 6],
+        ],
+    ];
 }
 
 /// Rounds of three layers sharing 5 slots, each layer picking experts 0 and 1
@@ -88,7 +130,11 @@ fn cycled(eviction: Eviction) -> ExpertCounts {
     let mut fetches: List<Fetch> = [];
     for let _ of 0..<10 {
         for let layer of 0..<3 {
-            fetches.push(Fetch { step: layer, tokens: 1, experts: [0, 1] });
+            fetches.push(Fetch {
+                step: layer,
+                tokens: 1,
+                experts: [0, 1],
+            });
         }
     }
     let [prompts, steps] = replayed(&[shape(3, 0)], &fetches, 10, eviction).unwrap();

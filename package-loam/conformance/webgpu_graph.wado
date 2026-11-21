@@ -239,7 +239,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // the pool, which nothing reads back.
     let octets = typed::<WebGpuBackend, u8, [Rows, Pair]>(&gpu, &cases::written_pools(&mut gpu).1);
     let reads_before_slot = gpu.read_backs();
-    let slot_one = gpu.upload(&Tensor::<i64, [Slots, Run]> { data: [1], extents: [1, 1] });
+    let slot_one = gpu.upload(&Tensor::<i64, [Slots, Run]> {
+        data: [1],
+        extents: [1, 1],
+    });
     let slot: Placed<u8, [Slots, Pair]> = gpu.gather(&octets, &slot_one, &GatherDims {
         offset_dims: [1],
         collapsed_slice_dims: [0],
