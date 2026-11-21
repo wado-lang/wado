@@ -558,9 +558,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .classes
             .iter()
             .zip(&args)
-            .map(|(class, &arg)| match class.is_literal() {
-                true => class.clone(),
-                false => ArgClass::Exact(arg),
+            .map(|(class, &arg)| {
+                if class.is_literal() {
+                    class.clone()
+                } else {
+                    ArgClass::Exact(arg)
+                }
             })
             .collect();
         let value_target = self.impl_target_of(receiver);
