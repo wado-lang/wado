@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795230679694,
+  "lastUpdate": 1795234922639,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80401,6 +80401,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ddf80d8a28e63bdceffa3c97613952a91210dcf8"
         },
         "date": 1795230678644,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c7de68d64786c83ac58b917870c06fa9827d1aca",
+          "message": "Merge pull request #2708 from wado-lang/ci/faster-test-packages\n\nperf: run CI's package tests in half the time, at wado test's default -O1",
+          "timestamp": "2026-11-21T13:04:07+09:00",
+          "tree_id": "c7635565fc8ba30217ec0c048b339fa4389a6713",
+          "url": "https://github.com/wado-lang/wado/commit/c7de68d64786c83ac58b917870c06fa9827d1aca"
+        },
+        "date": 1795234921640,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
