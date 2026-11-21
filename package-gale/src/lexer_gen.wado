@@ -21,7 +21,7 @@ use { constant_patterns, negate_cond, open_chain_arm } from "./gen_util.wado";
 use { gen_visibility_comment } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { literal_const_name } from "./ident.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_range_pat, wado } from "lib:wadopoet";
+use { CodeWriter, FieldSpec, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_range_pat, wado } from "lib:wadopoet";
 use {
     SuperOp,
     gen_super_interface,
@@ -280,7 +280,7 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
                 let name = `TK_${rule.name}`;
                 let mut g = GlobalSpec::new(&name, "i32", &init, Vis::Pub);
                 if rule.is_virtual {
-                    g.set_trailing_comment("virtual");
+                    g.set_doc("Virtual: declared in `tokens { }`, matched by no lexer rule.");
                 }
                 g.emit(w);
             },
@@ -454,28 +454,28 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
     s.add_field("src", "StrSlice");
     s.add_field("pos", "i32");
     for let mf of &members.fields {
-        s.add_field_default(&mf.name, &mf.ty, &mf.init);
+        s.add_field_spec(FieldSpec { name: mf.name, type_str: mf.ty, default: Option::Some(mf.init) });
     }
     if surface.sink {
-        s.add_field_default("act_output", "String", "\"\"");
+        s.add_field_spec(FieldSpec { name: "act_output", type_str: "String", default: Option::Some("\"\"") });
     }
     if surface.commit_latches {
-        s.add_field_default("act_type", "i32", "-1");
-        s.add_field_default("act_channel", "i32", "-1");
-        s.add_field_default("act_skip", "bool", "false");
-        s.add_field_default("act_more", "bool", "false");
+        s.add_field_spec(FieldSpec { name: "act_type", type_str: "i32", default: Option::Some("-1") });
+        s.add_field_spec(FieldSpec { name: "act_channel", type_str: "i32", default: Option::Some("-1") });
+        s.add_field_spec(FieldSpec { name: "act_skip", type_str: "bool", default: Option::Some("false") });
+        s.add_field_spec(FieldSpec { name: "act_more", type_str: "bool", default: Option::Some("false") });
     }
     if surface.mode_commands {
-        s.add_field_default("act_push_mode", "i32", "-1");
-        s.add_field_default("act_pop_mode", "bool", "false");
-        s.add_field_default(&LEXER_SET_MODE_FIELD, "i32", "-1");
+        s.add_field_spec(FieldSpec { name: "act_push_mode", type_str: "i32", default: Option::Some("-1") });
+        s.add_field_spec(FieldSpec { name: "act_pop_mode", type_str: "bool", default: Option::Some("false") });
+        s.add_field_spec(FieldSpec { name: LEXER_SET_MODE_FIELD, type_str: "i32", default: Option::Some("-1") });
         // ANTLR's `_modeStack.size()`, which a base branches on.
-        s.add_field_default("act_mode_depth", "i32", "0");
+        s.add_field_spec(FieldSpec { name: "act_mode_depth", type_str: "i32", default: Option::Some("0") });
     }
     if surface.current_mode {
         // ANTLR's `_mode`: the mode the token is being matched in, seeded per
         // token. Only a body that reads `$mode` needs it.
-        s.add_field_default(&LEXER_MODE_FIELD, "i32", "0");
+        s.add_field_spec(FieldSpec { name: LEXER_MODE_FIELD, type_str: "i32", default: Option::Some("0") });
     }
     s.emit(w);
     w.blank();
@@ -6101,6 +6101,6 @@ pub fn gen_token_names_global(w: &mut CodeWriter, lexer_rules: &List<LexerRule>,
         };
         names.push(wado`"${name}"`);
     }
-    w.line(`global TOKEN_NAMES: List<String> = [${names.join(", ")}];`);
+    GlobalSpec::new("TOKEN_NAMES", "List<String>", `[${names.join(", ")}]`).emit(w);
     w.blank();
 }

@@ -8,17 +8,17 @@ use { to_string } from "core:json";
 use { Uri } from "core:uri";
 use { percent_decode, percent_encode } from "core:url";
 use {
+    CaseSpec,
     CodeWriter,
-    EnumMember,
     EnumSpec,
     FieldSpec,
     FlagsSpec,
+    MemberSpec,
     ModuleSpec,
     NewtypeSpec,
     StructSpec,
     VariantSpec,
     Vis,
-    WadoVariantCase,
     is_keyword,
     is_reserved,
     wado,
@@ -523,10 +523,7 @@ impl Gen {
             }
             let ty = self.type_of(property, &pat, &`${name}${decl_name(key, &pat)?}`)?;
             let p = property.into_object();
-            let mut f = FieldSpec {
-                ..FieldSpec::new_pub(field, ty.text),
-                doc: doc_of(&p),
-            };
+            let mut f = FieldSpec { name: field, type_str: ty.text, vis: Vis::Pub, doc: doc_of(&p) };
             if !o.required.contains_str(key) {
                 if let Some(d) = &p.default {
                     self.check_default(&pat, &d.root())?;
@@ -570,7 +567,7 @@ impl Gen {
                 Some(a) => [*a],
                 null => [],
             };
-            spec.add_member_spec(EnumMember { name: pair.0, trailing_comment: null, attrs });
+            spec.add_member_spec(MemberSpec { name: pair.0, attrs });
         }
         spec.emit(self.next_decl());
         return Result::Ok(());
@@ -628,7 +625,7 @@ impl Gen {
         if let Some(t) = &tag {
             spec.add_attr(wado`wire(tag = "${*t}")`);
         }
-        let mut cases: List<WadoVariantCase> = [];
+        let mut cases: List<CaseSpec> = [];
         let mut wires: List<String> = [];
         for let [i, branch] of o.one_of.iter_ref().enumerate() {
             let bat = `${*at}/oneOf/${i}`;
@@ -644,7 +641,7 @@ impl Gen {
                 Some([p, within]) => Option::Some(self.type_of(&p, &`${bat}${within}`, &`${name}${case}`)?.text),
                 null => null,
             };
-            cases.push(WadoVariantCase { name: case, payload, doc: doc_of(&b) });
+            cases.push(CaseSpec { name: case, payload, doc: doc_of(&b) });
             wires.push(wire);
         }
         let mut pairs: List<[String, String]> = [];

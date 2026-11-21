@@ -4,9 +4,12 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { apply_case } from "core:serde";
 use {
+    CaseSpec,
     CodeWriter,
     EnumSpec,
     FieldSpec,
+    FnSpec,
+    ImplSpec,
     ModuleSpec,
     StructSpec,
     VariantSpec,
@@ -118,7 +121,7 @@ impl EnumPlan {
             for let c of &self.cases {
                 spec.add_case(&c.name);
             }
-            spec.add_case_with_payload(other, "i32");
+            spec.add_case_spec(CaseSpec { name: *other, payload: Option::Some("i32") });
             spec.emit(w);
         } else {
             let mut spec = EnumSpec::new(&self.name, Vis::Pub);
@@ -129,15 +132,15 @@ impl EnumPlan {
         }
         if !self.aliases.is_empty() {
             w.blank();
-            w.begin(`impl ${self.name}`);
+            ImplSpec::new(&self.name).emit_begin(w);
             for let alias of &self.aliases {
                 w.line(`pub const ${alias.0}: ${self.name} = ${self.name}::${alias.1};`);
             }
             w.end();
         }
         w.blank();
-        w.begin(`impl ${RUNTIME}::Enumeration for ${self.name}`);
-        w.begin("fn number(&self) -> i32");
+        ImplSpec::new_trait(`${RUNTIME}::Enumeration`, &self.name).emit_begin(w);
+        FnSpec::new("number").set_receiver("&self").set_return_type("i32").emit_begin(w);
         w.begin("return match self");
         for let c of &self.cases {
             w.line(`${self.name}::${c.name} => ${c.number},`);
@@ -148,7 +151,7 @@ impl EnumPlan {
         w.end_with(";");
         w.end();
         w.blank();
-        w.begin(`fn from_number(number: i32) -> Option<${self.name}>`);
+        FnSpec::new("from_number").add_param("number", "i32").set_return_type(`Option<${self.name}>`).emit_begin(w);
         w.begin("return match number");
         for let c of &self.cases {
             w.line(`${c.number} => Option::Some(${self.name}::${c.name}),`);
@@ -161,7 +164,7 @@ impl EnumPlan {
         w.end_with(";");
         w.end();
         w.blank();
-        w.begin(`fn first() -> ${self.name}`);
+        FnSpec::new("first").set_return_type(&self.name).emit_begin(w);
         w.line(`return ${self.name}::${self.cases[0].name};`);
         w.end();
         w.end();
@@ -173,14 +176,22 @@ impl EnumPlan {
     /// is on the wire.
     fn write_order(&self, w: &mut CodeWriter) {
         w.blank();
-        w.begin(`impl Eq for ${self.name}`);
-        w.begin(`fn eq(&self, other: &${self.name}) -> bool`);
+        ImplSpec::new_trait("Eq", &self.name).emit_begin(w);
+        FnSpec::new("eq")
+            .set_receiver("&self")
+            .add_param("other", `&${self.name}`)
+            .set_return_type("bool")
+            .emit_begin(w);
         w.line("return self.number() == other.number();");
         w.end();
         w.end();
         w.blank();
-        w.begin(`impl Ord for ${self.name}`);
-        w.begin(`fn cmp(&self, other: &${self.name}) -> Ordering`);
+        ImplSpec::new_trait("Ord", &self.name).emit_begin(w);
+        FnSpec::new("cmp")
+            .set_receiver("&self")
+            .add_param("other", `&${self.name}`)
+            .set_return_type("Ordering")
+            .emit_begin(w);
         w.line("return self.number().cmp(&other.number());");
         w.end();
         w.end();
@@ -291,11 +302,14 @@ impl MessagePlan {
             };
             w.blank();
             if !opened {
-                w.begin(`impl ${self.spec.name}`);
+                ImplSpec::new(&self.spec.name).emit_begin(w);
                 opened = true;
             }
             let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
-            w.begin(`pub fn ${field}_of(input: LinearBuffer) -> ${RUNTIME}::Messages<${element}>`);
+            FnSpec::new(`${field}_of`, Vis::Pub)
+                .add_param("input", "LinearBuffer")
+                .set_return_type(`${RUNTIME}::Messages<${*element}>`)
+                .emit_begin(w);
             w.line(`return ${RUNTIME}::each::<${element}>(input, ${a.number}, ${RUNTIME}::WireType::${wire});`);
             w.end();
         }
@@ -313,21 +327,29 @@ impl MessagePlan {
         let name = &self.spec.name;
         self.write_each(w);
         w.blank();
-        w.begin(`impl ${RUNTIME}::Message for ${name}`);
-        w.begin(`fn size(&self, s: &mut ${RUNTIME}::Sizer) -> i64`);
+        ImplSpec::new_trait(`${RUNTIME}::Message`, name).emit_begin(w);
+        FnSpec::new("size")
+            .set_receiver("&self")
+            .add_param("s", `&mut ${RUNTIME}::Sizer`)
+            .set_return_type("i64")
+            .emit_begin(w);
         w.line(`let mut n = self.${UNKNOWN_FIELDS}.len() as i64;`);
         self.calls(w, "n += s.");
         w.line("return n;");
         w.end();
         w.blank();
-        w.begin(`fn write(&self, w: &mut ${RUNTIME}::Writer)`);
+        FnSpec::new("write").set_receiver("&self").add_param("w", `&mut ${RUNTIME}::Writer`).emit_begin(w);
         self.calls(w, "w.");
         w.line(`w.raw(&self.${UNKNOWN_FIELDS});`);
         w.end();
         w.blank();
-        w.begin(
-            `fn merge_field<B: ${RUNTIME}::Input>(&mut self, number: i32, r: &mut ${RUNTIME}::Reader<B>) -> Result<bool, ${RUNTIME}::DecodeError>`,
-        );
+        FnSpec::new("merge_field")
+            .add_generic(`B: ${RUNTIME}::Input`)
+            .set_receiver("&mut self")
+            .add_param("number", "i32")
+            .add_param("r", `&mut ${RUNTIME}::Reader<B>`)
+            .set_return_type(`Result<bool, ${RUNTIME}::DecodeError>`)
+            .emit_begin(w);
         if !self.slots.is_empty() {
             w.begin("match number");
             for let slot of &self.slots {
@@ -349,7 +371,7 @@ impl MessagePlan {
         w.line("return Result::Ok(false);");
         w.end();
         w.blank();
-        w.begin("fn unknown_fields(&mut self) -> &mut ByteList");
+        FnSpec::new("unknown_fields").set_receiver("&mut self").set_return_type("&mut ByteList").emit_begin(w);
         w.line(`return &mut self.${UNKNOWN_FIELDS};`);
         w.end();
         w.end();
@@ -542,9 +564,12 @@ impl Emitter {
                     null => {
                         let wado_name = claim_field_name(oneof, &mut field_names, decl, field)?;
                         let sum = self.take(`${name}${pascal(oneof)}`, `${decl.path.join(".")}.${oneof}`, field.line)?;
-                        let mut out = FieldSpec::new_pub(&wado_name, &`Option<${sum}>`);
-                        out.default = Option::Some("null");
-                        spec.add_field_spec(out);
+                        spec.add_field_spec(FieldSpec {
+                            name: wado_name,
+                            type_str: `Option<${sum}>`,
+                            vis: Vis::Pub,
+                            default: Option::Some("null"),
+                        });
                         oneof_at[*oneof] = oneofs.len();
                         oneofs.push(OneofPlan { field: wado_name, sum, members: TreeMap::new() });
                         oneofs.len() - 1;
@@ -560,19 +585,20 @@ impl Emitter {
             }
             let wado_name = claim_field_name(&field.name, &mut field_names, decl, field)?;
             let [type_str, default, wire] = self.plan_field(decl, field)?;
-            let mut out = FieldSpec::new_pub(&wado_name, &type_str);
-            out.default = Option::Some(default);
-            spec.add_field_spec(out);
+            spec.add_field_spec(FieldSpec { name: wado_name, type_str, vis: Vis::Pub, default: Option::Some(default) });
             slots.push(Slot::Field([wado_name, wire]));
         }
-        let mut unknown = FieldSpec::new_pub(UNKNOWN_FIELDS, "ByteList");
-        unknown.default = Option::Some("b\"\"");
-        spec.add_field_spec(unknown);
+        spec.add_field_spec(FieldSpec {
+            name: UNKNOWN_FIELDS,
+            type_str: "ByteList",
+            vis: Vis::Pub,
+            default: Option::Some("b\"\""),
+        });
         let mut variants: List<VariantSpec> = [];
         for let oneof of oneofs {
             let mut v = VariantSpec::new(&oneof.sum, Vis::Pub);
             for let [_, m] of oneof.members.entries() {
-                v.add_case_with_payload(&m.case, &m.payload);
+                v.add_case_spec(CaseSpec { name: m.case, payload: Option::Some(m.payload) });
                 slots.push(Slot::Member([oneof.field, oneof.sum, *m]));
             }
             variants.push(v);

@@ -1,0 +1,637 @@
+use { Origin } from "core:kiln";
+use { CodeWriter, FnHead } from "./writer.wado";
+
+/// Visibility of an emitted declaration or field: the scope ladder
+/// (file-private, `internal`, `pub`).
+pub enum Vis {
+    Private,
+    Internal,
+    Pub,
+}
+
+impl Vis {
+    /// The keyword with a trailing space: `""`, `"internal "`, `"pub "`.
+    fn prefix(&self) -> String {
+        let p = match *self {
+            Vis::Private => "",
+            Vis::Internal => "internal ",
+            Vis::Pub => "pub ",
+        };
+        return p;
+    }
+}
+
+/// What a declaration or a member writes above itself: its doc comment, one
+/// `///` line per line of text, then its attributes, one `#[body]` line each.
+struct DeclHead {
+    doc: Option<String> = null,
+    attrs: List<String> = [],
+}
+
+impl DeclHead {
+    fn lines(&self) -> List<String> {
+        let mut out: List<String> = [];
+        if let Some(text) = &self.doc {
+            for let line of text.lines() {
+                out.push(if line.is_empty() { "///" } else { `/// ${line}` });
+            }
+        }
+        for let attr of &self.attrs {
+            out.push(`#[${attr}]`);
+        }
+        return out;
+    }
+
+    fn emit(&self, w: &mut CodeWriter) {
+        for let line of self.lines() {
+            w.line(line);
+        }
+    }
+}
+
+fn member_head(doc: &Option<String>, attrs: &List<String>) -> DeclHead {
+    return DeclHead { doc: *doc, attrs: *attrs };
+}
+
+/// A struct field.
+pub struct FieldSpec {
+    pub name: String,
+    pub type_str: String,
+    pub vis: Vis = Vis::Private,
+    /// Written `name: T = default`, so a struct literal may leave the field out.
+    pub default: Option<String> = null,
+    pub doc: Option<String> = null,
+    /// Attribute bodies, each written `#[body]` on its own line.
+    pub attrs: List<String> = [],
+}
+
+/// A case of a variant.
+pub struct CaseSpec {
+    pub name: String,
+    pub payload: Option<String> = null,
+    pub doc: Option<String> = null,
+    pub attrs: List<String> = [],
+}
+
+/// A member of an enum or a flags type.
+pub struct MemberSpec {
+    pub name: String,
+    pub doc: Option<String> = null,
+    pub attrs: List<String> = [],
+}
+
+/// A function parameter.
+pub struct ParamSpec {
+    pub name: String,
+    pub type_str: String,
+    pub is_mut: bool = false,
+    /// Written `name: T = default`, so a call may leave the argument out.
+    pub default: Option<String> = null,
+}
+
+/// `struct Name<…> { … }`.
+pub struct StructSpec {
+    pub name: String,
+    vis: Vis,
+    generics: List<String> = [],
+    fields: List<FieldSpec> = [],
+    head: DeclHead = DeclHead {},
+}
+
+impl StructSpec {
+    pub fn new<S: AsStrSlice>(name: S, vis: Vis = Vis::Private) -> StructSpec {
+        return StructSpec { name: name.to_string(), vis };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut StructSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut StructSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    /// Adds a type parameter, written as it renders (`"T: Default"`).
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut StructSpec {
+        self.generics.push(generic.to_string());
+        return self;
+    }
+
+    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        name: S,
+        type_str: S1,
+        vis: Vis = Vis::Private,
+    ) -> &mut StructSpec {
+        self.fields.push(FieldSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            vis,
+        });
+        return self;
+    }
+
+    pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec {
+        self.fields.push(field);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        let head = `${self.vis.prefix()}struct ${self.name}${generic_list(&self.generics)}`;
+        if self.fields.is_empty() {
+            w.line(`${head} {}`);
+            return;
+        }
+        w.begin(head);
+        for let field of &self.fields {
+            member_head(&field.doc, &field.attrs).emit(w);
+            let decl = `${field.vis.prefix()}${field.name}: ${field.type_str}`;
+            match &field.default {
+                Some(d) => w.line(`${decl} = ${*d},`),
+                null => w.line(`${decl},`),
+            }
+        }
+        w.end();
+    }
+}
+
+/// `variant Name<…> { … }`.
+pub struct VariantSpec {
+    pub name: String,
+    vis: Vis,
+    generics: List<String> = [],
+    cases: List<CaseSpec> = [],
+    head: DeclHead = DeclHead {},
+}
+
+impl VariantSpec {
+    pub fn new<S: AsStrSlice>(name: S, vis: Vis = Vis::Private) -> VariantSpec {
+        return VariantSpec { name: name.to_string(), vis };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut VariantSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut VariantSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    /// Adds a type parameter, written as it renders (`"T"`).
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut VariantSpec {
+        self.generics.push(generic.to_string());
+        return self;
+    }
+
+    /// Adds a case without a payload.
+    pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec {
+        self.cases.push(CaseSpec { name: name.to_string() });
+        return self;
+    }
+
+    pub fn add_case_spec(&mut self, case: CaseSpec) -> &mut VariantSpec {
+        self.cases.push(case);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        w.begin(`${self.vis.prefix()}variant ${self.name}${generic_list(&self.generics)}`);
+        for let case of &self.cases {
+            member_head(&case.doc, &case.attrs).emit(w);
+            if let Some(p) = &case.payload {
+                w.line(`${case.name}(${*p}),`);
+            } else {
+                w.line(`${case.name},`);
+            }
+        }
+        w.end();
+    }
+}
+
+/// `enum Name { … }`.
+pub struct EnumSpec {
+    pub name: String,
+    vis: Vis,
+    members: List<MemberSpec> = [],
+    head: DeclHead = DeclHead {},
+}
+
+impl EnumSpec {
+    pub fn new<S: AsStrSlice>(name: S, vis: Vis = Vis::Private) -> EnumSpec {
+        return EnumSpec { name: name.to_string(), vis };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut EnumSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut EnumSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut EnumSpec {
+        self.members.push(MemberSpec { name: name.to_string() });
+        return self;
+    }
+
+    pub fn add_member_spec(&mut self, member: MemberSpec) -> &mut EnumSpec {
+        self.members.push(member);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        emit_members(w, `${self.vis.prefix()}enum ${self.name}`, &self.members);
+    }
+}
+
+/// `flags Name { … }`.
+pub struct FlagsSpec {
+    pub name: String,
+    vis: Vis,
+    members: List<MemberSpec> = [],
+    head: DeclHead = DeclHead {},
+}
+
+impl FlagsSpec {
+    pub fn new<S: AsStrSlice>(name: S, vis: Vis = Vis::Private) -> FlagsSpec {
+        return FlagsSpec { name: name.to_string(), vis };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut FlagsSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut FlagsSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut FlagsSpec {
+        self.members.push(MemberSpec { name: name.to_string() });
+        return self;
+    }
+
+    pub fn add_member_spec(&mut self, member: MemberSpec) -> &mut FlagsSpec {
+        self.members.push(member);
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        emit_members(w, `${self.vis.prefix()}flags ${self.name}`, &self.members);
+    }
+}
+
+fn emit_members(w: &mut CodeWriter, opener: String, members: &List<MemberSpec>) {
+    w.begin(opener);
+    for let member of members {
+        member_head(&member.doc, &member.attrs).emit(w);
+        w.line(`${member.name},`);
+    }
+    w.end();
+}
+
+/// A newtype, `type Name<…> = Base;`.
+pub struct NewtypeSpec {
+    pub name: String,
+    base: String,
+    vis: Vis,
+    generics: List<String> = [],
+    head: DeclHead = DeclHead {},
+}
+
+impl NewtypeSpec {
+    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, base: S1, vis: Vis = Vis::Private) -> NewtypeSpec {
+        return NewtypeSpec {
+            name: name.to_string(),
+            base: base.to_string(),
+            vis,
+        };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut NewtypeSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut NewtypeSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    /// Adds a type parameter, written as it renders (`"T"`).
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut NewtypeSpec {
+        self.generics.push(generic.to_string());
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        w.line(`${self.vis.prefix()}type ${self.name}${generic_list(&self.generics)} = ${self.base};`);
+    }
+}
+
+/// `fn name<…>(…) -> R with …`, opened as a block the caller fills and closes
+/// with `CodeWriter::end`.
+pub struct FnSpec {
+    pub name: String,
+    vis: Vis,
+    is_export: bool = false,
+    generics: List<String> = [],
+    receiver: Option<String> = null,
+    params: List<ParamSpec> = [],
+    return_type: Option<String> = null,
+    effects: List<String> = [],
+    /// Whether `CodeWriter::prune` may drop it when nothing kept references it.
+    prunable: bool = false,
+    head: DeclHead = DeclHead {},
+}
+
+impl FnSpec {
+    pub fn new<S: AsStrSlice>(name: S, vis: Vis = Vis::Private) -> FnSpec {
+        return FnSpec { name: name.to_string(), vis };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut FnSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut FnSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    /// Adds a type parameter, written as it renders (`"V: Visitor"`).
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut FnSpec {
+        self.generics.push(generic.to_string());
+        return self;
+    }
+
+    /// Sets the receiver, written as it renders (`"&self"`) before the
+    /// parameters.
+    pub fn set_receiver<S: AsStrSlice>(&mut self, recv: S) -> &mut FnSpec {
+        self.receiver = Option::Some(recv.to_string());
+        return self;
+    }
+
+    pub fn add_param<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut FnSpec {
+        self.params.push(ParamSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+        });
+        return self;
+    }
+
+    pub fn add_param_spec(&mut self, param: ParamSpec) -> &mut FnSpec {
+        self.params.push(param);
+        return self;
+    }
+
+    pub fn set_return_type<S: AsStrSlice>(&mut self, type_str: S) -> &mut FnSpec {
+        self.return_type = Option::Some(type_str.to_string());
+        return self;
+    }
+
+    /// Adds an effect to the `with` clause.
+    pub fn add_effect<S: AsStrSlice>(&mut self, effect_name: S) -> &mut FnSpec {
+        self.effects.push(effect_name.to_string());
+        return self;
+    }
+
+    /// Marks the function `export`, which implies `pub`.
+    pub fn set_export(&mut self) -> &mut FnSpec {
+        self.is_export = true;
+        return self;
+    }
+
+    /// Let `CodeWriter::prune` drop the function when nothing kept calls it or
+    /// `note`s its name, and forward calls through it. Every reference to it
+    /// must then be a `CallStmt` or a `note`.
+    pub fn set_prunable(&mut self) -> &mut FnSpec {
+        self.prunable = true;
+        return self;
+    }
+
+    /// Writes the head and opens the body. The caller writes the body, then
+    /// closes it with `w.end()`.
+    pub fn emit_begin(&self, w: &mut CodeWriter) {
+        let mut pre = String::new();
+        for let line of self.head.lines() {
+            pre.push_str(&line);
+            pre.push('\n');
+        }
+        let mut params: List<String> = [];
+        let mut defaults: List<String> = [];
+        for let p of &self.params {
+            params.push(p.name);
+            defaults.push(p.default.unwrap_or(""));
+        }
+        w.open_fn(&FnHead {
+            pre,
+            signature: self.signature(),
+            name: self.name,
+            params,
+            defaults,
+            prunable: self.prunable,
+            returns_unit: self.returns_unit(),
+        });
+    }
+
+    fn returns_unit(&self) -> bool {
+        return match &self.return_type {
+            null => true,
+            Some(t) => *t == "()",
+        };
+    }
+
+    fn signature(&self) -> String {
+        let mut sig = String::with_capacity(64);
+        sig.push_str(if self.is_export { "export " } else { self.vis.prefix() });
+        sig.push_str(`fn ${self.name}${generic_list(&self.generics)}(`);
+        let mut parts: List<String> = [];
+        if let Some(recv) = &self.receiver {
+            parts.push(*recv);
+        }
+        for let p of &self.params {
+            let binding = if p.is_mut { "mut " } else { "" };
+            let default = if let Some(d) = &p.default {
+                ` = ${*d}`;
+            } else {
+                "";
+            };
+            parts.push(`${binding}${p.name}: ${p.type_str}${default}`);
+        }
+        sig.push_str(&parts.join(", "));
+        sig.push(')');
+        if let Some(ret) = &self.return_type {
+            sig.push_str(` -> ${*ret}`);
+        }
+        if self.effects.len() == 1 {
+            sig.push_str(` with ${self.effects[0]}`);
+        } else if self.effects.len() > 1 {
+            sig.push_str(` with (${self.effects.join(", ")})`);
+        }
+        return sig;
+    }
+}
+
+/// `global Name: T = init;`.
+pub struct GlobalSpec {
+    pub name: String,
+    type_str: String,
+    initializer: String,
+    vis: Vis,
+    is_mut: bool = false,
+    head: DeclHead = DeclHead {},
+}
+
+impl GlobalSpec {
+    pub fn new<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+        name: S,
+        type_str: S1,
+        initializer: S2,
+        vis: Vis = Vis::Private,
+    ) -> GlobalSpec {
+        return GlobalSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            initializer: initializer.to_string(),
+            vis,
+        };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut GlobalSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut GlobalSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    /// Marks the global `mut`.
+    pub fn set_mut(&mut self) -> &mut GlobalSpec {
+        self.is_mut = true;
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        let binding = if self.is_mut { "mut " } else { "" };
+        w.line(`${self.vis.prefix()}global ${binding}${self.name}: ${self.type_str} = ${self.initializer};`);
+    }
+}
+
+/// `impl<…> Type` or `impl<…> Trait for Type`, opened as a block the caller
+/// fills and closes with `CodeWriter::end`.
+pub struct ImplSpec {
+    type_name: String,
+    trait_name: Option<String> = null,
+    generics: List<String> = [],
+    head: DeclHead = DeclHead {},
+}
+
+impl ImplSpec {
+    pub fn new<S: AsStrSlice>(type_name: S) -> ImplSpec {
+        return ImplSpec { type_name: type_name.to_string() };
+    }
+
+    pub fn new_trait<S: AsStrSlice, S1: AsStrSlice>(trait_name: S, type_name: S1) -> ImplSpec {
+        return ImplSpec {
+            type_name: type_name.to_string(),
+            trait_name: Option::Some(trait_name.to_string()),
+        };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut ImplSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut ImplSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    /// Adds a type parameter of the impl, written as it renders (`"T: Default"`).
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut ImplSpec {
+        self.generics.push(generic.to_string());
+        return self;
+    }
+
+    /// Writes the head and opens the body. The caller writes the body, then
+    /// closes it with `w.end()`.
+    pub fn emit_begin(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        let head = `impl${generic_list(&self.generics)}`;
+        if let Some(t) = &self.trait_name {
+            w.begin(`${head} ${*t} for ${self.type_name}`);
+        } else {
+            w.begin(`${head} ${self.type_name}`);
+        }
+    }
+}
+
+/// The head of a generated module: the `#![generated]` header that says where
+/// it came from.
+pub struct ModuleSpec {
+    origin: Origin,
+}
+
+impl ModuleSpec {
+    /// The head of a module a Kiln generator writes, from its request's
+    /// `origin()`.
+    pub fn from_origin(origin: &Origin) -> ModuleSpec {
+        return ModuleSpec { origin: *origin };
+    }
+
+    /// The head of a module a script writes outside Kiln: `by` names the
+    /// script, `sources` what it read, each from the repository root.
+    pub fn new<S: AsStrSlice>(by: S, sources: List<String> = []) -> ModuleSpec {
+        return ModuleSpec {
+            origin: Origin { by: by.to_string(), sources },
+        };
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter)
+        contract w.is_empty(), "the header opens the module"
+    {
+        w.raw(self.origin.header());
+    }
+}
+
+/// `<A, B>` for the parameters `generics`, or nothing for none.
+fn generic_list(generics: &List<String>) -> String {
+    if generics.is_empty() {
+        return "";
+    }
+    return `<${generics.join(", ")}>`;
+}

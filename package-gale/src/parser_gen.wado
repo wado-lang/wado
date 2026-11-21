@@ -45,7 +45,7 @@ use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_nam
 use { MetPredicate } from "./gate_conditions.wado";
 use { is_nullable } from "./grammar_analysis.wado";
 use { RuleOverlap } from "./rule_overlap.wado";
-use { CallForm, CallStmt, CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
+use { CallForm, CallStmt, CodeWriter, FnSpec, GlobalSpec, ParamSpec, wado } from "lib:wadopoet";
 use { HashMap } from "core:collections";
 use {
     PredictionNode,
@@ -226,7 +226,7 @@ fn add_zero_default_param<S: AsStrSlice, S1: AsStrSlice>(f: &mut FnSpec, name: S
     f.add_param_spec(ParamSpec {
         name: name.to_string(),
         type_str: type_str.to_string(),
-        default_value: Option::Some("0"),
+        default: Option::Some("0"),
     });
 }
 
@@ -341,13 +341,13 @@ fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &EmitContext) {
         };
         index.push(`${id}`);
     }
-    w.line(`global CALL_FOLLOW_SETS: List<List<i32>> = [${sets.join(", ")}];`);
-    w.line(`global CALL_FOLLOW: List<i32> = [${index.join(", ")}];`);
+    GlobalSpec::new("CALL_FOLLOW_SETS", "List<List<i32>>", `[${sets.join(", ")}]`).emit(w);
+    GlobalSpec::new("CALL_FOLLOW", "List<i32>", `[${index.join(", ")}]`).emit(w);
     let mut ends: List<String> = [];
     for let e of &ctx.plan.recovery_sets().call_follow_ends {
         ends.push(`${*e}`);
     }
-    w.line(`global CALL_FOLLOW_ENDS: List<bool> = [${ends.join(", ")}];`);
+    GlobalSpec::new("CALL_FOLLOW_ENDS", "List<bool>", `[${ends.join(", ")}]`).emit(w);
     w.blank();
 }
 

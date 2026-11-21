@@ -30,7 +30,7 @@ use {
 use { HashMap } from "core:collections";
 use { follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { elements_match } from "./ir_shape.wado";
-use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec } from "lib:wadopoet";
+use { CallForm, CallStmt, CodeWriter, FieldSpec, FnSpec, ImplSpec, ParamSpec, StructSpec } from "lib:wadopoet";
 use { AmbiguousNode, PredictionNode, build_group_prediction_tree } from "./prediction.wado";
 use {
     RULE_START_TOK_LOCAL,
@@ -76,7 +76,7 @@ pub fn add_arg_params(f: &mut FnSpec, rule: &ParserRule, ctx: &EmitContext) {
         f.add_param_spec(ParamSpec {
             name: arg_param_name(&a.name),
             type_str: a.type_text.trim().to_string(),
-            default_value: Option::Some(def),
+            default: Option::Some(def),
         });
     }
 }
@@ -356,18 +356,21 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
         if !ctx.rule_emits_vals(rule) {
             continue;
         }
-        w.begin(`struct ${vals_struct_name(rule)}`);
+        let mut vals = StructSpec::new(vals_struct_name(rule));
         if rule_threads_args(rule) {
-            gen_vals_fields(w, &rule.args);
+            add_vals_fields(&mut vals, &rule.args);
         }
-        gen_vals_fields(w, &rule.returns_decls);
-        gen_vals_fields(w, &rule.locals_decls);
-        gen_capture_fields(w, ctx.plan.rule_captures(&rule.name));
+        add_vals_fields(&mut vals, &rule.returns_decls);
+        add_vals_fields(&mut vals, &rule.locals_decls);
+        add_capture_fields(&mut vals, ctx.plan.rule_captures(&rule.name));
         for let label of &ctx.plan.rule_captures(&rule.name).labels {
-            let ty = label_value_type(label.is_token, &label.ref_name, ctx);
-            w.line(`${after_label_field(&label.base)}: ${ty} = ${unbound_label_value(label.is_token)},`);
+            vals.add_field_spec(FieldSpec {
+                name: after_label_field(&label.base),
+                type_str: label_value_type(label.is_token, &label.ref_name, ctx),
+                default: Option::Some(unbound_label_value(label.is_token)),
+            });
         }
-        w.end();
+        vals.emit(w);
         w.blank();
     }
 }
@@ -381,23 +384,35 @@ pub fn after_label_field<S: AsStrSlice>(base: S) -> String {
 /// The captured token range / builder row of each labeled rule call an action
 /// reads. A read that may come before the call asks the shared label instead
 /// (`LabelReach::Shared`).
-fn gen_capture_fields(w: &mut CodeWriter, captures: &RuleCaptures) {
+fn add_capture_fields(vals: &mut StructSpec, captures: &RuleCaptures) {
     for let f of &captures.spans {
-        w.line(`${rule_span_lo_field(f)}: i32 = 0,`);
-        w.line(`${rule_span_hi_field(f)}: i32 = -1,`);
+        vals.add_field_spec(FieldSpec {
+            name: rule_span_lo_field(f),
+            type_str: "i32",
+            default: Option::Some("0"),
+        });
+        vals.add_field_spec(FieldSpec {
+            name: rule_span_hi_field(f),
+            type_str: "i32",
+            default: Option::Some("-1"),
+        });
     }
     for let f of &captures.nodes {
-        w.line(`${rule_node_field(f)}: i32 = -1,`);
+        vals.add_field_spec(FieldSpec {
+            name: rule_node_field(f),
+            type_str: "i32",
+            default: Option::Some("-1"),
+        });
     }
 }
 
-fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
+fn add_vals_fields(vals: &mut StructSpec, decls: &List<AttrDecl>) {
     for let d of decls {
         if !field_in_vals(d) {
             continue;
         }
-        let def = wado_type_default(&d.type_text).expect("gen_vals_fields: field_in_vals/wado_type_default disagree");
-        w.line(`${d.name}: ${d.type_text} = ${def},`);
+        let def = wado_type_default(&d.type_text).expect("add_vals_fields: field_in_vals/wado_type_default disagree");
+        vals.add_field_spec(FieldSpec { name: d.name, type_str: d.type_text, default: Option::Some(def) });
     }
 }
 
@@ -861,7 +876,7 @@ pub fn add_seeded_vals_param(f: &mut FnSpec, rule: &ParserRule) {
     f.add_param_spec(ParamSpec {
         name: "vals",
         type_str: vname,
-        default_value: Option::Some(`${vname} {}`),
+        default: Option::Some(`${vname} {}`),
     });
 }
 

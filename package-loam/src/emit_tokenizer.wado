@@ -2,7 +2,7 @@
 //! `decode` run the runtime's BPE over the vocabulary and merges the file
 //! names, embedded as data.
 
-use { CodeWriter, byte_string_literal, wado } from "lib:wadopoet";
+use { CodeWriter, FnSpec, GlobalSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado } from "lib:wadopoet";
 use { BpePipeline } from "./tokenizer_json.wado";
 
 /// The generated module's source for `bpe`, read from `path`, importing the
@@ -16,33 +16,33 @@ pub fn emit_tokenizer(bpe: &BpePipeline, path: &String, runtime: &String) -> Str
     w.blank();
     w.line(wado`use { BpeTokenizer, PieceSplit, TokenSpelling } from "${*runtime}";`);
     w.blank();
-    w.line("global TOKENIZER: BpeTokenizer = BpeTokenizer::new(");
-    w.line(`    &${byte_string_literal(&tokens)},`);
-    w.line(`    &${byte_string_literal(&order_bytes(&bpe.tokens))},`);
-    w.line(`    &${byte_string_literal(&merges_bytes(&bpe.merges))},`);
-    w.line(`    [${specials.join(", ")}],`);
-    w.line(`    TokenSpelling::${bpe.spelling},`);
-    w.line(`    PieceSplit::${bpe.split},`);
-    w.line(`    ${bpe.ignore_merges},`);
-    w.line(`    ${bpe.unknown},`);
-    w.line(`    [${prefix.join(", ")}],`);
-    w.line(");");
+    let args: List<String> = [
+        `&${byte_string_literal(&tokens)}`, `&${byte_string_literal(&order_bytes(&bpe.tokens))}`,
+        `&${byte_string_literal(&merges_bytes(&bpe.merges))}`, `[${specials.join(", ")}]`,
+        `TokenSpelling::${bpe.spelling}`, `PieceSplit::${bpe.split}`, `${bpe.ignore_merges}`, `${bpe.unknown}`,
+        `[${prefix.join(", ")}]`,
+    ];
+    GlobalSpec::new("TOKENIZER", "BpeTokenizer", `BpeTokenizer::new(${args.join(", ")})`).emit(&mut w);
     w.blank();
-    w.line("/// BPE over this file's vocabulary and merges.");
-    w.line("pub struct Tokenizer {");
-    w.line("}");
+    StructSpec::new("Tokenizer", Vis::Pub).set_doc("BPE over this file's vocabulary and merges.").emit(&mut w);
     w.blank();
-    w.line("impl Tokenizer {");
-    w.line("    /// The ids `text` encodes to.");
-    w.line("    pub fn encode(text: &String) -> List<i32> {");
-    w.line("        return TOKENIZER.encode(text);");
-    w.line("    }");
+    ImplSpec::new("Tokenizer").emit_begin(&mut w);
+    FnSpec::new("encode", Vis::Pub)
+        .set_doc("The ids `text` encodes to.")
+        .add_param("text", "&String")
+        .set_return_type("List<i32>")
+        .emit_begin(&mut w);
+    w.line("return TOKENIZER.encode(text);");
+    w.end();
     w.blank();
-    w.line("    /// The text `ids` decode to.");
-    w.line("    pub fn decode(ids: &List<i32>) -> String {");
-    w.line("        return TOKENIZER.decode(ids);");
-    w.line("    }");
-    w.line("}");
+    FnSpec::new("decode", Vis::Pub)
+        .set_doc("The text `ids` decode to.")
+        .add_param("ids", "&List<i32>")
+        .set_return_type("String")
+        .emit_begin(&mut w);
+    w.line("return TOKENIZER.decode(ids);");
+    w.end();
+    w.end();
     return w.to_string();
 }
 

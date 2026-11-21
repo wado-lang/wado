@@ -11,7 +11,7 @@ use { bits_ids, bits_union_into, sets_overlap } from "./token_kinds.wado";
 use { Reading } from "./readings.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use { DISPATCH_KIND_LOCAL } from "./ident.wado";
-use { CodeWriter, FnSpec } from "lib:wadopoet";
+use { CodeWriter, FnSpec, GlobalSpec } from "lib:wadopoet";
 
 /// Scan-side twin of `gen_lookahead_condition`. Uses
 /// `tokens[pos + d]` (guarded by `pos + d < tokens.len()`) instead
@@ -209,15 +209,15 @@ fn intern_position_set(sets: &mut List<List<i32>>, set: &List<i32>) -> i32 {
 pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
     // Also the empty wanted-set `fail` takes, so a lexer-only grammar — whose
     // `Parser` runtime is still emitted — needs it too.
-    w.line("global EMPTY_SYNC: List<i32> = [];");
+    GlobalSpec::new("EMPTY_SYNC", "List<i32>", "[]").emit(w);
     for let entry of ctx.tables.sync_sets() {
         let bits = sync_bits_name(entry.id);
         if used.contains(bits) {
-            w.line(`global ${bits}: List<i32> = [${kind_bitset_words(&entry.tokens).join(", ")}];`);
+            GlobalSpec::new(bits, "List<i32>", `[${kind_bitset_words(&entry.tokens).join(", ")}]`).emit(w);
         }
         let list = sync_list_name(entry.id);
         if used.contains(list) {
-            w.line(`global ${list}: List<i32> = [${ctx.analysis.token_names_of(&entry.tokens).join(", ")}];`);
+            GlobalSpec::new(list, "List<i32>", `[${ctx.analysis.token_names_of(&entry.tokens).join(", ")}]`).emit(w);
         }
     }
     w.blank();

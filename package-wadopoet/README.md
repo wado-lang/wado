@@ -7,31 +7,45 @@ it. A package names it under `[dependencies]` and imports it from
 ## Building Source
 
 `CodeWriter` holds the text and its indentation. `begin` opens a block, `end`
-closes it, and `line` writes one line at the current depth. The specs
-(`StructSpec`, `VariantSpec`, `EnumSpec`, `FlagsSpec`, `NewtypeSpec`, `FnSpec`,
-`GlobalSpec`, `ImplSpec`) build a declaration and emit it into a writer. A type
-declaration takes a doc comment, and attributes too unless it is a newtype,
-which takes none. A field, a case and an enum member take both, and a flags
-member neither. Most of a function body is plain lines.
+closes it, and `line` writes one line at the current depth. Most of a function
+body is plain lines.
+
+A spec builds one declaration and emits it into a writer: `StructSpec`,
+`VariantSpec`, `EnumSpec`, `FlagsSpec`, `NewtypeSpec`, `GlobalSpec`, `FnSpec`
+and `ImplSpec`. `FnSpec` and `ImplSpec` open a block with `emit_begin`, which
+the caller fills and closes with `end`. Every spec is built the same way:
+
+- `new(name, vis)` creates it. `vis` defaults to file-private.
+- `set_doc` sets the doc comment and `add_attr` adds an attribute.
+- `add_generic` adds a type parameter, where the declaration takes one.
+- `add_field`, `add_case`, `add_member` and `add_param` add a member by its
+  name and type. Each has a `_spec` form taking a `FieldSpec`, `CaseSpec`,
+  `MemberSpec` or `ParamSpec`, for a member with a default, a payload, a doc
+  comment or attributes.
+
+Every setter returns the spec, so calls chain.
 
 ```wado
-use { CodeWriter, FnSpec, StructSpec, Vis } from "lib:wadopoet";
+use { CodeWriter, FieldSpec, FnSpec, StructSpec, Vis } from "lib:wadopoet";
 
 let mut w = CodeWriter::new();
 let mut s = StructSpec::new("Point", Vis::Pub);
-s.add_pub_field("x", "i32").add_pub_field("y", "i32");
+s.set_doc("A point in the plane.");
+s.add_field("x", "i32", Vis::Pub).add_field("y", "i32", Vis::Pub);
+s.add_field_spec(FieldSpec { name: "label", type_str: "String", default: Option::Some("\"\"") });
 s.emit(&mut w);
 w.blank();
 
-let mut f = FnSpec::new("sum");
-f.add_param("p", "&Point");
-f.set_return_type("i32");
-f.emit_begin(&mut w);
+FnSpec::new("sum").add_param("p", "&Point").set_return_type("i32").emit_begin(&mut w);
 w.line("return p.x + p.y;");
 w.end();
 
 let source = w.to_string();
 ```
+
+Write a declaration through its spec, not as a line of text. `prune` reads a
+function only through `FnSpec`, and a doc comment `FnSpec` writes goes where the
+function goes.
 
 `append` splices in what another writer holds, indented to the current depth.
 Build a body in its own writer and append it, rather than printing it with

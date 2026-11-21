@@ -3,14 +3,14 @@ use {
     CallStmt,
     CallForm,
     FieldSpec,
+    CaseSpec,
+    MemberSpec,
+    ParamSpec,
     StructSpec,
     VariantSpec,
-    WadoVariantCase,
     EnumSpec,
-    EnumMember,
     FlagsSpec,
     NewtypeSpec,
-    ParamSpec,
     FnSpec,
     GlobalSpec,
     ImplSpec,
@@ -19,7 +19,7 @@ use {
     wado,
     char_range_pat,
     byte_string_literal,
-} from "./wadopoet.wado";
+} from "./lib.wado";
 use { eval, EvalHost } from "core:eval";
 use { Origin } from "core:kiln";
 
@@ -409,8 +409,8 @@ test "StructSpec basic" {
 
 test "StructSpec pub with pub fields" {
     let mut s = StructSpec::new("Token", Vis::Pub);
-    s.add_pub_field("kind", "i32");
-    s.add_pub_field("text", "String");
+    s.add_field("kind", "i32", Vis::Pub);
+    s.add_field("text", "String", Vis::Pub);
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -420,18 +420,19 @@ test "StructSpec pub with pub fields" {
 
 test "StructSpec mixed visibility fields" {
     let mut s = StructSpec::new("Config", Vis::Pub);
-    s.add_pub_field("name", "String");
+    s.add_field("name", "String", Vis::Pub);
+    s.add_field("cache", "i32", Vis::Internal);
     s.add_field("secret", "i32");
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
-    let expected = "pub struct Config {\n    pub name: String,\n    secret: i32,\n}\n";
+    let expected = "pub struct Config {\n    pub name: String,\n    internal cache: i32,\n    secret: i32,\n}\n";
     assert w.to_string() == expected;
 }
 
 test "StructSpec with FieldSpec" {
     let mut s = StructSpec::new("Foo");
-    s.add_field_spec(FieldSpec::new_pub("x", "f64"));
+    s.add_field_spec(FieldSpec { name: "x", type_str: "f64", vis: Vis::Pub });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -444,7 +445,7 @@ test "a field's attributes precede it, one a line" {
     s.add_field_spec(FieldSpec {
         name: "x",
         type_str: "i32",
-        is_pub: true,
+        vis: Vis::Pub,
         default: Option::Some("0"),
         attrs: ["wire(name = \"y\")", "secret"],
     });
@@ -457,7 +458,10 @@ test "a field's attributes precede it, one a line" {
 
 test "an enum member's attributes precede it" {
     let mut e = EnumSpec::new("Corpus");
-    e.add_member_with_attrs("Web", ["wire(name = \"web\")"]);
+    e.add_member_spec(MemberSpec {
+        name: "Web",
+        attrs: ["wire(name = \"web\")"],
+    });
 
     let mut w = CodeWriter::new();
     e.emit(&mut w);
@@ -468,29 +472,36 @@ test "a declaration's doc comment and attributes precede it, and its members' th
     let mut s = StructSpec::new("Point", Vis::Pub);
     s.set_doc("A point.\n\nIn the plane.").add_attr("wire(name_policy = \"camelCase\")");
     s.add_field_spec(FieldSpec {
-        ..FieldSpec::new_pub("x_pos", "i32"),
+        name: "x_pos",
+        type_str: "i32",
+        vis: Vis::Pub,
         doc: Option::Some("Across."),
     });
     let mut e = EnumSpec::new("Color");
     e.set_doc("A hue.");
-    e.add_member_spec(EnumMember {
+    e.add_member_spec(MemberSpec {
         name: "Red",
-        trailing_comment: null,
         attrs: ["wire(name = \"red\")"],
         doc: Option::Some("Warm."),
     });
     let mut v = VariantSpec::new("Shape");
     v.add_attr("wire(tag = \"kind\")");
-    v.add_case_spec(WadoVariantCase {
+    v.add_case_spec(CaseSpec {
         name: "Dot",
-        payload: null,
         attrs: ["wire(name = \"dot\")"],
         doc: Option::Some("No size."),
     });
     let mut f = FlagsSpec::new("Perms", Vis::Pub);
-    f.set_doc("Access.").add_attr("wire(name_policy = \"kebab-case\")").add_member("Read").add_member("Write");
+    f.set_doc("Access.").add_attr("wire(name_policy = \"kebab-case\")");
+    f.add_member_spec(MemberSpec { name: "Read", doc: Option::Some("Look.") }).add_member("Write");
     let mut n = NewtypeSpec::new("Meters", "f64", Vis::Pub);
-    n.set_doc("A length.");
+    n.set_doc("A length.").add_attr("allow(unused)");
+    let mut g = GlobalSpec::new("ORIGIN", "i32", "0");
+    g.set_doc("Where it starts.").add_attr("allow(unused)").set_mut();
+    let mut i = ImplSpec::new("Meters");
+    i.set_doc("Lengths.").add_attr("coverage(off)");
+    let mut m = FnSpec::new("zero", Vis::Pub);
+    m.set_doc("None at all.").add_attr("inline").set_return_type("Meters");
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -498,6 +509,12 @@ test "a declaration's doc comment and attributes precede it, and its members' th
     v.emit(&mut w);
     f.emit(&mut w);
     n.emit(&mut w);
+    g.emit(&mut w);
+    i.emit_begin(&mut w);
+    m.emit_begin(&mut w);
+    w.line("return 0.0;");
+    w.end();
+    w.end();
     assert w.to_string() == "/// A point.
 ///
 /// In the plane.
@@ -521,12 +538,66 @@ variant Shape {
 /// Access.
 #[wire(name_policy = \"kebab-case\")]
 pub flags Perms {
+    /// Look.
     Read,
     Write,
 }
 /// A length.
+#[allow(unused)]
 pub type Meters = f64;
+/// Where it starts.
+#[allow(unused)]
+global mut ORIGIN: i32 = 0;
+/// Lengths.
+#[coverage(off)]
+impl Meters {
+    /// None at all.
+    #[inline]
+    pub fn zero() -> Meters {
+        return 0.0;
+    }
+}
 ";
+}
+
+test "what every spec writes above a declaration compiles" {
+    let mut w = CodeWriter::new();
+    let mut f = FlagsSpec::new("Perms");
+    f.add_member_spec(MemberSpec { name: "Read", doc: Option::Some("Look.") });
+    f.emit(&mut w);
+    let mut n = NewtypeSpec::new("Bag", "List<T>");
+    n.set_doc("Some.").add_generic("T");
+    n.emit(&mut w);
+    let mut v = VariantSpec::new("Maybe");
+    v.set_doc("Perhaps.").add_generic("T").add_case_spec(CaseSpec { name: "Just", payload: Option::Some("T") });
+    v.add_case("Nothing");
+    v.emit(&mut w);
+    let mut g = GlobalSpec::new("HITS", "i32", "0");
+    g.set_doc("Counted.").set_mut();
+    g.emit(&mut w);
+    let mut i = ImplSpec::new("Perms");
+    i.set_doc("Bits.").add_attr("coverage(off)");
+    i.emit_begin(&mut w);
+    let mut m = FnSpec::new("read");
+    m.set_doc("Readable.").set_return_type("Perms");
+    m.emit_begin(&mut w);
+    w.line("return Perms::Read;");
+    w.end();
+    w.end();
+    let run = "HITS += 1; let b: Bag<i32> = [1]; let j: Maybe<i32> = Just(2); print(`${Perms::read() as u32}${b.len()}${HITS}${j matches { Just(2) }}`);";
+    assert printed(run, w.to_string()) == "111true";
+}
+
+test "prune drops a function's doc comment and attributes with it" {
+    let mut w = CodeWriter::new();
+    let mut f = FnSpec::new("dead");
+    f.set_doc("Gone.").add_attr("inline").set_prunable();
+    f.emit_begin(&mut w);
+    w.ret();
+    w.end();
+    w.line("global G: i32 = 0;");
+    w.prune();
+    assert w.to_string() == "global G: i32 = 0;\n";
 }
 
 test "a doc comment reaches reflection as written" {
@@ -552,8 +623,8 @@ test "VariantSpec unit cases" {
 
 test "VariantSpec with payloads" {
     let mut v = VariantSpec::new("Shape");
-    v.add_case_with_payload("Circle", "f64");
-    v.add_case_with_payload("Rect", "[f64, f64]");
+    v.add_case_spec(CaseSpec { name: "Circle", payload: Option::Some("f64") });
+    v.add_case_spec(CaseSpec { name: "Rect", payload: Option::Some("[f64, f64]") });
     v.add_case("Point");
 
     let mut w = CodeWriter::new();
@@ -590,25 +661,33 @@ test "FnSpec simple" {
     assert w.to_string() == expected;
 }
 
+/// The line `f` opens its body with, without the brace.
+fn signature_of(f: &FnSpec) -> String {
+    let mut w = CodeWriter::new();
+    f.emit_begin(&mut w);
+    w.end();
+    return w.to_string().trim_suffix(" {\n}\n").to_string();
+}
+
 test "FnSpec with receiver" {
     let mut f = FnSpec::new("len", Vis::Pub);
     f.set_receiver("&self");
     f.set_return_type("i32");
 
-    assert f.signature() == "pub fn len(&self) -> i32";
+    assert signature_of(&f) == "pub fn len(&self) -> i32";
 }
 
-test "FnSpec with default-valued param" {
+test "FnSpec with default-valued and mut params" {
     let mut f = FnSpec::new("parse_expr");
-    f.add_param("p", "&mut Parser");
+    f.add_param_spec(ParamSpec { name: "p", type_str: "Parser", is_mut: true });
     f.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
-        default_value: Option::<String>::Some("0"),
+        default: Option::Some("0"),
     });
     f.set_return_type("ExprNode");
 
-    assert f.signature() == "fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> ExprNode";
+    assert signature_of(&f) == "fn parse_expr(mut p: Parser, min_prec: i32 = 0) -> ExprNode";
 }
 
 test "FnSpec no return type" {
@@ -630,8 +709,7 @@ test "FnSpec signature string" {
     f.add_param("scale", "f64");
     f.set_return_type("String");
 
-    let sig = f.signature();
-    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String";
+    assert signature_of(&f) == "pub fn transform(&self, input: &String, scale: f64) -> String";
 }
 
 test "FnSpec export with effects" {
@@ -641,8 +719,7 @@ test "FnSpec export with effects" {
     f.add_effect("Stderr");
     f.add_effect("Environment");
 
-    let sig = f.signature();
-    assert sig == "export fn run() with (Stdout, Stderr, Environment)";
+    assert signature_of(&f) == "export fn run() with (Stdout, Stderr, Environment)";
 }
 
 // A row of one goes bare; only a row of more than one takes parentheses.
@@ -651,8 +728,7 @@ test "FnSpec with a single effect" {
     f.set_export();
     f.add_effect("Stdout");
 
-    let sig = f.signature();
-    assert sig == "export fn run() with Stdout";
+    assert signature_of(&f) == "export fn run() with Stdout";
 }
 
 test "FnSpec generic type parameter" {
@@ -661,8 +737,7 @@ test "FnSpec generic type parameter" {
     f.add_param("v", "&mut V");
     f.add_param("node", "&StmtNode");
 
-    let sig = f.signature();
-    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)";
+    assert signature_of(&f) == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)";
 }
 
 test "FnSpec multiple generics" {
@@ -673,8 +748,7 @@ test "FnSpec multiple generics" {
     f.add_param("b", "B");
     f.set_return_type("[A, B]");
 
-    let sig = f.signature();
-    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]";
+    assert signature_of(&f) == "fn zip<A, B>(a: A, b: B) -> [A, B]";
 }
 
 
@@ -750,7 +824,7 @@ test "variant + global composition" {
 
 test "chaining builder methods" {
     let mut s = StructSpec::new("Pair", Vis::Pub);
-    s.add_pub_field("first", "i32").add_pub_field("second", "i32");
+    s.add_field("first", "i32", Vis::Pub).add_field("second", "i32", Vis::Pub);
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -910,7 +984,7 @@ test "ImplSpec trait impl" {
 test "a generic struct and its impl compile" {
     let mut w = CodeWriter::new();
     let mut s = StructSpec::new("Holder", Vis::Pub);
-    s.add_generic("T: Default").add_pub_field("value", "T");
+    s.add_generic("T: Default").add_field("value", "T", Vis::Pub);
     s.emit(&mut w);
     let mut i = ImplSpec::new("Holder<T>");
     i.add_generic("T: Default");
@@ -932,7 +1006,7 @@ test "struct + impl trait composition" {
 
     // struct
     let mut s = StructSpec::new("Article", Vis::Pub);
-    s.add_pub_field("name", "String");
+    s.add_field("name", "String", Vis::Pub);
     s.emit(&mut w);
     w.blank();
 
