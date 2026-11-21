@@ -51,7 +51,9 @@ use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_rea
 use crate::synthesis::traits::{
     REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
 };
-use crate::tir::{AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef};
+use crate::tir::{
+    AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef, solve_row,
+};
 use crate::trait_solver::args_per_param;
 use crate::unparse::unparse_generic_params_into;
 
@@ -60,7 +62,8 @@ use crate::unparse::unparse_generic_params_into;
 #[derive(Clone, Debug)]
 pub struct BoundUnmet(());
 
-/// A bound asked of a type whose rows the effect check had yet to solve.
+/// A bound asked of a type, or at trait arguments, whose rows the effect check
+/// had yet to solve.
 pub(crate) struct DeferredBound {
     question: DeferredQuestion,
     type_arg: TypeId,
@@ -993,7 +996,7 @@ impl TypeSystem {
                 .substitute_effect_rows(bound.type_arg, rows);
             let asked = bound
                 .trait_
-                .map_rows(&|row| crate::tir::solve_row(row, rows, &mut |_| {}));
+                .map_rows(&|row| solve_row(row, rows, &mut |_| {}));
             let answer = self
                 .solver()
                 .answer_deferred(self, bound.question, closed, &asked);
@@ -3228,8 +3231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // check has solved it.
         let unsolved = self.tysys.type_table.borrow().contains_effect_var(type_arg)
             || trait_.args().iter().any(FqTypeName::names_effect_var);
-        let deferred =
-            unsolved && self.defer_bound(type_arg, trait_name, trait_, param_name, span);
+        let deferred = unsolved && self.defer_bound(type_arg, trait_name, trait_, param_name, span);
         if self.check_and_register_bound(type_arg, trait_) {
             let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
                 bridge.borrow().tied_through_bound(

@@ -2273,7 +2273,7 @@ impl SolverBridge {
     }
 
     /// `asked` of `type_id` as [`Self::answer_owing`] would ask it, kept to be
-    /// asked again of the type once the effect check has solved its rows.
+    /// asked again once the effect check has solved the rows in either.
     /// `None` where the question cannot be put, which `answer_owing` answers
     /// at once.
     pub(super) fn deferred(
@@ -3122,7 +3122,7 @@ pub(super) struct OwedBody {
     pub(super) trait_: DefId,
 }
 
-/// A question put of a type whose rows the effect check has yet to solve, with
+/// A question whose rows the effect check has yet to solve, with
 /// the binders of the scope that put it.
 pub(super) struct DeferredQuestion {
     question: Question,
