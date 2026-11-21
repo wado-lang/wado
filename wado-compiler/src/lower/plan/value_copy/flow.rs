@@ -24,26 +24,24 @@
 //! ends, recursion included.
 
 use super::analyze::collect_pattern_bindings;
-use super::funcset::FuncKeySet;
+use super::funcset::{FuncIndex, FuncKeySet};
 use super::last_use::collect_child_exprs;
-use super::points_to::{
-    Args, Graph, Handle, HoldsHandle, Site, Slot, Target, retains_storage,
-};
+use super::points_to::{Args, Graph, Handle, HoldsHandle, Site, Slot, Target, retains_storage};
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
-    GlobalRole, ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    GlobalRole, ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::type_table::TypeTable;
 use std::collections::VecDeque;
 
 /// A location a call's caller can name, as its callee's summary speaks of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Iface {
+enum Iface {
     /// The storage of the argument at a by-value position.
     Own(u32),
     /// What the argument at a position names: its referent, for a reference.
@@ -58,7 +56,7 @@ pub enum Iface {
 
 /// Where a fact of a [`Summary`] lands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Holder {
+enum Holder {
     /// The call's result names it.
     Result,
     /// The call's result is its storage, handed out uncopied: `return place`
@@ -72,8 +70,8 @@ pub enum Holder {
 /// returns. A fact that holds of any call (an argument's storage holds what its
 /// value names) is left out.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Summary {
-    pub holds: IndexSet<(Holder, Iface)>,
+struct Summary {
+    holds: IndexSet<(Holder, Iface)>,
 }
 
 impl Summary {
@@ -94,8 +92,7 @@ impl Summary {
     /// Whether every value the call returns is storage it created or took by
     /// value that nothing else reaches, so the caller takes it over without a
     /// copy. A parameter its callers pass uncopied is the caller's to rule out.
-    #[must_use]
-    pub fn returns_owned(&self) -> bool {
+    fn returns_owned(&self) -> bool {
         self.holds.iter().all(|&(holder, source)| {
             holder != Holder::Returned || matches!(source, Iface::Fresh | Iface::Own(_))
         })
@@ -104,21 +101,16 @@ impl Summary {
 
 /// Every function's summary, by its position in `flat.functions`.
 pub struct Flow {
-    pub summaries: Vec<Summary>,
+    summaries: Vec<Summary>,
     /// Each body's locals whose storage a reference outliving the frame may
     /// name: one its caller can reach or one out of sight. One the result
     /// reaches leaves with the result, read in the frame only by what holds it
     /// there, which liveness answers for.
     outlived: Vec<IndexSet<u32>>,
-    functions: IndexMap<(ModuleSource, String), u32>,
+    functions: FuncIndex,
 }
 
 impl Flow {
-    #[must_use]
-    pub fn summary(&self, id: u32) -> &Summary {
-        &self.summaries[id as usize]
-    }
-
     /// The locals of `func` whose storage a reference outliving its frame may
     /// name, so its storage must not leave with a move.
     #[must_use]
@@ -131,12 +123,14 @@ impl Flow {
     #[must_use]
     pub fn returns_owned(&self, module: &ModuleSource, name: &str) -> bool {
         self.functions
-            .get(&(module.clone(), name.to_string()))
-            .is_some_and(|&id| self.summaries[id as usize].returns_owned())
+            .id(module, name)
+            .is_some_and(|id| self.summaries[id as usize].returns_owned())
     }
 
     fn id(&self, module: &ModuleSource, name: &str) -> u32 {
-        self.functions[&(module.clone(), name.to_string())]
+        self.functions
+            .id(module, name)
+            .expect("every function of the package is numbered")
     }
 }
 
@@ -145,7 +139,7 @@ struct Package<'a> {
     type_table: &'a TypeTable,
     names: HoldsHandle<'a>,
     builtins: &'a BuiltinDeclarations,
-    functions: IndexMap<(ModuleSource, String), u32>,
+    functions: FuncIndex,
     callees: Vec<Callee>,
     /// Each closure functor's `$call`, by functor id.
     closure_calls: Vec<u32>,
@@ -174,18 +168,11 @@ pub fn compute(
     hands_out_payload: &dyn Fn(&TirFunction) -> bool,
 ) -> Flow {
     let type_table = flat.type_table.borrow();
-    let functions: IndexMap<(ModuleSource, String), u32> = flat
-        .functions
-        .iter()
-        .enumerate()
-        .map(|(i, func)| {
-            let func = func.borrow();
-            (
-                (func.module_source.clone(), func.name.clone()),
-                u32::try_from(i).expect("function count fits u32"),
-            )
-        })
-        .collect();
+    let mut functions = FuncIndex::default();
+    for (id, func) in (0u32..).zip(&flat.functions) {
+        let func = func.borrow();
+        functions.insert(func.module_source.clone(), func.name.clone(), id);
+    }
     let callees = flat
         .functions
         .iter()
@@ -208,7 +195,11 @@ pub fn compute(
             }
         })
         .collect();
-    let id_of = |func: &TirFunction| functions[&(func.module_source.clone(), func.name.clone())];
+    let id_of = |func: &TirFunction| {
+        functions
+            .id(&func.module_source, &func.name)
+            .expect("every function of the package is numbered")
+    };
     let closure_calls = functors
         .iter()
         .map(|functor| id_of(&functor.call_method.borrow()))
@@ -218,9 +209,8 @@ pub fn compute(
         .iter()
         .filter_map(|func| {
             let func = func.borrow();
-            func.is_closure_call()
-                .then(|| Some((func.params.first()?.type_id, id_of(&func))))
-                .flatten()
+            let receiver = func.params.first().filter(|_| func.is_closure_call())?;
+            Some((receiver.type_id, id_of(&func)))
         })
         .collect();
     let mut package = Package {
@@ -317,11 +307,7 @@ fn minted_by_shape(flat: &FlatPackage, package: &Package<'_>) -> IndexMap<String
                     module_source,
                     name,
                     ..
-                } => self
-                    .package
-                    .functions
-                    .get(&(module_source.clone(), name.clone()))
-                    .copied(),
+                } => self.package.functions.id(module_source, name),
                 _ => None,
             };
             if let Some(id) = minted {
@@ -346,6 +332,11 @@ fn minted_by_shape(flat: &FlatPackage, package: &Package<'_>) -> IndexMap<String
         crate::tir_visitor::TirRefVisitor::visit_expr(&mut mints, global.init.slot_expr());
     }
     mints.out
+}
+
+/// An expression's identity while the body holding it is solved.
+fn key(expr: &TirExpr) -> usize {
+    std::ptr::from_ref(expr).addr()
 }
 
 /// The parameter locations of the body being solved.
@@ -523,7 +514,10 @@ impl<'p, 'a> Body<'p, 'a> {
         let returned = g.node();
         let escape = g.node();
         let installed = g.node();
-        let id = package.functions[&(func.module_source.clone(), func.name.clone())];
+        let id = package
+            .functions
+            .id(&func.module_source, &func.name)
+            .expect("every function of the package is numbered");
         let local_types = func
             .params
             .iter()
@@ -639,8 +633,8 @@ impl<'p, 'a> Body<'p, 'a> {
         storage: Option<u32>,
     ) {
         self.read.insert(callee);
-        let summary = self.summaries[callee as usize].clone();
-        self.apply_summary(&summary, args, result, storage);
+        let summaries = self.summaries;
+        self.apply_summary(&summaries[callee as usize], args, result, storage);
     }
 
     /// [`Self::apply`] with `summary`; the result's own storage lands in
@@ -758,8 +752,10 @@ impl<'p, 'a> Body<'p, 'a> {
         if let Some(&loc) = self.shape_locations.get(&key) {
             return Some(loc);
         }
-        let ResolvedType::Function { params, .. } =
-            self.package.type_table.get(self.package.type_table.peel_refs(callee_type))
+        let ResolvedType::Function { params, .. } = self
+            .package
+            .type_table
+            .get(self.package.type_table.peel_refs(callee_type))
         else {
             return None;
         };
@@ -767,12 +763,13 @@ impl<'p, 'a> Body<'p, 'a> {
         let loc = self.g.node();
         self.shape_locations.insert(key.clone(), loc);
         let this = self.g.node();
-        let params: Vec<u32> = (0..arity).map(|_| self.g.node()).collect();
-        let ret = self.g.node();
+        let (params, ret) = self.target_nodes(arity);
         let minted = self.package.minted.get(&key).cloned().unwrap_or_default();
         for callee in minted {
             if self.package.callees[callee as usize].is_closure_call {
-                let with_self: Vec<u32> = std::iter::once(this).chain(params.iter().copied()).collect();
+                let with_self: Vec<u32> = std::iter::once(this)
+                    .chain(params.iter().copied())
+                    .collect();
                 self.instantiate_target(callee, &with_self, ret);
             } else {
                 self.instantiate_target(callee, &params, ret);
@@ -847,7 +844,10 @@ impl<'p, 'a> Body<'p, 'a> {
         let value = if matches!(expr.kind, TirExprKind::Local { .. }) {
             self.eval(expr)
         } else {
-            self.package.names.of(expr.type_id).then(|| self.held_by(place))
+            self.package
+                .names
+                .of(expr.type_id)
+                .then(|| self.held_by(place))
         };
         (value, Some(place))
     }
@@ -877,7 +877,12 @@ impl<'p, 'a> Body<'p, 'a> {
         let result = self.g.node();
         let info = &self.package.callees[callee as usize];
         if info.dispatches {
-            self.apply_summary(&Summary::unseen(handed.len()), &handed, result, Some(storage));
+            self.apply_summary(
+                &Summary::unseen(handed.len()),
+                &handed,
+                result,
+                Some(storage),
+            );
         } else if !info.analyzed {
             self.local_merge(&slots, &handed, result);
             self.g.copy(self.escape, storage);
@@ -893,7 +898,12 @@ impl<'p, 'a> Body<'p, 'a> {
         let handed: Vec<(Option<u32>, Option<u32>)> =
             args.iter().map(|a| self.hand(a, Slot::UNKNOWN)).collect();
         let result = self.g.node();
-        self.apply_summary(&Summary::unseen(handed.len()), &handed, result, Some(storage));
+        self.apply_summary(
+            &Summary::unseen(handed.len()),
+            &handed,
+            result,
+            Some(storage),
+        );
         Some(result)
     }
 
@@ -1082,12 +1092,7 @@ impl<'p, 'a> Body<'p, 'a> {
     /// recorded, so `expr` must have been evaluated.
     fn storage_of(&mut self, expr: &TirExpr) -> Option<u32> {
         let tt = self.package.type_table;
-        let value_of = |b: &Self, e: &TirExpr| {
-            b.values
-                .get(&std::ptr::from_ref(e).addr())
-                .copied()
-                .flatten()
-        };
+        let value_of = |b: &Self, e: &TirExpr| b.values.get(&key(e)).copied().flatten();
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 let loc = self.local(*index);
@@ -1111,10 +1116,9 @@ impl<'p, 'a> Body<'p, 'a> {
                     self.storage_of(inner)
                 }
             }
-            TirExprKind::Call { .. } | TirExprKind::IndirectCall { .. } => self
-                .call_storage
-                .get(&std::ptr::from_ref(expr).addr())
-                .copied(),
+            TirExprKind::Call { .. } | TirExprKind::IndirectCall { .. } => {
+                self.call_storage.get(&key(expr)).copied()
+            }
             TirExprKind::Block(block) => block.tail_expr().and_then(|t| self.storage_of(t)),
             TirExprKind::If {
                 then_branch,
@@ -1135,10 +1139,7 @@ impl<'p, 'a> Body<'p, 'a> {
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 let tail = block.tail_expr().and_then(|t| self.storage_of(t));
-                let breaks = self
-                    .label_storage
-                    .get(&std::ptr::from_ref(expr).addr())
-                    .copied();
+                let breaks = self.label_storage.get(&key(expr)).copied();
                 self.join([tail, breaks])
             }
             TirExprKind::VariantConstruct {
@@ -1219,22 +1220,14 @@ impl<'p, 'a> Body<'p, 'a> {
                 None
             }
             TirStmtKind::Expr(e) => self.eval(e),
-            TirStmtKind::Return { value } => {
-                if let Some(value) = value {
-                    if let Some(v) = self.eval(value) {
-                        self.g.copy(v, self.result);
-                    }
-                    self.hand_back(value);
-                }
-                None
-            }
-            TirStmtKind::TaskReturn { value } => {
+            TirStmtKind::Return { value: Some(value) } | TirStmtKind::TaskReturn { value } => {
                 if let Some(v) = self.eval(value) {
                     self.g.copy(v, self.result);
                 }
                 self.hand_back(value);
                 None
             }
+            TirStmtKind::Return { value: None } => None,
             TirStmtKind::If {
                 condition,
                 then_block,
@@ -1289,7 +1282,7 @@ impl<'p, 'a> Body<'p, 'a> {
         let value = self
             .eval_kind(expr)
             .filter(|_| self.package.names.of(expr.type_id));
-        self.values.insert(std::ptr::from_ref(expr).addr(), value);
+        self.values.insert(key(expr), value);
         value
     }
 
@@ -1353,25 +1346,19 @@ impl<'p, 'a> Body<'p, 'a> {
             }
             TirExprKind::Call { func, args, .. } => {
                 let storage = self.g.node();
-                self.call_storage
-                    .insert(std::ptr::from_ref(expr).addr(), storage);
+                self.call_storage.insert(key(expr), storage);
                 let args: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 if let Some(decl) = self.package.builtins.get(&**func) {
                     return self.builtin_call(decl, tt.is_reference(expr.type_id), &args, storage);
                 }
-                match self
-                    .package
-                    .functions
-                    .get(&(func.module_source.clone(), func.name.clone()))
-                {
-                    Some(&id) => self.call(id, &args, storage),
+                match self.package.functions.id(&func.module_source, &func.name) {
+                    Some(id) => self.call(id, &args, storage),
                     None => self.opaque_call(&args, storage),
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let storage = self.g.node();
-                self.call_storage
-                    .insert(std::ptr::from_ref(expr).addr(), storage);
+                self.call_storage.insert(key(expr), storage);
                 self.indirect_call(callee, args, storage)
             }
             TirExprKind::FuncRef {
@@ -1379,12 +1366,8 @@ impl<'p, 'a> Body<'p, 'a> {
                 name,
                 ..
             } => {
-                let loc = match self
-                    .package
-                    .functions
-                    .get(&(module_source.clone(), name.clone()))
-                {
-                    Some(&id) => self.function_location(id),
+                let loc = match self.package.functions.id(module_source, name) {
+                    Some(id) => self.function_location(id),
                     None => {
                         let loc = self.g.node();
                         self.g.targets.insert(
@@ -1427,8 +1410,7 @@ impl<'p, 'a> Body<'p, 'a> {
             TirExprKind::LabeledBlock { label, block, .. } => {
                 let node = self.g.node();
                 let storage = self.g.node();
-                self.label_storage
-                    .insert(std::ptr::from_ref(expr).addr(), storage);
+                self.label_storage.insert(key(expr), storage);
                 self.labels.push((label.clone(), node, storage));
                 let tail = self.block_value(block);
                 self.labels.pop();
@@ -1437,13 +1419,8 @@ impl<'p, 'a> Body<'p, 'a> {
                 }
                 Some(node)
             }
-            TirExprKind::WithHandler { bindings, body, .. } => {
-                for binding in bindings {
-                    if let Some(v) = self.eval(&binding.handler) {
-                        self.g.copy(v, self.escape);
-                    }
-                }
-                self.block_value(body)
+            TirExprKind::WithHandler { .. } => {
+                unreachable!("effect dispatch synthesis desugars every `with`")
             }
             TirExprKind::Closure {
                 captures,

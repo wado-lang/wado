@@ -177,7 +177,7 @@ pub fn analyze_ownership(
     let owned: IndexSet<u32> = fresh
         .iter()
         .copied()
-        .filter(|idx| a.hands_on_storage(*idx) && !outlived.contains(idx))
+        .filter(|idx| a.hands_on_storage(*idx))
         .collect();
 
     let moved_places: Vec<&PlaceMove> = a

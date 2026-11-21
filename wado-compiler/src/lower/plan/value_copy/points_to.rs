@@ -39,8 +39,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
-    ResolvedType, RetainInto, RetainSpec, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    ResolvedType, RetainInto, RetainSpec, ReturnConvention, StructFields, TirBlock, TirExpr,
+    TirExprKind, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::{TypeMemo, TypeTable};
@@ -272,7 +272,11 @@ pub(super) enum Handle {
 
 /// Whether what `spec` retains out of an argument of type `source` is storage:
 /// anything but the elements of an array of plain values, which are copied.
-pub(super) fn retains_storage<P>(spec: &RetainSpec<P>, source: TypeId, type_table: &TypeTable) -> bool {
+pub(super) fn retains_storage<P>(
+    spec: &RetainSpec<P>,
+    source: TypeId,
+    type_table: &TypeTable,
+) -> bool {
     match (spec.elements, type_table.get(type_table.peel_refs(source))) {
         (true, ResolvedType::BuiltinArray(element)) => carries_storage(*element, type_table),
         _ => true,
@@ -576,22 +580,17 @@ impl Graph {
 
     /// Connect call `at` through `callee` to `loc`, where `loc` is a function.
     fn bind(&mut self, callee: u32, at: usize, loc: u32) {
-        let site = &self.sites[callee as usize][at];
-        let mut receiver = None;
-        let loc = match site.fallback {
-            Some(fallback) if self.external.contains(&loc) => {
-                receiver = Some(loc);
-                fallback
-            }
-            _ => loc,
+        let (loc, supplied) = match self.sites[callee as usize][at].fallback {
+            Some(fallback) if self.external.contains(&loc) => (fallback, Some(loc)),
+            _ => (loc, None),
         };
         // A function the caller supplies is its own `self`, should it be a
         // closure.
-        if let Some(external) = receiver
+        if let Some(supplied) = supplied
             && let Some(this) = self.targets.get(&loc).and_then(|t| t.this)
         {
             let naming = self.node();
-            self.add(naming, external);
+            self.add(naming, supplied);
             self.copy(naming, this);
         }
         let site = &self.sites[callee as usize][at];

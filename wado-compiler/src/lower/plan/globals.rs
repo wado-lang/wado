@@ -16,8 +16,8 @@ use crate::name::{
 };
 use crate::synthesis::common::cold_path_stmt;
 use crate::tir::{
-    FunctionRef, GlobalInit, GlobalRole, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirStmt, TirStmtKind, is_constant_initializer,
+    FunctionRef, GlobalInit, GlobalRole, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirGlobal, TirStmt, TirStmtKind, is_constant_initializer,
 };
 use crate::tir_visitor::{TirRefVisitor, shift_locals};
 use crate::token::Span;
