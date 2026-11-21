@@ -51,7 +51,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
-use crate::elaborator::solver_bridge::Ordered;
+use crate::elaborator::solver_bridge::{Commitment, Ordered};
 use crate::elaborator::types::{
     ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitLookup, TraitMethodMatch,
 };
@@ -3198,6 +3198,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         required_trait: Option<&RequiredTrait>,
     ) -> Option<Ordered> {
+        let (ordered, commitment) =
+            self.ask_order(type_key, receiver_type_id, method_name, required_trait)?;
+        if let Some(commitment) = commitment {
+            self.infer_holes.require(Obligation::Selection(commitment));
+        }
+        Some(ordered)
+    }
+
+    /// [`Self::order_for_call`] for a site that only asks, owing nothing.
+    fn ask_order(
+        &self,
+        type_key: &ImplTargetKey,
+        receiver_type_id: Option<TypeId>,
+        method_name: &str,
+        required_trait: Option<&RequiredTrait>,
+    ) -> Option<(Ordered, Option<Commitment>)> {
         let bridge = self.tysys.solver.as_ref()?.borrow();
         let required = match required_trait.map(|r| r.decl) {
             Some(Resolution::Def(def)) => Some(def),
@@ -3211,7 +3227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The order reads the reference as a level of the receiver's chain, so
         // it has to be put back.
         let through_ref = type_key.ref_kind().map(|kind| kind == RefKind::Mut);
-        let (ordered, commitment) = bridge.select(
+        bridge.select(
             &self.tysys,
             &self.annotate_ctx,
             self.frame_module(),
@@ -3222,11 +3238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             required_trait
                 .and_then(|r| r.args.as_deref())
                 .unwrap_or_default(),
-        )?;
-        if let Some(commitment) = commitment {
-            self.infer_holes.require(Obligation::Selection(commitment));
-        }
-        Some(ordered)
+        )
     }
 
     /// Whether which impl answers `method_name` on `receiver` waits on a
@@ -3249,12 +3261,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         required_trait: Option<&RequiredTrait>,
     ) -> Option<Vec<Option<DefId>>> {
-        match self.order_for_call(
-            &self.impl_target_of(receiver),
-            Some(receiver),
-            method_name,
-            required_trait,
-        )? {
+        match self
+            .ask_order(
+                &self.impl_target_of(receiver),
+                Some(receiver),
+                method_name,
+                required_trait,
+            )?
+            .0
+        {
             Ordered::Undecided(live) => Some(live),
             Ordered::One(_)
             | Ordered::Nothing

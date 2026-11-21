@@ -2074,27 +2074,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_args: method_type_args,
                     ..
                 } = static_args;
-                // A receiver spelled without its arguments is the instance at
-                // the ones the call inferred, each a variable where none did.
-                let declared_params = (impl_type_args_inferred.is_empty())
-                    .then(|| {
-                        let declared = self.declared_self_type(receiver.key().decl()?)?;
-                        let tt = self.tysys.type_table.borrow();
-                        let params = tt.nominal_type_args(declared)?;
-                        Some(params.iter().map(|&p| tt.name(p)).collect::<Vec<_>>())
-                    })
-                    .flatten();
-                let instance_args = match declared_params {
-                    Some(names) => names
-                        .iter()
-                        .map(|name| self.mint_infer_var_named(name))
-                        .collect(),
-                    None => impl_type_args_inferred.clone(),
+                // The same argument the selection above read: without it this
+                // resolution answers a different declaration than the call was
+                // mangled to.
+                let typed = receiver.at_type(Some(receiver_type));
+                let resolved = self.resolve_static_callee(StaticQuery {
+                    arg_types: &args,
+                    receiver_args: &receiver_args,
+                    expected_return: expected_type,
+                    ..StaticQuery::of(&typed, suffix)
+                });
+                // Impls of one trait neither the arguments nor the receiver tell
+                // apart may be told apart by the instance a later use settles. A
+                // receiver spelled without its arguments is the instance at the
+                // ones the call inferred, each a variable where none did.
+                let declared_params = (matches!(resolved, StaticLookup::Overloaded { .. })
+                    && impl_type_args_inferred.is_empty())
+                .then(|| {
+                    let declared = self.declared_self_type(receiver.key().decl()?)?;
+                    let tt = self.tysys.type_table.borrow();
+                    let params = tt.nominal_type_args(declared)?;
+                    Some(params.iter().map(|&p| tt.name(p)).collect::<Vec<_>>())
+                })
+                .flatten();
+                let (instance, instance_args) = match declared_params {
+                    Some(names) => {
+                        let vars: Vec<TypeId> = names
+                            .iter()
+                            .map(|name| self.mint_infer_var_named(name))
+                            .collect();
+                        let instance = self
+                            .declared_type_at(receiver.key(), &vars)
+                            .unwrap_or(receiver_type);
+                        (instance, vars)
+                    }
+                    None => (receiver_type, impl_type_args_inferred.clone()),
                 };
-                let instance = self
-                    .declared_type_at(receiver.key(), &instance_args)
-                    .unwrap_or(receiver_type);
-                if method_type_args.is_empty()
+                if matches!(resolved, StaticLookup::Overloaded { .. })
+                    && method_type_args.is_empty()
                     && let Some(info) = self.static_waits(instance, suffix, args.len())
                 {
                     for (i, (&arg, &param)) in args.iter().zip(&info.param_types).enumerate() {
@@ -2131,16 +2148,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                // The same argument the selection above read: without it this
-                // re-check resolves a different declaration than the call was
-                // mangled to.
-                let typed = receiver.at_type(Some(receiver_type));
-                let resolved = self.resolve_static_callee(StaticQuery {
-                    arg_types: &args,
-                    receiver_args: &receiver_args,
-                    expected_return: expected_type,
-                    ..StaticQuery::of(&typed, suffix)
-                });
                 if self.report_unresolved_static(&resolved, suffix, &args, call.span) {
                     return TypeTable::ERROR;
                 }
