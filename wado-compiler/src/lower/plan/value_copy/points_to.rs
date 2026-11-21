@@ -38,7 +38,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
-    ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
+    ResolvedType, RetainInto, RetainSpec, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
@@ -305,6 +305,16 @@ impl<'a> HoldsHandle<'a> {
     pub(super) fn of(&self, ty: TypeId) -> bool {
         self.known
             .get_or_compute(ty, || self.walk(ty, None, &mut UnderWay::new(false), 0))
+    }
+
+    /// Whether what `spec` retains out of an argument of type `source` may
+    /// hold one: the argument, or each element of an array it names.
+    pub(super) fn retained_by<P>(&self, spec: &RetainSpec<P>, source: TypeId) -> bool {
+        let source = self.type_table.peel_refs(source);
+        match (spec.elements, self.type_table.get(source)) {
+            (true, ResolvedType::BuiltinArray(element)) => self.of(*element),
+            _ => self.of(source),
+        }
     }
 
     /// `env` is what the template parameters `ty` is written in take.
@@ -1592,6 +1602,9 @@ impl Builder<'_> {
             let Some(source) = handed[spec.source] else {
                 continue;
             };
+            if !self.names.retained_by(spec, args[spec.source].type_id) {
+                continue;
+            }
             let kept = if spec.elements {
                 self.held_by(source)
             } else {
