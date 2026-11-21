@@ -1014,8 +1014,9 @@ struct Brought {
 }
 
 /// Owns the cross-module effect maps so multiple checks (effects, default
-/// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
-/// from [`Semantics`] + [`AnnotateState`].
+/// purity) can borrow a single [`EffectIndex`] view over them. Assembled from
+/// the declarations once every module's resolve, and again from
+/// [`Semantics`] + [`AnnotateState`] once the bodies are walked.
 pub(crate) struct OwnedEffectData {
     flows_by_var: IndexMap<String, Vec<usize>>,
     fn_effects: IndexMap<AstId, Vec<EffectRef>>,
@@ -1873,7 +1874,10 @@ impl BodyFacts for WalkInProgress<'_> {
     }
 
     fn local_types(&self, def: AstId) -> Vec<TypeId> {
-        ModuleSemantics::LOCAL_TYPES.all(self.sem, def).copied().collect()
+        ModuleSemantics::LOCAL_TYPES
+            .all(self.sem, def)
+            .copied()
+            .collect()
     }
 
     fn method_dispatches_at(&self, id: AstId) -> Vec<&MethodDispatch> {
@@ -1881,7 +1885,10 @@ impl BodyFacts for WalkInProgress<'_> {
     }
 
     fn referenced_symbol(&self, id: AstId) -> Option<AstId> {
-        ModuleSemantics::REFERENCES.all(self.sem, id).next().copied()
+        ModuleSemantics::REFERENCES
+            .all(self.sem, id)
+            .next()
+            .copied()
     }
 }
 
@@ -3613,7 +3620,8 @@ impl Rows {
     }
 
     /// Hand each flow's row on to the variables of the slot it moves into,
-    /// until none grows: a variable stands for every value moved into it.
+    /// until none grows: a variable stands for every value moved into it,
+    /// unless an expression read it and so closed it.
     fn propagate_flows(&mut self, index: &EffectIndex<'_>) {
         let closed = index.types.effect_row_closings();
         loop {
@@ -3642,7 +3650,8 @@ impl Rows {
     }
 
     /// Report each effect a value performs beyond the row of the slot a flow
-    /// moved it into, where that row names no variable to grow. An effect
+    /// moved it into, where that row names no variable to grow or a closed
+    /// one. An effect
     /// parameter there admits only itself: the function holds for every row
     /// its caller may pick for it, the empty one among them.
     fn bound_flows(&self, index: &EffectIndex<'_>, out: &mut Vec<EffectError>) {

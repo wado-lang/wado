@@ -2567,8 +2567,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Record the operation signatures of the `interface` or `resource`
-    /// declared at `decl_id`.
     /// Resolve a global variable declaration for its fact-recording side
     /// effects. Reify (`reify_global`) is the sole producer of the `TirGlobal`,
     /// re-emitting the initializer from the AST + recorded per-`AstId`

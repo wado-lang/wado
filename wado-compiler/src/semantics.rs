@@ -18,6 +18,7 @@ use crate::compiler_trace;
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
 use crate::defs::DefId;
+use crate::effect_check::BodyFacts;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
@@ -45,7 +46,6 @@ use crate::type_table::TypeTable;
 use crate::unparse::unparse_contract_clause_renamed;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::{ExportMapping, ExportMappings, WorldRegistry, world_key};
-use crate::effect_check::BodyFacts;
 use crate::{ast, load_erased, loader, parse, report_without_span, symbol_notation};
 
 /// A ready-to-query analysis result.

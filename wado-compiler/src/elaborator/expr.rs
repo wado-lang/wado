@@ -12,8 +12,8 @@ use crate::cut_memo::CutWalk;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
-    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing, SubstitutionContext,
-    TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
+    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing,
+    SubstitutionContext, TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;

@@ -1389,7 +1389,7 @@ impl<'a> Reify<'a> {
         // recorded them; reify reads them back rather than re-resolving.
         let operations = self
             .ann_effect_ops(decl.id)
-            .expect("`record_effect_ops` records op signatures for every effect reify emits");
+            .expect("the decl pass records op signatures for every effect reify emits");
         tir::TirEffect {
             head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
@@ -1402,11 +1402,11 @@ impl<'a> Reify<'a> {
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
     /// 0; for generic resources `Self` is a `Resource` with the
     /// decl's own `TypeParam`s as type args. The op signatures are read
-    /// from the facts the body walk recorded.
+    /// from the facts the decl pass recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
         let operations = self
             .ann_effect_ops(decl.id)
-            .expect("`record_effect_ops` records op signatures for every resource reify emits");
+            .expect("the decl pass records op signatures for every resource reify emits");
         let type_params = self
             .ann_decl_type_params(decl.id)
             .expect("the body walk records the type params for every resource reify emits");

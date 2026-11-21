@@ -347,8 +347,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Project the closure's `fn(...)` / `fn mut(...)` type so the
         // caller's typecheck context (`expression_types[closure.id]`, etc.)
         // sees it. Reify rebuilds an equivalent type from its own facts.
-        // Its row is what the body performs, which the effect check works out:
-        // a variable here.
+        // Its row is a variable, solved here to what the body performs where
+        // every row the body reads is solved already, and by the effect check
+        // otherwise.
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let performed = self.closure_performs(closure);
         let mut table = self.tysys.type_table.borrow_mut();
