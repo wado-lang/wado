@@ -4606,7 +4606,7 @@ impl TypeTable {
     }
 
     /// `type_id` once the effect check is done: each variable replaced by
-    /// what [`Self::close_effect_rows`] answered for it, and each struct
+    /// what [`Self::solved_effect_rows`] answered for it, and each struct
     /// instance's arguments rowless.
     pub fn close_type(&mut self, type_id: TypeId, rows: &EffectRows) -> TypeId {
         assert!(self.effect_vars_solved);
@@ -5294,9 +5294,8 @@ impl TypeTable {
 
     /// What each effect variable stands for once the effect check has solved
     /// them: what `solved` says, and the empty row for one nothing solved. No
-    /// row it answers names a variable, and no variable is minted from here on.
-    pub fn close_effect_rows(&mut self, solved: &EffectRows) -> EffectRows {
-        self.effect_vars_solved = true;
+    /// row it answers names a variable.
+    pub fn solved_effect_rows(&self, solved: &EffectRows) -> EffectRows {
         let mut rows = solved.clone();
         for id in self.iter_type_ids() {
             self.unsolved_vars_in(id, &mut rows);
@@ -5310,6 +5309,12 @@ impl TypeTable {
                 (var.clone(), solved)
             })
             .collect()
+    }
+
+    /// Ends the effect check's part: no variable is minted from here on, and
+    /// a struct instance interned after this carries no row in its arguments.
+    pub fn close_effect_rows(&mut self) {
+        self.effect_vars_solved = true;
     }
 
     /// Note each effect variable in `id`'s rows that `rows` holds no solution

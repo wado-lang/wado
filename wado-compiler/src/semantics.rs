@@ -217,8 +217,12 @@ impl Semantics {
         let Some(state) = &self.state else {
             return Vec::new();
         };
+        let rows = state.tysys.type_table.borrow().solved_effect_rows(solved);
+        // Asked while a struct's arguments still carry their rows, which an
+        // impl's target may write.
+        let unmet = state.tysys.unmet_deferred_bounds(&rows);
         let mut table = state.tysys.type_table.borrow_mut();
-        let rows = table.close_effect_rows(solved);
+        table.close_effect_rows();
         let mut writer = EffectRowWriter {
             table: &mut table,
             rows: &rows,
@@ -232,8 +236,7 @@ impl Semantics {
                 writer.walk_global(global);
             }
         }
-        drop(table);
-        state.tysys.unmet_deferred_bounds(&rows)
+        unmet
     }
 
     /// Power-assert capture plans across every module that annotate reached,

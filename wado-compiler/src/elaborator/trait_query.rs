@@ -979,8 +979,8 @@ impl TypeSystem {
     }
 
     /// The deferred bounds unmet once `rows`, the effect check's solution,
-    /// closes the rows of the types they were asked of. A bound met records
-    /// the bodies its answer owes, as one answered at once does.
+    /// stands for the variables in the types they were asked of. A bound met
+    /// records the bodies its answer owes, as one answered at once does.
     pub(crate) fn unmet_deferred_bounds(&self, rows: &EffectRows) -> Vec<TypeError> {
         let deferred = std::mem::take(&mut *self.deferred_bounds.borrow_mut());
         let mut unmet = Vec::new();
@@ -988,7 +988,7 @@ impl TypeSystem {
             let closed = self
                 .type_table
                 .borrow_mut()
-                .close_type(bound.type_arg, rows);
+                .substitute_effect_rows(bound.type_arg, rows);
             let answer = self.solver().answer_deferred(self, bound.question, closed);
             match answer {
                 Some(bodies) => self.record_owed(bodies),
