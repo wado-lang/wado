@@ -27,7 +27,7 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{
     PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
 };
-use super::pending_selection::PendingStatic;
+use super::pending_selection::{PendingStatic, Undecided};
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
@@ -3430,8 +3430,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let walk = |s: &mut Self| {
-            s.with_resolving_home(home, |s| {
-                s.with_declaration_frame(self_binding, type_bindings, body)
+            s.settling_selections(Undecided::Wait, |s| {
+                s.with_resolving_home(home, |s| {
+                    s.with_declaration_frame(self_binding, type_bindings, body)
+                })
             })
         };
         let Some(site) = site else {

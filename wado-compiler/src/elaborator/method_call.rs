@@ -1218,6 +1218,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if waits_for_selection {
                 self.wait_for_selection(PendingCall {
                     call: call_id.expect("a call waits only where its dispatch is recorded"),
+                    method_id,
                     receiver: base_type_id,
                     method_name: method_name.to_string(),
                     args,

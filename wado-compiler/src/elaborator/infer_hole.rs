@@ -14,7 +14,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::assoc_target_slot;
-use super::pending_selection::{PendingSelection, SelectedDispatch};
+use super::pending_selection::{PendingSelection, SelectedDispatch, Undecided};
 use super::scope::{ParamRef, ScopeParams};
 use super::solver_bridge::Commitment;
 use super::trait_query::{SelfBinding, spelled_at};
@@ -880,7 +880,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A check queued after the last answer has not been asked yet.
         self.run_obligations();
-        self.settle_pending_selections();
+        self.settle_pending_selections(Undecided::Report);
         let mismatches = self.infer_holes.mismatches.take();
         let covered: IndexSet<TypeId> = self
             .infer_holes

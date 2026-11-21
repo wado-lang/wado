@@ -1041,6 +1041,33 @@ fn conversion_overload_definition_follows_the_argument() {
 }
 
 #[test]
+fn waiting_call_definition_follows_the_settled_receiver() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "struct Bx<T> { v: T }\n",
+            "fn mk<T: Default>() -> Bx<T> { return Bx { v: T::default() }; }\n",
+            "trait Me with () { fn me(&self) -> i32; }\n",
+            "impl Me for Bx<u64> {\n",
+            "    fn me(&self) -> i32 { return 1; }\n",
+            "}\n",
+            "impl Me for Bx<i64> {\n",
+            "    fn me(&self) -> i32 { return 2; }\n",
+            "}\n",
+            "fn f() -> i32 {\n",
+            "    let b = mk();\n",
+            "    let r = b.me();\n",
+            "    let _d: Bx<i64> = b;\n",
+            "    return r;\n",
+            "}\n",
+        );
+        // The call waits for `b` to settle, so only the later line says which
+        // impl's `me` it reaches.
+        let me = def_at(source, 11, 14).await.expect("b.me()");
+        assert_range(&me, 7, 7, 9);
+    });
+}
+
+#[test]
 fn namespaced_static_call_definition() {
     futures::executor::block_on(async {
         let helper = concat!(

@@ -17,6 +17,7 @@ use crate::unparse::unparse_instance_pattern;
 
 use super::method_call::MethodCallInput;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
+use super::pending_selection::Undecided;
 use super::type_resolution::slot_type_ids;
 use super::types::{BindingSite, FunctionContext, MustBind, TypeError};
 use super::tysys::TypeSystem;
@@ -2854,7 +2855,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Resolve the body AST (each expansion gets its own resolution with
             // different element types) for its facts.
-            self.resolve_block(&for_of.body, ctx, None);
+            self.settling_selections(Undecided::Wait, |this| {
+                this.resolve_block(&for_of.body, ctx, None)
+            });
 
             // Capture this element's body annotations and reset the maps back to
             // their pre-loop state so the next element records from a clean

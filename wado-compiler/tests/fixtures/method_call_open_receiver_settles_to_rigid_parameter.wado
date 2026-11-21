@@ -1,0 +1,39 @@
+// The receiver settles to the enclosing function's `T`, and the impl is
+// selected while `T: Cap` is in scope.
+
+struct Bx<T> { v: T }
+
+fn mk<T: Default>() -> Bx<T> {
+    return Bx { v: T::default() };
+}
+
+trait Cap with () {
+    fn cap() -> i32;
+}
+
+impl Cap for i32 {
+    fn cap() -> i32 { return 5; }
+}
+
+trait Go with () {
+    fn go(&self) -> i32;
+}
+
+impl Go for Bx<String> {
+    fn go(&self) -> i32 { return 0; }
+}
+
+impl<U: Cap + Default> Go for Bx<U> {
+    fn go(&self) -> i32 { return U::cap(); }
+}
+
+fn f<T: Cap + Default>() -> i32 {
+    let b = mk();
+    let r = b.go();
+    let _c: Bx<T> = b;
+    return r;
+}
+
+test {
+    assert f::<i32>() == 5;
+}

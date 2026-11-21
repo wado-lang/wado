@@ -1,0 +1,39 @@
+// A default body is walked once per implementing type, each walk recording
+// into its own facts. A selection waiting there is made while that walk's
+// facts are the ones recorded into.
+
+struct Bx<T> { v: T }
+
+fn mk<T: Default>() -> Bx<T> {
+    return Bx { v: T::default() };
+}
+
+impl Neg for Bx<u64> {
+    type Output = i32;
+    fn neg(&self) -> i32 { return 1; }
+}
+
+impl Neg for Bx<i64> {
+    type Output = i32;
+    fn neg(&self) -> i32 { return 2; }
+}
+
+trait Probe with () {
+    fn probe(&self) -> i32 {
+        let a = mk();
+        let n: i32 = -a;
+        let _d: Bx<u64> = a;
+        return n;
+    }
+}
+
+struct P {}
+impl Probe for P {}
+
+struct Q {}
+impl Probe for Q {}
+
+test {
+    assert P {}.probe() == 1;
+    assert Q {}.probe() == 1;
+}

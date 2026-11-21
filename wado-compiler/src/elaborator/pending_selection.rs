@@ -75,6 +75,15 @@ pub(super) enum PendingSelection {
     Static(PendingStatic),
 }
 
+/// What becomes of a selection nothing has decided where its walk ends.
+#[derive(Clone, Copy)]
+pub(super) enum Undecided {
+    /// The walk was its body: nothing later settles what it waits on.
+    Report,
+    /// The walk was part of a body, whose later lines may still settle it.
+    Wait,
+}
+
 /// A static call through a trait, typed by the trait's declaration.
 pub(super) struct PendingStatic {
     pub(super) receiver: ReceiverId,
@@ -133,6 +142,8 @@ pub(super) struct PendingOperator {
 
 pub(super) struct PendingCall {
     pub(super) call: AstId,
+    /// The method name's token, whose use→def edge names the selected method.
+    pub(super) method_id: Option<AstId>,
     /// The receiver's value, as the lookup reads it.
     pub(super) receiver: TypeId,
     pub(super) method_name: String,
@@ -368,11 +379,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// Run `walk`, then make the selections it left waiting while its scope
+    /// and the facts it records into are still the ones the sites were walked
+    /// in. Those waiting from before the walk wait on.
+    pub(super) fn settling_selections<R>(
+        &mut self,
+        undecided: Undecided,
+        walk: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let outer = self.infer_holes.take_pending();
+        let result = walk(self);
+        self.settle_pending_selections(undecided);
+        for selection in outer {
+            self.infer_holes.require(Obligation::Pending(selection));
+        }
+        result
+    }
+
     /// Make each pending selection whose receiver has settled far enough,
-    /// until none can be made, and report the rest as needing an annotation.
+    /// until none can be made, and treat the rest as `undecided` says.
     /// A selection settles variables in turn, through the impl's signature, so
     /// a later one may decide only after an earlier one.
-    pub(super) fn settle_pending_selections(&mut self) {
+    pub(super) fn settle_pending_selections(&mut self, undecided: Undecided) {
         loop {
             let pending = self.infer_holes.take_pending();
             if pending.is_empty() {
@@ -395,7 +423,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect();
             if waiting.len() == asked {
                 for selection in waiting {
-                    self.report_stuck_selection(selection);
+                    match undecided {
+                        Undecided::Report => self.report_stuck_selection(selection),
+                        Undecided::Wait => {
+                            self.infer_holes.require(Obligation::Pending(selection));
+                        }
+                    }
                 }
                 return;
             }
@@ -541,6 +574,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.hold_to_selected(typed, declared, selection.span);
         }
         self.hold_to_selected(return_type, selection.return_type, selection.span);
+        if let (Some(method_id), Some(def)) = (selection.method_id, info.method_def) {
+            self.record_reference_to_decl(method_id, def, selection.span);
+        }
         let struct_module = self
             .tysys
             .type_table
