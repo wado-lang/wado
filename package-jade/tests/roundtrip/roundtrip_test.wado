@@ -1,0 +1,158 @@
+//! D applied to the schema B derives, and B applied to what D generates, give
+//! that schema back, for each row of B's mapping table.
+
+use { Document, JsonSchema, generate, schema_for } from "lib:jade";
+use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
+use { eval, EvalHost } from "core:eval";
+use { to_string } from "core:json";
+use { Duration, Instant, PlainDate, ZonedDateTime } from "core:temporal";
+use { Uri, UriReference } from "core:uri";
+use { Url } from "core:url";
+use { Uuid } from "core:uuid";
+use { Value } from "core:value";
+use { ModuleSpec } from "lib:wadopoet";
+
+/// Fails unless the schema B derives for `T` comes back from B applied to the
+/// type D generates for it under the name `name`.
+fn round_trips<T: JsonSchema>(name: String) with EvalHost {
+    let schema = schema_for::<T>();
+    let source = generate(&schema, &ModuleSpec::new("lib:jade", ["roundtrip.schema.json"])).unwrap();
+    let out = eval(`${source}
+use { schema_for } from "lib:jade";
+use { print, Stdout } from "core:cli";
+use { to_string } from "core:json";
+
+export fn run() with Stdout {
+    print(to_string(&schema_for::<${name}>()).unwrap());
+}`).unwrap();
+    assert out.status matches { Exited(0) }, `${out.stderr}\n${source}`;
+    let expected = to_string(&schema).unwrap();
+    assert Document::parse(out.stdout).unwrap().root() == Document::parse(expected).unwrap().root(), `${expected}\n${out.stdout}\n${source}`;
+}
+
+struct Numbers {
+    a: i8,
+    b: i16,
+    c: i32,
+    d: u8,
+    e: u16,
+    f: u32,
+    g: i64,
+    h: u64,
+    i: i128,
+    j: u128,
+    k: f64,
+    l: f32,
+}
+
+test "the integer and float types" {
+    round_trips::<Numbers>("Numbers");
+}
+
+struct Texts {
+    flag: bool,
+    letter: char,
+    text: String,
+    bytes: ByteList,
+    unit: (),
+    any: Value,
+}
+
+test "bool, char, String, bytes, unit and any value" {
+    round_trips::<Texts>("Texts");
+}
+
+struct Library {
+    at: Instant,
+    day: PlainDate,
+    span: Duration,
+    zoned: ZonedDateTime,
+    uri: Uri,
+    reference: UriReference,
+    id: Uuid,
+    url: Url,
+}
+
+test "the standard library's text types" {
+    round_trips::<Library>("Library");
+}
+
+struct Containers {
+    maybe: Option<i32>,
+    nested: Option<Option<String>>,
+    list: List<String>,
+    tree_set: TreeSet<String>,
+    hash_set: HashSet<i32>,
+    tree_map: TreeMap<String, bool>,
+    hash_map: HashMap<String, List<i32>>,
+    pair: [i32, String],
+    result: Result<i32, String>,
+}
+
+test "Option, the collections, a tuple and Result" {
+    round_trips::<Containers>("Containers");
+}
+
+/// A user of the service.
+///
+/// Created on sign-up.
+#[wire(name_policy = "camelCase")]
+struct CreateUser {
+    /// The login.
+    user_name: String,
+    #[wire(name = "e-mail")]
+    email: String,
+    age: i32 = 18,
+    nick: Option<String> = null,
+    scores: List<i32> = [1, 2],
+    color: Color = Color::DarkBlue,
+    next: Option<CreateUser>,
+}
+
+/// A hue.
+#[wire(name_policy = "snake_case")]
+enum Color {
+    Red,
+    DarkBlue,
+}
+
+test "a struct, with doc comments, wire names, defaults and recursion" {
+    round_trips::<CreateUser>("CreateUser");
+}
+
+#[wire(name_policy = "kebab-case")]
+flags Perms {
+    Read,
+    WriteAll,
+}
+
+variant Shape {
+    /// No size.
+    Dot,
+    Circle(f64),
+    #[wire(name = "rect")]
+    Rect([f64, f64]),
+}
+
+struct Moved {
+    x: f64,
+}
+
+#[wire(tag = "kind")]
+variant Event {
+    Stop,
+    Move(Moved),
+}
+
+type Meters = f64;
+
+struct Kinds {
+    perms: Perms,
+    shape: Shape,
+    event: Event,
+    length: Meters,
+}
+
+test "flags, a variant, a tagged variant and a newtype" {
+    round_trips::<Kinds>("Kinds");
+}
