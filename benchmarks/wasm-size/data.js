@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795254604028,
+  "lastUpdate": 1795265419587,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80577,6 +80577,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/301fe6d017d3372117dd7882a62265f88582c46c"
         },
         "date": 1795254602918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "422bc071e50f30d1c00c87a6d464f80ffe2bd28c",
+          "message": "Merge pull request #2711 from wado-lang/ccr-c4532329-09v6dr\n\ndocs: state only the current pattern-binding rule",
+          "timestamp": "2026-11-21T21:36:43+09:00",
+          "tree_id": "bfc77a4393f3f1bacde0f618e6aefea2d48d41d5",
+          "url": "https://github.com/wado-lang/wado/commit/422bc071e50f30d1c00c87a6d464f80ffe2bd28c"
+        },
+        "date": 1795265419234,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
