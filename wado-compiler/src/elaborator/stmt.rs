@@ -3303,7 +3303,10 @@ fn refutable_shape(pattern: &Pattern) -> Option<String> {
     match pattern {
         Pattern::Literal(ast::Literal::Null) => Some("`null` may not match".to_string()),
         Pattern::Literal(_) => Some("literal patterns may not match".to_string()),
-        Pattern::Variant { .. } => Some(format!("`{}` may not match", unparse_pattern_source(pattern))),
+        Pattern::Variant { .. } => Some(format!(
+            "`{}` may not match",
+            unparse_pattern_source(pattern)
+        )),
         Pattern::Or(_) => Some("or-patterns may not match".to_string()),
         Pattern::Range { .. } => Some("range patterns may not match".to_string()),
         Pattern::Equal { .. } => Some("`==` patterns may not match".to_string()),
