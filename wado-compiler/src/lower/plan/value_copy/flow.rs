@@ -292,23 +292,20 @@ struct Solved {
 /// need not state.
 type Shape = Vec<String>;
 
-/// The [`Shape`] of `type_id`, `None` for a type that is not a function.
-fn shape(type_id: TypeId, type_table: &TypeTable) -> Option<Shape> {
+fn shape(type_id: TypeId, type_table: &TypeTable) -> Shape {
     let ResolvedType::Function {
         params,
         return_type,
         ..
     } = type_table.get(type_table.peel_refs(type_id))
     else {
-        return None;
+        unreachable!("only a function value has a shape");
     };
-    Some(
-        params
-            .iter()
-            .chain([return_type])
-            .map(|&t| type_table.mangle_type_arg_rowless(t))
-            .collect(),
-    )
+    params
+        .iter()
+        .chain([return_type])
+        .map(|&t| type_table.mangle_type_arg_rowless(t))
+        .collect()
 }
 
 /// The functions a value of each function shape may run: every closure and
@@ -333,9 +330,10 @@ fn minted_by_shape(flat: &FlatPackage, package: &Package<'_>) -> IndexMap<Shape,
                 _ => None,
             };
             if let Some(id) = minted {
-                let key = shape(expr.type_id, self.package.type_table)
-                    .expect("a closure or a function taken by name is a function value");
-                self.out.entry(key).or_default().insert(id);
+                self.out
+                    .entry(shape(expr.type_id, self.package.type_table))
+                    .or_default()
+                    .insert(id);
             }
             self.walk_expr(expr);
         }
@@ -1054,7 +1052,7 @@ impl<'p, 'a> Body<'p, 'a> {
             .zip(slots)
             .map(|(arg, slot)| self.hand(arg, slot).0)
             .collect();
-        let key = shape(callee.type_id, tt).expect("checked to be a function above");
+        let key = shape(callee.type_id, tt);
         self.shape_storage(&key, value, &handed, storage);
         let fallback = Some(self.shape_location(key));
         let result = self.g.node();

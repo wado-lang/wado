@@ -587,8 +587,8 @@ impl Graph {
             Some(fallback) if !self.targets.contains_key(&loc) => (fallback, Some(loc)),
             _ => (loc, None),
         };
-        // A function the caller supplies is its own `self`, should it be a
-        // closure.
+        // A function the body did not see made is its own `self`, should it
+        // be a closure.
         if let Some(supplied) = supplied
             && let Some(this) = self.targets.get(&loc).and_then(|t| t.this)
         {
@@ -1599,7 +1599,12 @@ impl Builder<'_> {
             let Some(source) = handed[spec.source] else {
                 continue;
             };
-            if !retains_storage(spec, args[spec.source].type_id, self.type_table, &self.names) {
+            if !retains_storage(
+                spec,
+                args[spec.source].type_id,
+                self.type_table,
+                &self.names,
+            ) {
                 continue;
             }
             let kept = if spec.elements {
