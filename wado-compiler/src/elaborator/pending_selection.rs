@@ -169,7 +169,7 @@ pub(super) struct PendingCall {
     /// The receiver's value, as the lookup reads it.
     pub(super) receiver: TypeId,
     /// Set where the impls waited on were written for `&T` / `&mut T`, which
-    /// the selection is then made among.
+    /// the selection asks before those for the value.
     pub(super) ref_kind: Option<RefKind>,
     pub(super) method_name: String,
     pub(super) args: Vec<TypeId>,
