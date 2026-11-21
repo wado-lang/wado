@@ -223,7 +223,58 @@ test "a reference to neither a root nor a definition is refused" {
     assert refused(schema) == "/$ref: names neither a document's root nor one of its `$defs`, which D declares";
 }
 
-test "two names converting to one Wado name are refused" {
+test "two names converting to one Wado name are refused at the second" {
     let schema = ##"{"$defs": {"a-b": {"type": "string"}, "aB": {"type": "string"}}, "$ref": "#/$defs/a-b"}"##;
-    assert refused(schema) == "/$defs: names `AB`, which another declaration takes";
+    assert refused(schema) == "/$defs/aB: names `AB`, which another declaration takes";
+}
+
+test "an identifier, an anchor or a format asserts nothing D reads" {
+    let schema = ##"{
+        "$id": "https://example.com/pet.json",
+        "title": "Pet",
+        "type": "object",
+        "properties": {
+            "kind": {"$ref": "#kind"},
+            "age": {"type": "integer", "format": "int32", "minimum": -2147483648, "maximum": 2147483647}
+        },
+        "required": ["kind", "age"],
+        "$defs": {"Kind": {"$anchor": "kind", "type": "string", "enum": ["cat"]}}
+    }"##;
+    assert generated(schema).contains("pub struct Pet {\n    pub kind: Kind,\n    pub age: i32,\n}");
+}
+
+test "a nullable definition declares what it holds under a name of its own" {
+    let schema = ##"{"$defs": {"Pet": {"type": ["object", "null"], "properties": {"n": {"type": "string"}}, "required": ["n"]}}, "$ref": "#/$defs/Pet"}"##;
+    let out = generated(schema);
+    assert out.contains("pub type Pet = Option<PetValue>;");
+    assert out.contains("pub struct PetValue {");
+}
+
+test "the root option names a root that is only a reference" {
+    let schema = ##"{"$ref": "#/$defs/A", "$defs": {"A": {"type": "string"}}}"##;
+    assert generated(schema, GenerateOptions { root: Option::Some("Doc") }).contains("pub type Doc = A;");
+}
+
+test "an enum of more members than a flags holds is a set" {
+    let mut members: List<String> = [];
+    for let i of 0..<33 {
+        members.push(`"m${i}"`);
+    }
+    let schema = `{"title": "T", "type": "array", "uniqueItems": true, "items": {"type": "string", "enum": [${members.join(
+        ", ",
+    )}]}}`;
+    assert generated(schema).contains("pub type T = collections::TreeSet<TItem>;");
+}
+
+test "a default its own schema rejects is refused" {
+    let schema = ##"{"title": "T", "type": "object", "properties": {"c": {"type": "integer", "default": "none"}}}"##;
+    assert refused(schema) == "/properties/c/default: is a value its own schema rejects";
+}
+
+test "a type named by x-wado-format takes no assertion beside it" {
+    let schema = ##"{"title": "T", "type": "string", "x-wado-format": "core:uuid#Uuid", "pattern": "^0"}"##;
+    assert refused(schema) == "/pattern: has no Wado type D generates";
+    assert generated(##"{"title": "T", "type": "string", "x-wado-format": "core:a b#X"}"##).contains(
+        "pub type T = String;",
+    );
 }

@@ -6,7 +6,7 @@ use { apply_case } from "core:serde";
 use { HashMap, HashSet } from "core:collections";
 use { to_string } from "core:json";
 use { Uri } from "core:uri";
-use { percent_decode } from "core:url";
+use { percent_decode, percent_encode } from "core:url";
 use {
     CodeWriter,
     EnumMember,
@@ -26,7 +26,7 @@ use {
 use { Node } from "./document.wado";
 use { JsonSchema, SchemaGenerator } from "./derive.wado";
 use { JsonTypes, Schema, SchemaError, SchemaObject, pointer_token } from "./schema.wado";
-use { CompileError, DEFAULT_BASE, SchemaSet } from "./validate.wado";
+use { CompileError, DEFAULT_BASE, SchemaSet, Validator } from "./validate.wado";
 
 /// Where the root's name comes from when it declares a type: `root` first,
 /// then its `title`, then the name of the file it was read from.
@@ -162,13 +162,13 @@ struct Gen {
 
 impl Gen {
     /// Declares the root of the document under `uri` unless it is only a
-    /// `$ref`, each of its `$defs`, and every schema those reach.
+    /// `$ref` the `root` option names nothing for, each of its `$defs`, and
+    /// every schema those reach.
     fn start(&mut self, uri: &Uri, options: &GenerateOptions) -> Result<(), SchemaError> {
         self.doc = *uri;
         let root = self.set.get(uri).unwrap().into_object();
-        let bare = self.schema_at(&`${*uri}#`).unwrap();
-        if assertions(&bare.into_object()) == ["$ref"] {
-            self.type_of(&bare, &"", &"")?;
+        if assertions(&root) == ["$ref"] && options.root matches { null } {
+            self.type_of(&Schema::Object(root), &"", &"")?;
         } else {
             let Some(name) = root_name(&root, uri, &options.root)? else {
                 return fail(&"", "has no name: give the `root` option or a `title`");
@@ -177,7 +177,7 @@ impl Gen {
         }
         for let key of root.defs.keys() {
             let at = `/$defs/${pointer_token(key)}`;
-            self.name(`${*uri}#${at}`, decl_name(key, &at)?, &"/$defs")?;
+            self.name(`${*uri}#${at}`, decl_name(key, &at)?, &at)?;
         }
         while !self.pending.is_empty() {
             let [place, name] = self.pending.remove(0);
@@ -212,8 +212,7 @@ impl Gen {
         let [uri, at] = Gen::split(place);
         let root = self.set.get(&uri)?;
         if at.is_empty() {
-            let o = root.into_object();
-            return Option::Some(Schema::Object(SchemaObject { ..o, dialect: null, defs: HashMap::new() }));
+            return Option::Some(root);
         }
         return root.into_object().defs.get(def_key(&at)?);
     }
@@ -274,7 +273,14 @@ impl Gen {
         if let Object(o) = s && self.flags_decl(name, o, doc) {
             return Result::Ok(());
         }
-        let ty = self.type_of(s, at, &name)?;
+        // A struct, enum or variant written in place inside an `Option` takes a
+        // name of its own, as the declaration holds the `Option`.
+        let hint = if let Object(o) = s && non_null(o) matches { Some(_) } {
+            `${name}Value`;
+        } else {
+            name;
+        };
+        let ty = self.type_of(s, at, &hint)?;
         let mut spec = NewtypeSpec::new(name, ty.text, Vis::Pub);
         if let Some(d) = doc {
             spec.set_doc(d);
@@ -314,6 +320,7 @@ impl Gen {
             return self.resolve(at);
         }
         if let Some(ty) = self.wado_format(&o) {
+            only(&keys, ["type"], at)?;
             return Result::Ok(ty);
         }
         if !o.one_of.is_empty() && is_result(&o) {
@@ -337,17 +344,12 @@ impl Gen {
         }
         if !o.any_of.is_empty() {
             only(&keys, ["anyOf"], at)?;
-            if o.any_of.len() == 2 && is_null(&o.any_of[1]) {
-                return self.optional(&o.any_of[0], &`${*at}/anyOf/0`, hint);
+            if non_null(&o) matches { null } {
+                return fail(&`${*at}/anyOf`, "is not a schema and `null`, the one `anyOf` D reads");
             }
-            if o.any_of.len() == 2 && is_null(&o.any_of[0]) {
-                return self.optional(&o.any_of[1], &`${*at}/anyOf/1`, hint);
-            }
-            return fail(&`${*at}/anyOf`, "is not a schema and `null`, the one `anyOf` D reads");
         }
-        if o.type & JsonTypes::Null != JsonTypes::none() && o.type != JsonTypes::Null {
-            let rest = SchemaObject { ..o, type: o.type ^ JsonTypes::Null };
-            return self.optional(&Schema::Object(rest), at, hint);
+        if let Some([inner, within]) = non_null(&o) {
+            return self.optional(&inner, &`${*at}${within}`, hint);
         }
         return self.typed(&o, &keys, at, hint);
     }
@@ -441,12 +443,15 @@ impl Gen {
         let Some(hash) = text.find("#") else {
             return null;
         };
-        let module = text.slice(0, hash).to_string();
+        let module = text.slice(0, hash);
         let name = text.slice(hash + 1, text.len()).to_string();
-        if !module.starts_with("core:") || !is_identifier(&name) {
+        let Some(ns) = module.strip_prefix("core:") else {
+            return null;
+        };
+        if !is_identifier(&ns.to_string()) || !is_identifier(&name) {
             return null;
         }
-        return Option::Some(Ty { text: `${self.namespace(module)}::${name}` });
+        return Option::Some(Ty { text: `${self.namespace(module.to_string())}::${name}` });
     }
 
     fn optional(&mut self, inner: &Schema, at: &String, hint: &String) -> Result<Ty, SchemaError> {
@@ -525,6 +530,7 @@ impl Gen {
             };
             if !o.required.contains_str(key) {
                 if let Some(d) = &p.default {
+                    self.check_default(&pat, &d.root())?;
                     f.default = Option::Some(self.literal(&ty, &d.root()));
                 } else {
                     f.type_str = `Option<${ty.text}>`;
@@ -586,6 +592,9 @@ impl Gen {
         let Ok(pairs) = members(&enum_names(&items), &"") else {
             return false;
         };
+        if pairs.len() > FLAGS_MAX {
+            return false;
+        }
         let [policy, names] = wire_policy(&pairs);
         if !names.iter_ref().all(|n| n matches { null }) {
             return false;
@@ -662,6 +671,21 @@ impl Gen {
         return Result::Ok(());
     }
 
+    /// Fails unless the schema at `at` admits `node`, its default. Draft
+    /// 2020-12 lets a default be any value, and a field holding one its type
+    /// cannot hold would fail to compile or trap where it falls back to it.
+    fn check_default(&self, at: &String, node: &Node) -> Result<(), SchemaError> {
+        let tokens: List<String> = at.split("/").map(|t| percent_encode(t)).collect();
+        let probe = Uri::from_str("jade:default").unwrap();
+        let mut set = self.set;
+        set.insert(probe, Schema::Object(SchemaObject { reference: Option::Some(`${self.doc}#${tokens.join("/")}`) }));
+        let validator = Validator::compile_in(&set, &probe).unwrap();
+        if validator.validate(node) matches { Err(_) } {
+            return fail(&`${*at}/default`, "is a value its own schema rejects");
+        }
+        return Result::Ok(());
+    }
+
     /// `node`, the default of a field of type `ty`, as a Wado expression.
     fn literal(&mut self, ty: &Ty, node: &Node) -> String {
         let null_node = node.kind() matches { _::Null };
@@ -696,6 +720,9 @@ impl Gen {
     }
 }
 
+/// The members a flags holds at most, one bit of a `u32` each.
+global FLAGS_MAX: i32 = 32;
+
 /// The `$defs` key the JSON Pointer `at` names an entry of a document's root
 /// by, or `null` where it points anywhere else.
 fn def_key(at: &String) -> Option<String> {
@@ -706,22 +733,37 @@ fn def_key(at: &String) -> Option<String> {
     return Option::Some(rest.to_string().replace("~1", "/").replace("~0", "~"));
 }
 
-/// The keywords of `o` that assert, as D reads them: an annotation reads as
-/// nothing, and `format` only where D reads it.
+/// The keywords of `o` that assert, as D reads them.
 fn assertions(o: &SchemaObject) -> List<String> {
-    let mut keys: List<String> = [];
-    for let key of o.keywords() {
-        if !ANNOTATIONS.contains_str(key) {
-            keys.push(key);
-        }
-    }
-    return keys;
+    return bare(o).keywords();
 }
 
-global ANNOTATIONS: List<String> = [
-    "$comment", "title", "description", "default", "examples", "deprecated", "readOnly", "writeOnly", "format",
-    "contentMediaType", "contentSchema",
-];
+/// `o` without the keywords that assert nothing: Core's identifiers and
+/// locations, and the annotations, `format` included, which D reads only
+/// where it chooses a string's type.
+fn bare(o: &SchemaObject) -> SchemaObject {
+    return SchemaObject {
+        ..*o,
+        dialect: null,
+        id: null,
+        vocabulary: HashMap::new(),
+        anchor: null,
+        dynamic_anchor: null,
+        comment: null,
+        defs: HashMap::new(),
+        title: null,
+        description: null,
+        default: null,
+        examples: [],
+        deprecated: false,
+        read_only: false,
+        write_only: false,
+        format: null,
+        content_media_type: null,
+        content_schema: null,
+        extra: HashMap::new(),
+    };
+}
 
 /// Fails at the first of `keys` that `allowed` does not hold.
 fn only(keys: &List<String>, allowed: List<String>, at: &String) -> Result<(), SchemaError> {
@@ -805,9 +847,14 @@ fn leaves() -> List<[String, Ty]> {
     ];
     let mut out: List<[String, Ty]> = [];
     for let [s, ty] of schemas {
-        out.push([to_string(&s).unwrap(), ty]);
+        out.push([leaf_text(&s.into_object()), ty]);
     }
     return out;
+}
+
+/// What a leaf is matched by: the assertions of `o`, as written.
+fn leaf_text(o: &SchemaObject) -> String {
+    return to_string(&Schema::Object(bare(o))).unwrap();
 }
 
 /// The type of a schema holding `type` alone, by its value. An integer is
@@ -832,25 +879,31 @@ global SCALARS: List<[JsonTypes, Ty]> = [
 ];
 
 fn leaf_of(o: &SchemaObject) -> Option<Ty> {
-    let bare = SchemaObject {
-        ..*o,
-        comment: null,
-        title: null,
-        description: null,
-        default: null,
-        examples: [],
-        deprecated: false,
-        read_only: false,
-        write_only: false,
-        extra: HashMap::new(),
-    };
-    let Ok(text) = to_string(&Schema::Object(bare)) else {
-        return null;
-    };
+    let text = leaf_text(o);
     for let [leaf, ty] of &LEAVES {
         if *leaf == text {
             return Option::Some(*ty);
         }
+    }
+    return null;
+}
+
+/// What `o` admits besides `null`, where it is that and `null`, and the JSON
+/// Pointer to it within `o`.
+fn non_null(o: &SchemaObject) -> Option<[Schema, String]> {
+    if o.any_of.len() == 2 {
+        for let [i, j] of [
+            [0, 1],
+            [1, 0],
+        ] {
+            if is_null(&o.any_of[j]) {
+                return Option::Some([o.any_of[i], `/anyOf/${i}`]);
+            }
+        }
+        return null;
+    }
+    if o.type & JsonTypes::Null != JsonTypes::none() && o.type != JsonTypes::Null {
+        return Option::Some([Schema::Object(SchemaObject { ..*o, type: o.type ^ JsonTypes::Null }), ""]);
     }
     return null;
 }
