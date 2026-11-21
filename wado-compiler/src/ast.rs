@@ -1180,8 +1180,7 @@ pub fn walk_pattern<'ast, V: AstVisitor<'ast>>(v: &mut V, pat: &'ast Pattern) {
             v.visit_pattern(pattern);
             v.visit_type(ty);
         }
-        // A bound named by a bare name is a constant and binds nothing, so it is
-        // walked as the reference it is, as an `==` operand is.
+        // A bare-name bound is a constant reference, as an `==` operand is.
         Pattern::Range { start, end, .. } => {
             for bound in [start, end] {
                 match &**bound {

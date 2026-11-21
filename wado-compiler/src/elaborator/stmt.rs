@@ -1518,14 +1518,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Resolve the constant `pattern` names, recording its use: an immutable
-    /// global, bare or under a namespace, or an associated constant. `None`
-    /// where it names none. A case of the scrutinee is asked first by callers.
+    /// Resolve the constant `pattern` names, recording its use, to its type:
+    /// an immutable global, bare or under a namespace, or an associated
+    /// constant. `None` where it names none. A case of the scrutinee is asked
+    /// first by callers.
     fn resolve_pattern_constant(
         &mut self,
         pattern: &Pattern,
         ctx: &mut FunctionContext,
-    ) -> Option<PatternConstant> {
+    ) -> Option<TypeId> {
         match pattern {
             Pattern::Ident {
                 id,
@@ -1537,11 +1538,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .immutable_global_type(name)
                     .expect("the resolver answers only an immutable global");
                 self.record_reference_to_decl(*id, global, *name_span);
-                // Only an `==` operand shows: a range bound reports itself.
-                Some(PatternConstant {
-                    shown: format!("== {name}"),
-                    ty,
-                })
+                Some(ty)
             }
             Pattern::Variant {
                 variant_name,
@@ -1551,8 +1548,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
                 ..
             } if bindings.is_empty() => {
-                let shown =
-                    self.format_pattern_case_name(variant_name, variant_qualifier.as_ref(), None);
                 if let Some(assoc) = self
                     .tysys
                     .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
@@ -1568,15 +1563,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                     self.record_reference_to_def(*name_id, assoc.decl);
                     self.resolve_associated_const_body(&assoc, ctx);
-                    return Some(PatternConstant {
-                        shown,
-                        ty: assoc.ty,
-                    });
+                    return Some(assoc.ty);
                 }
                 let (alias, ty) =
                     self.namespaced_constant(variant_qualifier.as_ref(), variant_name)?;
                 self.record_item_reference_by_name(*name_id, &alias);
-                Some(PatternConstant { shown, ty })
+                Some(ty)
             }
             _ => None,
         }
@@ -1617,26 +1609,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Where a constant pattern's `scrutinee == constant` is a trait call, dispatch
-    /// it on the pattern and reserve the local reify holds the scrutinee in. A
-    /// constant holding a float names a value only the run shows, so it is noted
-    /// for `float_literal_pattern` at `site`.
+    /// Where the constant pattern `written`'s `scrutinee == constant` is a
+    /// trait call, dispatch it on the pattern and reserve the local reify holds
+    /// the scrutinee in. A constant holding a float names a value only the run
+    /// shows, so it is noted for `float_literal_pattern` at `site`.
     fn resolve_constant_pattern(
         &mut self,
-        pattern_id: AstId,
-        constant: &PatternConstant,
+        written: &Pattern,
+        constant: TypeId,
         scrutinee: TypeId,
         ctx: &mut FunctionContext,
-        span: Span,
         site: Span,
     ) {
-        let PatternConstant {
-            shown,
-            ty: constant,
-        } = constant;
-        let constant = *constant;
+        let (pattern_id, span) = util::constant_pattern_site(written);
         if self.tysys.holds_float(constant) {
-            self.note_inexact_float_pattern(site, shown.clone());
+            self.note_inexact_float_pattern(site, unparse_pattern_source(written));
         }
         {
             let type_table = self.tysys.type_table.borrow();
@@ -1817,15 +1804,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // An associated constant (`i32::MAX`, `f64::PI`) or a
                     // namespaced global binds nothing: it matches by value.
                     if let Some(constant) = self.resolve_pattern_constant(pattern, ctx) {
-                        self.typecheck(constant.ty, scrutinee_type, *span);
-                        self.resolve_constant_pattern(
-                            *name_id,
-                            &constant,
-                            scrutinee_type,
-                            ctx,
-                            *span,
-                            site,
-                        );
+                        self.typecheck(constant, scrutinee_type, *span);
+                        self.resolve_constant_pattern(pattern, constant, scrutinee_type, ctx, site);
                         return Vec::new();
                     }
 
@@ -2194,9 +2174,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return Vec::new();
                 }
                 let Pattern::Ident {
-                    id,
-                    span: name_span,
-                    ..
+                    span: name_span, ..
                 } = &**operand
                 else {
                     return self.resolve_if_pattern_inner(
@@ -2212,15 +2190,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .resolve_pattern_constant(operand, ctx)
                     .expect("`names_pattern_constant` answered for it");
                 let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                self.typecheck(constant.ty, peeled, *name_span);
-                self.resolve_constant_pattern(
-                    *id,
-                    &constant,
-                    scrutinee_type,
-                    ctx,
-                    *name_span,
-                    site,
-                );
+                self.typecheck(constant, peeled, *name_span);
+                self.resolve_constant_pattern(pattern, constant, scrutinee_type, ctx, site);
                 Vec::new()
             }
             Pattern::Typed {
@@ -2565,7 +2536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut origin = None;
         for bound in bounds {
             if let Some(constant) = self.resolve_pattern_constant(bound, ctx) {
-                self.typecheck(constant.ty, scrutinee, span);
+                self.typecheck(constant, scrutinee, span);
                 origin = origin.or(Some(util::constant_pattern_site(bound)));
                 continue;
             }
@@ -3506,12 +3477,6 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
         | TirPattern::Range { .. }
         | TirPattern::PerInstance { .. } => {}
     }
-}
-
-/// A constant a pattern names: how it is written, and its type.
-struct PatternConstant {
-    shown: String,
-    ty: TypeId,
 }
 
 /// A primitive integer's `MIN` / `MAX` written as a pattern (`i32::MIN`), its

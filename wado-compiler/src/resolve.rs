@@ -1124,8 +1124,9 @@ impl Resolver<'_> {
         true
     }
 
-    /// The immutable `global` an `==` pattern's `name` reaches, where no
-    /// binding in scope as the pattern starts has taken the name.
+    /// The immutable `global` a bare `name` in an `==` operand or a range
+    /// bound reaches, where no binding in scope as the pattern starts has taken
+    /// the name.
     fn immutable_global(&self, name: &str) -> Option<DefId> {
         if self.bound_before_pattern(name) {
             return None;

@@ -3931,25 +3931,26 @@ impl Parser {
             let name_span = self.peek().span;
             let name = self.consume_ident()?;
             let name_id = self.alloc_ast_id();
-            let mut pattern = if self.check(&TokenKind::LParen) {
-                self.parse_variant_pattern(name, None, underscore, name_id, name_span)?
-            } else {
-                Pattern::Variant {
+            if !self.check(&TokenKind::LParen) {
+                return Ok(Pattern::Variant {
                     variant_name: name,
                     variant_qualifier: None,
-                    inferred_qualifier: None,
+                    inferred_qualifier: Some(underscore),
                     name_id,
                     name_span,
                     bindings: Vec::new(),
                     span: underscore.merge(&name_span),
-                }
-            };
-            if let Pattern::Variant {
+                });
+            }
+            let mut pattern =
+                self.parse_variant_pattern(name, None, underscore, name_id, name_span)?;
+            let Pattern::Variant {
                 inferred_qualifier, ..
             } = &mut pattern
-            {
-                *inferred_qualifier = Some(underscore);
-            }
+            else {
+                unreachable!("`parse_variant_pattern` builds a `Variant`");
+            };
+            *inferred_qualifier = Some(underscore);
             Ok(pattern)
         } else if self.check(&TokenKind::EqEq) {
             let start = self.peek().span;

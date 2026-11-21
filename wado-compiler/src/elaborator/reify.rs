@@ -9106,11 +9106,7 @@ impl<'a> Reify<'a> {
             local_index,
             type_id: scrutinee_type,
             test: Box::new(test),
-            // A bare name would bind, so it shows as the `==` it was written as.
-            shown: match written {
-                ast::Pattern::Ident { name, .. } => format!("== {name}"),
-                _ => unparse_pattern_source(written),
-            },
+            shown: unparse_pattern_source(written),
         }
     }
 
@@ -9163,7 +9159,7 @@ impl<'a> Reify<'a> {
                         .reify_pattern_constant(operand, ctx)
                         .expect("annotate rejects an `==` naming no constant");
                     let const_pat = self.constant_value_pattern(constant, scrutinee_type);
-                    self.compare_constant_by_eq(operand, const_pat, scrutinee_type, ctx)
+                    self.compare_constant_by_eq(pattern, const_pat, scrutinee_type, ctx)
                 }
                 _ => self.reify_pattern(operand, scrutinee_type, site, ctx),
             },

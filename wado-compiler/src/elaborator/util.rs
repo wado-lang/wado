@@ -717,6 +717,7 @@ pub(super) fn constant_pattern_site(pattern: &Pattern) -> (AstId, Span) {
     match pattern {
         Pattern::Ident { id, span, .. } => (*id, *span),
         Pattern::Variant { name_id, span, .. } => (*name_id, *span),
+        Pattern::Equal { operand, .. } => constant_pattern_site(operand),
         _ => unreachable!("only a name names a constant"),
     }
 }
