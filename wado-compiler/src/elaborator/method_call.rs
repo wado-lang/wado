@@ -4264,19 +4264,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             // By the types, as `Selector` is: two distinct types printing one
             // name are two candidates, not one.
+            // The parameters as the impl's own frame resolved them, so a
+            // private or aliased name means what the impl wrote.
+            let spelling = render_type_list(&self.tysys.type_table.borrow(), &params);
+            // At the receiver, so a literal argument is shaped by what the
+            // receiver places in the impl's slots rather than by the slots.
+            let at_receiver = |ty: TypeId| match receiver.ty() {
+                Some(receiver) => self.tysys.at_receiver(impl_def, receiver, ty),
+                None => ty,
+            };
+            let params: Vec<TypeId> = params.into_iter().map(at_receiver).collect();
             if survey.candidates.iter().any(|c| c.params == params) {
                 continue;
             }
-            let return_type = match receiver.ty() {
-                Some(receiver) => self
-                    .tysys
-                    .at_receiver(impl_def, receiver, offer.return_type),
-                None => offer.return_type,
-            };
-            let table = self.tysys.type_table.borrow();
-            // The parameters as the impl's own frame resolved them, so a
-            // private or aliased name means what the impl wrote.
-            let spelling = render_type_list(&table, &params);
+            let return_type = at_receiver(offer.return_type);
             survey.candidates.push(ArgCandidate {
                 spelling,
                 params,

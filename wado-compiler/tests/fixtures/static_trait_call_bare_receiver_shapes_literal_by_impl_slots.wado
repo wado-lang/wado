@@ -1,0 +1,20 @@
+// A bare generic receiver is asked at variables. The argument literal is
+// shaped by the selected impl's parameter at that receiver, not by the impl's
+// own slots: `impl<V> From<Array<[String, V]>> for TreeMap<String, V>` shapes
+// `["small", 1]` as `[String, ?V]`, which the literal settles.
+
+use { TreeMap } from "core:collections";
+
+struct Sizes {
+    by_name: TreeMap<String, i32> = TreeMap::from([["small", 1], ["small", 2]]),
+}
+
+test "a local" {
+    let m: TreeMap<String, i32> = TreeMap::from([["small", 1], ["large", 2]]);
+    assert m["large"] == 2;
+}
+
+test "a field default" {
+    let s = Sizes {};
+    assert s.by_name["small"] == 2;
+}
