@@ -3146,7 +3146,7 @@ fn a_binding_a_body_is_entered_with_is_in_scope_inside_it() {
     }
     match o {
         Some(v) => { assert v >= 0; },
-        None => { assert true; },
+        null => { assert true; },
     }
     if let Some(w) = o {
         assert w >= 0;
@@ -3164,7 +3164,6 @@ fn a_binding_a_body_is_entered_with_is_in_scope_inside_it() {
         vec![
             vec!["l", "o", "x"],
             vec!["l", "o", "v"],
-            // `None` parses as a plain name and is a variant, not a binding.
             vec!["l", "o"],
             vec!["l", "o", "w"],
         ]
