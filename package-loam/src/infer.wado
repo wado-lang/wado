@@ -274,6 +274,10 @@ pub struct Checked {
     pub axes: Axes = Axes {},
     /// Each axis's name and where it took it from, once stage 0 has named them.
     pub axis_names: List<AxisName> = [],
+    /// Every name the generated module declares so far, its own and the axes',
+    /// which the emit goes on minting from. See WEP 2026-09-20 § "Every Name
+    /// Is Minted From One Set".
+    pub names: NameRegistry = NameRegistry::new(),
 }
 
 /// An axis's name, and where it took it from: a `dim_param`, or the tensor axis
@@ -324,6 +328,7 @@ pub fn infer(graph: &Graph) -> Result<Checked, InferError> {
         words: HashMap::new(),
     };
     name_axes(graph, &mut scope, &axes, &axes.roots(), &mut naming);
+    scope.names = naming.taken;
     return Result::Ok(scope);
 }
 

@@ -181,14 +181,15 @@ impl Prepared {
         }
         refuse_unmapped_dtype(graph)?;
         let mut axes = axis_names(graph, checked);
-        let experts = ExpertPlan::of(graph, checked, &axes);
+        let mut minted = checked.names;
+        let experts = ExpertPlan::of(graph, checked, &mut minted);
         for let group of &experts.groups {
             axes.push(group.slots);
         }
         let literals = graph_literals(graph, checked);
         let crossing = Crossing::of(graph, cache_pairs(graph));
         let carriers = symbol_carriers(graph, &checked.shapes, &crossing.cached);
-        let names = Names::of(named_tensors(graph, checked, &literals.spelled, &carriers), &axes)?;
+        let names = Names::of(named_tensors(graph, checked, &literals.spelled, &carriers), &mut minted)?;
         let kept = kept_literals(&literals, checked);
         let grown = grown_lengths(checked, &crossing, &carriers)?;
         let padded = padded_symbols(graph, checked, &carriers);

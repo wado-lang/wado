@@ -21,10 +21,12 @@ impl IdGen {
     }
 }
 
-/// A claim refused: the name it would take, and the owner already holding it.
+/// A claim refused: the name it would take, the owner already holding it, and
+/// the owner it was refused to.
 pub struct NameClash {
     pub name: String,
-    pub owner: String,
+    pub holder: String,
+    pub claimant: String,
 }
 
 /// The names one scope of generated source declares, each held by the owner
@@ -45,9 +47,8 @@ impl NameRegistry {
         self.bound.insert(name.to_string());
     }
 
-    /// Whether a claim of `name` is renamed: the language reserves it or `bind`
-    /// added it.
-    pub fn is_bound<S: AsStrSlice>(&self, name: S) -> bool {
+    /// Whether the language reserves `name` or `bind` added it.
+    fn is_bound<S: AsStrSlice>(&self, name: S) -> bool {
         return is_reserved(name) || self.bound.contains_str(name);
     }
 
@@ -60,10 +61,39 @@ impl NameRegistry {
             claimed.push('_');
         }
         if let Some(other) = self.owners.get_str(&claimed) {
-            return Err(NameClash { name: claimed, owner: other });
+            return Err(NameClash { name: claimed, holder: other, claimant: owner.to_string() });
         }
         self.owners[claimed] = owner.to_string();
         return Ok(claimed);
+    }
+
+    /// A name for each of `wants`, `[name, owner]` pairs, in their order, where
+    /// the whole set is known at once. A name neither bound nor held is taken as
+    /// it is, and two owners wanting one are refused. The rest are renamed as
+    /// `fresh` renames them, after the others, so a renaming takes no name the
+    /// set wants, whatever the order within it.
+    pub fn claim_all(&mut self, wants: &List<[String, String]>) -> Result<List<String>, NameClash> {
+        let renamed: List<bool> = wants
+            .iter_ref()
+            .map(|w| self.is_bound(&w.0) || self.owners.contains_key_str(&w.0))
+            .collect();
+        let mut names: List<String> = List::filled(wants.len(), "");
+        for let [i, [name, owner]] of wants.iter_ref().enumerate() {
+            if renamed[i] {
+                continue;
+            }
+            if let Some(other) = self.owners.get_str(name) {
+                return Err(NameClash { name: *name, holder: other, claimant: *owner });
+            }
+            self.owners[*name] = *owner;
+            names[i] = *name;
+        }
+        for let [i, [name, owner]] of wants.iter_ref().enumerate() {
+            if renamed[i] {
+                names[i] = self.fresh(name, owner);
+            }
+        }
+        return Ok(names);
     }
 
     /// The first of `wanted`, `wanted_`, `wanted__`, … that is neither bound nor

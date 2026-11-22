@@ -12,17 +12,19 @@ test "a claim takes a free name as it is" {
     assert names.claim("Point", "a.Point") == Ok("Point");
 }
 
-test "a claim of a held name is refused with the name and its owner" {
+test "a claim of a held name is refused with the name, its holder and the claimant" {
     let mut names = NameRegistry::new();
     names.claim("Point", "a.Point").unwrap();
-    assert names.claim("Point", "b.Point") == Err(NameClash { name: "Point", owner: "a.Point" });
+    assert names.claim("Point", "b.Point") == Err(NameClash { name: "Point", holder: "a.Point", claimant: "b.Point" });
 }
 
 test "a fresh name is held by the owner it was minted for" {
     let mut names = NameRegistry::new();
     names.bind("Slots");
     assert names.fresh("Slots", "pool 0") == "Slots_";
-    assert names.claim("Slots_", "tensor x") == Err(NameClash { name: "Slots_", owner: "pool 0" });
+    assert names.claim("Slots_", "tensor x") == Err(
+        NameClash { name: "Slots_", holder: "pool 0", claimant: "tensor x" },
+    );
 }
 
 test "a claim of a reserved or bound name takes a `_` for each binding it meets" {
@@ -36,10 +38,10 @@ test "a claim of a reserved or bound name takes a `_` for each binding it meets"
 test "a renamed claim meeting a held name is refused, whichever came first" {
     let mut names = NameRegistry::new();
     names.claim("List_", "a").unwrap();
-    assert names.claim("List", "b") == Err(NameClash { name: "List_", owner: "a" });
+    assert names.claim("List", "b") == Err(NameClash { name: "List_", holder: "a", claimant: "b" });
     let mut reversed = NameRegistry::new();
     reversed.claim("List", "b").unwrap();
-    assert reversed.claim("List_", "a") == Err(NameClash { name: "List_", owner: "b" });
+    assert reversed.claim("List_", "a") == Err(NameClash { name: "List_", holder: "b", claimant: "a" });
 }
 
 test "fresh takes the first name past what is reserved, bound or held" {
@@ -51,10 +53,47 @@ test "fresh takes the first name past what is reserved, bound or held" {
     assert names.fresh("String", "d") == "String_";
 }
 
-test "is_bound reads the language's reservations and the module's bindings" {
+test "claim_all takes each free name as it is, in the order wanted" {
     let mut names = NameRegistry::new();
-    names.bind("compute");
-    assert names.is_bound("compute");
-    assert names.is_bound("fn");
-    assert !names.is_bound("input");
+    let wants: List<[String, String]> = [
+        ["x", "a"],
+        ["y", "b"],
+    ];
+    assert names.claim_all(&wants) == Ok(["x", "y"] as List<String>);
+}
+
+test "claim_all refuses two owners wanting one name" {
+    let mut names = NameRegistry::new();
+    let wants: List<[String, String]> = [
+        ["x", "a"],
+        ["x", "b"],
+    ];
+    assert names.claim_all(&wants) == Err(NameClash { name: "x", holder: "a", claimant: "b" });
+}
+
+test "claim_all renames a bound name past what the rest of the set takes, wherever it stands" {
+    let mut names = NameRegistry::new();
+    names.bind("build");
+    let wants: List<[String, String]> = [
+        ["build", "a"],
+        ["build_", "b"],
+    ];
+    assert names.claim_all(&wants) == Ok(["build__", "build_"] as List<String>);
+    let mut reversed = NameRegistry::new();
+    reversed.bind("build");
+    let reversed_wants: List<[String, String]> = [
+        ["build_", "b"],
+        ["build", "a"],
+    ];
+    assert reversed.claim_all(&reversed_wants) == Ok(["build_", "build__"] as List<String>);
+}
+
+test "claim_all renames a name held before the set past it" {
+    let mut names = NameRegistry::new();
+    names.fresh("Batch", "axis");
+    let wants: List<[String, String]> = [
+        ["Batch", "tensor"],
+        ["List", "other"],
+    ];
+    assert names.claim_all(&wants) == Ok(["Batch_", "List_"] as List<String>);
 }

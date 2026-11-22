@@ -107,16 +107,24 @@ A name the generator mints from its input must not be reserved. Check it with
 
 `NameRegistry` holds the names one scope declares, past the reserved ones and
 those `bind` adds, such as the module's imports. `claim(name, owner)` takes a
-`_` after a bound name. A held one is refused with a `NameClash` naming it and
-its owner, so whether two names meet does not depend on which came first.
-`fresh(wanted, owner)` takes the first of `wanted`, `wanted_`, … that is free.
+`_` after a bound name. A held one is refused with a `NameClash` naming it, its
+holder and the claimant, so whether two names meet does not depend on which
+came first. `fresh(wanted, owner)` takes the first of `wanted`, `wanted_`, …
+that is free.
+
+Where the whole set of names is known at once, `claim_all` claims it in one
+call. A name nothing holds or binds is taken as it is, and the rest are renamed
+past every name the set takes, so neither fails over an order.
 
 ```wado
 let mut names = NameRegistry::new();
 names.bind("grog");
 assert names.claim("List", "pkg.List") == Ok("List_");
-assert names.claim("List", "other.List") == Err(NameClash { name: "List_", owner: "pkg.List" });
+assert names.claim("List", "other.List") == Err(NameClash { name: "List_", holder: "pkg.List", claimant: "other.List" });
 assert names.fresh("grog", "runtime alias") == "grog_";
+let wants: List<[String, String]> = [["Point", "a"], ["Point_", "b"]];
+names.bind("Point");
+assert names.claim_all(&wants) == Ok(["Point__", "Point_"] as List<String>);
 ```
 
 `IdGen` hands out 0, 1, 2, …, for the locals a generator suffixes so two never

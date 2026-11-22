@@ -35,6 +35,20 @@ g (float[N, 2] "a.b", float[N, 2] "a/b") => (float[N, 2] out)
     assert `${e}` == "a/b and a.b both name `a_b`";
 }
 
+test "a tensor named as the module or an axis is renamed past every other tensor's name" {
+    let source = `
+g (float[N, 2] build, float[N, 2] build_, float[N, 2] N) => (float[N, 2] out)
+<>
+{
+    t = Add(build, build_)
+    out = Add(t, N)
+}
+`;
+    let out = generate(source).unwrap();
+    assert out.contains("build__");
+    assert out.contains("N_");
+}
+
 fn is_error<E: Error>() {
 }
 

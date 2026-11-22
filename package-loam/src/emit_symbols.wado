@@ -7,7 +7,8 @@ use { HashMap, HashSet } from "core:collections";
 use { PlacedExperts } from "./emit_experts.wado";
 use { Extent, Solved, solved } from "./extent.wado";
 use { Graph, Node, is_float } from "./graph.wado";
-use { BACKEND_PARAM, module_names } from "./idents.wado";
+use { BACKEND_PARAM } from "./idents.wado";
+use { NameRegistry } from "lib:wadopoet";
 use { Lowers, Op, Poly } from "./poly.wado";
 use { RowRefusal, SLOTS } from "./rows.wado";
 use { Shape } from "./shape.wado";
@@ -84,51 +85,32 @@ impl Error for NameCollision {
 impl Error for EmitError {
 }
 
-/// Every identifier the generated module declares, minted from one set: the
-/// axes, then each tensor name sanitized. Two that collide stop the build.
+/// Every identifier the generated module declares for a tensor, each its name
+/// sanitized. Two that collide stop the build.
 internal struct Names {
     idents: HashMap<String, String>,
 }
 
 impl Names {
-    /// An identifier for each of `tensors`, in the order first seen, past the
-    /// names the module binds and `axes`, which name its marker types. A
-    /// tensor's sanitized form is its identifier unless the module binds it;
-    /// those are renamed last, past every other tensor's, so a renaming takes
-    /// none of theirs.
-    internal fn of(tensors: List<String>, axes: &List<String>) -> Result<Names, EmitError> {
-        let mut registry = module_names();
-        for let axis of *axes {
-            assert !registry.is_bound(&axis), "infer names an axis past every name the module declares";
-            registry.bind(axis);
-        }
-        let mut sanitized = HashMap::<String, String>::new();
-        for let tensor of tensors {
-            if !sanitized.contains_key(tensor) {
-                sanitized[tensor] = sanitize(&tensor);
-            }
-        }
+    /// An identifier for each of `tensors`, minted in `taken`, which holds the
+    /// module's own names and its markers'.
+    internal fn of(tensors: List<String>, taken: &mut NameRegistry) -> Result<Names, EmitError> {
+        let mut wants: List<[String, String]> = [];
         let mut idents = HashMap::<String, String>::new();
-        for let [tensor, ident] of sanitized.entries() {
-            if registry.is_bound(ident) {
-                continue;
-            }
-            match registry.claim(ident, tensor) {
-                Ok(claimed) => idents[*tensor] = claimed,
-                Err(clash) => {
-                    builtin::cold_path();
-                    return Result::Err(EmitError::Collision(NameCollision {
-                        tensor: *tensor,
-                        other: clash.owner,
-                        ident: clash.name,
-                    }));
-                },
+        for let tensor of tensors {
+            if !idents.contains_key(tensor) {
+                idents[tensor] = "";
+                wants.push([sanitize(&tensor), tensor]);
             }
         }
-        for let [tensor, ident] of sanitized.entries() {
-            if registry.is_bound(ident) {
-                idents[*tensor] = registry.fresh(ident, tensor);
-            }
+        let minted = taken.claim_all(&wants).map_err(|clash| {
+            builtin::cold_path();
+            return EmitError::Collision(
+                NameCollision { tensor: clash.claimant, other: clash.holder, ident: clash.name },
+            );
+        })?;
+        for let [i, [_, tensor]] of wants.into_iter().enumerate() {
+            idents[tensor] = minted[i];
         }
         return Result::Ok(Names { idents });
     }
