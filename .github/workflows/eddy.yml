@@ -85,6 +85,7 @@ jobs:
           runs="$(gh run list -R "$REPO" -w ci.yml -b main -e push -s success -L 20 \
             --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')"
           while read -r run sha; do
+            [ -n "$run" ] || continue
             if [ -n "$(gh api "repos/$REPO/actions/runs/$run/artifacts" \
               --jq '.artifacts[] | select(.name == "prebuilt-wado" and (.expired | not)) | .id')" ]; then
               if [ "$(run_from "$sha")" != "$wanted" ]; then
