@@ -27,7 +27,7 @@ use {
 } from "./tensor.wado";
 use { HashMap } from "core:collections";
 use { Any, Recorded, Recorder, Run, Untyped, assert_carries, constants, kept_any } from "./recorded.wado";
-use { HostWeight } from "./weight.wado";
+use { HostWeight, stored_bytes } from "./weight.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -152,6 +152,11 @@ pub affine trait Backend: Graph with _ {
     /// slot that [`Self::written`] fills in place, and that holds nothing to
     /// read until then.
     fn pool(&mut self, kind: ElementKind, extents: List<i32>) -> Any<Self>;
+    /// The most slots of `kind` and `slot`'s extents one [`Self::pool`]
+    /// holds: as many as keep its bytes within `i32`.
+    fn pool_slots(&self, kind: ElementKind, slot: &List<i32>) -> i32 with () {
+        return i32::MAX / stored_bytes(kind, slot);
+    }
     /// `pool`, which [`Self::pool`] made, with its slot `slot` holding `row`:
     /// one slice along the first axis, as a checkpoint stores it.
     fn written(&mut self, pool: &mut Any<Self>, slot: i32, row: HostWeight);
@@ -370,7 +375,7 @@ pub affine trait Graph: Holds with _ {
         sinks: Option<&Self::Tensor<E, [SH]>>,
         options: &Attention,
     ) -> [Self::Tensor<E, [B, S, Q]>, Self::Tensor<E, [B, H, T, D]>, Self::Tensor<E, [B, H, T, D]>]
-        contract past_length matches { None } || options.causal, "a shared buffer's padding is masked causally"
+        contract past_length matches { null } || options.causal, "a shared buffer's padding is masked causally"
     {
         return decomposed_attention::<Self, E, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH, BS, SH>(
             self,
@@ -470,7 +475,7 @@ pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, P
     let [heads, kv] = [options.heads, options.kv_heads];
     let [first, total] = match past_length {
         Some(l) => [*l, past],
-        None => [shared(g, &scalar(g, past as i64)), past + s],
+        null => [shared(g, &scalar(g, past as i64)), past + s],
     };
     let mut query = heads_first::<G, E, B, S, Q, Heads, D>(g, q, heads, d);
     let mut key = heads_first::<G, E, B, S, K, H, D>(g, k, kv, d);
@@ -482,7 +487,7 @@ pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, P
         key = turned::<G, E, B, H, S, D, Half>(g, &key, &cos_rows, &sin_rows);
     }
     let mut present = |held: &G::Tensor<E, [B, H, P, D]>, new: &G::Tensor<E, [B, H, S, D]>| -> G::Tensor<E, [B, H, T, D]> {
-        if past_length matches { None } {
+        if past_length matches { null } {
             return g.concatenate(held, new, 2);
         }
         let written = written_at::<G, E, [B, H, P, D], [B, H, S, D]>(g, held, new, 2, &first, Option::Some(0));
@@ -511,14 +516,14 @@ pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, P
     );
     let wide_bias: Option<G::Tensor<f32, [BB, BH, BS, T]>> = match bias {
         Some(b) => Option::Some(g.convert::<E, f32, [BB, BH, BS, T]>(b)),
-        None => null,
+        null => null,
     };
     if options.softcap > 0.0 {
         let cap = full::<G, f32, [B, Heads, S, T]>(g, options.softcap, score_extents);
         let tanh = g.unary(Unary::Tanh, &g.binary(Binary::Divide, &scores, &cap));
         scores = g.binary(Binary::Multiply, &cap, &tanh);
     }
-    let bias_first = options.hidden matches { None };
+    let bias_first = options.hidden matches { null };
     if let Some(b) = &wide_bias && bias_first {
         scores = biased::<G, f32, [B, Heads, S, T], [BB, BH, BS, T]>(g, &scores, b, &score_extents);
     }
@@ -546,7 +551,7 @@ pub fn decomposed_attention<affine G: Graph, E: Float, B, S, Q, K, H, P, T, D, P
     }
     let sunk: Option<G::Tensor<f32, Rows>> = match sinks {
         Some(h) => Option::Some(g.broadcast_in_dim(&g.convert::<E, f32, [SH]>(h), [batch, heads, s], [1])),
-        None => null,
+        null => null,
     };
     let weights = softmax_over::<G, f32, [B, Heads, S, T]>(g, &scores, 3, optional(&sunk));
     let attend = DotDims {
@@ -664,7 +669,7 @@ pub fn decomposed_gather<affine G: Graph, E: Float, R, P, I, Blocks, Z, Out>(
     let picked_scales = rows_at::<G, E, R, Blocks, Rows>(g, scales, &at);
     let picked_zeros: Option<G::Tensor<u8, [Rows, Z]>> = match zero_points {
         Some(z) => Option::Some(rows_at::<G, u8, R, Z, Rows>(g, z, &at)),
-        None => null,
+        null => null,
     };
     let width = bytes * (8 / quantized.bits);
     let values = dequantized::<G, E, Rows, P, Blocks, Z>(
@@ -730,7 +735,7 @@ fn dequantized<affine G: Graph, E: Float, M, P, Blocks, Z>(
             let unpacked = unpacked_values::<G, M, Z>(g, z, quantized.bits);
             g.convert(&g.slice::<u8, [M, Row], [M, Blocks]>(&unpacked, [0, 0], [m, blocks], [1, 1]));
         },
-        None => full::<G, E, [M, Blocks]>(g, E::from_i64(1 << (quantized.bits - 1) as i64), [m, blocks]),
+        null => full::<G, E, [M, Blocks]>(g, E::from_i64(1 << (quantized.bits - 1) as i64), [m, blocks]),
     };
     let held: List<i32> = [m, blocks, block];
     let in_blocks: G::Tensor<E, [M, Blocks, Group]> = g.convert(&g.reshape::<u8, [M, Row], [M, Blocks, Group]>(
@@ -775,7 +780,7 @@ fn unpacked_values<affine G: Graph, M, P>(
         let column: G::Tensor<u8, [M, Row, One]> = g.reshape(&value, [m, p, 1]);
         joined = Option::Some(match &joined {
             Some(j) => g.concatenate(j, &column, 2),
-            None => column,
+            null => column,
         });
     }
     return g.reshape(&joined.unwrap(), [m, p * lanes]);
@@ -944,7 +949,7 @@ pub fn branched<affine G: Graph, Axes, T>(
     return match chosen {
         Some(true) => g.taken(then),
         Some(false) => g.taken(otherwise),
-        None => g.conditional(pred, then, otherwise),
+        null => g.conditional(pred, then, otherwise),
     };
 }
 
@@ -1440,13 +1445,13 @@ impl Backend for Cpu {
 /// The weight `k` names, of `kind`, as `Any` holds it.
 fn kept_any_of(kind: ElementKind, k: KeptWeight) -> Any<Cpu> {
     return match kind {
-        F32 => Any::F32(CpuTensor::Kept(k)),
-        F16 => Any::F16(CpuTensor::Kept(k)),
-        BF16 => Any::BF16(CpuTensor::Kept(k)),
-        U8 => Any::U8(CpuTensor::Kept(k)),
-        I64 => Any::I64(CpuTensor::Kept(k)),
-        I32 => Any::I32(CpuTensor::Kept(k)),
-        Bool => Any::Bool(CpuTensor::Kept(k)),
+        _::F32 => Any::F32(CpuTensor::Kept(k)),
+        _::F16 => Any::F16(CpuTensor::Kept(k)),
+        _::BF16 => Any::BF16(CpuTensor::Kept(k)),
+        _::U8 => Any::U8(CpuTensor::Kept(k)),
+        _::I64 => Any::I64(CpuTensor::Kept(k)),
+        _::I32 => Any::I32(CpuTensor::Kept(k)),
+        _::Bool => Any::Bool(CpuTensor::Kept(k)),
     };
 }
 
@@ -1858,7 +1863,7 @@ impl Graph for Cpu {
         init: f32,
         window: &WindowReduce,
     ) -> CpuTensor<E, Out>
-        contract op matches { Maximum } && init == f32::NEG_INFINITY, "the CPU reduces windows by their greatest alone"
+        contract op matches { _::Maximum } && init == f32::NEG_INFINITY, "the CPU reduces windows by their greatest alone"
     {
         let x = self.held(x);
         let pooled = pooled_window(&x.extents, window);
@@ -2077,7 +2082,7 @@ impl<E: Float, R, Blocks, Z> PackedRow<E, R, Blocks, Z> {
             mask: (1 << bits) - 1,
             row,
             at,
-            exact: E::kind() matches { F32 },
+            exact: E::kind() matches { _::F32 },
             zero: 0,
             scale: 0.0,
             rounded: List::<f32>::filled(1 << bits, 0.0),
@@ -2094,7 +2099,7 @@ impl<E: Float, R, Blocks, Z> PackedRow<E, R, Blocks, Z> {
         let per = 8 / self.bits;
         self.zero = match self.zero_points {
             Some(z) => z.data[self.row * z.extents[1] + b / per] as i32 >> b % per * self.bits & self.mask,
-            None => 1 << self.bits - 1,
+            null => 1 << self.bits - 1,
         };
         self.scale = self.scales.data[self.row * self.scales.extents[1] + b].cast_to::<f32>();
         if self.exact {
@@ -2128,15 +2133,15 @@ struct Spatial {
 
 fn unary_f32(op: Unary, v: f32) -> f32 {
     return match op {
-        Abs => f32::abs(v),
-        Erf => f32::erf(v),
-        Exponential => f32::exp(v),
-        Log => f32::ln(v),
-        Logistic => sigmoid_f32(v),
-        Negate => -v,
-        Rsqrt => 1.0 / f32::sqrt(v),
-        Sqrt => f32::sqrt(v),
-        Tanh => f32::tanh(v),
+        _::Abs => f32::abs(v),
+        _::Erf => f32::erf(v),
+        _::Exponential => f32::exp(v),
+        _::Log => f32::ln(v),
+        _::Logistic => sigmoid_f32(v),
+        _::Negate => -v,
+        _::Rsqrt => 1.0 / f32::sqrt(v),
+        _::Sqrt => f32::sqrt(v),
+        _::Tanh => f32::tanh(v),
     };
 }
 
@@ -2144,48 +2149,48 @@ fn unary_f32(op: Unary, v: f32) -> f32 {
 /// operand is.
 fn binary_f32(op: Binary, a: f32, b: f32) -> f32 {
     return match op {
-        Add => a + b,
-        Divide => a / b,
-        Maximum => f32::ieee754_max(a, b),
-        Minimum => f32::ieee754_min(a, b),
-        Multiply => a * b,
-        Power => f32::pow(a, b),
-        Subtract => a - b,
+        _::Add => a + b,
+        _::Divide => a / b,
+        _::Maximum => f32::ieee754_max(a, b),
+        _::Minimum => f32::ieee754_min(a, b),
+        _::Multiply => a * b,
+        _::Power => f32::pow(a, b),
+        _::Subtract => a - b,
     };
 }
 
 /// StableHLO's integer arithmetic, which wraps and divides toward zero.
 fn binary_i64(op: Binary, a: i64, b: i64) -> i64 {
     return match op {
-        Add => a + b,
-        Divide => a / b,
-        Maximum => i64::max(a, b),
-        Minimum => i64::min(a, b),
-        Multiply => a * b,
-        Power => unreachable(),
-        Subtract => a - b,
+        _::Add => a + b,
+        _::Divide => a / b,
+        _::Maximum => i64::max(a, b),
+        _::Minimum => i64::min(a, b),
+        _::Multiply => a * b,
+        _::Power => unreachable(),
+        _::Subtract => a - b,
     };
 }
 
 fn compared_f32(direction: Comparison, a: f32, b: f32) -> bool {
     return match direction {
-        Eq => a.ieee754_eq(b),
-        Ne => !a.ieee754_eq(b),
-        Ge => a.ieee754_ge(b),
-        Gt => a.ieee754_gt(b),
-        Le => a.ieee754_le(b),
-        Lt => a.ieee754_lt(b),
+        _::Eq => a.ieee754_eq(b),
+        _::Ne => !a.ieee754_eq(b),
+        _::Ge => a.ieee754_ge(b),
+        _::Gt => a.ieee754_gt(b),
+        _::Le => a.ieee754_le(b),
+        _::Lt => a.ieee754_lt(b),
     };
 }
 
 fn compared_i64(direction: Comparison, a: i64, b: i64) -> bool {
     return match direction {
-        Eq => a == b,
-        Ne => a != b,
-        Ge => a >= b,
-        Gt => a > b,
-        Le => a <= b,
-        Lt => a < b,
+        _::Eq => a == b,
+        _::Ne => a != b,
+        _::Ge => a >= b,
+        _::Gt => a > b,
+        _::Le => a <= b,
+        _::Lt => a < b,
     };
 }
 
@@ -2224,7 +2229,7 @@ impl<E: Float> Laid<E> {
     fn of<Axes>(&self, x: &Tensor<E, Axes>) -> &List<E> {
         return match &self.data {
             Some(laid) => laid,
-            None => &x.data,
+            null => &x.data,
         };
     }
 }

@@ -12,7 +12,7 @@ variant Shape {
 fn area(s: &Shape) -> f64 {
     return match s {
         Circle(r) => *r,
-        Point => 0.0,
+        _::Point => 0.0,
     };
 }
 
@@ -22,5 +22,5 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": "non-exhaustive match: missing case `Rectangle`"
+  "compile_error": "non-exhaustive match: missing case `Rectangle(_)`"
 }

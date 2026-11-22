@@ -13,7 +13,7 @@ test "as bottom type" {
     // Function argument
     let a = nadd(match opt {
         Some(v) => v,
-        None => panic("none"),
+        null => panic("none"),
     }, 10);
     assert a == 15;
 
@@ -21,7 +21,7 @@ test "as bottom type" {
     let p = NPoint {
         x: match opt {
             Some(v) => v,
-            None => panic("none"),
+            null => panic("none"),
         },
         y: 0,
     };
@@ -30,14 +30,14 @@ test "as bottom type" {
     // List element
     let arr: List<i32> = [match opt {
         Some(v) => v,
-        None => panic("none"),
+        null => panic("none"),
     }, 2];
     assert arr[0] == 5;
 
     // Binary operand (RHS)
     let b: i32 = 3 + match opt {
         Some(v) => v,
-        None => panic("none"),
+        null => panic("none"),
     };
     assert b == 8;
 }
@@ -46,7 +46,7 @@ test "let binding" {
     let opt: Option<i32> = Option::<i32>::Some(42);
     let x: i32 = match opt {
         Some(v) => v,
-        None => panic("none"),
+        null => panic("none"),
     };
     assert x == 42;
 }

@@ -721,27 +721,19 @@ fn let_bindings(stmt: &Stmt) -> Vec<Binding> {
     // `let mut x` carries the `mut` on the statement; `MutIdent` is what a
     // nested pattern binds.
     let mut bindings = Vec::new();
-    let refutable = let_stmt.else_block.is_some();
-    pattern_bindings(&let_stmt.pattern, let_stmt.is_mut, refutable, &mut bindings);
+    pattern_bindings(&let_stmt.pattern, let_stmt.is_mut, &mut bindings);
     bindings
 }
 
-/// A plain name in a refutable pattern is either a binding or a unit variant
-/// and the parser cannot tell, so an initial capital is read as the variant
-/// Wado spells that way: naming one costs the payload the whole fixture.
-fn pattern_bindings(pattern: &Pattern, is_mut: bool, refutable: bool, out: &mut Vec<Binding>) {
+fn pattern_bindings(pattern: &Pattern, is_mut: bool, out: &mut Vec<Binding>) {
     let recurse = |pattern, out: &mut Vec<Binding>| {
-        pattern_bindings(pattern, is_mut, refutable, out);
+        pattern_bindings(pattern, is_mut, out);
     };
     match pattern {
-        Pattern::Ident { name, .. } => {
-            if !refutable || !name.starts_with(char::is_uppercase) {
-                out.push(Binding {
-                    name: name.clone(),
-                    is_mut,
-                });
-            }
-        }
+        Pattern::Ident { name, .. } => out.push(Binding {
+            name: name.clone(),
+            is_mut,
+        }),
         Pattern::MutIdent { name, .. } => out.push(Binding {
             name: name.clone(),
             is_mut: true,
@@ -769,7 +761,11 @@ fn pattern_bindings(pattern: &Pattern, is_mut: bool, refutable: bool, out: &mut 
                 recurse(first, out);
             }
         }
-        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
+        Pattern::Literal(_)
+        | Pattern::Wildcard
+        | Pattern::Range { .. }
+        | Pattern::Equal { .. }
+        | Pattern::Error(_) => {}
     }
 }
 
@@ -782,7 +778,7 @@ fn condition_bindings(condition: &Condition) -> Vec<Binding> {
     let mut bindings = Vec::new();
     for element in elements {
         if let ConditionElement::Let { pattern, .. } = element {
-            pattern_bindings(pattern, false, true, &mut bindings);
+            pattern_bindings(pattern, false, &mut bindings);
         }
     }
     bindings
@@ -881,7 +877,7 @@ impl AstVisitor<'_> for SiteCollector {
             Stmt::ForOf(for_of) => {
                 self.visit_expr(&for_of.iterable);
                 let mut bound = Vec::new();
-                pattern_bindings(&for_of.binding, for_of.is_mut, false, &mut bound);
+                pattern_bindings(&for_of.binding, for_of.is_mut, &mut bound);
                 self.in_scope(bound, |s| s.visit_block(&for_of.body));
             }
             _ => walk_stmt(self, stmt),
@@ -893,7 +889,7 @@ impl AstVisitor<'_> for SiteCollector {
         self.visit_expr(&match_expr.expr);
         for arm in &match_expr.arms {
             let mut bound = Vec::new();
-            pattern_bindings(&arm.pattern, false, true, &mut bound);
+            pattern_bindings(&arm.pattern, false, &mut bound);
             self.in_scope(bound, |s| {
                 if let Some(guard) = &arm.guard {
                     s.visit_expr(guard);
@@ -3150,7 +3146,7 @@ fn a_binding_a_body_is_entered_with_is_in_scope_inside_it() {
     }
     match o {
         Some(v) => { assert v >= 0; },
-        None => { assert true; },
+        null => { assert true; },
     }
     if let Some(w) = o {
         assert w >= 0;
@@ -3168,7 +3164,6 @@ fn a_binding_a_body_is_entered_with_is_in_scope_inside_it() {
         vec![
             vec!["l", "o", "x"],
             vec!["l", "o", "v"],
-            // `None` parses as a plain name and is a variant, not a binding.
             vec!["l", "o"],
             vec!["l", "o", "w"],
         ]

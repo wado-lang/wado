@@ -11,11 +11,11 @@ export fn run() with Stdout {
     let s = Shape::Point;
     let desc = match s {
         Circle(r) => `circle ${r}`,
-        Point => "point",
+        _::Point => "point",
         // Missing Rectangle arm
     };
     println(desc);
 }
 
 __DATA__
-{"compile_error": "missing case `Rectangle`"}
+{"compile_error": "missing case `Rectangle(_)`"}

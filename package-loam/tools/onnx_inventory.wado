@@ -41,7 +41,7 @@ struct Weight {
 fn element_name(number: i32) -> String {
     return match onnx::TensorProtoDataType::from_number(number) {
         Some(element) => `${element}`.to_ascii_lowercase(),
-        None => `${number}`,
+        null => `${number}`,
     };
 }
 
@@ -74,7 +74,7 @@ fn typed_value(vi: &onnx::ValueInfoProto) -> String {
             dims.push(match &d.value {
                 Some(DimParam(param)) => *param,
                 Some(DimValue(value)) => `${*value}`,
-                None => "?",
+                null => "?",
             });
         }
     }
@@ -94,7 +94,7 @@ fn attr_value(a: &onnx::AttributeProto) -> String {
         },
         Some(onnx::AttributeProtoAttributeType::Tensor) => match &a.t {
             Some(t) => `tensor<${typed_tensor(t)}>`,
-            None => "tensor",
+            null => "tensor",
         },
         Some(onnx::AttributeProtoAttributeType::Graph) => "graph",
         Some(onnx::AttributeProtoAttributeType::Graphs) => "graphs",

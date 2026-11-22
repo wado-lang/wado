@@ -105,7 +105,7 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
         } else if kind == onnx::RK_INITIALIZERS {
             for let vi of children_of_kind(s, c, onnx::RK_VALUE_INFO) {
                 let info = read_value_info(s, toks, vi)?;
-                if static_extents(&info.rank) matches { None } {
+                if static_extents(&info.rank) matches { null } {
                     return Result::Err(`${info.name}: an initializer's extents are integers`);
                 }
                 if is_build_time(&info.dtype) {
@@ -335,7 +335,7 @@ fn digit_after_point(text: &mut String) {
         return;
     };
     let fraction = point + 1;
-    assert text.as_str_slice().slice(fraction, text.len()).find(".") matches { None }, "the `FLOAT` rule admits one point";
+    assert text.as_str_slice().slice(fraction, text.len()).find(".") matches { null }, "the `FLOAT` rule admits one point";
     if fraction == text.len() || !text.byte_at(fraction).is_ascii_digit() {
         text.insert(fraction, '0');
     }
@@ -366,7 +366,7 @@ fn read_tensor_type(
             rank = Rank::Dims(dims);
         }
     }
-    if saw_bracket && rank matches { Scalar } {
+    if saw_bracket && rank matches { _::Scalar } {
         rank = Rank::Unranked;
     }
     return Result::Ok([dtype, rank]);

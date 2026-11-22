@@ -103,7 +103,7 @@ fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> HashMap<i32, i32> {
     let mut by_text = HashMap::<String, i32>::new();
     let mut owners = HashMap::<i32, i32>::new();
     for let a of &actions {
-        if a.kind matches { Predicate } {
+        if a.kind matches { _::Predicate } {
             let id = a.source.action_id;
             owners[id] = by_text.get_or_insert(a.source.text.trim().to_string(), id);
         }
@@ -181,7 +181,7 @@ impl GrammarAnalysis {
     }
 
     pub fn set_left_edges(&mut self, edges: RuleLeftEdges)
-        contract self.left_edges matches { None }, "a grammar's left edges are derived once"
+        contract self.left_edges matches { null }, "a grammar's left edges are derived once"
     {
         self.left_edges = Option::Some(edges);
     }
@@ -662,7 +662,7 @@ impl GrammarAnalysis {
                 },
                 Repeat(rep) => {
                     let mut body_suffix: List<Element> = [];
-                    if !rep.kind matches { Optional } {
+                    if !rep.kind matches { _::Optional } {
                         body_suffix.push(Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star }));
                     }
                     body_suffix.extend(&rest);
@@ -698,7 +698,7 @@ impl GrammarAnalysis {
             while tails.len() <= left {
                 tails.push(null);
             }
-            if tails[left] matches { None } {
+            if tails[left] matches { null } {
                 tails[left] = Option::Some(self.readings_of_elements(elements, from + 1, left, visiting, cycled));
             }
             let Some(tail) = &tails[left] else {
@@ -749,7 +749,7 @@ impl GrammarAnalysis {
         visiting: &mut List<i32>,
         cycled: &mut bool,
     ) -> List<Reading> {
-        if rep.kind matches { Optional } {
+        if rep.kind matches { _::Optional } {
             let mut out = self.readings_of_element(&rep.element, k, visiting, cycled);
             readings_union_into(&mut out, &readings_empty(k), k);
             return out;
@@ -768,7 +768,7 @@ impl GrammarAnalysis {
             }
             star.push(out);
         }
-        if rep.kind matches { Star } {
+        if rep.kind matches { _::Star } {
             return star[k];
         }
         let mut out: List<Reading> = [];
@@ -1054,7 +1054,7 @@ impl GrammarAnalysis {
             RuleRef(r) => self.rule_is_nullable_at(&r.name, visiting, min_cycle),
             Label(lab) => self.element_is_nullable_deep_at(&lab.element, visiting, min_cycle),
             Repeat(rep) => match rep.kind {
-                Star | Optional => true,
+                _::Star | _::Optional => true,
                 _ => self.element_is_nullable_deep_at(&rep.element, visiting, min_cycle),
             },
             Group(g) => {
@@ -1864,7 +1864,7 @@ pub fn elements_from(elements: &List<Element>, start: i32) -> List<Element> {
 
 pub fn is_nullable(elem: &Element) -> bool {
     if let Repeat(rep) = elem {
-        if let Star | Optional = rep.kind {
+        if let _::Star | _::Optional = rep.kind {
             return true;
         }
     }
@@ -1929,7 +1929,7 @@ fn collect_late_failing_calls(elements: &List<Element>, in_repeat: bool, out: &m
 /// Whether an element must match something: anything but an optional or a
 /// star. A rule call counts, though its rule may be nullable.
 fn is_required(elem: &Element) -> bool {
-    return !peel_labels(elem) matches { Repeat(rep) && !rep.kind matches { Plus } };
+    return !peel_labels(elem) matches { Repeat(rep) && !rep.kind matches { _::Plus } };
 }
 
 /// Collect the parser-rule names an element sequence references for

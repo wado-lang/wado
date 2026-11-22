@@ -737,6 +737,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `_::Case` where the expected type has no such case, or there is none.
+    InferredCaseUnresolved {
+        case: String,
+        expected: Option<String>,
+        span: Span,
+    },
+
     /// A bare case (`Red`) where no expected type supplies it: the type name
     /// may be omitted only where the context says which type is meant.
     BareCaseNeedsContext {
@@ -2132,6 +2139,23 @@ impl TypeError {
             TypeError::CannotInferType { message, span } => {
                 (Code::NeedsTypeAnnotation, message.clone(), *span)
             }
+            TypeError::InferredCaseUnresolved {
+                case,
+                expected,
+                span,
+            } => match expected {
+                Some(expected) => (
+                    Code::UndefinedVariable,
+                    format!("`{expected}` has no case `{case}`"),
+                    *span,
+                ),
+                None => (
+                    Code::NeedsTypeAnnotation,
+                    format!("`_::{case}` needs an expected type to name its case"),
+                    *span,
+                ),
+            },
+
             TypeError::BareCaseNeedsContext {
                 case,
                 qualified,
@@ -4462,13 +4486,16 @@ pub(super) enum TraitLookup {
     /// The lookup reported why it cannot answer, so the call reports nothing
     /// more.
     Reported,
+    /// The impls that may answer depend on what the receiver's variables
+    /// settle to: the blocks the order names, each `None` for a derived body.
+    Undecided(Vec<Option<DefId>>),
 }
 
 impl TraitLookup {
     pub(super) fn found(self) -> Option<TraitMethodMatch> {
         match self {
             Self::Found(found) => Some(*found),
-            Self::Missing | Self::Reported => None,
+            Self::Missing | Self::Reported | Self::Undecided(_) => None,
         }
     }
 }

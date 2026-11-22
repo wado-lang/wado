@@ -180,6 +180,45 @@ test "a buffer lends its own memory to a stream copy" {
     assert buffer.bytes().to_list_of::<u8>(0, 5) == [1, 2, 3, 4, 5];
 }
 
+test "streams read at once each fill their own array, up to its length" {
+    let [long_rx, long_tx] = Stream::<u8>::new();
+    let [short_rx, short_tx] = Stream::<u8>::new();
+    let [none_rx, none_tx] = Stream::<u8>::new();
+    let long = long_tx.start_write(counting(0, 6));
+    let short = short_tx.start_write(counting(7, 2));
+    let streams: List<&Stream<u8>> = [&long_rx, &short_rx, &none_rx];
+    let arrays = LinearArray::read_streams_prefix(&streams, &[5, 2, 0]);
+    assert arrays[0].to_list() == counting(0, 5);
+    assert arrays[1].to_list() == counting(7, 2);
+    assert arrays[2].is_empty();
+    for let writing of [long, short] {
+        let [writer, _] = writing.finish();
+        writer.drop();
+    }
+    none_tx.drop();
+    for let stream of [long_rx, short_rx, none_rx] {
+        stream.drop();
+    }
+}
+
+/// What `read_stream_prefix` reads of a stream a `Trickle` of `content`
+/// serves `step` bytes a read, for `len` bytes.
+fn trickled(content: List<u8>, step: i32, len: i32) -> List<u8> with Stream {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    let mut source = Trickle { content, at: 0, step };
+    let array = with &mut source do {
+        LinearArray::read_stream_prefix(&rx, len);
+    };
+    rx.drop();
+    return array.to_list();
+}
+
+test "a stream's prefix takes a handler's items, up to the length or the stream's end" {
+    assert trickled(counting(0, 10000), 3000, 7000) == counting(0, 7000);
+    assert trickled(counting(0, 5), 3, 9) == counting(0, 5);
+}
+
 test "to_string_of reads a byte range as text" {
     let source: ByteList = b"\xffhi\xc3\xa9";
     let bytes = LinearArray::from_slice(&source);

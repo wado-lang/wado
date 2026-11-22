@@ -162,11 +162,11 @@ a plain fold (from [`example/eval.wado`](./example/eval.wado)):
 ```wado
 fn eval_expr(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Result<i64, String> {
     return match s.expr_alt(node) {
-        Some(Num) => int_value(s, node, toks),
-        Some(Paren) => eval_first_child(s, node, toks),
-        Some(MulDiv) => fold_binary(s, node, toks),
-        Some(AddSub) => fold_binary(s, node, toks),
-        None => panic("expr: node has no stamped alternative"),
+        Some(_::Num) => int_value(s, node, toks),
+        Some(_::Paren) => eval_first_child(s, node, toks),
+        Some(_::MulDiv) => fold_binary(s, node, toks),
+        Some(_::AddSub) => fold_binary(s, node, toks),
+        null => panic("expr: node has no stamped alternative"),
     };
 }
 ```

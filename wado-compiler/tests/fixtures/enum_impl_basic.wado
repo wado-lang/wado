@@ -11,18 +11,18 @@ enum Season {
 impl Season {
     fn is_warm(&self) -> bool {
         return match *self {
-            Spring => true,
-            Summer => true,
+            _::Spring => true,
+            _::Summer => true,
             _ => false,
         };
     }
 
     fn next(&self) -> Season {
         return match *self {
-            Spring => Season::Summer,
-            Summer => Season::Autumn,
-            Autumn => Season::Winter,
-            Winter => Season::Spring,
+            _::Spring => Season::Summer,
+            _::Summer => Season::Autumn,
+            _::Autumn => Season::Winter,
+            _::Winter => Season::Spring,
         };
     }
 }
@@ -34,7 +34,7 @@ export fn run() with Stdout {
     }
 
     let n = s.next();
-    if let Summer = n {
+    if let _::Summer = n {
         println("next is summer");
     }
 

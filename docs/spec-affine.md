@@ -46,7 +46,7 @@ type Wrapped = Holder;
 
 test {
     let slot: Slot = Empty;
-    assert slot matches { Empty };
+    assert slot matches { _::Empty };
     let bag = Bag { items: [] };
     assert bag.items.is_empty();
 }

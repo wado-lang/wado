@@ -524,7 +524,7 @@ impl Deserializer for ArgvDeserializer {
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
         // A bare `--flag` is `true`; an inline `--flag=0`, a positional bool, or
         // a forced repeatable value is converted leniently.
-        let bare_flag = self.cur_is_option && self.cur_inline matches { None } && self.forced matches { None };
+        let bare_flag = self.cur_is_option && self.cur_inline matches { null } && self.forced matches { null };
         if bare_flag {
             return Result::Ok(true);
         }
@@ -668,7 +668,7 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
     };
     let recorded = if let Some([kind, raised]) = de.err && raised.kind == e.kind && raised.message == e.message {
         ArgsError { kind, message: raised.message };
-    } else if e.kind matches { UnknownVariant } && let Some(bad) = de.unknown_case {
+    } else if e.kind matches { _::UnknownVariant } && let Some(bad) = de.unknown_case {
         bad;
     } else {
         return Result::Err(ArgsError::from(e));

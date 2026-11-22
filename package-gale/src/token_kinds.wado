@@ -78,8 +78,8 @@ impl TokenKinds {
         for let mut idx = 0; idx < slots.len(); idx += 1 {
             let name = match slots[idx] {
                 Rule(ri) => `TK_${grammar.lexer_rules[ri].name}`,
-                Eof => "TK_EOF",
-                Error => "TK_ERROR",
+                _::Eof => "TK_EOF",
+                _::Error => "TK_ERROR",
                 Lit(li) => lit_tokens[li].const_name,
             };
             by_name[name] = idx;

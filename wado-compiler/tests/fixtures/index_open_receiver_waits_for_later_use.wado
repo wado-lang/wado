@@ -1,0 +1,30 @@
+// Either `IndexValue` may answer `a[0]` while `T` is open, so the element is
+// typed by the trait's `Output` and waits for the line settling `T` to `u64`.
+
+struct Bx<T> { v: T }
+
+impl IndexValue<i32> for Bx<u64> {
+    type Output = u64;
+    fn index_value(&self, _i: i32) -> u64 {
+        return self.v + 1;
+    }
+}
+
+impl IndexValue<i32> for Bx<i64> {
+    type Output = i64;
+    fn index_value(&self, _i: i32) -> i64 {
+        return self.v - 1;
+    }
+}
+
+fn mk<T: Default>() -> Bx<T> {
+    return Bx { v: T::default() };
+}
+
+test {
+    let a = mk();
+    let c = a[0];
+    let _d: Bx<u64> = a;
+    let e: u64 = c;
+    assert e == 1;
+}

@@ -48,7 +48,7 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
         let mut entered = third;
         loop {
             let inst = program.insts[pc];
-            if inst matches { Byte(_) | Match } {
+            if inst matches { Byte(_) | _::Match } {
                 entered = 0;
             }
             let bit = (program.state_base[pc] + entered) * positions + (pos - start);
@@ -69,7 +69,7 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
                     pc += 1;
                     pos += 1;
                 },
-                Match => {
+                _::Match => {
                     assert pos == end;
                     slots.truncate(program.captures);
                     return slots;
@@ -115,7 +115,7 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
                     }
                     pc += 1;
                 },
-                Fail => {
+                _::Fail => {
                     break;
                 },
             }

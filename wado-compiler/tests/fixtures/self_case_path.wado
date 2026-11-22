@@ -38,12 +38,12 @@ impl Make for Mb {
 
 test "a payload case of a plain variant" {
     assert Mb::mk(1) matches { J(1) };
-    assert Mb::none() matches { N };
+    assert Mb::none() matches { _::N };
 }
 
 test "a case of a generic variant takes Self's type arguments" {
     assert Gb::<i32>::mk(2) matches { J(2) };
-    assert Gb::<String>::none() matches { N };
+    assert Gb::<String>::none() matches { _::N };
 }
 
 test "Self's written argument types the payload literal" {
@@ -51,7 +51,7 @@ test "Self's written argument types the payload literal" {
 }
 
 test "an enum case and a flags member" {
-    assert C::red() matches { R };
+    assert C::red() matches { _::R };
     assert P::rw() as u32 == 3;
 }
 

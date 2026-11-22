@@ -2,7 +2,7 @@
 
 use super::scope::{BinderInScope, ParamRef, ScopeParams, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
-use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind};
+use super::trait_query::{DerivedAt, SelfBinding, UnmetImplBound, UnmetKind, Unsettled};
 use super::type_resolution::ParamSpace;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -37,10 +37,8 @@ use super::infer_hole::{DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
-use super::synth::{ArgClass, ArgProbe, KeyedAccess};
-use super::trait_env::{
-    BlanketReceiver, ImplHeader, ImplMethodHeader, TraitEnv, header_as_written, receiver_as_written,
-};
+use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess};
+use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
     MethodInfo, MethodOwner, TypeError, TypeLookup,
@@ -51,7 +49,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
-use crate::elaborator::solver_bridge::Ordered;
+use crate::elaborator::solver_bridge::{Commitment, Ordered};
 use crate::elaborator::types::{
     ImplMemberKind, OverloadedCallForm, RequiredTrait, TraitLookup, TraitMethodMatch,
 };
@@ -999,62 +997,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
-        // The call committing to the impl checks the bounds against the
-        // answer (`Self::defer_awaited_impl_bounds`).
-        let bounded = receiver_type_args.map(|args| self.bounded_at_answer(args));
         self.tysys.impl_reaches(def, receiver_type_args)
             && self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
                 def,
                 Some(receiver),
-                bounded.as_deref(),
+                receiver_type_args,
+                Unsettled::MayHold,
             )
     }
 
-    /// `args` with each awaiting its report standing as the error type a
-    /// report leaves, which meets every bound: the variable carries its bounds
-    /// to its answer.
-    fn bounded_at_answer(&self, args: &[TypeId]) -> Vec<TypeId> {
-        let tt = self.tysys.type_table.borrow();
-        args.iter()
-            .map(|&arg| {
-                if self.awaits_report(&tt, arg) {
-                    TypeTable::ERROR
-                } else {
-                    arg
-                }
-            })
-            .collect()
-    }
-
-    /// Check the bounds impl `def` places on `receiver`'s arguments still
-    /// awaiting their report against what answers them, as
-    /// [`Self::inherent_impl_applies`] let them meet every bound.
-    pub(super) fn defer_awaited_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
+    /// Require the bounds impl `def`, selected for `receiver`, places on its
+    /// arguments where they name a variable: the selection asked those in
+    /// three values, and one it could not answer yet holds or fails once
+    /// settled.
+    pub(super) fn require_selected_impl_bounds(
+        &mut self,
+        def: DefId,
+        receiver: TypeId,
+        span: Span,
+    ) {
         // As the block reads them, which for a newtype is at its base where
         // the block is the base's.
         if let Some(type_args) = self
             .tysys
             .receiver_args_at_impl(Some(receiver), &[], Some(def))
         {
-            self.defer_awaited_bounds_at(def, &type_args, span);
+            self.require_impl_bounds_at(def, &type_args, span);
         }
     }
 
-    /// [`Self::defer_awaited_impl_bounds`] at `type_args`, block `def`'s
+    /// [`Self::require_selected_impl_bounds`] at `type_args`, block `def`'s
     /// arguments as it reads them.
-    fn defer_awaited_bounds_at(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
+    ///
+    /// Each bound is owed where any argument names a variable, the answered
+    /// ones included: the selection asked in three values wherever one did.
+    fn require_impl_bounds_at(&mut self, def: DefId, type_args: &[TypeId], span: Span) {
         let binding = {
             let tt = self.tysys.type_table.borrow();
-            if !type_args.iter().any(|&arg| self.awaits_report(&tt, arg)) {
+            let names_var = |ty: TypeId| !tt.infer_vars_in(ty).is_empty();
+            if !type_args.iter().any(|&arg| names_var(arg)) {
                 return;
             }
-            let open = |ty: TypeId| self.awaits_report(&tt, ty);
-            tt.open_impl_target_binding(tt.impl_target_args(def), type_args, &open)
+            tt.open_impl_target_binding(&tt.impl_target_positions(def), type_args, &names_var)
         };
         if let Some(binding) = binding {
             let binding = self.tysys.type_table.borrow_mut().settle_runs(binding);
-            self.defer_open_impl_bounds(def, &binding.slots, span);
+            self.defer_impl_bounds(def, &binding.slots, &binding.slots, span, OwedBounds::All);
         }
     }
 
@@ -1141,6 +1130,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             def,
                             Some(receiver),
                             Some(&args),
+                            Unsettled::MayHold,
                         )
                     });
                 if let Some(unmet) = unmet {
@@ -1158,8 +1148,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Enforce the bounds of the impl block a static call selected at the
     /// receiver arguments it names, which no lookup filtered the block by:
-    /// now where they are decided, and once answered where an argument awaits
-    /// its report.
+    /// now where they are decided, and once settled where they are open.
     pub(super) fn enforce_static_block_bounds(
         &mut self,
         block: Option<DefId>,
@@ -1169,11 +1158,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(block) = block else {
             return;
         };
-        self.defer_awaited_bounds_at(block, receiver_args, span);
-        let receiver_args = self.bounded_at_answer(receiver_args);
+        self.require_impl_bounds_at(block, receiver_args, span);
         let unmet = self
             .tysys
-            .unmet_impl_bound(&self.annotate_ctx, block, None, Some(&receiver_args))
+            .unmet_impl_bound(
+                &self.annotate_ctx,
+                block,
+                None,
+                Some(receiver_args),
+                Unsettled::MayHold,
+            )
             .or_else(|| {
                 // A list past the receiver's positions spells the slots only
                 // the trait arguments name, whose bounds no position reaches.
@@ -1181,10 +1175,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !table.impl_trait_sets_params(block) {
                     return None;
                 }
-                let slots = table.impl_spelled_slots(block, &receiver_args);
+                let slots = table.impl_spelled_slots(block, receiver_args);
                 drop(table);
                 self.tysys
-                    .unmet_slot_bound(&self.annotate_ctx, block, &slots)
+                    .unmet_slot_bound(&self.annotate_ctx, block, &slots, Unsettled::MayHold)
             });
         if let Some(unmet) = unmet {
             self.report_unmet(unmet, span);
@@ -1302,7 +1296,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (&var, &answer) in &binding.answers {
             self.equate(var, answer);
         }
-        self.defer_open_impl_bounds(def, &binding.slots, span);
+        self.defer_impl_bounds(def, &binding.slots, &binding.slots, span, OwedBounds::Open);
         true
     }
 
@@ -1318,13 +1312,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied();
         let tt = self.tysys.type_table.borrow();
         written.is_some_and(|written| tt.binds_type_params(&[written], &[key]))
-    }
-
-    /// Check the bounds impl `def` places on its parameters, where the
-    /// parameter or an argument of its bound is still open, once they are
-    /// answered.
-    pub(super) fn defer_open_impl_bounds(&mut self, def: DefId, slots: &TypeArgMap, span: Span) {
-        self.defer_impl_bounds(def, slots, slots, span, OwedBounds::Open);
     }
 
     /// Check that `receiver` derives the trait declaring `method_name` once
@@ -1399,9 +1386,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             let bounds = self.declared_bounds(param, None, &impl_args);
-            let owes = matches!(owed, OwedBounds::All) || self.awaits_pending_call(*arg) || {
+            let owes = matches!(owed, OwedBounds::All) || {
                 let tt = self.tysys.type_table.borrow();
-                self.awaits_report(&tt, *arg)
+                !tt.infer_vars_in(*arg).is_empty()
                     || bounds
                         .iter()
                         .any(|b| self.annotate_ctx.trait_awaits_pending_call(&tt, &b.trait_))
@@ -1467,7 +1454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|&(_, arg)| !self.type_has_infer_hole(arg))
             .collect();
         self.tysys
-            .unmet_slot_bound(&self.annotate_ctx, block, &settled)
+            .unmet_slot_bound(&self.annotate_ctx, block, &settled, Unsettled::Fails)
             .is_none()
     }
 
@@ -1666,6 +1653,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     def,
                     Some(receiver),
                     Some(&args),
+                    Unsettled::MayHold,
                 )
             })
             .collect()
@@ -1695,7 +1683,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let binding = {
             let tt = self.tysys.type_table.borrow();
             let open = |ty: TypeId| self.pending_owner_index(ty).is_some();
-            tt.open_impl_target_binding(tt.impl_target_args(def), &args, &open)?
+            tt.open_impl_target_binding(&tt.impl_target_positions(def), &args, &open)?
         };
         Some(self.tysys.type_table.borrow_mut().settle_runs(binding))
     }
@@ -2451,7 +2439,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `probe`: the call's arguments, classified on demand to select
         // among one trait's argument lists. `None` from callers with no
         // argument list at hand.
-        probe: Option<&mut ArgProbe<'_>>,
+        probe: Option<ArgSource<'_, '_>>,
     ) -> TraitLookup {
         let receiver_display = type_key
             .display_name(self.tysys.resolutions.defs())
@@ -2462,7 +2450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(Ordered::One(Some(def))) = order
             && let Some(receiver) = receiver_type_id
         {
-            self.defer_awaited_impl_bounds(def, receiver, span);
+            self.require_selected_impl_bounds(def, receiver, span);
         }
         let named: &[Option<DefId>] = match &order {
             Some(Ordered::One(def)) => std::slice::from_ref(def),
@@ -2485,24 +2473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 impls
             }
-            Some(Ordered::Undecided(_)) => {
-                let receiver = receiver_type_id.expect("the order answers a receiver it can say");
-                let receiver = self.apply_infer_holes(receiver);
-                let (name, open) = {
-                    let table = self.tysys.type_table.borrow();
-                    (table.name(receiver), table.infer_vars_in(receiver))
-                };
-                let _ = self.emit(TypeError::CannotInferType {
-                    message: format!(
-                        "cannot infer `{name}` far enough to choose which `{method_name}` this calls; annotate it"
-                    ),
-                    span,
-                });
-                for var in open {
-                    self.close_infer_var(var);
-                }
-                return TraitLookup::Reported;
-            }
+            Some(Ordered::Undecided(live)) => return TraitLookup::Undecided(live.clone()),
             Some(Ordered::Nothing) | None => &[],
         };
         let asked = required_trait.and_then(|wanted| wanted.args.as_deref());
@@ -2565,6 +2536,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe) {
             Some(found) => TraitLookup::Found(Box::new(found)),
             None => TraitLookup::Missing,
+        }
+    }
+
+    /// `lookup`, with an undecided selection reported at `span` as needing an
+    /// annotation, for a site that cannot wait for the receiver to settle.
+    pub(super) fn decide_now(
+        &mut self,
+        lookup: TraitLookup,
+        receiver: TypeId,
+        method_name: &str,
+        span: Span,
+    ) -> TraitLookup {
+        if !matches!(lookup, TraitLookup::Undecided(_)) {
+            return lookup;
+        }
+        self.report_undecided_selection(receiver, method_name, span);
+        TraitLookup::Reported
+    }
+
+    /// The trait's declaration a call waiting on `lookup` is typed by, with
+    /// `Self` as `declared_self`, where `lookup` leaves the impl undecided and
+    /// the call `can_wait`; otherwise `lookup`, decided now.
+    pub(super) fn wait_or_decide(
+        &mut self,
+        lookup: TraitLookup,
+        can_wait: bool,
+        declared_self: TypeId,
+        receiver: TypeId,
+        method_name: &str,
+        span: Span,
+    ) -> Result<(FqTraitName, MethodInfo), TraitLookup> {
+        if let TraitLookup::Undecided(live) = &lookup
+            && can_wait
+            && let Some(declared) = self.trait_declared_info(live, declared_self, method_name)
+        {
+            return Ok(declared);
+        }
+        Err(self.decide_now(lookup, receiver, method_name, span))
+    }
+
+    /// Report that `receiver` must settle further before a call of
+    /// `method_name` can choose its impl, and close its variables so nothing
+    /// reports them again.
+    pub(super) fn report_undecided_selection(
+        &mut self,
+        receiver: TypeId,
+        method_name: &str,
+        span: Span,
+    ) {
+        let receiver = self.apply_infer_holes(receiver);
+        let (name, open) = {
+            let table = self.tysys.type_table.borrow();
+            (table.name(receiver), table.infer_vars_in(receiver))
+        };
+        let _ = self.emit(TypeError::CannotInferType {
+            message: format!(
+                "cannot infer `{name}` far enough to choose which `{method_name}` this calls; annotate it"
+            ),
+            span,
+        });
+        for var in open {
+            self.close_infer_var(var);
         }
     }
 
@@ -3079,36 +3112,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: TypeId,
         span: Span,
     ) {
-        let env = Arc::clone(&self.tysys.trait_env);
-        let (blankets, heads): (Vec<DefId>, Vec<DefId>) = tied
-            .iter()
-            .flatten()
-            .copied()
-            .collect::<IndexSet<_>>()
-            .into_iter()
-            .partition(|&def| {
-                env.blanket_of_block(def)
-                    .is_some_and(|b| matches!(b.receiver, BlanketReceiver::Value))
-            });
-        let blankets: Vec<&ImplHeader> =
-            blankets.iter().map(|def| &env.impl_headers[def]).collect();
-        let heads: Vec<&ImplHeader> = heads.iter().map(|def| &env.impl_headers[def]).collect();
-        let receiver = self.tysys.type_id_to_string(receiver);
-        if let [_, _, ..] = blankets.as_slice() {
-            let _ = self.emit(TypeError::AmbiguousValueBlankets {
-                trait_name: trait_.to_display(),
-                receiver: receiver.clone(),
-                bounds: blankets.iter().map(|h| receiver_as_written(h)).collect(),
-                span,
-            });
-        }
-        if let [_, _, ..] = heads.as_slice() {
-            let _ = self.emit(TypeError::AmbiguousHeadImpls {
-                trait_name: trait_.to_display(),
-                receiver,
-                headers: heads.iter().map(|h| header_as_written(h)).collect(),
-                span,
-            });
+        for error in self.tysys.tied_impl_errors(tied, trait_, receiver, span) {
+            let _ = self.emit(error);
         }
     }
 
@@ -3174,6 +3179,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         required_trait: Option<&RequiredTrait>,
     ) -> Option<Ordered> {
+        let (ordered, commitment) =
+            self.ask_order(type_key, receiver_type_id, method_name, required_trait)?;
+        if let Some(commitment) = commitment {
+            self.infer_holes.require(Obligation::Selection(commitment));
+        }
+        Some(ordered)
+    }
+
+    /// [`Self::order_for_call`] for a site that only asks, owing nothing.
+    fn ask_order(
+        &self,
+        type_key: &ImplTargetKey,
+        receiver_type_id: Option<TypeId>,
+        method_name: &str,
+        required_trait: Option<&RequiredTrait>,
+    ) -> Option<(Ordered, Option<Commitment>)> {
         let bridge = self.tysys.solver.as_ref()?.borrow();
         let required = match required_trait.map(|r| r.decl) {
             Some(Resolution::Def(def)) => Some(def),
@@ -3187,7 +3208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The order reads the reference as a level of the receiver's chain, so
         // it has to be put back.
         let through_ref = type_key.ref_kind().map(|kind| kind == RefKind::Mut);
-        let (ordered, commitment) = bridge.select(
+        bridge.select(
             &self.tysys,
             &self.annotate_ctx,
             self.frame_module(),
@@ -3198,11 +3219,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             required_trait
                 .and_then(|r| r.args.as_deref())
                 .unwrap_or_default(),
-        )?;
-        if let Some(commitment) = commitment {
-            self.infer_holes.require(Obligation::Selection(commitment));
+        )
+    }
+
+    /// Whether which impl answers `method_name` on `receiver` waits on a
+    /// variable the receiver holds.
+    pub(super) fn selection_undecided(
+        &self,
+        receiver: TypeId,
+        method_name: &str,
+        required_trait: Option<&RequiredTrait>,
+    ) -> bool {
+        self.undecided_impls(receiver, method_name, required_trait)
+            .is_some()
+    }
+
+    /// The impls that may answer `method_name` on `receiver`, where which one
+    /// does waits on a variable the receiver holds.
+    pub(super) fn undecided_impls(
+        &self,
+        receiver: TypeId,
+        method_name: &str,
+        required_trait: Option<&RequiredTrait>,
+    ) -> Option<Vec<Option<DefId>>> {
+        match self
+            .ask_order(
+                &self.impl_target_of(receiver),
+                Some(receiver),
+                method_name,
+                required_trait,
+            )?
+            .0
+        {
+            Ordered::Undecided(live) => Some(live),
+            Ordered::One(_)
+            | Ordered::Nothing
+            | Ordered::OutOfScope { .. }
+            | Ordered::AmbiguousTraits(_)
+            | Ordered::AmbiguousBlankets(_)
+            | Ordered::Overloaded(_)
+            | Ordered::Duplicated(_) => None,
         }
-        Some(ordered)
     }
 
     /// The winner among the matches the order named: the call's arguments
@@ -3214,7 +3271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver: Option<TypeId>,
         span: Span,
-        probe: Option<&mut ArgProbe<'_>>,
+        probe: Option<ArgSource<'_, '_>>,
     ) -> Option<TraitMethodMatch> {
         // The overload set is the concrete candidates of one declaration.
         // Distinct traits never form one, and a blanket neither forms nor
@@ -3226,7 +3283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(i, _)| i)
             .collect();
         let mut classes: Vec<ArgClass> = Vec::new();
-        if let Some(probe) = probe
+        if let Some(mut probe) = probe
             && concrete.len() > 1
             && concrete
                 .iter()
@@ -3255,7 +3312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .all(|(class, &param)| self.class_admits(param, class))
                 })
                 .collect();
-            if let Some(expected) = probe.expected {
+            if let Some(expected) = probe.expected() {
                 self.narrow_to_expected_return(&mut admitted, expected, |&i| {
                     found_traits[i].method_info.return_type
                 });
@@ -3584,7 +3641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let container = self.tysys.type_id_to_string(info.container);
             self.report_blocks_tied(&blocks, &key, &container, span);
         }
-        self.defer_awaited_impl_bounds(info.impl_def, info.container, span);
+        self.require_selected_impl_bounds(info.impl_def, info.container, span);
         self.defer_impl_bounds(
             info.impl_def,
             &info.trait_arg_slots,
@@ -3698,6 +3755,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_ref.0,
                         Some(base_type_id),
                         Some(&concrete_type_args),
+                        Unsettled::Fails,
                     );
                 if !(open && reaches) {
                     return None;
@@ -3808,6 +3866,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_ref.0,
                     Some(receiver),
                     Some(&concrete_type_args),
+                    Unsettled::Fails,
                 ) {
                     return None;
                 }
@@ -4077,14 +4136,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
                 let receiver = s.impl_receiver(header, base_type_id);
-                // The dispatch committing to the impl checks the bounds against
-                // the answer (`Self::indexing_function_ref`).
                 if !concrete_type_args.is_empty()
                     && !s.tysys.check_impl_block_bounds(
                         &s.annotate_ctx,
                         impl_ref.0,
                         Some(base_type_id),
-                        Some(&s.bounded_at_answer(&concrete_type_args)),
+                        Some(&concrete_type_args),
+                        Unsettled::MayHold,
                     )
                 {
                     return None;
@@ -4251,15 +4309,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // as on the plain method-call path.
         let mut probe = ArgProbe::new(&method_call.args, ctx, expected_type);
         if method_info.is_none() {
-            match self.find_trait_method_for_type(
+            let lookup = self.find_trait_method_for_type(
                 &self.impl_target_of(output_base_type_id),
                 &method_call.method,
                 output_type_args.as_deref(),
                 Some(output_type),
                 method_call.span,
                 None,
-                Some(&mut probe),
-            ) {
+                Some(ArgSource::Exprs(&mut probe)),
+            );
+            match self.decide_now(lookup, output_type, &method_call.method, method_call.span) {
                 TraitLookup::Found(trait_match) => {
                     method_trait_name = Some(trait_match.trait_name);
                     method_info = Some(trait_match.method_info);
@@ -4267,6 +4326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TraitLookup::Missing => {}
                 TraitLookup::Reported => return Some(TypeTable::ERROR),
+                TraitLookup::Undecided(_) => unreachable!("decided now"),
             }
         }
 

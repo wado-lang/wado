@@ -63,7 +63,7 @@ impl<affine T> Option<T> {
     pub fn unwrap_or(self, default: T) -> T {
         return match self {
             Some(v) => v,
-            None => default,
+            null => default,
         };
     }
 
@@ -71,7 +71,7 @@ impl<affine T> Option<T> {
     pub fn map<affine U>(self, mut f: fn mut(T) -> U with _) -> Option<U> with _ {
         return match self {
             Some(v) => Option::<U>::Some(f(v)),
-            None => Option::<U>::None,
+            null => Option::<U>::None,
         };
     }
 
@@ -79,7 +79,7 @@ impl<affine T> Option<T> {
     pub fn ok_or<affine E>(self, err: E) -> Result<T, E> {
         return match self {
             Some(v) => Result::<T, E>::Ok(v),
-            None => Result::<T, E>::Err(err),
+            null => Result::<T, E>::Err(err),
         };
     }
 
@@ -535,7 +535,13 @@ impl<affine T> Waitable for ReadCopy<T> {
         let Some([_, started]) = &self.copy else {
             unreachable();
         };
-        return started.buffer.wait_on();
+        return started.wait_on();
+    }
+}
+
+impl<affine T> Waitable for StartedRead<T> {
+    fn wait_on(&self) -> WaitOn {
+        return self.buffer.wait_on();
     }
 }
 
@@ -701,9 +707,9 @@ internal fn copy_result(packed: i32) -> CopyResult {
 /// The packed word of a copy that moved nothing and ended as `result`.
 fn copy_status(result: CopyResult) -> i32 {
     return match result {
-        Completed => 0,
-        Dropped => 1,
-        Cancelled => 2,
+        _::Completed => 0,
+        _::Dropped => 1,
+        _::Cancelled => 2,
     };
 }
 
@@ -852,7 +858,7 @@ impl CallState {
     /// Whether the call resolved, by returning or by a cancel. Only a resolved
     /// call's subtask may drop: the Component Model traps on one in flight.
     pub fn is_resolved(&self) -> bool {
-        return !*self matches { Starting | Started };
+        return !*self matches { _::Starting | _::Started };
     }
 }
 
@@ -1060,7 +1066,7 @@ impl<affine W: Waitable> WaitableSet<W> {
                 DELIVERED.push(Resolution { handle: reported.handle, state });
             },
             Copied(_) => SETTLED_COPIES.push(CopySettlement { handle: reported.handle, packed: reported.payload }),
-            Unreported => unreachable(),
+            _::Unreported => unreachable(),
         }
         builtin::waitable_join(reported.handle, 0);
         return Option::Some(Ready { member: self.members.remove(at), event: reported.event });
@@ -1178,14 +1184,14 @@ impl<affine T> AsyncCall<T> {
         if let Some(promise) = call.promise.take() {
             let buffer = match &call.buffer {
                 Some(buffer) => buffer.ptr,
-                None => 0,
+                null => 0,
             };
             builtin::extern_promise_wait(promise, buffer);
         }
         // The buffer drops, freed, once the lift has read it.
         return match call.buffer.take() {
             Some(buffer) => (call.lift)(buffer.ptr),
-            None => (call.lift)(0),
+            null => (call.lift)(0),
         };
     }
 
@@ -1215,7 +1221,7 @@ impl<affine T> Drop for AsyncCall<T> {
             drop_resolved(subtask);
         }
         // A promise nobody waited on has written no result.
-        if returned && self.promise matches { None } && let Some(buffer) = self.buffer {
+        if returned && self.promise matches { null } && let Some(buffer) = self.buffer {
             let _ = (self.lift)(buffer.ptr);
         }
     }
@@ -1228,7 +1234,7 @@ impl<affine T> Waitable for AsyncCall<T> {
         }
         return match &self.subtask {
             Some(subtask) => subtask.wait_on(),
-            None => WaitOn::Settled(ReadyEvent::Call(CallState::Returned)),
+            null => WaitOn::Settled(ReadyEvent::Call(CallState::Returned)),
         };
     }
 }

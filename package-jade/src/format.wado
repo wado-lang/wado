@@ -37,46 +37,46 @@ impl Format {
 
     internal fn name(&self) -> String {
         return match self {
-            DateTime => "date-time",
-            Date => "date",
-            Time => "time",
-            Duration => "duration",
-            Email => "email",
-            Ipv4 => "ipv4",
-            Ipv6 => "ipv6",
-            Uri => "uri",
-            UriReference => "uri-reference",
-            Iri => "iri",
-            IriReference => "iri-reference",
-            Uuid => "uuid",
-            UriTemplate => "uri-template",
-            JsonPointer => "json-pointer",
-            RelativeJsonPointer => "relative-json-pointer",
-            Regex => "regex",
+            _::DateTime => "date-time",
+            _::Date => "date",
+            _::Time => "time",
+            _::Duration => "duration",
+            _::Email => "email",
+            _::Ipv4 => "ipv4",
+            _::Ipv6 => "ipv6",
+            _::Uri => "uri",
+            _::UriReference => "uri-reference",
+            _::Iri => "iri",
+            _::IriReference => "iri-reference",
+            _::Uuid => "uuid",
+            _::UriTemplate => "uri-template",
+            _::JsonPointer => "json-pointer",
+            _::RelativeJsonPointer => "relative-json-pointer",
+            _::Regex => "regex",
         };
     }
 
     /// Whether `text` is a value of the format.
     internal fn admits(&self, text: StrSlice) -> bool {
         return match self {
-            DateTime => whole(Scan::of(text), date_time),
-            Date => whole(Scan::of(text), full_date),
-            Time => whole(Scan::of(text), full_time),
-            Duration => whole(Scan::of(text), duration),
-            Email => whole(Scan::of(text), mailbox),
-            Ipv4 => whole(Scan::of(text), |s| dotted_quad(s, Leading::Unpadded)),
-            Ipv6 => is_ipv6(&Scan::of(text).chars, 1, Leading::Unpadded),
-            Uri => is_uri(text),
-            UriReference => is_uri_reference(text),
-            Iri => iri_as_uri(text) matches { Some(mapped) && is_uri(mapped.as_str_slice()) },
-            IriReference => iri_as_uri(text) matches { Some(mapped) && is_uri_reference(mapped.as_str_slice()) },
-            Uuid => is_uuid(text),
-            UriTemplate => whole(Scan::of(text), uri_template),
-            JsonPointer => whole(Scan::of(text), json_pointer),
-            RelativeJsonPointer => whole(Scan::of(text), relative_json_pointer),
+            _::DateTime => whole(Scan::of(text), date_time),
+            _::Date => whole(Scan::of(text), full_date),
+            _::Time => whole(Scan::of(text), full_time),
+            _::Duration => whole(Scan::of(text), duration),
+            _::Email => whole(Scan::of(text), mailbox),
+            _::Ipv4 => whole(Scan::of(text), |s| dotted_quad(s, Leading::Unpadded)),
+            _::Ipv6 => is_ipv6(&Scan::of(text).chars, 1, Leading::Unpadded),
+            _::Uri => is_uri(text),
+            _::UriReference => is_uri_reference(text),
+            _::Iri => iri_as_uri(text) matches { Some(mapped) && is_uri(mapped.as_str_slice()) },
+            _::IriReference => iri_as_uri(text) matches { Some(mapped) && is_uri_reference(mapped.as_str_slice()) },
+            _::Uuid => is_uuid(text),
+            _::UriTemplate => whole(Scan::of(text), uri_template),
+            _::JsonPointer => whole(Scan::of(text), json_pointer),
+            _::RelativeJsonPointer => whole(Scan::of(text), relative_json_pointer),
             // The syntax alone: a lookbehind is a regex, though Re cannot
             // match it.
-            Regex => validate_ecma262_syntax(text) matches { Ok(_) },
+            _::Regex => validate_ecma262_syntax(text) matches { Ok(_) },
         };
     }
 }
@@ -295,7 +295,7 @@ fn dotted_quad(s: &mut Scan, leading: Leading) -> bool {
             value = value * 10 + d;
         }
         let width = s.at - start;
-        if width == 0 || value > 255 || leading matches { Unpadded } && width > 1 && s.chars[start] == '0' {
+        if width == 0 || value > 255 || leading matches { _::Unpadded } && width > 1 && s.chars[start] == '0' {
             return false;
         }
     }

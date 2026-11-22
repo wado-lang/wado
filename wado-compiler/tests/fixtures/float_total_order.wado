@@ -15,17 +15,17 @@ export fn run() {
     let pos_inf = f32::INFINITY;
 
     // The ladder, each step against the next.
-    assert neg_inf.cmp(&(-1.0 as f32)) matches { Less };
-    assert (-1.0 as f32).cmp(&neg_zero) matches { Less };
-    assert neg_zero.cmp(&pos_zero) matches { Equal };
-    assert pos_zero.cmp(&(1.0 as f32)) matches { Less };
-    assert (1.0 as f32).cmp(&pos_inf) matches { Less };
-    assert pos_inf.cmp(&neg_nan) matches { Less };
+    assert neg_inf.cmp(&(-1.0 as f32)) matches { _::Less };
+    assert (-1.0 as f32).cmp(&neg_zero) matches { _::Less };
+    assert neg_zero.cmp(&pos_zero) matches { _::Equal };
+    assert pos_zero.cmp(&(1.0 as f32)) matches { _::Less };
+    assert (1.0 as f32).cmp(&pos_inf) matches { _::Less };
+    assert pos_inf.cmp(&neg_nan) matches { _::Less };
 
     // Every NaN is one value.
-    assert neg_nan.cmp(&pos_nan) matches { Equal };
-    assert payload_nan.cmp(&neg_nan) matches { Equal };
-    assert neg_nan.cmp(&neg_inf) matches { Greater };
+    assert neg_nan.cmp(&pos_nan) matches { _::Equal };
+    assert payload_nan.cmp(&neg_nan) matches { _::Equal };
+    assert neg_nan.cmp(&neg_inf) matches { _::Greater };
 
     // The operators answer as `cmp` does, NaN included.
     assert neg_nan == pos_nan;
@@ -81,9 +81,9 @@ export fn run() {
     let d_neg_nan = f64::from_bits(0xFFF8_0000_0000_0000);
     let d_pos_nan = f64::from_bits(0x7FF8_0000_0000_0000);
     let d_neg_zero = f64::from_bits(0x8000_0000_0000_0000);
-    assert f64::INFINITY.cmp(&d_neg_nan) matches { Less };
-    assert d_neg_nan.cmp(&d_pos_nan) matches { Equal };
-    assert d_neg_zero.cmp(&(0.0 as f64)) matches { Equal };
+    assert f64::INFINITY.cmp(&d_neg_nan) matches { _::Less };
+    assert d_neg_nan.cmp(&d_pos_nan) matches { _::Equal };
+    assert d_neg_zero.cmp(&(0.0 as f64)) matches { _::Equal };
     assert d_neg_nan == d_pos_nan;
     assert f64::INFINITY < d_neg_nan;
     assert d_neg_nan > f64::INFINITY;

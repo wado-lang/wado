@@ -6,7 +6,7 @@ trait Msg with () {
 }
 
 fn optional<M: Msg + Default>(slot: &mut Option<M>, depth: i32) {
-    if *slot matches { None } {
+    if *slot matches { null } {
         *slot = Option::Some(M::default());
     }
     if let Some(m) = slot {
@@ -63,5 +63,5 @@ test "a nested optional field is filled through the recursion" {
     assert outer.n == 1;
     let Some(TypeProtoValue::Sequence(inner)) = outer.elem.unwrap().value else { unreachable(); };
     assert inner.n == 1;
-    assert inner.elem matches { None };
+    assert inner.elem matches { null };
 }

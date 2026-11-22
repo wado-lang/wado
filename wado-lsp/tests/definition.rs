@@ -172,7 +172,7 @@ fn match_arm_binding_definition() {
             "fn f(opt: Option<i32>) -> i32 {\n",
             "    return match opt {\n",
             "        Some(v) => v,\n",
-            "        None => 0,\n",
+            "        null => 0,\n",
             "    };\n",
             "}\n",
         );
@@ -273,7 +273,7 @@ fn match_or_pattern_binding_definition() {
             "fn f(s: Sign) -> i32 {\n",
             "    return match s {\n",
             "        Pos(n) | Neg(n) => n,\n",
-            "        Zero => 0,\n",
+            "        _::Zero => 0,\n",
             "    };\n",
             "}\n",
         );
@@ -430,12 +430,43 @@ fn variant_case_in_pattern_definition() {
             "fn f(m: Maybe<i32>) -> i32 {\n",
             "    return match m {\n",
             "        Just(v) => v,\n",
-            "        Nothing => 0,\n",
+            "        _::Nothing => 0,\n",
             "    };\n",
             "}\n",
         );
         let result = def_at(source, 3, 10).await.expect("Just pattern");
         assert_range(&result, 0, 19, 23);
+    });
+}
+
+#[test]
+fn inferred_case_in_pattern_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "variant Maybe<T> { Just(T), Nothing }\n",
+            "fn f(m: Maybe<i32>) -> i32 {\n",
+            "    return match m {\n",
+            "        Just(v) => v,\n",
+            "        _::Nothing => 0,\n",
+            "    };\n",
+            "}\n",
+        );
+        let result = def_at(source, 4, 12).await.expect("_::Nothing pattern");
+        assert_range(&result, 0, 28, 35);
+    });
+}
+
+#[test]
+fn inferred_case_in_expression_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "enum Color { Red, Green, Blue }\n",
+            "fn f() -> Color {\n",
+            "    return _::Green;\n",
+            "}\n",
+        );
+        let result = def_at(source, 2, 15).await.expect("_::Green expression");
+        assert_range(&result, 0, 18, 23);
     });
 }
 
@@ -1037,6 +1068,55 @@ fn conversion_overload_definition_follows_the_argument() {
         assert_range(&from_bool, 7, 7, 11);
         let from_i32 = def_at(source, 13, 22).await.expect("Wrapper::from(7)");
         assert_range(&from_i32, 2, 7, 11);
+    });
+}
+
+#[test]
+fn waiting_call_definition_follows_the_settled_receiver() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "struct Bx<T> { v: T }\n",
+            "fn mk<T: Default>() -> Bx<T> { return Bx { v: T::default() }; }\n",
+            "trait Me with () { fn me(&self) -> i32; }\n",
+            "impl Me for Bx<u64> {\n",
+            "    fn me(&self) -> i32 { return 1; }\n",
+            "}\n",
+            "impl Me for Bx<i64> {\n",
+            "    fn me(&self) -> i32 { return 2; }\n",
+            "}\n",
+            "fn f() -> i32 {\n",
+            "    let b = mk();\n",
+            "    let r = b.me();\n",
+            "    let _d: Bx<i64> = b;\n",
+            "    return r;\n",
+            "}\n",
+        );
+        // The call waits for `b` to settle, so only the later line says which
+        // impl's `me` it reaches.
+        let me = def_at(source, 11, 14).await.expect("b.me()");
+        assert_range(&me, 7, 7, 9);
+    });
+}
+
+#[test]
+fn waiting_static_call_definition_follows_the_settled_instance() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "struct Bx<T> { v: Option<T> }\n",
+            "trait Mk with () { fn make(x: i32) -> Self; }\n",
+            "impl Mk for Bx<i32> {\n",
+            "    fn make(x: i32) -> Self { return Bx { v: Some(x) }; }\n",
+            "}\n",
+            "impl Mk for Bx<bool> {\n",
+            "    fn make(x: i32) -> Self { return Bx { v: Some(x > 0) }; }\n",
+            "}\n",
+            "fn f() {\n",
+            "    let b = Bx::make(1);\n",
+            "    let _d: Bx<bool> = b;\n",
+            "}\n",
+        );
+        let make = def_at(source, 9, 17).await.expect("Bx::make(1)");
+        assert_range(&make, 6, 7, 11);
     });
 }
 

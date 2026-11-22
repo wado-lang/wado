@@ -8,7 +8,7 @@ pub enum Severity {
 
 impl Severity {
     pub fn label(&self) -> String {
-        return match *self { Error => "error" };
+        return match *self { _::Error => "error" };
     }
 }
 
@@ -24,12 +24,12 @@ pub enum DiagnosticCode {
 impl DiagnosticCode {
     pub fn name(&self) -> String {
         return match *self {
-            UnexpectedToken => "unexpected-token",
-            MissingToken => "missing-token",
-            ExtraToken => "extra-token",
-            NoViableAlternative => "no-viable-alternative",
-            UnterminatedConstruct => "unterminated-construct",
-            LexError => "lex-error",
+            _::UnexpectedToken => "unexpected-token",
+            _::MissingToken => "missing-token",
+            _::ExtraToken => "extra-token",
+            _::NoViableAlternative => "no-viable-alternative",
+            _::UnterminatedConstruct => "unterminated-construct",
+            _::LexError => "lex-error",
         };
     }
 }
@@ -68,7 +68,7 @@ impl Diagnostic {
     }
 
     pub fn is_error(&self) -> bool {
-        return self.severity matches { Error };
+        return self.severity matches { _::Error };
     }
 
     pub fn rule_path(&self) -> String {

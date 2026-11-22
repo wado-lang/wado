@@ -26,7 +26,7 @@ test "match scrutinee infers from a sibling arm" {
     let s = Source {};
     let r = match s.opt() {
         Some(x) => x,
-        None => 0,
+        null => 0,
     };
     assert r == 7;
 }
@@ -35,7 +35,7 @@ test "match scrutinee infers from the result annotation" {
     let s = Source {};
     let r: String = match s.opt() {
         Some(x) => x,
-        None => "fallback",
+        null => "fallback",
     };
     assert r == "hi";
 }

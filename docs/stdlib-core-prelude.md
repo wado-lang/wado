@@ -17,7 +17,7 @@ assert greeting == "Hello, Wado!";
 let primes = [2, 3, 5, 7] as List<i32>;
 assert primes.len() == 4;
 assert primes.get(1) matches { Some(v) && v == 3 };
-assert primes.get(9) matches { None };
+assert primes.get(9) matches { null };
 
 let decoded = String::try_from_utf8([87, 97, 100, 111] as ByteList);
 assert decoded matches { Ok(s) && s == "Wado" };
@@ -4720,6 +4720,10 @@ _Fields are private._
 
 A copy that already moved `chunk`, for a handler to answer
 `Stream::begin_read` with.
+
+#### `impl Waitable for StartedRead<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
 
 ### `pub affine struct ReadCopy<affine T>`
 

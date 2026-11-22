@@ -1,0 +1,23 @@
+// A struct literal's bound asked of a tuple holding a closure is decided once
+// the effect check has solved the closure's row.
+
+use { println, Stdout } from "core:cli";
+
+trait Shown {
+    fn shown(&self) -> i32;
+}
+
+struct Holder<T: Shown> {
+    t: T,
+}
+
+export fn run() with Stdout {
+    let h = || 7;
+    let _paired = Holder { t: [h, 1] };
+    println("unreached");
+}
+
+__DATA__
+{
+    "compile_error": ":16:19: analysis error: type '[fn() -> i32, i32]' does not implement trait 'Shown' required by bound on 'T'"
+}

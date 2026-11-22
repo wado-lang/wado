@@ -421,11 +421,11 @@ test "report_duplicate_field rejects under Error, naming the key as Inspect does
 }
 
 test "report_duplicate_field continues under Warn" {
-    assert report_duplicate_field(DuplicateFieldPolicy::Warn, &7) matches { Ok };
+    assert report_duplicate_field(DuplicateFieldPolicy::Warn, &7) matches { _::Ok };
 }
 
 test "report_duplicate_field continues under PassThru" {
-    assert report_duplicate_field(DuplicateFieldPolicy::PassThru, &7) matches { Ok };
+    assert report_duplicate_field(DuplicateFieldPolicy::PassThru, &7) matches { _::Ok };
 }
 
 struct KeyPair {
@@ -610,7 +610,7 @@ variant Reading {
 test "an enum or a variant reads its case by discriminant" {
     assert json::from_string::<ReadByDisc<Light>>(`"1"`) matches { Ok(r) && r.value == Light::Green };
     assert json::from_string::<ReadByDisc<Reading>>(`{"1":5}`) matches { Ok(r) && r.value matches { Level(5) } };
-    assert json::from_string::<ReadByDisc<Reading>>(`"0"`) matches { Ok(r) && r.value matches { Missing } };
+    assert json::from_string::<ReadByDisc<Reading>>(`"0"`) matches { Ok(r) && r.value matches { _::Missing } };
 }
 
 // --- every fallible step, failed in turn ---

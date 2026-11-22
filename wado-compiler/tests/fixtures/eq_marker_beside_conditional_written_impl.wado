@@ -1,0 +1,20 @@
+// The written `Eq` holds only where `T: Cap`, so at `Box<bool>` it produces no
+// candidate, and the marker, which holds where `T: Eq`, answers both `eq` and
+// `==`.
+
+struct Box<T> { v: T }
+
+trait Cap with () { fn cap(&self) -> i32; }
+impl Cap for i32 { fn cap(&self) -> i32 { return 1; } }
+
+impl<T: Cap> Eq for Box<T> { fn eq(&self, _o: &Self) -> bool { return false; } }
+impl<T: Eq> Eq for Box<T>;
+
+test {
+    let a: Box<bool> = Box { v: true };
+    let b: Box<bool> = Box { v: false };
+    assert a.eq(&a);
+    assert !a.eq(&b);
+    assert a == a;
+    assert a != b;
+}

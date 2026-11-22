@@ -47,7 +47,7 @@ test "a valid parse reports no diagnostics" {
 test "a character no lexer rule matches is a LexError diagnostic" {
     let r = json::parse("{\"a\": 1 #}");
     let d = &r.diagnostics[0];
-    assert d.code matches { LexError };
+    assert d.code matches { _::LexError };
     assert d.message == "token recognition error at: '#'";
     assert d.line == 1 && d.col == 8;
     let mut flagged = 0;
@@ -62,13 +62,13 @@ test "a character no lexer rule matches is a LexError diagnostic" {
 test "a later lex error neither takes the error budget nor jumps the order" {
     let capped = json::parse("{\"a\" 1} #", 1);
     assert capped.diagnostics.len() == 1;
-    assert !capped.diagnostics[0].code matches { LexError };
+    assert !capped.diagnostics[0].code matches { _::LexError };
 
     let r = json::parse("{\"a\" 1} #");
-    assert !r.diagnostics[0].code matches { LexError };
+    assert !r.diagnostics[0].code matches { _::LexError };
     let mut lex_errors = 0;
     for let mut i = 0; i < r.diagnostics.len(); i += 1 {
-        if r.diagnostics[i].code matches { LexError } {
+        if r.diagnostics[i].code matches { _::LexError } {
             lex_errors += 1;
         }
         if i > 0 {
@@ -81,7 +81,7 @@ test "a later lex error neither takes the error budget nor jumps the order" {
 test "input ending inside a construct is an unterminated construct" {
     let r = json::parse("[1, 2");
     let d = &r.diagnostics[r.diagnostics.len() - 1];
-    assert d.code matches { UnterminatedConstruct };
+    assert d.code matches { _::UnterminatedConstruct };
     assert d.found == json::TK_EOF;
     assert d.expected.len() == 1;
 }
@@ -90,5 +90,5 @@ test "no viable alternative carries the NoViableAlternative code" {
     // `}` starts no `value` alternative, so the dispatch falls through to the
     // no-viable fallback.
     let r = json::parse("{\"a\": }");
-    assert r.diagnostics[0].code matches { NoViableAlternative };
+    assert r.diagnostics[0].code matches { _::NoViableAlternative };
 }

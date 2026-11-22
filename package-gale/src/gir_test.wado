@@ -118,7 +118,7 @@ test "Diagnostic round-trips through its kind" {
     };
     assert d.owner.rule == "expr";
     assert d.message == "alts 0, 1 share first {IDENT}";
-    if let OverlapTournament = &d.kind {
+    if let _::OverlapTournament = &d.kind {
     } else {
         panic("expected OverlapTournament");
     }
@@ -193,8 +193,8 @@ test "Op::RuleCall preserves follow_arg and min_prec" {
     });
     if let RuleCall(r) = &call {
         assert r.target_snake == "expr";
-        assert r.follow_arg matches { NoFollow };
-        assert r.min_prec_arg matches { None };
+        assert r.follow_arg matches { _::NoFollow };
+        assert r.min_prec_arg matches { null };
     } else {
         panic("RuleCall");
     }
@@ -240,7 +240,7 @@ test "Op::Repeat carries inner element and strategy" {
         gate_caller_follow: false,
     });
     if let Repeat(r) = &rep {
-        if let Star = r.kind {
+        if let _::Star = r.kind {
             assert true;
         } else {
             panic("expected Star");
@@ -285,7 +285,7 @@ test "RepeatStrategy variants round-trip" {
     let shape_lookahead = RepeatStrategy::OptionalShapeLookahead(shape_strategy);
     let scan_guard = RepeatStrategy::OptionalScanGuard;
 
-    if let Plain = &plain {
+    if let _::Plain = &plain {
         assert true;
     } else {
         panic("Plain");
@@ -309,7 +309,7 @@ test "RepeatStrategy variants round-trip" {
     } else {
         panic("OptionalShapeLookahead");
     }
-    if let OptionalScanGuard = &scan_guard {
+    if let _::OptionalScanGuard = &scan_guard {
         assert true;
     } else {
         panic("OptionalScanGuard");
@@ -355,7 +355,7 @@ test "GroupShape variants round-trip" {
     } else {
         panic("General");
     }
-    if let Transparent = &tr {
+    if let _::Transparent = &tr {
         assert true;
     } else {
         panic("Transparent");
@@ -435,7 +435,7 @@ test "ScanElement variants round-trip" {
     } else {
         panic("RuleCall");
     }
-    if let Wildcard = &any {
+    if let _::Wildcard = &any {
         assert true;
     } else {
         panic("Wildcard");
@@ -446,7 +446,7 @@ test "ScanElement variants round-trip" {
         panic("Excluded");
     }
     if let Repeat(r) = &rep {
-        if let Plus = r.kind {
+        if let _::Plus = r.kind {
             assert true;
         } else {
             panic("Plus");
@@ -462,7 +462,7 @@ test "FieldDecl" {
         type_str: "Option<ExprNode>",
         kind: FieldKind::Optional,
     };
-    if let Optional = &f.kind {
+    if let _::Optional = &f.kind {
         assert true;
     } else {
         panic("Optional");
@@ -501,11 +501,11 @@ test "rule_header reaches every Rule variant" {
 }
 
 test "a diagnostic's level says what a default build shows" {
-    assert diagnostic_level(&DiagnosticKind::UnsupportedAction) matches { Some(Warn) };
-    assert diagnostic_level(&DiagnosticKind::HighlightQuery) matches { Some(Warn) };
-    assert diagnostic_level(&DiagnosticKind::FragmentEntry) matches { Some(Warn) };
-    assert diagnostic_level(&DiagnosticKind::OverlapTournament) matches { Some(Info) };
-    assert diagnostic_level(&DiagnosticKind::OptionalScanGuardFallback) matches { None };
+    assert diagnostic_level(&DiagnosticKind::UnsupportedAction) matches { Some(_::Warn) };
+    assert diagnostic_level(&DiagnosticKind::HighlightQuery) matches { Some(_::Warn) };
+    assert diagnostic_level(&DiagnosticKind::FragmentEntry) matches { Some(_::Warn) };
+    assert diagnostic_level(&DiagnosticKind::OverlapTournament) matches { Some(_::Info) };
+    assert diagnostic_level(&DiagnosticKind::OptionalScanGuardFallback) matches { null };
 }
 
 test "warn dedupes diagnostics with the same owner and message" {

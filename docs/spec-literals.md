@@ -52,7 +52,7 @@ fn pair<T>(a: T, b: T) -> T { return a; }
 test {
     let p = pair(null, Option::Some(1));    // Option<i32>
     let x = null;                           // Option<!>
-    assert p == null && x matches { None };
+    assert p == null && x matches { null };
 }
 ```
 
@@ -93,7 +93,7 @@ impl From<Option<!>> for Value {
 
 test {
     let doc: Value = { name: "Alice", nickname: null };
-    assert doc matches { Object(fields) && fields["nickname"] matches { Null } };
+    assert doc matches { Object(fields) && fields["nickname"] matches { _::Null } };
 }
 ```
 

@@ -46,7 +46,7 @@ impl FromStr for Uri {
 
     fn from_str<S: AsStrSlice>(input: S) -> Result<Uri, UriError> {
         let reference = UriReference::from_str(input)?;
-        if reference.scheme matches { None } {
+        if reference.scheme matches { null } {
             return fail(0, "a URI must have a scheme");
         }
         return Result::Ok(Uri { reference });
@@ -72,7 +72,7 @@ impl Uri {
             t.path = remove_dot_segments(&r.path);
         } else if r.path.is_empty() {
             t.path = base.path;
-            if r.query matches { None } {
+            if r.query matches { null } {
                 t.query = base.query;
             }
         } else if r.path.starts_with("/") {
@@ -80,15 +80,15 @@ impl Uri {
         } else {
             t.path = remove_dot_segments(&base.merge(&r.path));
         }
-        if r.scheme matches { None } {
+        if r.scheme matches { null } {
             t.scheme = base.scheme;
-            if r.authority matches { None } {
+            if r.authority matches { null } {
                 t.authority = base.authority;
             }
         }
         // Without an authority, a path starting `//` would read back as one
         // (§3.3); `/.` keeps it a path.
-        if t.authority matches { None } && t.path.starts_with("//") {
+        if t.authority matches { null } && t.path.starts_with("//") {
             t.path = `/.${t.path}`;
         }
         return Uri { reference: t };

@@ -13,9 +13,9 @@ use { Duration } from "wasi:clocks";
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with (RequestOptions, Response) {
     // Test defaults are None
     let opts = RequestOptions::new();
-    assert opts.get_connect_timeout() matches { None };
-    assert opts.get_first_byte_timeout() matches { None };
-    assert opts.get_between_bytes_timeout() matches { None };
+    assert opts.get_connect_timeout() matches { null };
+    assert opts.get_first_byte_timeout() matches { null };
+    assert opts.get_between_bytes_timeout() matches { null };
 
     // Set connect timeout (5 seconds = 5_000_000_000 nanoseconds)
     let connect_ns: Duration = 5000000000;
@@ -74,7 +74,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Re
     // Reset timeout to None
     let result4 = opts.set_connect_timeout(null);
     assert result4 matches { Ok(_) };
-    assert opts.get_connect_timeout() matches { None };
+    assert opts.get_connect_timeout() matches { null };
 
     // Return success
     let [resp_trailers_future, resp_trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

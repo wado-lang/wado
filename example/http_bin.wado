@@ -116,7 +116,7 @@ variant BodyError {
 impl From<ZlibError> for BodyError {
     fn from(e: ZlibError) -> BodyError {
         return match e {
-            OutputExceedsMax => BodyError::TooLarge,
+            _::OutputExceedsMax => BodyError::TooLarge,
             _ => BodyError::Corrupt(e),
         };
     }
@@ -126,24 +126,24 @@ type Handler = fn(Request, PathParams) -> RouteResponse with Request;
 
 fn scheme_name(s: Option<Scheme>) -> String {
     return match s {
-        Some(Http) => "http",
-        Some(Https) => "https",
+        Some(_::Http) => "http",
+        Some(_::Https) => "https",
         Some(Other(name)) => name,
-        None => "http",
+        null => "http",
     };
 }
 
 fn method_name(m: Method) -> String {
     return match m {
-        Get => "GET",
-        Head => "HEAD",
-        Post => "POST",
-        Put => "PUT",
-        Delete => "DELETE",
-        Connect => "CONNECT",
-        Options => "OPTIONS",
-        Trace => "TRACE",
-        Patch => "PATCH",
+        _::Get => "GET",
+        _::Head => "HEAD",
+        _::Post => "POST",
+        _::Put => "PUT",
+        _::Delete => "DELETE",
+        _::Connect => "CONNECT",
+        _::Options => "OPTIONS",
+        _::Trace => "TRACE",
+        _::Patch => "PATCH",
         Other(s) => s,
     };
 }
@@ -174,7 +174,7 @@ fn resolve_authority(request: &Request) -> String with Request {
     let h = request.get_headers();
     return match get_header(&h, "host") {
         Some(host) => host,
-        None => "",
+        null => "",
     };
 }
 
@@ -200,7 +200,9 @@ fn read_body_from_request(request: Request) -> Result<String, RouteResponse> wit
                 ["accept-encoding", "gzip, deflate"],
             ],
         }),
-        Err(TooLarge) => Result::Err(json_response(413, json_error(`Request body decodes past ${MAX_BODY_SIZE} bytes`))),
+        Err(_::TooLarge) => Result::Err(json_response(413, json_error(
+            `Request body decodes past ${MAX_BODY_SIZE} bytes`,
+        ))),
         Err(Corrupt(e)) => Result::Err(json_response(400, json_error(`Malformed request body: ${e}`))),
     };
 }
@@ -250,7 +252,7 @@ fn parse_status_code(s: String) -> Option<u16> {
 fn build_request_json(method: Method, url: Url, headers: &Headers, body: Option<String>) -> ByteList with Fields {
     let origin = match get_header(headers, "x-forwarded-for") {
         Some(s) => s,
-        None => "",
+        null => "",
     };
     return json_line(&RequestInfo {
         method: method_name(method),
@@ -363,7 +365,7 @@ fn respond_gzip(request: Request) -> RouteResponse with Request {
 
 fn respond_anything(request: Request) -> RouteResponse with Request {
     let method = request.get_method();
-    return echo(request, method matches { Post | Put | Patch });
+    return echo(request, method matches { _::Post | _::Put | _::Patch });
 }
 
 fn format_allow(methods: &List<Method>) -> String {
@@ -490,9 +492,9 @@ test "a request body in an unknown or broken coding is refused" {
 test "a request body decoding past the limit is refused, however it is coded" {
     let data: ByteList = "wado ".repeat(20).bytes().collect();
     assert decode_content(&"gzip", gzip_compress(&data), 100) matches { Ok(d) && d == data };
-    assert decode_content(&"gzip", gzip_compress(&data), 99) matches { Err(TooLarge) };
-    assert decode_content(&"deflate, gzip", gzip_compress(&zlib_compress(&data)), 99) matches { Err(TooLarge) };
-    assert decode_content(&"", data, 99) matches { Err(TooLarge) };
+    assert decode_content(&"gzip", gzip_compress(&data), 99) matches { Err(_::TooLarge) };
+    assert decode_content(&"deflate, gzip", gzip_compress(&zlib_compress(&data)), 99) matches { Err(_::TooLarge) };
+    assert decode_content(&"", data, 99) matches { Err(_::TooLarge) };
 }
 
 test "the limit is on the decoded body, not on its coded form" {

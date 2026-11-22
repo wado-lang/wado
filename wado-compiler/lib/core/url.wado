@@ -34,13 +34,13 @@ pub variant ParseError {
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
         let message: String = match *self {
-            EmptyInput => "empty input",
-            InvalidScheme => "invalid scheme",
-            MissingHost => "missing host",
-            InvalidHost => "invalid host",
-            InvalidPort => "invalid port",
-            InvalidPath => "invalid path",
-            InvalidPercentEncoding => "invalid percent-encoding",
+            _::EmptyInput => "empty input",
+            _::InvalidScheme => "invalid scheme",
+            _::MissingHost => "missing host",
+            _::InvalidHost => "invalid host",
+            _::InvalidPort => "invalid port",
+            _::InvalidPath => "invalid path",
+            _::InvalidPercentEncoding => "invalid percent-encoding",
             InvalidUtf8(e) => `invalid UTF-8: ${e}`,
         };
         f.write_str(&message);
@@ -55,13 +55,13 @@ impl From<Utf8Error> for ParseError;
 impl Eq for ParseError {
     fn eq(&self, other: &Self) -> bool {
         return match [*self, *other] {
-            [EmptyInput, EmptyInput] => true,
-            [InvalidScheme, InvalidScheme] => true,
-            [MissingHost, MissingHost] => true,
-            [InvalidHost, InvalidHost] => true,
-            [InvalidPort, InvalidPort] => true,
-            [InvalidPath, InvalidPath] => true,
-            [InvalidPercentEncoding, InvalidPercentEncoding] => true,
+            [_::EmptyInput, _::EmptyInput] => true,
+            [_::InvalidScheme, _::InvalidScheme] => true,
+            [_::MissingHost, _::MissingHost] => true,
+            [_::InvalidHost, _::InvalidHost] => true,
+            [_::InvalidPort, _::InvalidPort] => true,
+            [_::InvalidPath, _::InvalidPath] => true,
+            [_::InvalidPercentEncoding, _::InvalidPercentEncoding] => true,
             [InvalidUtf8(a), InvalidUtf8(b)] => a == b,
             _ => false,
         };
@@ -635,7 +635,7 @@ impl Url {
     pub fn effective_port(&self) -> u16 {
         return match self.port {
             Some(p) => p,
-            None => default_port_for_scheme(&self.scheme),
+            null => default_port_for_scheme(&self.scheme),
         };
     }
 
@@ -721,7 +721,7 @@ impl Url {
     pub fn query_pairs(&self) -> TreeMap<String, String> {
         return match self.query {
             Some(q) => parse_query(q),
-            None => TreeMap::new(),
+            null => TreeMap::new(),
         };
     }
 

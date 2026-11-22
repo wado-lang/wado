@@ -4,6 +4,7 @@
 
 use { args, println, Environment, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
 use { Cpu } from "lib:loam";
 use { Model, Tokenizer, checked } from "./model.wado";
 
@@ -14,7 +15,7 @@ global BUDGET: i64 = 2_000_000_000;
 /// the slowest backend, holds to the first few onnxruntime picks.
 global STEPS: i32 = 8;
 
-export fn run() with (Stdout, Stderr, Environment, Preopens) {
+export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock) {
     let given = args();
     if given.is_empty() {
         checked(Cpu {}, BUDGET, STEPS);

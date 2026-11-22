@@ -84,7 +84,7 @@ test "explicit parens still work" {
 test "matches in boolean chain" {
     let a: Option<i32> = Option::Some(1);
     let b: Option<i32> = null;
-    assert a matches { Some(_) } && b matches { None };
+    assert a matches { Some(_) } && b matches { null };
 }
 
 variant MatchShape {
@@ -96,8 +96,8 @@ test "matches over an Option" {
     let opt: Option<i32> = Option::<i32>::Some(42);
     let none: Option<i32> = null;
     assert opt matches { Some(_) };
-    assert none matches { None };
-    assert !opt matches { None };
+    assert none matches { null };
+    assert !opt matches { null };
 }
 
 test "matches with a guard" {
@@ -122,7 +122,7 @@ test "matches over a variant" {
     assert circle matches { Circle(_) };
     assert circle matches { Circle(r) && r > 3.0 };
     assert !point matches { Circle(_) };
-    assert point matches { MatchPoint };
+    assert point matches { _::MatchPoint };
 }
 
 // `matches { Some("literal") }` once matched a different string at O0/O2:

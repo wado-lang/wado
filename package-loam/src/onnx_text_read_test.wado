@@ -36,8 +36,8 @@ fn mlp() -> Graph {
 fn dims(rank: &Rank) -> List<Dim> {
     return match rank {
         Dims(d) => *d,
-        Scalar => panic("expected a ranked tensor, found a scalar"),
-        Unranked => panic("expected a ranked tensor, found an unranked one"),
+        _::Scalar => panic("expected a ranked tensor, found a scalar"),
+        _::Unranked => panic("expected a ranked tensor, found an unranked one"),
     };
 }
 
@@ -126,7 +126,7 @@ test "an unknown dimension is distinct from a symbolic one" {
     ).unwrap();
     let d = dims(&g.inputs[0].rank);
     assert d[0] matches { Symbol(_) };
-    assert d[1] matches { Unknown };
+    assert d[1] matches { _::Unknown };
 }
 
 test "a scalar and an unranked tensor are told apart" {
@@ -135,8 +135,8 @@ test "a scalar and an unranked tensor are told apart" {
             Y = Add(X, Z)
         }`,
     ).unwrap();
-    assert g.inputs[0].rank matches { Scalar };
-    assert g.inputs[1].rank matches { Unranked };
+    assert g.inputs[0].rank matches { _::Scalar };
+    assert g.inputs[1].rank matches { _::Unranked };
 }
 
 test "an operator keeps its domain" {
@@ -219,7 +219,7 @@ test "a tensor attribute of an element type not read carries no value" {
             Y = Identity(X)
         }`,
     ).unwrap();
-    assert g.nodes[0].attrs[0].tensor matches { None };
+    assert g.nodes[0].attrs[0].tensor matches { null };
     assert g.nodes[0].attrs[0].values.is_empty();
 }
 
@@ -313,7 +313,7 @@ test "an initializer's extents are integers, as ONNX's tensors state them" {
 }
 
 test "an initializer without inline values carries no data" {
-    assert mlp().initializers[0].data matches { None };
+    assert mlp().initializers[0].data matches { null };
 }
 
 test "a function short of the operands its body reads stops the read" {

@@ -71,7 +71,7 @@ test "sibling pattern-binding copy is independent of root mutation" {
     let mut c: List<i32> = [];
     match b {
         Some(t) => { c = t; }
-        None => {}
+        null => {}
     }
     if let Some(u) = &mut b {
         u.push(2);
@@ -91,7 +91,7 @@ test "call-arg copy is independent of sibling mut alias" {
     let mut n = 0;
     match b {
         Some(t) => { n = observe(t, &mut b); }
-        None => {}
+        null => {}
     }
     assert n == 1;
 }

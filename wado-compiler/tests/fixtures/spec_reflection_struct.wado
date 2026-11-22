@@ -30,10 +30,10 @@ test "from_fields builds the struct from its field values" {
 
 test "the slots start empty and default_slot fills one default" {
     let empty = ReflectStruct::<Config>::empty_slots();
-    assert empty.0 matches { None } && empty.1 matches { None };
+    assert empty.0 matches { null } && empty.1 matches { null };
     let slots = ReflectStruct::<Config>::default_slot(1);
     assert slots.1 matches { Some(8080) };
-    assert slots.0 matches { None } && slots.2 matches { None };
+    assert slots.0 matches { null } && slots.2 matches { null };
 }
 
 fn boom() -> i32 {

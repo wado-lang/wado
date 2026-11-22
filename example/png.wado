@@ -149,7 +149,7 @@ pub enum View {
 /// The protocol the terminal running us speaks, read from the variables each
 /// terminal sets; `Off` when stdout is not a terminal.
 fn detect() -> View with (Environment, TerminalStdout) {
-    if TerminalStdout::get_terminal_stdout() matches { None } {
+    if TerminalStdout::get_terminal_stdout() matches { null } {
         return Off;
     }
     let term = env("TERM").unwrap_or("");
@@ -167,11 +167,11 @@ fn detect() -> View with (Environment, TerminalStdout) {
 /// fallback scales the image to fit `columns` character cells.
 pub fn show(img: &Image, png: &ByteList, view: View, columns: i32) with (Stdout, Environment, TerminalStdout) {
     assert columns > 0;
-    let resolved = if view matches { Auto } { detect() } else { view };
+    let resolved = if view matches { _::Auto } { detect() } else { view };
     match resolved {
-        Kitty => print(kitty_escape(png)),
-        Iterm => print(iterm_escape(png)),
-        Ansi => print(ansi_blocks(img, columns)),
+        _::Kitty => print(kitty_escape(png)),
+        _::Iterm => print(iterm_escape(png)),
+        _::Ansi => print(ansi_blocks(img, columns)),
         _ => {
         },
     }

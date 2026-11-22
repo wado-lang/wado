@@ -13,19 +13,19 @@ internal fn print(node: &Node) -> String {
 fn node_to(node: &Node, out: &mut String) {
     match *node {
         Char(c) => char_to(c, out, false),
-        Any => out.push('.'),
-        Start => out.push('^'),
-        End => out.push('$'),
-        WordBoundary => out.push_str(#"\b"#),
-        NotWordBoundary => out.push_str(#"\B"#),
+        _::Any => out.push('.'),
+        _::Start => out.push('^'),
+        _::End => out.push('$'),
+        _::WordBoundary => out.push_str(#"\b"#),
+        _::NotWordBoundary => out.push_str(#"\B"#),
         Set(set) => set_to(&set, out),
         Group(g) => {
             match g.index {
                 Some(_) => match g.name {
                     Some(name) => out.push_str(`(?<${name}>`),
-                    None => out.push('('),
+                    null => out.push('('),
                 },
-                None => out.push_str("(?:"),
+                null => out.push_str("(?:"),
             }
             node_to(&g.body, out);
             out.push(')');
@@ -71,7 +71,7 @@ fn grouped_to(node: &Node, out: &mut String) {
 fn repeat_to(r: &Repeat, out: &mut String) {
     // Only an atom takes a quantifier.
     let atom = match r.body {
-        Char(_) | Any | Set(_) | Group(_) | Modified(_) => true,
+        Char(_) | _::Any | Set(_) | Group(_) | Modified(_) => true,
         _ => false,
     };
     if atom {
@@ -80,10 +80,10 @@ fn repeat_to(r: &Repeat, out: &mut String) {
         grouped_to(&r.body, out);
     }
     match [r.min, r.max] {
-        [0, None] => out.push('*'),
-        [1, None] => out.push('+'),
+        [0, null] => out.push('*'),
+        [1, null] => out.push('+'),
         [0, Some(1)] => out.push('?'),
-        [min, None] => out.push_str(`{${min},}`),
+        [min, null] => out.push_str(`{${min},}`),
         [min, Some(max)] => {
             if min == max {
                 out.push_str(`{${min}}`);
@@ -137,9 +137,9 @@ fn set_to(set: &CharSet, out: &mut String) {
 fn named_to(named: &NamedSet, out: &mut String) {
     out.push('\\');
     let [lower, upper] = match named.kind {
-        Digit => ['d', 'D'],
-        Word => ['w', 'W'],
-        Space => ['s', 'S'],
+        _::Digit => ['d', 'D'],
+        _::Word => ['w', 'W'],
+        _::Space => ['s', 'S'],
         Property(_) => ['p', 'P'],
     };
     out.push(if named.negated { upper } else { lower });

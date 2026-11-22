@@ -43,7 +43,7 @@ export fn run() {
     assert list[a] == 20;
     assert a as i64 == 1;
     assert 0 <= a < b;
-    assert shape matches { Point };
+    assert shape matches { _::Point };
     assert [a, b] == [1, 2];
     assert Inner { v: a } == Inner { v: 1 };
     assert (if a > 0 { a } else { b }) == 1;
@@ -79,7 +79,7 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ),
     // The root is false whenever the message prints, so only its operands are.
     ("(a..<b).contains(&a)", &["a"]),
-    ("shape matches { Point }", &["shape"]),
+    ("shape matches { _::Point }", &["shape"]),
     (
         "apply(|y: i32| -> i32 { return y; }, a) == 1",
         &["|y: i32| -> i32 { return y; }", "a"],

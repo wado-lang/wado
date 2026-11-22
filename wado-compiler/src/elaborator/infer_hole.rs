@@ -14,6 +14,9 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::assoc_target_slot;
+use super::pending_selection::{
+    ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
+};
 use super::scope::{ParamRef, ScopeParams};
 use super::solver_bridge::Commitment;
 use super::trait_query::{SelfBinding, spelled_at};
@@ -53,6 +56,12 @@ pub(crate) struct InferHoleTable {
     /// Each bound decided of a class, so a bound required of it twice (a
     /// slot two calls reach, two variables joined) is enforced once.
     decided_bounds: IndexSet<(TypeId, FqTraitName)>,
+    /// What each pending selection selected, by the id its recorded dispatch
+    /// carries; `None` until it is made, and for good where it is reported.
+    selections: Vec<Option<SelectedDispatch>>,
+    /// The unrolled tuple `for-of` element being walked, which a selection
+    /// queued now is made into the facts of.
+    pub(super) element_home: Option<ElementHome>,
 }
 
 /// A question a variable left undecided. Asked again whenever a variable
@@ -77,6 +86,9 @@ pub(super) enum Obligation {
     /// A type check that admitted a value while a variable on either side
     /// left it undecided.
     Check(DeferredCheck),
+    /// A call that selects its impl once its receiver settles. Asked only once
+    /// the body ends, by [`Elaborator::settle_pending_selections`].
+    Pending(Waiting),
 }
 
 /// A type check a variable left undecided, and how its mismatch is worded.
@@ -117,6 +129,45 @@ impl InferHoleTable {
 
     pub(super) fn require(&self, obligation: Obligation) {
         self.obligations.borrow_mut().push(obligation);
+    }
+
+    /// Queue `selection`, to be made into the facts of the walk queuing it.
+    pub(super) fn require_pending(&self, selection: PendingSelection) {
+        self.require(Obligation::Pending(Waiting {
+            selection,
+            home: self.element_home,
+        }));
+    }
+
+    /// The id of a selection yet to be made.
+    pub(super) fn reserve_selection(&mut self) -> usize {
+        self.selections.push(None);
+        self.selections.len() - 1
+    }
+
+    pub(super) fn select(&mut self, id: usize, selected: SelectedDispatch) {
+        assert!(self.selections[id].is_none(), "a selection is made once");
+        self.selections[id] = Some(selected);
+    }
+
+    /// Take the pending selections out of the queue, in the order they were
+    /// owed.
+    pub(super) fn take_pending(&self) -> Vec<Waiting> {
+        let mut queue = self.obligations.borrow_mut();
+        let (pending, rest): (Vec<Obligation>, Vec<Obligation>) = std::mem::take(&mut *queue)
+            .into_iter()
+            .partition(|o| matches!(o, Obligation::Pending(_)));
+        *queue = rest;
+        pending
+            .into_iter()
+            .map(|o| match o {
+                Obligation::Pending(waiting) => waiting,
+                Obligation::Bound { .. }
+                | Obligation::Projection(_)
+                | Obligation::Selection(_)
+                | Obligation::Check(_) => unreachable!("partitioned to the pending ones"),
+            })
+            .collect()
     }
 }
 
@@ -842,6 +893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A check queued after the last answer has not been asked yet.
         self.run_obligations();
+        self.settle_pending_selections(Undecided::Report);
         let mismatches = self.infer_holes.mismatches.take();
         let covered: IndexSet<TypeId> = self
             .infer_holes
@@ -1022,7 +1074,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Obligation::Projection(link) => {
                 (!self.settle_projection_link(&link)).then_some(Obligation::Projection(link))
             }
-            Obligation::Selection(_) => Some(obligation),
+            Obligation::Selection(_) | Obligation::Pending(_) => Some(obligation),
             Obligation::Check(check) => {
                 let actual = self.apply_infer_holes(check.actual);
                 let expected = self.apply_infer_holes(check.expected);
@@ -1160,6 +1212,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Obligation::Bound { .. } | Obligation::Check(_) => {
                     unreachable!("a settled variable decides a bound or a check")
                 }
+                Obligation::Pending(_) => {
+                    unreachable!("a pending selection is made or reported before the sweep")
+                }
             })
             .collect();
         let Some(solver) = self.tysys.solver.as_ref() else {
@@ -1184,21 +1239,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if subst.is_empty() {
             return;
         }
+        let sweep = Sweep {
+            subst,
+            selections: &std::mem::take(&mut self.infer_holes.selections),
+        };
         let mut tt = self.tysys.type_table.borrow_mut();
-        Self::sweep_type_annotations(&mut tt, &mut self.sem.types, subst);
+        Self::sweep_type_annotations(&mut tt, &mut self.sem.types, &sweep);
         for facts in self.sem.default_method_facts.values_mut() {
-            Self::sweep_type_annotations(&mut tt, &mut facts.types, subst);
+            Self::sweep_type_annotations(&mut tt, &mut facts.types, &sweep);
         }
     }
 
     /// Substitute `subst` through one `TypeAnnotations` fact bundle: the
     /// declaration-level maps, then every walk's body facts through
     /// [`Self::sweep_body_facts`].
-    fn sweep_type_annotations(
-        tt: &mut TypeTable,
-        types: &mut TypeAnnotations,
-        subst: &IndexMap<InferVarId, TypeId>,
-    ) {
+    fn sweep_type_annotations(tt: &mut TypeTable, types: &mut TypeAnnotations, sweep: &Sweep<'_>) {
+        let subst = sweep.subst;
         sub_map(tt, &mut types.fn_return_types, subst);
         sub_map(tt, &mut types.function_task_returns, subst);
         sub_vec_map(tt, &mut types.fn_param_types, subst);
@@ -1207,10 +1263,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for i in types.impl_facts.values_mut() {
             sub_vec(tt, &mut i.trait_type_args, subst);
         }
-        Self::sweep_body_facts(tt, &mut types.body, subst);
+        Self::sweep_body_facts(tt, &mut types.body, sweep);
         for overlays in types.tuple_overlays.values_mut() {
             for overlay in overlays.iter_mut().flatten() {
-                Self::sweep_body_facts(tt, overlay, subst);
+                Self::sweep_body_facts(tt, overlay, sweep);
             }
         }
     }
@@ -1219,11 +1275,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// below; the module's own walk, each unrolled tuple `for-of` element and
     /// each default-argument walk hold the same kinds and sweep through the
     /// same list.
-    fn sweep_body_facts(
-        tt: &mut TypeTable,
-        facts: &mut BodyFacts,
-        subst: &IndexMap<InferVarId, TypeId>,
-    ) {
+    fn sweep_body_facts(tt: &mut TypeTable, facts: &mut BodyFacts, sweep: &Sweep<'_>) {
+        let subst = sweep.subst;
         sub_map(tt, &mut facts.expression_types, subst);
         sub_map(tt, &mut facts.local_types, subst);
         sub_map(tt, &mut facts.let_annotated_types, subst);
@@ -1240,6 +1293,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             sub_generic_instantiation(tt, gi, subst);
         }
         for md in facts.method_dispatch.values_mut() {
+            if let Some(id) = md.selection.take()
+                && let Some(selected) = &sweep.selections[id]
+            {
+                md.method_def = selected.method_def;
+                md.function_ref = selected.function_ref.clone();
+            }
             sub_method_dispatch(tt, md, subst);
         }
         for sd in facts.static_method_dispatch.values_mut() {
@@ -1281,9 +1340,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // those may itself be a defaulted call. Swept here rather than beside
         // the caller's walk, so reaching a walk reaches everything under it.
         for overlay in facts.default_overlays.values_mut() {
-            Self::sweep_body_facts(tt, overlay, subst);
+            Self::sweep_body_facts(tt, overlay, sweep);
         }
     }
+}
+
+/// What the module-end sweep writes into the recorded facts: each variable's
+/// answer, and the dispatch each pending selection made.
+struct Sweep<'a> {
+    subst: &'a IndexMap<InferVarId, TypeId>,
+    selections: &'a [Option<SelectedDispatch>],
 }
 
 impl TypeSystem {

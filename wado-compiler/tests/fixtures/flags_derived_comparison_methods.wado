@@ -9,14 +9,14 @@ test "with a dot" {
     let r = Perms::Read;
     let w = Perms::Write;
     assert r.eq(&r) && !r.eq(&w);
-    assert r.cmp(&w) matches { Less };
+    assert r.cmp(&w) matches { _::Less };
 }
 
 test "by type path" {
     let r = Perms::Read;
     let rw = Perms::Read | Perms::Write;
     assert Perms::eq(&rw, &rw);
-    assert Perms::cmp(&rw, &r) matches { Greater };
+    assert Perms::cmp(&rw, &r) matches { _::Greater };
 }
 
 test "through a newtype" {

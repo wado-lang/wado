@@ -1,0 +1,60 @@
+// A field read whose value was forwarded from an earlier read of another slot
+// is not a read of that slot: pinning the shared value re-reads the slot, which
+// a store between the two has overwritten.
+
+struct Doc {
+    kinds: List<i32>,
+    ends: List<i32>,
+}
+
+struct Node {
+    doc: &Doc,
+    at: i32,
+}
+
+impl Node {
+    fn kind(&self) -> i32 {
+        return self.doc.kinds[self.at];
+    }
+
+    // Out of line, so the loop iterates a `Cursor` the call returned rather
+    // than one SROA splits into locals.
+    #[inline(never)]
+    fn items(&self) -> Cursor {
+        return Cursor { doc: self.doc, next: self.at + 1, left: 2 };
+    }
+}
+
+struct Cursor {
+    doc: &Doc,
+    next: i32,
+    left: i32,
+}
+
+impl Iterator for Cursor {
+    type Item = Node;
+
+    fn next(&mut self) -> Option<Node> {
+        if self.left == 0 {
+            return null;
+        }
+        let at = self.next;
+        self.next = self.doc.ends[at];
+        self.left -= 1;
+        return Option::Some(Node { doc: self.doc, at });
+    }
+}
+
+test "a node keeps the index it was built with after the cursor moves on" {
+    // [10, [30]]: the array, 10, the inner array, 30
+    let doc = Doc { kinds: [1, 10, 2, 30], ends: [4, 2, 4, 4] };
+    let root = Node { doc: &doc, at: 0 };
+    let mut kinds: List<i32> = [];
+    for let item of root.items() {
+        if builtin::black_box(false) {
+            builtin::black_box(item);
+        }
+        kinds.push(item.kind());
+    }
+    assert kinds == [10, 2];
+}

@@ -1,0 +1,31 @@
+// A call through a reference that waits on the impls written for `&Bx<_>`
+// reaches the one written for the value once its receiver settles to a type
+// no reference impl takes, as an immediate call does.
+
+struct Bx<T> { v: Option<T> }
+
+fn empty<T>() -> Bx<T> { return Bx { v: null }; }
+
+trait Lbl with () {
+    fn label(&self) -> i32;
+}
+
+impl Lbl for &Bx<i32> {
+    fn label(&self) -> i32 { return 1; }
+}
+
+impl Lbl for &Bx<bool> {
+    fn label(&self) -> i32 { return 2; }
+}
+
+impl Lbl for Bx<String> {
+    fn label(&self) -> i32 { return 3; }
+}
+
+test {
+    let b = empty();
+    let r = &b;
+    let n = r.label();
+    let _settled: Bx<String> = b;
+    assert n == 3;
+}

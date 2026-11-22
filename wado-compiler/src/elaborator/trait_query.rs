@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -26,7 +26,11 @@ use super::scope::{
     TraitCheckFrame, trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
-use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause, clause_writer};
+use super::solver_bridge::{DeferredAnswer, DeferredQuestion, OwedBody};
+use super::trait_env::{
+    ImplMethodHeader, InheritedBound, ViaClause, clause_writer, header_as_written,
+    receiver_as_written,
+};
 use super::type_resolution::ParamSpace;
 use super::types::{
     MethodInfo, MethodOwner, OperatorImpl, ParamList, ResolvedTraitMethod, SigPosition,
@@ -50,7 +54,9 @@ use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_rea
 use crate::synthesis::traits::{
     REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
 };
-use crate::tir::{AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef};
+use crate::tir::{
+    AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef, solve_row,
+};
 use crate::trait_solver::args_per_param;
 use crate::unparse::unparse_generic_params_into;
 
@@ -58,6 +64,17 @@ use crate::unparse::unparse_generic_params_into;
 /// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
 #[derive(Clone, Debug)]
 pub struct BoundUnmet(());
+
+/// A bound asked of a type, or at trait arguments, whose rows the effect check
+/// had yet to solve.
+pub(crate) struct DeferredBound {
+    question: DeferredQuestion,
+    type_arg: TypeId,
+    trait_name: String,
+    trait_: FqTraitName,
+    param_name: String,
+    span: Span,
+}
 
 /// Whether a bound query may follow a newtype to its base. Dispatch does; rank
 /// 2 does not (`docs/wep-2026-09-01-trait-resolution.md`).
@@ -957,11 +974,99 @@ impl TypeSystem {
         // (WEP 2026-09-01).
         let answer = self.solver().answer_owing(self, ctx, type_id, trait_);
         let holds = answer.is_some();
+        self.record_owed(answer.into_iter().flatten());
+        holds
+    }
+
+    fn record_owed(&self, bodies: impl IntoIterator<Item = OwedBody>) {
         let mut table = self.type_table.borrow_mut();
-        for body in answer.into_iter().flatten() {
+        for body in bodies {
             table.record_bound_driven_synth_request(&body.head, &body.module, &body.trait_);
         }
-        holds
+    }
+
+    /// The deferred bounds unmet once `rows`, the effect check's solution,
+    /// stands for the variables in the types and traits they were asked of. A
+    /// bound met records the bodies its answer owes, as one answered at once
+    /// does.
+    pub(crate) fn unmet_deferred_bounds(&self, rows: &EffectRows) -> Vec<TypeError> {
+        let deferred = std::mem::take(&mut *self.deferred_bounds.borrow_mut());
+        let mut unmet = Vec::new();
+        for bound in deferred {
+            let closed = self
+                .type_table
+                .borrow_mut()
+                .substitute_effect_rows(bound.type_arg, rows);
+            let asked = bound
+                .trait_
+                .map_rows(&|row| solve_row(row, rows, &mut |_| {}));
+            let answer = self
+                .solver()
+                .answer_deferred(self, bound.question, closed, &asked);
+            match answer {
+                Some(DeferredAnswer { owed, tied }) => {
+                    self.record_owed(owed);
+                    unmet.extend(self.tied_impl_errors(&tied, &asked, closed, bound.span));
+                }
+                None => unmet.push(TypeError::TraitBoundNotSatisfied {
+                    type_name: self.type_id_to_string(closed),
+                    trait_name: bound_as_written(&bound.trait_name, &asked),
+                    param_name: bound.param_name,
+                    reason: Vec::new(),
+                    span: bound.span,
+                    unmet: BoundUnmet(()),
+                }),
+            }
+        }
+        unmet
+    }
+
+    /// The errors for a tie the order left among one trait's impls
+    /// (`docs/wep-2026-09-01-trait-resolution.md`), naming value blankets by
+    /// their bounds and every other impl, a variadic one included, by its header.
+    pub(super) fn tied_impl_errors(
+        &self,
+        tied: &[Option<DefId>],
+        trait_: &FqTraitName,
+        receiver: TypeId,
+        span: Span,
+    ) -> Vec<TypeError> {
+        let env = &self.trait_env;
+        let (blankets, heads): (Vec<DefId>, Vec<DefId>) = tied
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<IndexSet<_>>()
+            .into_iter()
+            .partition(|&def| {
+                env.blanket_of_block(def)
+                    .is_some_and(|b| matches!(b.receiver, BlanketReceiver::Value))
+            });
+        let receiver = self.type_id_to_string(receiver);
+        let mut errors = Vec::new();
+        if let [_, _, ..] = blankets.as_slice() {
+            errors.push(TypeError::AmbiguousValueBlankets {
+                trait_name: trait_.to_display(),
+                receiver: receiver.clone(),
+                bounds: blankets
+                    .iter()
+                    .map(|def| receiver_as_written(&env.impl_headers[def]))
+                    .collect(),
+                span,
+            });
+        }
+        if let [_, _, ..] = heads.as_slice() {
+            errors.push(TypeError::AmbiguousHeadImpls {
+                trait_name: trait_.to_display(),
+                receiver,
+                headers: heads
+                    .iter()
+                    .map(|def| header_as_written(&env.impl_headers[def]))
+                    .collect(),
+                span,
+            });
+        }
+        errors
     }
 
     /// The trait a bound names, with the arguments it writes for that trait's
@@ -987,6 +1092,7 @@ impl TypeSystem {
         ctx: &Scope,
         type_id: TypeId,
         bounds: &'b [FqTraitName],
+        unsettled: Unsettled,
     ) -> Option<&'b FqTraitName> {
         let table = self.type_table.borrow();
         if ctx.awaits_pending_call(&table, type_id) {
@@ -996,11 +1102,22 @@ impl TypeSystem {
             .iter()
             .map(|trait_| ctx.trait_awaits_pending_call(&table, trait_))
             .collect();
+        let unsettled = match unsettled {
+            Unsettled::MayHold if table.infer_vars_in(type_id).is_empty() => Unsettled::Fails,
+            Unsettled::MayHold | Unsettled::Fails => unsettled,
+        };
         drop(table);
         bounds
             .iter()
             .zip(awaiting)
-            .find(|&(trait_, awaits)| !awaits && !self.type_implements_trait(ctx, type_id, trait_))
+            .find(|&(trait_, awaits)| {
+                !awaits
+                    && !self.type_implements_trait(ctx, type_id, trait_)
+                    && match unsettled {
+                        Unsettled::Fails => true,
+                        Unsettled::MayHold => !self.solver().may_hold(self, ctx, type_id, trait_),
+                    }
+            })
             .map(|(trait_, _)| trait_)
     }
 
@@ -1744,7 +1861,13 @@ impl TypeSystem {
                 if header.trait_def() == Some(trait_)
                     && self.header_answers_bound_args(header, wanted, type_args)
                     && self.impl_reaches(entry, type_args)
-                    && self.check_impl_block_bounds(ctx, entry, subject, type_args)
+                    && self.check_impl_block_bounds(
+                        ctx,
+                        entry,
+                        subject,
+                        type_args,
+                        Unsettled::Fails,
+                    )
                 {
                     return true;
                 }
@@ -2034,7 +2157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The header answers whether the method exists, the digest what it says.
     /// A method the header lists but the digest lacks is a decl-pass bug, so it
     /// panics rather than reading as "no such method".
-    fn trait_method_of(
+    pub(super) fn trait_method_of(
         &self,
         key: &DefId,
         method_name: &str,
@@ -2547,8 +2670,9 @@ impl TypeSystem {
         def: DefId,
         receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
+        unsettled: Unsettled,
     ) -> bool {
-        self.unmet_impl_bound(ctx, def, receiver, type_args)
+        self.unmet_impl_bound(ctx, def, receiver, type_args, unsettled)
             .is_none()
     }
 
@@ -2561,6 +2685,7 @@ impl TypeSystem {
         def: DefId,
         receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
+        unsettled: Unsettled,
     ) -> Option<UnmetImplBound> {
         let trait_env = self.trait_env.clone();
         let header = &trait_env.impl_headers[&def];
@@ -2573,7 +2698,7 @@ impl TypeSystem {
         }
         let affine_params = ctx.trait_ctx.affine_params();
         let unmet = |param: &str, subjects: &[TypeId]| {
-            self.unmet_param_bound(ctx, header, param, subjects, &affine_params, &[])
+            self.unmet_param_bound(ctx, header, param, subjects, &affine_params, &[], unsettled)
         };
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
@@ -2592,7 +2717,7 @@ impl TypeSystem {
         let impl_ty = header.ty.referent();
         if let ast::Type::Generic(_) = impl_ty {
             let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
-            return self.unmet_slot_bound(ctx, def, &slots);
+            return self.unmet_slot_bound(ctx, def, &slots, unsettled);
         }
         // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
         // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
@@ -2615,6 +2740,7 @@ impl TypeSystem {
         ctx: &Scope,
         def: DefId,
         slots: &TypeArgMap,
+        unsettled: Unsettled,
     ) -> Option<UnmetImplBound> {
         let trait_env = self.trait_env.clone();
         let header = &trait_env.impl_headers[&def];
@@ -2640,7 +2766,15 @@ impl TypeSystem {
                 .iter()
                 .any(|p| p.name == param && p.is_pack);
             let subjects = self.bound_subjects(is_pack, type_arg);
-            self.unmet_param_bound(ctx, header, param, &subjects, &affine_params, &at)
+            self.unmet_param_bound(
+                ctx,
+                header,
+                param,
+                &subjects,
+                &affine_params,
+                &at,
+                unsettled,
+            )
         })
     }
 
@@ -2657,6 +2791,7 @@ impl TypeSystem {
         subjects: &[TypeId],
         affine_params: &[TypeId],
         at: &[(FqTypeName, FqTypeName)],
+        unsettled: Unsettled,
     ) -> Option<UnmetImplBound> {
         let declared = header.type_params.iter().find(|p| p.name == param)?;
         let bounds: Vec<FqTraitName> = declared
@@ -2669,7 +2804,7 @@ impl TypeSystem {
             let missing = if !declared.is_affine && self.is_affine(subject, affine_params) {
                 UnmetKind::Affine
             } else {
-                UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds)?.clone())
+                UnmetKind::Trait(self.unmet_bound(ctx, subject, &bounds, unsettled)?.clone())
             };
             Some(UnmetImplBound {
                 param: param.to_string(),
@@ -2686,6 +2821,16 @@ pub(super) struct UnmetImplBound {
     pub(super) param: String,
     pub(super) type_arg: TypeId,
     pub(super) missing: UnmetKind,
+}
+
+/// How a bound check answers a type whose variables have not settled.
+#[derive(Clone, Copy)]
+pub(super) enum Unsettled {
+    /// As it stands: no impl answers a variable.
+    Fails,
+    /// In three values, as a selection asks it: a bound the type may yet meet
+    /// keeps the candidate, and selecting it requires the bound.
+    MayHold,
 }
 
 pub(super) enum UnmetKind {
@@ -3130,6 +3275,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Keeps the bound to be asked again once its rows are solved, answering
+    /// whether it was kept.
+    fn defer_bound(
+        &self,
+        type_arg: TypeId,
+        trait_name: &str,
+        trait_: &FqTraitName,
+        param_name: &str,
+        span: Span,
+    ) -> bool {
+        let Some(question) =
+            self.tysys
+                .solver()
+                .deferred(&self.tysys, &self.annotate_ctx, type_arg, trait_)
+        else {
+            return false;
+        };
+        self.tysys.deferred_bounds.borrow_mut().push(DeferredBound {
+            question,
+            type_arg,
+            trait_name: trait_name.to_string(),
+            trait_: trait_.clone(),
+            param_name: param_name.to_string(),
+            span,
+        });
+        true
+    }
+
     /// Whether one concrete type argument meets one trait bound — the primitive
     /// every enforcement path funnels through. Registers the associated types on
     /// success, raises `TraitBoundNotSatisfied` on failure.
@@ -3146,7 +3319,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(trait_) = trait_ else {
             return true;
         };
-        if self.check_and_register_bound(type_arg, trait_) {
+        // The solver reads an unsolved row as empty, so for a type or trait
+        // argument carrying one, such as a closure literal's, neither answer
+        // it gives now is final. The bound is asked again once the effect
+        // check has solved it, and a tie is reported then.
+        let unsolved = self.tysys.type_table.borrow().contains_effect_var(type_arg)
+            || trait_.args().iter().any(FqTypeName::names_effect_var);
+        let deferred = unsolved && self.defer_bound(type_arg, trait_name, trait_, param_name, span);
+        let held = self.check_and_register_bound(type_arg, trait_);
+        if deferred {
+            return true;
+        }
+        if held {
             let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
                 bridge.borrow().tied_through_bound(
                     &self.tysys,

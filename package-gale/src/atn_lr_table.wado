@@ -13,7 +13,7 @@ use { Atn, atn_blob_bytes } from "./atn.wado";
 use { AtnSim, ATN_TR_EPSILON, ATN_TR_PRECEDENCE, atn_decode } from "./runtime/atn.wado";
 use { atn_state_cont_admits, atn_with_lr_tables } from "./runtime/atn_lr.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
-use { follow_admits_call } from "./gen_util.wado";
+use { constant_patterns, follow_admits_call } from "./gen_util.wado";
 use { CodeWriter, FnSpec, ParamSpec } from "lib:wadopoet";
 
 /// The tokens one suffix alone admits, and that suffix.
@@ -97,7 +97,7 @@ pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, anal
     w.begin(`if pos < tokens.len() && tokens[pos] < ${table.kinds}`);
     w.begin("match tokens[pos]");
     for let e of &table.enters {
-        w.begin(`${analysis.token_names_of(&e.tokens).join(" | ")} =>`);
+        w.begin(`${constant_patterns(&analysis.token_names_of(&e.tokens))} =>`);
         w.line(`if min_prec > ${e.prec} { return ${table.exit}; }`);
         if follow {
             w.line(`if !${follow_admits_call("tokens", "pos")} { return ${e.alt}; }`);
@@ -107,7 +107,7 @@ pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, anal
         w.end_with(",");
     }
     if !table.contested.is_empty() {
-        w.line(`${analysis.token_names_of(&table.contested).join(" | ")} => {},`);
+        w.line(`${constant_patterns(&analysis.token_names_of(&table.contested))} => {},`);
     }
     w.line(`_ => { return ${table.exit}; },`);
     w.end_with(";");

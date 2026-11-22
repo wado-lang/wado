@@ -48,8 +48,8 @@ pub fn translate_action<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>(
     expected: S2 = NO_EXPECTED,
 ) -> Result<String, String> {
     return match lang {
-        Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
-        Java => {
+        _::Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
+        _::Java => {
             let env = JEnv {
                 this_bind: PARSER_HANDLE,
                 grammar: grammar_name.to_string(),
@@ -96,8 +96,8 @@ pub fn translate_predicate<S: AsStrSlice, S1: AsStrSlice>(
     handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
     return match lang {
-        Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
-        Java => {
+        _::Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
+        _::Java => {
             let env = JEnv {
                 this_bind: *handle,
                 grammar: grammar_name.to_string(),
@@ -129,14 +129,14 @@ pub fn stage_lexer_bodies(grammar: &mut Grammar, lang: &ActionLanguage, members:
 /// One body, in the grammar's action language. `Wado` is the identity
 /// translator: `$`-references resolved, the rest verbatim.
 fn stage_lexer_body(a: &AltAction, lang: &ActionLanguage, env: &JEnv) -> Result<String, String> {
-    let is_pred = a.kind matches { Predicate };
+    let is_pred = a.kind matches { _::Predicate };
     return match lang {
-        Java => if is_pred {
+        _::Java => if is_pred {
             translate_java_lexer_expr(&a.source.text, env);
         } else {
             translate_java_lexer_stmts(&a.source.text, env);
         },
-        Wado => {
+        _::Wado => {
             let text = translate_lexer_body(
                 &a.source.text,
                 &LexerAttrEnv { in_action: !is_pred, uses_modes: env.uses_modes },
@@ -214,8 +214,8 @@ pub fn translate_members<S: AsStrSlice, S1: AsStrSlice>(
     lexer: bool = false,
 ) -> Result<MemberDecls, String> {
     return match lang {
-        Java => translate_java_members(body, grammar_name, lexer),
-        Wado => translate_wado_members(body),
+        _::Java => translate_java_members(body, grammar_name, lexer),
+        _::Wado => translate_wado_members(body),
         Other(name) => Result::Err(`unsupported action language '${*name}' for @members`),
     };
 }
@@ -223,8 +223,8 @@ pub fn translate_members<S: AsStrSlice, S1: AsStrSlice>(
 /// Whether java2wado can emit the grammar's non-superClass action bodies:
 /// `Wado` always, `Java` unless the grammar declares `superClass`.
 pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
-    return grammar.action_language matches { Wado }
-        || grammar.action_language matches { Java } && !grammar_has_superclass(grammar);
+    return grammar.action_language matches { _::Wado }
+        || grammar.action_language matches { _::Java } && !grammar_has_superclass(grammar);
 }
 
 /// The parser half of the same question, where a `superClass` carves nothing
@@ -236,7 +236,7 @@ pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
 /// ANTLR4 compiles `@parser::members` and a `superClass` together, so refusing
 /// them together rejected a grammar it accepts.
 pub fn parser_action_language_is_emittable(grammar: &Grammar) -> bool {
-    return grammar.action_language matches { Wado } || grammar.action_language matches { Java };
+    return grammar.action_language matches { _::Wado } || grammar.action_language matches { _::Java };
 }
 
 /// Whether the grammar carries any action content: a named action, a rule
@@ -343,7 +343,7 @@ fn lexer_element_has_actions(elem: &LexerElement) -> bool {
 /// A no-op for non-Java grammars and for types already Wado (or unmapped, e.g.
 /// `List<String>`), which pass through unchanged.
 pub fn translate_attr_types(grammar: &mut Grammar) {
-    if !grammar.action_language matches { Java } {
+    if !grammar.action_language matches { _::Java } {
         return;
     }
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {

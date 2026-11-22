@@ -29,13 +29,13 @@ ${weights}
 
 test "a weight's transpose only a product reads is read as the weight is stored" {
     let lowered = head(false, false);
-    assert lowered[0] matches { Transposed };
-    assert lowered[1] matches { Operation };
+    assert lowered[0] matches { _::Transposed };
+    assert lowered[1] matches { _::Operation };
 }
 
 test "a transpose of an input, or one read again, is an operation" {
-    assert head(true, false)[0] matches { Operation };
-    assert head(false, true)[0] matches { Operation };
+    assert head(true, false)[0] matches { _::Operation };
+    assert head(false, true)[0] matches { _::Operation };
 }
 
 test "a product by an attention key's transpose, of rank 3, reads an operation's output" {
@@ -46,7 +46,7 @@ scores (float[1, 2, 4] Q, float[1, 3, 4] K) => (float[1, 2, 3] Y)
     Y = MatMul(Q, T)
 }
 `;
-    assert lowerings_of(source)[0] matches { Operation };
+    assert lowerings_of(source)[0] matches { _::Operation };
 }
 
 /// What `spelled` varies of GPT-2's attention over a past of two positions.
@@ -102,10 +102,10 @@ attention (float[1, 1, 4] Q, float[${b}, 1, 4] K, float[${b}, 1, 4] V, float[${b
 
 test "an attention spelled in parts over a causal table is one composite" {
     let lowered = spelled(Spelling {});
-    assert lowered[0] matches { Folded };
-    assert lowered[1] matches { Folded };
+    assert lowered[0] matches { _::Folded };
+    assert lowered[1] matches { _::Folded };
     // The mask's table is cut at the build, so its `Slice`s fold.
-    assert !lowered[2..<lowered.len() - 1].to_list().into_iter().any(|l| l matches { Operation });
+    assert !lowered[2..<lowered.len() - 1].to_list().into_iter().any(|l| l matches { _::Operation });
     let Attention(a) = lowered[lowered.len() - 1] else {
         panic("the last node computes the composite");
     };
@@ -129,12 +129,12 @@ test "a scale applied by Mul keeps its operator" {
 
 test "a mask that is no causal table stays operations" {
     let lowered = spelled(Spelling { table: "1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1" });
-    assert lowered[lowered.len() - 1] matches { Operation };
+    assert lowered[lowered.len() - 1] matches { _::Operation };
 }
 
 test "a table read from another row than the past's end stays operations" {
     let lowered = spelled(Spelling { row_start: 1 });
-    assert lowered[lowered.len() - 1] matches { Operation };
+    assert lowered[lowered.len() - 1] matches { _::Operation };
 }
 
 /// How many attentions of `model`, each `If`'s branches among them, are one
@@ -186,27 +186,27 @@ attention (float[1, 1, 4] Q, float[1, 3, 4] K, float[1, 3, 4] V) => (float[1, 1,
 
 test "a score another node reads stays operations" {
     let lowered = spelled(Spelling { outputs: ", float[1, 2, 1, 3] Seen", after: "Seen = Identity(Biased)" });
-    assert !lowered.into_iter().any(|l| l matches { Attended });
+    assert !lowered.into_iter().any(|l| l matches { _::Attended });
 }
 
 test "heads merged into another shape than the queries' stay operations" {
     let lowered = spelled(Spelling { merged: "1, 2, 2" });
-    assert !lowered.into_iter().any(|l| l matches { Attended });
+    assert !lowered.into_iter().any(|l| l matches { _::Attended });
 }
 
 test "a bias of more rows than the queries stays operations" {
     let lowered = spelled(Spelling { bias_extents: "1, 1, 2, 3", merged: "1, 2, 4" });
-    assert !lowered.into_iter().any(|l| l matches { Attended });
+    assert !lowered.into_iter().any(|l| l matches { _::Attended });
 }
 
 test "queries a batch of keys broadcasts stay operations" {
     let lowered = spelled(Spelling { key_batch: 2, merged: "2, 1, 4" });
-    assert !lowered.into_iter().any(|l| l matches { Attended });
+    assert !lowered.into_iter().any(|l| l matches { _::Attended });
 }
 
 test "a bias the attention itself computes stays operations" {
     let lowered = spelled(Spelling { bias: "Raw" });
-    assert !lowered.into_iter().any(|l| l matches { Attended });
+    assert !lowered.into_iter().any(|l| l matches { _::Attended });
 }
 
 test "keys split for the scores that the scope returns stay operations" {

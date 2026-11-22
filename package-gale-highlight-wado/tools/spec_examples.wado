@@ -107,16 +107,16 @@ pub fn reference_of(block: &FencedCode) -> Result<Option<Citation>, String> {
         }
     }
     let reference = match [fixture, source] {
-        [Some(name), None] && name.contains("/") => Reference::Helper(name),
-        [Some(name), None] => Reference::Fixture(name),
-        [None, Some(path)] && path.starts_with(`${FIXTURE_DIR}/`) => {
+        [Some(name), null] && name.contains("/") => Reference::Helper(name),
+        [Some(name), null] => Reference::Fixture(name),
+        [null, Some(path)] && path.starts_with(`${FIXTURE_DIR}/`) => {
             return Result::Err(`\`${path}\` is under the fixtures, so the reference names it as a \`fixture\``);
         },
-        [None, Some(path)] => Reference::Source(path),
+        [null, Some(path)] => Reference::Source(path),
         [Some(_), Some(_)] => {
             return Result::Err("the reference names both a `fixture` and a `source`");
         },
-        [None, None] => {
+        [null, null] => {
             return Result::Err("the reference names no `fixture` or `source`");
         },
     };
@@ -232,7 +232,7 @@ fn split_data(source: &String) -> [String, String] {
             source.substr_bytes(0, at),
             source.substr_bytes(at + marker.len(), source.len()),
         ],
-        None => [*source, ""],
+        null => [*source, ""],
     };
 }
 
@@ -294,7 +294,7 @@ pub fn audit(blocks: &List<FencedCode>, files: &TreeMap<String, String>, reached
     for let block of blocks {
         let why = match reference_of(block) {
             Ok(Some(citation)) => check_block(block, &citation, files, reached),
-            Ok(None) => Option::Some("names no fixture or source"),
+            Ok(null) => Option::Some("names no fixture or source"),
             Err(why) => Option::Some(why),
         };
         if let Some(why) = why {

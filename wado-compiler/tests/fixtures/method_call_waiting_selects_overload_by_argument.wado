@@ -1,0 +1,29 @@
+// A waiting call selects among one trait's overloads by its arguments once
+// the receiver settles, as an immediate call does.
+
+struct Bx<T> { v: Option<T> }
+
+fn empty<T>() -> Bx<T> { return Bx { v: null }; }
+
+trait Conv<A> with () {
+    fn conv(&self, a: A) -> i32;
+}
+
+impl Conv<i32> for Bx<i32> {
+    fn conv(&self, a: i32) -> i32 { return 1; }
+}
+
+impl Conv<String> for Bx<i32> {
+    fn conv(&self, a: String) -> i32 { return 2; }
+}
+
+impl Conv<i32> for Bx<bool> {
+    fn conv(&self, a: i32) -> i32 { return 3; }
+}
+
+test {
+    let b = empty();
+    let n = b.conv("s");
+    let _settled: Bx<i32> = b;
+    assert n == 2;
+}

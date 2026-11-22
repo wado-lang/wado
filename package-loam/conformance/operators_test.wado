@@ -87,7 +87,7 @@ fn computed(model: ByteList, case: &Case, budget: Option<i64>) -> String with Ev
     let passed = match budget {
         Some(bytes) => `let mut model = Model::embedded(&mut cpu, ${bytes}).unwrap();
     printed(&compute(&mut cpu, ${inputs}&mut model));`,
-        None => `let params = Params::embedded(&mut cpu);
+        null => `let params = Params::embedded(&mut cpu);
     let built = build(&mut cpu, ${inputs}&params);
     printed(&cpu.download(&built));`,
     };
@@ -847,12 +847,12 @@ test "QMoE of one token of halves" {
 /// up to 6.5e-6.
 global QMOE_LAYERS_TOLERANCE: f32 = 1e-5;
 
-test "QMoE layers sharing pools that hold half their experts" {
+test "QMoE layers sharing pools that hold 6 of their 8 experts" {
     assert_agrees(
         #include_bytes("./operators/QMoeLayers.onnx"),
         #include_str("./operators/QMoeLayers.txt"),
         QMOE_LAYERS_TOLERANCE,
-        Option::Some(4 * QMOE_LAYERS_EXPERT_BYTES),
+        Option::Some(6 * QMOE_LAYERS_EXPERT_BYTES),
     );
 }
 

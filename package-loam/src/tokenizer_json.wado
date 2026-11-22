@@ -229,7 +229,7 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
             return unsupported("model", key, affix);
         }
     }
-    let pieces = spelling matches { Pieces };
+    let pieces = spelling matches { _::Pieces };
     if !pieces {
         if let Some(unknown) = model.unk_token {
             return unsupported("model", "unk_token", unknown);
@@ -308,8 +308,8 @@ fn spelling_of(file: &TokenizerFile) -> Result<[TokenSpelling, PieceSplit], Toke
     let steps = sequence.decoders;
     if !(steps.len() == 3
         && steps[0] matches { Replace(r) && is_space_replacement(&r, "▁", " ") }
-        && steps[1] matches { ByteFallback }
-        && steps[2] matches { Fuse }) {
+        && steps[1] matches { _::ByteFallback }
+        && steps[2] matches { _::Fuse }) {
         let kinds: List<String> = steps.into_iter().map(|s| case_name(&s)).collect();
         return refused(`decoder: ${kinds.join(", ")} is not supported`);
     }
@@ -369,7 +369,7 @@ fn is_space_replacement(replace: &Replace, pattern: String, content: String) -> 
 fn kind_of<V: ReflectVariant<CasePayloads = [..P]>, ..P>(stage: &Option<V>) -> String {
     return match *stage {
         Some(given) => case_name(&given),
-        None => "none",
+        null => "none",
     };
 }
 
@@ -432,7 +432,7 @@ fn prefix_of(processor: &Option<PostProcessor>, ids: &HashMap<String, i32>) -> R
 fn id_of(ids: &HashMap<String, i32>, token: &String, what: String) -> Result<i32, TokenizerError> {
     return match ids.get(*token) {
         Some(id) => Result::Ok(id),
-        None => refused(`${what} ${*token} is not in the vocabulary`),
+        null => refused(`${what} ${*token} is not in the vocabulary`),
     };
 }
 
@@ -499,12 +499,12 @@ fn specials_of(
             return unsupported(at, "normalized", "true");
         }
         let own = vocab.get(token.content);
-        if own matches { None } && token.id == tokens.len() {
+        if own matches { null } && token.id == tokens.len() {
             tokens.push(token.content);
         } else if own != Option::Some(token.id) {
             let given = match own {
                 Some(id) => `${id}`,
-                None => "none",
+                null => "none",
             };
             return refused(`${at} is id ${token.id}, and the vocabulary gives it ${given}`);
         }

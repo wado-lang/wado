@@ -696,12 +696,12 @@ test "BITS is the width in bits" {
 test "cmp answers each Ordering, a float's NaN greatest" {
     let one: f32 = builtin::black_box(1.0);
     let nan: f32 = builtin::black_box(f32::NAN);
-    assert one.cmp(&nan) matches { Less } && nan.cmp(&one) matches { Greater };
-    assert nan.cmp(&nan) matches { Equal };
+    assert one.cmp(&nan) matches { _::Less } && nan.cmp(&one) matches { _::Greater };
+    assert nan.cmp(&nan) matches { _::Equal };
     let low: u64 = builtin::black_box(1);
     let high: u64 = builtin::black_box(u64::MAX);
-    assert low.cmp(&high) matches { Less } && high.cmp(&low) matches { Greater };
-    assert low.cmp(&low) matches { Equal };
+    assert low.cmp(&high) matches { _::Less } && high.cmp(&low) matches { _::Greater };
+    assert low.cmp(&low) matches { _::Equal };
 }
 
 test "an f32 inspects as the same value in f64 does" {

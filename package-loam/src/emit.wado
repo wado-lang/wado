@@ -91,7 +91,7 @@ impl Placement {
     /// where there is no `load` to find it.
     fn places(&self, name: &String) -> bool {
         return match *self {
-            Unplaced => true,
+            _::Unplaced => true,
             File(_) => true,
             Shards(placed) => placed.contains_key(*name),
             InPlace(in_place) => in_place.ranges.contains_key(*name),
@@ -146,7 +146,7 @@ pub fn rows_judged(graph: &Graph, checked: &Checked) -> Result<Option<String>, E
 fn padded_symbols(graph: &Graph, checked: &Checked, carriers: &List<Carrier>) -> List<String> {
     return padding(graph, checked)
         .into_iter()
-        .filter(|j| j.refused matches { None } && carriers.into_iter().any(|c| c.solved.symbol == j.symbol))
+        .filter(|j| j.refused matches { null } && carriers.into_iter().any(|c| c.solved.symbol == j.symbol))
         .map(|j| j.symbol)
         .collect();
 }
@@ -379,7 +379,7 @@ fn cache_pairs(graph: &Graph) -> List<[String, String]> {
 fn refuse_unmapped_dtype(graph: &Graph) -> Result<(), EmitError> {
     for let declared of [&graph.inputs, &graph.initializers, &graph.outputs] {
         for let vi of *declared {
-            if element_of(&vi.dtype) matches { None } {
+            if element_of(&vi.dtype) matches { null } {
                 builtin::cold_path();
                 return Result::Err(EmitError::Dtype(UnmappedDtype {
                     tensor: vi.name,
@@ -518,7 +518,7 @@ fn emit_weights(
             w.line(`${at} => ${hosts[vi.name]}.stored_bytes(),`);
         }
         w.line("_ => unreachable(),");
-        w.end_with("))).unwrap()).pools(backend, &Unread {});");
+        w.end_with("))).unwrap(), backend).pools(backend, &Unread {});");
         "pools";
     };
     emit_held_call(w, graph, experts, &hosts, false, pools);
@@ -564,7 +564,11 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
     );
     for let group of &experts.groups {
         let mut layers: List<String> = [];
+        let mut pools: List<String> = [];
         for let layer of &group.layers {
+            let positions: List<String> = (first..<first + layer.len()).map(|i| `${i}`).collect();
+            pools.push(`[${positions.join(", ")}]`);
+            first += layer.len();
             let mut stored: List<String> = [];
             for let weight of layer {
                 let at = position(weight);
@@ -578,8 +582,6 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
             }
             layers.push(`[${stored.join(", ")}]`);
         }
-        let pools: List<String> = (first..<first + group.pools().len()).map(|i| `${i}`).collect();
-        first += group.pools().len();
         let steps: List<String> = group.steps.into_iter().map(|s| `${s}`).collect();
         let x = static_extents(&checked.shapes[group.pools()[0]]).unwrap()[0];
         layouts.push(
@@ -600,7 +602,7 @@ fn prepared_type(checked: &Checked, tensor: &String) -> String {
 /// Whether some initializer's data is left to a checkpoint.
 fn loads_weights(graph: &Graph) -> bool {
     for let vi of &graph.initializers {
-        if vi.data matches { None } {
+        if vi.data matches { null } {
             return true;
         }
     }
@@ -615,7 +617,7 @@ fn loads_weights(graph: &Graph) -> bool {
 /// some, `Model` takes a budget for them besides.
 fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placement: &Placement, experts: &ExpertPlan) {
     let loads = loads_weights(graph);
-    if loads && placement matches { Unplaced } {
+    if loads && placement matches { _::Unplaced } {
         return;
     }
     w.blank();
@@ -626,7 +628,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         // Where the weights are, and what `load` checks of its files before
         // reading a weight out of one.
         let [doc, firsts]: [String, List<String>] = match *placement {
-            Unplaced => unreachable(),
+            _::Unplaced => unreachable(),
             File(file) => [
                 `the safetensors checkpoint ${file}`,
                 [wado`let header = read_headers(source, ["${file}"])?;`],
@@ -708,12 +710,12 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
             for let [at, vi] of pooled_initializers(graph, experts) {
                 let bytes = match vi.data {
                     Some(_) => `ExpertBytes::Held(${EMBEDDED_DATA}(${at}))`,
-                    None => `ExpertBytes::File(${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)})`,
+                    null => `ExpertBytes::File(${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)})`,
                 };
                 w.line(`${at} => ${bytes},`);
             }
             w.line("_ => unreachable(),");
-            w.end_with("))?, budget)?;");
+            w.end_with("))?, budget, backend)?;");
             w.line("let pools = experts.pools(backend, source);");
             "pools";
         } else {
@@ -750,7 +752,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     }
     w.line("/// Its pools hold every expert.");
     embedded.emit_begin(w);
-    w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}));`);
+    w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}, backend));`);
     w.end();
     w.blank();
     w.line("/// The weights the graph carries, the experts as many as `experts` holds.");
@@ -775,7 +777,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         UNREAD,
         [],
         [
-            `let mut experts = HeldExperts::within(${CARRIED_LAYOUTS}, budget)?;`, "let source = Unread {};",
+            `let mut experts = HeldExperts::within(${CARRIED_LAYOUTS}, budget, backend)?;`, "let source = Unread {};",
             "let weights = Params::embedded_within(backend, &mut experts);",
         ],
     );
@@ -831,7 +833,7 @@ fn held_hosts(graph: &Graph, checked: &Checked, placement: &Placement, experts: 
         let e = expected(&vi, &checked.shapes[vi.name]);
         hosts[vi.name] = match vi.data {
             Some(_) => `HostWeight::of_bytes::<${primitive}>(${e.extents}, &${EMBEDDED_DATA}(${at}))`,
-            None => checkpoint_payload(&e, &primitive, placement),
+            null => checkpoint_payload(&e, &primitive, placement),
         };
     }
     return hosts;
@@ -887,7 +889,7 @@ fn emit_embedded_data(w: &mut CodeWriter, graph: &Graph) {
 /// `load` was given, checked against what the build compiled it as.
 fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -> String {
     let file = match *placement {
-        Unplaced => unreachable(),
+        _::Unplaced => unreachable(),
         File(file) => file,
         Shards(placed) => placed[e.tensor],
         InPlace(in_place) => {
@@ -903,7 +905,7 @@ fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -
 /// compiled the tensor as; a range the build found is that tensor's already.
 fn expert_place(e: &Expected, placement: &Placement) -> String {
     let file = match *placement {
-        Unplaced => unreachable(),
+        _::Unplaced => unreachable(),
         File(file) => file,
         Shards(placed) => placed[e.tensor],
         InPlace(in_place) => {
@@ -1231,7 +1233,7 @@ fn prepared_entry(
             let ident = symbols.ident(&symbol);
             let host = symbols.spell(&Poly::symbol(&symbol))?;
             let data = match &apart {
-                None => `[${host}]`,
+                null => `[${host}]`,
                 Some(a) => if moves_a_step(&symbol, &a.total, owed)? {
                     at_each_past(host, symbols.spell(&Poly::symbol(&a.past))?);
                 } else {
@@ -1660,19 +1662,19 @@ fn emit_decoded(
     // Where the cache starts among what a step carries: past the inputs it carries.
     let mut first_cached = 0;
     for let a of *taken {
-        if a.crossed matches { Input } {
+        if a.crossed matches { _::Input } {
             decoded.add_param(a.ident, `&${bk}::Tensor<${a.element}, ${a.axes}>`);
             if a.tensor != axes.ids && a.tensor != axes.mask {
                 build_arguments.push(a.ident);
                 continue;
             }
             start.push(a.erased_from(a.ident));
-        } else if a.crossed matches { Cache } {
+        } else if a.crossed matches { _::Cache } {
             start.push(a.erased_from(`&cache.${a.ident}`));
         } else {
             continue;
         }
-        if a.crossed matches { Input } {
+        if a.crossed matches { _::Input } {
             build_arguments.push(`&${a.taken_from("state", carried.len())}`);
             first_cached += 1;
         }
@@ -1789,7 +1791,7 @@ fn emit_least_extents(
     let mut capacities = at_capacities(&mut symbols, &mut lines, padded, owed, names, &null)?;
     let mut extents: List<String> = [];
     for let a of *taken {
-        extents.push(if a.crossed matches { Length } {
+        extents.push(if a.crossed matches { _::Length } {
             // One length every row shares, where each row holds its own.
             if per_row {
                 "[1]";
@@ -1884,7 +1886,7 @@ fn at_capacities(
         "";
     };
     // The rest of a present is spelled at the capacities of the lengths it reads.
-    let mut ordered: List<String> = padded.into_iter().filter(|s| grows(s) matches { None }).map(|s| *s).collect();
+    let mut ordered: List<String> = padded.into_iter().filter(|s| grows(s) matches { null }).map(|s| *s).collect();
     ordered.extend(&padded.into_iter().filter(|s| grows(s) matches { Some(_) }).map(|s| *s).collect());
     for let symbol of ordered {
         let capacity = names.get(&capacity_key(&symbol));
@@ -1939,11 +1941,11 @@ impl ProgramArgument {
     /// Where `compute` holds the argument.
     fn held(&self) -> String {
         return match self.crossed {
-            Input => self.ident,
-            Cache => `cache.${self.ident}`,
-            Length => `lengths.${self.ident}`,
+            _::Input => self.ident,
+            _::Cache => `cache.${self.ident}`,
+            _::Length => `lengths.${self.ident}`,
             // `erased_fields` passes the weights whole.
-            Weight => unreachable(),
+            _::Weight => unreachable(),
         };
     }
 
@@ -2002,8 +2004,8 @@ fn any_case(primitive: &String) -> String {
     };
 }
 
-/// The initializers held as they are, the folded literals `kept`, then the
-/// weights standing for the pools, as `Params` holds them.
+/// The initializers held as they are, the folded literals `kept`, then every
+/// layer's pooled weights, as `Params` holds them.
 fn weight_names(graph: &Graph, kept: &List<String>, experts: &ExpertPlan) -> List<String> {
     let mut weights: List<String> = held_initializers(graph, experts).into_iter().map(|vi| vi.name).collect();
     weights.extend(kept);
@@ -2034,8 +2036,22 @@ fn emit_model(w: &mut CodeWriter) {
     w.line("/// A model of `weights`, whose pools hold every expert.");
     w.line(`pub fn new(weights: ${PARAMS_TYPE}) -> ${MODEL}<${BACKEND_PARAM}> {`);
     w.line(
-        `    return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::resident([]), source: Unread {} };`,
+        `    return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::none(), source: Unread {} };`,
     );
+    w.line("}");
+    w.end();
+    w.blank();
+    let mut any = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}, ${SOURCE_PARAM}>`);
+    any.add_generic(BACKEND_BOUND);
+    any.add_generic(SOURCE_BOUND);
+    any.emit_begin(w);
+    w.line("/// The experts the pools hold, and what the passes have picked of them.");
+    w.line("pub fn experts(&self) -> &HeldExperts {");
+    w.line("    return &self.experts;");
+    w.line("}");
+    w.blank();
+    w.line("pub fn experts_mut(&mut self) -> &mut HeldExperts {");
+    w.line("    return &mut self.experts;");
     w.line("}");
     w.end();
 }
@@ -2069,20 +2085,20 @@ fn emit_recorded(
     };
     let mut arguments: List<String> = ["recorder"];
     for let [at, a] of taken.into_iter().enumerate() {
-        if a.crossed matches { Input } {
+        if a.crossed matches { _::Input } {
             w.line(`let ${a.ident} = ${a.parameter(&extents_at(at))};`);
             arguments.push(`&${a.ident}`);
         }
     }
     if crossing.has_cache() {
         // The cache follows the inputs.
-        let first_cache = taken.into_iter().filter(|a| a.crossed matches { Input }).count();
+        let first_cache = taken.into_iter().filter(|a| a.crossed matches { _::Input }).count();
         w.line(`let cache: ${CACHE}<Recorder> = recorded_fields(recorder, extents, ${first_cache});`);
         arguments.push("&cache");
     }
     let mut lengths: List<String> = [];
     for let [at, a] of taken.into_iter().enumerate() {
-        if a.crossed matches { Length } {
+        if a.crossed matches { _::Length } {
             lengths.push(`${a.ident}: ${a.parameter(&extents_at(at))}`);
         }
     }
@@ -2283,7 +2299,7 @@ fn emit_entry(
     experts: &ExpertPlan,
 ) -> Result<List<String>, EmitError> {
     let shapes = &checked.shapes;
-    let mut exprs = Operands { experts: experts.placements(), pooled: experts.pooled };
+    let mut exprs = Operands { experts: experts.placements() };
     let mut entry = FnSpec::new("build", Vis::Pub);
     entry.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // The pasts cross in one `Cache`, and the presents replace them in it.
@@ -2304,7 +2320,7 @@ fn emit_entry(
         entry.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
     }
     for let vi of &graph.initializers {
-        exprs.values[vi.name] = `weights.${names.get(&experts.held_in(&vi.name))}`;
+        exprs.values[vi.name] = `weights.${names.get(&vi.name)}`;
     }
     for let tensor of kept {
         exprs.values[*tensor] = `weights.${names.get(tensor)}`;
@@ -2574,13 +2590,13 @@ fn scope_body(
     let lowered = lowerings(graph, checked);
     for let [at, node] of graph.nodes.into_iter().enumerate() {
         match lowered[at] {
-            Folded => {
+            _::Folded => {
             },
-            Transposed => {
+            _::Transposed => {
                 exprs.transposed[node.outputs[0]] = node.inputs[0];
                 exprs.unlifted(&node.inputs[0]);
             },
-            Alias => {
+            _::Alias => {
                 exprs.values[node.outputs[0]] = exprs.values.get(node.inputs[0]).unwrap();
                 if exprs.borrowed.contains(node.inputs[0]) {
                     exprs.borrowed.insert(node.outputs[0]);
@@ -2589,12 +2605,12 @@ fn scope_body(
                     exprs.lifted.insert(node.outputs[0]);
                 }
             },
-            Branch => {
+            _::Branch => {
                 exprs.unlifted(&node.inputs[0]);
                 body.extend(&branch_block(&node, checked, names, exprs, symbols)?);
             },
-            Operation => body.extend(&node_calls(&node, checked, names, exprs, symbols, graph.opset)?),
-            Attended => {
+            _::Operation => body.extend(&node_calls(&node, checked, names, exprs, symbols, graph.opset)?),
+            _::Attended => {
             },
             Attention(a) => {
                 for let tensor of a.operands() {
@@ -2874,7 +2890,7 @@ fn spelled_attention_call(
             operands.push(symbols.length_operand(&positions.extent.poly(), &q)?);
             positions.name;
         },
-        None => {
+        null => {
             let extents = [symbols.spell_extent(&present.axes[0].extent.poly())?, `${a.heads}`, "0", `${a.width}`] as List<String>;
             lines.push(
                 `let ${present_value} = backend.upload(&Tensor::<${element}, [${held_axes(&total)}]> { data: [], extents: [${extents.join(
@@ -2898,7 +2914,7 @@ fn spelled_attention_call(
             operands.push(`Option::Some(${as_axes(b, &`${axes.join(", ")}, ${total}`)})`);
             axes;
         },
-        None => {
+        null => {
             operands.push("null");
             [batch, heads, sequence] as List<String>;
         },
@@ -2918,7 +2934,7 @@ fn spelled_attention_call(
     let attended = names.get(&node.outputs[0]);
     let present_key = match &a.present_key {
         Some(key) => names.get(key),
-        None => "_",
+        null => "_",
     };
     lines.push(
         `let [${attended}, ${present_key}, ${present_value}] = backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(
@@ -2970,7 +2986,7 @@ fn branch_block(
     let axes = axis_list(&checked.shapes[node.inputs[0]]);
     let opening = match symbols.chosen_branch(&node.inputs[0]) {
         Some(chosen) => `branched::<${BACKEND_PARAM}, [${axes}], ${yielded}>(backend, ${condition}, ${chosen}, || {`,
-        None => `backend.conditional::<[${axes}], ${yielded}>(${condition}, || {`,
+        null => `backend.conditional::<[${axes}], ${yielded}>(${condition}, || {`,
     };
     let mut lines: List<String> = [`let ${bound} = ${opening}`];
     lines.extend(&indented(branch_lines(node, &then_branch, checked, names, exprs, symbols)?));
@@ -3084,7 +3100,7 @@ fn read_by_graph(read: &mut HashSet<String>, graph: &Graph, checked: &Checked) {
     }
     let lowered = lowerings(graph, checked);
     for let [at, node] of graph.nodes.into_iter().enumerate() {
-        if lowered[at] matches { Folded | Attended } {
+        if lowered[at] matches { _::Folded | _::Attended } {
             continue;
         }
         if let Attention(a) = lowered[at] {
@@ -3093,7 +3109,7 @@ fn read_by_graph(read: &mut HashSet<String>, graph: &Graph, checked: &Checked) {
             }
             continue;
         }
-        if lowered[at] matches { Branch } {
+        if lowered[at] matches { _::Branch } {
             for let b of branches(&node, checked) {
                 read_by_graph(read, &b.graph, &b.checked);
             }

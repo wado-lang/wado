@@ -178,7 +178,7 @@ impl CodeWriter {
     /// Emit a blank line.
     pub fn blank(&mut self) {
         let n = self.segs.len();
-        if n > 0 && self.segs[n - 1].kind matches { Close } && !self.segs[n - 1].blank_after && self.cur_is_empty() {
+        if n > 0 && self.segs[n - 1].kind matches { _::Close } && !self.segs[n - 1].blank_after && self.cur_is_empty() {
             self.segs[n - 1].blank_after = true;
             self.fresh_line = true;
             return;
@@ -268,8 +268,8 @@ impl CodeWriter {
         }
         seg.pre_end = self.buf.len();
         seg.form = match &call.form {
-            Discard => Form::Discard,
-            Return => Form::Return,
+            _::Discard => Form::Discard,
+            _::Return => Form::Return,
             Bind(prefix) => {
                 seg.bind_start = self.buf.len();
                 self.buf.push_str(prefix);
@@ -510,7 +510,7 @@ impl CodeWriter {
     pub fn references(&self) -> HashSet<String> {
         let mut found = HashSet::<String>::new();
         for let seg of &self.segs {
-            if seg.kind matches { Call } {
+            if seg.kind matches { _::Call } {
                 found.insert(self.slice(seg.text_start, seg.text_end).to_string());
             }
             for let mut i = seg.names_start; i < seg.names_end; i += 1 {
@@ -546,9 +546,9 @@ impl CodeWriter {
             if seg.depth != 0 {
                 continue;
             }
-            if seg.kind matches { FnOpen } {
+            if seg.kind matches { _::FnOpen } {
                 opened_at = Option::Some(i);
-            } else if seg.kind matches { Close } {
+            } else if seg.kind matches { _::Close } {
                 let Some(start) = opened_at else {
                     panic("CodeWriter: a function body closes that never opened");
                 };
@@ -575,7 +575,7 @@ impl CodeWriter {
         let mut changed = false;
         for let mut i = 0; i < self.segs.len(); i += 1 {
             let site = &self.segs[i];
-            if !site.kind matches { Call } {
+            if !site.kind matches { _::Call } {
                 continue;
             }
             let Some(k) = self.item_called(site, item_of) else {
@@ -598,7 +598,7 @@ impl CodeWriter {
         let mut body: List<i32> = [];
         for let mut i = item.start + 1; i < item.end; i += 1 {
             let seg = &self.segs[i];
-            if seg.kind matches { Text } {
+            if seg.kind matches { _::Text } {
                 names = self.join_names(names, [seg.names_start, seg.names_end]);
                 if seg.text_start == seg.text_end {
                     continue;
@@ -614,18 +614,18 @@ impl CodeWriter {
         }
         let first = &self.segs[body[0]];
         let call_forwards = if body.len() == 1 {
-            first.kind matches { Call } && first.form matches { Return };
+            first.kind matches { _::Call } && first.form matches { _::Return };
         } else {
-            if !self.segs[body[1]].kind matches { Return } {
+            if !self.segs[body[1]].kind matches { _::Return } {
                 return null;
             }
-            first.kind matches { Call } && first.form matches { Discard };
+            first.kind matches { _::Call } && first.form matches { _::Discard };
         };
         if call_forwards {
             let [start, end] = self.join_names(names, [first.names_start, first.names_end]);
             return Option::Some(Forward { call: Option::Some(*first), names_start: start, names_end: end });
         }
-        if body.len() == 2 && first.kind matches { Text } && first.lines == 1 && first.movable && !first.opaque {
+        if body.len() == 2 && first.kind matches { _::Text } && first.lines == 1 && first.movable && !first.opaque {
             return Option::Some(Forward {
                 call: null,
                 stmt_start: first.first_start,
@@ -654,7 +654,7 @@ impl CodeWriter {
             fw.names_start, fw.names_end,
         ]);
         let Some(inner) = &fw.call else {
-            if !passes_params || !site.form matches { Discard } {
+            if !passes_params || !site.form matches { _::Discard } {
                 return null;
             }
             return Option::Some(Seg {
@@ -673,7 +673,7 @@ impl CodeWriter {
         }
         // A body discarding the inner result forwards a value only where there is
         // none to discard.
-        if inner.form matches { Discard } && !site.form matches { Discard } {
+        if inner.form matches { _::Discard } && !site.form matches { _::Discard } {
             let Some(k) = self.item_called(inner, item_of) else {
                 return null;
             };
@@ -802,7 +802,7 @@ impl CodeWriter {
     ) {
         for let mut i = from; i <= to; i += 1 {
             let seg = &self.segs[i];
-            if seg.kind matches { Call } {
+            if seg.kind matches { _::Call } {
                 reach(self.slice(seg.text_start, seg.text_end), item_of, kept, queue);
             }
             for let mut n = seg.names_start; n < seg.names_end; n += 1 {
@@ -849,37 +849,37 @@ impl CodeWriter {
 
     fn print_seg(&self, seg: &Seg, out: &mut String) {
         match seg.kind {
-            Text => print_shifted(out, self.slice(seg.text_start, seg.text_end), seg.depth),
-            FnOpen => {
+            _::Text => print_shifted(out, self.slice(seg.text_start, seg.text_end), seg.depth),
+            _::FnOpen => {
                 push_indent(out, seg.depth);
                 out.push_str(self.slice(seg.text_start, seg.text_end));
                 out.push_str(" {\n");
             },
-            Close => {
+            _::Close => {
                 push_indent(out, seg.depth);
                 out.push_str(if seg.blank_after { "}\n\n" } else { "}\n" });
             },
-            Call => {
+            _::Call => {
                 print_lines(out, self.slice(seg.pre_start, seg.pre_end), seg.depth);
                 push_indent(out, seg.depth);
                 match seg.form {
-                    Discard => {
+                    _::Discard => {
                     },
-                    Return => out.push_str("return "),
-                    Bind => out.push_str(self.slice(seg.bind_start, seg.bind_end)),
+                    _::Return => out.push_str("return "),
+                    _::Bind => out.push_str(self.slice(seg.bind_start, seg.bind_end)),
                 }
                 out.push_str(self.slice(seg.text_start, seg.text_end));
                 out.push('(');
                 out.push_str(self.slice(seg.args_start, seg.args_end));
                 out.push_str(");\n");
             },
-            Line => {
+            _::Line => {
                 print_lines(out, self.slice(seg.pre_start, seg.pre_end), seg.depth);
                 push_indent(out, seg.depth);
                 out.push_str(self.slice(seg.text_start, seg.text_end));
                 out.push('\n');
             },
-            Return => {
+            _::Return => {
                 push_indent(out, seg.depth);
                 out.push_str("return;\n");
             },
@@ -1225,6 +1225,7 @@ pub struct FieldSpec {
     pub default: Option<String> = null,
     /// Attribute bodies, each written `#[body]` on its own line above the field.
     pub attrs: List<String> = [],
+    pub doc: Option<String> = null,
 }
 
 impl FieldSpec {
@@ -1251,11 +1252,24 @@ pub struct StructSpec {
     visibility: Vis,
     /// Generic type parameters, each rendered verbatim after the name.
     generics: List<String>,
+    head: DeclHead = DeclHead {},
 }
 
 impl StructSpec {
     pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> StructSpec {
         return StructSpec { name: name.to_string(), fields: [], visibility, generics: [] };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut StructSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut StructSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
     }
 
     /// Adds a type parameter, written as it renders (`"T: Default"`).
@@ -1295,6 +1309,7 @@ impl StructSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
         let head = `${self.visibility.prefix()}struct ${self.name}${generic_list(&self.generics)}`;
         if self.fields.is_empty() {
             w.line(`${head} {}`);
@@ -1302,11 +1317,12 @@ impl StructSpec {
         }
         w.begin(head);
         for let field of &self.fields {
+            write_doc(w, &field.doc);
             write_attrs(w, &field.attrs);
             let vis = if field.is_pub { "pub " } else { "" };
             match &field.default {
                 Some(d) => w.line(`${vis}${field.name}: ${field.type_str} = ${*d},`),
-                None => w.line(`${vis}${field.name}: ${field.type_str},`),
+                null => w.line(`${vis}${field.name}: ${field.type_str},`),
             }
         }
         w.end();
@@ -1316,17 +1332,37 @@ impl StructSpec {
 pub struct WadoVariantCase {
     pub name: String,
     pub payload: Option<String>,
+    pub attrs: List<String> = [],
+    pub doc: Option<String> = null,
 }
 
 pub struct VariantSpec {
     pub name: String,
     cases: List<WadoVariantCase>,
     visibility: Vis,
+    head: DeclHead = DeclHead {},
 }
 
 impl VariantSpec {
     pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> VariantSpec {
         return VariantSpec { name: name.to_string(), cases: [], visibility };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut VariantSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut VariantSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    pub fn add_case_spec(&mut self, case: WadoVariantCase) -> &mut VariantSpec {
+        self.cases.push(case);
+        return self;
     }
 
     pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec {
@@ -1343,8 +1379,11 @@ impl VariantSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
         w.begin(`${self.visibility.prefix()}variant ${self.name}`);
         for let case of &self.cases {
+            write_doc(w, &case.doc);
+            write_attrs(w, &case.attrs);
             if let Some(p) = &case.payload {
                 w.line(`${case.name}(${*p}),`);
             } else {
@@ -1359,6 +1398,7 @@ pub struct EnumMember {
     pub name: String,
     pub trailing_comment: Option<String>,
     pub attrs: List<String> = [],
+    pub doc: Option<String> = null,
 }
 
 fn write_attrs(w: &mut CodeWriter, attrs: &List<String>) {
@@ -1367,15 +1407,61 @@ fn write_attrs(w: &mut CodeWriter, attrs: &List<String>) {
     }
 }
 
+/// Writes `doc` as `///` lines, one per line of its text.
+fn write_doc(w: &mut CodeWriter, doc: &Option<String>) {
+    let Some(text) = doc else {
+        return;
+    };
+    for let line of text.lines() {
+        if line.is_empty() {
+            w.line("///");
+        } else {
+            w.line(`/// ${line}`);
+        }
+    }
+}
+
+/// What a declaration writes above its head: its doc comment, then its
+/// attributes.
+struct DeclHead {
+    doc: Option<String> = null,
+    attrs: List<String> = [],
+}
+
+impl DeclHead {
+    fn emit(&self, w: &mut CodeWriter) {
+        write_doc(w, &self.doc);
+        write_attrs(w, &self.attrs);
+    }
+}
+
 pub struct EnumSpec {
     pub name: String,
     members: List<EnumMember>,
     visibility: Vis,
+    head: DeclHead = DeclHead {},
 }
 
 impl EnumSpec {
     pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> EnumSpec {
         return EnumSpec { name: name.to_string(), members: [], visibility };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut EnumSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut EnumSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    pub fn add_member_spec(&mut self, member: EnumMember) -> &mut EnumSpec {
+        self.members.push(member);
+        return self;
     }
 
     pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut EnumSpec {
@@ -1397,8 +1483,10 @@ impl EnumSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
         w.begin(`${self.visibility.prefix()}enum ${self.name}`);
         for let member of &self.members {
+            write_doc(w, &member.doc);
             write_attrs(w, &member.attrs);
             if let Some(c) = &member.trailing_comment {
                 w.line(`${member.name},  // ${*c}`);
@@ -1407,6 +1495,74 @@ impl EnumSpec {
             }
         }
         w.end();
+    }
+}
+
+pub struct FlagsSpec {
+    pub name: String,
+    members: List<String>,
+    visibility: Vis,
+    head: DeclHead = DeclHead {},
+}
+
+impl FlagsSpec {
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> FlagsSpec {
+        return FlagsSpec { name: name.to_string(), members: [], visibility };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut FlagsSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    /// Adds an attribute, written `#[body]` above the declaration.
+    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut FlagsSpec {
+        self.head.attrs.push(body.to_string());
+        return self;
+    }
+
+    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut FlagsSpec {
+        self.members.push(name.to_string());
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        w.begin(`${self.visibility.prefix()}flags ${self.name}`);
+        for let member of &self.members {
+            w.line(`${member},`);
+        }
+        w.end();
+    }
+}
+
+/// A newtype, `type Name = Base;`.
+pub struct NewtypeSpec {
+    pub name: String,
+    base: String,
+    visibility: Vis,
+    head: DeclHead = DeclHead {},
+}
+
+impl NewtypeSpec {
+    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, base: S1, visibility: Vis = Vis::Private) -> NewtypeSpec {
+        return NewtypeSpec {
+            name: name.to_string(),
+            base: base.to_string(),
+            visibility,
+        };
+    }
+
+    /// Sets the doc comment, written as `///` lines above the declaration.
+    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut NewtypeSpec {
+        self.head.doc = Option::Some(doc.to_string());
+        return self;
+    }
+
+    pub fn emit(&self, w: &mut CodeWriter) {
+        self.head.emit(w);
+        w.line(`${self.visibility.prefix()}type ${self.name} = ${self.base};`);
     }
 }
 
@@ -1480,7 +1636,7 @@ impl FnSpec {
 
     fn returns_unit(&self) -> bool {
         return match &self.return_type {
-            None => true,
+            null => true,
             Some(t) => *t == "()",
         };
     }

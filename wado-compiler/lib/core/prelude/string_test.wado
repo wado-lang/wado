@@ -956,7 +956,7 @@ test "pop multibyte" {
 
 test "pop empty" {
     let mut s = "";
-    assert s.pop() matches { None };
+    assert s.pop() matches { null };
 }
 
 test "clear" {
@@ -1023,7 +1023,7 @@ test "ends_with" {
 test "find" {
     assert "hello world".find("world") matches { Some(idx) && idx == 6 };
     assert "hello world".find("hello") matches { Some(idx) && idx == 0 };
-    assert "hello world".find("xyz") matches { None };
+    assert "hello world".find("xyz") matches { null };
     assert "abcabc".find("bc") matches { Some(idx) && idx == 1 };
 }
 
@@ -1036,20 +1036,20 @@ test "find reaches a needle at every offset of an unrolled run, and in a view" {
             let text = `${"-".repeat(at)}ab${"-".repeat(len - at)}`;
             assert text.find("ab") matches { Some(i) && i == at };
             assert text.find("b") matches { Some(i) && i == at + 1 };
-            assert text.find("ax") matches { None };
+            assert text.find("ax") matches { null };
             let padded = `ab${text}`;
             let view = padded.as_str_slice().slice(2, padded.len());
             assert view.find("ab") matches { Some(i) && i == at };
         }
     }
     assert "aaab".find("aab") matches { Some(i) && i == 1 };
-    assert "ab".find("abc") matches { None };
-    assert "".find("a") matches { None };
+    assert "ab".find("abc") matches { null };
+    assert "".find("a") matches { null };
 }
 
 test "rfind" {
     assert "abcabc".rfind("bc") matches { Some(idx) && idx == 4 };
-    assert "hello".rfind("xyz") matches { None };
+    assert "hello".rfind("xyz") matches { null };
     assert "hello".rfind("hello") matches { Some(idx) && idx == 0 };
 }
 
@@ -1061,7 +1061,7 @@ test "contains_char" {
 
 test "find_char" {
     assert "hello".find_char(|c: char| c == 'l') matches { Some(idx) && idx == 2 };
-    assert "hello".find_char(|c: char| c == 'x') matches { None };
+    assert "hello".find_char(|c: char| c == 'x') matches { null };
 }
 
 test "truncate" {
@@ -1454,14 +1454,14 @@ test "the two UTF-8 validity tables agree" {
 
 test "strip_suffix removes a matching suffix" {
     assert "hello.md".strip_suffix(".md") matches { Some(s) && s == "hello" };
-    assert "hello.md".strip_suffix(".txt") matches { None };
-    assert "".strip_suffix(".md") matches { None };
+    assert "hello.md".strip_suffix(".txt") matches { null };
+    assert "".strip_suffix(".md") matches { null };
     assert "a".strip_suffix("a") matches { Some(s) && s == "" };
 }
 
 test "strip_prefix removes a matching prefix" {
     assert "---json".strip_prefix("---") matches { Some(s) && s == "json" };
-    assert "abc".strip_prefix("x") matches { None };
+    assert "abc".strip_prefix("x") matches { null };
     assert "abc".strip_prefix("abc") matches { Some(s) && s == "" };
 }
 
@@ -1484,8 +1484,8 @@ test "split_once cuts at the first separator" {
     assert "a=b=c".split_once("=") matches { Some(p) && p.0 == "a" && p.1 == "b=c" };
     assert "=v".split_once("=") matches { Some(p) && p.0 == "" && p.1 == "v" };
     assert "k=".split_once("=") matches { Some(p) && p.0 == "k" && p.1 == "" };
-    assert "no separator".split_once("=") matches { None };
-    assert "".split_once("=") matches { None };
+    assert "no separator".split_once("=") matches { null };
+    assert "".split_once("=") matches { null };
     // A separator longer than one byte, and one that is not ASCII.
     assert "a::b::c".split_once("::") matches { Some(p) && p.0 == "a" && p.1 == "b::c" };
     assert "α→β".split_once("→") matches { Some(p) && p.0 == "α" && p.1 == "β" };
@@ -1496,8 +1496,8 @@ test "rsplit_once cuts at the last separator" {
     assert "key=value".rsplit_once("=") matches { Some(p) && p.0 == "key" && p.1 == "value" };
     assert "=v".rsplit_once("=") matches { Some(p) && p.0 == "" && p.1 == "v" };
     assert "k=".rsplit_once("=") matches { Some(p) && p.0 == "k" && p.1 == "" };
-    assert "no separator".rsplit_once("=") matches { None };
-    assert "".rsplit_once("=") matches { None };
+    assert "no separator".rsplit_once("=") matches { null };
+    assert "".rsplit_once("=") matches { null };
     assert "a::b::c".rsplit_once("::") matches { Some(p) && p.0 == "a::b" && p.1 == "c" };
 }
 
@@ -1569,7 +1569,7 @@ test "a whole buffer ending mid-character is malformed, not pending" {
 test "a String compares its bytes against any text with cmp_str" {
     let s: String = "beta";
     let text = "xbetax";
-    assert s.cmp_str(text.as_str_slice().slice(1, 5)) matches { Equal };
-    assert s.cmp_str("alpha") matches { Greater };
-    assert s.cmp_str("betamax") matches { Less };
+    assert s.cmp_str(text.as_str_slice().slice(1, 5)) matches { _::Equal };
+    assert s.cmp_str("alpha") matches { _::Greater };
+    assert s.cmp_str("betamax") matches { _::Less };
 }

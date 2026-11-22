@@ -2486,7 +2486,7 @@ impl<'a> Reify<'a> {
                 id,
                 name,
                 span: binding_span,
-            } if self.ann_local_type(*id).is_some() => {
+            } => {
                 // `let mut x = …` carries the mutability on `LetStmt`,
                 // not on the `Ident` pattern.
                 let is_mut =
@@ -2509,13 +2509,11 @@ impl<'a> Reify<'a> {
                 // `let _ = expr;` discards. Lower as an Expr stmt.
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            ast::Pattern::Ident { .. }
-            | ast::Pattern::MutIdent { .. }
-            | ast::Pattern::Tuple(_, _)
+            ast::Pattern::Tuple(_, _)
             | ast::Pattern::Struct { .. }
             | ast::Pattern::Variant { .. } => {
                 // Destructuring `let [a, b] = …;` / `let Point { x, y }
-                // = …;` / `let A(x) = …;` or `let A = …;` of a one-case
+                // = …;` / `let A(x) = …;` or `let _::A = …;` of a one-case
                 // variant. The TIR uses
                 // `TirStmtKind::LetDestructure` rather than `Let`. The
                 // shared `reify_pattern` adds the sub-pattern bindings
@@ -2533,7 +2531,10 @@ impl<'a> Reify<'a> {
             ast::Pattern::Typed { .. } => {
                 unreachable!("the parser keeps a `let`'s top-level ascription in `LetStmt::ty`")
             }
-            ast::Pattern::Literal(_) | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
+            ast::Pattern::Literal(_)
+            | ast::Pattern::Or(_)
+            | ast::Pattern::Range { .. }
+            | ast::Pattern::Equal { .. } => {
                 // Annotate rejects a refutable `let` pattern.
                 panic!(
                     "reify_let: refutable pattern {:?} in let binding (annotate should have rejected)",
@@ -3822,7 +3823,7 @@ impl<'a> Reify<'a> {
                             id,
                             name,
                             span: binding_span,
-                        } if this.ann_local_type(*id).is_some() => {
+                        } => {
                             let is_mut = for_of.is_mut
                                 || matches!(&for_of.binding, ast::Pattern::MutIdent { .. });
                             let local_index = ctx.add_local_at(
@@ -5661,7 +5662,7 @@ impl<'a> Reify<'a> {
     }
 
     /// Reify the `?` postfix operator into the `Match` its operand type calls
-    /// for: `match expr { Some(v) => v, None => return null }` for `Option<T>`,
+    /// for: `match expr { Some(v) => v, null => return null }` for `Option<T>`,
     /// `match expr { Ok(v) => v, Err(e) => return Err(From::from(e)) }` for
     /// `Result<T, E>`. Annotate has already validated both the operand and the
     /// function's return type.
@@ -6181,21 +6182,10 @@ impl<'a> Reify<'a> {
             let table = self.tysys.type_table.borrow();
             table.representation_head(table.peel_refs(t))
         });
-        let params: Vec<(String, TypeId)> = closure
-            .params
-            .iter()
-            .map(|p| {
-                let type_id = self.ann_local_type(p.id).unwrap_or(TypeTable::UNKNOWN);
-                closure_ctx.add_local_at(
-                    p.name.clone(),
-                    type_id,
-                    p.is_mut,
-                    Some(p.id),
-                    p.name_span,
-                );
-                (p.name.clone(), type_id)
-            })
-            .collect();
+        for p in &closure.params {
+            let type_id = self.ann_local_type(p.id).unwrap_or(TypeTable::UNKNOWN);
+            closure_ctx.add_local_at(p.name.clone(), type_id, p.is_mut, Some(p.id), p.name_span);
+        }
 
         // Step 4: reify the body in the closure scope.
         // An explicit `|params| -> Type ...` annotation is the authoritative
@@ -6248,20 +6238,15 @@ impl<'a> Reify<'a> {
 
         let body = self.probe_expr(ProbeSite::Around, closure.body.id(), body);
 
-        let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
+        let mut params = closure_ctx.locals;
+        let body_locals = params.split_off(closure.params.len());
+        let param_types: Vec<TypeId> = params.iter().map(|p| p.type_id).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
             cap_info.is_mutating,
             param_types,
             cap_info.return_type,
             Vec::new(),
         );
-
-        let mut all_locals = closure_ctx.locals;
-        let body_locals = if params.len() <= all_locals.len() {
-            all_locals.split_off(params.len())
-        } else {
-            Vec::new()
-        };
         let address_taken_locals = closure_ctx.address_taken_locals;
 
         let closure_tir = TirExpr::new(
@@ -8987,7 +8972,7 @@ impl<'a> Reify<'a> {
     /// Discriminant index of `case_name` when `scrutinee_type` is an enum that
     /// declares it. Drives lowering an enum-case pattern to `TirPattern::Enum`.
     fn scrutinee_enum_case_index(&self, scrutinee_type: TypeId, case_name: &str) -> Option<u32> {
-        // Peel references for match ergonomics: `match &c { Red => … }`
+        // Peel references for match ergonomics: `match &c { _::Red => … }`
         // presents the scrutinee as `&Color`.
         let peeled = self
             .tysys
@@ -9026,10 +9011,9 @@ impl<'a> Reify<'a> {
             .is_some_and(|info| info.case_named(case_name).is_some())
     }
 
-    /// Lower a nullary variant-case pattern (e.g. `None`) to
+    /// Lower a nullary variant-case pattern (e.g. `null`) to
     /// `TirPattern::Variant` with no bindings, resolving the case's
-    /// payload type from the scrutinee's variant decl. Shared by the
-    /// bare-ident and qualified-`Variant` arms.
+    /// payload type from the scrutinee's variant decl.
     fn reify_nullary_variant_case(
         &mut self,
         scrutinee_type: TypeId,
@@ -9053,7 +9037,7 @@ impl<'a> Reify<'a> {
     }
 
     /// A read of the immutable global `name`, defined here or imported. A
-    /// mutable global is no constant, so its name binds in a pattern.
+    /// mutable global is no constant, so no pattern matches against it.
     fn immutable_global_expr(&self, name: &str, span: Span) -> Option<TirExpr> {
         let (module_source, name, ty) = match self.sem.decls.current_module_globals.get(name) {
             Some(&(ty, false)) => (self.current_module_source.clone(), name.to_string(), ty),
@@ -9142,36 +9126,6 @@ impl<'a> Reify<'a> {
         match pattern {
             ast::Pattern::Wildcard => TirPattern::Wildcard,
             ast::Pattern::Ident { id, name, span } => {
-                // A bare ident in a pattern is ambiguous: a nullary
-                // enum/variant case (`None`, `Red`), an immutable global
-                // constant, or a fresh binding. A name annotate bound is a
-                // binding; otherwise disambiguate in the same order as
-                // `Elaborator::resolve_if_pattern_inner`.
-                if self.ann_local_type(*id).is_none() {
-                    if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
-                        return TirPattern::Enum {
-                            enum_type: self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .scrutinee_structure_head(scrutinee_type),
-                            case_name: name.clone(),
-                            case_index,
-                        };
-                    }
-                    if self.scrutinee_has_variant_case(scrutinee_type, name) {
-                        return self.reify_nullary_variant_case(scrutinee_type, name);
-                    }
-                    if let Some(constant) = self.reify_pattern_constant(pattern, ctx) {
-                        let const_pat = self.constant_value_pattern(constant, scrutinee_type);
-                        return self.compare_constant_by_eq(
-                            pattern,
-                            const_pat,
-                            scrutinee_type,
-                            ctx,
-                        );
-                    }
-                }
                 let local_index = ctx.add_local_at(
                     name.clone(),
                     scrutinee_type,
@@ -9185,6 +9139,16 @@ impl<'a> Reify<'a> {
                     type_id: scrutinee_type,
                 }
             }
+            ast::Pattern::Equal { operand, .. } => match &**operand {
+                ast::Pattern::Ident { .. } => {
+                    let constant = self
+                        .reify_pattern_constant(operand, ctx)
+                        .expect("annotate rejects an `==` naming no constant");
+                    let const_pat = self.constant_value_pattern(constant, scrutinee_type);
+                    self.compare_constant_by_eq(pattern, const_pat, scrutinee_type, ctx)
+                }
+                _ => self.reify_pattern(operand, scrutinee_type, site, ctx),
+            },
             ast::Pattern::MutIdent { id, name, span } => {
                 let local_index = ctx.add_local_at(
                     name.clone(),

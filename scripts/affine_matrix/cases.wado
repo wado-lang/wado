@@ -126,15 +126,15 @@ impl Value {
     fn literal(&self, index: i32) -> String {
         let tok = `Tok { id: ${index} }`;
         return match self {
-            Tok => tok,
-            Shell | Guard => `${self.name()} { tok: ${tok} }`,
+            _::Tok => tok,
+            _::Shell | _::Guard => `${self.name()} { tok: ${tok} }`,
         };
     }
 
     /// What dropping the value made by `literal(index)` prints.
     fn dropped(&self, index: i32) -> String {
         let tok = `drop ${index}\n`;
-        return if self matches { Guard } { `guard ${index}\n${tok}` } else { tok };
+        return if self matches { _::Guard } { `guard ${index}\n${tok}` } else { tok };
     }
 }
 
@@ -144,28 +144,28 @@ impl Producer {
     }
 
     fn emit(&self, index: i32, value: Value, w: &mut CodeWriter) {
-        assert self matches { Literal } || value matches { Tok }, "only a literal makes a type other than `Tok`";
+        assert self matches { _::Literal } || value matches { _::Tok }, "only a literal makes a type other than `Tok`";
         let tok = value.literal(index);
         match self {
-            Literal => w.line(`let t = ${tok};`),
-            Returned => w.line(`let t = make(${index});`),
-            Param => {
+            _::Literal => w.line(`let t = ${tok};`),
+            _::Returned => w.line(`let t = make(${index});`),
+            _::Param => {
             },
-            TupleElement => {
+            _::TupleElement => {
                 w.line(`let pair = [${tok}, 0];`);
                 w.line("let t = pair.0;");
             },
-            Field => {
+            _::Field => {
                 w.line(`let h = Holder { tok: ${tok}, n: 0 };`);
                 w.line("let t = h.tok;");
             },
-            MatchArm => {
+            _::MatchArm => {
                 w.begin(`let t = match Option::Some(${tok})`);
                 w.line("Some(v) => v,");
                 w.line("None => unreachable(),");
                 w.end_with(";");
             },
-            LetElse => {
+            _::LetElse => {
                 w.begin(`let Some(t) = Option::Some(${tok}) else`);
                 w.line("unreachable();");
                 w.end_with(";");
@@ -185,31 +185,31 @@ impl Consumer {
         let ty = value.name();
         let helper = value.helper();
         return match self {
-            Call => `eat_${helper}(t);`,
-            Drop => "builtin::drop(t);",
-            Bind => "let u = t;",
-            Tuple => "let p = [t, 1];",
-            Wrap => "let o = Option::Some(t);",
-            Cast => `let w = t as Renamed${ty};`,
-            Borrow => `look_${helper}(&t);`,
-            GenericCall => "keep(t);",
-            GenericPass => "let u = pass(t);",
-            Push => `let mut xs: List<${ty}> = []; xs.push(t);`,
-            Take => "let mut o = Option::Some(t); let u = o.take();",
-            ForOf => `let xs: List<${ty}> = [t]; for let x of xs {}`,
-            Handle => "with Ask => t do { let _ = Ask::ask(); }",
-            Forward => `let mut sink = Sink { n: 0 }; with Sink${ty} => &mut sink do { let _ = Sink${ty}::put(t); }`,
+            _::Call => `eat_${helper}(t);`,
+            _::Drop => "builtin::drop(t);",
+            _::Bind => "let u = t;",
+            _::Tuple => "let p = [t, 1];",
+            _::Wrap => "let o = Option::Some(t);",
+            _::Cast => `let w = t as Renamed${ty};`,
+            _::Borrow => `look_${helper}(&t);`,
+            _::GenericCall => "keep(t);",
+            _::GenericPass => "let u = pass(t);",
+            _::Push => `let mut xs: List<${ty}> = []; xs.push(t);`,
+            _::Take => "let mut o = Option::Some(t); let u = o.take();",
+            _::ForOf => `let xs: List<${ty}> = [t]; for let x of xs {}`,
+            _::Handle => "with Ask => t do { let _ = Ask::ask(); }",
+            _::Forward => `let mut sink = Sink { n: 0 }; with Sink${ty} => &mut sink do { let _ = Sink${ty}::put(t); }`,
         };
     }
 
     /// Whether the value is gone once the statement ends, rather than held by
     /// a local of the block the statement runs in.
     fn drops_in_statement(&self) -> bool {
-        return self matches { Call | Drop | GenericCall | ForOf | Handle | Forward };
+        return self matches { _::Call | _::Drop | _::GenericCall | _::ForOf | _::Handle | _::Forward };
     }
 
     pub fn moves(&self) -> bool {
-        return !self matches { Borrow };
+        return !self matches { _::Borrow };
     }
 }
 
@@ -220,13 +220,13 @@ impl Context {
 
     /// Whether `flag` decides if the consumer runs.
     pub fn is_conditional(&self) -> bool {
-        return self matches { If | Match | While | IfReturn };
+        return self matches { _::If | _::Match | _::While | _::IfReturn };
     }
 
     /// Whether the consumer runs in a block of its own, which ends before the
     /// marker after it.
     fn opens_block(&self) -> bool {
-        return !self matches { Straight };
+        return !self matches { _::Straight };
     }
 }
 
@@ -317,7 +317,7 @@ impl Case {
             out.push_str(&self.value.dropped(index));
         }
         // The `return` leaves the body before the marker after the consumer.
-        if !(self.context matches { IfReturn } && self.runs_consumer()) {
+        if !(self.context matches { _::IfReturn } && self.runs_consumer()) {
             out.push_str("after\n");
         }
         out.push_str(&self.body_drops(index));
@@ -329,46 +329,46 @@ impl Case {
     /// declared after both `t` and `s`.
     fn body_drops(&self, index: i32) -> String {
         let t = if self.drops_at_consumer() { "" } else { self.value.dropped(index) };
-        let s = if self.companion matches { None } { "" } else { `drop ${companion_id(index)}\n` };
+        let s = if self.companion matches { _::None } { "" } else { `drop ${companion_id(index)}\n` };
         let rebound = self.runs_consumer() && self.consumer.moves();
-        return if rebound || self.companion matches { Before } { `${t}${s}` } else { `${s}${t}` };
+        return if rebound || self.companion matches { _::Before } { `${t}${s}` } else { `${s}${t}` };
     }
 
     /// Whether `t` may be read after the consumer: no path reaching that read
     /// moved it.
     pub fn readable_after(&self) -> bool {
-        return !self.consumer.moves() || self.context matches { IfReturn };
+        return !self.consumer.moves() || self.context matches { _::IfReturn };
     }
 
     fn emit(&self, index: i32, w: &mut CodeWriter, probe: Probe) {
         let mut f = FnSpec::new(`case_${index}`);
         f.add_param("flag", "bool");
-        if self.producer matches { Param } {
+        if self.producer matches { _::Param } {
             f.add_param("t", "Tok");
         }
         f.emit_begin(w);
         w.line(`log_stdout("case ${index}");`);
         let companion = `let s = Tok { id: ${companion_id(index)} };`;
-        if self.companion matches { Before } {
+        if self.companion matches { _::Before } {
             w.line(&companion);
         }
         self.producer.emit(index, self.value, w);
-        if self.companion matches { After } {
+        if self.companion matches { _::After } {
             w.line(&companion);
         }
         w.line("log_stdout(\"before\");");
         let statement = self.consumer.statement(self.value);
-        if probe matches { InClosure } {
+        if probe matches { _::InClosure } {
             w.begin("let f = ||");
         }
         match self.context {
-            Straight => w.line(&statement),
-            If => {
+            _::Straight => w.line(&statement),
+            _::If => {
                 w.begin("if flag");
                 w.line(&statement);
                 w.end();
             },
-            Match => {
+            _::Match => {
                 w.begin("match flag");
                 w.begin("true =>");
                 w.line(&statement);
@@ -376,36 +376,36 @@ impl Case {
                 w.line("false => {},");
                 w.end();
             },
-            LoopOnce => {
+            _::LoopOnce => {
                 w.begin("loop");
                 w.line(&statement);
                 w.line("break;");
                 w.end();
             },
-            Labeled => {
+            _::Labeled => {
                 w.begin("blk:");
                 w.line(&statement);
                 w.end();
             },
-            While => {
+            _::While => {
                 w.begin("while flag");
                 w.line(&statement);
                 w.line("break;");
                 w.end();
             },
-            IfReturn => {
+            _::IfReturn => {
                 w.begin("if flag");
                 w.line(&statement);
                 w.line("return;");
                 w.end();
             },
         }
-        if probe matches { InClosure } {
+        if probe matches { _::InClosure } {
             w.end_with(";");
             w.line("f();");
         }
         w.line("log_stdout(\"after\");");
-        if probe matches { ReadAfter } {
+        if probe matches { _::ReadAfter } {
             w.line(`look_${self.value.helper()}(&t);`);
         }
         w.end();
@@ -523,7 +523,7 @@ fn emit_program(cases: &List<Case>, probe: Probe) -> String {
     w.blank();
     w.begin("export fn run()");
     for let i of 0..<cases.len() {
-        let tok = if cases[i].producer matches { Param } { `, Tok { id: ${i} }` } else { "" };
+        let tok = if cases[i].producer matches { _::Param } { `, Tok { id: ${i} }` } else { "" };
         w.line(`case_${i}(builtin::black_box(${cases[i].flag})${tok});`);
     }
     w.end();

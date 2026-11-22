@@ -5,7 +5,7 @@ use { Request, Response, ErrorCode, Fields, Headers, Method, Trailers } from "wa
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Request, Response) {
     let method = request.get_method();
-    assert method matches { Put };
+    assert method matches { _::Put };
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Headers::new();

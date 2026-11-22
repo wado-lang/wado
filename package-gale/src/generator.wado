@@ -163,7 +163,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with Stream
     for let d of &generated.diagnostics {
         if let Some(level) = diagnostic_level(&d.kind) {
             let message = `${d.owner.label()}: ${d.message}`;
-            if level matches { Error } {
+            if level matches { _::Error } {
                 refusals.push(`gale: ${message}`);
             } else {
                 event(level, message, NoFields {}, "gale");

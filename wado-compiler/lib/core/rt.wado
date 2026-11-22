@@ -330,7 +330,7 @@ internal fn handle_identical(a: Option<ExternObject>, b: Option<ExternObject>) -
     if let Some(a) = a && let Some(b) = b {
         return handle_eq(a, b);
     }
-    return a matches { None } && b matches { None };
+    return a matches { null } && b matches { null };
 }
 
 /// The extern handles that are in linear memory right now, each at the index
@@ -402,9 +402,9 @@ internal fn cm_future_write_result(packed: i32) -> FutureWriteResult {
         return FutureWriteResult::Pending;
     }
     return match copy_result(packed) {
-        Completed => FutureWriteResult::Completed,
-        Dropped => FutureWriteResult::Dropped,
-        Cancelled => unreachable(),
+        _::Completed => FutureWriteResult::Completed,
+        _::Dropped => FutureWriteResult::Dropped,
+        _::Cancelled => unreachable(),
     };
 }
 

@@ -117,8 +117,8 @@ fn match_len(insts: &List<Inst>) -> Option<i32> {
     for let back of 0..<insts.len() {
         let pc = insts.len() - 1 - back;
         to_match[pc] = match insts[pc] {
-            Match => 0,
-            Fail => no_match,
+            _::Match => 0,
+            _::Fail => no_match,
             Byte(_) => {
                 let rest = to_match[pc + 1];
                 if rest >= 0 {
@@ -150,8 +150,8 @@ struct Compiler {
 /// Whether `node` can match without consuming a character.
 fn can_match_empty(node: &Node) -> bool {
     return match *node {
-        Char(_) | Any | Set(_) => false,
-        Start | End | WordBoundary | NotWordBoundary => true,
+        Char(_) | _::Any | Set(_) => false,
+        _::Start | _::End | _::WordBoundary | _::NotWordBoundary => true,
         Group(g) => can_match_empty(&g.body),
         Modified(m) => can_match_empty(&m.body),
         Repeat(r) => r.min == 0 || can_match_empty(&r.body),
@@ -193,7 +193,7 @@ fn group_span(node: &Node) -> Option<[i32, i32]> {
                     i32::min(a, lo),
                     i32::max(b, hi),
                 ]),
-                None => Some([lo, hi]),
+                null => Some([lo, hi]),
             };
         }
     };
@@ -249,7 +249,7 @@ impl Compiler {
             Char(c) => self.chars([
                 [c, c],
             ])?,
-            Any => {
+            _::Any => {
                 if self.flags & Flag::DotAll != Flag::none() {
                     self.chars([
                         [0, MAX_CODE_POINT],
@@ -258,19 +258,19 @@ impl Compiler {
                     self.chars(complement(&line_terminators()))?;
                 }
             },
-            Start => {
+            _::Start => {
                 let look = if self.multiline() { Look::StartLine } else { Look::StartText };
                 self.push(Inst::Assert(look))?;
             },
-            End => {
+            _::End => {
                 let look = if self.multiline() { Look::EndLine } else { Look::EndText };
                 self.push(Inst::Assert(look))?;
             },
-            WordBoundary => {
+            _::WordBoundary => {
                 let look = if self.ignore_case() { Look::FoldedWordBoundary } else { Look::WordBoundary };
                 self.push(Inst::Assert(look))?;
             },
-            NotWordBoundary => {
+            _::NotWordBoundary => {
                 let look = if self.ignore_case() { Look::FoldedNotWordBoundary } else { Look::NotWordBoundary };
                 self.push(Inst::Assert(look))?;
             },

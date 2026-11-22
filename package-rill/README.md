@@ -19,7 +19,7 @@ with &mut dom do {
     let mut button: Option<Element> = null;
     let mut dispose = scope(|| {
         let view = element("button")
-            .bind_text(|| `clicked ${count.get()} times`)
+            .children([|| `clicked ${count.get()} times`])
             .on("click", |_event: Event| count.set(count.get() + 1));
         button = Option::Some(build(view));
     });
@@ -33,15 +33,68 @@ with &mut dom do {
 };
 ```
 
+## Building a page
+
+A `View` is an element as it is to be built: `element("li")` makes a new one,
+and `View::of(node)` adopts one already in the page. Its methods chain, and
+each adds a step that `build` or `hydrate` runs later, in document order.
+
+- `attr(name, value)` sets an attribute. A `String` sets it once. A closure
+  keeps it current: one answering `String` sets it, and one answering
+  `Option<String>` takes it out while it answers `None`.
+- `children([...])` adds children, in order. Each is a `View`, a `String` for
+  fixed text, a closure answering `String` for text kept current, or one of
+  the control-flow children below.
+- `on(type, handler)` listens for an event.
+- `node_ref(r)` records the element in `r`, made with `node_ref()`. `r.get()`
+  reads it once the view is built.
+
+The control-flow children stand among the others, where they are written:
+
+- `show(when, render)` holds the subtree `render` makes while `when` answers
+  `true`.
+- `switch(key, render)` holds the subtree `render` makes for the current key,
+  and makes another when the key changes.
+- `each(items, render)` holds a row per item, keyed by equality. A reorder
+  leaves the longest run of rows already in order where they are, and moves
+  the rest.
+
+A control-flow child puts back what it holds only when it updates: `show` when
+`when` changes its answer, `switch` when the key changes, and `each` each time
+its items run, an equal list included. Until then, a subtree that other code
+removed stays removed, so a `show` or `switch` run that changes nothing checks
+no placement.
+
+```wado
+use { Signal, each, element, show, signal } from "wado-lang:rill";
+
+let items: Signal<List<String>> = signal(["a", "b"]);
+let list = element("ul").children([
+    element("li").children(["first"]),
+    each(|| items.get(), |item: String| element("li").children([item])),
+    show(|| items.get().is_empty(), || element("li").children(["Nothing yet."])),
+]);
+```
+
+### Without `dyn`
+
+Wado has no `dyn`, so `children` cannot take a list of mixed values. It takes a
+pack instead: `children<..C: IntoChild>(kids: [..C])` sees each element at its
+own type, and the loop over the pack unrolls at compile time. `IntoChild` turns
+each into a `Child`, which holds one build step of a single closure type. The
+steps go into a `List`, and from there every child is alike.
+
+The closures are matched by their type, the effects they perform included:
+`IntoChild` and `IntoAttr` have impls for `fn` and `fn mut` closures that
+perform `Track`. A closure that reads no signal performs nothing and matches
+no impl, so a value that never changes is passed as a `String`.
+
 ## Layout
 
 - `src/signals.wado` — `signal`, `memo`, `observe`, `scope` and `flush`.
-- `src/view.wado` — `View`, an element as it is to be built, new from `element`
-  or adopted with `View::of`. `text`, `attribute`, `child` and `children` set
-  it once, `bind_text`, `bind_attribute`, the keyed list `each` and the
-  conditional `show` and `switch` keep it current, `on` listens on it, and
-  `with_node` hands it over. `build` builds a view; `hydrate` builds one on the
-  served HTML, as [`static-generation.md`](./static-generation.md) describes.
+- `src/view.wado` — `View` and its children, `build`, and `hydrate`, which
+  builds a view on the served HTML as
+  [`static-generation.md`](./static-generation.md) describes.
 - `example/todo/` — a to-do list, published as a static site. `site.wado`
   renders its initial page and bundles `src/main.wado`, the browser program
   that hydrates it; `mise run rill-todo-site` builds the site into
@@ -70,9 +123,10 @@ with &mut dom do {
   subscriptions when it runs again or is disposed of. So a dependency it no
   longer reads wakes nothing. A memo is disposed of with the computation that
   made it.
-- A binding writes the one place it owns, and takes it out when disposed of:
-  `bind_text` a text node it adds, and `each` its rows. A reorder leaves the
-  longest run of rows already in order where they are, and moves the rest.
+- A binding writes the one place it owns, and takes it out when disposed of: a
+  text child the text node it adds, and `show`, `switch` and `each` what they
+  hold. Each of the three keeps an empty text node after what it holds, to
+  know where that ends among its siblings.
 - `on` flushes when the listener returns, so the page is consistent again
   before the browser gets control back. Any other code that writes, a listener
   added with `add_event_listener` directly included, calls `flush` itself.

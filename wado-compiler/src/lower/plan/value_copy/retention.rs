@@ -28,7 +28,8 @@ use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
     RetainInto, RetainSpec, ReturnConvention, StructDef, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -1751,13 +1752,13 @@ impl StoresWalker<'_> {
         &mut self,
         span: Span,
         callee_type: TypeId,
-        params: &[(String, TypeId)],
+        params: &[TirLocal],
         body: &TirExpr,
     ) {
         let positions: Vec<(u32, TypeId)> = params
             .iter()
             .enumerate()
-            .map(|(i, (_, type_id))| (u32::try_from(i).unwrap(), *type_id))
+            .map(|(i, param)| (u32::try_from(i).unwrap(), param.type_id))
             .collect();
         let functor_params: FunctorParams = positions
             .iter()

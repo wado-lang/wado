@@ -42,9 +42,9 @@ export fn run() {
     assert one >= one;
 
     // `cmp` answers as the operators do.
-    assert neg_nan.cmp(&pos_inf) matches { Greater };
-    assert pos_nan.cmp(&neg_nan) matches { Equal };
-    assert neg_zero.cmp(&pos_zero) matches { Equal };
+    assert neg_nan.cmp(&pos_inf) matches { _::Greater };
+    assert pos_nan.cmp(&neg_nan) matches { _::Equal };
+    assert neg_zero.cmp(&pos_zero) matches { _::Equal };
 
     // A sort puts the NaNs last, each pair of equals in input order.
     let mut xs: List<f16> = [pos_inf, neg_zero, pos_nan, one, neg_nan, pos_zero];
@@ -68,7 +68,7 @@ export fn run() {
     assert b_inf < b_nan;
     assert b_nan >= b_inf;
     assert b_nan == b_neg_nan;
-    assert b_nan.cmp(&b_neg_nan) matches { Equal };
+    assert b_nan.cmp(&b_neg_nan) matches { _::Equal };
     assert bf16::from_bits(0x8000) == bf16::from_bits(0x0000);
     assert !(bf16::from_bits(0x8000) < bf16::from_bits(0x0000));
     assert bound_less(b_inf, b_neg_nan);

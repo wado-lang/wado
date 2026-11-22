@@ -398,9 +398,9 @@ fn sll_step(c: &SllConfig, pos: i32) -> List<SllConfig> {
 /// resumes as a `*`, since its one required iteration is behind it.
 fn after_iteration(elements: &List<Element>, at: i32, rep: &RepeatElement) -> SllReturn {
     return match rep.kind {
-        Optional => SllReturn { elements, pos: at + 1 },
-        Star => SllReturn { elements, pos: at },
-        Plus => {
+        _::Optional => SllReturn { elements, pos: at + 1 },
+        _::Star => SllReturn { elements, pos: at },
+        _::Plus => {
             let mut looped = *elements;
             looped[at] = Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star });
             SllReturn { elements: &looped, pos: at };

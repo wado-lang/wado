@@ -1,0 +1,42 @@
+//! gpt-oss-20b on a WebGPU device: checks the first tokens of each prompt
+//! `generate.json` records against onnxruntime, its pools holding the experts
+//! the budget the first argument gives in bytes holds, as many tokens as the
+//! second gives, and says what the device keeps.
+
+use { eprintln, println, Environment, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedFeatures,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { WebGpuBackend } from "lib:loam";
+use { WEBGPU_BUDGET, budget_and_steps, checked } from "./model.wado";
+
+global STEPS: i32 = 8;
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let [budget, steps] = budget_and_steps(WEBGPU_BUDGET, STEPS);
+    let Some(gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    let Some(mut model) = checked(gpu, budget, steps) else {
+        return;
+    };
+    println(`the device keeps ${model.backend_mut().kept_bytes()} bytes`);
+}

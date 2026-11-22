@@ -48,15 +48,15 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Re
 
 fn method_name(m: Method) -> String {
     return match m {
-        Get => "GET",
-        Head => "HEAD",
-        Post => "POST",
-        Put => "PUT",
-        Delete => "DELETE",
-        Connect => "CONNECT",
-        Options => "OPTIONS",
-        Trace => "TRACE",
-        Patch => "PATCH",
+        _::Get => "GET",
+        _::Head => "HEAD",
+        _::Post => "POST",
+        _::Put => "PUT",
+        _::Delete => "DELETE",
+        _::Connect => "CONNECT",
+        _::Options => "OPTIONS",
+        _::Trace => "TRACE",
+        _::Patch => "PATCH",
         Other(s) => s,
     };
 }
@@ -137,7 +137,7 @@ fn echo(request: &MockRequest, path: String, query: String, with_body: bool) -> 
 fn route(request: &MockRequest) -> MockResponse {
     let [path, query] = match request.path_with_query.split_once("?") {
         Some([p, q]) => [p.to_string(), q.to_string()],
-        None => [request.path_with_query, ""],
+        null => [request.path_with_query, ""],
     };
     let method = request.method;
     let sends_body = method == "POST" || method == "PUT" || method == "PATCH";

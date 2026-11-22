@@ -34,7 +34,7 @@ fn is_literal<S: AsStrSlice>(sel: &TokenSelector, expected: S) -> bool {
 test "default rule on a token name" {
     let rules = parse_ok("(STRING) @string");
     assert rules.len() == 1;
-    assert rules[0].rule_context matches { None };
+    assert rules[0].rule_context matches { null };
     assert is_name(&rules[0].selector, "STRING");
     assert rules[0].capture == "string";
 }
@@ -42,7 +42,7 @@ test "default rule on a token name" {
 test "default rule on a literal token" {
     let rules = parse_ok("\"true\" @constant.builtin");
     assert rules.len() == 1;
-    assert rules[0].rule_context matches { None };
+    assert rules[0].rule_context matches { null };
     assert is_literal(&rules[0].selector, "true");
     assert rules[0].capture == "constant.builtin";
 }

@@ -10,23 +10,23 @@ use { Request, Response, ErrorCode, Fields, Headers, Method, Scheme, Trailers } 
 
 fn method_name(m: Method) -> String {
     return match m {
-        Get => "GET",
-        Head => "HEAD",
-        Post => "POST",
-        Put => "PUT",
-        Delete => "DELETE",
-        Connect => "CONNECT",
-        Options => "OPTIONS",
-        Trace => "TRACE",
-        Patch => "PATCH",
+        _::Get => "GET",
+        _::Head => "HEAD",
+        _::Post => "POST",
+        _::Put => "PUT",
+        _::Delete => "DELETE",
+        _::Connect => "CONNECT",
+        _::Options => "OPTIONS",
+        _::Trace => "TRACE",
+        _::Patch => "PATCH",
         Other(s) => s,
     };
 }
 
 fn scheme_name(s: Scheme) -> String {
     return match s {
-        Http => "http",
-        Https => "https",
+        _::Http => "http",
+        _::Https => "https",
         Other(s) => s,
     };
 }

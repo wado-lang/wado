@@ -2228,6 +2228,20 @@ fn wrap_async_result(
     )
 }
 
+/// The parameters of a closure standing in for an operation: the operation's
+/// own, none of which the stub writes.
+fn op_closure_params(op: &TirEffectOp, span: Span) -> Vec<TirLocal> {
+    op.params
+        .iter()
+        .map(|p| TirLocal {
+            name: p.name.clone(),
+            type_id: p.type_id,
+            is_mut: false,
+            span,
+        })
+        .collect()
+}
+
 /// The arguments an operation's closure hands on: each of its parameters,
 /// moved.
 fn forwarded_args(op: &TirEffectOp, span: Span) -> Vec<CallArg> {
@@ -2267,13 +2281,8 @@ fn build_handler_op_closure(
 ) -> TirExpr {
     let span = synth_span();
 
-    // Closure params (mirror the op's params; closure-local indices
-    // start fresh at 0).
-    let closure_params: Vec<(String, TypeId)> = op
-        .params
-        .iter()
-        .map(|p| (p.name.clone(), p.type_id))
-        .collect();
+    // Closure-local indices start fresh at 0.
+    let closure_params = op_closure_params(op, span);
     let arg_call_args = forwarded_args(op, span);
 
     let target = impl_info
@@ -2334,7 +2343,7 @@ fn build_handler_op_closure(
         Vec::new()
     };
 
-    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let param_types: Vec<TypeId> = closure_params.iter().map(|p| p.type_id).collect();
     let func_type = type_table
         .borrow_mut()
         .make_function(param_types, closure_ret, vec![]);
@@ -2410,14 +2419,10 @@ fn build_trap_closure(
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirExpr {
     let span = synth_span();
-    let closure_params: Vec<(String, TypeId)> = op
-        .params
-        .iter()
-        .map(|p| (p.name.clone(), p.type_id))
-        .collect();
+    let closure_params = op_closure_params(op, span);
     let closure_ret = op.return_type;
     let trap_call = unreachable_call(closure_ret, span);
-    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let param_types: Vec<TypeId> = closure_params.iter().map(|p| p.type_id).collect();
     let func_type = type_table
         .borrow_mut()
         .make_function(param_types, closure_ret, vec![]);
@@ -2450,11 +2455,7 @@ fn build_default_closure(
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirExpr {
     let span = synth_span();
-    let closure_params: Vec<(String, TypeId)> = op
-        .params
-        .iter()
-        .map(|p| (p.name.clone(), p.type_id))
-        .collect();
+    let closure_params = op_closure_params(op, span);
     let args = forwarded_args(op, span);
     let body = TirExpr::new(
         TirExprKind::Call {
@@ -2472,7 +2473,7 @@ fn build_default_closure(
         span,
     );
 
-    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let param_types: Vec<TypeId> = closure_params.iter().map(|p| p.type_id).collect();
     let func_type = type_table
         .borrow_mut()
         .make_function(param_types, op.return_type, vec![]);
@@ -2501,11 +2502,7 @@ fn build_forward_closure(
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirExpr {
     let span = synth_span();
-    let closure_params: Vec<(String, TypeId)> = op
-        .params
-        .iter()
-        .map(|p| (p.name.clone(), p.type_id))
-        .collect();
+    let closure_params = op_closure_params(op, span);
     let args = forwarded_args(op, span);
     let closure_ret = op.return_type;
     let wrapper_name = plan
@@ -2515,7 +2512,7 @@ fn build_forward_closure(
         .clone();
     let body = wrapper_call(wrapper_name, args, closure_ret, span, entry_source);
 
-    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let param_types: Vec<TypeId> = closure_params.iter().map(|p| p.type_id).collect();
     let func_type = type_table
         .borrow_mut()
         .make_function(param_types, closure_ret, vec![]);

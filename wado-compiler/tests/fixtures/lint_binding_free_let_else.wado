@@ -1,0 +1,50 @@
+// A `let … else` whose pattern binds no name only tests its value, so it warns.
+
+global LIMIT: i32 = 3;
+
+fn at_limit(v: i32) -> bool {
+    let == LIMIT = v else { return false; };
+    return true;
+}
+
+test {
+    assert at_limit(builtin::black_box(3)) && !at_limit(builtin::black_box(4));
+}
+
+fn some_second(pair: [i32, Option<i32>]) -> i32 {
+    let [first, _::Some(_)] = pair else { return -1; };
+    return first;
+}
+
+fn first_at_limit(pair: [i32, i32]) -> i32 {
+    let [== LIMIT, n] = pair else { return -1; };
+    return n;
+}
+
+fn has_value(o: Option<i32>) -> bool {
+    let _::Some(_): Option<i32> = o else { return false; };
+    return true;
+}
+
+#[allow(binding_free_let_else)]
+fn is_some(o: Option<i32>) -> bool {
+    let _::Some(_) = o else { return false; };
+    return true;
+}
+
+test {
+    assert some_second(builtin::black_box([1, Option::Some(2)])) == 1;
+    assert first_at_limit(builtin::black_box([3, 9])) == 9;
+    assert is_some(builtin::black_box(Option::Some(1)));
+    assert has_value(builtin::black_box(Option::Some(1)));
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_contains": [
+        "`let == LIMIT = … else` binds no name",
+        "`let _::Some(_): Option<i32> = … else` binds no name"
+    ],
+    "warnings_not_contains": ["`let [first", "`let [== LIMIT, n]", "`let _::Some(_) ="]
+}

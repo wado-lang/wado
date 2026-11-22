@@ -6,6 +6,7 @@ use std::rc::Rc;
 use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::util::{float_infinity_key, float_of_order_key};
 use crate::tir::TypeId;
+use crate::unparse::case_pattern_head;
 
 /// An arm pattern as coverage reads it. A constructor carries the set its
 /// column draws from, so the check reads no types.
@@ -41,6 +42,8 @@ pub(super) struct Case {
     pub(super) has_payload: bool,
     /// False for a case whose payload type has no value, which no arm need cover.
     pub(super) inhabited: bool,
+    /// The `None` of an `Option`, which a pattern writes `null`.
+    pub(super) is_null: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -118,7 +121,8 @@ fn write_float_witness(
 /// A value no arm takes, as a pattern that would take it.
 pub(super) enum Witness {
     Wild,
-    /// `payload` is `None` where no arm names the case at all.
+    /// `name` is the case as a pattern names it; `payload` is `None` for a
+    /// case that carries none.
     Case {
         name: String,
         payload: Option<Box<Witness>>,
@@ -477,14 +481,17 @@ fn default_rows<'p, R: MatrixRow<'p>>(rows: &[R]) -> Vec<R> {
 fn build(rows: &[Row<'_>], ctor: Ctor, args: Vec<Witness>) -> Witness {
     match ctor {
         Ctor::Case(cases, index) => {
+            let case = &cases[index];
             let named = rows
                 .iter()
                 .any(|row| matches!(row[0], Pat::Case { index: i, .. } if *i == index));
+            let payload = match args.into_iter().next() {
+                Some(arg) if named => Some(Box::new(arg)),
+                _ => case.has_payload.then(|| Box::new(Witness::Wild)),
+            };
             Witness::Case {
-                name: cases[index].name.clone(),
-                payload: named
-                    .then(|| args.into_iter().next().map(Box::new))
-                    .flatten(),
+                name: case_pattern_head(&case.name, case.has_payload, case.is_null),
+                payload,
             }
         }
         Ctor::Bool(value) => Witness::Bool(value),

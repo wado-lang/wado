@@ -1,0 +1,32 @@
+// A bound asked of a closure literal waits for the effect check to solve the
+// closure's row, and is still decided where no method of the trait is called.
+
+use { println, Stdout } from "core:cli";
+
+trait Apply with _ {
+    fn apply0(&self) -> i32;
+}
+
+impl Apply for fn() -> i32 {
+    fn apply0(&self) -> i32 {
+        return self();
+    }
+}
+
+fn through<T: Apply>(_t: &T) -> i32 {
+    return 0;
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(`${through(&|| loud())}`);
+}
+
+__DATA__
+{
+    "compile_error": ":26:16: analysis error: type 'fn() -> i32 with Stdout' does not implement trait 'Apply' required by bound on 'T'"
+}

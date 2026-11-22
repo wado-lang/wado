@@ -34,9 +34,9 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
         pad.push_str(&" ");
     }
     return match opts.align {
-        Left => s + pad,
-        Right => pad + s,
-        Center => {
+        _::Left => s + pad,
+        _::Right => pad + s,
+        _::Center => {
             let left = pad_len / 2;
             let right = pad_len - left;
             let mut lpad = String::with_capacity(left);

@@ -34,9 +34,9 @@ fn one() -> i32 {
 test {
     let c = builtin::black_box(true);
     let x = if c { V::A.me() } else { V::B(NoOrd { f: one }) };
-    assert x matches { A };
+    assert x matches { _::A };
     let y = if c { W::none().me() } else { W::B(NoOrd { f: one }) };
-    assert y matches { A };
+    assert y matches { _::A };
 }
 
 __DATA__

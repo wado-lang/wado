@@ -104,7 +104,7 @@ impl BpeTokenizer {
         unknown: i32,
         prefix: List<i32>,
     ) -> BpeTokenizer
-        contract spelling matches { Pieces } == split matches { Whole }, "SentencePiece's spelling takes the whole text as one piece"
+        contract spelling matches { _::Pieces } == split matches { _::Whole }, "SentencePiece's spelling takes the whole text as one piece"
     {
         let Ok(text) = String::try_from_utf8(*tokens) else {
             unreachable();
@@ -121,7 +121,7 @@ impl BpeTokenizer {
                 triples[rank * 3 + 2],
             ));
         }
-        let o200k = split matches { O200k };
+        let o200k = split matches { _::O200k };
         let mut t = BpeTokenizer {
             spelling,
             split,
@@ -150,7 +150,7 @@ impl BpeTokenizer {
             t.special_ids[t.id_of(&special).unwrap()] = true;
         }
         match spelling {
-            ByteLevel => {
+            _::ByteLevel => {
                 for let [b, c] of byte_chars().into_iter().enumerate() {
                     t.byte_ids[b] = t.id_of(String::from(c)).unwrap();
                     while t.bytes_of.len() <= c as i32 {
@@ -159,7 +159,7 @@ impl BpeTokenizer {
                     t.bytes_of[c as i32] = b;
                 }
             },
-            Pieces => {
+            _::Pieces => {
                 t.bytes_of = List::<i32>::filled(count, -1);
                 for let id of 0..<count {
                     let token = t.token(id);
@@ -226,7 +226,7 @@ impl BpeTokenizer {
         for let id of *ids {
             let token = self.token(id);
             match self.spelling {
-                ByteLevel => {
+                _::ByteLevel => {
                     if self.special_ids[id] {
                         bytes.extend_from_slice(token.as_bytes() as Slice<u8>);
                         continue;
@@ -235,7 +235,7 @@ impl BpeTokenizer {
                         bytes.push(self.bytes_of[c as i32] as u8);
                     }
                 },
-                Pieces => {
+                _::Pieces => {
                     if self.bytes_of[id] >= 0 {
                         bytes.push(self.bytes_of[id] as u8);
                         continue;
@@ -262,7 +262,7 @@ impl BpeTokenizer {
                 continue;
             };
             let better = match first {
-                None => true,
+                null => true,
                 Some([earlier, held]) => at < earlier || at == earlier && special.len() > held.len(),
             };
             if better {
@@ -277,19 +277,19 @@ impl BpeTokenizer {
         let mut at = 0;
         while at < chars.len() {
             let end = match self.split {
-                Whole => chars.len(),
-                Gpt2 => self.piece_end(&chars, at),
-                O200k => self.o200k_end(&chars, at),
+                _::Whole => chars.len(),
+                _::Gpt2 => self.piece_end(&chars, at),
+                _::O200k => self.o200k_end(&chars, at),
             };
             let mut parts: List<i32> = [];
             for let k of at..<end {
                 match self.spelling {
-                    ByteLevel => {
+                    _::ByteLevel => {
                         for let b of chars[k].encode_utf8() {
                             parts.push(self.byte_ids[b as i32]);
                         }
                     },
-                    Pieces => self.spell_piece(if chars[k] == ' ' { SPACE_PIECE } else { chars[k] }, &mut parts),
+                    _::Pieces => self.spell_piece(if chars[k] == ' ' { SPACE_PIECE } else { chars[k] }, &mut parts),
                 }
             }
             if let Some(id) = self.spelled_whole(&parts) {
@@ -338,11 +338,11 @@ impl BpeTokenizer {
         if let Some(end) = contraction_end(chars, at, false) {
             return end;
         }
-        let spaced = chars[at] == ' ' && at + 1 < chars.len() && !self.class_of(chars[at + 1]) matches { Space };
+        let spaced = chars[at] == ' ' && at + 1 < chars.len() && !self.class_of(chars[at + 1]) matches { _::Space };
         let lead = if spaced { at + 1 } else { at };
         let class = self.class_of(chars[lead]);
         let end = run_end(chars, lead + 1, |d| self.class_of(d) == class);
-        return if class matches { Space } { space_run_end(chars, at, end) } else { end };
+        return if class matches { _::Space } { space_run_end(chars, at, end) } else { end };
     }
 
     /// Where the piece starting at `at` ends, as o200k's pattern splits text,
@@ -353,7 +353,7 @@ impl BpeTokenizer {
     fn o200k_end(&self, chars: &List<char>, at: i32) -> i32 {
         let n = chars.len();
         let c = chars[at];
-        let leads: List<i32> = if c != '\r' && c != '\n' && self.class_of(c) matches { Space | Other } {
+        let leads: List<i32> = if c != '\r' && c != '\n' && self.class_of(c) matches { _::Space | _::Other } {
             [at + 1, at];
         } else {
             [at];
@@ -368,7 +368,7 @@ impl BpeTokenizer {
         if within(&self.numbers, c as u32) {
             return i32::min(run_end(chars, at, |d| within(&self.numbers, d as u32)), at + 3);
         }
-        let other = |d: char| self.class_of(d) matches { Other };
+        let other = |d: char| self.class_of(d) matches { _::Other };
         let spaced: List<i32> = if c == ' ' { [at + 1, at] } else { [at] };
         for let start of spaced {
             if start < n && other(chars[start]) {

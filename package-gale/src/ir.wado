@@ -119,11 +119,11 @@ pub variant GrammarKind {
 }
 
 pub fn is_parser_members(act: &NamedAction, kind: &GrammarKind) -> bool {
-    return is_members(act, "parser", !kind matches { Lexer });
+    return is_members(act, "parser", !kind matches { _::Lexer });
 }
 
 pub fn is_lexer_members(act: &NamedAction, kind: &GrammarKind) -> bool {
-    return is_members(act, "lexer", kind matches { Lexer });
+    return is_members(act, "lexer", kind matches { _::Lexer });
 }
 
 /// Whether a named action is a `@members` block for one recognizer: scoped to it
@@ -134,7 +134,7 @@ fn is_members<S: AsStrSlice>(act: &NamedAction, scope: S, bare_is_mine: bool) ->
     }
     return match &act.scope {
         Some(s) => *s == scope.as_str_slice(),
-        None => bare_is_mine,
+        null => bare_is_mine,
     };
 }
 
@@ -229,7 +229,7 @@ pub fn superclass_bases(kind: &GrammarKind, options: &List<GrammarOption>) -> [S
         if o.name != "superClass" {
             continue;
         }
-        if kind matches { Lexer } {
+        if kind matches { _::Lexer } {
             lexer = option_value_name(&o.value);
         } else {
             parser = option_value_name(&o.value);
@@ -246,7 +246,7 @@ fn option_value_name(v: &OptionValue) -> String {
         Qualified(parts) => parts[parts.len() - 1],
         Str(s) => match s.rsplit_once(".") {
             Some([_, last]) => last.to_string(),
-            None => *s,
+            null => *s,
         },
         _ => "",
     };
@@ -258,11 +258,11 @@ fn option_value_name(v: &OptionValue) -> String {
 /// Must run before `check_references`; `Combined`-only because
 /// split-grammar halves are about to merge a sibling lexer.
 pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
-    if !grammar.kind matches { Combined } {
+    if !grammar.kind matches { _::Combined } {
         return;
     }
     for let r of &grammar.pending_refs {
-        if !r.kind matches { TokenRef } {
+        if !r.kind matches { _::TokenRef } {
             continue;
         }
         if r.referenced_name == "EOF" {
@@ -315,8 +315,8 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
     }
     for let r of &grammar.pending_refs {
         match &r.kind {
-            ParserRuleRef => {
-                if grammar.kind matches { Lexer } {
+            _::ParserRuleRef => {
+                if grammar.kind matches { _::Lexer } {
                     continue;
                 }
                 let mut found = false;
@@ -336,10 +336,10 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                     );
                 }
             },
-            TokenRef => {
+            _::TokenRef => {
                 // A `parser grammar` cannot resolve token refs until
                 // merged with its sibling lexer grammar.
-                if grammar.kind matches { Parser } {
+                if grammar.kind matches { _::Parser } {
                     continue;
                 }
                 // `EOF` is a built-in token recognized without a lexer rule.
@@ -363,7 +363,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                     );
                 }
             },
-            LexerRuleRef => {
+            _::LexerRuleRef => {
                 // Lexer-to-lexer refs (including fragment refs) are
                 // always resolvable locally — lexer rules cannot cross
                 // the lexer/parser grammar boundary.
@@ -436,7 +436,7 @@ fn check_left_recursion_ends(grammar: &Grammar) -> Result<(), ParseError> {
 /// consuming input and never terminates (issue #1671), so reject them here
 /// instead of emitting looping code.
 fn check_left_recursion(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), ParseError> {
-    if grammar.kind matches { Lexer } {
+    if grammar.kind matches { _::Lexer } {
         return Result::Ok(());
     }
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
@@ -504,7 +504,8 @@ fn element_holds_epsilon_closure(elem: &Element, ctx: &LeftCornerCtx) -> bool {
         Label(l) => element_holds_epsilon_closure(&l.element, ctx),
         Group(g) => g.alternatives.iter_ref().any(|a: &Alternative| elements_hold_epsilon_closure(&a.elements, ctx)),
         Repeat(rep) => {
-            if rep.kind matches { Star | Plus } && element_nullable(&rep.element, &ctx.index, &ctx.nullable, false) {
+            if rep.kind matches { _::Star | _::Plus }
+                && element_nullable(&rep.element, &ctx.index, &ctx.nullable, false) {
                 true;
             } else {
                 element_holds_epsilon_closure(&rep.element, ctx);
@@ -538,7 +539,7 @@ fn element_holds_eof_closure(elem: &Element, rules: &List<ParserRule>, ctx: &Lef
         Not(n) => element_holds_eof_closure(&n.element, rules, ctx),
         Label(l) => element_holds_eof_closure(&l.element, rules, ctx),
         Group(g) => g.alternatives.iter_ref().any(|a| elements_hold_eof_closure(&a.elements, rules, ctx)),
-        Repeat(rep) => rep.kind matches { Star | Plus }
+        Repeat(rep) => rep.kind matches { _::Star | _::Plus }
             && element_starts_with_eof(&rep.element, rules, ctx, &mut List::filled(rules.len(), false))
             || element_holds_eof_closure(&rep.element, rules, ctx),
     };
@@ -560,7 +561,7 @@ fn element_starts_with_eof(
         Group(g) => g.alternatives.iter_ref().any(|a| sequence_starts_with_eof(&a.elements, 0, rules, ctx, entered)),
         RuleRef(r) => match ctx.index.get(r.name) {
             Some(i) => rule_starts_with_eof(i, rules, ctx, entered),
-            None => false,
+            null => false,
         },
     };
 }
@@ -620,7 +621,7 @@ fn lexer_nullable_table(rules: &List<LexerRule>) -> HashMap<String, bool> {
 fn lexer_rule_nullable<S: AsStrSlice>(name: S, nullable: &HashMap<String, bool>) -> bool {
     return match nullable.get_str(name) {
         Some(n) => n,
-        None => false,
+        null => false,
     };
 }
 
@@ -631,12 +632,12 @@ fn lexer_elements_all_nullable(elements: &List<LexerElement>, nullable: &HashMap
 fn lexer_element_nullable(elem: &LexerElement, nullable: &HashMap<String, bool>) -> bool {
     return match elem {
         Literal(text) => text.is_empty(),
-        CharRange(_) | CharClass(_) | AnyChar | Not(_) => false,
+        CharRange(_) | CharClass(_) | _::AnyChar | Not(_) => false,
         RuleRef(name) => lexer_rule_nullable(name, nullable),
         Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_elements_all_nullable(&a.elements, nullable)),
         Repeat(rep) => match rep.kind {
-            Star | Optional => true,
-            Plus => lexer_element_nullable(&rep.element, nullable),
+            _::Star | _::Optional => true,
+            _::Plus => lexer_element_nullable(&rep.element, nullable),
         },
     };
 }
@@ -647,7 +648,7 @@ fn lexer_elements_hold_epsilon_closure(elements: &List<LexerElement>, nullable: 
 
 fn lexer_element_holds_epsilon_closure(elem: &LexerElement, nullable: &HashMap<String, bool>) -> bool {
     return match elem {
-        Literal(_) | CharRange(_) | CharClass(_) | AnyChar | RuleRef(_) => false,
+        Literal(_) | CharRange(_) | CharClass(_) | _::AnyChar | RuleRef(_) => false,
         Not(n) => lexer_element_holds_epsilon_closure(&n.element, nullable),
         Group(alts) => alts
             .iter_ref()
@@ -656,7 +657,7 @@ fn lexer_element_holds_epsilon_closure(elem: &LexerElement, nullable: &HashMap<S
                 nullable,
             )),
         Repeat(rep) => {
-            if rep.kind matches { Star | Plus } && lexer_element_nullable(&rep.element, nullable) {
+            if rep.kind matches { _::Star | _::Plus } && lexer_element_nullable(&rep.element, nullable) {
                 true;
             } else {
                 lexer_element_holds_epsilon_closure(&rep.element, nullable);
@@ -834,12 +835,12 @@ fn element_nullable(elem: &Element, index: &HashMap<String, i32>, nullable: &Lis
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
         RuleRef(r) => match index.get(r.name) {
             Some(idx) => nullable[idx],
-            None => false,
+            null => false,
         },
         Label(l) => element_nullable(&l.element, index, nullable, scan),
         Repeat(rep) => match rep.kind {
-            Star | Optional => true,
-            Plus => element_nullable(&rep.element, index, nullable, scan),
+            _::Star | _::Optional => true,
+            _::Plus => element_nullable(&rep.element, index, nullable, scan),
         },
         Group(g) => {
             // A `lenient` scan group bails out at its entry position on no
@@ -1053,7 +1054,7 @@ impl Alternative {
         let mut out: List<AltAction> = [];
         for let a of &self.actions {
             out.push(*a);
-            if a.kind matches { Action } {
+            if a.kind matches { _::Action } {
                 break;
             }
         }
@@ -1066,7 +1067,7 @@ impl Alternative {
         return self
             .prediction_guards()
             .into_iter()
-            .filter(|a| a.before_index == 0 && a.kind matches { Predicate })
+            .filter(|a| a.before_index == 0 && a.kind matches { _::Predicate })
             .collect();
     }
 }
@@ -1379,8 +1380,8 @@ fn scoped_by_declaring_kind(act: &NamedAction, kind: &GrammarKind) -> NamedActio
         return *act;
     }
     let scope = match kind {
-        Lexer => "lexer",
-        Parser | Combined => "parser",
+        _::Lexer => "lexer",
+        _::Parser | _::Combined => "parser",
     };
     return NamedAction { scope: Option::Some(scope), name: act.name, body: act.body };
 }
@@ -1406,7 +1407,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     let mut lexer_superclass = String::new();
     let mut parser_superclass = String::new();
     for let g of &grammars {
-        if !g.action_language matches { Java } {
+        if !g.action_language matches { _::Java } {
             action_language = g.action_language;
         }
         if !g.lexer_superclass.is_empty() {
@@ -1938,7 +1939,7 @@ fn is_bare_wrapper(g: &GroupElement) -> bool {
         return false;
     }
     let alt = &g.alternatives[0];
-    return alt.elements.len() == 1 && alt.options.is_empty() && alt.actions.is_empty() && alt.label matches { None };
+    return alt.elements.len() == 1 && alt.options.is_empty() && alt.actions.is_empty() && alt.label matches { null };
 }
 
 /// Assign every parser-rule `RuleRefElement` a unique `atn_call_site` id, the
@@ -1982,7 +1983,7 @@ fn stamp_parser_elements(grammar: &mut Grammar, mode: StampMode) {
 fn stamp_alternatives(alts: &List<Alternative>, mode: StampMode, next: &mut i32) -> List<Alternative> {
     let mut out: List<Alternative> = [];
     for let alt of alts {
-        let acts = if mode matches { ActionIds } { stamp_alt_actions(&alt.actions, next) } else { alt.actions };
+        let acts = if mode matches { _::ActionIds } { stamp_alt_actions(&alt.actions, next) } else { alt.actions };
         let mut elems: List<Element> = [];
         for let e of &alt.elements {
             elems.push(stamp_element(e, mode, next));
@@ -1995,8 +1996,8 @@ fn stamp_alternatives(alts: &List<Alternative>, mode: StampMode, next: &mut i32)
 fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
     return match *elem {
         RuleRef(rr) => {
-            let call_site = stamped_id(rr.atn_call_site, mode matches { CallSites }, next);
-            let arg = if mode matches { ActionIds } {
+            let call_site = stamped_id(rr.atn_call_site, mode matches { _::CallSites }, next);
+            let arg = if mode matches { _::ActionIds } {
                 stamp_action_source_opt(rr.arg_action, next);
             } else {
                 rr.arg_action;
@@ -2004,7 +2005,7 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
             Element::RuleRef(RuleRefElement { ..rr, atn_call_site: call_site, arg_action: arg });
         },
         Repeat(rep) => {
-            let decision = stamped_id(rep.atn_decision, mode matches { Decisions }, next);
+            let decision = stamped_id(rep.atn_decision, mode matches { _::Decisions }, next);
             Element::Repeat(RepeatElement {
                 kind: rep.kind,
                 element: stamp_element(&rep.element, mode, next),
@@ -2013,7 +2014,7 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
             });
         },
         Group(g) => {
-            let decision = stamped_id(g.atn_decision, mode matches { Decisions }, next);
+            let decision = stamped_id(g.atn_decision, mode matches { _::Decisions }, next);
             Element::Group(GroupElement {
                 alternatives: stamp_alternatives(&g.alternatives, mode, next),
                 options: g.options,
@@ -2032,11 +2033,11 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
         }),
         TokenRef(t) => Element::TokenRef(TokenRefElement {
             ..t,
-            atn_leaf_site: stamped_id(t.atn_leaf_site, mode matches { LeafSites }, next),
+            atn_leaf_site: stamped_id(t.atn_leaf_site, mode matches { _::LeafSites }, next),
         }),
         Literal(l) => Element::Literal(LiteralElement {
             ..l,
-            atn_leaf_site: stamped_id(l.atn_leaf_site, mode matches { LeafSites }, next),
+            atn_leaf_site: stamped_id(l.atn_leaf_site, mode matches { _::LeafSites }, next),
         }),
         _ => *elem,
     };
@@ -2217,10 +2218,10 @@ fn canon_empty_alt_element(elem: &Element) -> Element {
 /// skip points the same way.
 fn canon_repeat(kind: RepeatKind, element: &Element, non_greedy: bool) -> Element {
     if let Some(inner) = peel_nested_repeat(element) {
-        assert !repeat_admits_empty(inner.kind) || kind matches { Optional }, "a closure over a nullable body is rejected by check_epsilon_closure before canonicalization";
-        let outer_loops = !kind matches { Optional };
-        let capped = kind matches { Optional } && inner.kind matches { Optional };
-        let demands_one = kind matches { Plus } && inner.kind matches { Plus };
+        assert !repeat_admits_empty(inner.kind) || kind matches { _::Optional }, "a closure over a nullable body is rejected by check_epsilon_closure before canonicalization";
+        let outer_loops = !kind matches { _::Optional };
+        let capped = kind matches { _::Optional } && inner.kind matches { _::Optional };
+        let demands_one = kind matches { _::Plus } && inner.kind matches { _::Plus };
         let collapsed = if capped {
             RepeatKind::Optional;
         } else if demands_one {
@@ -2273,9 +2274,9 @@ fn assert_canonical_element<S: AsStrSlice>(elem: &Element, rule: S) {
 /// Whether a repeat of this kind can match nothing.
 fn repeat_admits_empty(kind: RepeatKind) -> bool {
     return match kind {
-        Optional => true,
-        Star => true,
-        Plus => false,
+        _::Optional => true,
+        _::Star => true,
+        _::Plus => false,
     };
 }
 

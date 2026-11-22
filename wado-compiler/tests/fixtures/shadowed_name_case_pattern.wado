@@ -1,7 +1,6 @@
-// A bare identifier pattern matches rather than binds when it names a case or
-// a `global`, and only the elaborator knows the scrutinee's type. So such a
-// name is left alone by the lint, even where a type of that name outranks the
-// case everywhere else — `Default` here is the prelude trait.
+// A case's name and an `==` operand bind nothing, so the lint leaves them
+// alone, even where a type of that name outranks the case everywhere
+// else — `Default` here is the prelude trait.
 
 use { println, Stdout } from "core:cli";
 
@@ -10,8 +9,8 @@ global TK_SUB: i32 = 2;
 
 fn op(token: i32) -> String {
     return match token {
-        TK_ADD => "+",
-        TK_SUB => "-",
+        == TK_ADD => "+",
+        == TK_SUB => "-",
         _ => "?",
     };
 }
@@ -23,15 +22,15 @@ enum Visibility {
 
 fn label(v: &Visibility) -> String {
     return match *v {
-        Default => "",
-        Public => "public",
+        _::Default => "",
+        _::Public => "public",
     };
 }
 
 fn first(opt: &Option<i32>) -> i32 {
     return match *opt {
         Some(n) => n,
-        None => -1,
+        null => -1,
     };
 }
 

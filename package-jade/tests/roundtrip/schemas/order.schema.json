@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Order",
+  "description": "An order to ship.",
+  "type": "object",
+  "properties": {
+    "id": {"type": "string", "format": "uuid"},
+    "shipTo": {"$ref": "./address.schema.json"},
+    "lines": {"type": "array", "items": {"$ref": "common/line.schema.json#/$defs/LineItem"}},
+    "status": {"type": "string", "enum": ["pending", "shipped"], "default": "pending"},
+    "note": {"type": "string"}
+  },
+  "required": ["id", "shipTo", "lines"]
+}

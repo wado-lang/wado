@@ -44,9 +44,9 @@ test "lowercase type" {
 
     let c = ident_color::red;
     let name = match c {
-        red => "red",
-        green => "green",
-        blue => "blue",
+        _::red => "red",
+        _::green => "green",
+        _::blue => "blue",
     };
     assert name == "red";
 
@@ -68,7 +68,7 @@ test "case independence" {
     assert Y == 4;
 
     let c = ident_color::red;
-    if c matches { red } {
+    if c matches { _::red } {
         assert true;
     }
 

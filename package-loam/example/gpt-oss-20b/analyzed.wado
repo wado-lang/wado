@@ -1,0 +1,18 @@
+//! gpt-oss-20b compiled for a TPU topology, which needs no TPU: every expert
+//! held, as a chip of 16 GB holds them, and what the plugin reports of the
+//! program of a prompt and of a step after it.
+
+use { println, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use { PjrtHost } from "core:pjrt";
+use { PjrtBackend, summary } from "lib:loam";
+use { Model } from "./model.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, PjrtHost, MonotonicClock) {
+    let mut model = Model::load(PjrtBackend::analyzing("v5e:1x1"), i64::MAX).unwrap();
+    model.stepped_once(&[1, 2, 3, 4, 5, 6, 7, 8]);
+    for let analysis of model.backend_mut().analyses() {
+        println(summary(analysis));
+    }
+}

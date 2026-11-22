@@ -4606,7 +4606,7 @@ impl TypeTable {
     }
 
     /// `type_id` once the effect check is done: each variable replaced by
-    /// what [`Self::close_effect_rows`] answered for it, and each struct
+    /// what [`Self::solved_effect_rows`] answered for it, and each struct
     /// instance's arguments rowless.
     pub fn close_type(&mut self, type_id: TypeId, rows: &EffectRows) -> TypeId {
         assert!(self.effect_vars_solved);
@@ -5294,9 +5294,8 @@ impl TypeTable {
 
     /// What each effect variable stands for once the effect check has solved
     /// them: what `solved` says, and the empty row for one nothing solved. No
-    /// row it answers names a variable, and no variable is minted from here on.
-    pub fn close_effect_rows(&mut self, solved: &EffectRows) -> EffectRows {
-        self.effect_vars_solved = true;
+    /// row it answers names a variable.
+    pub fn solved_effect_rows(&self, solved: &EffectRows) -> EffectRows {
         let mut rows = solved.clone();
         for id in self.iter_type_ids() {
             self.unsolved_vars_in(id, &mut rows);
@@ -5310,6 +5309,12 @@ impl TypeTable {
                 (var.clone(), solved)
             })
             .collect()
+    }
+
+    /// Ends the effect check's part: no variable is minted from here on, and
+    /// a struct instance interned after this carries no row in its arguments.
+    pub fn close_effect_rows(&mut self) {
+        self.effect_vars_solved = true;
     }
 
     /// Note each effect variable in `id`'s rows that `rows` holds no solution
@@ -6040,9 +6045,27 @@ impl TypeTable {
         self.any_infer_var(id, &mut |_| true)
     }
 
+    /// Whether a function type in `id` carries a row the effect check has yet
+    /// to solve, as a closure literal's does until then.
+    pub fn contains_effect_var(&self, id: TypeId) -> bool {
+        if let ResolvedType::Function { effects, .. } = self.get(id)
+            && effects.iter().any(EffectRef::is_var)
+        {
+            return true;
+        }
+        self.any_constituent(id, &mut |t| self.contains_effect_var(t))
+    }
+
     /// Whether `id` is an inference variable itself, not a type naming one.
     pub fn is_infer_var(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::InferVar(_))
+    }
+
+    /// Whether `id` names its head, below any references: neither a variable
+    /// nor a type a substitution or projection is yet to answer.
+    pub fn head_is_known(&self, id: TypeId) -> bool {
+        let head = self.peel_refs(id);
+        !self.is_infer_var(head) && !self.receiver_head_awaits_substitution(head)
     }
 
     /// The inference variables [`Self::contains_infer_var`] finds in `id`,
@@ -6845,6 +6868,17 @@ impl TypeTable {
         &self.impl_target(def).args
     }
 
+    /// What a receiver's arguments are read against in impl block `def`'s
+    /// target: the arguments of the head it names, or the elements of a tuple
+    /// it writes, which a tuple receiver's arguments are.
+    pub fn impl_target_positions(&self, def: DefId) -> Vec<TypeId> {
+        let whole = self.peel_refs(self.impl_target_whole(def));
+        match self.as_tuple(whole) {
+            Some(elements) => elements,
+            None => self.impl_target_args(def).to_vec(),
+        }
+    }
+
     /// The slots each of impl block `def`'s target positions holds, at any
     /// depth, filled from the receiver's arguments: `T` in `Pair<List<T>, i32>`
     /// from `Pair<List<String>, i32>`, then the slots its bounds project from
@@ -7109,7 +7143,7 @@ impl TypeTable {
     }
 
     /// What a target writing `written` binds at a receiver with `receiver_args`,
-    /// or `None` where it misses it. Unknown arguments and a pack's tail pin none.
+    /// or `None` where it misses it. Unknown arguments pin none.
     pub fn impl_target_binding(
         &mut self,
         written: &[TypeId],
@@ -7150,20 +7184,16 @@ impl TypeTable {
         if written.is_empty() || receiver_args.is_empty() {
             return Some(binding);
         }
-        let fixed = written
-            .iter()
-            .position(|&w| self.is_type_pack(w))
-            .unwrap_or(written.len());
-        if receiver_args.len() < written.len() && fixed == written.len() {
-            return None;
-        }
-        self.bind_all(
-            &written[..fixed],
-            receiver_args.get(..fixed)?,
-            open,
-            &mut binding,
-        )
-        .then_some(binding)
+        let bound = match written.iter().position(|&w| self.is_type_pack(w)) {
+            Some(at) => self.bind_run(written, at, receiver_args, None, open, &mut binding),
+            None => self.bind_all(
+                written,
+                receiver_args.get(..written.len())?,
+                open,
+                &mut binding,
+            ),
+        };
+        bound.then_some(binding)
     }
 
     /// The type parameters `concrete` fills in `written`, at any depth; `None`
@@ -7280,6 +7310,25 @@ impl TypeTable {
             return None;
         };
         let at = written.iter().position(|&w| self.is_type_pack(w))?;
+        let ResolvedType::Tuple(elements) = self.get(concrete) else {
+            return Some(false);
+        };
+        Some(self.bind_run(written, at, elements, Some(concrete), open, binding))
+    }
+
+    /// `written`, spreading a pack at `at` among fixed neighbours, against
+    /// `elements`: the neighbours take the ends, and the pack the run between
+    /// them. `whole` is the tuple `elements` make, where one exists, which a
+    /// pack with no neighbours takes as it stands.
+    fn bind_run(
+        &self,
+        written: &[TypeId],
+        at: usize,
+        elements: &[TypeId],
+        whole: Option<TypeId>,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
+    ) -> bool {
         assert!(
             matches!(
                 self.get(written[at]),
@@ -7290,16 +7339,13 @@ impl TypeTable {
             ),
             "a written target spreads a declared pack; a repeat appears only in a signature"
         );
-        let ResolvedType::Tuple(elements) = self.get(concrete) else {
-            return Some(false);
-        };
         // A second spread leaves no count to split the elements by.
         if written[at + 1..].iter().any(|&w| self.is_type_pack(w)) {
-            return Some(false);
+            return false;
         }
         let after = written.len() - at - 1;
         let Some(end) = elements.len().checked_sub(after).filter(|&end| end >= at) else {
-            return Some(false);
+            return false;
         };
         let ends: Vec<TypeId> = elements[..at]
             .iter()
@@ -7309,41 +7355,42 @@ impl TypeTable {
         // A neighbour takes one element, and a spread in the receiver stands
         // for any number of them.
         if ends.iter().any(|&e| self.is_type_pack(e)) {
-            return Some(false);
+            return false;
         }
         let neighbours = written[..at].iter().chain(&written[at + 1..]);
         if !neighbours
             .zip(&ends)
             .all(|(&w, &e)| self.bind_one(w, e, open, binding))
         {
-            return Some(false);
+            return false;
         }
         let slot = self.declared_param(written[at]);
         let run = &elements[at..end];
+        let whole = whole.filter(|_| ends.is_empty());
         let prior = match binding.slots.get(&slot) {
-            Some(&prior) => match self.as_tuple(prior) {
-                Some(prior) => Some(prior),
-                None => {
-                    return Some(ends.is_empty() && self.agree(prior, concrete, open, binding));
-                }
+            Some(&prior) => match (self.as_tuple(prior), whole) {
+                (Some(prior), _) => Some(prior),
+                (None, Some(whole)) => return self.agree(prior, whole, open, binding),
+                (None, None) => return false,
             },
             None => binding.runs.get(&slot).cloned(),
         };
         if let Some(prior) = prior {
-            return Some(
-                prior.len() == run.len()
-                    && prior
-                        .iter()
-                        .zip(run)
-                        .all(|(&p, &r)| self.agree(p, r, open, binding)),
-            );
+            return prior.len() == run.len()
+                && prior
+                    .iter()
+                    .zip(run)
+                    .all(|(&p, &r)| self.agree(p, r, open, binding));
         }
-        if ends.is_empty() {
-            binding.slots.insert(slot, concrete);
-        } else {
-            binding.runs.insert(slot, run.to_vec());
+        match whole {
+            Some(whole) => {
+                binding.slots.insert(slot, whole);
+            }
+            None => {
+                binding.runs.insert(slot, run.to_vec());
+            }
         }
-        Some(true)
+        true
     }
 
     /// The base, trait arguments and arguments of `a` and of `b` where both

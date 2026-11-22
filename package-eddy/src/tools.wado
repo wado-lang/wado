@@ -324,7 +324,7 @@ impl Workspace {
             "Grep" => self.grep(&input_of::<GrepInput>(input)?)?,
             "Glob" => self.glob(&input_of::<GlobInput>(input)?)?,
             "FindSymbol" | "FindReferences" => self.find(name, &input_of::<SymbolInput>(input)?)?,
-            "Write" | "Run" && self.runner matches { None } => {
+            "Write" | "Run" && self.runner matches { null } => {
                 return Err(`no tool named ${*name}`);
             },
             "Write" => self.write(&input_of::<WriteInput>(input)?)?,
@@ -342,7 +342,7 @@ impl Workspace {
         let full = self.resolve(&input.path)?;
         let path = match full.strip_prefix(`${self.root}/`) {
             Some(relative) => relative.to_string(),
-            None => "",
+            null => "",
         };
         let found = if *which == "FindSymbol" {
             symbols.find_symbol(&input.name, &path);
@@ -400,7 +400,7 @@ impl Workspace {
         let out = match run {
             Ok(out) => out,
             // It ran, so it is an answer and spends a run, not an error.
-            Err(e) && e.kind matches { OutputTooLarge } => {
+            Err(e) && e.kind matches { _::OutputTooLarge } => {
                 return Ok(Ran {
                     succeeded: false,
                     report: "killed: its stdout passed the capture limit, so nothing it printed is kept",
@@ -431,7 +431,7 @@ ${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
         }
         let path = self.resolve(&input.file_path)?;
         let meta = fs::metadata(&path).map_err(|e| `${e}`)?;
-        if meta.type matches { Directory } {
+        if meta.type matches { _::Directory } {
             return Err(`${input.file_path} is a directory; use Glob to list it`);
         }
         let text = String::from_utf8_lossy(fs::read(&path).map_err(|e| `${e}`)?);
@@ -528,7 +528,7 @@ ${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
         let out = match Command::new("rg").args(full).grant_read(self.root).output() {
             Ok(out) => out,
             Err(e) => {
-                return Err(if e.kind matches { OutputTooLarge } {
+                return Err(if e.kind matches { _::OutputTooLarge } {
                     "the output is too large; narrow the request";
                 } else {
                     `${e}`;
@@ -570,7 +570,7 @@ ${tail(String::from_utf8_lossy(out.stdout))}</stdout>` });
     fn anchor(&self, glob: &String) -> String {
         let [negation, body] = match glob.strip_prefix("!") {
             Some(rest) => ["!", rest.to_string()],
-            None => ["", *glob],
+            null => ["", *glob],
         };
         let rooted = if body.contains("/") { `${self.root}/${unrooted(&body)}` } else { body };
         return `${negation}${rooted}`;

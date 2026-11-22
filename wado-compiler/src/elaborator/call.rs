@@ -27,12 +27,13 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{
     PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
 };
+use super::pending_selection::{PendingStatic, Undecided};
 use super::scope::{BinderInScope, BoundsOf, ParamRef, Scope, ScopedBound};
 use super::sem::types::{
     BodyFacts, CalleeParams, IndirectCallee, ListViewConversion, StaticMethodDispatch,
 };
 use super::sig::{DeclSig, MethodSig, Param};
-use super::static_call::{ReceiverId, StaticQuery};
+use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::DerivedAt;
@@ -1693,7 +1694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A bare case constructs (`Some(x)`) only where the expected type
         // supplies it, and then ahead of any function of that name.
         if let CalleeIdentKind::AsIs(bare) = callee_kind
-            && !bare.name.contains("::")
+            && (!bare.name.contains("::") || bare.has_inferred_qualifier())
         {
             match self.bare_case(bare, expected_type) {
                 BareCase::Of { owner, spelled } => {
@@ -2073,6 +2074,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_args: method_type_args,
                     ..
                 } = static_args;
+                // The same argument the selection above read: without it this
+                // resolution answers a different declaration than the call was
+                // mangled to.
+                let typed = receiver.at_type(Some(receiver_type));
+                let resolved = self.resolve_static_callee(StaticQuery {
+                    arg_types: &args,
+                    receiver_args: &receiver_args,
+                    expected_return: expected_type,
+                    ..StaticQuery::of(&typed, suffix)
+                });
+                // Impls of one trait neither the arguments nor the receiver tell
+                // apart may be told apart by the instance a later use settles. A
+                // receiver spelled without its arguments is the instance at the
+                // ones the call inferred, each a variable where none did.
+                let at_variables = (matches!(resolved, StaticLookup::Overloaded { .. })
+                    && impl_type_args_inferred.is_empty())
+                .then(|| self.declared_type_at_variables(receiver.key()))
+                .flatten();
+                let (instance, instance_args) = at_variables
+                    .unwrap_or_else(|| (receiver_type, impl_type_args_inferred.clone()));
+                if matches!(resolved, StaticLookup::Overloaded { .. })
+                    && method_type_args.is_empty()
+                    && let Some(info) = self.static_waits(instance, suffix, args.len())
+                {
+                    for (i, (&arg, &param)) in args.iter().zip(&info.param_types).enumerate() {
+                        self.typecheck_arg(arg, param, ArgSite::of(&call.args, i, call.span));
+                    }
+                    self.wait_for_static(PendingStatic {
+                        receiver: receiver.clone(),
+                        receiver_type,
+                        instance,
+                        method_name: suffix.to_string(),
+                        args: args.clone(),
+                        impl_args: instance_args,
+                        call: call.id,
+                        method_id: ident.segments.get(1).map(|segment| segment.id),
+                        span: call.span,
+                        expected: expected_type,
+                        return_type: info.return_type,
+                    });
+                    return info.return_type;
+                }
                 if suffix == "from"
                     && !own_from
                     && let [arg_type] = args[..]
@@ -2090,16 +2133,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                // The same argument the selection above read: without it this
-                // re-check resolves a different declaration than the call was
-                // mangled to.
-                let typed = receiver.at_type(Some(receiver_type));
-                let resolved = self.resolve_static_callee(StaticQuery {
-                    arg_types: &args,
-                    receiver_args: &receiver_args,
-                    expected_return: expected_type,
-                    ..StaticQuery::of(&typed, suffix)
-                });
                 if self.report_unresolved_static(&resolved, suffix, &args, call.span) {
                     return TypeTable::ERROR;
                 }
@@ -2219,7 +2252,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     call.id,
                     call.span,
                     expected_type,
-                    ctx,
+                    Some(ctx),
                 );
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
@@ -3382,8 +3415,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let walk = |s: &mut Self| {
-            s.with_resolving_home(home, |s| {
-                s.with_declaration_frame(self_binding, type_bindings, body)
+            s.settling_selections(Undecided::Wait, |s| {
+                s.with_resolving_home(home, |s| {
+                    s.with_declaration_frame(self_binding, type_bindings, body)
+                })
             })
         };
         let Some(site) = site else {
@@ -5723,6 +5758,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected_return: expected_type,
             ..StaticQuery::of(receiver, method)
         });
+        // Impls of one trait no argument separates may be told apart by the
+        // instance the call settles, which the static call's own resolution
+        // waits for, and reports where it cannot.
+        if matches!(instance, UnappliedStatic::Open)
+            && matches!(ranked, StaticLookup::Overloaded { .. })
+        {
+            return None;
+        }
         if self.report_unresolved_static(&ranked, method, args, span) {
             return Some(TypeTable::ERROR);
         }

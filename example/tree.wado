@@ -93,7 +93,7 @@ fn collect_entries(dir: &String, opts: &Options) -> Result<List<fs::DirEntry>, f
         if !opts.show_hidden && e.name.starts_with(".") {
             continue;
         }
-        if opts.dirs_only && !e.type matches { Directory } {
+        if opts.dirs_only && !e.type matches { _::Directory } {
             continue;
         }
         out.push(e);
@@ -126,7 +126,7 @@ fn walk(
         let connector = if is_last { "└── " } else { "├── " };
         let next_prefix_fragment = if is_last { "    " } else { "│   " };
 
-        let is_dir = entry.type matches { Directory };
+        let is_dir = entry.type matches { _::Directory };
         let suffix = if is_dir { "/" } else { "" };
 
         println(`${prefix}${connector}${entry.name}${suffix}`);

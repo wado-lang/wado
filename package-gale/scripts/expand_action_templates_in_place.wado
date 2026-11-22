@@ -40,7 +40,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let mut rewritten = 0;
     let mut warned = 0;
     for let category of categories {
-        if !category.type matches { Directory } {
+        if !category.type matches { _::Directory } {
             continue;
         }
         let dir = fs::join(&GRAMMARS_ROOT, &category.name);
@@ -90,7 +90,7 @@ fn grammar_names<S: AsStrSlice>(dir: S) -> List<String> with (Stderr, Preopens, 
     };
     let mut out: List<String> = [];
     for let entry of entries {
-        if entry.type matches { File } && entry.name.ends_with(".g4") {
+        if entry.type matches { _::File } && entry.name.ends_with(".g4") {
             out.push(entry.name);
         }
     }
