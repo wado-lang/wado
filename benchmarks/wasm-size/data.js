@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795378653502,
+  "lastUpdate": 1795386196427,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81237,6 +81237,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0103a9b860a2a5a6ba9105355e457a49afc7d1a4"
         },
         "date": 1795378653151,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b28fa4350f12c1591bae386da46e230a6cb84ea",
+          "message": "Merge pull request #2724 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(compiler): a closure's effects select its impl and its associated types",
+          "timestamp": "2026-11-23T07:05:33+09:00",
+          "tree_id": "13487bffb13b32d3b8445efbc0897664fc0e12da",
+          "url": "https://github.com/wado-lang/wado/commit/0b28fa4350f12c1591bae386da46e230a6cb84ea"
+        },
+        "date": 1795386195499,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
