@@ -65,7 +65,7 @@ function generate(input, output) {
     "        for let i of 0..<caps.len() {",
     "            groups.push(match caps[i] {",
     "                Some(m) => `${m.start()}..${m.end()}`,",
-    '                None => "-",',
+    '                null => "-",',
     "            });",
     "        }",
     '        found.push(groups.join(","));',
