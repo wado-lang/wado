@@ -1,7 +1,7 @@
 # Jade TODO
 
-Open work on Jade. [WEP: Jade](../docs/wep-2026-06-13-jade.md) holds the
-design, and [`AGENTS.md`](./AGENTS.md) the rules for every change.
+Open work on Jade. [`README.md`](./README.md) holds the design, and
+[`AGENTS.md`](./AGENTS.md) the rules for every change.
 
 This file lists what is not yet done, at the level of behaviour. Find the code
 by searching, not by line numbers. Closed work belongs in the commit history.
