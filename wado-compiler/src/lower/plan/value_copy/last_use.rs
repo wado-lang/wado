@@ -258,6 +258,7 @@ struct WriteCheck<'a> {
 struct CallStart {
     mutations: usize,
     handed: usize,
+    opaque_writes: usize,
     beyond_handed_writes: usize,
 }
 
@@ -2707,6 +2708,9 @@ impl<'a> Analyzer<'a> {
         for m in &self.mutations[since.mutations..] {
             written.extend(self.landed(m.lands));
         }
+        for (opaque, _) in &self.opaque_writes[since.opaque_writes..] {
+            written.extend(opaque.locations.iter().copied());
+        }
         CallWrites {
             locations: written,
             beyond_handed,
@@ -2719,6 +2723,7 @@ impl<'a> Analyzer<'a> {
         let start = CallStart {
             mutations: self.mutations.len(),
             handed: self.handed.len(),
+            opaque_writes: self.opaque_writes.len(),
             beyond_handed_writes: self.beyond_handed_writes,
         };
         self.beyond_handed_writes += usize::from(beyond_handed);

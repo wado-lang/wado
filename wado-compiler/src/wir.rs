@@ -1853,7 +1853,7 @@ impl WirInstr {
     fn branches(&self, labels: u32, returns: bool, hits: &impl Fn(u32, u32) -> bool) -> bool {
         let under = |body: &[Self]| body.iter().any(|i| i.branches(labels + 1, returns, hits));
         match self {
-            Self::Return { .. } => returns,
+            Self::Return { .. } if returns => true,
             Self::Br { depth } => hits(*depth, labels),
             Self::BrIf { depth, condition } => {
                 hits(*depth, labels) || condition.branches(labels, returns, hits)
@@ -1896,16 +1896,12 @@ impl WirInstr {
                 then_body,
                 else_body,
                 ..
-            } => {
-                Self::seq_always_diverges(then_body)
-                    && else_body
-                        .as_ref()
-                        .is_some_and(|eb| Self::seq_always_diverges(eb))
-            }
+            } => else_body.as_ref().is_some_and(|else_body| {
+                Self::labelled_always_diverges(then_body)
+                    && Self::labelled_always_diverges(else_body)
+            }),
             Self::Seq(body) => Self::seq_always_diverges(body),
-            Self::Block { body, .. } => {
-                Self::seq_always_diverges(body) && !body.iter().any(|i| i.branches_to(0))
-            }
+            Self::Block { body, .. } => Self::labelled_always_diverges(body),
             Self::Drop(inner) => inner.always_diverges(),
             _ => false,
         }
@@ -1913,6 +1909,12 @@ impl WirInstr {
 
     fn seq_always_diverges(instrs: &[Self]) -> bool {
         instrs.iter().any(Self::always_diverges)
+    }
+
+    /// Whether the body of a construct with a label of its own diverges: a
+    /// branch to that label falls out of its `end`.
+    fn labelled_always_diverges(body: &[Self]) -> bool {
+        Self::seq_always_diverges(body) && !body.iter().any(|i| i.branches_to(0))
     }
 
     /// The instruction codegen actually writes, with every transparent wrapper

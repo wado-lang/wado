@@ -351,4 +351,44 @@ mod tests {
         clean_body(&mut body, &IndexSet::from_iter([0]));
         assert_matches!(body.as_slice(), [WirInstr::Call { .. }]);
     }
+
+    fn return_seven() -> WirInstr {
+        WirInstr::Return {
+            value: Some(Box::new(WirInstr::I32Const(7))),
+        }
+    }
+
+    #[test]
+    fn code_after_an_if_branching_to_its_own_end_stays() {
+        let mut body = vec![
+            WirInstr::If {
+                condition: Box::new(effect()),
+                result: None,
+                then_body: vec![WirInstr::Br { depth: 0 }],
+                else_body: Some(vec![WirInstr::Br { depth: 0 }]),
+            },
+            return_seven(),
+        ];
+        clean_body(&mut body, &IndexSet::default());
+        assert_matches!(body.as_slice(), [WirInstr::If { .. }, WirInstr::Return { .. }]);
+    }
+
+    #[test]
+    fn code_after_a_block_a_return_operand_leaves_stays() {
+        let mut body = vec![
+            WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![WirInstr::Return {
+                    value: Some(Box::new(WirInstr::Seq(vec![
+                        WirInstr::Br { depth: 0 },
+                        WirInstr::I32Const(0),
+                    ]))),
+                }],
+            },
+            return_seven(),
+        ];
+        clean_body(&mut body, &IndexSet::default());
+        assert_matches!(body.as_slice(), [WirInstr::Block { .. }, WirInstr::Return { .. }]);
+    }
 }

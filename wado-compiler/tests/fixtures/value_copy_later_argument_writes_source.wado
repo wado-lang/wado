@@ -4,7 +4,8 @@
 // still needs the copy: whether the write goes through a `&mut` taken on the
 // spot, an assignment, a `&mut` some local or struct keeps, a closure that
 // captured the value, a second reference parameter naming the same storage, a
-// reference into a list's element, a `&mut` a global keeps, or a global, and
+// reference into a list's element, a `&mut` a global keeps, a global, or a
+// reference an `if` picks, and
 // whether the argument is a local, a global, or a call handing back part of one.
 
 struct Pair {
@@ -121,6 +122,10 @@ export fn run() {
     assert count(items(&m), then: { m.s.push(1); m.s.len() }) == 1;
     assert two(GD, then: { GD.a = 1001; GD }) == 1011;
     assert count(global_items(), then: { GD.s.push(1); GD.s.len() }) == 1;
+    let mut f = pair();
+    let picked = Holder { w: &mut f };
+    let c = builtin::black_box(true);
+    assert two(f, then: { (if c { picked.w } else { picked.w }).a = 1001; f }) == 1011;
 }
 
 __DATA__
