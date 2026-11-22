@@ -37,13 +37,13 @@ AVX-512. One expert is 14,014,080 bytes as the `q4f16` export stores it.
 
 | What                                                     | Figure                                     |
 | -------------------------------------------------------- | ------------------------------------------ |
-| One guest core, 4-bit weights times i8 activations, DRAM | 11.18 GB/s of stored bytes, 1.25 ms/expert |
+| One guest core, 4-bit weights times i8 activations, DRAM | 10.84 GB/s of stored bytes, 1.29 ms/expert |
 | GPU pools of 5 GB, `LayerOrder`: a step's experts held   | 80.8% of 1344, 258 MB loaded a token       |
 | GPU pools of 5 GB, `Farthest` (the bound)                | 87.0%                                      |
 | GPU pools of 6.3 GB, as llama.cpp's best arm, `Recent`   | 84.7%                                      |
 
 ```sh
-(cd package-loam/benchmark/gpt_oss_20b && wado run -O3 cpu_expert.wado)
+(cd package-loam/benchmark/gpt_oss_20b && wado run -O3 --no-spectre-mitigation cpu_expert.wado)
 (cd package-loam && wado run tools/expert_eviction.wado -- \
     example/gpt-oss-20b/build/fetches.json 5000000000 6300000000)
 ```
@@ -54,24 +54,25 @@ The replay covers 14 generated tokens. A longer run may hold fewer.
 
 The target, 1/1.5 of llama.cpp's 40.38 tokens/s, is 37.1 ms a token. At 5 GB
 the GPU lacks 19.2% of 96 picks, 18.4 experts, and one core computes them in
-23 ms. The GPU's own work overlaps that, so a token takes the longer of the
+24 ms. The GPU's own work overlaps that, so a token takes the longer of the
 two plus one round trip per layer. One core fits only if the GPU's part and 24
-round trips together take under about 14 ms.
+round trips together take under about 13 ms.
 
 ## Constraints
 
 - The guest has one thread. A Component Model thread is cooperative, so one
   instance computes on one core, while llama.cpp and Strata use all of them.
 - The guest's own memory addresses 4 GiB, and the experts the GPU lacks at
-  5 GB take 5.75 GB. A second memory of 64-bit addresses holds them whole,
-  which needs `memory64` in Wado.
+  5 GB take 5.75 GB. A `LinearArray64` holds them whole. Its accesses are
+  bounds-checked one by one, and the figure above is with
+  `--no-spectre-mitigation`, as every benchmark runs.
 - The GPU drops to low clocks when idle. Each layer waiting on the CPU idles
   it, which may keep its kernels at the 18 GB/s measured under partial load.
 
 ## Design
 
 1. Placement. The GPU pools stay as they are, under the eviction order the
-   replay ranks best. The guest holds every other expert in its 64-bit memory.
+   replay ranks best. The guest holds every other expert in a `LinearArray64`.
 2. Choice per expert, after Fiddler. In a host step, an expert the pools lack
    is computed on the CPU when the step routes fewer than T tokens to it, and
    written into a slot otherwise, as today. A generated token routes 1. T is
@@ -134,5 +135,3 @@ The recommendation is A first. It needs no host change, and its measurements
   they are.
 - The hit rate over a longer run than 14 tokens.
 - The product's error against onnxruntime with i8 activations.
-- The product's speed from a 64-bit memory, whose loads the engine checks
-  explicitly rather than by guard pages.
