@@ -70,9 +70,9 @@ the site that closed it.
 ### What goes
 
 The effect check verifies rows it is given; it no longer solves any.
-`write_back_effect_rows` and the effect check's fixed point over the program (`solve_rows`) are deleted. Every
-type the elaborator writes back holds solved rows, so reify and the TIR never
-see an effect variable.
+`write_back_effect_rows` and the effect check's fixed point over the program
+(`solve_rows`) are deleted. Every type the elaborator writes back holds solved
+rows, so reify and the TIR never see an effect variable.
 
 ## Roadmap
 
