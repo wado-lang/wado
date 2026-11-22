@@ -128,9 +128,16 @@ impl WirMutVisitor for CleanupVisitor<'_> {
         self.walk_body(body);
         // Remove nops.
         body.retain(|i| !matches!(i, WirInstr::Nop));
-        // Truncate after first unreachable (dead code elimination).
-        if let Some(pos) = body.iter().position(|i| matches!(i, WirInstr::Unreachable)) {
-            body.truncate(pos + 1);
+        if let Some(pos) = body.iter().position(WirInstr::always_diverges) {
+            // Validation takes the end of a block or an `if` as reachable, so
+            // past one that diverges an `unreachable` stays for the stack the
+            // enclosing block expects.
+            if body[pos].ends_with_terminator() {
+                body.truncate(pos + 1);
+            } else if body.len() > pos + 1 {
+                body.truncate(pos + 2);
+                body[pos + 1] = WirInstr::Unreachable;
+            }
         }
     }
 

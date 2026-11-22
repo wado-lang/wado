@@ -1,0 +1,16 @@
+// A template's holes are picked by a `br_table` over the hole index. Once the
+// format call is unrolled per hole, each index is a constant, so each table
+// folds to the one branch it takes.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a: String = builtin::black_box("a");
+    println(`${a}-${a}-${a}-${a}-${a}`);
+}
+
+__DATA__
+{
+    "stdout": "a-a-a-a-a\n",
+    "wir_not_expect:O2": ["br_table"]
+}

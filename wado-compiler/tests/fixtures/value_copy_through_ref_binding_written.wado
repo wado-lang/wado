@@ -2,8 +2,9 @@
 // may write it. Each function here writes the referent while the binding is
 // still read: through an aliasing `&mut` parameter, through a callee writing a
 // global the reference points into, through a closure, through a callee
-// running a closure it is handed, and through a callee writing a reference
-// held in its `&mut` argument, so each copies.
+// running a closure it is handed, through a callee writing a reference held
+// in its `&mut` argument, through a reference an `if` picks, which names no
+// place, and through a direct write to the global, so each copies.
 
 use { println, Stdout } from "core:cli";
 
@@ -76,6 +77,13 @@ fn through_unnamed_place(base: &Rec, other: &mut Rec, pick: bool) -> String {
     return r.name;
 }
 
+#[inline(never)]
+fn through_global_write(base: &Rec) -> String {
+    let r = *base;
+    HELD.name.push_str("!");
+    return r.name;
+}
+
 export fn run() with Stdout {
     let mut a = Rec { name: "a" };
     let p: &Rec = &a;
@@ -93,10 +101,12 @@ export fn run() with Stdout {
     let mut f = Rec { name: "f" };
     let u: &Rec = &f;
     let o = through_unnamed_place(u, &mut f, builtin::black_box(true));
-    println(`${x} ${y} ${z} ${w} ${v} ${o} ${a.name} ${HELD.name} ${c.name} ${d.name} ${e.name} ${f.name}`);
+    let k = through_global_write(&HELD);
+    println(`${x} ${y} ${z} ${w} ${v} ${o} ${k}`);
+    println(`${a.name} ${HELD.name} ${c.name} ${d.name} ${e.name} ${f.name}`);
 }
 
 __DATA__
 {
-    "stdout": "a g c d e f a! g! c! d! e! f!\n"
+    "stdout": "a g c d e f g!\na! g!! c! d! e! f!\n"
 }

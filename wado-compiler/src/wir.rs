@@ -1840,31 +1840,47 @@ impl WirInstr {
     /// `labels` is how many labels a branch out of `self` crosses before it
     /// leaves.
     pub(crate) fn leaves(&self, labels: u32) -> bool {
-        let under = |body: &[Self]| body.iter().any(|i| i.leaves(labels + 1));
+        self.branches(labels, true, &|depth, labels| depth >= labels)
+    }
+
+    /// Whether a branch in `self` targets the label `labels` levels out.
+    pub(crate) fn branches_to(&self, labels: u32) -> bool {
+        self.branches(labels, false, &|depth, labels| depth == labels)
+    }
+
+    /// Whether a branch in `self` whose depth `hits` the label `labels` levels
+    /// out, or a `return` where `returns`, can run.
+    fn branches(&self, labels: u32, returns: bool, hits: &impl Fn(u32, u32) -> bool) -> bool {
+        let under = |body: &[Self]| body.iter().any(|i| i.branches(labels + 1, returns, hits));
         match self {
-            Self::Return { .. } => true,
-            Self::Br { depth } => *depth >= labels,
-            Self::BrIf { depth, condition } => *depth >= labels || condition.leaves(labels),
+            Self::Return { .. } => returns,
+            Self::Br { depth } => hits(*depth, labels),
+            Self::BrIf { depth, condition } => {
+                hits(*depth, labels) || condition.branches(labels, returns, hits)
+            }
             Self::BrTable {
                 index,
                 targets,
                 default,
-            } => targets.iter().chain([default]).any(|&d| d >= labels) || index.leaves(labels),
+            } => {
+                targets.iter().chain([default]).any(|&d| hits(d, labels))
+                    || index.branches(labels, returns, hits)
+            }
             Self::If {
                 condition,
                 then_body,
                 else_body,
                 ..
             } => {
-                condition.leaves(labels)
+                condition.branches(labels, returns, hits)
                     || under(then_body)
                     || else_body.as_deref().is_some_and(under)
             }
             Self::Block { body, .. } | Self::Loop { body, .. } => under(body),
             other => {
-                let mut leaves = false;
-                other.for_each_child(&mut |c| leaves = leaves || c.leaves(labels));
-                leaves
+                let mut found = false;
+                other.for_each_child(&mut |c| found = found || c.branches(labels, returns, hits));
+                found
             }
         }
     }
@@ -1887,6 +1903,9 @@ impl WirInstr {
                         .is_some_and(|eb| Self::seq_always_diverges(eb))
             }
             Self::Seq(body) => Self::seq_always_diverges(body),
+            Self::Block { body, .. } => {
+                Self::seq_always_diverges(body) && !body.iter().any(|i| i.branches_to(0))
+            }
             Self::Drop(inner) => inner.always_diverges(),
             _ => false,
         }

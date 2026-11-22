@@ -1,5 +1,6 @@
 // A field read through the `&mut` a call returns is the referent's own
-// storage, so assigning to it writes the caller's value rather than a copy.
+// storage: assigning to it writes the caller's value rather than a copy, and a
+// reference to it, bound or passed, sees a later write to the referent.
 
 use { println, Stdout } from "core:cli";
 
@@ -23,13 +24,42 @@ fn rename(other: &mut Rec) -> String {
     return "done";
 }
 
+#[inline(never)]
+fn bound_then_written(other: &mut Rec) -> String {
+    let mut h = Holder { r: other };
+    let s: &String = &get(&mut h).name;
+    h.r.name.push_str("+");
+    return *s;
+}
+
+#[inline(never)]
+fn bump(h: &mut Holder) -> i32 {
+    h.r.name.push_str("^");
+    return 1;
+}
+
+#[inline(never)]
+fn both(s: &String, n: i32) -> String {
+    return `${*s}${n}`;
+}
+
+#[inline(never)]
+fn passed_then_written(other: &mut Rec) -> String {
+    let mut h = Holder { r: other };
+    return both(&get(&mut h).name, bump(&mut h));
+}
+
 export fn run() with Stdout {
     let mut e = Rec { name: "e" };
     let v = rename(&mut e);
-    println(`${v} ${e.name}`);
+    let mut b = Rec { name: "b" };
+    let s = bound_then_written(&mut b);
+    let mut p = Rec { name: "p" };
+    let q = passed_then_written(&mut p);
+    println(`${v} ${e.name} ${s} ${q}`);
 }
 
 __DATA__
 {
-    "stdout": "done changed\n"
+    "stdout": "done changed b+ p^1\n"
 }

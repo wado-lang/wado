@@ -341,6 +341,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, types: &
         let mut changed = false;
         changed |= rewrite_everywhere(instrs, &mut try_fold_comparison);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_eliminate_const_if(instr, null));
+        changed |= rewrite_everywhere(instrs, &mut try_fold_const_branch);
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             let folded = try_fold_eqz(instr);
             try_negate_eqz_comparison(instr) || folded
@@ -564,6 +565,32 @@ fn try_eliminate_const_if(instr: &mut WirInstr, null: &Nullability) -> bool {
             body: vec![WirInstr::Nop],
         };
     }
+    true
+}
+
+/// Replace a branch whose target a constant decides (`br_if` on a constant
+/// condition, `br_table` on a constant index) by the branch it takes.
+fn try_fold_const_branch(instr: &mut WirInstr) -> bool {
+    *instr = match instr {
+        WirInstr::BrIf { depth, condition } => match try_fold_wir_to_bool(condition) {
+            Some(true) => WirInstr::Br { depth: *depth },
+            Some(false) => WirInstr::Nop,
+            None => return false,
+        },
+        WirInstr::BrTable {
+            index,
+            targets,
+            default,
+        } => {
+            let WirInstr::I32Const(k) = **index else {
+                return false;
+            };
+            // The index is unsigned: a negative constant is past every target.
+            let taken = targets.get(k.cast_unsigned() as usize).unwrap_or(default);
+            WirInstr::Br { depth: *taken }
+        }
+        _ => return false,
+    };
     true
 }
 
@@ -1832,6 +1859,34 @@ mod tests {
         );
         assert!(!fold_short_fill(&mut instr));
         assert_matches!(instr, WirInstr::ArrayFill { .. });
+    }
+
+    #[test]
+    fn const_branch_takes_the_decided_target() {
+        let br_if = |c| WirInstr::BrIf {
+            depth: 2,
+            condition: Box::new(WirInstr::BranchHint {
+                likely: true,
+                expr: Box::new(WirInstr::I32Const(c)),
+            }),
+        };
+        let br_table = |k| WirInstr::BrTable {
+            index: Box::new(WirInstr::I32Const(k)),
+            targets: vec![4, 5],
+            default: 6,
+        };
+        let mut not_taken = br_if(0);
+        assert!(try_fold_const_branch(&mut not_taken));
+        assert_matches!(not_taken, WirInstr::Nop);
+        for (mut instr, taken) in [
+            (br_if(1), 2),
+            (br_table(1), 5),
+            (br_table(2), 6),
+            (br_table(-1), 6),
+        ] {
+            assert!(try_fold_const_branch(&mut instr));
+            assert_matches!(instr, WirInstr::Br { depth } if depth == taken);
+        }
     }
 
     #[test]
