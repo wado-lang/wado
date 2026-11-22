@@ -1,0 +1,31 @@
+// A field whose type is a function with a row reads through the reflection
+// bridge, on a plain struct and on a generic one whose argument carries the row.
+
+use { println, Stdout } from "core:cli";
+
+struct Listener {
+    name: String,
+    f: fn mut(i32) with Stdout,
+}
+
+struct Slot<F> {
+    v: F,
+}
+
+fn fields<S: ReflectStruct<FieldTypes = [..F]>, ..F>(s: &S) -> i32 {
+    let mut n = 0;
+    for let field of ReflectStruct::<S>::members() {
+        let _ = field.get_ref(s);
+        n += 1;
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let l = Listener { name: "a", f: |x: i32| { println(`${x}`); } };
+    let s = Slot { v: || { println("loud"); } };
+    println(`${fields(&l)} ${fields(&s)}`);
+}
+
+__DATA__
+{"stdout": "2 1\n"}

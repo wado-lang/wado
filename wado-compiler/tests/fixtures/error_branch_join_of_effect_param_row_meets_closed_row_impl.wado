@@ -1,0 +1,34 @@
+// A branch joining a function value of an effect parameter with a closure that
+// performs `Stdout` has the union of their rows, `E` among them, so it meets no
+// impl written for one row.
+
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+fn pick<effect E>(g: fn() with E) -> String with (E, Stdout) {
+    let c = builtin::black_box(true);
+    let f = if c { g } else { || { println("x"); } };
+    return f.name();
+}
+
+export fn run() with Stdout {
+    println(pick(|| {}));
+}
+
+__DATA__
+{"compile_error": ":26:12: analysis error: no method 'name' found on type 'fn() -> () with (Stdout, E)'"}

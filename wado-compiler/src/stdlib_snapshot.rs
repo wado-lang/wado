@@ -191,6 +191,7 @@ fn build_snapshot(coverage: Option<CoverageScope>, profile: Option<Applied<'_>>)
         profile,
         &LivenessScope::Compilation,
         None,
+        &IndexSet::default(),
     );
     assert!(
         sem.is_complete(),

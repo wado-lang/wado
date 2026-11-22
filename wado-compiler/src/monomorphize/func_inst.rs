@@ -1312,13 +1312,21 @@ impl Monomorphizer {
             }),
             method_info,
         };
-        Some(self.instantiate_with(
+        self.current_effect_rows = match generic.impl_origin {
+            Some(block) if !generic.impl_effect_params.is_empty() => {
+                type_table.impl_effect_binding(block, &key.impl_type_args)
+            }
+            _ => IndexMap::default(),
+        };
+        let instance = self.instantiate_with(
             generic,
             &substitution,
             param_key_by_binder,
             identity,
             type_table,
-        ))
+        );
+        self.current_effect_rows = IndexMap::default();
+        Some(instance)
     }
 
     /// `generic` with `substitution` applied throughout, under the identity the
@@ -1407,6 +1415,7 @@ impl Monomorphizer {
             is_export: generic.is_export, // Inherit from generic
             type_params: vec![],          // Concrete function has no type params
             impl_type_params: vec![],     // Already monomorphized, no impl type params
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: identity.monomorph_info,
             method_info: identity.method_info,

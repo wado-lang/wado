@@ -1,0 +1,17 @@
+// Two closure literals joined by an `if` select the impl for the union of
+// their rows, solved where the branches meet.
+
+use { println, Stdout } from "core:cli";
+
+trait Name with () { fn name(&self) -> String; }
+impl Name for fn() { fn name(&self) -> String { return "pure"; } }
+impl Name for fn() with Stdout { fn name(&self) -> String { return "loud"; } }
+
+export fn run() with Stdout {
+    let c = builtin::black_box(true);
+    let f = if c { || { println("x"); } } else { || {} };
+    println(f.name());
+}
+
+__DATA__
+{"stdout": "loud\n"}

@@ -1,0 +1,44 @@
+// A closure calling a trait default method generic over an effect performs
+// what the argument resolves that parameter to.
+
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+trait Each with _ {
+    fn get(&self) -> i32;
+    fn each<effect E>(&self, f: fn() with E) with E {
+        f();
+    }
+}
+
+struct S {}
+
+impl Each for S {
+    fn get(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() with Stdout {
+    let s = S {};
+    let f = || s.each(|| { println("x"); });
+    println(f.name());
+}
+
+__DATA__
+{"stdout": "loud\n"}

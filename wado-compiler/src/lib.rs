@@ -848,7 +848,16 @@ async fn package_unused_diagnostics_body(
         production,
         walked,
     }));
-    let sem = semantics::semantics_with_logger(load, &logger, false, None, None, &scope, None);
+    let sem = semantics::semantics_with_logger(
+        load,
+        &logger,
+        false,
+        None,
+        None,
+        &scope,
+        None,
+        &IndexSet::default(),
+    );
     sem.is_complete()
         .then(|| unused_diagnostics(&sem, lints, false))
 }
@@ -1791,11 +1800,8 @@ fn check_effects_and_moves<H: CompilerHost>(
         let _span = logger.span("effect-check/moves");
         affine_move_check::check_affine_moves_semantic(sem)
     };
-    let unmet_bounds = sem.write_back_effect_rows(&diags.rows);
-    let had_error = !diags.is_empty() || !move_errors.is_empty() || !unmet_bounds.is_empty();
-    for error in unmet_bounds {
-        let _ = logger.error(error);
-    }
+    sem.write_back_effect_rows(&diags.rows);
+    let had_error = !diags.is_empty() || !move_errors.is_empty();
     for error in diags.effects {
         let _ = logger.error(error);
     }
@@ -1991,6 +1997,7 @@ fn build_after_load<H: CompilerHost>(
             .map(|profile| profile.applied(options.opt.profile_thresholds())),
         &LivenessScope::Compilation,
         dependencies,
+        &provided_import_fqs,
     );
     if let Some(views) = views.as_deref_mut() {
         views.analysis = Some(AnalysisViews {

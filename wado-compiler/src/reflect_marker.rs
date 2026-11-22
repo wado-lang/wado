@@ -52,13 +52,13 @@ pub(crate) fn bridge_callee(
     let (head, name) = if bridge.names_member() {
         let [head, member] = marker_type_args::<2>(type_args, mi, marker);
         let name = bridge.pair_name(
-            &tt.mangle_type_arg_rowless(head),
-            &tt.mangle_type_arg_rowless(member),
+            &tt.mangle_type_arg_solved(head),
+            &tt.mangle_type_arg_solved(member),
         );
         (head, name)
     } else {
         let [shape] = marker_type_args::<1>(type_args, mi, marker);
-        (shape, bridge.shape_name(&tt.mangle_type_arg_rowless(shape)))
+        (shape, bridge.shape_name(&tt.mangle_type_arg_solved(shape)))
     };
     Some(BridgeCallee::homed(tt, head, name, marker))
 }

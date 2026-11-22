@@ -225,6 +225,7 @@
 - [Omitted Type Arguments Are Inference Variables](./wep-2026-11-19-omitted-type-arguments.md)
 - [A Bare Name in a Pattern Always Binds](./wep-2026-11-20-bare-names-bind.md)
 - [One Inference Context: Equations and Obligations](./wep-2026-11-20-inference-context.md)
+- [Effect Rows in the Inference Context](./wep-2026-11-21-effect-rows-in-inference-context.md)
 
 ## Standard Library
 

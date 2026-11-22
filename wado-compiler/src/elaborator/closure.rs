@@ -4,10 +4,14 @@
 //! the caller's typecheck, and records the
 //! [`super::sem::types::ClosureCaptureInfo`] reify rebuilds from.
 
-use crate::ast::{self};
+use crate::ModuleSource;
+use crate::ast::{self, Expr};
 use crate::compiler_host::CompilerHost;
+use crate::effect_check::{OwnedEffectData, WalkInProgress, call_rows, closure_row};
 use crate::name::capture_ref_name;
-use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId};
+use crate::tir::{
+    CaptureSource, EffectRef, EffectRows, ResolvedType, RowClosing, TirCapture, TypeId,
+};
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
@@ -349,16 +353,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Project the closure's `fn(...)` / `fn mut(...)` type so the
         // caller's typecheck context (`expression_types[closure.id]`, etc.)
         // sees it. Reify rebuilds an equivalent type from its own facts.
-        // Its row is what the body performs, which the effect check works out:
-        // a variable here.
+        // Its row is a variable, solved here to what the body performs where
+        // every row the body reads is solved already, and by the effect check
+        // otherwise.
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
+        let performed = self.closure_performs(closure);
+        let site = RowClosing {
+            span: closure.span,
+            module: self.home_module(closure.id).source_path(),
+        };
         let mut table = self.tysys.type_table.borrow_mut();
-        let row = vec![table.mint_effect_var()];
+        let var = table.mint_effect_var();
+        if let Some(performed) = performed {
+            table.solve_effect_var(var.name(), performed, site);
+        }
+        let row = vec![var];
         let func_type =
             table.make_function_with_mut(any_mutating_capture, param_types, return_type, row);
         drop(table);
 
         ctx.source_bindings.extend(closure_ctx.source_bindings);
         func_type
+    }
+
+    /// What the body of `closure`, just walked, performs, where every row it
+    /// reads is solved.
+    fn closure_performs(&self, closure: &ast::ClosureExpr) -> Option<Vec<EffectRef>> {
+        self.walk_effects_so_far(|facts, decls, module, solved| {
+            closure_row(facts, decls, module, closure, solved)
+        })?
+    }
+
+    /// Solve each variable the call `expr`, just resolved, carries out in its
+    /// type, where every row it reads is solved: what reads it next, a bound
+    /// among them, reads the row the effect check ends with.
+    pub(super) fn solve_call_rows(&self, expr: &Expr) {
+        let Some(solved) = self.walk_effects_so_far(|facts, decls, module, solved| {
+            call_rows(facts, decls, module, expr, solved)
+        }) else {
+            return;
+        };
+        let site = RowClosing {
+            span: expr.span(),
+            module: self.home_module(expr.id()).source_path(),
+        };
+        let mut table = self.tysys.type_table.borrow_mut();
+        for (var, row) in solved {
+            table.solve_effect_var(&var, row, site.clone());
+        }
+    }
+
+    /// What `walk` answers over the facts elaborated so far and the rows solved
+    /// so far. `None` before the effect declarations are indexed.
+    fn walk_effects_so_far<R>(
+        &self,
+        walk: impl FnOnce(&WalkInProgress<'_>, &OwnedEffectData, &ModuleSource, &EffectRows) -> R,
+    ) -> Option<R> {
+        let decls = self.effect_decls.as_ref()?;
+        let types = self.tysys.type_table.borrow();
+        let facts = WalkInProgress {
+            types: &types,
+            sem: &self.sem,
+        };
+        Some(walk(
+            &facts,
+            decls,
+            &self.current_module_source,
+            types.early_effect_rows(),
+        ))
     }
 }

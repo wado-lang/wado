@@ -15,7 +15,7 @@ use super::super::types::{DataDecls, StructFieldInfo};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::sig::{AssocConstSig, ImplSig, TraitSig};
-use crate::tir::{EffectRef, TirEffectOp, TirStruct};
+use crate::tir::{EffectRef, TirStruct};
 use crate::type_table::AnonStructId;
 
 /// A function's canonical signature, resolved once by its module's decl
@@ -126,14 +126,6 @@ pub(crate) struct ModuleDecls {
     /// trait's own frame (`Self` at slot 0) and keyed by the declaration, so
     /// a use site instantiates instead of re-resolving the trait method AST.
     pub(crate) trait_sigs: IndexMap<DefId, TraitSig>,
-    /// Resolved operation signatures of this module's `interface` and
-    /// `resource` declarations, keyed by the declaration.
-    ///
-    /// Resolved in the declaration's own frame — type params registered and
-    /// `Self` constructed — which is why the body pass reads these back
-    /// instead of resolving the same methods a second time.
-    pub(crate) effect_ops: IndexMap<DefId, Vec<TirEffectOp>>,
-
     /// `mangled_name → type_params` for generic methods.
     pub(crate) generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// `mangled_name → resolved param TypeIds` for generic methods. Resolved

@@ -51,8 +51,9 @@ pub enum SolverType {
         /// empty for one that declares no parameters.
         args: Vec<SolverType>,
     },
-    /// A function type's row holding an effect parameter: it stands for
-    /// whatever row meets it.
+    /// A function type's row an impl header writes with an effect binder: it
+    /// stands for whatever row meets it. The asking frame's own effect
+    /// parameter is rigid instead, an effect no impl names.
     AnyRow,
     /// A type inference has yet to settle. Two occurrences of one variable are
     /// one type.

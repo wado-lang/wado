@@ -1390,7 +1390,7 @@ impl<'a> Reify<'a> {
         // recorded them; reify reads them back rather than re-resolving.
         let operations = self
             .ann_effect_ops(decl.id)
-            .expect("`record_effect_ops` records op signatures for every effect reify emits");
+            .expect("the decl pass records op signatures for every effect reify emits");
         tir::TirEffect {
             head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
@@ -1403,11 +1403,11 @@ impl<'a> Reify<'a> {
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
     /// 0; for generic resources `Self` is a `Resource` with the
     /// decl's own `TypeParam`s as type args. The op signatures are read
-    /// from the facts the body walk recorded.
+    /// from the facts the decl pass recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
         let operations = self
             .ann_effect_ops(decl.id)
-            .expect("`record_effect_ops` records op signatures for every resource reify emits");
+            .expect("the decl pass records op signatures for every resource reify emits");
         let type_params = self
             .ann_decl_type_params(decl.id)
             .expect("the body walk records the type params for every resource reify emits");
@@ -1513,6 +1513,7 @@ impl<'a> Reify<'a> {
             is_async: func.is_async,
             type_params,
             impl_type_params: vec![],
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
             method_info: None,
@@ -1751,7 +1752,7 @@ impl<'a> Reify<'a> {
         let mut tir_func = self.reify_callable(func, display_name);
         tir_func.name = mangled_name;
         tir_func.is_export = false;
-        tir_func.impl_origin = Some(origin);
+        tir_func.place_in_impl(origin, &self.tysys.type_table.borrow());
         tir_func.impl_type_params = impl_type_params;
         tir_func.method_info = Some(method_info);
         tir_func
@@ -1794,6 +1795,7 @@ impl<'a> Reify<'a> {
             is_async: false,
             type_params: vec![],
             impl_type_params: vec![],
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
             method_info: None,
@@ -6676,7 +6678,7 @@ impl<'a> Reify<'a> {
             facts
                 .receiver_args
                 .iter()
-                .map(|&arg| table.fq_type_name_rowless(arg))
+                .map(|&arg| table.fq_type_name_solved(arg))
                 .collect()
         };
         let mut method_info = generic.with_type_args(&arg_names, &[]);

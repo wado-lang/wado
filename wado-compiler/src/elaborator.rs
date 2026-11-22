@@ -63,6 +63,7 @@ use crate::ast::{
 use crate::compiler_host::{Code, CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::divergence;
+use crate::effect_check::OwnedEffectData;
 use crate::elaborator::item::OperationOwner;
 pub(crate) use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
@@ -235,6 +236,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     pub(super) abstract_selection_cache: Rc<RefCell<AbstractSelectionCache>>,
     /// `AnnotateState::transpositions`.
     transpositions: Rc<hashmap::IndexMap<ast::AstId, transposition::Clean>>,
+    /// `AnnotateState::effect_decls`.
+    effect_decls: Option<Rc<OwnedEffectData>>,
 }
 
 /// What a default body's author selected at one call through a bound.
@@ -1781,12 +1784,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for trait_decl in &trait_decls {
             self.resolve_trait_decl(trait_decl);
         }
+        // A default method's parameters, which the effect index reads before
+        // any impl walks the body.
+        for sig in self.sem.decls.trait_sigs.values() {
+            for method in sig.methods.values() {
+                let Some(body) = &method.default_body else {
+                    continue;
+                };
+                let types = &mut self.sem.types;
+                types
+                    .fn_param_types
+                    .insert(body.id, method.sig.decl.param_types.clone());
+                types.fn_return_types.insert(
+                    body.id,
+                    method.sig.decl.return_type.unwrap_or(TypeTable::UNIT),
+                );
+            }
+        }
 
         // Resolve each `interface` / `resource` declaration's operations in
         // its own frame, so a generic resource's methods see its type params
-        // and `Self`. The body pass reads these back rather than repeating
-        // the work.
-        self.sem.decls.effect_ops.clear();
+        // and `Self`.
         self.sem.decls.resource_method_ids.clear();
         let decl_ops: Vec<(AstId, Vec<ast::GenericParam>, Vec<ast::Function>, bool)> = module
             .items
@@ -1818,7 +1836,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .resource_method_ids
                     .insert((owner, method.name.clone()), op);
             }
-            self.sem.decls.effect_ops.insert(owner, ops);
+            self.sem.types.effect_ops.insert(decl_id, ops);
         }
 
         // Before any body, so a same-module forward reference (`outer<T>`
@@ -1829,12 +1847,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if let Item::Function(func) = item {
                 let def = self.tysys.def_at(func.id);
                 let sig = self.record_function_sig(func);
+                let types = &mut self.sem.types;
+                types.function_effects.insert(func.id, sig.effects.clone());
+                types
+                    .fn_param_types
+                    .insert(func.id, sig.decl.param_types.clone());
+                types
+                    .fn_return_types
+                    .insert(func.id, sig.decl.return_type.unwrap_or(TypeTable::UNIT));
                 function_sigs.insert(def, Rc::new(sig));
             }
         }
         for item in &module.items {
-            if let Item::Impl(impl_block) = item {
-                self.record_impl_decls(impl_block);
+            match item {
+                Item::Impl(impl_block) => self.record_impl_decls(impl_block),
+                Item::Struct(struct_decl) => self.record_struct_field_types(struct_decl),
+                _ => {}
             }
         }
         self.sem.decls.function_sigs = function_sigs;
@@ -1890,7 +1918,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // AST + decl tables, so the body walk does nothing for them.
                 Item::Enum(_) | Item::Flags(_) | Item::Newtype(_) => {}
                 Item::Interface(effect_decl) => {
-                    self.record_effect_ops(effect_decl.id);
                     self.reject_unsupported_operation_clauses(
                         &effect_decl.name,
                         &effect_decl.methods,
@@ -1911,7 +1938,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 Item::Resource(resource_decl) => {
                     self.record_decl_type_params(resource_decl.id, &resource_decl.type_params);
-                    self.record_effect_ops(resource_decl.id);
                     self.reject_unsupported_operation_clauses(
                         &resource_decl.name,
                         &resource_decl.methods,
@@ -2047,66 +2073,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
 
-        // Snapshot the resolution facts, which `reify_impl` reads back verbatim.
-        {
-            let self_type = scope.resolve_type(&impl_block.ty);
-            // `reify_impl_default_methods` recomputes a default method's name
-            // from `qualified_struct_name`, so it must be what this block's
-            // methods are recorded under, or the block writes two templates.
-            let qualified_struct_name = scope.impl_receiver_name(impl_block);
-            let receiver = match RefKind::from_ast(&impl_block.ty) {
-                Some(kind) => Receiver::of_ref_impl(kind, &qualified_struct_name),
-                None => Receiver::Type(qualified_struct_name.clone()),
-            };
-            let is_ref_impl = receiver.ref_kind().is_some();
-            // Concrete type args of the impl's trait reference
-            // (`impl Future<i32>` → `[i32]`), resolved in the
-            // impl's type-param scope so generic impls
-            // round-trip their `TypeParam` ids. Mirrors
-            // `record_impl_sig`.
-            let trait_type_args: Vec<tir::TypeId> = match &impl_block.trait_type {
-                Some(ast::Type::Generic(generic)) => generic
-                    .args
-                    .iter()
-                    .map(|arg| scope.resolve_type(arg))
-                    .collect(),
-                _ => Vec::new(),
-            };
-            // Concrete-impl owner (`impl List<u8>`, `impl Eq for &Item`): the
-            // receiver's qualified mangle, matching call sites (issue #1348).
-            let concrete_owner: Option<FqTypeName> =
-                if !qualified_struct_name.references().is_empty()
-                    && impl_block.type_params.is_empty()
-                {
-                    Some(qualified_struct_name.clone())
-                } else if scope
-                    .tysys
-                    .impl_is_concrete_instantiation(&impl_block.ty, &impl_block.type_params)
-                {
-                    let tt = scope.tysys.type_table.borrow();
-                    let peeled = tt.peel_refs(self_type);
-                    let is_instantiation = match tt.get(peeled) {
-                        ResolvedType::Newtype { type_args, .. } => !type_args.is_empty(),
-                        // The shapes a call site mangles with their arguments.
-                        _ => tt.nominal_type_args(peeled).is_some(),
-                    };
-                    is_instantiation.then(|| tt.fq_type_name(self_type))
-                } else {
-                    None
-                };
-            scope.record_impl_facts(
-                impl_block.id,
-                sem::types::ImplFacts {
-                    trait_name: trait_name.clone(),
-                    trait_type_args,
-                    is_ref_impl,
-                    struct_name: qualified_struct_name,
-                    receiver,
-                    concrete_owner,
-                },
-            );
-        }
-
         // Reify reads a constant's body facts under this module's
         // perspective, so this module must be the one that records them.
         let mut scope = scope;
@@ -2195,6 +2161,69 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .insert((impl_block.id, default_method.id), facts);
             }
         }
+    }
+
+    /// Record what `reify_impl` reads back verbatim of an impl block, in the
+    /// block's scope.
+    pub(super) fn record_impl_block_facts(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+        trait_name: Option<FqTraitName>,
+    ) {
+        let self_type = self.resolve_type(&impl_block.ty);
+        // `reify_impl_default_methods` recomputes a default method's name
+        // from `qualified_struct_name`, so it must be what this block's
+        // methods are recorded under, or the block writes two templates.
+        let qualified_struct_name = self.impl_receiver_name(impl_block);
+        let receiver = match RefKind::from_ast(&impl_block.ty) {
+            Some(kind) => Receiver::of_ref_impl(kind, &qualified_struct_name),
+            None => Receiver::Type(qualified_struct_name.clone()),
+        };
+        let is_ref_impl = receiver.ref_kind().is_some();
+        // Concrete type args of the impl's trait reference
+        // (`impl Future<i32>` → `[i32]`), resolved in the impl's type-param
+        // scope so generic impls round-trip their `TypeParam` ids. Mirrors
+        // `record_impl_sig`.
+        let trait_type_args: Vec<tir::TypeId> = match &impl_block.trait_type {
+            Some(ast::Type::Generic(generic)) => generic
+                .args
+                .iter()
+                .map(|arg| self.resolve_type(arg))
+                .collect(),
+            _ => Vec::new(),
+        };
+        // Concrete-impl owner (`impl List<u8>`, `impl Eq for &Item`): the
+        // receiver's qualified mangle, matching call sites (issue #1348).
+        let concrete_owner: Option<FqTypeName> = if !qualified_struct_name.references().is_empty()
+            && impl_block.type_params.is_empty()
+        {
+            Some(qualified_struct_name.clone())
+        } else if self
+            .tysys
+            .impl_is_concrete_instantiation(&impl_block.ty, &impl_block.type_params)
+        {
+            let tt = self.tysys.type_table.borrow();
+            let peeled = tt.peel_refs(self_type);
+            let is_instantiation = match tt.get(peeled) {
+                ResolvedType::Newtype { type_args, .. } => !type_args.is_empty(),
+                // The shapes a call site mangles with their arguments.
+                _ => tt.nominal_type_args(peeled).is_some(),
+            };
+            is_instantiation.then(|| tt.fq_type_name(self_type))
+        } else {
+            None
+        };
+        self.record_impl_facts(
+            impl_block.id,
+            sem::types::ImplFacts {
+                trait_name,
+                trait_type_args,
+                is_ref_impl,
+                struct_name: qualified_struct_name,
+                receiver,
+                concrete_owner,
+            },
+        );
     }
 
     /// Run `body`, a walk of a trait default body, recording into a fresh
