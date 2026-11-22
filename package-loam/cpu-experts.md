@@ -62,17 +62,16 @@ round trips together take under about 14 ms.
 
 - The guest has one thread. A Component Model thread is cooperative, so one
   instance computes on one core, while llama.cpp and Strata use all of them.
-- The guest addresses 4 GiB, and Wado has no `memory64`. The experts the GPU
-  lacks at 5 GB take 5.75 GB, so some stay in the file, which the page cache
-  serves when a token picks them, at the cost of a copy before the product.
+- The guest's own memory addresses 4 GiB, and the experts the GPU lacks at
+  5 GB take 5.75 GB. A second memory of 64-bit addresses holds them whole,
+  which needs `memory64` in Wado.
 - The GPU drops to low clocks when idle. Each layer waiting on the CPU idles
   it, which may keep its kernels at the 18 GB/s measured under partial load.
 
 ## Design
 
 1. Placement. The GPU pools stay as they are, under the eviction order the
-   replay ranks best. The guest holds as many of the remaining experts as its
-   heap allows, the most-picked first, and reads the rest from the file.
+   replay ranks best. The guest holds every other expert in its 64-bit memory.
 2. Choice per expert, after Fiddler. In a host step, an expert the pools lack
    is computed on the CPU when the step routes fewer than T tokens to it, and
    written into a slot otherwise, as today. A generated token routes 1. T is
@@ -90,21 +89,42 @@ round trips together take under about 14 ms.
    router early. It then also tells the CPU which guest-held experts to warm
    and which file ranges to read.
 
+## Keeping the GPU busy
+
+The GPU reaches its full speed only with no gap in its queue: a gap lowers its
+clocks, and its kernels then run at the 18 GB/s of partial load. A layer's MoE
+output gates the next layer's attention, and the next token gates on the last
+layer, so a single sequence offers the GPU no other token's work to fill a
+gap. The design has to remove the gaps rather than fill them.
+
+- Balance each layer. The GPU waits for the CPU by the CPU's time less its
+  own. The choice per expert minimizes the longer of the two, not each
+  expert's own cost: when the CPU's share would outlast the GPU's, the misses
+  it would finish last are written into slots instead, and the GPU computes
+  them.
+- Submit ahead. The host step queues every kernel that does not read the
+  CPU's outputs before it waits for them, so the queue holds the held experts,
+  the early router of the next layer, and the next layer's writes.
+- More tokens a pass. Speculative decoding, as Strata's prompt lookup does,
+  checks several drafted tokens in one pass: the GPU reads each weight once
+  for all of them, and a greedy run picks the same tokens. The CPU's share
+  grows with the experts the extra tokens route to, so this one is measured
+  against the balance above.
+
 ## Parallelism: the decision
 
 In B, the host runs N instances of a kernel module, one thread each, and each
 holds a share of the experts in its own memory.
 
-| Option                 | Cores | 4 GiB             | Cost                                                       |
-| ---------------------- | ----- | ----------------- | ---------------------------------------------------------- |
-| A. One guest core      | 1     | stays             | none beyond the design                                     |
-| B. Worker instances    | N     | split N ways      | a host feature in `wado run-webgpu`, and a Wado API for it |
-| C. The PJRT CPU plugin | all   | the plugin's heap | both hosts in one runner; XLA's speed on 4-bit is unknown  |
+| Option                 | Cores | Cost                                                       |
+| ---------------------- | ----- | ---------------------------------------------------------- |
+| A. One guest core      | 1     | none beyond the design                                     |
+| B. Worker instances    | N     | a host feature in `wado run-webgpu`, and a Wado API for it |
+| C. The PJRT CPU plugin | all   | both hosts in one runner; XLA's speed on 4-bit is unknown  |
 
 The recommendation is A first. It needs no host change, and its measurements
 (T, the round trip, the GPU's clocks under the new pattern) decide whether the
-1/1.5 target needs B. B is the general answer, since it lifts both limits at
-once.
+1/1.5 target needs B.
 
 ## To measure first
 
@@ -114,3 +134,5 @@ once.
   they are.
 - The hit rate over a longer run than 14 tokens.
 - The product's error against onnxruntime with i8 activations.
+- The product's speed from a 64-bit memory, whose loads the engine checks
+  explicitly rather than by guard pages.
