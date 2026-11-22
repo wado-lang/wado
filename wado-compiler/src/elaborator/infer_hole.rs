@@ -458,22 +458,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether a queued associated-type equality answers `var`, wherever its
-    /// target holds it (`Item = List<B>`), once its owner is answered.
+    /// target holds it (`Item = List<B>`), once its owner is answered. An
+    /// owner holding `var` itself (`A: Src<This = A>`) answers nothing new.
     pub(super) fn projection_answers(&self, var: TypeId) -> bool {
         let vars = &self.infer_holes.vars;
         let Some(root) = vars.root_of(var) else {
             return false;
+        };
+        let holds_var = |ty: TypeId| {
+            let ty = self.apply_infer_holes(ty);
+            let held = self.tysys.type_table.borrow().infer_vars_in(ty);
+            held.into_iter().any(|v| vars.root_of(v) == Some(root))
         };
         self.infer_holes
             .obligations
             .borrow()
             .iter()
             .any(|o| match o {
-                Obligation::Projection(link) => {
-                    let target = self.apply_infer_holes(link.target);
-                    let held = self.tysys.type_table.borrow().infer_vars_in(target);
-                    held.into_iter().any(|v| vars.root_of(v) == Some(root))
-                }
+                Obligation::Projection(link) => holds_var(link.target) && !holds_var(link.owner),
                 Obligation::Bound { .. }
                 | Obligation::Selection(_)
                 | Obligation::Check(_)

@@ -18,6 +18,12 @@ impl Many for i32 { type Items = List<i64>; }
 
 fn h<A: Many<Items = List<B>>, B>(b: B, a: A) -> B { return b; }
 
+trait Selfish { type Item; type This; }
+
+impl Selfish for i32 { type Item = i64; type This = i32; }
+
+fn r<A: Selfish<Item = B, This = A>, B>(b: B, a: A) -> B { return b; }
+
 struct K {}
 
 impl K {
@@ -40,6 +46,12 @@ test "a free call, the waiting literal first" {
 test "a waiting literal inside the projected type" {
     let r = h(5_000_000_000 + 0, 1);
     let s: i64 = r;
+    assert s == 5_000_000_000;
+}
+
+test "an equality naming its own owner" {
+    let v = r(5_000_000_000 + 0, 1);
+    let s: i64 = v;
     assert s == 5_000_000_000;
 }
 
