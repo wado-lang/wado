@@ -761,11 +761,12 @@ impl<'a> Analyzer<'a> {
     /// The locations a write `lands` in.
     fn landed(&self, lands: Lands<'_>) -> IndexSet<u32> {
         match lands {
-            Lands::Local(local) => self
+            Lands::Local(local) => [self
                 .points_to
                 .location(self.frame, local)
-                .into_iter()
-                .collect(),
+                .expect("the analysis gives every local a body writes a location")]
+            .into_iter()
+            .collect(),
             Lands::Place(set) => set.iter().collect(),
             Lands::Reach(set) => self.points_to.reach_written(set.iter(), false),
         }
@@ -2700,12 +2701,6 @@ impl<'a> Analyzer<'a> {
         let beyond_handed = self.beyond_handed_writes > since.beyond_handed_writes;
         let mut written = self.points_to.reach_written(sources, beyond_handed);
         for m in &self.mutations[since.mutations..] {
-            if let Lands::Local(local) = m.lands {
-                assert!(
-                    self.points_to.location(self.frame, local).is_some(),
-                    "the analysis gives every local a body writes a location"
-                );
-            }
             written.extend(self.landed(m.lands));
         }
         CallWrites {
