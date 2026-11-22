@@ -1,0 +1,38 @@
+// A later argument writing through a reference an `if` picks writes only what
+// points-to says the reference reaches, so a global taken by value before it
+// keeps no defensive copy when the write lands in a local. Only a write
+// points-to gives no location to can reach any global.
+//
+// The writes that do reach the argument are in
+// `value_copy_later_argument_writes_source`.
+
+struct Pair {
+    a: i32,
+    s: List<i32>,
+}
+
+struct Holder {
+    w: &mut Pair,
+}
+
+global mut GD: Pair = Pair { a: 1, s: [] };
+
+#[inline("never")]
+fn two(p: Pair, q: Pair) -> i32 {
+    return p.a * 10 + q.a;
+}
+
+export fn run() {
+    let mut f = Pair { a: builtin::black_box(1), s: [] };
+    let picked = Holder { w: &mut f };
+    let c = builtin::black_box(true);
+    if two(GD, then: { (if c { picked.w } else { picked.w }).a = 1001; f }) != 1011 {
+        panic("the write landed in GD");
+    }
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["$array_clone_dst"]
+}
