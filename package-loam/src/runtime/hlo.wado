@@ -28,6 +28,7 @@ use {
 use { HashMap } from "core:collections";
 use { Any, Recorded, Recorder, Run, Untyped, assert_carries, constants, kept_any } from "./recorded.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
+use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture } from "./experts.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -442,6 +443,21 @@ pub affine trait Graph: Holds with _ {
             zero_points,
             quantized,
         );
+    }
+
+    /// The experts of onnxruntime's `QMoE` past its routing, Loam's own
+    /// composite: each of `rows` through the experts `routing` picks for it,
+    /// read where `held` says the pools hold them, weighed and summed, as
+    /// [`decomposed_mixture`] computes it.
+    fn expert_mixture<E: Float>(
+        &mut self,
+        rows: &Self::Tensor<f32, [Picked, Hidden]>,
+        routing: &Routing<Self>,
+        held: &Held<Self>,
+        ffn: &[Projection<Self, E>, Projection<Self, E>],
+        experts: &Experts,
+    ) -> Self::Tensor<f32, [Picked, Hidden]> with _ {
+        return decomposed_mixture::<Self, E>(self, rows, routing, held, ffn, experts);
     }
 
     /// ONNX's `ArgMax` keeping its axis: the index of each lane's first

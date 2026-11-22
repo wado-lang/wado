@@ -37,7 +37,18 @@ use {
     windowed_input,
     written_pools,
 } from "../../src/runtime/graph_cases.wado";
-use { Any, Programs, Recorded, Recorder, Untyped, host_of, run, split, typed } from "../../src/runtime/recorded.wado";
+use {
+    Any,
+    Operation,
+    Programs,
+    Recorded,
+    Recorder,
+    Untyped,
+    host_of,
+    run,
+    split,
+    typed,
+} from "../../src/runtime/recorded.wado";
 use { Binary, Graph, Slots, branched } from "../../src/runtime/hlo.wado";
 use { Cpu, CpuTensor, Element, ElementKind, Holds, Tensor } from "../../src/runtime/tensor.wado";
 
@@ -303,6 +314,18 @@ test "a recorded mixture of experts computes the CPU's, by its picks and by its 
         let mut r = Recorder::new();
         let recorded = mixing_pass(&mut r, tokens);
         assert run(cpu, &recorded, &mixing_arguments(cpu, tokens)) == [any_of(&want)] as List<Any<Cpu>>;
+    }
+}
+
+test "a mixture of experts records its experts as one composite, and as none decomposed" {
+    for let [recorder, composites] of [
+        [Recorder::new(), 1],
+        [Recorder::decomposing(), 0],
+    ] {
+        let mut r = recorder;
+        let recorded = mixing_pass(&mut r, 1);
+        let mixtures = recorded.nodes.into_iter().filter(|n| n.op matches { ExpertMixture(_) }).count();
+        assert mixtures == composites;
     }
 }
 
