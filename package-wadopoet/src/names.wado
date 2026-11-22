@@ -68,30 +68,31 @@ impl NameRegistry {
     }
 
     /// A name for each of `wants`, `[name, owner]` pairs, in their order, where
-    /// the whole set is known at once. A name neither bound nor held is taken as
-    /// it is, and two owners wanting one are refused. The rest are renamed as
-    /// `fresh` renames them, after the others, so a renaming takes no name the
-    /// set wants, whatever the order within it.
+    /// the whole set is known at once. Two owners wanting one name are refused.
+    /// A name neither bound nor held is taken as it is. The rest are renamed as
+    /// `fresh` renames them, after the others and in the order of what they
+    /// want, so each owner's name is the same whatever the order of the set.
     pub fn claim_all(&mut self, wants: &List<[String, String]>) -> Result<List<String>, NameClash> {
-        let renamed: List<bool> = wants
-            .iter_ref()
-            .map(|w| self.is_bound(&w.0) || self.owners.contains_key_str(&w.0))
-            .collect();
-        let mut names: List<String> = List::filled(wants.len(), "");
-        for let [i, [name, owner]] of wants.iter_ref().enumerate() {
-            if renamed[i] {
-                continue;
-            }
-            if let Some(other) = self.owners.get_str(name) {
+        let mut wanted_by = TreeMap::<String, String>::new();
+        for let [name, owner] of wants {
+            if let Some(other) = wanted_by.get_str(name) {
                 return Err(NameClash { name: *name, holder: other, claimant: *owner });
+            }
+            wanted_by[*name] = *owner;
+        }
+        let mut names: List<String> = List::filled(wants.len(), "");
+        let mut renamed: List<[String, String, i32]> = [];
+        for let [i, [name, owner]] of wants.iter_ref().enumerate() {
+            if self.is_bound(name) || self.owners.contains_key_str(name) {
+                renamed.push([*name, *owner, i]);
+                continue;
             }
             self.owners[*name] = *owner;
             names[i] = *name;
         }
-        for let [i, [name, owner]] of wants.iter_ref().enumerate() {
-            if renamed[i] {
-                names[i] = self.fresh(name, owner);
-            }
+        renamed.sort_by(|a, b| a.0.cmp(&b.0));
+        for let [name, owner, i] of renamed {
+            names[i] = self.fresh(name, owner);
         }
         return Ok(names);
     }

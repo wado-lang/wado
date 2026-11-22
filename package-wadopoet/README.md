@@ -113,8 +113,9 @@ came first. `fresh(wanted, owner)` takes the first of `wanted`, `wanted_`, …
 that is free.
 
 Where the whole set of names is known at once, `claim_all` claims it in one
-call. A name nothing holds or binds is taken as it is, and the rest are renamed
-past every name the set takes, so neither fails over an order.
+call. Two owners wanting one name are refused. A name nothing holds or binds is
+taken as it is, and the rest are renamed past every name the set takes, so each
+owner's name is the same whatever the order of the set.
 
 ```wado
 let mut names = NameRegistry::new();

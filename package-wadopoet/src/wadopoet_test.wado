@@ -160,6 +160,13 @@ test "a hoisted function prunable and never called is pruned" {
     assert w.to_string() == "";
 }
 
+#[expect_trap]
+test "hoist_fn after prune traps, as prune may have dropped what a key names" {
+    let mut w = CodeWriter::new();
+    w.prune();
+    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |w| w.line("work();")));
+}
+
 test "a function hoisted while another is defined is queued beside it, under a name of its own" {
     let mut w = CodeWriter::new();
     let outer = w.hoist_fn("outer", "f", |w, name| {

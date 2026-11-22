@@ -128,6 +128,7 @@ pub struct CodeWriter {
     fn_blocks: List<bool> = [],
     hoisted_names: List<[String, String]> = [],
     hoisted: List<CodeWriter> = [],
+    pruned: bool = false,
 }
 
 impl CodeWriter {
@@ -437,7 +438,9 @@ impl CodeWriter {
         key: S,
         prefix: S1,
         mut define: fn mut(&mut CodeWriter, String) with E,
-    ) -> String with E {
+    ) -> String with E
+        contract !self.pruned, "CodeWriter: nothing is hoisted after prune, which may drop what a key names"
+    {
         if let Some(hit) = self.hoisted_names.iter_ref().find(|kn| kn.0 == key.as_str_slice()) {
             return hit.1;
         }
@@ -453,6 +456,7 @@ impl CodeWriter {
         self.hoisted_names = def.hoisted_names;
         self.hoisted.extend(&def.hoisted);
         def.hoisted = [];
+        def.hoisted_names = [];
         self.hoisted.push(def);
         return name;
     }
@@ -518,6 +522,7 @@ impl CodeWriter {
     /// passing anything else is renamed to the inner callee instead, where the
     /// body forwards every parameter in order and runs nothing before.
     pub fn prune(&mut self) {
+        self.pruned = true;
         self.flush_text();
         let items = self.items();
         let mut item_of = HashMap::<String, i32>::new();

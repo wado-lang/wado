@@ -71,6 +71,34 @@ test "claim_all refuses two owners wanting one name" {
     assert names.claim_all(&wants) == Err(NameClash { name: "x", holder: "a", claimant: "b" });
 }
 
+test "claim_all refuses two owners wanting one bound name" {
+    let mut names = NameRegistry::new();
+    let wants: List<[String, String]> = [
+        ["List", "a"],
+        ["List", "b"],
+    ];
+    assert names.claim_all(&wants) == Err(NameClash { name: "List", holder: "a", claimant: "b" });
+}
+
+test "claim_all gives each owner the same renaming whatever the order of the set" {
+    let mut names = NameRegistry::new();
+    names.bind("build");
+    names.bind("build_");
+    let wants: List<[String, String]> = [
+        ["build", "a"],
+        ["build_", "b"],
+    ];
+    assert names.claim_all(&wants) == Ok(["build__", "build___"] as List<String>);
+    let mut reversed = NameRegistry::new();
+    reversed.bind("build");
+    reversed.bind("build_");
+    let reversed_wants: List<[String, String]> = [
+        ["build_", "b"],
+        ["build", "a"],
+    ];
+    assert reversed.claim_all(&reversed_wants) == Ok(["build___", "build__"] as List<String>);
+}
+
 test "claim_all renames a bound name past what the rest of the set takes, wherever it stands" {
     let mut names = NameRegistry::new();
     names.bind("build");
