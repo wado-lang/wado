@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795344262377,
+  "lastUpdate": 1795350091709,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81017,6 +81017,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/68e0dbbb7dd3d98a6f9abac2b7a17cdc7c4cfbb0"
         },
         "date": 1795344261051,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d4992bb09711013b1335cf53aeb4ae97d4dfdaf7",
+          "message": "Merge pull request #2721 from wado-lang/ccr-4886d32c-9ndzfw\n\nrefactor(wadopoet): one shape for every spec, closure-bodied emit, and a shared name registry",
+          "timestamp": "2026-11-22T20:55:46+09:00",
+          "tree_id": "71a87a71614806abf769fe734246a3221ca3fdd2",
+          "url": "https://github.com/wado-lang/wado/commit/d4992bb09711013b1335cf53aeb4ae97d4dfdaf7"
+        },
+        "date": 1795350091231,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
