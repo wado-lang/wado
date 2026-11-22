@@ -179,8 +179,10 @@ Each step keeps every fixture passing and deletes what it replaces.
   literals). Within a call, a literal at a slot that an associated-type
   equality on another slot names answers last, so `f(1, 2)` for
   `fn f<A: Src<Item = B>, B>(a: A, b: B)` takes `B` from `i32`'s `Src::Item`.
-  Free, method and static calls solve their slots through one
-  `solve_call_type_args`.
+  A call links its slots' equalities (`Obligation::Projection`) before its
+  arguments resolve, and settles a variable one of them answers after the rest,
+  whatever the argument order. An operation over literals waits as a literal
+  does.
 - [x] A `_` below a call's turbofish slot, and any `_` in a struct literal's
   turbofish, is a variable (`InferHoleTable::written`), minted afresh each time
   its expression is elaborated. A slot meets it as it meets a written type, and

@@ -128,14 +128,11 @@ pub(super) fn slot_names(params: &[ast::GenericParam], resolutions: &Resolutions
         .collect()
 }
 
-/// A call's type-argument solve: `slots`, the parameters declaring them
-/// (`owners`) and the names a bound's target spells them by; the parameter
-/// types written in them, the arguments' types, the arguments as written, and
-/// the declared return with the type the site expects.
+/// A call's type-argument solve: `slots`, the parameter types written in them,
+/// the arguments' types, the arguments as written, and the declared return
+/// with the type the site expects.
 pub(super) struct CallSolve<'a> {
     pub(super) slots: &'a [TypeId],
-    pub(super) owners: &'a [ast::GenericParam],
-    pub(super) names: &'a [ParamRef],
     pub(super) param_types: &'a [TypeId],
     pub(super) args: &'a [TypeId],
     pub(super) raw_args: &'a [Expr],
@@ -3775,16 +3772,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved_param_types = self.instantiate_types(&resolved_param_types, &inst);
         let decl_return_type = decl_return_type.map(|r| self.instantiate_type(r, &inst));
 
-        let params: Vec<ast::GenericParam> = self
-            .lookup_function_type_params(callee)
-            .into_iter()
-            .filter(GenericParam::is_real_type_param)
-            .collect();
-        let names = slot_names(&params, &self.tysys.resolutions);
         let (inferred, bindings) = self.solve_call_type_args(CallSolve {
             slots: &inst.vars,
-            owners: &params,
-            names: &names,
             param_types: &resolved_param_types,
             args,
             raw_args,
@@ -3797,62 +3786,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inferred
     }
 
-    /// Solve a call's `slots` from its arguments, in [`InferCtx`]'s tiers. A
-    /// literal at a slot an associated-type equality on another slot names
-    /// answers only what the equality leaves open: `f(1, 2)` for
-    /// `fn f<A: Src<Item = B>, B>(a: A, b: B)` takes `B` from `A`'s
-    /// `Src::Item` once `1` has settled `A`.
+    /// Solve a call's `slots` from its arguments, in [`InferCtx`]'s tiers.
     pub(super) fn solve_call_type_args(
         &mut self,
         solve: CallSolve<'_>,
     ) -> (Vec<TypeId>, IndexMap<TypeId, TypeId>) {
         let CallSolve {
             slots,
-            owners,
-            names,
             param_types,
             args,
             raw_args,
             ret,
         } = solve;
-        assert!(
-            owners.len() == slots.len() && names.len() == slots.len(),
-            "every slot is declared and named"
-        );
-        let projected: Vec<TypeId> = owners
-            .iter()
-            .flat_map(|param| &param.bounds)
-            .flat_map(|bound| bound_targets(bound, names, &self.tysys.resolutions))
-            .map(|(_, slot)| slots[slot])
-            .collect();
-        let mut held: Vec<(TypeId, TypeId)> = Vec::new();
         let mut infer = InferCtx::new(&self.tysys.type_table, slots.to_vec());
         for (i, (&param_type, &arg)) in param_types.iter().zip(args).enumerate() {
-            if !answers_last(raw_args.get(i)) {
-                infer.add(param_type, arg);
-            } else if projected.contains(&param_type) {
-                held.push((param_type, arg));
-            } else {
+            if answers_last(raw_args.get(i)) {
                 infer.add_deferred(param_type, arg);
+            } else {
+                infer.add(param_type, arg);
             }
         }
         if let Some((declared, expected)) = ret {
             infer.add_expected_return(declared, expected);
         }
-        let (mut inferred, mut bindings) = infer.solve_with_bindings();
-        if held.is_empty() {
-            return (inferred, bindings);
-        }
-        self.resolve_assoc_bounds_in(owners, 0, names, &mut inferred);
-        for (&slot, answer) in slots.iter().zip(&mut inferred) {
-            if *answer != slot {
-                bindings.entry(slot).or_insert(*answer);
-            } else if let Some(&(_, literal)) = held.iter().find(|&&(param, _)| param == slot) {
-                *answer = literal;
-                bindings.insert(slot, literal);
-            }
-        }
-        (inferred, bindings)
+        infer.solve_with_bindings()
     }
 
     /// Resolve a type parameter appearing only inside another's
@@ -4986,8 +4943,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (names, owners) = self.sig_slots(&sig);
         let (mut inferred, bindings) = self.solve_call_type_args(CallSolve {
             slots: &all_param_ids,
-            owners: &owners,
-            names: &names,
             param_types: &sig.decl.param_types,
             args,
             raw_args,

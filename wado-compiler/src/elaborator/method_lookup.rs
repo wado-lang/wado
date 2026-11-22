@@ -2124,11 +2124,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_types = self.instantiate_types(param_types, inst);
         let decl_return_type = self.instantiate_type(decl_return_type, inst);
 
-        let names = slot_names(&method_type_params, &self.tysys.resolutions);
         let (mut inferred, _) = self.solve_call_type_args(CallSolve {
             slots: &inst.vars,
-            owners: &method_type_params,
-            names: &names,
             param_types: &param_types,
             args,
             raw_args,
