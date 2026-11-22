@@ -938,10 +938,12 @@ mod tests {
             "--max-memory",
             "32m",
             "--report-fuel",
+            "--no-spectre-mitigation",
             "--deny-process",
             "app.wado",
         ]);
         let knobs = &options.command.runtime;
+        assert!(knobs.no_spectre_mitigation);
         assert!(matches!(
             knobs.collector,
             wasmtime::Collector::DeferredReferenceCounting

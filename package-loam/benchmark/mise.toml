@@ -9,7 +9,8 @@
 # first use. The WebGPU arm of onnxruntime is onnxruntime-node, which
 # `mise run loam-oracle-deps` installs.
 #
-# `WADO_BIN` and `WADO_BENCH_FLAGS` mean what they do in `benchmark/`.
+# `WADO_BIN` and `WADO_BENCH_FLAGS` mean what they do in `benchmark/`, and Loam's
+# arms pass `--no-spectre-mitigation` as `benchmark/`'s do.
 
 [settings]
 lockfile = true
@@ -92,7 +93,7 @@ fi
 ./onnxruntime_webgpu.sh $model
 
 echo "=== Loam (WebGPU) ==="
-WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gpt2_124m/gpt2_124m_webgpu.wado
+WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 --no-spectre-mitigation $WADO_BENCH_FLAGS --dir $model gpt2_124m/gpt2_124m_webgpu.wado
 
 echo "=== Loam (Cpu) ==="
 "$wado_exe" run -O2 $WADO_BENCH_FLAGS --dir $model gpt2_124m/gpt2_124m.wado
@@ -122,10 +123,10 @@ fi
 ./llama_cpp.sh F16 $model/generate.json 0 gemma3_270m/fetch_gguf.sh F16
 
 echo "=== Loam (WebGPU) ==="
-WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado
+WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 --no-spectre-mitigation $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado
 
 echo "=== Loam (WebGPU decode) ==="
-WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado decode
+WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 --no-spectre-mitigation $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado decode
 
 # The weights outgrow the copying collector's half of the heap.
 echo "=== Loam (Cpu) ==="
@@ -150,7 +151,7 @@ wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
 for export in q4 q4f16; do
     echo "=== Loam (WebGPU $export decode) ==="
-    WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/${export}_webgpu.wado
+    WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 --no-spectre-mitigation $WADO_BENCH_FLAGS --dir $model gemma3_270m/${export}_webgpu.wado
 done
 
 for precision in Q4_0 Q4_1; do
@@ -177,7 +178,7 @@ for layers in 10 14 24; do
 done
 
 echo "=== Loam (WebGPU) ==="
-WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gpt_oss_20b/gpt_oss_20b_webgpu.wado
+WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 --no-spectre-mitigation $WADO_BENCH_FLAGS --dir $model gpt_oss_20b/gpt_oss_20b_webgpu.wado
 """
 
 [tasks.all]

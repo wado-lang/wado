@@ -695,6 +695,7 @@ pub enum RuntimeKnobOpt {
     GcHeapInitial,
     MaxMemory,
     FunctionAlignment,
+    NoSpectreMitigation,
     ReportFuel,
     DenyProcess,
     ProcessRead,
@@ -707,6 +708,7 @@ impl RuntimeKnobOpt {
         Self::GcHeapInitial,
         Self::MaxMemory,
         Self::FunctionAlignment,
+        Self::NoSpectreMitigation,
         Self::ReportFuel,
         Self::DenyProcess,
         Self::ProcessRead,
@@ -739,6 +741,12 @@ impl RuntimeKnobOpt {
                 short: None,
                 value: Some("<bytes>"),
                 desc: "Start each compiled function at a multiple of <bytes>, a power\nof two (default: Cranelift's own, 32 on x86-64). Where an\nunchanged function lands moves a timing by a few percent, so\nan A/B of two builds holds it fixed",
+            },
+            Self::NoSpectreMitigation => OptSpec {
+                long: Some("no-spectre-mitigation"),
+                short: None,
+                value: None,
+                desc: "Drop the Spectre guard on each memory access wasmtime bounds-\nchecks, which is every access to core:linear's WideArray.\nSuch a read runs about a third faster, and the guest may\nread host memory under speculation. For benchmarks and for\nguests you trust",
             },
             Self::ReportFuel => OptSpec {
                 long: Some("report-fuel"),
@@ -780,6 +788,9 @@ pub struct RuntimeKnobs {
     /// `--function-alignment`: the bytes each compiled function starts at a
     /// multiple of, or Cranelift's own where `None`.
     pub function_alignment: Option<u32>,
+    /// `--no-spectre-mitigation`: bounds-checked accesses skip Cranelift's
+    /// Spectre guard.
+    pub no_spectre_mitigation: bool,
     /// `--report-fuel`: meter the guest in fuel and report what it spent.
     pub report_fuel: bool,
     /// `--deny-process` / `--process-read` / `--process-trace`: whether a
@@ -795,6 +806,7 @@ impl Default for RuntimeKnobs {
             gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
             max_memory: None,
             function_alignment: None,
+            no_spectre_mitigation: false,
             report_fuel: false,
             process: ProcessGrant::Offered {
                 read: Vec::new(),
@@ -823,6 +835,7 @@ impl RuntimeKnobs {
                     parse_function_alignment(&require_string(parser)?).map_err(CliExit::error)?,
                 );
             }
+            RuntimeKnobOpt::NoSpectreMitigation => self.no_spectre_mitigation = true,
             RuntimeKnobOpt::ReportFuel => self.report_fuel = true,
             RuntimeKnobOpt::DenyProcess => match &self.process {
                 ProcessGrant::Offered {
