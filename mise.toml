@@ -165,16 +165,10 @@ syntax="$(mktemp package-wadopoet/build/syntax.XXXXXX)"
 out="$(mktemp package-wadopoet/build/vocabulary.XXXXXX)"
 trap 'rm -f "${syntax}" "${out}"' EXIT
 scripts/dev-bin.sh wado syntax --format json -o "${syntax}"
-<<<<<<< HEAD
 # The generator imports the library, which imports the module it rewrites, so
 # that module stays whole until the generator has run.
-scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- "${syntax}" > "${out}"
+scripts/dev-bin.sh wado run package-wadopoet/tools/gen_vocabulary.wado -- "${syntax}" > "${out}"
 mv "${out}" package-wadopoet/src/vocabulary.wado
-||||||| ecc1d6f94
-scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- "${syntax}" > package-wadopoet/src/vocabulary.wado
-=======
-scripts/dev-bin.sh wado run package-wadopoet/tools/gen_vocabulary.wado -- "${syntax}" > package-wadopoet/src/vocabulary.wado
->>>>>>> origin/main
 """
 
 [tasks.check-minted-names]
