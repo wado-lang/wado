@@ -283,10 +283,8 @@ impl WasmModuleInfo {
         // Globals
         wir.globals.clone_from(&self.globals);
 
-        let mut reached = false;
-        wir.for_each_instr(&mut |instr| reached |= instr.reaches(WirMemoryRef::Wide));
         assert!(
-            !reached,
+            !wir.reaches(WirMemoryRef::Wide),
             "a standalone module exports its one memory, so it holds no wide one"
         );
 
@@ -355,6 +353,13 @@ impl WirPackage {
         }
     }
 
+    /// Whether an instruction accesses `memory`.
+    pub fn reaches(&self, memory: WirMemoryRef) -> bool {
+        let mut reached = false;
+        self.for_each_instr(&mut |instr| reached |= instr.reaches(memory));
+        reached
+    }
+
     /// Defines the wide memory where an instruction reaches it. It runs once
     /// the optimizer is done, so a module whose every wide access was deleted
     /// declares no memory it does not use.
@@ -363,9 +368,7 @@ impl WirPackage {
             !self.memories.iter().any(|m| m.memory64),
             "the wide memory is declared once"
         );
-        let mut reached = false;
-        self.for_each_instr(&mut |instr| reached |= instr.reaches(WirMemoryRef::Wide));
-        if reached {
+        if self.reaches(WirMemoryRef::Wide) {
             self.memories.push(WirMemory {
                 min: 0,
                 max: None,
