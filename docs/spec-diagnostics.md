@@ -73,10 +73,10 @@ test {
 }
 ```
 
-A closure parameter may take the name of a local binding, a `let` or a
-parameter the closure sits in, without a warning. It receives that name's value
-afresh as an argument, which is how a closure hands a value back to itself:
-`emit(w, |w| …)`. The name of a declaration still warns.
+A closure parameter may take the name of a local binding without a warning: a
+`let`, a parameter or a pattern binding in scope where the closure is written.
+The parameter receives its value as an argument, often the very local it
+shadows, as in `emit(w, |w| …)`. The name of a declaration still warns.
 
 <!-- {"fixture":"shadowed_name_closure_param.wado"} -->
 

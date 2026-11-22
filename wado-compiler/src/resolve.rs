@@ -1093,9 +1093,8 @@ impl Resolver<'_> {
 
     /// [`Self::declare_name`] for a closure parameter, which may take a local
     /// binding's name unreported: it receives its value as an argument, so it
-    /// names no second thing a reader has to tell apart.
-    /// The closure's own frame is innermost, so a parameter list repeating a
-    /// name still reaches the redeclaration check.
+    /// names no second thing a reader has to tell apart. Only the outer frames
+    /// exempt it, so a parameter list repeating a name still redeclares it.
     fn declare_closure_param(&mut self, param: &ast::ClosureParam) {
         let (own, outer) = self
             .bindings
