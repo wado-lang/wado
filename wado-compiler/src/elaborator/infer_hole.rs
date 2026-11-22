@@ -157,21 +157,6 @@ impl InferHoleTable {
         self.selections[id] = Some(selected);
     }
 
-    /// Whether a queued associated-type equality answers `var` once its owner
-    /// is answered.
-    pub(super) fn projection_answers(&self, var: TypeId) -> bool {
-        let Some(root) = self.vars.root_of(var) else {
-            return false;
-        };
-        self.obligations.borrow().iter().any(|o| match o {
-            Obligation::Projection(link) => self.vars.root_of(link.target) == Some(root),
-            Obligation::Bound { .. }
-            | Obligation::Selection(_)
-            | Obligation::Check(_)
-            | Obligation::Pending(_) => false,
-        })
-    }
-
     /// Take the pending selections out of the queue, in the order they were
     /// owed.
     pub(super) fn take_pending(&self) -> Vec<Waiting> {
@@ -470,6 +455,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let var = self.mint_infer_var();
         self.infer_holes.written.push((span, var));
         var
+    }
+
+    /// Whether a queued associated-type equality answers `var`, wherever its
+    /// target holds it (`Item = List<B>`), once its owner is answered.
+    pub(super) fn projection_answers(&self, var: TypeId) -> bool {
+        let vars = &self.infer_holes.vars;
+        let Some(root) = vars.root_of(var) else {
+            return false;
+        };
+        self.infer_holes
+            .obligations
+            .borrow()
+            .iter()
+            .any(|o| match o {
+                Obligation::Projection(link) => {
+                    let target = self.apply_infer_holes(link.target);
+                    let held = self.tysys.type_table.borrow().infer_vars_in(target);
+                    held.into_iter().any(|v| vars.root_of(v) == Some(root))
+                }
+                Obligation::Bound { .. }
+                | Obligation::Selection(_)
+                | Obligation::Check(_)
+                | Obligation::Pending(_) => false,
+            })
     }
 
     /// The variables of the `_`s the source wrote that `ty` still holds.

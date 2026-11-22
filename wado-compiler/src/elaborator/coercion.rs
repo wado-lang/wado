@@ -1077,7 +1077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A variable an associated-type equality answers takes a literal only
         // where its owner's projection leaves it open.
-        by_var.sort_by_key(|&var, _| self.infer_holes.projection_answers(var));
+        by_var.sort_by_key(|&var, _| self.projection_answers(var));
         let hints = self.literal_hints(ret);
         let is_arg = |expr: &Expr| args.iter().any(|arg| arg.id() == expr.id());
         let mut settled = IndexMap::default();

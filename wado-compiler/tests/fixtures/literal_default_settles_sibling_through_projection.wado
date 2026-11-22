@@ -12,6 +12,12 @@ fn f<A: Src<Item = B>, B>(a: A, b: B) -> B { return b; }
 
 fn g<A: Src<Item = B>, B>(b: B, a: A) -> B { return b; }
 
+trait Many { type Items; }
+
+impl Many for i32 { type Items = List<i64>; }
+
+fn h<A: Many<Items = List<B>>, B>(b: B, a: A) -> B { return b; }
+
 struct K {}
 
 impl K {
@@ -27,6 +33,12 @@ test "a free call" {
 
 test "a free call, the waiting literal first" {
     let r = g(5_000_000_000 + 0, 1);
+    let s: i64 = r;
+    assert s == 5_000_000_000;
+}
+
+test "a waiting literal inside the projected type" {
+    let r = h(5_000_000_000 + 0, 1);
     let s: i64 = r;
     assert s == 5_000_000_000;
 }
