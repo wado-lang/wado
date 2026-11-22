@@ -1,0 +1,45 @@
+// A `with` installs the handler for its body only and restores the slot on
+// every path out, so a handler local returned after the `with` leaves the
+// frame without a copy.
+
+use { println, Stdout } from "core:cli";
+
+interface Sink {
+    fn event(message: String);
+}
+
+struct Lines {
+    lines: List<String> = [],
+}
+
+impl Sink for Lines {
+    fn event(&mut self, message: String) {
+        self.lines.push(message);
+        resume ();
+    }
+}
+
+#[inline(never)]
+fn collect() -> List<String> {
+    let mut sink = Lines {};
+    with Sink => &mut sink do {
+        Sink::event("a");
+        Sink::event("b");
+    }
+    return sink.lines;
+}
+
+export fn run() with Stdout {
+    let mut got = collect();
+    got.push("c");
+    println(`${got:?}`);
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["lower/value_copy/share"]},
+    "wir_contrast": {"O2": [{"return sink.lines;": "let out = sink.lines; sink.lines.push(\"c\"); return out;"}]},
+    "stdout": "[\"a\", \"b\", \"c\"]\n",
+    "wir_scope": "value_copy_return_after_handler_install.wado/collect\"",
+    "wir_not_expect:O2": ["array_clone", "$value_copy$"]
+}

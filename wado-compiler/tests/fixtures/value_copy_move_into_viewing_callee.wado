@@ -1,0 +1,31 @@
+// A by-value parameter moved into a callee whose result views it leaves the
+// frame only through that result, which nothing in the frame holds while it
+// moves, so the move needs no copy.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn first_half<S: AsStrSlice>(s: S) -> StrSlice {
+    let v = s.as_str_slice();
+    return v.slice(0, v.len() / 2);
+}
+
+#[inline(never)]
+fn half(path: String) -> Option<StrSlice> {
+    let h = first_half(path);
+    return Some(h);
+}
+
+export fn run() with Stdout {
+    let h = half(builtin::black_box("abcd")).unwrap();
+    println(h.to_string());
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["lower/value_copy/share"]},
+    "wir_contrast": {"O2": [{"let h = first_half(path);": "let h = first_half(path); assert path.len() == 4;"}]},
+    "stdout": "ab\n",
+    "wir_scope": "value_copy_move_into_viewing_callee.wado/half\"",
+    "wir_not_expect:O2": ["array_clone"]
+}

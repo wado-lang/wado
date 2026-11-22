@@ -1,0 +1,30 @@
+// A by-value parameter is the callee's own, and so is what it is rebound to,
+// so returning it hands it over without a copy.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn shout(mut s: String) -> String {
+    s = s.to_ascii_uppercase();
+    return s;
+}
+
+#[inline(never)]
+fn caller() -> String {
+    let mut out = shout(builtin::black_box("ab"));
+    out.push_str("!");
+    return out;
+}
+
+export fn run() with Stdout {
+    println(caller());
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["lower/value_copy/share"]},
+    "wir_contrast": {"O2": [{"let mut out = shout(builtin::black_box(\"ab\"));": "let base = builtin::black_box(\"ab\"); let mut out = shout(base); assert base == \"ab\";"}]},
+    "stdout": "AB!\n",
+    "wir_scope": "value_copy_return_rebound_param.wado/caller\"",
+    "wir_not_expect:O2": ["array_clone"]
+}

@@ -1,0 +1,24 @@
+// `builtin::black_box` hands its argument back, a reference included, so a
+// reference to `a` stored after passing through it still names `a`, and `a`
+// is copied at the `return`.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn keep(sink: &mut List<&List<i32>>) -> List<i32> {
+    let a: List<i32> = [1];
+    sink.push(builtin::black_box(&a));
+    return a;
+}
+
+export fn run() with Stdout {
+    let mut s: List<&List<i32>> = [];
+    let mut a = keep(&mut s);
+    a.push(2);
+    println(`${s[0].len()} ${a.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2\n"
+}
