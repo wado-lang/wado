@@ -7,6 +7,7 @@
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
+use value_copy::callgraph::SpecializedCalls;
 
 pub mod boxing;
 pub mod capture_ref;
@@ -36,11 +37,10 @@ pub fn plan(
     capture_ref::capture_observed_by_ref(flat);
     // The pre-lifting analyses share one graph: what follows rewrites bodies but
     // adds no function, so the callee sets do not move until closure lifting.
+    // Nothing is specialized before closure lifting.
+    let unspecialized = SpecializedCalls::default();
     let pre_lifting_calls = in_span(profiler, "lower/callgraph", || {
-        value_copy::callgraph::CallGraph::build(
-            flat,
-            &value_copy::callgraph::SpecializedCalls::default(),
-        )
+        value_copy::callgraph::CallGraph::build(flat, &unspecialized)
     });
     // A detached `&mut` argument becomes a reference to a temp that is stored
     // back after the call. The reference a callee keeps is read from its body,
@@ -56,7 +56,7 @@ pub fn plan(
             &pre_lifting_calls,
             &builtins,
             &closure_captures,
-            &value_copy::callgraph::SpecializedCalls::default(),
+            &unspecialized,
         )
     });
     in_span(profiler, "lower/write_backs", || {
@@ -78,26 +78,12 @@ pub fn plan(
     let box_plan = in_span(profiler, "lower/boxing", || boxing::prepare(flat));
     globals::build_initialize_modules(flat);
     lift_mut::lift_mut_match_bindings(flat);
-    let mut specialized = value_copy::callgraph::SpecializedCalls::default();
-    for ((module, name), locals) in &closure.specialized_locals {
-        for local in locals {
-            let call = closure.functor_infos[local.functor_id as usize]
-                .call_method
-                .borrow();
-            specialized.insert(
-                module,
-                name,
-                local.local_index,
-                (call.module_source.clone(), call.name.clone()),
-            );
-        }
-    }
     let value_copy = value_copy::plan(
         flat,
         builtins,
         confined_params,
         &closure.functor_infos,
-        &specialized,
+        &SpecializedCalls::of(&closure),
         profiler,
     );
     Ok(LowerPlan {

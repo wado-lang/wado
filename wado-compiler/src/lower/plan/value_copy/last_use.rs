@@ -614,6 +614,7 @@ impl<'a> Analyzer<'a> {
         // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind of
         // the place is never itself a conflict. Every other mutation must be
         // unreachable.
+        //
         // A source reached through a reference, or rooted at one the resolver
         // could not follow (`*base` with `base` a parameter), lies in storage
         // this body does not own, which any alias of it may write: a `&mut`
@@ -634,13 +635,11 @@ impl<'a> Analyzer<'a> {
                 || m.written
                     .is_some_and(|written| !self.reach.write_reaches(written, *binds))
         }) && !(referent
-            && self
-                .opaque_writes
-                .iter()
-                .zip(&inputs.at_opaque_write)
-                .any(|((written, _), readable)| {
+            && self.opaque_writes.iter().zip(&inputs.at_opaque_write).any(
+                |((written, _), readable)| {
                     readable.contains(&local) && self.root_reaches_written(path.root, written)
-                }));
+                },
+            ));
         let root_given_away = inputs
             .consumed_reach
             .get(&path.root)
@@ -746,7 +745,11 @@ impl<'a> Analyzer<'a> {
     /// Whether a write landing at `lands` may meet storage `root` reaches.
     fn lands_in_reach(&self, lands: Lands<'_>, root: u32) -> bool {
         let landed: IndexSet<u32> = match lands {
-            Lands::Local(local) => self.points_to.location(self.frame, local).into_iter().collect(),
+            Lands::Local(local) => self
+                .points_to
+                .location(self.frame, local)
+                .into_iter()
+                .collect(),
             Lands::Place(set) => set.iter().collect(),
         };
         self.root_reaches_written(
@@ -956,7 +959,7 @@ impl<'a> Analyzer<'a> {
                     locations: IndexSet::default(),
                     beyond_handed: true,
                 };
-                self.opaque_writes.push((Rc::new(written), live.clone()));
+                self.opaque_writes.push((written, live.clone()));
             }
         }
     }
@@ -1605,7 +1608,7 @@ struct Analyzer<'a> {
     beyond_handed_writes: usize,
     /// What each call, or write to storage no local names, may write, with
     /// the locals live there.
-    opaque_writes: Vec<(Rc<CallWrites>, IndexSet<u32>)>,
+    opaque_writes: Vec<(CallWrites, IndexSet<u32>)>,
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
@@ -2734,7 +2737,7 @@ impl<'a> Analyzer<'a> {
             locations: self.points_to.reach_written(sources, beyond_handed),
             beyond_handed,
         };
-        self.opaque_writes.push((Rc::new(written), live.clone()));
+        self.opaque_writes.push((written, live.clone()));
     }
 
     /// Note what `args` hand a call.

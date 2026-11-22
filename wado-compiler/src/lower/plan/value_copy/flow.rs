@@ -469,7 +469,7 @@ fn summarize(package: &Package<'_>, summaries: &[Summary], func: &TirFunction) -
     }
     let owner: IndexMap<u32, u32> = b.locals.iter().map(|(&local, &loc)| (loc, local)).collect();
     let mut outlived: IndexSet<u32> = IndexSet::default();
-    let mut work: Vec<u32> = escaped.clone();
+    let mut work: Vec<u32> = escaped;
     for l in &params {
         work.extend([l.arg, l.deep]);
         if l.by_value {
@@ -1327,11 +1327,7 @@ impl<'p, 'a> Body<'p, 'a> {
             TirStmtKind::Break { label, value } => {
                 let v = value.as_ref().and_then(|v| self.eval(v));
                 let Some(label) = label else { return None };
-                let Some(&(_, node, storage)) =
-                    self.labels.iter().rev().find(|(l, _, _)| l == label)
-                else {
-                    return None;
-                };
+                let &(_, node, storage) = self.labels.iter().rev().find(|(l, _, _)| l == label)?;
                 if let Some(v) = v {
                     self.g.copy(v, node);
                 }
@@ -1449,21 +1445,20 @@ impl<'p, 'a> Body<'p, 'a> {
                 name,
                 ..
             } => {
-                let loc = match self.package.functions.id(module_source, name) {
-                    Some(id) => self.function_location(id),
-                    None => {
-                        let loc = self.g.node();
-                        self.g.targets.insert(
-                            loc,
-                            Target {
-                                this: None,
-                                params: Vec::new(),
-                                sink: Some(self.escape),
-                                ret: self.escape,
-                            },
-                        );
-                        loc
-                    }
+                let loc = if let Some(id) = self.package.functions.id(module_source, name) {
+                    self.function_location(id)
+                } else {
+                    let loc = self.g.node();
+                    self.g.targets.insert(
+                        loc,
+                        Target {
+                            this: None,
+                            params: Vec::new(),
+                            sink: Some(self.escape),
+                            ret: self.escape,
+                        },
+                    );
+                    loc
                 };
                 Some(self.naming(loc))
             }

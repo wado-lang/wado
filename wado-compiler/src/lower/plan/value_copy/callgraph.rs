@@ -12,6 +12,7 @@
 use super::funcset::{FuncIndex, FuncKeyMap};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
+use crate::lower::plan::closure::ClosurePlan;
 use crate::module_source::ModuleSource;
 use crate::tir::{FunctionRef, TirExpr, TirExprKind};
 use crate::tir_visitor::TirRefVisitor;
@@ -26,11 +27,25 @@ pub struct SpecializedCalls {
 }
 
 impl SpecializedCalls {
-    /// Record that in `module`/`name`, a call through `local` runs `target`.
-    pub fn insert(&mut self, module: &ModuleSource, name: &str, local: u32, target: (ModuleSource, String)) {
-        let mut targets = self.targets.get(module, name).cloned().unwrap_or_default();
-        targets.insert(local, target);
-        self.targets.insert(module.clone(), name.to_string(), targets);
+    #[must_use]
+    pub fn of(closure: &ClosurePlan) -> Self {
+        let mut targets = FuncKeyMap::default();
+        for ((module, name), locals) in &closure.specialized_locals {
+            let by_local = locals
+                .iter()
+                .map(|local| {
+                    let call = closure.functor_infos[local.functor_id as usize]
+                        .call_method
+                        .borrow();
+                    (
+                        local.local_index,
+                        (call.module_source.clone(), call.name.clone()),
+                    )
+                })
+                .collect();
+            targets.insert(module.clone(), name.clone(), by_local);
+        }
+        Self { targets }
     }
 
     /// The function a call through each such local in `module`/`name` runs.

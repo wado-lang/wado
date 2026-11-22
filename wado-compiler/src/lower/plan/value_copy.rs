@@ -205,13 +205,7 @@ pub fn plan(
         reach::ClosureCaptures::collect(flat)
     });
     let retained = in_span(profiler, "lower/value_copy/retention", || {
-        retention::compute_retention(
-            flat,
-            &call_graph,
-            &builtins,
-            &closure_captures,
-            specialized,
-        )
+        retention::compute_retention(flat, &call_graph, &builtins, &closure_captures, specialized)
     });
     // Three passes, because the paths gate the conventions
     // ([`hands_out_payload`]) and the conventions place the paths: a seed pass
