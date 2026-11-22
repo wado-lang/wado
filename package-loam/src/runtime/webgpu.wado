@@ -42,6 +42,9 @@ use {
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { LinearArray } from "core:linear";
 use { HostWeight } from "./weight.wado";
+use { Experts, ProjectionShape } from "./experts.wado";
+use { Quantized } from "./hlo.wado";
+use { Untyped } from "./recorded.wado";
 use {
     Webgpu,
     Gpu,
@@ -3352,6 +3355,81 @@ impl WebGpuBackend {
         return Option::Some(out);
     }
 
+    /// The first projection of the expert in `slot` over `row`, `[1, K]`,
+    /// then the SwiGLU of each gate and up value: one quantized product whose
+    /// weight's rows alternate between gate and up, read where `pool` holds
+    /// them. `None` where it does not bind.
+    internal fn gated_up(
+        &mut self,
+        row: &DeviceTensor,
+        pool: &ExpertPool,
+        slot: i32,
+        experts: &Experts,
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let rows = pool.shape.rows;
+        let mut reads: List<PlacedRead<Untyped>> = [];
+        let [mut gate, mut up] = [operand(0), operand(1)];
+        if let Some(b) = &pool.bias {
+            let gates = DeviceTensor { ..slot_view(b, slot, [1, rows / 2]), strides: [0, 2 * b.strides[1]] };
+            reads.push(PlacedRead::<Untyped> { view: gates });
+            reads.push(PlacedRead::<Untyped> { view: DeviceTensor { ..gates, offset: gates.offset + b.strides[1] } });
+            gate = gate.binary(BinaryOp::Add, &operand(2));
+            up = up.binary(BinaryOp::Add, &operand(3));
+        }
+        let limit = constant(experts.limit);
+        gate = gate.binary(BinaryOp::Minimum, &limit);
+        up = up.binary(BinaryOp::Minimum, &limit).binary(BinaryOp::Maximum, &constant(-experts.limit));
+        let sigmoid = gate.binary(BinaryOp::Mul, &constant(experts.alpha)).unary(UnaryOp::Sigmoid);
+        let op = gate.binary(BinaryOp::Mul, &sigmoid).binary(BinaryOp::Mul, &up.binary(BinaryOp::Add, &constant(experts.beta)));
+        return self.quantized_product_kernel(
+            &pool.operands(row, slot),
+            experts.quantized.bits,
+            experts.quantized.block,
+            null,
+            &Epilogue { operands: reads, op },
+            true,
+        );
+    }
+
+    /// `total`, or zero, plus the second projection of the expert in `slot`
+    /// over `inner`, `[1, K]`, and its bias, times `weight`, a `[1, 1]` view,
+    /// where that is positive: one quantized product read where `pool` holds
+    /// it. `None` where it does not bind.
+    internal fn weighed_down(
+        &mut self,
+        inner: &DeviceTensor,
+        pool: &ExpertPool,
+        slot: i32,
+        weight: &DeviceTensor,
+        total: Option<&DeviceTensor>,
+        quantized: &Quantized,
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let mut reads: List<PlacedRead<Untyped>> = [];
+        let mut out = operand(0);
+        if let Some(b) = &pool.bias {
+            reads.push(PlacedRead::<Untyped> { view: slot_view(b, slot, [1, pool.shape.rows]) });
+            out = out.binary(BinaryOp::Add, &operand(reads.len()));
+        }
+        reads.push(PlacedRead::<Untyped> { view: *weight });
+        let w = operand(reads.len());
+        let weighed = w.binary(BinaryOp::Gt, &constant(0.0)).select(&out.binary(BinaryOp::Mul, &w), &constant(0.0));
+        let before = match total {
+            Some(t) => {
+                reads.push(PlacedRead::<Untyped> { view: *t });
+                operand(reads.len());
+            },
+            null => constant(0.0),
+        };
+        return self.quantized_product_kernel(
+            &pool.operands(inner, slot),
+            quantized.bits,
+            quantized.block,
+            null,
+            &Epilogue { operands: reads, op: before.binary(BinaryOp::Add, &weighed) },
+            false,
+        );
+    }
+
     /// Whether a launch makes its next run's buffer at `slot` where it made
     /// this one's: one it owns, but for an attention cache, which a run
     /// appends to.
@@ -3515,6 +3593,43 @@ fn split_axis(extents: &List<i32>) -> i32 {
         panic("loam: one element outgrows a binding");
     };
     return axis;
+}
+
+/// One projection's pools of experts on the device, each expert a row of
+/// each, and one expert's shape.
+internal struct ExpertPool {
+    internal packed: DeviceTensor,
+    internal scales: DeviceTensor,
+    internal bias: Option<DeviceTensor>,
+    internal zero_points: Option<DeviceTensor>,
+    internal shape: ProjectionShape,
+}
+
+impl ExpertPool {
+    /// A quantized product's operands over `input`, the weight, scales and
+    /// any zero points those of the expert in `slot`.
+    fn operands(&self, input: &DeviceTensor, slot: i32) -> List<DeviceTensor> {
+        let s = &self.shape;
+        let mut operands: List<DeviceTensor> = [
+            *input,
+            slot_view(&self.packed, slot, [s.rows, s.blocks, s.blob]),
+            slot_view(&self.scales, slot, [s.rows, s.blocks]),
+        ];
+        if let Some(z) = &self.zero_points {
+            operands.push(slot_view(z, slot, [s.rows, s.zero_bytes]));
+        }
+        return operands;
+    }
+}
+
+/// Row `slot` of `pool`, a row of each slot's elements laid flat, as
+/// `extents` row-major.
+fn slot_view(pool: &DeviceTensor, slot: i32, extents: List<i32>) -> DeviceTensor {
+    let mut strides = row_major(&extents);
+    for let d of 0..<strides.len() {
+        strides[d] *= pool.strides[1];
+    }
+    return DeviceTensor { ..*pool, offset: pool.offset + slot * pool.strides[0], extents, strides };
 }
 
 /// A view of `extents` laid out row-major from `offset`.

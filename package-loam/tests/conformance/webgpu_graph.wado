@@ -388,7 +388,12 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     for let tokens of [1, 3] as List<i32> {
         let c = cases::experts_case(tokens);
         let mixing = cases::compiled_from(&mut gpu, |r| cases::mixing_pass(r, tokens), &[], &[]);
-        let mixed = gpu.executed(&mixing, &cases::mixing_arguments(&mut gpu, tokens), &[]);
+        let arguments = cases::mixing_arguments(&mut gpu, tokens);
+        let mixing_from = gpu.dispatches();
+        let mixed = gpu.executed(&mixing, &arguments, &[]);
+        if tokens == 1 {
+            assert gpu.dispatches() - mixing_from == 22, "the routing's 18, then two products a pick";
+        }
         let output = typed::<WebGpuBackend, f32, [cases::A, cases::B]>(&gpu, &mixed[0]);
         let expected = cases::mixing(
             cpu,
