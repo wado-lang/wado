@@ -93,7 +93,7 @@ use {
     constants,
     kept_any,
 } from "./recorded.wado";
-use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced } from "./webgpu.wado";
+use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced, slot_layout } from "./webgpu.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
 use { LinearArray } from "core:linear";
 
@@ -301,12 +301,9 @@ impl Backend for WebGpuBackend {
         return of_kind(self, kind, Placed::Device(d));
     }
 
-    /// As many slots as one binding holds, laid as `pooled` lays them: four
-    /// bytes or one float to a word.
+    /// As many slots as one binding holds, laid as `pooled` lays them.
     fn pool_slots(&self, kind: ElementKind, slot: &List<i32>) -> i32 {
-        let elements = element_count(slot);
-        let words = if kind matches { _::U8 } { elements.div_ceil(4) } else { elements };
-        return self.max_binding() / words;
+        return self.max_binding() / slot_layout(kind, element_count(slot)).0;
     }
 
     fn written(&mut self, pool: &mut Any<WebGpuBackend>, slot: i32, row: HostWeight) with (GpuQueue, GpuBuffer) {

@@ -118,6 +118,21 @@ impl Packed {
     }
 }
 
+/// The words a slot of `elements` of `kind` takes in a pool, and how they
+/// pack: bytes four to a word, halves two where they fill whole words, and any
+/// other float one.
+internal fn slot_layout(kind: ElementKind, elements: i32) -> [i32, Option<Packed>] {
+    return match kind {
+        _::U8 => [
+            elements.div_ceil(4),
+            Option::Some(Packed::U8),
+        ],
+        _::F16 && elements % 2 == 0 => [elements / 2, Option::Some(Packed::F16)],
+        _::BF16 && elements % 2 == 0 => [elements / 2, Option::Some(Packed::BF16)],
+        _ => [elements, null],
+    };
+}
+
 /// A tensor where the WebGPU backend holds it.
 pub variant Placed<E, Axes> {
     Host(Tensor<E, Axes>),
@@ -1436,24 +1451,25 @@ impl WebGpuBackend {
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer)
         contract kind matches { _::U8 | _::F32 | _::F16 | _::BF16 }
     {
-        if kind matches { _::U8 } {
-            return self.reserved_bytes(extents, true);
-        }
-        return contiguous(self.reserved(element_count(&extents), true), 0, extents);
+        let [words, packed] = slot_layout(kind, element_count(&extents) / extents[0]);
+        return DeviceTensor { ..contiguous(self.reserved(words * extents[0], true), 0, extents), packed };
     }
 
     /// Writes `row` over the slot `slot` of the pool `pool` laid as `pooled`
-    /// lays one.
+    /// lays one: packed elements as the checkpoint stores them, any other as
+    /// the f32 holding it.
     internal fn written_slot(&self, pool: &DeviceTensor, slot: i32, row: &HostWeight) with (GpuQueue, GpuBuffer) {
         let width = row.count();
         assert width * pool.extents[0] == element_count(&pool.extents), "a row fills one slot of the pool";
         let start = slot * width;
-        if row.kind matches { _::U8 } {
-            assert width % 4 == 0, "a slot of bytes fills whole words";
-            self.write_linear(pool.slot, start, row.bytes());
-            return;
+        match pool.packed {
+            Some(_::U8) => {
+                assert width % 4 == 0, "a slot of bytes fills whole words";
+                self.write_linear(pool.slot, start, row.bytes());
+            },
+            Some(_::F16 | _::BF16) => self.write_linear(pool.slot, 2 * start, row.bytes()),
+            null => self.write_values(pool.slot, start, row),
         }
-        self.write_values(pool.slot, start, row);
     }
 
     /// Writes each element of `row` as the f32 holding it, from the word

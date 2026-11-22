@@ -173,8 +173,18 @@ impl<T: AnyBits> LinearArray<T> {
         contract 0 <= len <= i32::MAX / builtin::size_of::<T>()
     {
         let mut array = unchecked LinearArray::<T>::unwritten(len);
-        for let i of 0..<len {
-            unchecked array.set(i, value);
+        if len == 0 {
+            return array;
+        }
+        unchecked array.set(0, value);
+        // Each copy doubles the elements written, so a large array takes a
+        // few block copies rather than a store per element.
+        let total = array.block.bytes;
+        let mut written = builtin::size_of::<T>();
+        while written < total {
+            let more = i32::min(written, total - written);
+            builtin::memory_copy(array.block.ptr + written, array.block.ptr, more);
+            written += more;
         }
         return array;
     }
