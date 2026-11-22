@@ -8,7 +8,6 @@ description: "Where a Wado package keeps each kind of file: the root files, docs
 [`docs/spec-package-standard.md`](../../../docs/spec-package-standard.md) is
 the standard. Read it first. This skill adds what it asks of an agent.
 
-- Put nothing at a package's root but the files the standard lists.
 - Ask the user before creating a directory the standard does not name. Once
   approved, the package's `AGENTS.md` says what it holds.
 - A file that moves takes every reference to it along: `use` and

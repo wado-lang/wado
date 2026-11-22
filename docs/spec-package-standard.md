@@ -5,7 +5,7 @@ an agent finds it without learning the package first.
 
 ## The Root
 
-The root holds only these files:
+The root holds these files:
 
 | File        | Holds                                                                                          |
 | ----------- | ---------------------------------------------------------------------------------------------- |
