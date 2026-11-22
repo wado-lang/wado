@@ -126,6 +126,12 @@ export fn run() {
     let picked = Holder { w: &mut f };
     let c = builtin::black_box(true);
     assert two(f, then: { (if c { picked.w } else { picked.w }).a = 1001; f }) == 1011;
+    let mut s = pair();
+    let mut o = pair();
+    let into_s = Holder { w: &mut s };
+    let into_o = Holder { w: &mut o };
+    assert two(s, then: { (if !c { into_o.w } else { into_s.w }).a = 1001; s }) == 1011;
+    assert two(s, then: { (if c { into_s.w } else { into_o.w }).a = 2001; s }) == 12011;
 }
 
 __DATA__
