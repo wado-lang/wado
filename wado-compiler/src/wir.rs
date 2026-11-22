@@ -1982,9 +1982,10 @@ impl WirInstr {
     }
 
     /// Returns true if this instruction ends with an unconditional branch or
-    /// `unreachable` at the tail position. Unlike `always_diverges`, this does
-    /// NOT consider `If` blocks where both branches diverge — those still need
-    /// an explicit `Unreachable` after them for Wasm stack validation.
+    /// `unreachable` at the tail position, so the stack after it is
+    /// polymorphic. Unlike `always_diverges`, this does NOT consider a block or
+    /// an `if` that no path falls out of: validation still takes its `end` as
+    /// reachable, pushing its result.
     pub fn ends_with_terminator(&self) -> bool {
         match self.emitted() {
             Self::Return { .. } | Self::Unreachable | Self::Br { .. } | Self::BrTable { .. } => {

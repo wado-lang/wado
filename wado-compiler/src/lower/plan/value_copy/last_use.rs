@@ -965,13 +965,17 @@ impl<'a> Analyzer<'a> {
                     live: live.clone(),
                 });
             }
-            // A write to storage no local names, a global's or the referent of
-            // a reference an `if` picks, is still where points-to says it
-            // lands, and a binding sharing that storage must see it.
+            // A write to storage no local names, a global's say, lands beyond
+            // what calls are handed, as a callee's own such write does in
+            // `ModRef`: points-to gives no location to a part that holds no
+            // reference, such as `GD.a`. Where it does give one, as for the
+            // referent of a reference an `if` picks, a binding sharing that
+            // storage must see the write.
             if self.mutations.len() == recorded {
+                self.beyond_handed_writes += 1;
                 let written = CallWrites {
                     locations: self.landed(lands),
-                    beyond_handed: false,
+                    beyond_handed: true,
                 };
                 self.opaque_writes.push((written, live.clone()));
             }

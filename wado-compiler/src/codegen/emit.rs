@@ -1700,7 +1700,7 @@ impl<'a> WirEmitter<'a> {
             WirInstr::BlackBox(o) => self.emit_instr(f, o),
             WirInstr::Drop(o) => {
                 self.emit_instr(f, o);
-                if !o.always_diverges() {
+                if !o.ends_with_terminator() {
                     f.instruction(&Instruction::Drop);
                 }
             }
