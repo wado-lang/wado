@@ -6693,7 +6693,7 @@ impl<'a> Reify<'a> {
             facts
                 .receiver_args
                 .iter()
-                .map(|&arg| table.fq_type_name_rowless(arg))
+                .map(|&arg| table.fq_type_name_solved(arg))
                 .collect()
         };
         let mut method_info = generic.with_type_args(&arg_names, &[]);

@@ -770,7 +770,7 @@ impl LiteralCallee {
         self.type_arg_names = self
             .type_arg_ids
             .iter()
-            .map(|&t| tt.fq_type_name_rowless(t))
+            .map(|&t| tt.fq_type_name_solved(t))
             .collect();
     }
 

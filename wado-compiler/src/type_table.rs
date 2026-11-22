@@ -1141,7 +1141,7 @@ impl TypeTable {
             return id;
         }
         let id = AnonStructId(u32::try_from(self.anon_structs.len()).expect("anon struct space"));
-        let mut mangle = self.render_shape(&key.1, &|tt, ty| tt.mangle_type_arg_rowless(ty));
+        let mut mangle = self.render_shape(&key.1, &|tt, ty| tt.mangle_type_arg_solved(ty));
         // A template shape renders as a hash of its text, so two shapes can
         // collide; the mangle is the whole identity of a shape, and sharing
         // one would give both the other's bridges. Widen the loser instead.
@@ -2614,7 +2614,7 @@ impl TypeTable {
     fn mangled_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
         let args: Vec<String> = type_args
             .iter()
-            .map(|&a| self.mangle_type_arg_rowless(a))
+            .map(|&a| self.mangle_type_arg_solved(a))
             .collect();
         mangle_generic_name(decl_name, &args)
     }
@@ -3230,10 +3230,10 @@ impl TypeTable {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 match self.cell_payload(payload) {
                     Some(_) => self.cell_struct_name(payload),
-                    None => self.mangle_type_arg_rowless(self.representation_head(*inner)),
+                    None => self.mangle_type_arg_solved(self.representation_head(*inner)),
                 }
             }
-            _ => self.mangle_type_arg_rowless(payload),
+            _ => self.mangle_type_arg_solved(payload),
         };
         name::cell_struct_name(&spelled)
     }
@@ -6387,15 +6387,15 @@ impl TypeTable {
         self.fq_type_name(id).to_mangled()
     }
 
-    /// [`Self::mangle_type_arg_for_generic`] as [`Self::fq_type_name_rowless`]
+    /// [`Self::mangle_type_arg_for_generic`] as [`Self::fq_type_name_solved`]
     /// spells it.
-    pub fn mangle_type_arg_rowless(&self, id: TypeId) -> String {
-        self.fq_type_name_rowless(id).to_mangled()
+    pub fn mangle_type_arg_solved(&self, id: TypeId) -> String {
+        self.fq_type_name_solved(id).to_mangled()
     }
 
-    fn mangle_type_args_rowless(&self, ids: &[TypeId]) -> Vec<String> {
+    fn mangle_type_args_solved(&self, ids: &[TypeId]) -> Vec<String> {
         ids.iter()
-            .map(|&t| self.mangle_type_arg_rowless(t))
+            .map(|&t| self.mangle_type_arg_solved(t))
             .collect()
     }
 
@@ -6438,7 +6438,7 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
             }
-            _ => self.mangle_type_arg_rowless(id),
+            _ => self.mangle_type_arg_solved(id),
         }
     }
 
@@ -6478,7 +6478,7 @@ impl TypeTable {
             ResolvedType::Tuple(elems) => Some(mangle_tuple_type(
                 &elems
                     .iter()
-                    .map(|t| self.mangle_type_arg_rowless(*t))
+                    .map(|t| self.mangle_type_arg_solved(*t))
                     .collect::<Vec<_>>(),
             )),
             _ => None,
@@ -6608,7 +6608,7 @@ impl TypeTable {
     /// [`Self::fq_type_name`] with no effect variable spelled: the name of an
     /// instance whose rows the effect check has yet to solve, which a variable
     /// solved to nothing would otherwise tell apart from the instance it is.
-    pub fn fq_type_name_rowless(&self, id: TypeId) -> FqTypeName {
+    pub fn fq_type_name_solved(&self, id: TypeId) -> FqTypeName {
         self.fq_type_name_spelled_in(id, RowSpelling::Solved)
     }
 
@@ -6738,13 +6738,13 @@ impl TypeTable {
             ResolvedType::Resource { def, type_args } if !type_args.is_empty() => {
                 TypeNameInfo::Generic {
                     name: self.decl_name(*def).to_string(),
-                    args: self.mangle_type_args_rowless(type_args),
+                    args: self.mangle_type_args_solved(type_args),
                 }
             }
             ResolvedType::Variant { def, type_args } if !type_args.is_empty() => {
                 TypeNameInfo::Generic {
                     name: mangle_declared(self.def_module(*def), &self.decl_mangled_name(*def)),
-                    args: self.mangle_type_args_rowless(type_args),
+                    args: self.mangle_type_args_solved(type_args),
                 }
             }
             ResolvedType::Enum { def }
@@ -6766,7 +6766,7 @@ impl TypeTable {
             ResolvedType::Tuple(elems) => TypeNameInfo::Tuple(
                 elems
                     .iter()
-                    .map(|t| self.mangle_type_arg_rowless(*t))
+                    .map(|t| self.mangle_type_arg_solved(*t))
                     .collect(),
             ),
             // One spelling with the receiver's, so a stub's name and a call

@@ -2720,7 +2720,7 @@ impl FunctionTranslator<'_, '_> {
                 let items = tt.compiler_items();
                 let name = match tt.get(variant_ty) {
                     tir::ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
-                        variant_tag_helper_name(&tt.mangle_type_arg_rowless(variant_ty))
+                        variant_tag_helper_name(&tt.mangle_type_arg_solved(variant_ty))
                     }
                     _ => MethodName::format_local(
                         &tt.fq_type_name(variant_ty),
