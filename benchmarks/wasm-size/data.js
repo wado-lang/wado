@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795305288676,
+  "lastUpdate": 1795312648406,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80797,6 +80797,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c4a0a3b0414345f61361ec45e7c0ce95ee72332b"
         },
         "date": 1795305288216,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fce56a414759eab9de08fff53f1fe86401cd56e0",
+          "message": "Merge pull request #2718 from wado-lang/ccr-25ccfb89-atykhb\n\ndocs(jade): keep the design, manual and open work in package-jade/",
+          "timestamp": "2026-11-22T10:40:40+09:00",
+          "tree_id": "315b2955d9474a9063f6e3c5f6aa06ce497b8dec",
+          "url": "https://github.com/wado-lang/wado/commit/fce56a414759eab9de08fff53f1fe86401cd56e0"
+        },
+        "date": 1795312647087,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
