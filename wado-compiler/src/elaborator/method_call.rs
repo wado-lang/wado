@@ -2706,7 +2706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(written) = self.case_written(
                 &owner,
                 [&spelled, &static_call.method],
-                head.args,
+                (head.args, Self::resolve_path_args),
                 static_call.span,
             ) else {
                 return self.resolve_args_without_callee(&static_call.args, ctx);

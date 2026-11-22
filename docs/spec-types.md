@@ -1541,11 +1541,16 @@ test "calls" {
 }
 ```
 
-A `_` inside a turbofish leaves that type-argument slot for inference while the
-others stay explicit, reusing the same inference an omitted turbofish uses. The
-explicit (non-`_`) arguments always win. An uninferable `_` is the same error as
-an omitted turbofish on an uninferable parameter. A `_` works only in a
-turbofish: in a plain type annotation (`let xs: List<_>`) it is an error.
+A `_` in a type an expression writes leaves that type to inference, at any
+depth: `pick::<_, bool>`, `pick::<Option<_>, bool>`, `Box::<List<_>> { … }`,
+and `let xs: List<_> = …`. What the source writes around it stays explicit and
+always wins. The arguments, the expected type or a later use settle it, as they
+settle an omitted turbofish. An uninferable `_` is the same error as an omitted
+turbofish on an uninferable parameter. A declaration's signature writes no `_`.
+
+> Not yet implemented: a `_` in a `let` annotation, after `as`, and below the
+> top of a path's type argument (`Bx::<List<_>>::make()`,
+> `Option::<List<_>>::None`) is rejected.
 
 A turbofish may also stop short of the declared parameters. The ones it does not
 name are inferred, as a `_` in their place would be.
@@ -1564,6 +1569,12 @@ test "a partial turbofish" {
     let a = pick::<_, bool>(1, true);       // infers the first type argument
     let b = pick::<i32>(1, true);           // stops short: infers the second
     assert r.unwrap() == 42 && a == 1 && b == 1;
+}
+
+test "a `_` inside a type argument" {
+    let a = pick::<Option<_>, bool>(Some(1), true);  // Option<i32>
+    let b = Box::<List<_>> { value: ["x"] };          // List<String>
+    assert a.unwrap() == 1 && b.value[0] == "x";
 }
 ```
 

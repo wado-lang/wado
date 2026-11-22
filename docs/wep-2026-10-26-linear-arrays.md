@@ -358,9 +358,10 @@ faults while decoding against 30, all from guest code.
 
 - `AnyBits` and `FromLeBytes` admit nearly the same types, and nothing relates
   the two.
-- A 32-bit memory addresses 4 GiB, shared with the canonical ABI's buffers, so
-  the linear data of one instance stays below that. A larger model needs
-  `memory64`, which nothing here considers.
+- A 32-bit memory addresses 4 GiB, shared with the canonical ABI's buffers.
+  `LinearArray64` holds more, in a `memory64` memory the canonical ABI never
+  reads, so it crosses no component boundary: an import takes its bytes only
+  after a copy into a `LinearArray`.
 - A struct of `AnyBits` fields is not `AnyBits`, so an array of records is
   several arrays.
 - There is no view over part of a `LinearArray`. A kernel indexes the whole

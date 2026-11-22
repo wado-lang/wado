@@ -7,8 +7,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef, WirTypeId,
-    WirVariantType,
+    WirInstr, WirMemoryRef, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef,
+    WirTypeId, WirVariantType,
 };
 
 use crate::codegen_flags::CodegenFlags;
@@ -31,6 +31,13 @@ fn packed_signedness(ty: &WirType) -> Option<bool> {
         WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
         _ => None,
     }
+}
+
+fn imported_memory_count(wir: &WirPackage) -> usize {
+    wir.imports
+        .iter()
+        .filter(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
+        .count()
 }
 
 /// Emit a core Wasm module from a `WirPackage`.
@@ -81,11 +88,20 @@ struct WirEmitter<'a> {
     strip_names: bool,
     /// Fine-grained codegen feature flags (from the CLI's `-f <flag>` option).
     codegen_flags: CodegenFlags,
+    /// The module's index of its memory64 memory, where it defines one: after
+    /// every imported memory, at the `memory64` definition's place.
+    memory64_index: Option<u32>,
 }
 
 impl<'a> WirEmitter<'a> {
     fn new(wir: &'a WirPackage, strip_names: bool, codegen_flags: CodegenFlags) -> Self {
+        let memory64_index = wir
+            .memories
+            .iter()
+            .position(|m| m.memory64)
+            .map(|defined| u32::try_from(imported_memory_count(wir) + defined).unwrap());
         Self {
+            memory64_index,
             wir,
             type_index_map: IndexMap::default(),
             variant_case_types: IndexMap::default(),
@@ -114,7 +130,7 @@ impl<'a> WirEmitter<'a> {
 
         // 2. Import section
         let (imports, import_func_count) = self.emit_import_section();
-        if import_func_count > 0 || self.has_memory_import() {
+        if import_func_count > 0 || imported_memory_count(self.wir) > 0 {
             module.section(&imports);
         }
         self.func_index_offset = import_func_count;
@@ -612,20 +628,8 @@ impl<'a> WirEmitter<'a> {
         (imports, func_count)
     }
 
-    fn has_memory_import(&self) -> bool {
-        self.wir
-            .imports
-            .iter()
-            .any(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
-    }
-
     fn memory_count(&self) -> usize {
-        self.wir
-            .imports
-            .iter()
-            .filter(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
-            .count()
-            + self.wir.memories.len()
+        imported_memory_count(self.wir) + self.wir.memories.len()
     }
 
     // === Function Section ===
@@ -640,13 +644,32 @@ impl<'a> WirEmitter<'a> {
         funcs
     }
 
+    /// The module's index of `memory`. The main memory is the first, imported
+    /// or defined.
+    fn memory_index(&self, memory: WirMemoryRef) -> u32 {
+        match memory {
+            WirMemoryRef::Main => 0,
+            WirMemoryRef::Memory64 => self
+                .memory64_index
+                .expect("a module reaching the memory64 memory defines it"),
+        }
+    }
+
+    fn mem_arg(&self, memory: WirMemoryRef, offset: u64, align: u32) -> MemArg {
+        MemArg {
+            offset,
+            align,
+            memory_index: self.memory_index(memory),
+        }
+    }
+
     fn emit_memory_section(&self) -> MemorySection {
         let mut memories = MemorySection::new();
         for mem in &self.wir.memories {
             memories.memory(MemoryType {
                 minimum: u64::from(mem.min),
                 maximum: mem.max.map(u64::from),
-                memory64: false,
+                memory64: mem.memory64,
                 shared: false,
                 page_size_log2: None,
             });
@@ -1748,66 +1771,62 @@ impl<'a> WirEmitter<'a> {
 
             // Memory operations
             WirInstr::I32Load {
+                memory,
                 offset,
                 align,
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I32Load(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Load8U {
+                memory,
                 offset,
                 align,
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load8U(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I32Load8U(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Load8S {
+                memory,
                 offset,
                 align,
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load8S(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I32Load8S(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Load16U {
+                memory,
                 offset,
                 align,
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load16U(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I32Load16U(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Load16S {
+                memory,
                 offset,
                 align,
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load16S(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I32Load16S(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Store {
+                memory,
                 offset,
                 align,
                 addr,
@@ -1815,13 +1834,12 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I32Store(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Store8 {
+                memory,
                 offset,
                 align,
                 addr,
@@ -1829,13 +1847,12 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store8(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I32Store8(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Store16 {
+                memory,
                 offset,
                 align,
                 addr,
@@ -1843,25 +1860,23 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store16(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I32Store16(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I64Load {
+                memory,
                 offset,
                 align,
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I64Load(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I64Load(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I64Store {
+                memory,
                 offset,
                 align,
                 addr,
@@ -1869,25 +1884,23 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I64Store(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::I64Store(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::V128Load {
+                memory,
                 offset,
                 align,
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::V128Load(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::V128Load(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::V128Store {
+                memory,
                 offset,
                 align,
                 addr,
@@ -1895,32 +1908,41 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::V128Store(MemArg {
-                    offset: (*offset),
-                    align: *align,
-                    memory_index: 0,
-                }));
+                f.instruction(&Instruction::V128Store(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
-            WirInstr::MemorySize => {
-                f.instruction(&Instruction::MemorySize(0));
+            WirInstr::MemorySize { memory } => {
+                f.instruction(&Instruction::MemorySize(self.memory_index(*memory)));
             }
-            WirInstr::MemoryGrow(o) => {
-                self.emit_instr(f, o);
-                f.instruction(&Instruction::MemoryGrow(0));
+            WirInstr::MemoryGrow { memory, delta } => {
+                self.emit_instr(f, delta);
+                f.instruction(&Instruction::MemoryGrow(self.memory_index(*memory)));
             }
-            WirInstr::MemoryFill { dst, value, len } => {
+            WirInstr::MemoryFill {
+                memory,
+                dst,
+                value,
+                len,
+            } => {
                 self.emit_instr(f, dst);
                 self.emit_instr(f, value);
                 self.emit_instr(f, len);
-                f.instruction(&Instruction::MemoryFill(0));
+                f.instruction(&Instruction::MemoryFill(self.memory_index(*memory)));
             }
-            WirInstr::MemoryCopy { dst, src, len } => {
+            WirInstr::MemoryCopy {
+                dst_memory,
+                src_memory,
+                dst,
+                src,
+                len,
+            } => {
                 self.emit_instr(f, dst);
                 self.emit_instr(f, src);
                 self.emit_instr(f, len);
                 f.instruction(&Instruction::MemoryCopy {
-                    src_mem: 0,
-                    dst_mem: 0,
+                    src_mem: self.memory_index(*src_memory),
+                    dst_mem: self.memory_index(*dst_memory),
                 });
             }
 

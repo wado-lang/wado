@@ -22,6 +22,9 @@
 #   WADO_RUN_FLAGS="--function-alignment 64" mise run all
 #   WADO_BIN="$(mise run benchmark-baseline)" mise run all
 #
+# Every `wado run` and `wado serve` here passes `--no-spectre-mitigation`, as
+# the native rows beside them run without a sandbox to guard.
+#
 # Every row runs at the 256 MiB default GC heap. Each benchmark's task times
 # Wado twice, with and without the recorded profile (`wado_rows` in `wado.sh`).
 
@@ -328,7 +331,7 @@ echo "=== JavaScript (Node.js RegExp) ==="
 node $dir/node.mjs
 
 echo "=== Wado (Re) ==="
-wado run -O2 $WADO_BENCH_FLAGS $WADO_RUN_FLAGS $dir/re.wado
+wado run -O2 --no-spectre-mitigation $WADO_BENCH_FLAGS $WADO_RUN_FLAGS $dir/re.wado
 """
 
 [tasks.gale-gen]
@@ -405,7 +408,7 @@ for f in $FILES; do
     name=${f##*/}
     echo "[${name%.wado}] \\$ wado run -O2 $f"
     echo "=== Wado ==="
-    wado run -O2 $WADO_BENCH_FLAGS $WADO_RUN_FLAGS "$f"
+    wado run -O2 --no-spectre-mitigation $WADO_BENCH_FLAGS $WADO_RUN_FLAGS "$f"
 done
 """
 

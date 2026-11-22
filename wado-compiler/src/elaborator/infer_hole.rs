@@ -14,6 +14,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::assoc_target_slot;
+use super::infer::unify;
 use super::pending_selection::{
     ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
 };
@@ -39,6 +40,12 @@ use crate::tir;
 #[derive(Default)]
 pub(crate) struct InferHoleTable {
     vars: VarStore,
+    /// Each variable a `_` the source wrote stands for, with where it is
+    /// written.
+    written: Vec<(Span, TypeId)>,
+    /// Whether the type being resolved is one where a written `_` is a
+    /// variable.
+    pub(super) holes_writable: bool,
     /// Hole `TypeId` → what it says if it is never solved.
     diags: IndexMap<TypeId, Blame>,
     /// Where a type mismatch was reported. The mismatch says what was wrong
@@ -441,6 +448,83 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         hole
     }
 
+    /// A variable for the `_` written at `span`, fresh for each elaboration
+    /// of it: an unrolled tuple `for-of` and a default argument elaborate one
+    /// `_` many times, each a use of its own.
+    pub(super) fn written_hole(&mut self, span: Span) -> TypeId {
+        let var = self.mint_infer_var();
+        self.infer_holes.written.push((span, var));
+        var
+    }
+
+    /// Whether `ty` holds a variable of `var`'s class.
+    pub(super) fn holds_class_of(&self, ty: TypeId, var: TypeId) -> bool {
+        let vars = &self.infer_holes.vars;
+        let Some(root) = vars.root_of(var) else {
+            return false;
+        };
+        let ty = self.apply_infer_holes(ty);
+        let held = self.tysys.type_table.borrow().infer_vars_in(ty);
+        held.into_iter().any(|v| vars.root_of(v) == Some(root))
+    }
+
+    /// Whether a queued associated-type equality answers `var`, wherever its
+    /// target holds it (`Item = List<B>`), once its owner is answered. An
+    /// owner holding `var` itself (`A: Src<This = A>`) answers nothing new.
+    pub(super) fn projection_answers(&self, var: TypeId) -> bool {
+        self.infer_holes
+            .obligations
+            .borrow()
+            .iter()
+            .any(|o| match o {
+                Obligation::Projection(link) => {
+                    self.holds_class_of(link.target, var) && !self.holds_class_of(link.owner, var)
+                }
+                Obligation::Bound { .. }
+                | Obligation::Selection(_)
+                | Obligation::Check(_)
+                | Obligation::Pending(_) => false,
+            })
+    }
+
+    /// The variables of the `_`s the source wrote that `ty` still holds.
+    pub(super) fn written_holes_in(&self, ty: TypeId) -> Vec<TypeId> {
+        let ty = self.apply_infer_holes(ty);
+        let vars = &self.infer_holes.vars;
+        let held: IndexSet<Option<TypeId>> = self
+            .tysys
+            .type_table
+            .borrow()
+            .infer_vars_in(ty)
+            .into_iter()
+            .map(|h| vars.root_of(h))
+            .collect();
+        self.infer_holes
+            .written
+            .iter()
+            .map(|&(_, w)| w)
+            .filter(|&w| vars.is_unanswered(w) && held.contains(&vars.root_of(w)))
+            .collect()
+    }
+
+    /// Answer each `_` `written` holds with what `expected` has in its place.
+    /// A place `expected` does not reach, such as one a coercion would bridge,
+    /// stays open.
+    pub(super) fn settle_written_holes_from(&mut self, written: TypeId, expected: TypeId) {
+        let holes = self.written_holes_in(written);
+        if holes.is_empty() {
+            return;
+        }
+        let written = self.apply_infer_holes(written);
+        let mut bindings = IndexMap::default();
+        unify(&self.tysys.type_table, written, expected, &mut bindings);
+        for (var, answer) in bindings {
+            if holes.contains(&var) {
+                self.settle_as_written(var, answer);
+            }
+        }
+    }
+
     /// Require of `var`'s answer the trait bounds its slot declared.
     pub(super) fn attach_infer_var_bounds(
         &mut self,
@@ -667,15 +751,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         let answer = self.apply_infer_holes(answer);
-        let class = self.infer_holes.vars.root_of(var);
-        let occurs = self
-            .tysys
-            .type_table
-            .borrow()
-            .infer_vars_in(answer)
-            .into_iter()
-            .any(|v| self.infer_holes.vars.root_of(v) == class);
-        if occurs {
+        if self.holds_class_of(answer, var) {
             return false;
         }
         self.infer_holes.vars.answer_with(var, answer);
@@ -884,6 +960,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Blame each `_` the source wrote whose class no slot blames, at the `_`.
+    fn blame_bare_written_holes(&mut self) {
+        let vars = &self.infer_holes.vars;
+        let blamed: IndexSet<Option<TypeId>> = self
+            .infer_holes
+            .diags
+            .keys()
+            .map(|&hole| vars.root_of(hole))
+            .collect();
+        let bare: Vec<(Span, TypeId)> = self
+            .infer_holes
+            .written
+            .iter()
+            .copied()
+            .filter(|&(_, w)| vars.is_unanswered(w) && !blamed.contains(&vars.root_of(w)))
+            .collect();
+        for (span, hole) in bare {
+            self.attach_infer_var_diag(
+                hole,
+                span,
+                "cannot infer the type this `_` stands for; write it in its place".to_string(),
+            );
+        }
+    }
+
     /// End-of-module finalize: raise diagnostics for unsolved holes and
     /// substitute every hole (solved → concrete, unsolved → `error`) into all
     /// recorded facts that can carry one.
@@ -894,6 +995,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A check queued after the last answer has not been asked yet.
         self.run_obligations();
         self.settle_pending_selections(Undecided::Report);
+        self.blame_bare_written_holes();
         let mismatches = self.infer_holes.mismatches.take();
         let covered: IndexSet<TypeId> = self
             .infer_holes

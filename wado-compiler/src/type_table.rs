@@ -3857,8 +3857,12 @@ impl TypeTable {
             // A scalar primitive's arithmetic is compiler-supplied, so nothing
             // registered its `Output`: it is the receiver itself, a newtype
             // over one included. `v128` is not one — only a lane type's own
-            // impl names its output.
-            if assoc_name == "Output" && self.is_scalar_primitive_like(receiver) {
+            // impl names its output. A right-hand side other than the receiver
+            // is its base's impl, unchanged: `Meters: Add<i32>` is `i32`'s.
+            if assoc_name == "Output"
+                && self.is_scalar_primitive_like(receiver)
+                && trait_args.is_none_or(|args| args.iter().all(|&arg| arg == receiver))
+            {
                 return Some(receiver);
             }
             let ResolvedType::Newtype { base_type, .. } = self.get(receiver) else {

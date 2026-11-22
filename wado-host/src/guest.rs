@@ -422,6 +422,13 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: &Runtime
             );
         }
     }
+    if knobs.no_spectre_mitigation {
+        // SAFETY: the guard only stops a speculative read past a bound; the
+        // bounds check itself stays, so no access a guest makes changes.
+        unsafe {
+            config.cranelift_flag_set("enable_heap_access_spectre_mitigation", "false");
+        }
+    }
     if knobs.report_fuel {
         meter_fuel(&mut config);
     }

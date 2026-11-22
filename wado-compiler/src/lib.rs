@@ -2741,6 +2741,7 @@ fn build_after_load<H: CompilerHost>(
         let _span = logger.span("wir_optimize");
         wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
     }
+    wir_package.declare_memory64();
 
     Ok(Built {
         nir,

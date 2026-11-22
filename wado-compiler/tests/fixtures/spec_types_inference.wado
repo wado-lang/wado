@@ -67,3 +67,9 @@ test "a partial turbofish" {
     let b = pick::<i32>(1, true);           // stops short: infers the second
     assert r.unwrap() == 42 && a == 1 && b == 1;
 }
+
+test "a `_` inside a type argument" {
+    let a = pick::<Option<_>, bool>(Some(1), true);  // Option<i32>
+    let b = Box::<List<_>> { value: ["x"] };          // List<String>
+    assert a.unwrap() == 1 && b.value[0] == "x";
+}

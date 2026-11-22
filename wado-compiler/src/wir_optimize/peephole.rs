@@ -1384,12 +1384,14 @@ fn try_fold_sign_extension(instr: &mut WirInstr) -> bool {
     match inner.as_mut() {
         // Unsigned load + sign-extend → signed load.
         WirInstr::I32Load8U {
+            memory,
             offset,
             align,
             addr,
         } if width == 8 => {
             let addr = std::mem::replace(addr, Box::new(WirInstr::Nop));
             *instr = WirInstr::I32Load8S {
+                memory: *memory,
                 offset: *offset,
                 align: *align,
                 addr,
@@ -1397,12 +1399,14 @@ fn try_fold_sign_extension(instr: &mut WirInstr) -> bool {
             changed = true;
         }
         WirInstr::I32Load16U {
+            memory,
             offset,
             align,
             addr,
         } if width == 16 => {
             let addr = std::mem::replace(addr, Box::new(WirInstr::Nop));
             *instr = WirInstr::I32Load16S {
+                memory: *memory,
                 offset: *offset,
                 align: *align,
                 addr,
@@ -1760,7 +1764,7 @@ fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wir::{WirAbstractHeapType, WirFuncId};
+    use crate::wir::{WirAbstractHeapType, WirFuncId, WirMemoryRef};
     use std::assert_matches;
     use std::rc::Rc;
 
@@ -1957,13 +1961,20 @@ mod tests {
     #[test]
     fn extend8_over_load8u_becomes_load8s() {
         let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32Load8U {
+            memory: WirMemoryRef::Memory64,
             offset: 4,
             align: 0,
-            addr: Box::new(WirInstr::I32Const(16)),
+            addr: Box::new(WirInstr::I64Const(16)),
         }));
         try_fold_sign_extension(&mut instr);
         match instr {
-            WirInstr::I32Load8S { offset, align, .. } => {
+            WirInstr::I32Load8S {
+                memory,
+                offset,
+                align,
+                ..
+            } => {
+                assert_eq!(memory, WirMemoryRef::Memory64);
                 assert_eq!(offset, 4);
                 assert_eq!(align, 0);
             }
@@ -1974,6 +1985,7 @@ mod tests {
     #[test]
     fn extend16_over_load16u_becomes_load16s() {
         let mut instr = WirInstr::I32Extend16S(Box::new(WirInstr::I32Load16U {
+            memory: WirMemoryRef::Main,
             offset: 0,
             align: 1,
             addr: Box::new(WirInstr::I32Const(0)),
@@ -1985,6 +1997,7 @@ mod tests {
     #[test]
     fn extend8_over_load8s_is_idempotent() {
         let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32Load8S {
+            memory: WirMemoryRef::Main,
             offset: 0,
             align: 0,
             addr: Box::new(WirInstr::I32Const(0)),
@@ -2012,6 +2025,7 @@ mod tests {
         // `load8_s` in the same pass (the re-fold step).
         let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32And(
             Box::new(WirInstr::I32Load8U {
+                memory: WirMemoryRef::Main,
                 offset: 0,
                 align: 0,
                 addr: Box::new(WirInstr::I32Const(0)),
@@ -2040,6 +2054,7 @@ mod tests {
     fn extend8_over_load16s_is_untouched() {
         // `extend8_s(load16_s a)` truncates to 8 bits; must NOT fold to load16_s.
         let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32Load16S {
+            memory: WirMemoryRef::Main,
             offset: 0,
             align: 0,
             addr: Box::new(WirInstr::I32Const(0)),
