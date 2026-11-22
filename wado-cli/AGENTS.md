@@ -16,7 +16,8 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   `CompileKnobs` / `CompileKnobOpt` carry what the compiler is told: `-O`,
   `--log-level`, `--allocator`, `-f`, `--no-cache`. `RuntimeKnobs` /
   `RuntimeKnobOpt` carry what the wasmtime engine is built with: `--collector`,
-  `--gc-heap-initial`, `--max-memory`, `--function-alignment`, `--report-fuel`,
+  `--gc-heap-initial`, `--max-memory`, `--function-alignment`,
+  `--no-spectre-mitigation`, `--report-fuel`,
   `--deny-process`, `--process-read`, `--process-trace`. `HostKnobs` /
   `HostKnobOpt` carry how the `wado` process itself runs: `--retain-memory`,
   which `main` installs before the subcommand runs.

@@ -187,7 +187,7 @@ fn once_guard_flag<'i>(instr: &'i WirInstr, setters: &IndexMap<u32, String>) -> 
 fn remove_dead_once_guards(module: &mut WirPackage) -> bool {
     let setters = flag_setters(module);
     let mut guards: IndexMap<String, usize> = IndexMap::default();
-    for_each_instr_in(module, &mut |instr| {
+    module.for_each_instr(&mut |instr| {
         if let Some(flag) = once_guard_flag(instr, &setters) {
             *guards.entry(flag.to_string()).or_default() += 1;
         }
@@ -201,7 +201,7 @@ fn remove_dead_once_guards(module: &mut WirPackage) -> bool {
         return false;
     }
     let mut reads: IndexMap<&str, usize> = guards.keys().map(|flag| (flag.as_str(), 0)).collect();
-    for_each_instr_in(module, &mut |instr| {
+    module.for_each_instr(&mut |instr| {
         if let WirInstr::GlobalGet { name, .. } = instr
             && let Some(count) = reads.get_mut(name.fq.as_str())
         {
@@ -226,24 +226,6 @@ fn remove_dead_once_guards(module: &mut WirPackage) -> bool {
         }
     }
     true
-}
-
-/// Every instruction of every function body and global initializer.
-fn for_each_instr_in(module: &WirPackage, f: &mut impl FnMut(&WirInstr)) {
-    fn walk(instr: &WirInstr, f: &mut impl FnMut(&WirInstr)) {
-        f(instr);
-        instr.for_each_child(&mut |child| walk(child, f));
-    }
-    let bodies = module
-        .functions
-        .iter()
-        .filter_map(|func| func.body.as_ref());
-    for instr in bodies.flatten() {
-        walk(instr, f);
-    }
-    for global in &module.globals {
-        walk(&global.init, f);
-    }
 }
 
 struct DeadGuardRemover<'a> {

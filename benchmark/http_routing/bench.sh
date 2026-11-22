@@ -152,7 +152,7 @@ start_server() {
   case "$key" in
     wado)
       # Unquoted, so the flags split into words.
-      "${SERVER_PIN[@]}" "$WADO_BIN" serve -O2 ${WADO_RUN_FLAGS:-} \
+      "${SERVER_PIN[@]}" "$WADO_BIN" serve -O2 --no-spectre-mitigation ${WADO_RUN_FLAGS:-} \
         --addr "127.0.0.1:${WADO_PORT}" --workers "$workers" app.wado >/dev/null 2>&1 &
       PIDS+=($!)
       ;;

@@ -12,7 +12,7 @@ use crate::name::{BACKED_HANDLE_CLASS_FIELD, ExternHostQuery, MangledName, cm_im
 use crate::rarity::Mark;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
-use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirInstr, WirMemoryRef, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
@@ -40,42 +40,49 @@ fn operand_lane_const(body: &Body, op: Operand) -> u8 {
 
 /// The load of a `prim` at its own width. WIR has no float load, so a float
 /// reinterprets the integer of its width, the bytes `fN.load` reads.
-fn memory_load(prim: PrimitiveType, addr: Box<WirInstr>) -> WirInstr {
+fn memory_load(memory: WirMemoryRef, prim: PrimitiveType, addr: Box<WirInstr>) -> WirInstr {
     use PrimitiveType as P;
     match prim {
         P::I8 => WirInstr::I32Load8S {
+            memory,
             offset: 0,
             align: 0,
             addr,
         },
         P::U8 => WirInstr::I32Load8U {
+            memory,
             offset: 0,
             align: 0,
             addr,
         },
         P::I16 => WirInstr::I32Load16S {
+            memory,
             offset: 0,
             align: 1,
             addr,
         },
         P::U16 | P::F16 | P::Bf16 => WirInstr::I32Load16U {
+            memory,
             offset: 0,
             align: 1,
             addr,
         },
         P::I32 | P::U32 => WirInstr::I32Load {
+            memory,
             offset: 0,
             align: 2,
             addr,
         },
-        P::F32 => WirInstr::F32ReinterpretI32(Box::new(memory_load(P::I32, addr))),
+        P::F32 => WirInstr::F32ReinterpretI32(Box::new(memory_load(memory, P::I32, addr))),
         P::I64 | P::U64 => WirInstr::I64Load {
+            memory,
             offset: 0,
             align: 3,
             addr,
         },
-        P::F64 => WirInstr::F64ReinterpretI64(Box::new(memory_load(P::I64, addr))),
+        P::F64 => WirInstr::F64ReinterpretI64(Box::new(memory_load(memory, P::I64, addr))),
         P::V128 => WirInstr::V128Load {
+            memory,
             offset: 0,
             align: 4,
             addr,
@@ -85,36 +92,56 @@ fn memory_load(prim: PrimitiveType, addr: Box<WirInstr>) -> WirInstr {
 }
 
 /// The store [`memory_load`] reads back.
-fn memory_store(prim: PrimitiveType, addr: Box<WirInstr>, value: Box<WirInstr>) -> WirInstr {
+fn memory_store(
+    memory: WirMemoryRef,
+    prim: PrimitiveType,
+    addr: Box<WirInstr>,
+    value: Box<WirInstr>,
+) -> WirInstr {
     use PrimitiveType as P;
     match prim {
         P::I8 | P::U8 => WirInstr::I32Store8 {
+            memory,
             offset: 0,
             align: 0,
             addr,
             value,
         },
         P::I16 | P::U16 | P::F16 | P::Bf16 => WirInstr::I32Store16 {
+            memory,
             offset: 0,
             align: 1,
             addr,
             value,
         },
         P::I32 | P::U32 => WirInstr::I32Store {
+            memory,
             offset: 0,
             align: 2,
             addr,
             value,
         },
-        P::F32 => memory_store(P::I32, addr, Box::new(WirInstr::I32ReinterpretF32(value))),
+        P::F32 => memory_store(
+            memory,
+            P::I32,
+            addr,
+            Box::new(WirInstr::I32ReinterpretF32(value)),
+        ),
         P::I64 | P::U64 => WirInstr::I64Store {
+            memory,
             offset: 0,
             align: 3,
             addr,
             value,
         },
-        P::F64 => memory_store(P::I64, addr, Box::new(WirInstr::I64ReinterpretF64(value))),
+        P::F64 => memory_store(
+            memory,
+            P::I64,
+            addr,
+            Box::new(WirInstr::I64ReinterpretF64(value)),
+        ),
         P::V128 => WirInstr::V128Store {
+            memory,
             offset: 0,
             align: 4,
             addr,
@@ -584,7 +611,12 @@ impl FunctionTranslator<'_, '_> {
                 i32::try_from(width).expect("a primitive is a few bytes wide"),
             ));
         }
-        let access = match builtin_name {
+        // `memory64_` names an operation of the memory64 memory.
+        let (memory, operation) = match builtin_name.strip_prefix("memory64_") {
+            Some(operation) => (WirMemoryRef::Memory64, operation),
+            None => (WirMemoryRef::Main, builtin_name),
+        };
+        let access = match operation {
             "i32_load" | "i32_store" => Some(PrimitiveType::I32),
             "i32_load8_u" | "i32_store8" => Some(PrimitiveType::U8),
             "i32_load8_s" => Some(PrimitiveType::I8),
@@ -601,9 +633,31 @@ impl FunctionTranslator<'_, '_> {
             let addr = Box::new(self.translate_operand(args[0].expr));
             return Some(if let Some(value) = args.get(1) {
                 let value = Box::new(self.translate_operand(value.expr));
-                memory_store(prim, addr, value)
+                memory_store(memory, prim, addr, value)
             } else {
-                memory_load(prim, addr)
+                memory_load(memory, prim, addr)
+            });
+        }
+        let copy = {
+            use WirMemoryRef::{Main, Memory64};
+            match builtin_name {
+                "memory_copy" => Some([Main, Main]),
+                "memory64_copy" => Some([Memory64, Memory64]),
+                "copy_to_memory64" => Some([Memory64, Main]),
+                "copy_from_memory64" => Some([Main, Memory64]),
+                _ => None,
+            }
+        };
+        if let Some([dst_memory, src_memory]) = copy {
+            let dst = self.translate_operand(args[0].expr);
+            let src = self.translate_operand(args[1].expr);
+            let len = self.translate_operand(args[2].expr);
+            return Some(WirInstr::MemoryCopy {
+                dst_memory,
+                src_memory,
+                dst: Box::new(dst),
+                src: Box::new(src),
+                len: Box::new(len),
             });
         }
 
@@ -807,29 +861,23 @@ impl FunctionTranslator<'_, '_> {
                 self.operand_const_wide_int(args[0].expr)
                     .expect("a v128 bit pattern must be an i128 / u128 literal"),
             )),
-            "memory_size" => Some(WirInstr::MemorySize),
+            "memory_size" | "memory64_size" => Some(WirInstr::MemorySize { memory }),
+            "memory_grow" | "memory64_grow" => Some(WirInstr::MemoryGrow {
+                memory,
+                delta: Box::new(self.translate_operand(args[0].expr)),
+            }),
             "heap_base" => Some(WirInstr::I32Const(self.ctx.package.heap_base())),
-            "memory_fill" => {
+            "memory_fill" | "memory64_fill" => {
                 let dst = self.translate_operand(args[0].expr);
                 let value = self.translate_operand(args[1].expr);
                 let len = self.translate_operand(args[2].expr);
                 Some(WirInstr::MemoryFill {
+                    memory,
                     dst: Box::new(dst),
                     value: Box::new(value),
                     len: Box::new(len),
                 })
             }
-            "memory_copy" => {
-                let dst = self.translate_operand(args[0].expr);
-                let src = self.translate_operand(args[1].expr);
-                let len = self.translate_operand(args[2].expr);
-                Some(WirInstr::MemoryCopy {
-                    dst: Box::new(dst),
-                    src: Box::new(src),
-                    len: Box::new(len),
-                })
-            }
-
             "unreachable" => Some(WirInstr::Unreachable),
             "select" => {
                 let cond = self.translate_operand(args[0].expr);
@@ -1673,7 +1721,6 @@ impl FunctionTranslator<'_, '_> {
             "i32x4_relaxed_dot_i8x16_i7x16_add_s" => {
                 ternary!(self, args, WirInstr::I32x4RelaxedDotI8x16I7x16AddS)
             }
-            "memory_grow" => unary!(self, args, WirInstr::MemoryGrow),
             _ => return None,
         })
     }
