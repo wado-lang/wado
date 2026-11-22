@@ -988,8 +988,10 @@ fn emit_lexer_token(
 }
 pub global TK_T: i32 = 0;
 pub global TK_WS: i32 = 1;
-pub global TK_AA: i32 = 2;  // virtual
-pub global TK_BB: i32 = 3;  // virtual
+/// Virtual: declared in `tokens { }`, matched by no lexer rule.
+pub global TK_AA: i32 = 2;
+/// Virtual: declared in `tokens { }`, matched by no lexer rule.
+pub global TK_BB: i32 = 3;
 pub global TK_EOF: i32 = 4;
 pub global TK_ERROR: i32 = 5;
 
@@ -1076,19 +1078,19 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
 
 fn try_T(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_1 = pos;
-    alts_done_1: {
-        alts_1_0: {
-            pos = alts_saved_1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break alts_1_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break alts_0_0; }
             pos += 1;
-            break alts_done_1;
+            break alts_done_0;
         }
-        alts_1_1: {
-            pos = alts_saved_1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { break alts_1_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { break alts_0_1; }
             pos += 1;
-            break alts_done_1;
+            break alts_done_0;
         }
         return -1;
     }

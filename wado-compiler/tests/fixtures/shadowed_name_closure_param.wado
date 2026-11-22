@@ -1,0 +1,30 @@
+// A closure parameter may take the name of a local binding: it receives the
+// value afresh, as an argument. It still warns where it takes a declaration's
+// name.
+fn twice(w: i32, f: fn(i32) -> i32) -> i32 {
+    return f(w) * 2;
+}
+
+fn len(n: i32) -> i32 {
+    return n;
+}
+
+test {
+    let w = 3;
+    assert twice(w, |w| w + 1) == 8;                            // no warning: `w` is a local
+    let item = 5;
+    assert twice(item, |item| twice(item, |item| item)) == 20;  // no warning either
+    assert twice(1, |len| len) == 2 + len(0);                   // warns: `len` is a function
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_contains": [
+        "`len` shadows the function of the same name"
+    ],
+    "warnings_not_contains": [
+        "`w` shadows",
+        "`item` shadows"
+    ]
+}

@@ -7,7 +7,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { from_string } from "core:json";
 use { TreeMap } from "core:collections";
-use { CodeWriter, FnSpec, ModuleSpec, Vis, wado } from "../src/wadopoet.wado";
+use { CodeWriter, FnSpec, ModuleSpec, Vis, wado } from "../src/lib.wado";
 
 struct PreludeName {
     name: String,
@@ -71,10 +71,8 @@ fn render(vocabulary: &Vocabulary) -> String {
     w.line("/// Whether a generated declaration named `name` would collide with the");
     w.line("/// language: a keyword, or a name `core:prelude` puts in every module's scope.");
     let mut reserved = FnSpec::new("is_reserved", Vis::Pub);
-    reserved.add_generic("S: AsStrSlice").add_param("name", "S").set_return_type("bool");
-    reserved.emit_begin(&mut w);
-    w.line("return is_keyword(name) || is_prelude_name(name);");
-    w.end();
+    reserved.add_generic("S: AsStrSlice").add_param({ name: "name", type: "S" }).set_return_type("bool");
+    reserved.emit(&mut w, |w| w.line("return is_keyword(name) || is_prelude_name(name);"));
     w.blank();
     emit_membership(&mut w, "is_prelude_name", Vis::Private, &prelude);
     return w.to_string();
@@ -95,28 +93,28 @@ fn emit_membership(w: &mut CodeWriter, name: String, vis: Vis, words: &List<Stri
     lens.sort();
 
     let mut f = FnSpec::new(name, vis);
-    f.add_generic("S: AsStrSlice").add_param("name", "S").set_return_type("bool");
-    f.emit_begin(w);
-    w.line("let name = name.as_str_slice();");
-    w.begin("return match name.len()");
-    for let len of lens {
-        let mut group = by_len[len];
-        group.sort();
-        let mut alternatives = "";
-        for let word of group {
-            if !alternatives.is_empty() {
-                alternatives.push_str(" | ");
+    f.add_generic("S: AsStrSlice").add_param({ name: "name", type: "S" }).set_return_type("bool");
+    f.emit(w, |w| {
+        w.line("let name = name.as_str_slice();");
+        w.begin("return match name.len()");
+        for let len of lens {
+            let mut group = by_len[len];
+            group.sort();
+            let mut alternatives = "";
+            for let word of group {
+                if !alternatives.is_empty() {
+                    alternatives.push_str(" | ");
+                }
+                alternatives.push_str(&wado`"${word}"`);
             }
-            alternatives.push_str(&wado`"${word}"`);
+            w.begin(`${len} => match name`);
+            w.line(`${alternatives} => true,`);
+            w.line("_ => false,");
+            w.end_with(",");
         }
-        w.begin(`${len} => match name`);
-        w.line(`${alternatives} => true,`);
         w.line("_ => false,");
-        w.end_with(",");
-    }
-    w.line("_ => false,");
-    w.end_with(";");
-    w.end();
+        w.end_with(";");
+    });
 }
 
 fn is_identifier(name: &String) -> bool {

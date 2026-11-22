@@ -1097,9 +1097,9 @@ fn try_ID(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        rep_3: {
-            if pos >= src.len() { break rep_3; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_3; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1110,35 +1110,35 @@ fn try_ID(src: &StrSlice, start: i32) -> i32 {
 
 fn try_INDENT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let mut la_end_5: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { return -1; }
     pos += 1;
     loop {
-        let mut la_tot_6: i32 = -1;
-        let peek_save_7 = pos;
-        peek_7: {
-            if char_pos_in_line(src, start) != 0 { break peek_7; }
-            la_tot_6 = pos;
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            if char_pos_in_line(src, start) != 0 { break peek_2; }
+            la_tot_1 = pos;
         }
-        pos = peek_save_7;
-        if la_tot_6 >= 0 && la_tot_6 >= la_end_5 {
-            la_end_5 = la_tot_6;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_5 = pos;
-        la_rep_5: {
-            if pos >= src.len() { break la_rep_5; }
-            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { break la_rep_5; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
-        pos = la_saved_5;
+        pos = la_saved_0;
         break;
     }
-    if la_end_5 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_5;
+    pos = la_end_0;
     return pos;
 }
 
@@ -1155,9 +1155,9 @@ fn try_WS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { return -1; }
     pos += 1;
     loop {
-        rep_8: {
-            if pos >= src.len() { break rep_8; }
-            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { break rep_8; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { break rep_0; }
             pos += 1;
             continue;
         }

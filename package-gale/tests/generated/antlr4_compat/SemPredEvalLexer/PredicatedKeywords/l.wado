@@ -1098,15 +1098,15 @@ fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     if pos > end { return; }
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= src.len() { break rep_3; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_3; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_0; }
             pos += 1;
-            if pos > end { break rep_3; }
+            if pos > end { break rep_0; }
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_0;
         break;
     }
     lx.emit(`ID ${span_text(src, start, pos)}\n`);
@@ -1114,35 +1114,35 @@ fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {
 
 fn try_ENUM(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let mut la_end_5: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        let mut la_tot_6: i32 = -1;
-        let peek_save_7 = pos;
-        peek_7: {
-            if !(span_text(src, start, pos) == "enum") { break peek_7; }
-            la_tot_6 = pos;
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            if !(span_text(src, start, pos) == "enum") { break peek_2; }
+            la_tot_1 = pos;
         }
-        pos = peek_save_7;
-        if la_tot_6 >= 0 && la_tot_6 >= la_end_5 {
-            la_end_5 = la_tot_6;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_5 = pos;
-        la_rep_5: {
-            if pos >= src.len() { break la_rep_5; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break la_rep_5; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
-        pos = la_saved_5;
+        pos = la_saved_0;
         break;
     }
-    if la_end_5 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_5;
+    pos = la_end_0;
     return pos;
 }
 
@@ -1152,9 +1152,9 @@ fn try_ID(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        rep_8: {
-            if pos >= src.len() { break rep_8; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_8; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_0; }
             pos += 1;
             continue;
         }

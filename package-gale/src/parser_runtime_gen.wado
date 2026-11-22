@@ -9,7 +9,7 @@ use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from 
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE } from "./emit_context.wado";
 use { kind_bitset_words } from "./kind_set_gen.wado";
 use { follow_site_name } from "./table_registry.wado";
-use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "lib:wadopoet";
+use { CodeWriter, FnSpec, GlobalSpec, ImplSpec, ParamSpec, StructSpec, Vis } from "lib:wadopoet";
 use { add_parser_super_effect, entry_emits_vals } from "./action_gen.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
@@ -58,46 +58,48 @@ internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut EmitContext) -
 internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &EmitContext) {
     let mut starts: List<i32> = [];
     for let mut i = 0; i < entries.len(); i += 1 {
-        w.line(`global _FRAGMENT_FIRST_${i}: List<i32> = [${kind_bitset_words(&entries[i].first_ids).join(", ")}];`);
+        GlobalSpec::new(`_FRAGMENT_FIRST_${i}`, "List<i32>", `[${kind_bitset_words(&entries[i].first_ids).join(", ")}]`).emit(
+            w,
+        );
         starts.extend(&entries[i].first_ids);
     }
-    w.line(`global _FRAGMENT_STARTS: List<i32> = [${kind_bitset_words(&starts).join(", ")}];`);
+    GlobalSpec::new("_FRAGMENT_STARTS", "List<i32>", `[${kind_bitset_words(&starts).join(", ")}]`).emit(w);
     w.blank();
 
     let mut d = FnSpec::new("_recover_fragment");
-    d.add_param("p", "&mut Parser");
+    d.add_param({ name: "p", type: "&mut Parser" });
     add_parser_super_effect(&mut d, ctx);
     d.set_return_type("bool");
-    d.emit_begin(w);
-    if entries.is_empty() {
-        w.line("return false;");
-    } else {
-        w.line("let _k = p.kinds[p.pos];");
-        w.line("p.site = -1;");
-        for let mut i = 0; i < entries.len(); i += 1 {
-            w.begin(`if kind_set_has(&_FRAGMENT_FIRST_${i}, _k)`);
-            w.line(&entries[i].call);
-            w.line("return true;");
-            w.end();
+    d.emit(w, |w| {
+        if entries.is_empty() {
+            w.line("return false;");
+        } else {
+            w.line("let _k = p.kinds[p.pos];");
+            w.line("p.site = -1;");
+            for let mut i = 0; i < entries.len(); i += 1 {
+                w.begin(`if kind_set_has(&_FRAGMENT_FIRST_${i}, _k)`);
+                w.line(&entries[i].call);
+                w.line("return true;");
+                w.end();
+            }
+            w.line("return false;");
         }
-        w.line("return false;");
-    }
-    w.end();
+    });
     w.blank();
 
     let mut s = FnSpec::new("_recover_try_descend");
-    s.add_param("p", "&mut Parser");
+    s.add_param({ name: "p", type: "&mut Parser" });
     add_parser_super_effect(&mut s, ctx);
-    s.emit_begin(w);
-    w.line("let _before = p.pos;");
-    w.line("let _was = p.recovering;");
-    w.line("p.recovering = false;");
-    w.line("let _did = _recover_fragment(p);");
-    w.line("p.recovering = _was;");
-    w.begin("if !_did || p.pos == _before");
-    w.line("p.skip_one();");
-    w.end();
-    w.end();
+    s.emit(w, |w| {
+        w.line("let _before = p.pos;");
+        w.line("let _was = p.recovering;");
+        w.line("p.recovering = false;");
+        w.line("let _did = _recover_fragment(p);");
+        w.line("p.recovering = _was;");
+        w.begin("if !_did || p.pos == _before");
+        w.line("p.skip_one();");
+        w.end();
+    });
     w.blank();
 }
 
@@ -110,15 +112,21 @@ fn parser_super_fn_clause(ctx: &EmitContext) -> String {
     return "";
 }
 
-/// The ` with Foo` clause a parse-entry fn carries: the lexer's base (it
-/// tokenizes) and the parser's (its rules evaluate predicates).
-fn superclass_clause(ctx: &EmitContext) -> String {
-    let bases = ctx.settings.base_effects();
-    return match bases.len() {
-        0 => "",
-        1 => ` with ${bases[0]}`,
-        _ => ` with (${bases.join(", ")})`,
-    };
+/// The head of a parse entry, `name<S: AsStrSlice>(input: S, …) -> ParseResult`,
+/// the parameters after `input` left to the caller. It performs the lexer's
+/// base (it tokenizes) and the parser's (its rules evaluate predicates).
+fn parse_entry_spec(name: String, vis: Vis, ctx: &EmitContext) -> FnSpec {
+    let mut f = FnSpec::new(name, vis);
+    f.add_generic("S: AsStrSlice").add_param({ name: "input", type: "S" }).set_return_type("ParseResult");
+    for let base of ctx.settings.base_effects() {
+        f.add_effect(base);
+    }
+    return f;
+}
+
+/// `max_errors`, which a public parse entry defaults to no cap.
+fn max_errors_param() -> ParamSpec {
+    return ParamSpec { name: "max_errors", type: "i32", default: Option::Some("i32::MAX") };
 }
 
 /// Public `parse` entry under the emitter: tokenize, run the start
@@ -139,9 +147,9 @@ pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &EmitC
     // caller parse from any rule (ANTLR4 lets you pick a start rule; the
     // ANTLR4-compat descriptors name one), mirroring the typed parser.
     let start = rule_header(&lowered.parser_rules[0]);
-    w.begin(`pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(ctx)}`);
-    w.line(`return parse_${start.snake_name}(input, max_errors);`);
-    w.end();
+    parse_entry_spec("parse", Vis::Pub, ctx).add_param(max_errors_param()).emit(w, |w| {
+        w.line(`return parse_${start.snake_name}(input, max_errors);`);
+    });
     w.blank();
     for let ri of 0..<lowered.parser_rules.len() {
         gen_parse_rule_entry(w, &lowered.parser_rules[ri], ri, ctx);
@@ -154,58 +162,58 @@ pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &EmitC
 /// partial tree, and on error push a single diagnostic (deepest of the
 /// propagated error and `p.pending`).
 fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
-    w.begin(
-        `fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)${parser_super_fn_clause(
-            ctx,
-        )}) -> ParseResult${superclass_clause(
-            ctx,
-        )}`,
-    );
-    // `max_errors` caps recovery; 1 is the fail-fast minimum. 0 (or negative)
-    // would suppress every diagnostic and let a broken parse report `ok()`, so
-    // reject it up front.
-    w.line("assert max_errors >= 1;");
-    // A predicate or action may run a parse of its own; each keeps its state
-    // apart from the one it runs inside.
-    if ctx.plan.lr_frames {
-        w.line("let lr_outer = lr_frames_enter();");
-    }
-    if ctx.plan.emit_follow {
-        w.line("let follow_outer = follow_links_enter();");
-    }
-    let verify = ctx.settings.prediction.verifies() && ctx.plan.needs_atn;
-    if verify {
-        w.line(`let verify_outer = ${ATN_VERIFY_BEGIN}();`);
-    }
-    w.line("let tokens = tokenize(input);");
-    w.line("let mut p = Parser::new(tokens);");
-    w.line("p.max_errors = max_errors;");
-    w.line("entry(&mut p);");
-    if ctx.plan.lr_frames {
-        w.line("lr_frames_leave(lr_outer);");
-    }
-    if ctx.plan.emit_follow {
-        w.line("follow_links_leave(follow_outer);");
-    }
-    // The parser is infallible: a failure leaves `p.recovering` set and the
-    // deepest error in `p.pending`, surfaced here as one diagnostic.
-    w.begin("if p.recovering && p.diagnostics.len() < max_errors");
-    w.line("p.commit_pending();");
-    w.end();
-    w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
-    w.line("resolve_positions(&mut p.diagnostics, &p.tokens.src);");
-    if verify {
-        w.line(`${ATN_VERIFY_END}(&p.diagnostics, verify_outer);`);
-    }
-    if ctx.settings.emit_actions {
-        // Lexer prints precede parser prints in the one sink, as on ANTLR4's stdout.
-        w.line(
-            "return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.tokens.output };",
+    parse_entry_spec("_run_parse_entry", Vis::Private, ctx)
+        .add_param({ name: "max_errors", type: "i32" })
+        .add_param({ name: "entry", type: `fn(&mut Parser)${parser_super_fn_clause(ctx)}` })
+        .emit(
+            w,
+            |w| {
+                // `max_errors` caps recovery; 1 is the fail-fast minimum. 0 (or negative)
+                // would suppress every diagnostic and let a broken parse report `ok()`, so
+                // reject it up front.
+                w.line("assert max_errors >= 1;");
+                // A predicate or action may run a parse of its own; each keeps its state
+                // apart from the one it runs inside.
+                if ctx.plan.lr_frames {
+                    w.line("let lr_outer = lr_frames_enter();");
+                }
+                if ctx.plan.emit_follow {
+                    w.line("let follow_outer = follow_links_enter();");
+                }
+                let verify = ctx.settings.prediction.verifies() && ctx.plan.needs_atn;
+                if verify {
+                    w.line(`let verify_outer = ${ATN_VERIFY_BEGIN}();`);
+                }
+                w.line("let tokens = tokenize(input);");
+                w.line("let mut p = Parser::new(tokens);");
+                w.line("p.max_errors = max_errors;");
+                w.line("entry(&mut p);");
+                if ctx.plan.lr_frames {
+                    w.line("lr_frames_leave(lr_outer);");
+                }
+                if ctx.plan.emit_follow {
+                    w.line("follow_links_leave(follow_outer);");
+                }
+                // The parser is infallible: a failure leaves `p.recovering` set and the
+                // deepest error in `p.pending`, surfaced here as one diagnostic.
+                w.begin("if p.recovering && p.diagnostics.len() < max_errors");
+                w.line("p.commit_pending();");
+                w.end();
+                w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
+                w.line("resolve_positions(&mut p.diagnostics, &p.tokens.src);");
+                if verify {
+                    w.line(`${ATN_VERIFY_END}(&p.diagnostics, verify_outer);`);
+                }
+                if ctx.settings.emit_actions {
+                    // Lexer prints precede parser prints in the one sink, as on ANTLR4's stdout.
+                    w.line(
+                        "return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.tokens.output };",
+                    );
+                } else {
+                    w.line("return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+                }
+            },
         );
-    } else {
-        w.line("return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
-    }
-    w.end();
 }
 
 /// Emit one `pub fn parse_<rule>(input) -> ParseResult` entry as a thin wrapper
@@ -214,26 +222,22 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
 /// `min_prec` fills in.
 fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, rule_index: i32, ctx: &EmitContext) {
     let header = rule_header(rule);
-    w.begin(
-        `pub fn parse_${header.snake_name}<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(
-            ctx,
-        )}`,
-    );
-    let follow = if let Some(site) = ctx.plan.entry_follow_site(rule_index) {
-        let name = follow_site_name(site);
-        w.note(&name);
-        `, ${name}`;
-    } else {
-        "";
-    };
-    let call = `_parse_${header.snake_name}(p${follow})`;
-    let entry = if entry_emits_vals(ctx, &header.name) {
-        `|p: &mut Parser| { let _ = ${call}; }`;
-    } else {
-        `|p: &mut Parser| ${call}`;
-    };
-    w.line(`return _run_parse_entry(input, max_errors, ${entry});`);
-    w.end();
+    parse_entry_spec(`parse_${header.snake_name}`, Vis::Pub, ctx).add_param(max_errors_param()).emit(w, |w| {
+        let follow = if let Some(site) = ctx.plan.entry_follow_site(rule_index) {
+            let name = follow_site_name(site);
+            w.note(&name);
+            `, ${name}`;
+        } else {
+            "";
+        };
+        let call = `_parse_${header.snake_name}(p${follow})`;
+        let entry = if entry_emits_vals(ctx, &header.name) {
+            `|p: &mut Parser| { let _ = ${call}; }`;
+        } else {
+            `|p: &mut Parser| ${call}`;
+        };
+        w.line(`return _run_parse_entry(input, max_errors, ${entry});`);
+    });
     w.blank();
 }
 
@@ -274,203 +278,210 @@ pub fn syncs_on<P: AsStrSlice, S: AsStrSlice, K: AsStrSlice>(fragment_recovery: 
 fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
     let mut rr = FnSpec::new("recover_rule");
     rr.set_receiver("&mut self");
-    rr.add_param("rule", "NodeKind");
-    rr.add_param("name", "String");
-    rr.add_param("row", "i32");
+    rr.add_param({ name: "rule", type: "NodeKind" });
+    rr.add_param({ name: "name", type: "String" });
+    rr.add_param({ name: "row", type: "i32" });
     rr.set_return_type("bool");
-    rr.emit_begin(w);
-    w.begin("if self.speculating || self.diagnostics.len() >= self.max_errors");
-    w.line("self.push_rule_stack(name);");
-    w.line("return false;");
-    w.end();
-    w.line("let node = if row < 0 { self.b.innermost_open() } else { row };");
-    w.line("self.b.resume_node(node, self.last_end());");
-    w.line("assert self.b.node_kind(node) == rule, \"recover_rule: the resumed node is the failed rule's\";");
-    w.line("if !self.b.in_error_mode() { self.recovered_failures.clear(); }");
-    w.line("self.commit_pending();");
-    w.line("self.recovering = false;");
-    w.line("let failure = [rule, self.failed_expected];");
-    w.begin(
-        "if self.pos == self.recovery_pos && self.recovered_failures.contains(&failure) && self.kinds[self.pos] != TK_EOF",
+    rr.emit(
+        w,
+        |w| {
+            w.begin("if self.speculating || self.diagnostics.len() >= self.max_errors");
+            w.line("self.push_rule_stack(name);");
+            w.line("return false;");
+            w.end();
+            w.line("let node = if row < 0 { self.b.innermost_open() } else { row };");
+            w.line("self.b.resume_node(node, self.last_end());");
+            w.line("assert self.b.node_kind(node) == rule, \"recover_rule: the resumed node is the failed rule's\";");
+            w.line("if !self.b.in_error_mode() { self.recovered_failures.clear(); }");
+            w.line("self.commit_pending();");
+            w.line("self.recovering = false;");
+            w.line("let failure = [rule, self.failed_expected];");
+            w.begin(
+                "if self.pos == self.recovery_pos && self.recovered_failures.contains(&failure) && self.kinds[self.pos] != TK_EOF",
+            );
+            w.line("self.skip_one();");
+            w.end();
+            w.line("self.recovery_pos = self.pos;");
+            w.line("self.recovered_failures.push(failure);");
+            w.line("self.skip_until(&self.resync_set(&[]));");
+            w.line("return true;");
+        },
     );
-    w.line("self.skip_one();");
-    w.end();
-    w.line("self.recovery_pos = self.pos;");
-    w.line("self.recovered_failures.push(failure);");
-    w.line("self.skip_until(&self.resync_set(&[]));");
-    w.line("return true;");
-    w.end();
     w.blank();
 
     let mut cp = FnSpec::new("commit_pending");
     cp.set_receiver("&mut self");
-    cp.emit_begin(w);
-    w.line("let Some(d) = self.pending else { return; };");
-    w.line("self.pending = null;");
-    w.line("let mut diag = d;");
-    w.line("self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);");
-    w.line("self.report(diag);");
-    w.end();
+    cp.emit(w, |w| {
+        w.line("let Some(d) = self.pending else { return; };");
+        w.line("self.pending = null;");
+        w.line("let mut diag = d;");
+        w.line("self.b.push_open_rule_names(&RULE_NAMES, &mut diag.rule_stack);");
+        w.line("self.report(diag);");
+    });
     w.blank();
 
     // ANTLR4's error recovery mode: once an error is reported, the next one
     // waits for a token to match.
     let mut rp = FnSpec::new("report");
     rp.set_receiver("&mut self");
-    rp.add_param("diag", "Diagnostic");
-    rp.emit_begin(w);
-    w.line("if self.b.in_error_mode() { return; }");
-    w.line("self.diagnostics.push(diag);");
-    w.line("self.b.mark_error();");
-    w.end();
+    rp.add_param({ name: "diag", type: "Diagnostic" });
+    rp.emit(w, |w| {
+        w.line("if self.b.in_error_mode() { return; }");
+        w.line("self.diagnostics.push(diag);");
+        w.line("self.b.mark_error();");
+    });
     w.blank();
 
     let mut rs = FnSpec::new("resync_set");
     rs.set_receiver("&self");
-    rs.add_param("base", "&List<i32>");
+    rs.add_param({ name: "base", type: "&List<i32>" });
     rs.set_return_type("List<i32>");
-    rs.emit_begin(w);
-    w.line("let mut set = *base;");
-    w.begin("for let s of &self.sites");
-    w.line("if *s < 0 { continue; }");
-    w.line("let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];");
-    w.line("while set.len() < f.len() { set.push(0); }");
-    w.line("for let mut i = 0; i < f.len(); i += 1 { set[i] = set[i] | f[i]; }");
-    w.end();
-    w.line("return set;");
-    w.end();
+    rs.emit(w, |w| {
+        w.line("let mut set = *base;");
+        w.begin("for let s of &self.sites");
+        w.line("if *s < 0 { continue; }");
+        w.line("let f = &CALL_FOLLOW_SETS[CALL_FOLLOW[*s]];");
+        w.line("while set.len() < f.len() { set.push(0); }");
+        w.line("for let mut i = 0; i < f.len(); i += 1 { set[i] = set[i] | f[i]; }");
+        w.end();
+        w.line("return set;");
+    });
     w.blank();
 
     let mut fu = FnSpec::new("follows_rules_under_way");
     fu.set_receiver("&self");
-    fu.add_param("k", "i32");
+    fu.add_param({ name: "k", type: "i32" });
     fu.set_return_type("bool");
-    fu.emit_begin(w);
-    w.begin("for let mut i = self.sites.len() - 1; i >= 0; i -= 1");
-    w.line("let s = self.sites[i];");
-    w.line("if s < 0 { return i == 0 && k == TK_EOF; }");
-    w.line("if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }");
-    w.line("if !CALL_FOLLOW_ENDS[s] { return false; }");
-    w.end();
-    w.line("return k == TK_EOF;");
-    w.end();
+    fu.emit(w, |w| {
+        w.begin("for let mut i = self.sites.len() - 1; i >= 0; i -= 1");
+        w.line("let s = self.sites[i];");
+        w.line("if s < 0 { return i == 0 && k == TK_EOF; }");
+        w.line("if kind_set_has(&CALL_FOLLOW_SETS[CALL_FOLLOW[s]], k) { return true; }");
+        w.line("if !CALL_FOLLOW_ENDS[s] { return false; }");
+        w.end();
+        w.line("return k == TK_EOF;");
+    });
     w.blank();
 
     let mut su = FnSpec::new("skip_until");
     su.set_receiver("&mut self");
-    su.add_param("set", "&List<i32>");
-    su.emit_begin(w);
-    w.begin("loop");
-    w.line("let k = self.kinds[self.pos];");
-    w.line(`if k == TK_EOF || ${syncs_on(fragment_recovery, "self", "set", "k")} { break; }`);
-    w.line("self.skip_one();");
-    w.end();
-    w.end();
+    su.add_param({ name: "set", type: "&List<i32>" });
+    su.emit(w, |w| {
+        w.begin("loop");
+        w.line("let k = self.kinds[self.pos];");
+        w.line(`if k == TK_EOF || ${syncs_on(fragment_recovery, "self", "set", "k")} { break; }`);
+        w.line("self.skip_one();");
+        w.end();
+    });
     w.blank();
 
     if fragment_recovery {
         let mut rf = FnSpec::new("root_fragment_start");
         rf.set_receiver("&self");
-        rf.add_param("k", "i32");
+        rf.add_param({ name: "k", type: "i32" });
         rf.set_return_type("bool");
-        rf.emit_begin(w);
-        w.line("return self.sites.len() == 1 && kind_set_has(&_FRAGMENT_STARTS, k);");
-        w.end();
+        rf.emit(w, |w| w.line("return self.sites.len() == 1 && kind_set_has(&_FRAGMENT_STARTS, k);"));
         w.blank();
     }
 
     let mut so = FnSpec::new("skip_one");
     so.set_receiver("&mut self");
-    so.emit_begin(w);
-    w.line("let _sk = self.advance();");
-    w.line("self.tokens.mark_skipped(_sk);");
-    w.line("self.b.skip(_sk);");
-    w.end();
+    so.emit(w, |w| {
+        w.line("let _sk = self.advance();");
+        w.line("self.tokens.mark_skipped(_sk);");
+        w.line("self.b.skip(_sk);");
+    });
     w.blank();
 
     let mut sd = FnSpec::new("sync_delete");
     sd.set_receiver("&mut self");
-    sd.add_param("sync", "&List<i32>");
-    sd.add_param("expected", "&List<i32>");
+    sd.add_param({ name: "sync", type: "&List<i32>" });
+    sd.add_param({ name: "expected", type: "&List<i32>" });
     sd.set_return_type("bool");
-    sd.emit_begin(w);
-    w.begin(
-        `if self.speculating || self.kinds[self.pos] == TK_EOF || !${syncs_on(
-            fragment_recovery,
-            "self",
-            "sync",
-            "self.peek_at(1)",
-        )}`,
-    );
-    w.line("return false;");
-    w.end();
-    w.line("self.report_extraneous(expected, RecoveryAction::Deleted);");
-    w.line("self.skip_one();");
-    w.line("return true;");
-    w.end();
+    sd.emit(w, |w| {
+        w.begin(
+            `if self.speculating || self.kinds[self.pos] == TK_EOF || !${syncs_on(
+                fragment_recovery,
+                "self",
+                "sync",
+                "self.peek_at(1)",
+            )}`,
+        );
+        w.line("return false;");
+        w.end();
+        w.line("self.report_extraneous(expected, RecoveryAction::Deleted);");
+        w.line("self.skip_one();");
+        w.line("return true;");
+    });
     w.blank();
 
     let mut se = FnSpec::new("sync_enter");
     se.set_receiver("&mut self");
-    se.add_param("sync", "&List<i32>");
-    se.add_param("expected", "&List<i32>");
-    se.emit_begin(w);
-    w.begin("if !self.recovering && !self.sync_delete(sync, expected)");
-    w.line("self.fail_expecting(expected);");
-    w.end();
-    w.end();
+    se.add_param({ name: "sync", type: "&List<i32>" });
+    se.add_param({ name: "expected", type: "&List<i32>" });
+    se.emit(w, |w| {
+        w.begin("if !self.recovering && !self.sync_delete(sync, expected)");
+        w.line("self.fail_expecting(expected);");
+        w.end();
+    });
     w.blank();
 
     let mut sa = FnSpec::new("sync_alts");
     sa.set_receiver("&mut self");
-    sa.add_param("sync", "&List<i32>");
-    sa.add_param("expected", "&List<i32>");
-    sa.emit_begin(w);
-    w.begin("if !self.recovering && !self.sync_delete(sync, expected)");
-    w.line("self.no_viable(\"no viable alternative\", self.peek_span(), expected);");
-    w.end();
-    w.end();
+    sa.add_param({ name: "sync", type: "&List<i32>" });
+    sa.add_param({ name: "expected", type: "&List<i32>" });
+    sa.emit(w, |w| {
+        w.begin("if !self.recovering && !self.sync_delete(sync, expected)");
+        w.line("self.no_viable(\"no viable alternative\", self.peek_span(), expected);");
+        w.end();
+    });
     w.blank();
 
     // At EOF there is nothing to skip, and what the loop left unfinished
     // reports itself.
     let mut sb = FnSpec::new("sync_back");
     sb.set_receiver("&mut self");
-    sb.add_param("sync", "&List<i32>");
-    sb.add_param("expected", "&List<i32>");
-    sb.emit_begin(w);
-    w.line("if self.recovering || self.kinds[self.pos] == TK_EOF { return; }");
-    w.begin("if self.speculating");
-    w.line("self.fail_expecting(expected);");
-    w.line("return;");
-    w.end();
-    w.line("self.report_extraneous(expected, RecoveryAction::SkippedTo);");
-    w.line("self.skip_until(&self.resync_set(sync));");
-    w.end();
+    sb.add_param({ name: "sync", type: "&List<i32>" });
+    sb.add_param({ name: "expected", type: "&List<i32>" });
+    sb.emit(w, |w| {
+        w.line("if self.recovering || self.kinds[self.pos] == TK_EOF { return; }");
+        w.begin("if self.speculating");
+        w.line("self.fail_expecting(expected);");
+        w.line("return;");
+        w.end();
+        w.line("self.report_extraneous(expected, RecoveryAction::SkippedTo);");
+        w.line("self.skip_until(&self.resync_set(sync));");
+    });
     w.blank();
 
     // At EOF the wanted terminal closes a construct the input never finished.
     let mut fd = FnSpec::new("fail_expecting");
     fd.set_receiver("&mut self");
-    fd.add_param("expected", "&List<i32>");
-    fd.emit_begin(w);
-    w.line(
-        "let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };",
+    fd.add_param({ name: "expected", type: "&List<i32>" });
+    fd.emit(
+        w,
+        |w| {
+            w.line(
+                "let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };",
+            );
+            w.line("self.fail_on_token(\"got\", expected, code);");
+        },
     );
-    w.line("self.fail_on_token(\"got\", expected, code);");
-    w.end();
     w.blank();
 
     let mut rsy = FnSpec::new("report_extraneous");
     rsy.set_receiver("&mut self");
-    rsy.add_param("expected", "&List<i32>");
-    rsy.add_param("recovery", "RecoveryAction");
-    rsy.emit_begin(w);
-    emit_diag_prologue(w);
-    w.line(
-        "self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), *expected, self.kinds[self.pos], recovery));",
+    rsy.add_param({ name: "expected", type: "&List<i32>" });
+    rsy.add_param({ name: "recovery", type: "RecoveryAction" });
+    rsy.emit(
+        w,
+        |w| {
+            emit_diag_prologue(w);
+            w.line(
+                "self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), *expected, self.kinds[self.pos], recovery));",
+            );
+        },
     );
-    w.end();
     w.blank();
 }
 
@@ -488,19 +499,19 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     let base_api = !parser_base.is_empty();
     // A parser base handler names the recognizer in its operation signature.
     let mut s = StructSpec::new("Parser", if base_api { Vis::Pub } else { Vis::Private });
-    s.add_field("tokens", "TokenStream");
+    s.add_field({ name: "tokens", type: "TokenStream" });
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
     // array (not the `List<i32>` wrapper) so reading `kinds[pos]` is a single
     // `array.get` with nothing for the optimizer to hoist into an extra local;
     // a `&List<i32>` would cost every deeply-recursive scan frame one more
     // slot, overflowing the wasm stack on pathological grammars.
-    s.add_field("kinds", "Array<i32>");
-    s.add_field("pos", "i32");
+    s.add_field({ name: "kinds", type: "Array<i32>" });
+    s.add_field({ name: "pos", type: "i32" });
     // Deepest speculative failure seen (a scan-gated repetition re-parses a
     // malformed element to harvest a precise inner error). The input-entry
     // reports it over the shallow "expected <closer>" error when it reaches
     // at least as far into the token stream.
-    s.add_field("pending", "Option<Diagnostic>");
+    s.add_field({ name: "pending", type: "Option<Diagnostic>" });
     // Error-recovery flag. The parser is infallible: a match method that cannot
     // consume its terminal records the failure (into `pending`) and sets this
     // instead of propagating a `Result`. While set, every match method and rule
@@ -509,32 +520,32 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // reproducing the old `?` early-return without a `Result` type. A
     // speculative re-parse saves and restores it so a probe never aborts the
     // real parse.
-    s.add_field("recovering", "bool");
+    s.add_field({ name: "recovering", type: "bool" });
     // Set while a speculative parse runs (a scan-gated repeat's recovery probe,
     // an LR alt save-and-rewind). Recovery edits are suppressed: a mismatch
     // fails (records the deepest error, sets `recovering`) instead of
     // inserting / deleting / skipping, so the caller can cleanly backtrack —
     // static scan cannot tell a malformed element from a valid one that belongs
     // to the caller's continuation, so committing edits here would steal tokens.
-    s.add_field("speculating", "bool");
+    s.add_field({ name: "speculating", type: "bool" });
     // Cap on collected diagnostics (the `max_errors` entry parameter). Once
     // reached, recovery stops recording and folds the tree closed by setting
     // `recovering`; `<= 1` is effectively fail-fast (one diagnostic, partial
     // tree). Defaults to `i32::MAX` — unbounded.
-    s.add_field("max_errors", "i32");
+    s.add_field({ name: "max_errors", type: "i32" });
     // The rule calls under way as `atn_call_site` ids, whose follows a failed
     // rule resynchronises on: a call stamps `site`, its entry pushes it.
-    s.add_field("site", "i32");
-    s.add_field("sites", "List<i32>");
+    s.add_field({ name: "site", type: "i32" });
+    s.add_field({ name: "sites", type: "List<i32>" });
     // What the latest failure expected, where recovery last left off, and the
     // failures recovered from since a token matched: the progress guard of
     // "Building: TreeBuilder + recovery" in `resilient-parser.md`.
-    s.add_field("failed_expected", "List<i32>");
-    s.add_field("recovery_pos", "i32");
-    s.add_field("recovered_failures", "List<[NodeKind, List<i32>]>");
+    s.add_field({ name: "failed_expected", type: "List<i32>" });
+    s.add_field({ name: "recovery_pos", type: "i32" });
+    s.add_field({ name: "recovered_failures", type: "List<[NodeKind, List<i32>]>" });
     // Current recursive-descent depth, used only to indent trace output.
     if trace {
-        s.add_field("trace_depth", "i32");
+        s.add_field({ name: "trace_depth", type: "i32" });
     }
     // Runtime ATN simulator state (only when a non-greedy / LR decision needs
     // it); the decoded ATN is shared via the module-level `ATN_SIM`.
@@ -544,628 +555,624 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // callee's entry wrapper, which pushes it and resets to -1 (an unstamped
     // call pushes -1 = unknown caller, handled as SLL).
     if needs_atn {
-        s.add_field(&ATN_HANDLE, &ATN_PREDICTOR_TYPE);
-        s.add_field("atn_ret_pending", "i32");
+        s.add_field({ name: ATN_HANDLE, type: ATN_PREDICTOR_TYPE });
+        s.add_field({ name: "atn_ret_pending", type: "i32" });
     }
     // the parser drives a `TreeBuilder` (`b`) — the matched
     // terminals / subtrees accrue there in source order — and collects
     // `Diagnostic`s. The struct otherwise mirrors the typed Parser, so the
     // shared prediction / scan / ATN emission and the runtime ATN calls work
     // against it unchanged.
-    s.add_field("b", "TreeBuilder");
-    s.add_field("diagnostics", "List<Diagnostic>");
+    s.add_field({ name: "b", type: "TreeBuilder" });
+    s.add_field({ name: "diagnostics", type: "List<Diagnostic>" });
     // Eager because `token_line` answers through the `&Parser` predicates hold.
     if emit_actions {
-        s.add_field("line_starts", "List<i32>");
+        s.add_field({ name: "line_starts", type: "List<i32>" });
     }
     // `@members` fields: defaulted so `Parser::new`'s literal can omit them.
     for let mf of &members.fields {
-        s.add_field_default(&mf.name, &mf.ty, &mf.init);
+        s.add_field({ name: mf.name, type: mf.ty, default: Option::Some(mf.init) });
     }
     if scan_gate {
-        s.add_field_default(&SCAN_GATE_FIELD, &SCAN_GATE_TYPE, `${SCAN_GATE_TYPE} {}`);
+        s.add_field({
+            name: SCAN_GATE_FIELD,
+            type: SCAN_GATE_TYPE,
+            default: Option::Some(`${SCAN_GATE_TYPE} {}`),
+        });
     }
     if let Some(ty) = scan_memo {
-        s.add_field(&SCAN_MEMO_HANDLE, ty);
+        s.add_field({ name: SCAN_MEMO_HANDLE, type: *ty });
     }
     s.emit(w);
     w.blank();
 
     let mut kn = FnSpec::new("kind_names");
-    kn.add_param("kinds", "&List<i32>");
+    kn.add_param({ name: "kinds", type: "&List<i32>" });
     kn.set_return_type("List<String>");
-    kn.emit_begin(w);
-    w.line("let mut out: List<String> = List::with_capacity(kinds.len());");
-    w.begin("for let k of kinds");
-    w.line("out.push(TOKEN_NAMES[*k]);");
-    w.end();
-    w.line("return out;");
-    w.end();
+    kn.emit(w, |w| {
+        w.line("let mut out: List<String> = List::with_capacity(kinds.len());");
+        w.begin("for let k of kinds");
+        w.line("out.push(TOKEN_NAMES[*k]);");
+        w.end();
+        w.line("return out;");
+    });
     w.blank();
 
-    ImplSpec::new("Parser").emit_begin(w);
+    ImplSpec::new("Parser").emit(
+        w,
+        |w| {
 
-    let mut f = FnSpec::new("new");
-    f.add_param("tokens", "TokenStream");
-    f.set_return_type("Parser");
-    f.emit_begin(w);
-    w.line("let kinds = tokens.kinds.to_array();");
-    let mut init = String::from(
-        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: []",
+            let mut f = FnSpec::new("new");
+            f.add_param({ name: "tokens", type: "TokenStream" });
+            f.set_return_type("Parser");
+            let mut init = String::from(
+                "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: []",
+            );
+            if trace {
+                init.push_str(", trace_depth: 0");
+            }
+            if needs_atn {
+                init.push_str(`, ${ATN_HANDLE}: ${ATN_PREDICTOR_TYPE}::new(), atn_ret_pending: -1`);
+            }
+            init.push_str(", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
+            if emit_actions {
+                init.push_str(", line_starts: line_starts(&tokens.src)");
+            }
+            if scan_memo matches { Some(_) } {
+                init.push_str(`, ${SCAN_MEMO_HANDLE}: ScanMemo::new(kinds.len())`);
+            }
+            f.emit(w, |w| {
+                w.line("let kinds = tokens.kinds.to_array();");
+                w.line(`return Parser { ${init} };`);
+            });
+            w.blank();
+
+            if emit_actions {
+                // A parser base handler lives in the user's module, so this
+                // action-context API is the recognizer surface it reads — ANTLR's `this`.
+                let api = if base_api { Vis::Pub } else { Vis::Private };
+                let mut fem = FnSpec::new("emit", api);
+                fem.set_receiver("&mut self");
+                fem.add_param({ name: "s", type: "String" });
+                fem.emit(w, |w| w.line("self.tokens.output.push_str(&s);"));
+                w.blank();
+
+                let mut ftt = FnSpec::new("token_text", api);
+                ftt.set_receiver("&self");
+                ftt.add_param({ name: "i", type: "i32" });
+                ftt.set_return_type("String");
+                ftt.emit(w, |w| w.line("return self.tokens.token_text(i);"));
+                w.blank();
+
+                let mut fk = FnSpec::new("token_kind", api);
+                fk.set_receiver("&self");
+                fk.add_param({ name: "i", type: "i32" });
+                fk.set_return_type("i32");
+                fk.emit(w, |w| w.line("return self.tokens.kind_at(i);"));
+                w.blank();
+
+                // `$X.int` mirrors ANTLR's `Integer.parseInt`: a 32-bit value, so
+                // `token_int` returns `i32` (matching a `returns [int v]` field, which
+                // java2wado maps to `i32`).
+                let mut fint = FnSpec::new("token_int", api);
+                fint.set_receiver("&self");
+                fint.add_param({ name: "i", type: "i32" });
+                fint.set_return_type("i32");
+                fint.emit(w, |w| {
+                    w.line("let sp = self.tokens.span_at(i);");
+                    w.line("let mut acc: i32 = 0;");
+                    w.line("let mut neg = false;");
+                    w.line("let mut j = sp.start;");
+                    w.begin("if j < sp.end && self.tokens.src.byte_at(j) == b'-'");
+                    w.line("neg = true;");
+                    w.line("j += 1;");
+                    w.end();
+                    w.begin("while j < sp.end");
+                    w.line("let c = self.tokens.src.byte_at(j);");
+                    w.begin("if c.is_ascii_digit()");
+                    w.line("acc = acc * 10 + (c - b'0') as i32;");
+                    w.end();
+                    w.line("j += 1;");
+                    w.end();
+                    w.line("return if neg { -acc } else { acc };");
+                });
+                w.blank();
+
+                let mut fln = FnSpec::new("token_line", api);
+                fln.set_receiver("&self");
+                fln.add_param({ name: "i", type: "i32" });
+                fln.set_return_type("i32");
+                fln.emit(w, |w| w.line("return line_at(&self.line_starts, self.tokens.start_at(i));"));
+                w.blank();
+
+                let mut fcol = FnSpec::new("token_col", api);
+                fcol.set_receiver("&self");
+                fcol.add_param({ name: "i", type: "i32" });
+                fcol.set_return_type("i32");
+                fcol.emit(w, |w| w.line(
+                    "return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.start_at(i)).1;",
+                ));
+                w.blank();
+
+                // Byte offset where token `i` begins — backs `$text` (span from the
+                // rule's first token) and `$start`-derived spans.
+                let mut fts0 = FnSpec::new("token_start", api);
+                fts0.set_receiver("&self");
+                fts0.add_param({ name: "i", type: "i32" });
+                fts0.set_return_type("i32");
+                fts0.emit(w, |w| w.line("return self.tokens.start_at(i);"));
+                w.blank();
+
+                // `_input.LT(k)` — the stream index of ANTLR's `LT(k)`: `LT(1)` is the
+                // current token and `LT(-1)` the last consumed one. Clamped to the
+                // stream, so a lookahead past the end lands on the EOF token.
+                let mut flt = FnSpec::new("lt", api);
+                flt.set_receiver("&self");
+                flt.add_param({ name: "k", type: "i32" });
+                flt.set_return_type("i32");
+                flt.emit(w, |w| {
+                    w.line("let idx = if k > 0 { self.pos + k - 1 } else { self.pos + k };");
+                    w.line("if idx >= self.kinds.len() { return self.kinds.len() - 1; }");
+                    w.line("if idx < 0 { return 0; }");
+                    w.line("return idx;");
+                });
+                w.blank();
+
+                // `_input.LA(k)` — the kind of `LT(k)`.
+                let mut fla = FnSpec::new("la", api);
+                fla.set_receiver("&self");
+                fla.add_param({ name: "k", type: "i32" });
+                fla.set_return_type("i32");
+                fla.emit(w, |w| w.line("return self.kinds[self.lt(k)];"));
+                w.blank();
+
+                // Source text of the half-open byte range `[start, end)` — backs `$text`
+                // (the current rule's consumed input) and `_input.getText()`.
+                let mut fts = FnSpec::new("text_span", api);
+                fts.set_receiver("&self");
+                fts.add_param({ name: "start", type: "i32" });
+                fts.add_param({ name: "end", type: "i32" });
+                fts.set_return_type("String");
+                fts.emit(w, |w| w.line("return span_text(&self.tokens.src, start, end);"));
+                w.blank();
+
+                // `$text` — the input matched by the current rule so far. ANTLR
+                // concatenates the parse-tree token texts (skipped tokens are absent
+                // from the token stream), so a `-> skip` gap between tokens does NOT
+                // appear; this differs from a raw source-span slice (`text_span`). The
+                // range is the rule's first token (`start_tok`) through the last
+                // consumed token (`self.pos - 1`).
+                // `$<label>.text` — the text of one labeled rule call's own token range.
+                let mut ftb = FnSpec::new("text_between", api);
+                ftb.set_receiver("&self");
+                ftb.add_param({ name: "lo", type: "i32" });
+                ftb.add_param({ name: "hi", type: "i32" });
+                ftb.set_return_type("String");
+                ftb.emit(w, |w| w.line("return self.tokens.rule_text(lo, hi);"));
+                w.blank();
+
+                let mut frt = FnSpec::new("rule_text", api);
+                frt.set_receiver("&self");
+                frt.add_param({ name: "start_tok", type: "i32" });
+                frt.set_return_type("String");
+                frt.emit(w, |w| w.line("return self.tokens.rule_text(start_tok, self.pos - 1);"));
+                w.blank();
+
+                // `_input.getText()` — the entire input.
+                let mut fit = FnSpec::new("input_text", api);
+                fit.set_receiver("&self");
+                fit.set_return_type("String");
+                fit.emit(w, |w| w.line("return self.text_span(0, self.tokens.src.len());"));
+                w.blank();
+
+                // `$ctx.toStringTree()` — the S-expression of the rule currently under
+                // construction. A non-LR rule's node is still open in `@after`
+                // (`render_open`); a left-recursive rule's level is already folded shut
+                // by then, so its `@after` reads the just-finished node
+                // (`rule_string_tree_final` / `render_last_finished`).
+                let mut frst = FnSpec::new("rule_string_tree", api);
+                frst.set_receiver("&self");
+                frst.set_return_type("String");
+                frst.emit(w, |w| w.line("return self.b.render_open(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);"));
+                w.blank();
+
+                // `$x.ctx.toStringTree(this)` — the node one labeled rule call built,
+                // from the builder row captured before that call.
+                let mut frta = FnSpec::new("rule_tree_at", api);
+                frta.set_receiver("&self");
+                frta.add_param({ name: "row", type: "i32" });
+                frta.set_return_type("String");
+                frta.emit(w, |w| w.line("return self.b.render_at(row, &self.tokens, &RULE_NAMES, &TOKEN_NAMES);"));
+                w.blank();
+
+                // `getRuleInvocationStack()` — the rules entered and not yet finished,
+                // innermost first; the tree builder's open nodes already are that stack.
+                let mut frs = FnSpec::new("rule_stack", api);
+                frs.set_receiver("&self");
+                frs.set_return_type("String");
+                frs.emit(w, |w| w.line("return self.b.open_rule_names(&RULE_NAMES);"));
+                w.blank();
+
+                let mut frstf = FnSpec::new("rule_string_tree_final", api);
+                frstf.set_receiver("&self");
+                frstf.set_return_type("String");
+                frstf.emit(
+                    w,
+                    |w| w.line("return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);"),
+                );
+                w.blank();
+            }
+
+            // Only a failure deeper than the pending one replaces it, so each decides
+            // this before paying for its message.
+            let mut fsup = FnSpec::new("supersedes_pending");
+            fsup.set_receiver("&self");
+            fsup.add_param({ name: "start", type: "i32" });
+            fsup.set_return_type("bool");
+            fsup.emit(w, |w| {
+                w.line("if let Some(cur) = &self.pending { return start > cur.span.start; }");
+                w.line("return true;");
+            });
+            w.blank();
+
+            // Record a match failure and enter recovery: the deepest failure is kept in
+            // `pending` until `commit_pending` reports it.
+            let mut ff = FnSpec::new("fail");
+            ff.set_receiver("&mut self");
+            ff.add_param({ name: "message", type: "String" });
+            ff.add_param({ name: "span", type: "Span" });
+            ff.add_param({ name: "expected", type: "&List<i32>" });
+            ff.add_param({ name: "code", type: "DiagnosticCode" });
+            ff.emit(
+                w,
+                |w| {
+                    w.begin("if self.supersedes_pending(span.start)");
+                    w.line(
+                        "self.pending = Option::Some(Diagnostic::error(code, with_expected(message, &kind_names(expected)), span, *expected, self.kinds[self.pos], RecoveryAction::None));",
+                    );
+                    w.end();
+                    w.line("self.enter_recovery(expected);");
+                },
+            );
+            w.blank();
+
+            // `recover_rule` never runs under `speculating`, so a probe's failure is
+            // not recorded.
+            let mut er = FnSpec::new("enter_recovery");
+            er.set_receiver("&mut self");
+            er.add_param({ name: "expected", type: "&List<i32>" });
+            er.emit(w, |w| {
+                w.line("self.recovering = true;");
+                w.line("if !self.speculating { self.failed_expected = *expected; }");
+            });
+            w.blank();
+
+            // A mismatch at the current token, reported as `<what> "<its text>"`.
+            let mut fot = FnSpec::new("fail_on_token");
+            fot.set_receiver("&mut self");
+            fot.add_param({ name: "what", type: "String" });
+            fot.add_param({ name: "expected", type: "&List<i32>" });
+            fot.add_param({ name: "code", type: "DiagnosticCode" });
+            fot.emit(
+                w,
+                |w| {
+                    w.begin("if self.supersedes_pending(self.tokens.start_at(self.pos))");
+                    w.line(
+                        "self.fail(`${what} \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), expected, code);",
+                    );
+                    w.line("return;");
+                    w.end();
+                    w.line("self.enter_recovery(expected);");
+                },
+            );
+            w.blank();
+
+            let mut fok = FnSpec::new("fail_on_kind");
+            fok.set_receiver("&mut self");
+            fok.add_param({ name: "kind", type: "i32" });
+            fok.emit(w, |w| {
+                w.begin("if self.speculating && !self.supersedes_pending(self.tokens.start_at(self.pos))");
+                w.line("self.recovering = true;");
+                w.line("return;");
+                w.end();
+                w.line("self.fail_expecting(&([kind] as List<i32>));");
+            });
+            w.blank();
+
+            // Alternative dispatch found no viable alternative: record the failure with
+            // the `NoViableAlternative` code and enter recovery (thin wrapper over
+            // `fail`).
+            let mut nv = FnSpec::new("no_viable");
+            nv.set_receiver("&mut self");
+            nv.add_param({ name: "message", type: "String" });
+            nv.add_param({ name: "span", type: "Span" });
+            nv.add_param({ name: "expected", type: "&List<i32>" });
+            nv.emit(w, |w| w.line("self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);"));
+            w.blank();
+
+            // Append a rule name to the pending error's rule stack, so tooling can
+            // report the context that failed.
+            let mut prs = FnSpec::new("push_rule_stack");
+            prs.set_receiver("&mut self");
+            prs.add_param({ name: "name", type: "String" });
+            prs.emit(w, |w| {
+                w.begin("if let Some(e) = &mut self.pending");
+                w.line("e.rule_stack.push(name);");
+                w.end();
+            });
+            w.blank();
+
+            gen_rule_recovery(w, fragment_recovery);
+
+            // `trace_fail` is its only caller.
+            if trace {
+                let mut pm = FnSpec::new("pending_message");
+                pm.set_receiver("&self");
+                pm.set_return_type("String");
+                pm.emit(w, |w| {
+                    w.line("if let Some(e) = &self.pending { return e.message; }");
+                    w.line("return String::new();");
+                });
+                w.blank();
+            }
+
+            // At EOF the insertion closes a construct the input never finished.
+            let mut rmi = FnSpec::new("report_missing");
+            rmi.set_receiver("&mut self");
+            rmi.add_param({ name: "kind", type: "i32" });
+            rmi.emit(
+                w,
+                |w| {
+                    emit_diag_prologue(w);
+                    w.line("let found = self.kinds[self.pos];");
+                    w.line("let at_eof = found == TK_EOF;");
+                    w.line(
+                        "let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };",
+                    );
+                    w.line(
+                        "let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };",
+                    );
+                    w.line(
+                        "self.report(Diagnostic::error(code, `missing ${TOKEN_NAMES[kind]}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
+                    );
+                },
+            );
+            w.blank();
+
+            // Record an unexpected-token error opening an `<error>` recovery region.
+            let mut run = FnSpec::new("report_unexpected");
+            run.set_receiver("&mut self");
+            run.add_param({ name: "kind", type: "i32" });
+            run.emit(
+                w,
+                |w| {
+                    emit_diag_prologue(w);
+                    w.line(
+                        "self.report(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));",
+                    );
+                },
+            );
+            w.blank();
+
+            // A "token" handed to the rest of the parser is its `i32` index into the
+            // stream; node fields store that index, not a Token aggregate.
+            let mut f2 = FnSpec::new("peek_start");
+            f2.set_receiver("&self");
+            f2.set_return_type("i32");
+            f2.emit(w, |w| w.line("return self.tokens.start_at(self.pos);"));
+            w.blank();
+
+            let mut f2b = FnSpec::new("peek_span");
+            f2b.set_receiver("&self");
+            f2b.set_return_type("Span");
+            f2b.emit(w, |w| w.line("return self.tokens.span_at(self.pos);"));
+            w.blank();
+
+            let mut f3 = FnSpec::new("peek_kind");
+            f3.set_receiver("&self");
+            f3.set_return_type("i32");
+            f3.emit(w, |w| w.line("return self.kinds[self.pos];"));
+            w.blank();
+
+            let mut f4 = FnSpec::new("peek_at");
+            f4.set_receiver("&self");
+            f4.add_param({ name: "offset", type: "i32" });
+            f4.set_return_type("i32");
+            f4.emit(w, |w| {
+                w.line("let idx = self.pos + offset;");
+                w.line("if idx >= self.kinds.len() { return TK_EOF; }");
+                w.line("return self.kinds[idx];");
+            });
+            w.blank();
+
+            let mut f5 = FnSpec::new("advance");
+            f5.set_receiver("&mut self");
+            f5.set_return_type("i32");
+            f5.emit(w, |w| {
+                w.line("let i = self.pos;");
+                w.line("self.pos += 1;");
+                w.line("return i;");
+            });
+            w.blank();
+
+            let mut f6 = FnSpec::new("last_end");
+            f6.set_receiver("&self");
+            f6.set_return_type("i32");
+            f6.emit(w, |w| {
+                w.line("if self.pos == 0 { return 0; }");
+                w.line("return self.tokens.end_at(self.pos - 1);");
+            });
+            w.blank();
+
+            // EOF matches without advancing, since the stream holds one EOF and
+            // consecutive `EOF` references must see the same one (ANTLR4's `matchedEOF`).
+            let mut f7 = FnSpec::new("expect");
+            f7.set_receiver("&mut self");
+            f7.add_param({ name: "kind", type: "i32" });
+            f7.add_param({ name: "sync", type: "&List<i32>" });
+            f7.add_param({ name: "may_end_rule", type: "bool" });
+            f7.set_return_type("i32");
+            // Fragment recovery descends into rule entries, so `expect` reaches the
+            // parse fns and must carry the base effect they declare.
+            if fragment_recovery && base_api {
+                f7.add_effect(parser_base);
+            }
+            f7.emit(w, |w| {
+                w.line("if self.recovering { return self.pos; }");
+                w.begin("if self.kinds[self.pos] == kind");
+                emit_consume_kind_return(w);
+                w.end();
+                // In a speculative parse, do not apply recovery edits — fail so the caller
+                // backtracks (committing an edit here could steal tokens that belong to the
+                // caller's continuation, which static scan cannot rule out).
+                w.begin("if self.speculating");
+                w.line("self.fail_on_kind(kind);");
+                w.line("return self.pos;");
+                w.end();
+                if fragment_recovery {
+                    w.begin("if kind == TK_EOF && self.kinds[self.pos] != TK_EOF");
+                    w.line("self.report_unexpected(kind);");
+                    w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
+                    w.begin("loop");
+                    w.line("if self.kinds[self.pos] == TK_EOF { break; }");
+                    w.line("_recover_try_descend(self);");
+                    w.end();
+                    w.line("self.b.finish_node(self.last_end());");
+                    emit_consume_kind_return(w);
+                    w.end();
+                }
+                // single-token deletion: the current token is spurious, the expected one
+                // follows it.
+                w.begin("if self.peek_at(1) == kind");
+                w.line("self.report_extraneous(&[kind], RecoveryAction::Deleted);");
+                w.line("self.skip_one();");
+                emit_consume_kind_return(w);
+                w.end();
+                // single-token insertion: the current token continues the rule, or the
+                // rules under way once this one ends, so the expected one is missing.
+                w.begin(
+                    `if ${syncs_on(
+                        fragment_recovery,
+                        "self",
+                        "sync",
+                        "self.kinds[self.pos]",
+                    )} || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])`,
+                );
+                w.line("self.report_missing(kind);");
+                w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
+                w.line("self.b.missing(_syn);");
+                w.line("return _syn;");
+                w.end();
+                // Neither match nor a single-token edit fits. Skip the offending run into a
+                // lossless `<error>` region and resync to what may follow in the rule, then
+                // continue; with nothing to follow, fail the rule.
+                w.begin("if !sync.is_empty()");
+                // Nothing to resync onto at EOF: the missing terminal completes the
+                // construct only where the input may end after it.
+                w.begin("if !may_end_rule && self.kinds[self.pos] == TK_EOF");
+                w.line("self.fail_on_kind(kind);");
+                w.line("return self.pos;");
+                w.end();
+                w.line("self.report_unexpected(kind);");
+                w.begin("if self.kinds[self.pos] != TK_EOF");
+                w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
+                w.begin("loop");
+                w.line("let _k = self.kinds[self.pos];");
+                w.line(
+                    `if _k == TK_EOF || _k == kind || ${syncs_on(fragment_recovery, "self", "sync", "_k")} { break; }`,
+                );
+                w.line("self.skip_one();");
+                w.end();
+                w.line("self.b.finish_node(self.last_end());");
+                w.end();
+                // resynced exactly onto the expected token: consume it.
+                w.begin("if self.kinds[self.pos] == kind");
+                emit_consume_kind_return(w);
+                w.end();
+                // resynced onto a follow token / EOF: the expected one is still missing.
+                w.line("let _syn2 = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
+                w.line("self.b.missing(_syn2);");
+                w.line("return _syn2;");
+                w.end();
+                // no sync info: record the deepest failure and unwind.
+                w.line("self.fail_on_kind(kind);");
+                w.line("return self.pos;");
+            });
+            w.blank();
+
+            // `p.take()` — consumes the current token, whose kind a dispatch decided.
+            let mut ft = FnSpec::new("take");
+            ft.set_receiver("&mut self");
+            ft.set_return_type("i32");
+            ft.emit(w, |w| {
+                w.line("if self.recovering { return self.pos; }");
+                w.line("let kind = self.kinds[self.pos];");
+                emit_consume_kind_return(w);
+            });
+            w.blank();
+
+            // `p.any()` — consumes one token of any kind (for `.` wildcard).
+            // Fails at EOF.
+            let mut f9 = FnSpec::new("any");
+            f9.set_receiver("&mut self");
+            f9.set_return_type("i32");
+            f9.emit(
+                w,
+                |w| {
+                    w.line("if self.recovering { return self.pos; }");
+                    w.begin("if self.kinds[self.pos] != TK_EOF");
+                    emit_consume_return(w);
+                    w.end();
+                    // `any` wants no particular kind, so it carries the wanted set in the
+                    // message instead of the (kind-id) `expected` list.
+                    w.line(
+                        "self.fail_on_token(\"expected any token; got\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);",
+                    );
+                    w.line("return self.pos;");
+                },
+            );
+            w.blank();
+
+            // `p.expect_not([...])` — consumes one token whose kind is not in the
+            // exclusion set (parser-side `~ X`). Fails at EOF or on an excluded kind.
+            let mut f10 = FnSpec::new("expect_not");
+            f10.set_receiver("&mut self");
+            f10.add_param({ name: "excluded", type: "&List<i32>" });
+            f10.set_return_type("i32");
+            f10.emit(w, |w| {
+                w.line("if self.recovering { return self.pos; }");
+                w.line("let k = self.kinds[self.pos];");
+                w.begin("if k != TK_EOF && !kind_set_has(excluded, k)");
+                emit_consume_return(w);
+                w.end();
+                w.line("self.fail_on_token(\"unexpected token\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);");
+                w.line("return self.pos;");
+            });
+            w.blank();
+
+            // `p.expect_set([...])` — consumes one token whose kind is in the included
+            // set (parser-side token-only groups like `('b' | 'c')`). Fails outside the
+            // set (EOF included unless listed); a listed EOF matches without advancing.
+            let mut f11 = FnSpec::new("expect_set");
+            f11.set_receiver("&mut self");
+            f11.add_param({ name: "included", type: "&List<i32>" });
+            f11.add_param({ name: "expected", type: "&List<i32>" });
+            f11.set_return_type("i32");
+            f11.emit(w, |w| {
+                w.line("if self.recovering { return self.pos; }");
+                w.line("let k = self.kinds[self.pos];");
+                w.begin("if kind_set_has(included, k)");
+                w.begin("if k == TK_EOF");
+                w.line("self.b.token(self.pos);");
+                w.line("return self.pos;");
+                w.end();
+                emit_consume_return(w);
+                w.end();
+                w.line("self.fail_on_token(\"got\", expected, DiagnosticCode::UnexpectedToken);");
+                w.line("return self.pos;");
+            });
+        },
     );
-    if trace {
-        init.push_str(", trace_depth: 0");
-    }
-    if needs_atn {
-        init.push_str(`, ${ATN_HANDLE}: ${ATN_PREDICTOR_TYPE}::new(), atn_ret_pending: -1`);
-    }
-    init.push_str(", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
-    if emit_actions {
-        init.push_str(", line_starts: line_starts(&tokens.src)");
-    }
-    if scan_memo matches { Some(_) } {
-        init.push_str(`, ${SCAN_MEMO_HANDLE}: ScanMemo::new(kinds.len())`);
-    }
-    w.line(`return Parser { ${init} };`);
-    w.end();
-    w.blank();
-
-    if emit_actions {
-        // A parser base handler lives in the user's module, so this
-        // action-context API is the recognizer surface it reads — ANTLR's `this`.
-        let api = if base_api { Vis::Pub } else { Vis::Private };
-        let mut fem = FnSpec::new("emit", api);
-        fem.set_receiver("&mut self");
-        fem.add_param("s", "String");
-        fem.emit_begin(w);
-        w.line("self.tokens.output.push_str(&s);");
-        w.end();
-        w.blank();
-
-        let mut ftt = FnSpec::new("token_text", api);
-        ftt.set_receiver("&self");
-        ftt.add_param("i", "i32");
-        ftt.set_return_type("String");
-        ftt.emit_begin(w);
-        w.line("return self.tokens.token_text(i);");
-        w.end();
-        w.blank();
-
-        let mut fk = FnSpec::new("token_kind", api);
-        fk.set_receiver("&self");
-        fk.add_param("i", "i32");
-        fk.set_return_type("i32");
-        fk.emit_begin(w);
-        w.line("return self.tokens.kind_at(i);");
-        w.end();
-        w.blank();
-
-        // `$X.int` mirrors ANTLR's `Integer.parseInt`: a 32-bit value, so
-        // `token_int` returns `i32` (matching a `returns [int v]` field, which
-        // java2wado maps to `i32`).
-        let mut fint = FnSpec::new("token_int", api);
-        fint.set_receiver("&self");
-        fint.add_param("i", "i32");
-        fint.set_return_type("i32");
-        fint.emit_begin(w);
-        w.line("let sp = self.tokens.span_at(i);");
-        w.line("let mut acc: i32 = 0;");
-        w.line("let mut neg = false;");
-        w.line("let mut j = sp.start;");
-        w.begin("if j < sp.end && self.tokens.src.byte_at(j) == b'-'");
-        w.line("neg = true;");
-        w.line("j += 1;");
-        w.end();
-        w.begin("while j < sp.end");
-        w.line("let c = self.tokens.src.byte_at(j);");
-        w.begin("if c.is_ascii_digit()");
-        w.line("acc = acc * 10 + (c - b'0') as i32;");
-        w.end();
-        w.line("j += 1;");
-        w.end();
-        w.line("return if neg { -acc } else { acc };");
-        w.end();
-        w.blank();
-
-        let mut fln = FnSpec::new("token_line", api);
-        fln.set_receiver("&self");
-        fln.add_param("i", "i32");
-        fln.set_return_type("i32");
-        fln.emit_begin(w);
-        w.line("return line_at(&self.line_starts, self.tokens.start_at(i));");
-        w.end();
-        w.blank();
-
-        let mut fcol = FnSpec::new("token_col", api);
-        fcol.set_receiver("&self");
-        fcol.add_param("i", "i32");
-        fcol.set_return_type("i32");
-        fcol.emit_begin(w);
-        w.line("return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.start_at(i)).1;");
-        w.end();
-        w.blank();
-
-        // Byte offset where token `i` begins — backs `$text` (span from the
-        // rule's first token) and `$start`-derived spans.
-        let mut fts0 = FnSpec::new("token_start", api);
-        fts0.set_receiver("&self");
-        fts0.add_param("i", "i32");
-        fts0.set_return_type("i32");
-        fts0.emit_begin(w);
-        w.line("return self.tokens.start_at(i);");
-        w.end();
-        w.blank();
-
-        // `_input.LT(k)` — the stream index of ANTLR's `LT(k)`: `LT(1)` is the
-        // current token and `LT(-1)` the last consumed one. Clamped to the
-        // stream, so a lookahead past the end lands on the EOF token.
-        let mut flt = FnSpec::new("lt", api);
-        flt.set_receiver("&self");
-        flt.add_param("k", "i32");
-        flt.set_return_type("i32");
-        flt.emit_begin(w);
-        w.line("let idx = if k > 0 { self.pos + k - 1 } else { self.pos + k };");
-        w.line("if idx >= self.kinds.len() { return self.kinds.len() - 1; }");
-        w.line("if idx < 0 { return 0; }");
-        w.line("return idx;");
-        w.end();
-        w.blank();
-
-        // `_input.LA(k)` — the kind of `LT(k)`.
-        let mut fla = FnSpec::new("la", api);
-        fla.set_receiver("&self");
-        fla.add_param("k", "i32");
-        fla.set_return_type("i32");
-        fla.emit_begin(w);
-        w.line("return self.kinds[self.lt(k)];");
-        w.end();
-        w.blank();
-
-        // Source text of the half-open byte range `[start, end)` — backs `$text`
-        // (the current rule's consumed input) and `_input.getText()`.
-        let mut fts = FnSpec::new("text_span", api);
-        fts.set_receiver("&self");
-        fts.add_param("start", "i32");
-        fts.add_param("end", "i32");
-        fts.set_return_type("String");
-        fts.emit_begin(w);
-        w.line("return span_text(&self.tokens.src, start, end);");
-        w.end();
-        w.blank();
-
-        // `$text` — the input matched by the current rule so far. ANTLR
-        // concatenates the parse-tree token texts (skipped tokens are absent
-        // from the token stream), so a `-> skip` gap between tokens does NOT
-        // appear; this differs from a raw source-span slice (`text_span`). The
-        // range is the rule's first token (`start_tok`) through the last
-        // consumed token (`self.pos - 1`).
-        // `$<label>.text` — the text of one labeled rule call's own token range.
-        let mut ftb = FnSpec::new("text_between", api);
-        ftb.set_receiver("&self");
-        ftb.add_param("lo", "i32");
-        ftb.add_param("hi", "i32");
-        ftb.set_return_type("String");
-        ftb.emit_begin(w);
-        w.line("return self.tokens.rule_text(lo, hi);");
-        w.end();
-        w.blank();
-
-        let mut frt = FnSpec::new("rule_text", api);
-        frt.set_receiver("&self");
-        frt.add_param("start_tok", "i32");
-        frt.set_return_type("String");
-        frt.emit_begin(w);
-        w.line("return self.tokens.rule_text(start_tok, self.pos - 1);");
-        w.end();
-        w.blank();
-
-        // `_input.getText()` — the entire input.
-        let mut fit = FnSpec::new("input_text", api);
-        fit.set_receiver("&self");
-        fit.set_return_type("String");
-        fit.emit_begin(w);
-        w.line("return self.text_span(0, self.tokens.src.len());");
-        w.end();
-        w.blank();
-
-        // `$ctx.toStringTree()` — the S-expression of the rule currently under
-        // construction. A non-LR rule's node is still open in `@after`
-        // (`render_open`); a left-recursive rule's level is already folded shut
-        // by then, so its `@after` reads the just-finished node
-        // (`rule_string_tree_final` / `render_last_finished`).
-        let mut frst = FnSpec::new("rule_string_tree", api);
-        frst.set_receiver("&self");
-        frst.set_return_type("String");
-        frst.emit_begin(w);
-        w.line("return self.b.render_open(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);");
-        w.end();
-        w.blank();
-
-        // `$x.ctx.toStringTree(this)` — the node one labeled rule call built,
-        // from the builder row captured before that call.
-        let mut frta = FnSpec::new("rule_tree_at", api);
-        frta.set_receiver("&self");
-        frta.add_param("row", "i32");
-        frta.set_return_type("String");
-        frta.emit_begin(w);
-        w.line("return self.b.render_at(row, &self.tokens, &RULE_NAMES, &TOKEN_NAMES);");
-        w.end();
-        w.blank();
-
-        // `getRuleInvocationStack()` — the rules entered and not yet finished,
-        // innermost first; the tree builder's open nodes already are that stack.
-        let mut frs = FnSpec::new("rule_stack", api);
-        frs.set_receiver("&self");
-        frs.set_return_type("String");
-        frs.emit_begin(w);
-        w.line("return self.b.open_rule_names(&RULE_NAMES);");
-        w.end();
-        w.blank();
-
-        let mut frstf = FnSpec::new("rule_string_tree_final", api);
-        frstf.set_receiver("&self");
-        frstf.set_return_type("String");
-        frstf.emit_begin(w);
-        w.line("return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);");
-        w.end();
-        w.blank();
-    }
-
-    // Only a failure deeper than the pending one replaces it, so each decides
-    // this before paying for its message.
-    let mut fsup = FnSpec::new("supersedes_pending");
-    fsup.set_receiver("&self");
-    fsup.add_param("start", "i32");
-    fsup.set_return_type("bool");
-    fsup.emit_begin(w);
-    w.line("if let Some(cur) = &self.pending { return start > cur.span.start; }");
-    w.line("return true;");
-    w.end();
-    w.blank();
-
-    // Record a match failure and enter recovery: the deepest failure is kept in
-    // `pending` until `commit_pending` reports it.
-    let mut ff = FnSpec::new("fail");
-    ff.set_receiver("&mut self");
-    ff.add_param("message", "String");
-    ff.add_param("span", "Span");
-    ff.add_param("expected", "&List<i32>");
-    ff.add_param("code", "DiagnosticCode");
-    ff.emit_begin(w);
-    w.begin("if self.supersedes_pending(span.start)");
-    w.line(
-        "self.pending = Option::Some(Diagnostic::error(code, with_expected(message, &kind_names(expected)), span, *expected, self.kinds[self.pos], RecoveryAction::None));",
-    );
-    w.end();
-    w.line("self.enter_recovery(expected);");
-    w.end();
-    w.blank();
-
-    // `recover_rule` never runs under `speculating`, so a probe's failure is
-    // not recorded.
-    let mut er = FnSpec::new("enter_recovery");
-    er.set_receiver("&mut self");
-    er.add_param("expected", "&List<i32>");
-    er.emit_begin(w);
-    w.line("self.recovering = true;");
-    w.line("if !self.speculating { self.failed_expected = *expected; }");
-    w.end();
-    w.blank();
-
-    // A mismatch at the current token, reported as `<what> "<its text>"`.
-    let mut fot = FnSpec::new("fail_on_token");
-    fot.set_receiver("&mut self");
-    fot.add_param("what", "String");
-    fot.add_param("expected", "&List<i32>");
-    fot.add_param("code", "DiagnosticCode");
-    fot.emit_begin(w);
-    w.begin("if self.supersedes_pending(self.tokens.start_at(self.pos))");
-    w.line(
-        "self.fail(`${what} \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), expected, code);",
-    );
-    w.line("return;");
-    w.end();
-    w.line("self.enter_recovery(expected);");
-    w.end();
-    w.blank();
-
-    let mut fok = FnSpec::new("fail_on_kind");
-    fok.set_receiver("&mut self");
-    fok.add_param("kind", "i32");
-    fok.emit_begin(w);
-    w.begin("if self.speculating && !self.supersedes_pending(self.tokens.start_at(self.pos))");
-    w.line("self.recovering = true;");
-    w.line("return;");
-    w.end();
-    w.line("self.fail_expecting(&([kind] as List<i32>));");
-    w.end();
-    w.blank();
-
-    // Alternative dispatch found no viable alternative: record the failure with
-    // the `NoViableAlternative` code and enter recovery (thin wrapper over
-    // `fail`).
-    let mut nv = FnSpec::new("no_viable");
-    nv.set_receiver("&mut self");
-    nv.add_param("message", "String");
-    nv.add_param("span", "Span");
-    nv.add_param("expected", "&List<i32>");
-    nv.emit_begin(w);
-    w.line("self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);");
-    w.end();
-    w.blank();
-
-    // Append a rule name to the pending error's rule stack, so tooling can
-    // report the context that failed.
-    let mut prs = FnSpec::new("push_rule_stack");
-    prs.set_receiver("&mut self");
-    prs.add_param("name", "String");
-    prs.emit_begin(w);
-    w.begin("if let Some(e) = &mut self.pending");
-    w.line("e.rule_stack.push(name);");
-    w.end();
-    w.end();
-    w.blank();
-
-    gen_rule_recovery(w, fragment_recovery);
-
-    // `trace_fail` is its only caller.
-    if trace {
-        let mut pm = FnSpec::new("pending_message");
-        pm.set_receiver("&self");
-        pm.set_return_type("String");
-        pm.emit_begin(w);
-        w.line("if let Some(e) = &self.pending { return e.message; }");
-        w.line("return String::new();");
-        w.end();
-        w.blank();
-    }
-
-    // At EOF the insertion closes a construct the input never finished.
-    let mut rmi = FnSpec::new("report_missing");
-    rmi.set_receiver("&mut self");
-    rmi.add_param("kind", "i32");
-    rmi.emit_begin(w);
-    emit_diag_prologue(w);
-    w.line("let found = self.kinds[self.pos];");
-    w.line("let at_eof = found == TK_EOF;");
-    w.line("let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };");
-    w.line("let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };");
-    w.line(
-        "self.report(Diagnostic::error(code, `missing ${TOKEN_NAMES[kind]}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
-    );
-    w.end();
-    w.blank();
-
-    // Record an unexpected-token error opening an `<error>` recovery region.
-    let mut run = FnSpec::new("report_unexpected");
-    run.set_receiver("&mut self");
-    run.add_param("kind", "i32");
-    run.emit_begin(w);
-    emit_diag_prologue(w);
-    w.line(
-        "self.report(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::SkippedTo));",
-    );
-    w.end();
-    w.blank();
-
-    // A "token" handed to the rest of the parser is its `i32` index into the
-    // stream; node fields store that index, not a Token aggregate.
-    let mut f2 = FnSpec::new("peek_start");
-    f2.set_receiver("&self");
-    f2.set_return_type("i32");
-    f2.emit_begin(w);
-    w.line("return self.tokens.start_at(self.pos);");
-    w.end();
-    w.blank();
-
-    let mut f2b = FnSpec::new("peek_span");
-    f2b.set_receiver("&self");
-    f2b.set_return_type("Span");
-    f2b.emit_begin(w);
-    w.line("return self.tokens.span_at(self.pos);");
-    w.end();
-    w.blank();
-
-    let mut f3 = FnSpec::new("peek_kind");
-    f3.set_receiver("&self");
-    f3.set_return_type("i32");
-    f3.emit_begin(w);
-    w.line("return self.kinds[self.pos];");
-    w.end();
-    w.blank();
-
-    let mut f4 = FnSpec::new("peek_at");
-    f4.set_receiver("&self");
-    f4.add_param("offset", "i32");
-    f4.set_return_type("i32");
-    f4.emit_begin(w);
-    w.line("let idx = self.pos + offset;");
-    w.line("if idx >= self.kinds.len() { return TK_EOF; }");
-    w.line("return self.kinds[idx];");
-    w.end();
-    w.blank();
-
-    let mut f5 = FnSpec::new("advance");
-    f5.set_receiver("&mut self");
-    f5.set_return_type("i32");
-    f5.emit_begin(w);
-    w.line("let i = self.pos;");
-    w.line("self.pos += 1;");
-    w.line("return i;");
-    w.end();
-    w.blank();
-
-    let mut f6 = FnSpec::new("last_end");
-    f6.set_receiver("&self");
-    f6.set_return_type("i32");
-    f6.emit_begin(w);
-    w.line("if self.pos == 0 { return 0; }");
-    w.line("return self.tokens.end_at(self.pos - 1);");
-    w.end();
-    w.blank();
-
-    // EOF matches without advancing, since the stream holds one EOF and
-    // consecutive `EOF` references must see the same one (ANTLR4's `matchedEOF`).
-    let mut f7 = FnSpec::new("expect");
-    f7.set_receiver("&mut self");
-    f7.add_param("kind", "i32");
-    f7.add_param("sync", "&List<i32>");
-    f7.add_param("may_end_rule", "bool");
-    f7.set_return_type("i32");
-    // Fragment recovery descends into rule entries, so `expect` reaches the
-    // parse fns and must carry the base effect they declare.
-    if fragment_recovery && base_api {
-        f7.add_effect(parser_base);
-    }
-    f7.emit_begin(w);
-    w.line("if self.recovering { return self.pos; }");
-    w.begin("if self.kinds[self.pos] == kind");
-    emit_consume_kind_return(w);
-    w.end();
-    // In a speculative parse, do not apply recovery edits — fail so the caller
-    // backtracks (committing an edit here could steal tokens that belong to the
-    // caller's continuation, which static scan cannot rule out).
-    w.begin("if self.speculating");
-    w.line("self.fail_on_kind(kind);");
-    w.line("return self.pos;");
-    w.end();
-    if fragment_recovery {
-        w.begin("if kind == TK_EOF && self.kinds[self.pos] != TK_EOF");
-        w.line("self.report_unexpected(kind);");
-        w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
-        w.begin("loop");
-        w.line("if self.kinds[self.pos] == TK_EOF { break; }");
-        w.line("_recover_try_descend(self);");
-        w.end();
-        w.line("self.b.finish_node(self.last_end());");
-        emit_consume_kind_return(w);
-        w.end();
-    }
-    // single-token deletion: the current token is spurious, the expected one
-    // follows it.
-    w.begin("if self.peek_at(1) == kind");
-    w.line("self.report_extraneous(&[kind], RecoveryAction::Deleted);");
-    w.line("self.skip_one();");
-    emit_consume_kind_return(w);
-    w.end();
-    // single-token insertion: the current token continues the rule, or the
-    // rules under way once this one ends, so the expected one is missing.
-    w.begin(
-        `if ${syncs_on(
-            fragment_recovery,
-            "self",
-            "sync",
-            "self.kinds[self.pos]",
-        )} || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])`,
-    );
-    w.line("self.report_missing(kind);");
-    w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
-    w.line("self.b.missing(_syn);");
-    w.line("return _syn;");
-    w.end();
-    // Neither match nor a single-token edit fits. Skip the offending run into a
-    // lossless `<error>` region and resync to what may follow in the rule, then
-    // continue; with nothing to follow, fail the rule.
-    w.begin("if !sync.is_empty()");
-    // Nothing to resync onto at EOF: the missing terminal completes the
-    // construct only where the input may end after it.
-    w.begin("if !may_end_rule && self.kinds[self.pos] == TK_EOF");
-    w.line("self.fail_on_kind(kind);");
-    w.line("return self.pos;");
-    w.end();
-    w.line("self.report_unexpected(kind);");
-    w.begin("if self.kinds[self.pos] != TK_EOF");
-    w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
-    w.begin("loop");
-    w.line("let _k = self.kinds[self.pos];");
-    w.line(`if _k == TK_EOF || _k == kind || ${syncs_on(fragment_recovery, "self", "sync", "_k")} { break; }`);
-    w.line("self.skip_one();");
-    w.end();
-    w.line("self.b.finish_node(self.last_end());");
-    w.end();
-    // resynced exactly onto the expected token: consume it.
-    w.begin("if self.kinds[self.pos] == kind");
-    emit_consume_kind_return(w);
-    w.end();
-    // resynced onto a follow token / EOF: the expected one is still missing.
-    w.line("let _syn2 = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
-    w.line("self.b.missing(_syn2);");
-    w.line("return _syn2;");
-    w.end();
-    // no sync info: record the deepest failure and unwind.
-    w.line("self.fail_on_kind(kind);");
-    w.line("return self.pos;");
-    w.end();
-    w.blank();
-
-    // `p.take()` — consumes the current token, whose kind a dispatch decided.
-    let mut ft = FnSpec::new("take");
-    ft.set_receiver("&mut self");
-    ft.set_return_type("i32");
-    ft.emit_begin(w);
-    w.line("if self.recovering { return self.pos; }");
-    w.line("let kind = self.kinds[self.pos];");
-    emit_consume_kind_return(w);
-    w.end();
-    w.blank();
-
-    // `p.any()` — consumes one token of any kind (for `.` wildcard).
-    // Fails at EOF.
-    let mut f9 = FnSpec::new("any");
-    f9.set_receiver("&mut self");
-    f9.set_return_type("i32");
-    f9.emit_begin(w);
-    w.line("if self.recovering { return self.pos; }");
-    w.begin("if self.kinds[self.pos] != TK_EOF");
-    emit_consume_return(w);
-    w.end();
-    // `any` wants no particular kind, so it carries the wanted set in the
-    // message instead of the (kind-id) `expected` list.
-    w.line("self.fail_on_token(\"expected any token; got\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);");
-    w.line("return self.pos;");
-    w.end();
-    w.blank();
-
-    // `p.expect_not([...])` — consumes one token whose kind is not in the
-    // exclusion set (parser-side `~ X`). Fails at EOF or on an excluded kind.
-    let mut f10 = FnSpec::new("expect_not");
-    f10.set_receiver("&mut self");
-    f10.add_param("excluded", "&List<i32>");
-    f10.set_return_type("i32");
-    f10.emit_begin(w);
-    w.line("if self.recovering { return self.pos; }");
-    w.line("let k = self.kinds[self.pos];");
-    w.begin("if k != TK_EOF && !kind_set_has(excluded, k)");
-    emit_consume_return(w);
-    w.end();
-    w.line("self.fail_on_token(\"unexpected token\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);");
-    w.line("return self.pos;");
-    w.end();
-    w.blank();
-
-    // `p.expect_set([...])` — consumes one token whose kind is in the included
-    // set (parser-side token-only groups like `('b' | 'c')`). Fails outside the
-    // set (EOF included unless listed); a listed EOF matches without advancing.
-    let mut f11 = FnSpec::new("expect_set");
-    f11.set_receiver("&mut self");
-    f11.add_param("included", "&List<i32>");
-    f11.add_param("expected", "&List<i32>");
-    f11.set_return_type("i32");
-    f11.emit_begin(w);
-    w.line("if self.recovering { return self.pos; }");
-    w.line("let k = self.kinds[self.pos];");
-    w.begin("if kind_set_has(included, k)");
-    w.begin("if k == TK_EOF");
-    w.line("self.b.token(self.pos);");
-    w.line("return self.pos;");
-    w.end();
-    emit_consume_return(w);
-    w.end();
-    w.line("self.fail_on_token(\"got\", expected, DiagnosticCode::UnexpectedToken);");
-    w.line("return self.pos;");
-    w.end();
-
-    w.end();  // impl
     w.blank();
 }
 
@@ -1173,6 +1180,14 @@ pub fn gen_parser_struct<S: AsStrSlice>(
 // generate a scan_<rule>_alt_<N> function. This function scans only the
 // scannable prefix of the alternative, which is enough to distinguish it
 // from other alternatives without full speculative parsing.
+
+/// `fn name<S: AsStrSlice>(p: &Parser, rule: S, …)`, a trace helper about a
+/// rule, the parameters after `rule` left to the caller.
+fn trace_rule_fn(name: String) -> FnSpec {
+    let mut f = FnSpec::new(name);
+    f.add_generic("S: AsStrSlice").add_param({ name: "p", type: "&Parser" }).add_param({ name: "rule", type: "S" });
+    return f;
+}
 
 /// The early return that skips building a message no subscriber will take.
 fn gen_trace_gate(w: &mut CodeWriter) {
@@ -1186,94 +1201,108 @@ fn gen_trace_gate(w: &mut CodeWriter) {
 /// from nesting inside the emitter's own. Each helper opens its own
 /// `gen_trace_gate`, since it builds the padded message before calling `trace`.
 pub fn gen_trace_helpers(w: &mut CodeWriter) {
-    w.line("fn trace_pad(depth: i32) -> String {");
-    w.indent();
-    w.line("let mut s = String::with_capacity(depth * 2);");
-    w.line("for let mut i = 0; i < depth; i += 1 { s.push_str(&\"  \"); }");
-    w.line("return s;");
-    w.dedent();
-    w.line("}");
+    FnSpec::new("trace_pad").add_param({ name: "depth", type: "i32" }).set_return_type("String").emit(w, |w| {
+        w.line("let mut s = String::with_capacity(depth * 2);");
+        w.line("for let mut i = 0; i < depth; i += 1 { s.push_str(&\"  \"); }");
+        w.line("return s;");
+    });
     w.blank();
-    w.line("fn trace_tok(p: &Parser) -> String {");
-    w.indent();
-    w.line("if p.pos >= p.tokens.len() { return String::from(\"<eof>\"); }");
-    w.line("if p.tokens.is_empty_text(p.pos) { return String::from(\"<eof>\"); }");
-    w.line("return `'${p.tokens.token_text(p.pos)}'`;");
-    w.dedent();
-    w.line("}");
+    FnSpec::new("trace_tok").add_param({ name: "p", type: "&Parser" }).set_return_type("String").emit(w, |w| {
+        w.line("if p.pos >= p.tokens.len() { return String::from(\"<eof>\"); }");
+        w.line("if p.tokens.is_empty_text(p.pos) { return String::from(\"<eof>\"); }");
+        w.line("return `'${p.tokens.token_text(p.pos)}'`;");
+    });
     w.blank();
-    w.line("global TRACE_TARGET: String = \"gale.trace\";");
+    GlobalSpec::new("TRACE_TARGET", "String", "\"gale.trace\"").emit(w);
     w.blank();
-    w.line("pub fn trace_to_stderr<T, effect E>(mut body: fn mut() -> T with E) -> T with E {");
-    w.indent();
-    w.line("let mut sink = TextSink { seq: false };");
-    w.line("let prev = log_level();");
-    w.line("set_log_level(Level::Trace);");
-    w.line("let out = with Log => &mut sink do { body() };");
-    w.line("set_log_level(prev);");
-    w.line("return out;");
-    w.dedent();
-    w.line("}");
+    FnSpec::new("trace_to_stderr", Vis::Pub)
+        .add_generic("T")
+        .add_generic("effect E")
+        .add_param({ name: "body", type: "fn mut() -> T with E", is_mut: true })
+        .set_return_type("T")
+        .add_effect("E")
+        .emit(w, |w| {
+            w.line("let mut sink = TextSink { seq: false };");
+            w.line("let prev = log_level();");
+            w.line("set_log_level(Level::Trace);");
+            w.line("let out = with Log => &mut sink do { body() };");
+            w.line("set_log_level(prev);");
+            w.line("return out;");
+        });
     w.blank();
-    w.line("fn trace_enter<S: AsStrSlice>(p: &Parser, rule: S) {");
-    w.indent();
-    gen_trace_gate(w);
-    w.line(
-        "trace(`${trace_pad(p.trace_depth)}enter ${rule.to_string()} @${p.pos} ${trace_tok(p)}`, { rule: rule.to_string(), pos: p.pos }, TRACE_TARGET);",
+    trace_rule_fn("trace_enter").emit(
+        w,
+        |w| {
+            gen_trace_gate(w);
+            w.line(
+                "trace(`${trace_pad(p.trace_depth)}enter ${rule.to_string()} @${p.pos} ${trace_tok(p)}`, { rule: rule.to_string(), pos: p.pos }, TRACE_TARGET);",
+            );
+        },
     );
-    w.dedent();
-    w.line("}");
     w.blank();
-    w.line("fn trace_ok<S: AsStrSlice>(p: &Parser, rule: S) {");
-    w.indent();
-    gen_trace_gate(w);
-    w.line("trace(`${trace_pad(p.trace_depth)}ok ${rule.to_string()}`, { rule: rule.to_string() }, TRACE_TARGET);");
-    w.dedent();
-    w.line("}");
+    trace_rule_fn("trace_ok").emit(w, |w| {
+        gen_trace_gate(w);
+        w.line("trace(`${trace_pad(p.trace_depth)}ok ${rule.to_string()}`, { rule: rule.to_string() }, TRACE_TARGET);");
+    });
     w.blank();
-    w.line("fn trace_fail<S: AsStrSlice, S1: AsStrSlice>(p: &Parser, rule: S, msg: S1) {");
-    w.indent();
-    gen_trace_gate(w);
-    w.line(
-        "trace(`${trace_pad(p.trace_depth)}FAIL ${rule.to_string()}: ${msg.to_string()}`, { rule: rule.to_string(), reason: msg.to_string() }, TRACE_TARGET);",
-    );
-    w.dedent();
-    w.line("}");
+    trace_rule_fn("trace_fail")
+        .add_generic("S1: AsStrSlice")
+        .add_param({ name: "msg", type: "S1" })
+        .emit(
+            w,
+            |w| {
+                gen_trace_gate(w);
+                w.line(
+                    "trace(`${trace_pad(p.trace_depth)}FAIL ${rule.to_string()}: ${msg.to_string()}`, { rule: rule.to_string(), reason: msg.to_string() }, TRACE_TARGET);",
+                );
+            },
+        );
     w.blank();
     // Decision-point helpers: which alternative a multi-alt / tournament
     // rule committed to, the per-alt scan lengths a longest-match
     // tournament weighed, and the outcome of each speculative try.
-    w.line("fn trace_pick<S: AsStrSlice>(p: &Parser, rule: S, alt: i32) {");
-    w.indent();
-    gen_trace_gate(w);
-    w.line(
-        "if alt < 0 { trace(`${trace_pad(p.trace_depth)}  pick ${rule.to_string()}: no alt matched`, { rule: rule.to_string(), alt }, TRACE_TARGET); }",
-    );
-    w.line(
-        "else { trace(`${trace_pad(p.trace_depth)}  pick ${rule.to_string()} alt#${alt}`, { rule: rule.to_string(), alt }, TRACE_TARGET); }",
-    );
-    w.dedent();
-    w.line("}");
+    trace_rule_fn("trace_pick")
+        .add_param({ name: "alt", type: "i32" })
+        .emit(
+            w,
+            |w| {
+                gen_trace_gate(w);
+                w.line(
+                    "if alt < 0 { trace(`${trace_pad(p.trace_depth)}  pick ${rule.to_string()}: no alt matched`, { rule: rule.to_string(), alt }, TRACE_TARGET); }",
+                );
+                w.line(
+                    "else { trace(`${trace_pad(p.trace_depth)}  pick ${rule.to_string()} alt#${alt}`, { rule: rule.to_string(), alt }, TRACE_TARGET); }",
+                );
+            },
+        );
     w.blank();
-    w.line("fn trace_scan_alt<S: AsStrSlice>(p: &Parser, rule: S, alt: i32, end: i32) {");
-    w.indent();
-    gen_trace_gate(w);
-    w.line("let r = if end < 0 { String::from(\"fail\") } else { `-> @${end}` };");
-    w.line(
-        "trace(`${trace_pad(p.trace_depth)}  scan ${rule.to_string()} alt#${alt}: ${r}`, { rule: rule.to_string(), alt, end }, TRACE_TARGET);",
-    );
-    w.dedent();
-    w.line("}");
+    trace_rule_fn("trace_scan_alt")
+        .add_param({ name: "alt", type: "i32" })
+        .add_param({ name: "end", type: "i32" })
+        .emit(
+            w,
+            |w| {
+                gen_trace_gate(w);
+                w.line("let r = if end < 0 { String::from(\"fail\") } else { `-> @${end}` };");
+                w.line(
+                    "trace(`${trace_pad(p.trace_depth)}  scan ${rule.to_string()} alt#${alt}: ${r}`, { rule: rule.to_string(), alt, end }, TRACE_TARGET);",
+                );
+            },
+        );
     w.blank();
-    w.line("fn trace_try<S: AsStrSlice>(p: &Parser, rule: S, alt: i32, ok: bool) {");
-    w.indent();
-    gen_trace_gate(w);
-    w.line("let r = if ok { String::from(\"ok\") } else { String::from(\"rewind\") };");
-    w.line(
-        "trace(`${trace_pad(p.trace_depth)}  try ${rule.to_string()} alt#${alt}: ${r}`, { rule: rule.to_string(), alt, ok }, TRACE_TARGET);",
-    );
-    w.dedent();
-    w.line("}");
+    trace_rule_fn("trace_try")
+        .add_param({ name: "alt", type: "i32" })
+        .add_param({ name: "ok", type: "bool" })
+        .emit(
+            w,
+            |w| {
+                gen_trace_gate(w);
+                w.line("let r = if ok { String::from(\"ok\") } else { String::from(\"rewind\") };");
+                w.line(
+                    "trace(`${trace_pad(p.trace_depth)}  try ${rule.to_string()} alt#${alt}: ${r}`, { rule: rule.to_string(), alt, ok }, TRACE_TARGET);",
+                );
+            },
+        );
     w.blank();
 }
 

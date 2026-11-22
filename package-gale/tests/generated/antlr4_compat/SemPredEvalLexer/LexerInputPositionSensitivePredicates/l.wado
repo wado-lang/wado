@@ -1080,16 +1080,16 @@ fn apply_WORD2_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     if pos > end { return; }
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if !(char_pos_in_line(src, pos) >= 2) { break rep_2; }
-            if pos >= src.len() { break rep_2; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { break rep_2; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            if !(char_pos_in_line(src, pos) >= 2) { break rep_0; }
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { break rep_0; }
             pos += 1;
-            if pos > end { break rep_2; }
+            if pos > end { break rep_0; }
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_0;
         break;
     }
     deferred_actions.push([1, pos]);
@@ -1111,15 +1111,15 @@ fn try_WORD1(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_4 = pos;
-        rep_4: {
-            if !(char_pos_in_line(src, pos) < 2) { break rep_4; }
-            if pos >= src.len() { break rep_4; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { break rep_4; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            if !(char_pos_in_line(src, pos) < 2) { break rep_0; }
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { break rep_0; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_4;
+        pos = rep_saved_0;
         break;
     }
     return pos;
@@ -1132,15 +1132,15 @@ fn try_WORD2(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_6 = pos;
-        rep_6: {
-            if !(char_pos_in_line(src, pos) >= 2) { break rep_6; }
-            if pos >= src.len() { break rep_6; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { break rep_6; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            if !(char_pos_in_line(src, pos) >= 2) { break rep_0; }
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { break rep_0; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_6;
+        pos = rep_saved_0;
         break;
     }
     return pos;

@@ -66,7 +66,7 @@ use { plan_parser } from "./parser_plan.wado";
 use { EmitContext } from "./emit_context.wado";
 use { SCAN_GATE_TYPE, scan_edge_field, scan_gate_fields } from "./scan_gate.wado";
 use { scan_answers_predicates } from "./gate_conditions.wado";
-use { CodeWriter, ModuleSpec } from "lib:wadopoet";
+use { CodeWriter, GlobalSpec, ModuleSpec, StructSpec } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
@@ -649,9 +649,9 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool) {
 /// parser's own names, which is what lets one predicate text render for both
 /// sides — see `scan_gate.wado`.
 fn gen_scan_gate_type(w: &mut CodeWriter, settings: &GenSettings, members: &MemberDecls) {
-    w.begin(`struct ${SCAN_GATE_TYPE}`);
+    let mut gate = StructSpec::new(SCAN_GATE_TYPE);
     if settings.scan_answers_predicates {
-        w.line(`${settings.scan_edge_field}: i32 = -1,`);
+        gate.add_field({ name: settings.scan_edge_field, type: "i32", default: Option::Some("-1") });
     }
     for let f of &settings.scan_gate_fields {
         // The member's own declared type and initialiser, not `i32 = 0`. The
@@ -659,9 +659,9 @@ fn gen_scan_gate_type(w: &mut CodeWriter, settings: &GenSettings, members: &Memb
         // `i32` is a type error in the generated parser rather than anything
         // this side would notice.
         let [ty, init] = member_field(members, f);
-        w.line(`${*f}: ${ty} = ${init},`);
+        gate.add_field({ name: *f, type: ty, default: Option::Some(init) });
     }
-    w.end();
+    gate.emit(w);
     w.blank();
 }
 
@@ -694,7 +694,7 @@ fn emit_atn_blob_global<S: AsStrSlice>(w: &mut CodeWriter, atn: &Atn, sim_name: 
     }
     let decode = `atn_decode(&b"${body}")`;
     let init = if lr_tables { `atn_with_lr_tables(${decode})` } else { decode };
-    w.line(`global ${sim_name}: AtnSim = ${init};`);
+    GlobalSpec::new(sim_name, "AtnSim", init).emit(w);
 }
 
 /// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for

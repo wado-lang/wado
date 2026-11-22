@@ -1,0 +1,110 @@
+//! Minting the names generated source declares.
+
+use { TreeMap, TreeSet } from "core:collections";
+use { is_reserved } from "./vocabulary.wado";
+
+/// A run of ids, each handed out once, for the names a generator suffixes so
+/// two never meet.
+pub struct IdGen {
+    next: i32 = 0,
+}
+
+impl IdGen {
+    pub fn new() -> IdGen {
+        return IdGen {};
+    }
+
+    pub fn next(&mut self) -> i32 {
+        let id = self.next;
+        self.next += 1;
+        return id;
+    }
+}
+
+/// A claim refused: the name it would take, the owner already holding it, and
+/// the owner it was refused to.
+pub struct NameClash {
+    pub name: String,
+    pub holder: String,
+    pub claimant: String,
+}
+
+/// The names one scope of generated source declares, each held by the owner
+/// that claimed it, past those the language reserves and those `bind` adds.
+pub struct NameRegistry {
+    owners: TreeMap<String, String> = TreeMap::new(),
+    bound: TreeSet<String> = TreeSet::new(),
+}
+
+impl NameRegistry {
+    pub fn new() -> NameRegistry {
+        return NameRegistry {};
+    }
+
+    /// Record a name the scope binds itself, such as an import, which a claim
+    /// is renamed past.
+    pub fn bind<S: AsStrSlice>(&mut self, name: S) {
+        self.bound.insert(name.to_string());
+    }
+
+    /// Whether the language reserves `name` or `bind` added it.
+    fn is_bound<S: AsStrSlice>(&self, name: S) -> bool {
+        return is_reserved(name) || self.bound.contains_str(name);
+    }
+
+    /// `name` for `owner`, with a `_` after it for each time it is bound. A
+    /// held name is refused rather than renamed, so whether two names meet
+    /// does not hang on which came first.
+    pub fn claim<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, owner: S1) -> Result<String, NameClash> {
+        let mut claimed = name.to_string();
+        while self.is_bound(&claimed) {
+            claimed.push('_');
+        }
+        if let Some(other) = self.owners.get_str(&claimed) {
+            return Err(NameClash { name: claimed, holder: other, claimant: owner.to_string() });
+        }
+        self.owners[claimed] = owner.to_string();
+        return Ok(claimed);
+    }
+
+    /// A name for each of `wants`, `[name, owner]` pairs, in their order, where
+    /// the whole set is known at once. Two owners wanting one name are refused.
+    /// A name neither bound nor held is taken as it is. The rest are renamed as
+    /// `fresh` renames them, after the others and in the order of what they
+    /// want, so each owner's name is the same whatever the order of the set.
+    pub fn claim_all(&mut self, wants: &List<[String, String]>) -> Result<List<String>, NameClash> {
+        let mut wanted_by = TreeMap::<String, String>::new();
+        for let [name, owner] of wants {
+            if let Some(other) = wanted_by.get_str(name) {
+                return Err(NameClash { name: *name, holder: other, claimant: *owner });
+            }
+            wanted_by[*name] = *owner;
+        }
+        let mut names: List<String> = List::filled(wants.len(), "");
+        let mut renamed: List<[String, String, i32]> = [];
+        for let [i, [name, owner]] of wants.iter_ref().enumerate() {
+            if self.is_bound(name) || self.owners.contains_key_str(name) {
+                renamed.push([*name, *owner, i]);
+                continue;
+            }
+            self.owners[*name] = *owner;
+            names[i] = *name;
+        }
+        renamed.sort_by(|a, b| a.0.cmp(&b.0));
+        for let [name, owner, i] of renamed {
+            names[i] = self.fresh(name, owner);
+        }
+        return Ok(names);
+    }
+
+    /// The first of `wanted`, `wanted_`, `wanted__`, … that is neither bound nor
+    /// held, held now by `owner`.
+    pub fn fresh<S: AsStrSlice, S1: AsStrSlice>(&mut self, wanted: S, owner: S1) -> String {
+        let mut name = wanted.to_string();
+        while self.is_bound(&name) || self.owners.contains_key_str(&name) {
+            name.push('_');
+        }
+        self.owners[name] = owner.to_string();
+        return name;
+    }
+}

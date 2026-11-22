@@ -1065,15 +1065,15 @@ fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { return; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= src.len() { break rep_2; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' }) { break rep_2; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' }) { break rep_0; }
             pos += 1;
-            if pos > end { break rep_2; }
+            if pos > end { break rep_0; }
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_0;
         break;
     }
     lx.emit(`ID\n`);
@@ -1085,9 +1085,9 @@ fn try_I(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
-        rep_3: {
-            if pos >= src.len() { break rep_3; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_3; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1102,9 +1102,9 @@ fn try_ID(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' }) { return -1; }
     pos += 1;
     loop {
-        rep_5: {
-            if pos >= src.len() { break rep_5; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' }) { break rep_5; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1119,9 +1119,9 @@ fn try_WS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b' ' | b'\x0a' | b'\x09' | b'\x0d' }) { return -1; }
     pos += 1;
     loop {
-        rep_6: {
-            if pos >= src.len() { break rep_6; }
-            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x0a' | b'\x09' | b'\x0d' }) { break rep_6; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x0a' | b'\x09' | b'\x0d' }) { break rep_0; }
             pos += 1;
             continue;
         }

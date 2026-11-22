@@ -1,8 +1,7 @@
 //! The names the generated module binds before it names anything the graph
 //! brings. See WEP 2026-09-20 § "Every Name Is Minted From One Set".
 
-use { HashSet } from "core:collections";
-use { is_reserved } from "lib:wadopoet";
+use { NameRegistry } from "lib:wadopoet";
 
 /// The type parameter `build` takes its backend as.
 pub global BACKEND_PARAM: String = "Bk";
@@ -71,62 +70,58 @@ pub global RUNTIME_NAMES: List<String> = [
     "strided_gather", "to_extent", "typed", "unmet", "written_at", "written_fields", "zeroed_fields",
 ];
 
-/// Whether `name` already means something in the generated module.
-pub fn is_bound(module: &HashSet<String>, name: &String) -> bool {
-    return module.contains(*name) || is_reserved(name);
-}
-
-/// The names the generated module binds beyond the language's own.
-pub fn module_idents() -> HashSet<String> {
-    let mut reserved = HashSet::<String>::new();
+/// A registry of the names the generated module binds beyond the language's
+/// own.
+pub fn module_names() -> NameRegistry {
+    let mut reserved = NameRegistry::new();
     for let name of RUNTIME_NAMES {
-        reserved.insert(name);
+        reserved.bind(name);
     }
-    reserved.insert("build");
-    reserved.insert("compute");
-    reserved.insert(LENGTHS);
-    reserved.insert("lengths");
-    reserved.insert(CHOSEN);
-    reserved.insert("chosen");
-    reserved.insert(PARAMS);
-    reserved.insert("params");
-    reserved.insert(OUTPUTS);
-    reserved.insert(PASSED);
-    reserved.insert("weights");
-    reserved.insert("Weights");
-    reserved.insert(CACHE);
-    reserved.insert("cache");
-    reserved.insert(MODEL);
-    reserved.insert("model");
-    reserved.insert(RECORDED);
-    reserved.insert(LEAST_EXTENTS);
-    reserved.insert(DECODE);
-    reserved.insert(DECODE_ROWS);
-    reserved.insert(REQUESTS);
-    reserved.insert(DECODED_TYPE);
-    reserved.insert(DECODED);
-    reserved.insert(RECORDED_DECODED);
+    reserved.bind("build");
+    reserved.bind("compute");
+    reserved.bind(LENGTHS);
+    reserved.bind("lengths");
+    reserved.bind(CHOSEN);
+    reserved.bind("chosen");
+    reserved.bind(PARAMS);
+    reserved.bind("params");
+    reserved.bind(OUTPUTS);
+    reserved.bind(PASSED);
+    reserved.bind("weights");
+    reserved.bind("Weights");
+    reserved.bind(CACHE);
+    reserved.bind("cache");
+    reserved.bind(MODEL);
+    reserved.bind("model");
+    reserved.bind(RECORDED);
+    reserved.bind(LEAST_EXTENTS);
+    reserved.bind(DECODE);
+    reserved.bind(DECODE_ROWS);
+    reserved.bind(REQUESTS);
+    reserved.bind(DECODED_TYPE);
+    reserved.bind(DECODED);
+    reserved.bind(RECORDED_DECODED);
     // The parameters and locals the entries and what they record bind.
     for let name of [
         "all", "at", "capacity", "decoding", "ended", "extents", "finished", "ids", "last", "mask", "moved", "next",
         "open", "passed", "past", "pasts", "presents", "recorder", "results", "returned", "room", "rows", "sampler",
         "sampling", "slot", "slots", "start", "state", "step", "steps", "token", "tokens",
     ] as List<String> {
-        reserved.insert(name);
+        reserved.bind(name);
     }
     // The methods `Weights`, `Params` and `Cache` carry, which a
     // field must not share.
-    reserved.insert("empty");
-    reserved.insert("load");
-    reserved.insert("embedded");
-    reserved.insert("held");
-    reserved.insert("embedded_data");
+    reserved.bind("empty");
+    reserved.bind("load");
+    reserved.bind("embedded");
+    reserved.bind("held");
+    reserved.bind("embedded_data");
     // What a graph whose experts are pooled declares and binds besides.
     for let name of ["budget", "embedded_within", "expert_layouts", "experts", "loaded", "pools", "source"] as List<String> {
-        reserved.insert(name);
+        reserved.bind(name);
     }
-    reserved.insert("backend");
-    reserved.insert(BACKEND_PARAM);
-    reserved.insert(SOURCE_PARAM);
+    reserved.bind("backend");
+    reserved.bind(BACKEND_PARAM);
+    reserved.bind(SOURCE_PARAM);
     return reserved;
 }
