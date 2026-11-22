@@ -43,9 +43,9 @@ AVX-512. One expert is 14,014,080 bytes as the `q4f16` export stores it.
 | GPU pools of 6.3 GB, as llama.cpp's best arm, `Recent`   | 84.7%                                      |
 
 ```sh
-cd package-loam/benchmark/gpt_oss_20b && wado run -O3 cpu_expert.wado
-cd package-loam && wado run tools/expert_eviction.wado -- \
-    example/gpt-oss-20b/build/fetches.json 5000000000 6300000000
+(cd package-loam/benchmark/gpt_oss_20b && wado run -O3 cpu_expert.wado)
+(cd package-loam && wado run tools/expert_eviction.wado -- \
+    example/gpt-oss-20b/build/fetches.json 5000000000 6300000000)
 ```
 
 The replay covers 14 generated tokens. A longer run may hold fewer.
@@ -92,13 +92,14 @@ round trips together take under about 14 ms.
 
 ## Parallelism: the decision
 
-Each option changes how far the CPU side scales.
+In B, the host runs N instances of a kernel module, one thread each, and each
+holds a share of the experts in its own memory.
 
-| Option                                                                                                                                    | Cores | 4 GiB             | Cost                                                       |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----------------- | ---------------------------------------------------------- |
-| A. One guest core                                                                                                                         | 1     | stays             | none beyond the design                                     |
-| B. Worker instances: the host runs N instances of a kernel module, one thread each, each holding a share of the experts in its own memory | N     | split N ways      | a host feature in `wado run-webgpu`, and a Wado API for it |
-| C. The PJRT CPU plugin beside WebGPU in one host                                                                                          | all   | the plugin's heap | both hosts in one runner; XLA's speed on 4-bit is unknown  |
+| Option                 | Cores | 4 GiB             | Cost                                                       |
+| ---------------------- | ----- | ----------------- | ---------------------------------------------------------- |
+| A. One guest core      | 1     | stays             | none beyond the design                                     |
+| B. Worker instances    | N     | split N ways      | a host feature in `wado run-webgpu`, and a Wado API for it |
+| C. The PJRT CPU plugin | all   | the plugin's heap | both hosts in one runner; XLA's speed on 4-bit is unknown  |
 
 The recommendation is A first. It needs no host change, and its measurements
 (T, the round trip, the GPU's clocks under the new pattern) decide whether the
