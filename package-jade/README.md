@@ -34,8 +34,7 @@ assertion keyword, format or attribute of its own:
 - A `format` means what Draft 2020-12 defines, read strictly. See
   [Formats](#formats).
 - Its one keyword, `x-wado-format`, names a string's Wado type and is an
-  annotation. JSON Schema reserves the `x-` prefix for annotations, and no
-  validator asserts one.
+  annotation. See [Formats](#formats).
 
 ### What a schema promises
 
@@ -398,8 +397,8 @@ outside RFC 3339. It names the Wado type a string is the text of in
 {"type": "string", "x-wado-format": "core:temporal#Instant"}
 ```
 
-Validators, Jade's included, ignore it, and D reads it to choose the type it
-generates.
+JSON Schema reserves the `x-` prefix for annotations, so validators, Jade's
+included, ignore it. D reads it to choose the type it generates.
 
 The validator treats `format` as an annotation unless it is compiled with
 `CompileOptions { assert_format: true }`. Then a string must match its format's
