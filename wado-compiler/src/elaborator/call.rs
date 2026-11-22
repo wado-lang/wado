@@ -57,7 +57,7 @@ use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
-use crate::{IndexSet, Span, token};
+use crate::{Span, token};
 
 /// The builtin that reads an `Array<T>` out of a byte literal.
 pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
@@ -3818,11 +3818,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = solve;
         // A `_` the turbofish wrote stands in a parameter type where its slot
         // would, and is solved with the slots.
-        let holes: IndexSet<TypeId> = param_types
-            .iter()
-            .flat_map(|&ty| self.tysys.type_table.borrow().infer_vars_in(ty))
-            .filter(|&var| self.holds_written_hole(var))
-            .collect();
+        let holes = self.vars_holding_written_holes(param_types);
         let mut infer = InferCtx::new(
             &self.tysys.type_table,
             slots.iter().copied().chain(holes.iter().copied()).collect(),

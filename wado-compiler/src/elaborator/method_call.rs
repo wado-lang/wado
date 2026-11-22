@@ -1771,11 +1771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(mut args) = self.tysys.type_table.borrow().declared_type_args(*target) else {
             return Vec::new();
         };
-        let vars: IndexSet<TypeId> = args
-            .iter()
-            .flat_map(|&arg| self.tysys.type_table.borrow().infer_vars_in(arg))
-            .filter(|&var| self.holds_written_hole(var))
-            .collect();
+        let vars = self.vars_holding_written_holes(&args);
         let omitted: Vec<usize> = (0..args.len())
             .filter(|&i| self.is_bare_written_hole(args[i]))
             .collect();

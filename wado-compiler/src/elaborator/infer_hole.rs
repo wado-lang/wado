@@ -531,6 +531,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .retain(|(_, hole)| !held.contains(hole));
     }
 
+    /// The variables `tys` name whose class holds an open `_` the source wrote.
+    pub(super) fn vars_holding_written_holes(&self, tys: &[TypeId]) -> IndexSet<TypeId> {
+        tys.iter()
+            .flat_map(|&ty| self.tysys.type_table.borrow().infer_vars_in(ty))
+            .filter(|&var| self.holds_written_hole(var))
+            .collect()
+    }
+
     /// Whether `ty` still holds an open `_` the source wrote, at any depth.
     pub(super) fn holds_written_hole(&self, ty: TypeId) -> bool {
         !self.written_holes_in(ty).is_empty()
