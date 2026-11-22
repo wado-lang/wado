@@ -1487,9 +1487,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_case_path(ident, owner.def, case_data.ast_id);
             // A payload-less case has no payload to infer from, so what the
             // path writes is the only source besides the expected type.
-            let Some(written) =
-                self.case_written(&owner, [prefix, case_name], &ident.type_args, ident.span)
-            else {
+            let Some(written) = self.case_written(
+                &owner,
+                [prefix, case_name],
+                (&ident.type_args, Self::resolve_path_args),
+                ident.span,
+            ) else {
                 return Some(TypeTable::ERROR);
             };
             let case = CaseSite {
@@ -1527,7 +1530,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.record_case_path(ident, owner.def, case_ast_id);
         let fits = self
-            .case_written(&owner, [prefix, case_name], &ident.type_args, ident.span)
+            .case_written(
+                &owner,
+                [prefix, case_name],
+                (&ident.type_args, Self::resolve_path_args),
+                ident.span,
+            )
             .is_some_and(|written| {
                 self.check_case_turbofish_arity(written.len(), prefix, 0, ident.span)
             });
@@ -4083,6 +4091,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 e.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span)
             })
         });
+        if let (Some(written), Some(expected)) = (turbofish_type, expected_type) {
+            self.settle_written_holes_from(written, expected);
+        }
+        let turbofish_type = turbofish_type.map(|t| self.apply_infer_holes(t));
         let expected_type = turbofish_type.or(expected_type);
 
         let named_spread = struct_lit.spreads.first();

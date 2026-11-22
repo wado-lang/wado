@@ -1,0 +1,22 @@
+// A path's type argument takes `_` only for the whole argument, as a static
+// call's receiver does.
+
+struct Bx<T> {
+    v: T,
+}
+
+impl<T> Bx<T> {
+    fn make(v: T) -> Bx<T> {
+        return Bx { v };
+    }
+}
+
+export fn run() {
+    let _b = Bx::<List<_>>::make(["x"]);
+}
+
+__DATA__
+{
+    "compile_error": ":15:24: analysis error: a path's type argument takes `_` only for the whole argument; write the type around it",
+    "compile_error_count": 1
+}

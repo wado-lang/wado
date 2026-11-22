@@ -677,7 +677,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inst: Option<&Instantiated>,
         ret: Option<ExpectedReturn>,
     ) -> Vec<TypeId> {
-        let own_vars = inst.map_or(&[][..], |inst| &inst.vars);
+        // A `_` the turbofish wrote is this call's to settle, as an omitted
+        // argument is: a literal under it waits for the expected type.
+        let own_vars: Vec<TypeId> = inst.map_or_else(Vec::new, |inst| {
+            let written = inst.vars.iter().flat_map(|&v| self.written_holes_in(v));
+            inst.vars.iter().copied().chain(written).collect()
+        });
+        let own_vars = &own_vars[..];
         let hints = self.expected_return_hints(own_vars, ret);
         self.chain_expected_return(own_vars, ret);
         let collection = PendingLiterals::of_call(own_vars);
@@ -1224,19 +1230,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type arguments a case path writes: those its prefix carries, which
-    /// leave no room for a turbofish, else the turbofish's.
+    /// leave no room for a turbofish, else the turbofish's, read by `resolve`.
     pub(super) fn case_written(
         &mut self,
         owner: &CaseOwner,
         [prefix, case]: [&str; 2],
-        turbofish: &[ast::Type],
+        (turbofish, resolve): (&[ast::Type], fn(&mut Self, &[ast::Type]) -> Vec<TypeId>),
         span: Span,
     ) -> Option<Vec<TypeId>> {
         match &owner.carried {
-            None => Some(self.resolve_turbofish_args(turbofish)),
+            None => Some(resolve(self, turbofish)),
             Some(carried) if !owner.newtype_holes.is_empty() => {
                 let carried = carried.clone();
-                let args = self.resolve_turbofish_args(turbofish);
+                let args = resolve(self, turbofish);
                 let holes = owner.newtype_holes.clone();
                 if self.reject_surplus_turbofish(prefix, holes.len(), args.len(), span) {
                     return None;
@@ -1846,9 +1852,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (prefix, case_name) = spelled
                 .rsplit_once("::")
                 .expect("a case callee is qualified");
-            let Some(written) =
-                self.case_written(&owner, [prefix, case_name], &call.type_args, call.span)
-            else {
+            let Some(written) = self.case_written(
+                &owner,
+                [prefix, case_name],
+                (&call.type_args, Self::resolve_turbofish_args),
+                call.span,
+            ) else {
                 return self.resolve_args_without_callee(&call.args, ctx);
             };
             let case = CaseSite {

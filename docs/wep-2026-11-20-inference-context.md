@@ -182,11 +182,13 @@ Each step keeps every fixture passing and deletes what it replaces.
   Free, method and static calls solve their slots through one
   `solve_call_type_args`.
 - [x] A `_` below a call's turbofish slot, and any `_` in a struct literal's
-  turbofish, is a variable (`InferHoleTable::written`, one per `_`). A slot
-  meets it as it meets a written type, and an unsettled one reports as its slot
-  would. A struct literal's turbofish names its slots, as a call's does.
-- [ ] A `_` standing for a whole turbofish slot, or in a static call's receiver,
-  is a variable, so no call path reads `unknown` for it.
+  turbofish, is a variable (`InferHoleTable::written`), minted afresh each time
+  its expression is elaborated. A slot meets it as it meets a written type, and
+  an unsettled one reports as its slot would. The call counts it among its own
+  variables, so a literal under it waits for the expected type. A struct
+  literal's turbofish names its slots, as a call's does.
+- [ ] A `_` standing for a whole turbofish slot, or anywhere in a path's type
+  argument, is a variable, so no call path reads `unknown` for it.
 - [ ] A `_` in a `let` annotation and after `as` is a variable.
 - [ ] The context is per body rather than per module.
 

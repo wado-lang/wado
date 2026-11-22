@@ -1,0 +1,21 @@
+// A `_` in a turbofish is settled by the type the site expects before the
+// arguments are typed, so a literal under it takes that type, not its default.
+
+struct Bx<T> {
+    v: T,
+}
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+test "a call" {
+    let o: Option<i64> = id::<Option<_>>(Some(5_000_000_000));
+    assert o.unwrap() == 5_000_000_000;
+}
+
+test "a struct literal" {
+    let b: Bx<i64> = Bx::<_> { v: 5_000_000_000 };
+    let c: Bx<List<i64>> = Bx::<List<_>> { v: [5_000_000_000] };
+    assert b.v == 5_000_000_000 && c.v[0] == 5_000_000_000;
+}

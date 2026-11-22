@@ -14,6 +14,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::assoc_target_slot;
+use super::infer::unify;
 use super::pending_selection::{
     ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
 };
@@ -39,9 +40,9 @@ use crate::tir;
 #[derive(Default)]
 pub(crate) struct InferHoleTable {
     vars: VarStore,
-    /// The variable each `_` the source wrote stands for, by where it is
-    /// written: a site resolved twice reaches the same one.
-    written: IndexMap<Span, TypeId>,
+    /// Each variable a `_` the source wrote stands for, with where it is
+    /// written.
+    written: Vec<(Span, TypeId)>,
     /// Whether the type being resolved is one where a written `_` is a
     /// variable.
     pub(super) holes_writable: bool,
@@ -447,13 +448,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         hole
     }
 
-    /// The variable the `_` written at `span` stands for.
+    /// A variable for the `_` written at `span`, fresh for each elaboration
+    /// of it: an unrolled tuple `for-of` and a default argument elaborate one
+    /// `_` many times, each a use of its own.
     pub(super) fn written_hole(&mut self, span: Span) -> TypeId {
-        if let Some(&var) = self.infer_holes.written.get(&span) {
-            return var;
-        }
         let var = self.mint_infer_var();
-        self.infer_holes.written.insert(span, var);
+        self.infer_holes.written.push((span, var));
         var
     }
 
@@ -471,10 +471,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         self.infer_holes
             .written
-            .values()
-            .copied()
+            .iter()
+            .map(|&(_, w)| w)
             .filter(|&w| vars.is_unanswered(w) && held.contains(&vars.root_of(w)))
             .collect()
+    }
+
+    /// Answer each `_` `written` holds with what `expected` has in its place.
+    /// A place `expected` does not reach, such as one a coercion would bridge,
+    /// stays open.
+    pub(super) fn settle_written_holes_from(&mut self, written: TypeId, expected: TypeId) {
+        let holes = self.written_holes_in(written);
+        if holes.is_empty() {
+            return;
+        }
+        let written = self.apply_infer_holes(written);
+        let mut bindings = IndexMap::default();
+        unify(&self.tysys.type_table, written, expected, &mut bindings);
+        for (var, answer) in bindings {
+            if holes.contains(&var) {
+                self.equate(var, answer);
+            }
+        }
     }
 
     /// Require of `var`'s answer the trait bounds its slot declared.
@@ -933,8 +951,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .infer_holes
             .written
             .iter()
-            .filter(|&(_, &w)| vars.is_unanswered(w) && !blamed.contains(&vars.root_of(w)))
-            .map(|(&span, &w)| (span, w))
+            .copied()
+            .filter(|&(_, w)| vars.is_unanswered(w) && !blamed.contains(&vars.root_of(w)))
             .collect();
         for (span, hole) in bare {
             self.attach_infer_var_diag(

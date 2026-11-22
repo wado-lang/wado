@@ -420,7 +420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(owner) = owner.filter(|_| !params.is_empty()) else {
             return Some(Vec::new());
         };
-        let args = self.resolve_turbofish_args(&namespaced.args);
+        let args = self.resolve_path_args(&namespaced.args);
         let owed = self.param_bounds_at(owner, &namespaced.name, site, &args);
         for (((param, &arg), written), refs) in
             params.iter().zip(&args).zip(&namespaced.args).zip(owed)
@@ -673,6 +673,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         })
+    }
+
+    /// The types a path segment's arguments supply (`Option::<i32>::None`,
+    /// `Bx::<_>::make`), where a `_` stands only for a whole argument.
+    pub(super) fn resolve_path_args(&mut self, args: &[Type]) -> Vec<TypeId> {
+        self.reject_unresolved_args(args);
+        args.iter().map(|ty| self.resolve_type(ty)).collect()
     }
 
     /// Run `resolve` where a `_` the source wrote is a variable.
