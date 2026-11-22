@@ -1,0 +1,36 @@
+// Within one call, a literal that takes its default settles, through an
+// associated-type bound, the variable another literal of the call waits on:
+// `i32`'s `Src::Item` is `i64`, so the second literal is an `i64`. Free,
+// method and static calls solve their slots alike.
+
+trait Src { type Item; }
+
+impl Src for i32 { type Item = i64; }
+
+fn f<A: Src<Item = B>, B>(a: A, b: B) -> B { return b; }
+
+struct K {}
+
+impl K {
+    fn m<A: Src<Item = B>, B>(&self, a: A, b: B) -> B { return b; }
+    fn s<A: Src<Item = B>, B>(a: A, b: B) -> B { return b; }
+}
+
+test "a free call" {
+    let r = f(1, 5_000_000_000);
+    let s: i64 = r;
+    assert s == 5_000_000_000;
+}
+
+test "a method call" {
+    let k = K {};
+    let r = k.m(1, 5_000_000_000);
+    let s: i64 = r;
+    assert s == 5_000_000_000;
+}
+
+test "a static call" {
+    let r = K::s(1, 5_000_000_000);
+    let s: i64 = r;
+    assert s == 5_000_000_000;
+}

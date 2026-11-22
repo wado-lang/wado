@@ -31,8 +31,9 @@ use super::call::{
     DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, omits_a_default,
     slot_names, slot_type_bindings, turbofish_leaves_slot,
 };
-use super::coercion::{ExpectedReturn, answers_last};
-use super::infer::{InferCtx, infer_var_answers, unify};
+use super::call::CallSolve;
+use super::coercion::ExpectedReturn;
+use super::infer::{infer_var_answers, unify};
 use super::infer_hole::{DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
@@ -2124,19 +2125,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_types = self.instantiate_types(param_types, inst);
         let decl_return_type = self.instantiate_type(decl_return_type, inst);
 
-        let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
-        for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
-            if answers_last(raw_args.get(i)) {
-                infer.add_deferred(param_type, *arg);
-            } else {
-                infer.add(param_type, *arg);
-            }
-        }
-        if let Some(expected) = expected_return_type {
-            infer.add_expected_return(decl_return_type, expected);
-        }
-
-        let mut inferred = infer.solve();
+        let names = slot_names(&method_type_params, &self.tysys.resolutions);
+        let (mut inferred, _) = self.solve_call_type_args(CallSolve {
+            slots: &inst.vars,
+            owners: &method_type_params,
+            names: &names,
+            param_types: &param_types,
+            args,
+            raw_args,
+            ret: expected_return_type.map(|expected| (decl_return_type, expected)),
+        });
         // Resolve method type params that appear only inside another method
         // param's associated-type-equality bound (e.g.
         // `fn m<T, I: Iterator<Item = T>>`), mirroring the free-function path.

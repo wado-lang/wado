@@ -128,6 +128,20 @@ pub(super) fn slot_names(params: &[ast::GenericParam], resolutions: &Resolutions
         .collect()
 }
 
+/// A call's type-argument solve: `slots`, as a bound's target names them
+/// (`names`), the trailing ones declared by `owners`; the parameter types
+/// written in them, the arguments' types, the arguments as written, and the
+/// declared return with the type the site expects.
+pub(super) struct CallSolve<'a> {
+    pub(super) slots: &'a [TypeId],
+    pub(super) owners: &'a [ast::GenericParam],
+    pub(super) names: &'a [ParamRef],
+    pub(super) param_types: &'a [TypeId],
+    pub(super) args: &'a [TypeId],
+    pub(super) raw_args: &'a [Expr],
+    pub(super) ret: Option<(TypeId, TypeId)>,
+}
+
 /// A callee's signature in its declaration's own frame, as a call site reads it.
 #[derive(Default)]
 pub(super) struct CalleeSignature {
@@ -3715,24 +3729,88 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved_param_types = self.instantiate_types(&resolved_param_types, &inst);
         let decl_return_type = decl_return_type.map(|r| self.instantiate_type(r, &inst));
 
-        let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
-        for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
-            if answers_last(raw_args.get(i)) {
-                infer.add_deferred(*param_type, *arg);
-            } else {
-                infer.add(*param_type, *arg);
-            }
-        }
-        if let (Some(decl_ret), Some(expected)) = (decl_return_type, expected_type) {
-            infer.add_expected_return(decl_ret, expected);
-        }
-
-        let (inferred, bindings) = infer.solve_with_bindings();
+        let params: Vec<ast::GenericParam> = self
+            .lookup_function_type_params(callee)
+            .into_iter()
+            .filter(GenericParam::is_real_type_param)
+            .collect();
+        let names = slot_names(&params, &self.tysys.resolutions);
+        let (inferred, bindings) = self.solve_call_type_args(CallSolve {
+            slots: &inst.vars,
+            owners: &params,
+            names: &names,
+            param_types: &resolved_param_types,
+            args,
+            raw_args,
+            ret: decl_return_type.zip(expected_type),
+        });
         if !inst.vars.iter().any(|v| bindings.contains_key(v)) {
             return vec![];
         }
         self.record_instantiation(&inst, &inferred);
         inferred
+    }
+
+    /// Solve a call's `slots` from its arguments, in [`InferCtx`]'s tiers. A
+    /// literal at a slot an associated-type equality on another slot names
+    /// answers only what the equality leaves open: `f(1, 2)` for
+    /// `fn f<A: Src<Item = B>, B>(a: A, b: B)` takes `B` from `A`'s
+    /// `Src::Item` once `1` has settled `A`.
+    pub(super) fn solve_call_type_args(
+        &mut self,
+        solve: CallSolve<'_>,
+    ) -> (Vec<TypeId>, IndexMap<TypeId, TypeId>) {
+        let CallSolve {
+            slots,
+            owners,
+            names,
+            param_types,
+            args,
+            raw_args,
+            ret,
+        } = solve;
+        // A solve whose slots the declarations do not line up with projects
+        // nothing, as `resolve_assoc_bound_args` declines it.
+        let aligned = names.len() == slots.len() && owners.len() <= slots.len();
+        let offset = slots.len().saturating_sub(owners.len());
+        let projected: Vec<TypeId> = if aligned {
+            owners
+                .iter()
+                .flat_map(|param| &param.bounds)
+                .flat_map(|bound| bound_targets(bound, names, &self.tysys.resolutions))
+                .map(|(_, slot)| slots[slot])
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let mut held: Vec<(TypeId, TypeId)> = Vec::new();
+        let mut infer = InferCtx::new(&self.tysys.type_table, slots.to_vec());
+        for (i, (&param_type, &arg)) in param_types.iter().zip(args).enumerate() {
+            if !answers_last(raw_args.get(i)) {
+                infer.add(param_type, arg);
+            } else if projected.contains(&param_type) {
+                held.push((param_type, arg));
+            } else {
+                infer.add_deferred(param_type, arg);
+            }
+        }
+        if let Some((declared, expected)) = ret {
+            infer.add_expected_return(declared, expected);
+        }
+        let (mut inferred, mut bindings) = infer.solve_with_bindings();
+        if held.is_empty() {
+            return (inferred, bindings);
+        }
+        self.resolve_assoc_bounds_in(owners, offset, names, &mut inferred);
+        for (&slot, answer) in slots.iter().zip(&mut inferred) {
+            if *answer != slot {
+                bindings.entry(slot).or_insert(*answer);
+            } else if let Some(&(_, literal)) = held.iter().find(|&&(param, _)| param == slot) {
+                *answer = literal;
+                bindings.insert(slot, literal);
+            }
+        }
+        (inferred, bindings)
     }
 
     /// Resolve a type parameter appearing only inside another's
@@ -4861,21 +4939,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `args` are the arguments as written, so they begin with the receiver
         // when the method declares one. Dropping it here would slide every pair
         // one position left and solve each slot from the wrong argument.
-        let mut infer = InferCtx::new(&self.tysys.type_table, all_param_ids.clone());
-        for (i, (param_type, arg)) in sig.decl.param_types.iter().zip(args.iter()).enumerate() {
-            if answers_last(raw_args.get(i)) {
-                infer.add_deferred(*param_type, *arg);
-            } else {
-                infer.add(*param_type, *arg);
-            }
-        }
-        if let (Some(decl_ret), Some(expected)) = (decl_return_type, expected_type) {
-            infer.add_expected_return(decl_ret, expected);
-        }
-
         // Permissive solve — see `infer_fn_type_args` for the
         // TypeParam-forwarding rationale.
-        let (mut inferred, bindings) = infer.solve_with_bindings();
+        let (names, owners) = self.sig_slots(&sig);
+        let (mut inferred, bindings) = self.solve_call_type_args(CallSolve {
+            slots: &all_param_ids,
+            owners: &owners,
+            names: &names,
+            param_types: &sig.decl.param_types,
+            args,
+            raw_args,
+            ret: decl_return_type.zip(expected_type),
+        });
         let split = sig.declaring_split();
 
         // A method-level slot the arguments do not pin takes the default its
@@ -4892,7 +4967,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`, or the
         // block's own `impl<T: Tr<Out = U>, U>`) is projected off the owner
         // the arguments did settle.
-        let (names, owners) = self.sig_slots(&sig);
         self.resolve_assoc_bounds_in(&owners, 0, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),
