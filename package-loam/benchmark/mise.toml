@@ -119,7 +119,7 @@ fi
 
 ./onnxruntime_webgpu.sh $model
 
-./llama_cpp.sh F16 "$(gemma3_270m/fetch_gguf.sh F16)" $model/generate.json 0
+./llama_cpp.sh F16 $model/generate.json 0 gemma3_270m/fetch_gguf.sh F16
 
 echo "=== Loam (WebGPU) ==="
 WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado
@@ -154,7 +154,7 @@ for export in q4 q4f16; do
 done
 
 for precision in Q4_0 Q4_1; do
-    ./llama_cpp.sh $precision "$(gemma3_270m/fetch_gguf.sh $precision)" $model/generate.json 0
+    ./llama_cpp.sh $precision $model/generate.json 0 gemma3_270m/fetch_gguf.sh $precision
 done
 """
 
@@ -172,9 +172,8 @@ fi
 wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
 
 # Of the layers' experts on the CPU tried, 10 ran fastest on the RTX 4060 Ti.
-gguf=$(gpt_oss_20b/fetch_gguf.sh)
 for layers in 10 14 24; do
-    ./llama_cpp.sh "MXFP4, $layers layers' experts on the CPU" "$gguf" $model/generate.json $layers
+    ./llama_cpp.sh "MXFP4, $layers layers' experts on the CPU" $model/generate.json $layers gpt_oss_20b/fetch_gguf.sh
 done
 
 echo "=== Loam (WebGPU) ==="
