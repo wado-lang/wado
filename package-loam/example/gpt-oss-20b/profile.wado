@@ -5,7 +5,7 @@
 //! again timed, by the tokens the second argument gives, its pools holding the
 //! experts the budget the first gives in bytes holds.
 //!
-//!     wado run-webgpu profile.wado -- 3000000000 8
+//!     wado run-webgpu profile.wado -- 4500000000 8
 
 use { eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use { TreeMap } from "core:collections";
@@ -33,14 +33,12 @@ use {
 use { Backend, ElementKind, HostWeight, KernelTime, WebGpuBackend } from "lib:loam";
 use { LinearArray } from "core:linear";
 use { recorded } from "../checks.wado";
-use { Model, budget_and_steps, read_nanoseconds } from "./model.wado";
-
-global BUDGET: i64 = 3_000_000_000;
+use { Model, WEBGPU_BUDGET, budget_and_steps, read_nanoseconds } from "./model.wado";
 
 global STEPS: i32 = 8;
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuQuerySet, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let [budget, steps] = budget_and_steps(BUDGET, STEPS);
+    let [budget, steps] = budget_and_steps(WEBGPU_BUDGET, STEPS);
     let Some([generate, _]) = recorded("generate.json", "build/logits.bin") else {
         return;
     };

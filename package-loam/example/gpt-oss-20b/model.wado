@@ -200,6 +200,10 @@ pub fn checked<affine Bk: Backend>(
     return Option::Some(loaded);
 }
 
+/// The bytes of experts a WebGPU device of 8 GB holds beside the other weights
+/// and a pass's own buffers. The RTX 4060 Ti's peak use at it is 7.1 GB.
+pub global WEBGPU_BUDGET: i64 = 4_500_000_000;
+
 /// The budget in bytes and the tokens a check continues each prompt by, as the
 /// arguments give them, else `budget` and `steps`.
 pub fn budget_and_steps(budget: i64, steps: i32) -> [i64, i32] with Environment {
