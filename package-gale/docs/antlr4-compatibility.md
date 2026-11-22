@@ -1396,14 +1396,14 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 
 | Path                                       | Role                                                                                                                                          |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tools/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                                                                                           |
+| `tools/extract_antlr4_descriptors.wado`    | Extractor (single-file Wado script)                                                                                                           |
 | `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                                                                                             |
 | `tests/antlr4-compat/<category>_test.wado` | Stage A claim-(a) per-category tests (committed; `#![generated(by=…)]`)                                                                       |
 | `tests/antlr4-compat/drivers/`             | Every stage's drivers (committed), in the [driver files](#driver-files)                                                                       |
 | `tests/generated/antlr4_compat/`           | Kiln-generated parsers/lexers, one per distinct grammar (committed)                                                                           |
 | `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                              |
-| `tools/antlr4_oracle.wado`               | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `build/antlr4/`. Run at extract time only — CI does not need it.      |
-| `tools/antlr4_oracle_selftest.wado`      | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.    |
+| `tools/antlr4_oracle.wado`                 | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `build/antlr4/`. Run at extract time only — CI does not need it.      |
+| `tools/antlr4_oracle_selftest.wado`        | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.    |
 | `tools/tree_diff.wado`                     | Lists where the jar's parse tree and Gale's disagree, once per divergence rather than per line.                                               |
 | `tests/grammars/java/`                     | Base classes for `superClass` grammars, each the Java twin of a Wado `impl` in the matching driver test. Fed to `antlr4_oracle.wado --super`. |
 

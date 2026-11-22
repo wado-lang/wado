@@ -8,7 +8,7 @@ covers, and the work ahead.
 
 ## Library
 
-```wado
+````wado
 use { render, format, fenced_code_blocks } from "wado-lang:marl";
 
 let page = render("# Title\n\nSome *text*.\n");
@@ -17,7 +17,7 @@ page.headings;   // the outline: level, GFM slug, and text of each heading
 
 let tidy = format("*  item\n");                       // "- item\n"
 let blocks = fenced_code_blocks("```sh\nls\n```\n");  // each fence's language and body
-```
+````
 
 - `render` escapes raw HTML as text and drops a link whose scheme is not
   `http`, `https`, `mailto` or `tel`, so untrusted Markdown cannot inject

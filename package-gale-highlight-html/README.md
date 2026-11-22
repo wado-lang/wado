@@ -5,6 +5,8 @@ language it is written in. A `<script>` body is highlighted as JavaScript and a
 `<style>` body as CSS. The parsers are generated at build time by
 [Gale](../package-gale) from the [grammars-v4](https://github.com/antlr/grammars-v4)
 grammars in `assets/grammar/`.
+[WEP: Gale Highlight Query](../docs/wep-2026-07-12-gale-highlight-query.md)
+holds the design of the highlight queries.
 
 ## Library
 

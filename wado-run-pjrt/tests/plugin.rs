@@ -144,7 +144,8 @@ fn loams_programs_compute_what_its_cpu_graph_does() {
 #[test]
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
-    let conformance = Path::new(env!("CARGO_MANIFEST_DIR")).join("../package-loam/tests/conformance");
+    let conformance =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../package-loam/tests/conformance");
     let written = Command::new(std::env::var_os("WADO").expect("`mise run test-pjrt` sets it"))
         .args(["run", "large/write.wado"])
         .current_dir(&conformance)
@@ -191,7 +192,10 @@ fn loams_programs_compile_for_a_tpu() {
             std::env::var_os("WADO_PJRT_TPU_PLUGIN").expect("`mise run test-pjrt` sets it"),
         )
         .env("TPU_SKIP_MDS_QUERY", "1");
-    let printed = printed_by(command, "../package-loam/tests/conformance/pjrt_topology.wado");
+    let printed = printed_by(
+        command,
+        "../package-loam/tests/conformance/pjrt_topology.wado",
+    );
     assert!(
         !printed.trim().is_empty(),
         "the program prints a line a case"

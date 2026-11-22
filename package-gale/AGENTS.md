@@ -20,12 +20,12 @@ below hold for every change; the rest lives in companion docs:
 .g4 source ──parse──► Grammar ──lower──► LoweredGrammar ──emit──► Wado source
 ```
 
-- The `.g4` front end (`src/g4/`) parses a grammar into `Grammar`, the surface IR in `src/ir.wado`.
+- The `.g4` front end parses a grammar into `Grammar`, the surface IR.
 - Analysis answers what the rules derive (`grammar_analysis`), resolves decisions by static lookahead (`prediction`), and builds the ATN for the decisions static lookahead cannot settle (`atn`, and `latn` for the lexer).
-- Lowering (`lower`) commits every analysis decision into `LoweredGrammar`, the GIR in `src/gir.wado`, so emit never reads `Grammar`.
+- Lowering (`lower`) commits every analysis decision into `LoweredGrammar`, the GIR, so emit never reads `Grammar`.
 - Emit is driven by `codegen`: `parser_plan` decides what the parser carries, and `parser_gen`, `lexer_gen`, `cst_gen`, `action_gen` and `highlight_gen` write it. `java2wado` translates Java action bodies.
-- The runtime in `src/runtime/` is inlined into every generated parser (see Inlined Runtime).
-- `src/generator.wado` is the Kiln entry, and `src/main.wado` the `gale` command.
+- The runtime is inlined into every generated parser (see Inlined Runtime).
+- The Kiln generator and the `gale` command are the two entry points.
 
 ## Setup
 

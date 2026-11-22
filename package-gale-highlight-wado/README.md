@@ -4,6 +4,8 @@ Syntax highlighter for the Wado language. The parser is generated at build time
 by [Gale](../package-gale) from the bundled grammar (`assets/grammar/Wado.g4`
 and `assets/grammar/Wado.highlights.scm`); no ANTLR/Gale runtime dependency leaks to
 consumers — the runtime is inlined into the generated parser.
+[WEP: Gale Highlight Query](../docs/wep-2026-07-12-gale-highlight-query.md)
+holds the design of the highlight queries.
 
 ## Library
 

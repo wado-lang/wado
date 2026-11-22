@@ -7,30 +7,30 @@ an agent finds it without learning the package first.
 
 The root holds these files:
 
-| File        | Holds                                                                                          |
-| ----------- | ---------------------------------------------------------------------------------------------- |
-| `wado.toml` | the manifest ([The Manifest](./spec-packages.md#the-manifest))                                 |
-| `wado.lock` | the lock file ([The Lock File](./spec-packages.md#the-lock-file)), where the package has one   |
-| `README.md` | what the package is, and its user manual                                                       |
-| `AGENTS.md` | what to keep in mind on every change to the package                                            |
-| `TODO.md`   | the work not done yet, where there is any                                                      |
+| File        | Holds                                                                                        |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| `wado.toml` | the manifest ([The Manifest](./spec-packages.md#the-manifest))                               |
+| `wado.lock` | the lock file ([The Lock File](./spec-packages.md#the-lock-file)), where the package has one |
+| `README.md` | what the package is, and its user manual                                                     |
+| `AGENTS.md` | what to keep in mind on every change to the package                                          |
+| `TODO.md`   | the work not done yet, where there is any                                                    |
 
 `README.md` and `AGENTS.md` are required. `TODO.md` is not a document of
 `docs/`: a consumer reads it to learn what the package cannot do yet.
 
 ## Directories
 
-| Directory    | Holds                                                                  |
-| ------------ | ---------------------------------------------------------------------- |
-| `src/`       | the package's Wado modules                                             |
-| `tests/`     | its tests                                                              |
-| `docs/`      | every other document                                                   |
-| `assets/`    | the files it bundles that are not Wado modules                         |
-| `tools/`     | the programs that maintain it: generators, oracles, corpus checks      |
-| `example/`   | programs that show it in use                                           |
-| `benchmark/` | its benchmarks                                                         |
-| `build/`     | Kiln's intermediates, which the compiler writes and git ignores        |
-| `pgo/`       | the profile `wado test --pgo` records ([PGO](./spec-pgo.md))           |
+| Directory    | Holds                                                             |
+| ------------ | ----------------------------------------------------------------- |
+| `src/`       | the package's Wado modules                                        |
+| `tests/`     | its tests                                                         |
+| `docs/`      | every other document                                              |
+| `assets/`    | the files it bundles that are not Wado modules                    |
+| `tools/`     | the programs that maintain it: generators, oracles, corpus checks |
+| `example/`   | programs that show it in use                                      |
+| `benchmark/` | its benchmarks                                                    |
+| `build/`     | Kiln's intermediates, which the compiler writes and git ignores   |
+| `pgo/`       | the profile `wado test --pgo` records ([PGO](./spec-pgo.md))      |
 
 Each directory is there only where it has content. A directory these do not
 name may hold what none of them fits, and its package's `AGENTS.md` says what

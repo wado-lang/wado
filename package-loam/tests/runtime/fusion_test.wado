@@ -1,7 +1,17 @@
 use { Binary, DotDims, Graph, Quantized, Unary } from "../../src/runtime/hlo.wado";
 use { Kernel, Plan, planned, replanned, splats_of } from "../../src/runtime/fusion.wado";
 use { Recorded, Recorder, Untyped, Value, constants } from "../../src/runtime/recorded.wado";
-use { BinaryOp, Cpu, ElementKind, Float, HalfFloat, Holds, Tensor, UnaryOp, operand } from "../../src/runtime/tensor.wado";
+use {
+    BinaryOp,
+    Cpu,
+    ElementKind,
+    Float,
+    HalfFloat,
+    Holds,
+    Tensor,
+    UnaryOp,
+    operand,
+} from "../../src/runtime/tensor.wado";
 
 fn plan_of(recorded: &Recorded) -> Plan {
     return planned(recorded, &splats_of(&constants(&mut Cpu {}, recorded)));

@@ -1,4 +1,4 @@
-#![generated(by = "package-re/scripts/oracle.mjs", sources = ["package-re/tests/generated/test262.json"])]
+#![generated(by = "package-re/tools/oracle.mjs", sources = ["package-re/tests/generated/test262.json"])]
 // What Node's RegExp finds with the `u` flag. Regenerate with
 // `mise run oracle-re`; do not edit.
 
@@ -12,7 +12,7 @@ fn spans(pattern: String, text: String) -> String {
         for let i of 0..<caps.len() {
             groups.push(match caps[i] {
                 Some(m) => `${m.start()}..${m.end()}`,
-                null => "-",
+                None => "-",
             });
         }
         found.push(groups.join(","));
