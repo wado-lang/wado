@@ -96,10 +96,9 @@ impl Names {
     /// module's own names and its markers'.
     internal fn of(tensors: List<String>, taken: &mut NameRegistry) -> Result<Names, EmitError> {
         let mut wants: List<[String, String]> = [];
-        let mut idents = HashMap::<String, String>::new();
+        let mut seen = HashSet::<String>::new();
         for let tensor of tensors {
-            if !idents.contains_key(tensor) {
-                idents[tensor] = "";
+            if seen.insert(tensor) {
                 wants.push([sanitize(&tensor), tensor]);
             }
         }
@@ -109,6 +108,7 @@ impl Names {
                 NameCollision { tensor: clash.claimant, other: clash.holder, ident: clash.name },
             );
         })?;
+        let mut idents = HashMap::<String, String>::new();
         for let [i, [_, tensor]] of wants.into_iter().enumerate() {
             idents[tensor] = minted[i];
         }
