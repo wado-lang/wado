@@ -184,7 +184,7 @@ gpt_oss_20b/llama_bench.sh 10 14 24
 | 14                         | 80.25 tokens/s | 35.96 tokens/s     |
 | 24                         | 54.92 tokens/s | 25.14 tokens/s     |
 
-Loam's `WebGpuBackend` holds 3 GB of the experts on the device and writes the
+Loam's `WebGpuBackend` holds 5 GB of the experts on the device and writes the
 rest there as a token picks them. `example/gpt-oss-20b/profile.wado` times the
-prompt of 5 and 8 tokens after it: 0.66 tokens/s over the whole, 64 times as
+prompt of 5 and 8 tokens after it: 1.60 tokens/s over the whole, 26 times as
 long a token as llama.cpp's 10 layers on the CPU.
