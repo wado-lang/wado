@@ -182,7 +182,7 @@ impl Footprint {
             | WirInstr::V128Load { .. }
             | WirInstr::MemoryCopy { .. }
             | WirInstr::TableGet { .. }
-            | WirInstr::MemorySize => self.heap = true,
+            | WirInstr::MemorySize { .. } => self.heap = true,
             WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
                 self.call = true;
             }
@@ -238,7 +238,7 @@ impl Footprint {
             | WirInstr::I32Store16 { .. }
             | WirInstr::I64Store { .. }
             | WirInstr::V128Store { .. }
-            | WirInstr::MemoryGrow(_)
+            | WirInstr::MemoryGrow { .. }
             | WirInstr::MemoryFill { .. }
             | WirInstr::MemoryCopy { .. } => self.heap = true,
             WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
@@ -423,7 +423,7 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
         | WirInstr::I32Store16 { .. }
         | WirInstr::I64Store { .. }
         | WirInstr::V128Store { .. }
-        | WirInstr::MemoryGrow(_)
+        | WirInstr::MemoryGrow { .. }
         | WirInstr::MemoryFill { .. }
         | WirInstr::MemoryCopy { .. }
         // Trap.

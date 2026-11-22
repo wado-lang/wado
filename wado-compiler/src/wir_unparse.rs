@@ -9,7 +9,7 @@ use crate::unparse::ListWriter;
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirData, WirEnumType, WirExport, WirExportDesc, WirField,
     WirFlagsType, WirFuncType, WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr,
-    WirPackage, WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantType,
+    WirMemoryRef, WirPackage, WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantType,
 };
 
 /// Unparse a `WirPackage` into pseudo-Wado source code.
@@ -1777,86 +1777,118 @@ impl<'a> WirUnparser<'a> {
             }
 
             // Memory
-            WirInstr::MemorySize => self.write("builtin::memory_size()"),
-            WirInstr::MemoryGrow(a) => self.write_unop("builtin::memory_grow", a),
-            WirInstr::MemoryFill { dst, value, len } => {
-                self.write("builtin::memory_fill(");
-                self.unparse_instr_inline(dst);
-                self.write(", ");
-                self.unparse_instr_inline(value);
-                self.write(", ");
-                self.unparse_instr_inline(len);
-                self.write(")");
+            WirInstr::MemorySize { memory } => {
+                self.write_memory_builtin(*memory, "memory_size");
+                self.write("()");
             }
-            WirInstr::MemoryCopy { dst, src, len } => {
-                self.write("builtin::memory_copy(");
-                self.unparse_instr_inline(dst);
-                self.write(", ");
-                self.unparse_instr_inline(src);
-                self.write(", ");
-                self.unparse_instr_inline(len);
-                self.write(")");
+            WirInstr::MemoryGrow { memory, delta } => {
+                self.write_memory_builtin(*memory, "memory_grow");
+                self.write_args(&[delta]);
             }
-            WirInstr::I32Load { offset, addr, .. } => {
-                self.write_mem_load("builtin::load_i32", *offset, addr);
+            WirInstr::MemoryFill {
+                memory,
+                dst,
+                value,
+                len,
+            } => {
+                self.write_memory_builtin(*memory, "memory_fill");
+                self.write_args(&[dst, value, len]);
             }
-            WirInstr::I32Load8U { offset, addr, .. } => {
-                self.write_mem_load("builtin::load_u8", *offset, addr);
+            WirInstr::MemoryCopy {
+                dst_memory,
+                src_memory,
+                dst,
+                src,
+                len,
+            } => {
+                use WirMemoryRef::{Main, Wide};
+                self.write(match [dst_memory, src_memory] {
+                    [Main, Main] => "builtin::memory_copy",
+                    [Wide, Wide] => "builtin::wide_memory_copy",
+                    [Wide, Main] => "builtin::copy_to_wide",
+                    [Main, Wide] => "builtin::copy_from_wide",
+                });
+                self.write_args(&[dst, src, len]);
             }
-            WirInstr::I32Load8S { offset, addr, .. } => {
-                self.write_mem_load("builtin::load_i8", *offset, addr);
+            WirInstr::I32Load {
+                memory, offset, addr, ..
+            } => {
+                self.write_mem_load(*memory, "load_i32", *offset, addr);
             }
-            WirInstr::I32Load16U { offset, addr, .. } => {
-                self.write_mem_load("builtin::load_u16", *offset, addr);
+            WirInstr::I32Load8U {
+                memory, offset, addr, ..
+            } => {
+                self.write_mem_load(*memory, "load_u8", *offset, addr);
             }
-            WirInstr::I32Load16S { offset, addr, .. } => {
-                self.write_mem_load("builtin::load_i16", *offset, addr);
+            WirInstr::I32Load8S {
+                memory, offset, addr, ..
+            } => {
+                self.write_mem_load(*memory, "load_i8", *offset, addr);
+            }
+            WirInstr::I32Load16U {
+                memory, offset, addr, ..
+            } => {
+                self.write_mem_load(*memory, "load_u16", *offset, addr);
+            }
+            WirInstr::I32Load16S {
+                memory, offset, addr, ..
+            } => {
+                self.write_mem_load(*memory, "load_i16", *offset, addr);
             }
             WirInstr::I32Store {
+                memory,
                 offset,
                 addr,
                 value,
                 ..
             } => {
-                self.write_mem_store("builtin::store_i32", *offset, addr, value);
+                self.write_mem_store(*memory, "store_i32", *offset, addr, value);
             }
             WirInstr::I32Store8 {
+                memory,
                 offset,
                 addr,
                 value,
                 ..
             } => {
-                self.write_mem_store("builtin::store_u8", *offset, addr, value);
+                self.write_mem_store(*memory, "store_u8", *offset, addr, value);
             }
             WirInstr::I32Store16 {
+                memory,
                 offset,
                 addr,
                 value,
                 ..
             } => {
-                self.write_mem_store("builtin::store_u16", *offset, addr, value);
+                self.write_mem_store(*memory, "store_u16", *offset, addr, value);
             }
-            WirInstr::I64Load { offset, addr, .. } => {
-                self.write_mem_load("builtin::load_i64", *offset, addr);
+            WirInstr::I64Load {
+                memory, offset, addr, ..
+            } => {
+                self.write_mem_load(*memory, "load_i64", *offset, addr);
             }
             WirInstr::I64Store {
+                memory,
                 offset,
                 addr,
                 value,
                 ..
             } => {
-                self.write_mem_store("builtin::store_i64", *offset, addr, value);
+                self.write_mem_store(*memory, "store_i64", *offset, addr, value);
             }
-            WirInstr::V128Load { offset, addr, .. } => {
-                self.write_mem_load("builtin::load_v128", *offset, addr);
+            WirInstr::V128Load {
+                memory, offset, addr, ..
+            } => {
+                self.write_mem_load(*memory, "load_v128", *offset, addr);
             }
             WirInstr::V128Store {
+                memory,
                 offset,
                 addr,
                 value,
                 ..
             } => {
-                self.write_mem_store("builtin::store_v128", *offset, addr, value);
+                self.write_mem_store(*memory, "store_v128", *offset, addr, value);
             }
 
             // Table
@@ -1966,26 +1998,40 @@ impl<'a> WirUnparser<'a> {
         self.write(")");
     }
 
-    fn write_mem_load(&mut self, name: &str, offset: u64, addr: &WirInstr) {
+    /// `builtin::name`, `wide_` before the name on the wide memory.
+    fn write_memory_builtin(&mut self, memory: WirMemoryRef, name: &str) {
+        self.write(match memory {
+            WirMemoryRef::Main => "builtin::",
+            WirMemoryRef::Wide => "builtin::wide_",
+        });
         self.write(name);
-        if offset != 0 {
-            self.write(&format!("[{offset}]"));
-        }
+    }
+
+    fn write_args(&mut self, args: &[&WirInstr]) {
         self.write("(");
-        self.unparse_instr_inline(addr);
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                self.write(", ");
+            }
+            self.unparse_instr_inline(arg);
+        }
         self.write(")");
     }
 
-    fn write_mem_store(&mut self, name: &str, offset: u64, addr: &WirInstr, value: &WirInstr) {
-        self.write(name);
+    fn write_mem_load(&mut self, memory: WirMemoryRef, name: &str, offset: u64, addr: &WirInstr) {
+        self.write_memory_builtin(memory, name);
         if offset != 0 {
             self.write(&format!("[{offset}]"));
         }
-        self.write("(");
-        self.unparse_instr_inline(addr);
-        self.write(", ");
-        self.unparse_instr_inline(value);
-        self.write(")");
+        self.write_args(&[addr]);
+    }
+
+    fn write_mem_store(&mut self, memory: WirMemoryRef, name: &str, offset: u64, addr: &WirInstr, value: &WirInstr) {
+        self.write_memory_builtin(memory, name);
+        if offset != 0 {
+            self.write(&format!("[{offset}]"));
+        }
+        self.write_args(&[addr, value]);
     }
 
     /// Print the else-chain of an `if`, flattening `} else { if ... }` into `} else if ...`.

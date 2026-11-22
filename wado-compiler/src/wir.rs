@@ -333,6 +333,40 @@ impl WirPackage {
         }
     }
 
+    /// Every instruction of every function body and global initializer.
+    pub fn for_each_instr(&self, f: &mut impl FnMut(&WirInstr)) {
+        fn walk(instr: &WirInstr, f: &mut impl FnMut(&WirInstr)) {
+            f(instr);
+            instr.for_each_child(&mut |child| walk(child, f));
+        }
+        let bodies = self.functions.iter().filter_map(|func| func.body.as_ref());
+        for instr in bodies.flatten() {
+            walk(instr, f);
+        }
+        for global in &self.globals {
+            walk(&global.init, f);
+        }
+    }
+
+    /// Defines the wide memory where an instruction reaches it. It runs once
+    /// the optimizer is done, so a module whose every wide access was deleted
+    /// declares no memory it does not use.
+    pub fn declare_wide_memory(&mut self) {
+        assert!(
+            !self.memories.iter().any(|m| m.memory64),
+            "the wide memory is declared once"
+        );
+        let mut reached = false;
+        self.for_each_instr(&mut |instr| reached |= instr.reaches(WirMemoryRef::Wide));
+        if reached {
+            self.memories.push(WirMemory {
+                min: 0,
+                max: None,
+                memory64: true,
+            });
+        }
+    }
+
     /// The `WirFuncId` index of the defined function at `position` in
     /// [`functions`](Self::functions).
     pub fn defined_func_index(&self, position: usize) -> u32 {
@@ -1701,78 +1735,100 @@ pub enum WirInstr {
     },
 
     // === Memory ===
-    MemorySize,
-    MemoryGrow(Box<WirInstr>),
+    // An address and a length are i64 in `WirMemoryRef::Wide` and i32 in
+    // `Main`; a copy between the two takes an i32 length.
+    MemorySize {
+        memory: WirMemoryRef,
+    },
+    MemoryGrow {
+        memory: WirMemoryRef,
+        delta: Box<WirInstr>,
+    },
     MemoryFill {
+        memory: WirMemoryRef,
         dst: Box<WirInstr>,
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
     MemoryCopy {
+        dst_memory: WirMemoryRef,
+        src_memory: WirMemoryRef,
         dst: Box<WirInstr>,
         src: Box<WirInstr>,
         len: Box<WirInstr>,
     },
     I32Load {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
     },
     I32Load8U {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
     },
     I32Load8S {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
     },
     I32Load16U {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
     },
     I32Load16S {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
     },
     I32Store {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
         value: Box<WirInstr>,
     },
     I32Store8 {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
         value: Box<WirInstr>,
     },
     I32Store16 {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
         value: Box<WirInstr>,
     },
     I64Load {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
     },
     I64Store {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
         value: Box<WirInstr>,
     },
     V128Load {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
     },
     V128Store {
+        memory: WirMemoryRef,
         offset: u64,
         align: u32,
         addr: Box<WirInstr>,
@@ -2097,6 +2153,33 @@ impl WirInstr {
         }
     }
 
+    /// Whether this node itself, not a child, accesses `memory`.
+    pub fn reaches(&self, memory: WirMemoryRef) -> bool {
+        match self {
+            Self::MemorySize { memory: m }
+            | Self::MemoryGrow { memory: m, .. }
+            | Self::MemoryFill { memory: m, .. }
+            | Self::I32Load { memory: m, .. }
+            | Self::I32Load8U { memory: m, .. }
+            | Self::I32Load8S { memory: m, .. }
+            | Self::I32Load16U { memory: m, .. }
+            | Self::I32Load16S { memory: m, .. }
+            | Self::I32Store { memory: m, .. }
+            | Self::I32Store8 { memory: m, .. }
+            | Self::I32Store16 { memory: m, .. }
+            | Self::I64Load { memory: m, .. }
+            | Self::I64Store { memory: m, .. }
+            | Self::V128Load { memory: m, .. }
+            | Self::V128Store { memory: m, .. } => *m == memory,
+            Self::MemoryCopy {
+                dst_memory,
+                src_memory,
+                ..
+            } => *dst_memory == memory || *src_memory == memory,
+            _ => false,
+        }
+    }
+
     /// Visit all child instructions of this node (non-recursive), in evaluation
     /// order: the order codegen emits them.
     pub fn for_each_child(&self, f: &mut impl FnMut(&WirInstr)) {
@@ -2113,7 +2196,7 @@ impl WirInstr {
             | Self::Nop
             | Self::Rare(_)
             | Self::Unreachable
-            | Self::MemorySize
+            | Self::MemorySize { .. }
             | Self::Br { .. }
             | Self::DeclareLocal { .. }
             | Self::RefFunc { .. }
@@ -2138,9 +2221,9 @@ impl WirInstr {
             }
             Self::BrTable { index, .. } => f(index),
             Self::ArrayNewDefault { len, .. } => f(len),
+            Self::MemoryGrow { delta, .. } => f(delta),
             Self::BlackBox(o)
             | Self::Drop(o)
-            | Self::MemoryGrow(o)
             | Self::I32Eqz(o)
             | Self::I64Eqz(o)
             | Self::I32WrapI64(o)
@@ -2621,8 +2704,9 @@ impl WirInstr {
                 dst,
                 value: src,
                 len,
+                ..
             }
-            | Self::MemoryCopy { dst, src, len } => {
+            | Self::MemoryCopy { dst, src, len, .. } => {
                 f(dst);
                 f(src);
                 f(len);
@@ -2724,7 +2808,7 @@ impl WirInstr {
             | Self::Nop
             | Self::Rare(_)
             | Self::Unreachable
-            | Self::MemorySize
+            | Self::MemorySize { .. }
             | Self::Br { .. }
             | Self::DeclareLocal { .. }
             | Self::RefFunc { .. }
@@ -2749,9 +2833,9 @@ impl WirInstr {
             }
             Self::BrTable { index, .. } => f(index),
             Self::ArrayNewDefault { len, .. } => f(len),
+            Self::MemoryGrow { delta, .. } => f(delta),
             Self::BlackBox(o)
             | Self::Drop(o)
-            | Self::MemoryGrow(o)
             | Self::I32Eqz(o)
             | Self::I64Eqz(o)
             | Self::I32WrapI64(o)
@@ -3232,8 +3316,9 @@ impl WirInstr {
                 dst,
                 value: src,
                 len,
+                ..
             }
-            | Self::MemoryCopy { dst, src, len } => {
+            | Self::MemoryCopy { dst, src, len, .. } => {
                 f(dst);
                 f(src);
                 f(len);
@@ -3335,6 +3420,18 @@ pub struct WirMemory {
     pub min: u32,
     /// Maximum size in pages (optional).
     pub max: Option<u32>,
+    /// Whether it is addressed by i64 (`memory64`).
+    pub memory64: bool,
+}
+
+/// The linear memory an access reaches: the one every core module of the
+/// component shares through `mem`, whose 32-bit addresses the Canonical ABI
+/// reads, or the module's own of 64-bit addresses, which nothing outside it
+/// sees.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WirMemoryRef {
+    Main,
+    Wide,
 }
 
 /// A global variable.

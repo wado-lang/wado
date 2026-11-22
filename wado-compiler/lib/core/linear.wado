@@ -455,6 +455,192 @@ fn grown(block: &Block, len: i32, more: i32) -> Block {
     return moved;
 }
 
+/// The bytes of one page of Wasm memory.
+global PAGE: i64 = 65536;
+
+/// The wide memory's free ranges, `[start, bytes]`, in address order and none
+/// touching the next, so a range given back merges with its neighbours.
+global mut WIDE_FREE: List<[i64, i64]> = [];
+
+/// The start of `bytes` bytes of the wide memory, `bytes` a multiple of
+/// `ALIGN`: the first free range that holds them, else the end of the memory,
+/// grown to hold them.
+fn wide_taken(bytes: i64) -> i64 {
+    for let i of 0..<WIDE_FREE.len() {
+        let [start, room] = WIDE_FREE[i];
+        if room >= bytes {
+            if room == bytes {
+                let _ = WIDE_FREE.remove(i);
+            } else {
+                WIDE_FREE[i] = [start + bytes, room - bytes];
+            }
+            return start;
+        }
+    }
+    let end = builtin::wide_memory_size() * PAGE;
+    let mut start = end;
+    let free = WIDE_FREE.len();
+    if free > 0 && WIDE_FREE[free - 1][0] + WIDE_FREE[free - 1][1] == end {
+        start = WIDE_FREE[free - 1][0];
+        let _ = WIDE_FREE.pop();
+    }
+    let pages = (start + bytes - end).div_ceil(PAGE);
+    if builtin::wide_memory_grow(pages) < 0 {
+        builtin::cold_path();
+        panic(`the wide memory cannot grow by ${pages} pages`);
+    }
+    let left = end + pages * PAGE - (start + bytes);
+    if left > 0 {
+        WIDE_FREE.push([start + bytes, left]);
+    }
+    return start;
+}
+
+/// Gives `bytes` bytes of the wide memory at `start` back.
+fn wide_given(start: i64, bytes: i64) {
+    let mut at = 0;
+    while at < WIDE_FREE.len() && WIDE_FREE[at][0] < start {
+        at += 1;
+    }
+    let mut size = bytes;
+    if at < WIDE_FREE.len() && start + bytes == WIDE_FREE[at][0] {
+        size += WIDE_FREE.remove(at)[1];
+    }
+    if at > 0 {
+        let [before, room] = WIDE_FREE[at - 1];
+        if before + room == start {
+            WIDE_FREE[at - 1] = [before, room + size];
+            return;
+        }
+    }
+    WIDE_FREE.insert(at, [start, size]);
+}
+
+/// One block of the wide memory, `bytes` long, given back where it drops.
+affine struct WideBlock {
+    ptr: i64,
+    bytes: i64,
+}
+
+impl Drop for WideBlock {
+    fn drop(self) {
+        if self.bytes > 0 {
+            wide_given(self.ptr, self.bytes);
+        }
+    }
+}
+
+/// A fixed-length array of `T` in the wide memory: the module's own memory of
+/// 64-bit addresses, which holds more than the 4 GiB linear memory can. No
+/// component boundary reaches it, so an array crosses one only through a
+/// copy into a `LinearArray`.
+pub affine struct WideArray<T: AnyBits> {
+    block: WideBlock,
+    len: i64,
+}
+
+impl<T: AnyBits> WideArray<T> {
+    /// An array of `len` elements whose bytes the caller writes before any
+    /// read.
+    fn unwritten(len: i64) -> WideArray<T>
+        contract 0 <= len <= i64::MAX / 2 / builtin::size_of::<T>() as i64
+    {
+        let bytes = len * builtin::size_of::<T>() as i64;
+        let held = (bytes + ALIGN as i64 - 1) / ALIGN as i64 * ALIGN as i64;
+        let ptr = if held == 0 { 0 } else { wide_taken(held) };
+        return WideArray::<T> { block: WideBlock { ptr, bytes: held }, len };
+    }
+
+    /// An array of `len` elements, each `value`.
+    pub fn filled(len: i64, value: T) -> WideArray<T>
+        contract 0 <= len <= i64::MAX / 2 / builtin::size_of::<T>() as i64
+    {
+        let mut array = unchecked WideArray::<T>::unwritten(len);
+        if len == 0 {
+            return array;
+        }
+        unchecked array.set(0, value);
+        // Each copy doubles the elements written, as `LinearArray::filled`'s do.
+        let total = len * builtin::size_of::<T>() as i64;
+        let mut written = builtin::size_of::<T>() as i64;
+        while written < total {
+            let more = i64::min(written, total - written);
+            builtin::wide_memory_copy(array.block.ptr + written, array.block.ptr, more);
+            written += more;
+        }
+        return array;
+    }
+
+    pub fn len(&self) -> i64 {
+        return self.len;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.len == 0;
+    }
+
+    /// The element at `index`.
+    pub fn at(&self, index: i64) -> T
+        contract 0 <= index < self.len()
+    {
+        return builtin::wide_load::<T>(self.block.ptr + index * builtin::size_of::<T>() as i64);
+    }
+
+    /// Writes `value` at `index`.
+    pub fn set(&mut self, index: i64, value: T)
+        contract 0 <= index < self.len()
+    {
+        builtin::wide_store(self.block.ptr + index * builtin::size_of::<T>() as i64, value);
+    }
+
+    /// The same bytes as an array of `U`, as `LinearArray::cast` gives them.
+    pub fn cast<U: AnyBits>(self) -> WideArray<U>
+        contract self.len() * builtin::size_of::<T>() as i64 % builtin::size_of::<U>() as i64 == 0
+    {
+        let WideArray { block, len } = self;
+        let cast_len = len * builtin::size_of::<T>() as i64 / builtin::size_of::<U>() as i64;
+        return WideArray::<U> { block, len: cast_len };
+    }
+}
+
+impl WideArray<u8> {
+    /// The `U` whose bytes begin at `offset`, read little-endian at any
+    /// alignment.
+    pub fn load_at<U: AnyBits>(&self, offset: i64) -> U
+        contract 0 <= offset <= self.len() - builtin::size_of::<U>() as i64
+    {
+        return builtin::wide_load::<U>(self.block.ptr + offset);
+    }
+
+    /// Writes `value` little-endian at `offset`, at any alignment.
+    pub fn store_at<U: AnyBits>(&mut self, offset: i64, value: U)
+        contract 0 <= offset <= self.len() - builtin::size_of::<U>() as i64
+    {
+        builtin::wide_store(self.block.ptr + offset, value);
+    }
+
+    /// Copies `source[from..<from + count]` to `self[at..<at + count]`.
+    pub fn copy_from(&mut self, at: i64, source: &LinearArray<u8>, from: i32, count: i32)
+        contract 0 <= count
+        contract 0 <= at <= self.len() - count as i64
+        contract 0 <= from <= source.len() - count
+    {
+        builtin::copy_to_wide(self.block.ptr + at, source.block.ptr + from, count);
+    }
+}
+
+impl LinearArray<u8> {
+    /// Copies `source[from..<from + count]`, bytes of the wide memory, to
+    /// `self[at..<at + count]`.
+    pub fn copy_from_wide(&mut self, at: i32, source: &WideArray<u8>, from: i64, count: i32)
+        contract 0 <= count
+        contract 0 <= at <= self.len() - count
+        contract 0 <= from <= source.len() - count as i64
+    {
+        builtin::copy_from_wide(self.block.ptr + at, source.block.ptr + from, count);
+    }
+}
+
 /// The room a full buffer reading a stream grows by at least, so a stream of
 /// small copies is read in few of them.
 global BUFFER_ROOM: i32 = 65536;
