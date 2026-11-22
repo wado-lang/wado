@@ -345,18 +345,15 @@ impl LinearArray<u8> {
     pub fn read_stream_prefix(stream: &Stream<u8>, len: i32) -> LinearArray<u8> with Stream
         contract len >= 0
     {
-        let mut array = LinearArray::<u8>::unwritten(len);
-        array.len = 0;
-        while array.len < len && array.read_more(stream) == CopyResult::Completed {
-        }
-        return array;
+        let streams: List<&Stream<u8>> = [stream];
+        return LinearArray::read_streams_prefix(&streams, &[len]).pop().unwrap();
     }
 
     /// The first `lens[i]` bytes each of `streams[i]` delivers, or every byte
     /// where it ends sooner, as `read_stream_prefix` reads them, but read at
     /// once: a copy is in flight on every stream that has bytes still to come,
     /// so the host fills them side by side rather than one after another.
-    pub fn read_streams_prefix(streams: &List<Stream<u8>>, lens: &List<i32>) -> List<LinearArray<u8>> with Stream
+    pub fn read_streams_prefix(streams: &List<&Stream<u8>>, lens: &List<i32>) -> List<LinearArray<u8>> with Stream
         contract streams.len() == lens.len(), lens.into_iter().all(|len| *len >= 0)
     {
         let mut arrays: List<LinearArray<u8>> = [];
@@ -365,7 +362,7 @@ impl LinearArray<u8> {
             let mut array = LinearArray::<u8>::unwritten(lens[i]);
             array.len = 0;
             if lens[i] > 0 {
-                set.insert(landing(&streams[i], i, array.block.ptr, lens[i]));
+                set.insert(landing(streams[i], i, array.block.ptr, lens[i]));
             }
             arrays.push(array);
         }
@@ -385,7 +382,7 @@ impl LinearArray<u8> {
                 array.len += count;
             }
             if array.len < lens[at] && copy_result(packed) == CopyResult::Completed {
-                set.insert(landing(&streams[at], at, array.block.ptr + array.len, lens[at] - array.len));
+                set.insert(landing(streams[at], at, array.block.ptr + array.len, lens[at] - array.len));
             }
         }
         return arrays;

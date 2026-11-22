@@ -97,6 +97,15 @@ linear memory as [`read_linear`] reads a whole file. Reading a weight of a
 model's data file this way holds nothing else of the file. A file that
 ends before the last of them is `PastEnd`.
 
+### `pub fn read_linear_ranges(ranges: &List<FileRange>) -> Result<List<LinearArray<u8>>, FsError> with Preopens`
+
+- `contract ranges.into_iter().all(|r| r.len >= 0)`
+
+The bytes of each of `ranges`, as [`read_linear_range`] reads one, but
+read at once: the host fills them side by side, which a host reading a
+file stream a piece at a time makes several times faster than one after
+another. The first range that fails is the error.
+
 ### `pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Preopens`
 
 The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.
@@ -267,6 +276,16 @@ One entry of a directory.
 #### `name: String`
 
 #### `type: FileType`
+
+### `pub struct FileRange`
+
+`len` bytes of the regular file at `path` from byte `start` on.
+
+#### `path: String`
+
+#### `start: u64`
+
+#### `len: i32`
 
 ### `pub struct Walk<F>`
 

@@ -32,25 +32,6 @@ impl StoredExperts {
     fn slice_bytes(&self) -> i32 {
         return stored_bytes(self.kind, &self.extents);
     }
-
-    /// Where the bytes of expert `expert` lie in a file the source reads, as
-    /// `[file, start, end]`, or null where the guest holds them.
-    fn file_range(&self, expert: i32) -> Option<[String, i32, i32]> {
-        let size = self.slice_bytes();
-        return match self.bytes {
-            File([file, first]) => Option::Some([file, first + expert * size, first + (expert + 1) * size]),
-            Held(_) => null,
-        };
-    }
-
-    /// The bytes of expert `expert`, which the guest holds.
-    fn held(&self, expert: i32) -> LinearArray<u8> {
-        let Held(bytes) = self.bytes else {
-            unreachable();
-        };
-        let size = self.slice_bytes();
-        return LinearArray::<u8>::of_bytes(&bytes, expert * size, size);
-    }
 }
 
 /// The layers whose experts are laid out alike.
@@ -442,7 +423,8 @@ pub struct HeldExperts {
 /// The order in which a shared pool's experts give way.
 global EVICTION: Eviction = Eviction::LayerOrder;
 
-/// The experts whose bytes a layer holding its own reads at once.
+/// The most experts whose bytes are read at once, which bounds the guest's
+/// memory and the streams open.
 global EXPERTS_AT_ONCE: i32 = 4;
 
 impl HeldExperts {
@@ -519,10 +501,8 @@ impl HeldExperts {
                     pools.push(g.pool(w.kind, extents));
                 }
                 if !run.shared() {
-                    for let mut from = 0; from < layout.experts; from += EXPERTS_AT_ONCE {
-                        let experts: List<i32> = (from..<i32::min(from + EXPERTS_AT_ONCE, layout.experts)).collect();
-                        written(g, source, &layout.layers[run.first], &experts, &experts, &mut pools);
-                    }
+                    let experts: List<i32> = (0..<layout.experts).collect();
+                    written(g, source, &layout.layers[run.first], &experts, &experts, &mut pools);
                 }
                 for let layer of run.first..<run.first + run.count {
                     for let [i, pool] of pools.into_iter().enumerate() {
@@ -601,7 +581,8 @@ impl HeldExperts {
 }
 
 /// `pools`, one for each of `stored`, with their slot `slots[i]` holding
-/// expert `experts[i]`, the bytes of every one read from `source` at once.
+/// expert `experts[i]`, the bytes of `EXPERTS_AT_ONCE` of them read from
+/// `source` at once.
 fn written<affine G: Backend, affine Src: WeightSource>(
     g: &mut G,
     source: &Src,
@@ -612,27 +593,52 @@ fn written<affine G: Backend, affine Src: WeightSource>(
 ) with _
     contract experts.len() == slots.len()
 {
-    let mut ranges: List<[String, i32, i32]> = [];
-    for let expert of experts {
-        for let w of stored {
-            if let Some(range) = w.file_range(*expert) {
-                ranges.push(range);
+    for let mut from = 0; from < experts.len(); from += EXPERTS_AT_ONCE {
+        let mut ranges: List<[String, i32, i32]> = [];
+        // The slot of each range, and the pool it fills.
+        let mut targets: List<[i32, i32]> = [];
+        for let at of from..<i32::min(from + EXPERTS_AT_ONCE, experts.len()) {
+            for let [i, w] of stored.into_iter().enumerate() {
+                let size = w.slice_bytes();
+                let start = experts[at] * size;
+                match w.bytes {
+                    File([file, first]) => {
+                        ranges.push([file, first + start, first + start + size]);
+                        targets.push([slots[at], i]);
+                    },
+                    Held(bytes) => write_slot(g, pools, w, i, slots[at], LinearArray::<u8>::of_bytes(
+                        &bytes,
+                        start,
+                        size,
+                    )),
+                }
             }
         }
-    }
-    let mut read = match source.read_many(&ranges) {
-        Ok(read) => read,
-        Err(e) => panic(`${e}`),
-    };
-    read.reverse();
-    for let [at, expert] of experts.into_iter().enumerate() {
-        for let [i, w] of stored.into_iter().enumerate() {
-            let bytes = if w.bytes matches { File(_) } { read.pop().unwrap() } else { w.held(*expert) };
-            let mut pool = pools[i];
-            g.written(&mut pool, slots[at], HostWeight::stored(w.kind, w.extents, bytes));
-            pools[i] = pool;
+        let read = match source.read_many(&ranges) {
+            Ok(read) => read,
+            Err(e) => panic(`${e}`),
+        };
+        let mut r = 0;
+        for let bytes of read {
+            let [slot, i] = targets[r];
+            write_slot(g, pools, &stored[i], i, slot, bytes);
+            r += 1;
         }
     }
+}
+
+/// Slot `slot` of `pools[i]`, the pool of `w`, holding `bytes`.
+fn write_slot<affine G: Backend>(
+    g: &mut G,
+    pools: &mut List<Any<G>>,
+    w: &StoredExperts,
+    i: i32,
+    slot: i32,
+    bytes: LinearArray<u8>,
+) with _ {
+    let mut pool = pools[i];
+    g.written(&mut pool, slot, HostWeight::stored(w.kind, w.extents, bytes));
+    pools[i] = pool;
 }
 
 /// The source of a model whose experts are all held, which nothing reads.

@@ -183,15 +183,10 @@ pub fn read_linear<S: AsStrSlice>(path: S) -> Result<LinearArray<u8>, FsError> w
 pub fn read_linear_range<S: AsStrSlice>(path: S, start: u64, len: i32) -> Result<LinearArray<u8>, FsError> with Preopens
     contract len >= 0
 {
-    let file = open_regular(path)?;
-    let [stream, done] = file.read_via_stream(start as Filesize);
-    let array = LinearArray::<u8>::read_stream_prefix(&stream, len);
-    stream.drop();
-    finish(path, done)?;
-    if array.len() < len {
-        return Result::Err(FsError { path: path.to_string(), kind: FsErrorKind::PastEnd });
-    }
-    return Result::Ok(array);
+    let mut read = read_linear_ranges(&[
+        FileRange { path: path.to_string(), start, len },
+    ])?;
+    return Result::Ok(read.pop().unwrap());
 }
 
 /// `len` bytes of the regular file at `path` from byte `start` on.
@@ -215,19 +210,21 @@ pub fn read_linear_ranges(ranges: &List<FileRange>) -> Result<List<LinearArray<u
         streams.push(stream);
         ends.push(done);
     }
-    let arrays = LinearArray::read_streams_prefix(&streams, &ranges.into_iter().map(|r| r.len).collect());
+    let mut reading: List<&Stream<u8>> = [];
+    for let i of 0..<streams.len() {
+        reading.push(&streams[i]);
+    }
+    let arrays = LinearArray::read_streams_prefix(&reading, &ranges.into_iter().map(|r| r.len).collect());
     for let stream of streams {
         stream.drop();
     }
     let mut at = 0;
     for let done of ends {
         finish(&ranges[at].path, done)?;
-        at += 1;
-    }
-    for let i of 0..<ranges.len() {
-        if arrays[i].len() < ranges[i].len {
-            return Result::Err(FsError { path: ranges[i].path, kind: FsErrorKind::PastEnd });
+        if arrays[at].len() < ranges[at].len {
+            return Result::Err(FsError { path: ranges[at].path, kind: FsErrorKind::PastEnd });
         }
+        at += 1;
     }
     return Result::Ok(arrays);
 }

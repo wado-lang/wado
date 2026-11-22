@@ -60,8 +60,11 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
     let wall = (MonotonicClock::now() - began) as i64;
     let read = (read_nanoseconds() - read_before) as i64;
     let loaded = model.experts().counts().loaded_bytes - loaded_before;
+    println(`the prompt of ${ids.len()} and ${steps} tokens, ${loaded} bytes of experts loaded:`);
+    println(`  wall      ${ms(wall):>10.1} ms`);
+    println(`  reads     ${ms(read):>10.1} ms ${share(read, wall):>5.1}%`);
     // A profile submits each dispatch alone to time it, so it runs apart
-    // from the timed pass.
+    // from the timed pass, and its kernels are those of a pass alike.
     if !model.backend_mut().profile() {
         eprintln("no timestamp-query");
         return;
@@ -69,9 +72,6 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
     model.continued(ids, steps);
     let times = model.backend_mut().profiled();
     let device = times.into_iter().map(|t| t.nanoseconds).sum().unwrap_or(0);
-    println(`the prompt of ${ids.len()} and ${steps} tokens, ${loaded} bytes of experts loaded:`);
-    println(`  wall      ${ms(wall):>10.1} ms`);
-    println(`  reads     ${ms(read):>10.1} ms ${share(read, wall):>5.1}%`);
     println(`  kernels   ${ms(device):>10.1} ms ${share(device, wall):>5.1}%`);
     println(`  the rest  ${ms(wall - read - device):>10.1} ms ${share(wall - read - device, wall):>5.1}%`);
     report(&times, device);
