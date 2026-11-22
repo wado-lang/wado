@@ -27,21 +27,22 @@ compiler or the standard library.
 
 Jade follows Draft 2020-12 wherever it reads or writes a schema, so that a
 schema means the same thing to Jade as to every other tool. It defines no
-keyword, format or attribute of its own:
+assertion keyword, format or attribute of its own:
 
 - A wire name comes from `#[wire(…)]`, which the decoder reads too.
 - A description comes from a doc comment.
 - A `format` means what Draft 2020-12 defines, read strictly. See
   [Formats](#formats).
-- `x-wado-format`, which names a string's Wado type, is an annotation. JSON
-  Schema reserves the `x-` prefix for annotations, and no validator asserts one.
+- Its one keyword, `x-wado-format`, names a string's Wado type and is an
+  annotation. JSON Schema reserves the `x-` prefix for annotations, and no
+  validator asserts one.
 
 ### What a schema promises
 
 A derived schema describes the shape `core:json` writes, and the derived
-`Deserialize` reads that shape. So every value a type writes validates against
-its schema, and a document that validates decodes, apart from the cases
-[`TODO.md`](./TODO.md) lists. D reads the same table backwards, so deriving the
+`Deserialize` reads that shape. So, apart from the cases
+[`TODO.md`](./TODO.md) lists, every value a type writes validates against its
+schema, and a document that validates decodes. D reads the same table backwards, so deriving the
 schema of a generated type gives back the keywords D read.
 
 ## The Schema Model
@@ -61,9 +62,8 @@ Jade reads a schema's text, and an instance it validates, into a `Document`
 rather than into a Wado type. A `Document` holds its values in flat arrays in
 document order, so reading one allocates a few arrays rather than one object
 per value. A `Node` is a value inside it. Its equality is JSON Schema's: `1`
-equals `1.0`, and an object's members compare whatever their order. The
-keywords that hold any JSON value (`default`, `enum`, `const` and `examples`)
-hold a `Document`.
+equals `1.0`, and an object's members compare whatever their order. `default`
+and `const` hold a `Document`, and `enum` and `examples` a list of them.
 
 A `Document` is read through `core:json`'s lexer, so a repeated key and a lone
 surrogate are errors. A number is a `Number`, held exactly whatever its size and

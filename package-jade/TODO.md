@@ -6,12 +6,19 @@ Open work on Jade. [`README.md`](./README.md) holds the design, and
 This file lists what is not yet done, at the level of behaviour. Find the code
 by searching, not by line numbers. Closed work belongs in the commit history.
 
-Each entry states what is missing and what it admits, not how to close it.
+An entry under "Waiting on the language" is planned work and says when it is
+done. Every other entry is a gap: it states what is missing and what it admits,
+not how to close it.
 
 ## Waiting on the language
 
-- [ ] **B's refined keywords, once refined types land.** Done when each standard
-  library clause type has a `Keywords` impl and a test.
+- [ ] **B's refined keywords, once refined types land.** A refined type's value
+  clauses become its schema's assertion keywords, read through `ReflectRefined`
+  and a `Keywords` trait Jade implements for the standard library's clause
+  types: a range becomes `minimum` and `maximum`. A condition clause, or a
+  clause type with no `Keywords` impl, carries nothing to read, so the refined
+  type takes its base's schema, which accepts values the decoder rejects. Done
+  when each standard library clause type has a `Keywords` impl and a test.
 - [ ] **B's per-instantiation definition names, once `TypeInfo` lands.** A
   definition's name comes from `Reflect::decl_name()`, which names the
   declaration alone: `Pair<i32>` and `Pair<String>` get one name, and so do two
@@ -26,11 +33,6 @@ Each entry states what is missing and what it admits, not how to close it.
   `Serialize` or `Deserialize` is hand-written, and whose members are visible,
   takes the structural blanket. Its schema then describes its fields, not its
   wire form.
-- [ ] **A clause Jade cannot read.** A condition clause carries nothing to read,
-  and a clause type with no `Keywords` impl carries nothing Jade knows. Either
-  way the `ReflectRefined` blanket does not apply, and the refined type meets
-  `JsonSchema` through its base's impl, as Refined Types lets it. The schema
-  then accepts values the decoder rejects, and nothing reports it.
 - [ ] **A text type's schema admits what the type cannot read.** A leaf whose
   type is text, such as `Instant` or `Url`, asserts only `string`, with a
   standard `format` only where one fits strictly. `x-wado-format` names the type

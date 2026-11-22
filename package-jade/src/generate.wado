@@ -858,7 +858,8 @@ fn leaf_text(o: &SchemaObject) -> String {
 }
 
 /// The type of a schema holding `type` alone, by its value. An integer is
-/// unbounded, which no Wado type is, so `i64` holds only most of them.
+/// unbounded, which no Wado type is, so a document whose integer is beyond
+/// `i64` matches the schema but does not decode.
 global SCALARS: List<[JsonTypes, Ty]> = [
     [
         JsonTypes::Null,
