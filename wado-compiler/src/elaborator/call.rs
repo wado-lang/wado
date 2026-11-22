@@ -128,10 +128,10 @@ pub(super) fn slot_names(params: &[ast::GenericParam], resolutions: &Resolutions
         .collect()
 }
 
-/// A call's type-argument solve: `slots`, as a bound's target names them
-/// (`names`), the trailing ones declared by `owners`; the parameter types
-/// written in them, the arguments' types, the arguments as written, and the
-/// declared return with the type the site expects.
+/// A call's type-argument solve: `slots`, the parameters declaring them
+/// (`owners`) and the names a bound's target spells them by; the parameter
+/// types written in them, the arguments' types, the arguments as written, and
+/// the declared return with the type the site expects.
 pub(super) struct CallSolve<'a> {
     pub(super) slots: &'a [TypeId],
     pub(super) owners: &'a [ast::GenericParam],
@@ -3769,20 +3769,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             raw_args,
             ret,
         } = solve;
-        // A solve whose slots the declarations do not line up with projects
-        // nothing, as `resolve_assoc_bound_args` declines it.
-        let aligned = names.len() == slots.len() && owners.len() <= slots.len();
-        let offset = slots.len().saturating_sub(owners.len());
-        let projected: Vec<TypeId> = if aligned {
-            owners
-                .iter()
-                .flat_map(|param| &param.bounds)
-                .flat_map(|bound| bound_targets(bound, names, &self.tysys.resolutions))
-                .map(|(_, slot)| slots[slot])
-                .collect()
-        } else {
-            Vec::new()
-        };
+        assert!(
+            owners.len() == slots.len() && names.len() == slots.len(),
+            "every slot is declared and named"
+        );
+        let projected: Vec<TypeId> = owners
+            .iter()
+            .flat_map(|param| &param.bounds)
+            .flat_map(|bound| bound_targets(bound, names, &self.tysys.resolutions))
+            .map(|(_, slot)| slots[slot])
+            .collect();
         let mut held: Vec<(TypeId, TypeId)> = Vec::new();
         let mut infer = InferCtx::new(&self.tysys.type_table, slots.to_vec());
         for (i, (&param_type, &arg)) in param_types.iter().zip(args).enumerate() {
@@ -3801,7 +3797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if held.is_empty() {
             return (inferred, bindings);
         }
-        self.resolve_assoc_bounds_in(owners, offset, names, &mut inferred);
+        self.resolve_assoc_bounds_in(owners, 0, names, &mut inferred);
         for (&slot, answer) in slots.iter().zip(&mut inferred) {
             if *answer != slot {
                 bindings.entry(slot).or_insert(*answer);
