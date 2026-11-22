@@ -21,9 +21,9 @@ and `ImplSpec`. The specs are built alike:
 - `set_doc` sets the doc comment and `add_attr` adds an attribute.
 - `add_generic` adds a type parameter, where the declaration takes one.
 - `add_field` and `add_param` add a member by its name and type, `add_case` and
-  `add_member` by its name. Each has a `_spec` form taking a `FieldSpec`,
-  `CaseSpec`, `MemberSpec` or `ParamSpec`, for a member with a default, a
-  payload, a doc comment or attributes.
+  `add_member` by its name, and `add_case_with` a case by its name and payload.
+  Each has a `_spec` form taking a `FieldSpec`, `CaseSpec`, `MemberSpec` or
+  `ParamSpec`, for a member with a default, a doc comment or attributes.
 
 Every setter returns the spec, so calls chain.
 

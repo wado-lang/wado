@@ -199,6 +199,16 @@ impl VariantSpec {
         return self;
     }
 
+    /// Adds a case carrying a payload of `payload`, written as it renders
+    /// (`"[f64, f64]"`).
+    pub fn add_case_with<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, payload: S1) -> &mut VariantSpec {
+        self.cases.push(CaseSpec {
+            name: name.to_string(),
+            payload: Option::Some(payload.to_string()),
+        });
+        return self;
+    }
+
     pub fn add_case_spec(&mut self, case: CaseSpec) -> &mut VariantSpec {
         self.cases.push(case);
         return self;

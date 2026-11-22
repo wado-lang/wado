@@ -604,7 +604,7 @@ test "what every spec writes above a declaration compiles" {
     n.set_doc("Some.").add_generic("T");
     n.emit(&mut w);
     let mut v = VariantSpec::new("Maybe");
-    v.set_doc("Perhaps.").add_generic("T").add_case_spec(CaseSpec { name: "Just", payload: Option::Some("T") });
+    v.set_doc("Perhaps.").add_generic("T").add_case_with("Just", "T");
     v.add_case("Nothing");
     v.emit(&mut w);
     let mut g = GlobalSpec::new("HITS", "i32", "0");
@@ -652,8 +652,7 @@ test "VariantSpec unit cases" {
 
 test "VariantSpec with payloads" {
     let mut v = VariantSpec::new("Shape");
-    v.add_case_spec(CaseSpec { name: "Circle", payload: Option::Some("f64") });
-    v.add_case_spec(CaseSpec { name: "Rect", payload: Option::Some("[f64, f64]") });
+    v.add_case_with("Circle", "f64").add_case_with("Rect", "[f64, f64]");
     v.add_case("Point");
 
     let mut w = CodeWriter::new();

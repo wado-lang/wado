@@ -4,7 +4,6 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { apply_case } from "core:serde";
 use {
-    CaseSpec,
     CodeWriter,
     EnumSpec,
     FieldSpec,
@@ -124,7 +123,7 @@ impl EnumPlan {
             for let c of &self.cases {
                 spec.add_case(&c.name);
             }
-            spec.add_case_spec(CaseSpec { name: *other, payload: Option::Some("i32") });
+            spec.add_case_with(other, "i32");
             spec.emit(w);
         } else {
             let mut spec = EnumSpec::new(&self.name, Vis::Pub);
@@ -600,7 +599,7 @@ impl Emitter {
         for let oneof of oneofs {
             let mut v = VariantSpec::new(&oneof.sum, Vis::Pub);
             for let [_, m] of oneof.members.entries() {
-                v.add_case_spec(CaseSpec { name: m.case, payload: Option::Some(m.payload) });
+                v.add_case_with(m.case, m.payload);
                 slots.push(Slot::Member([oneof.field, oneof.sum, *m]));
             }
             variants.push(v);
