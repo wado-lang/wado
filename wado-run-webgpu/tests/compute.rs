@@ -425,7 +425,8 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
 /// memory, loads it from the same source once the limit is lifted.
 #[test]
 fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
-    let conformance = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../package-loam/tests/conformance");
+    let conformance =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../package-loam/tests/conformance");
     let written = Command::new(&*WADO)
         .args(["run", "large/write.wado"])
         .current_dir(&conformance)
