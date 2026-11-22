@@ -9,7 +9,7 @@ use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { Reading } from "./readings.wado";
 
 /// A recovery sync set interned during parser codegen.
-pub struct KindSetEntry {
+pub struct SyncSetEntry {
     pub id: i32,
     /// Canonical (name-sorted, unique) token list, as kind ids. Emitted as the
     /// `TK_*` global names via `GrammarAnalysis::token_name` at codegen.
@@ -21,7 +21,7 @@ pub global FOLLOW_SITE_DEPTH: i32 = FOLLOW_MAX_DEPTH;
 
 /// The interned tables, each keyed by its canonical (`canonical_ids`) form.
 pub struct TableRegistry {
-    sync_sets: HashMap<List<i32>, KindSetEntry>,
+    sync_sets: HashMap<List<i32>, SyncSetEntry>,
     /// The id of each interned continuation site.
     follow_site_ids: HashMap<List<Reading>, i32>,
     /// The continuation sites, indexed by id: the readings of the rest of a
@@ -52,12 +52,12 @@ impl TableRegistry {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.sync_sets.len();
-        self.sync_sets[ids] = KindSetEntry { id, tokens: ids };
+        self.sync_sets[ids] = SyncSetEntry { id, tokens: ids };
         return Option::<i32>::Some(id);
     }
 
     /// The interned sync sets, in id order.
-    pub fn sync_sets(&self) -> List<KindSetEntry> {
+    pub fn sync_sets(&self) -> List<SyncSetEntry> {
         return self.sync_sets.values().iter_value().collect();
     }
 

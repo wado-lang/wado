@@ -98,6 +98,14 @@ test "a kind set's order and duplicates do not make another helper" {
     assert !kind_set_fns_text(&mut ctx).contains("_kind_set_1");
 }
 
+#[expect_trap]
+test "a kind-set check after the helpers are taken traps, as its helper would never be placed" {
+    let mut ctx = mk_ctx();
+    let toks = ids(&mut ctx, ["TK_A", "TK_B"]);
+    ctx.take_kind_set_fns();
+    ctx.kind_check_str(&toks, "k");
+}
+
 test "a kind-set helper matches its tokens sorted by name" {
     let mut ctx = mk_ctx();
     let unsorted = ids(&mut ctx, ["TK_C", "TK_A", "TK_B"]);

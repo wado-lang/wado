@@ -324,6 +324,7 @@ pub struct EmitContext {
     pub cursor: EmitCursor,
     /// The `_kind_set_<id>` helpers the checks so far name, each defined once.
     kind_set_fns: CodeWriter,
+    kind_set_fns_taken: bool = false,
 }
 
 impl EmitContext {
@@ -347,7 +348,7 @@ impl EmitContext {
             plan,
             decisions,
             cursor,
-            kind_set_fns: CodeWriter::new(),
+            kind_set_fns: CodeWriter::with_capacity(0),
         };
     }
 
@@ -738,7 +739,9 @@ impl EmitContext {
     /// The helper testing membership of `tokens`, one per set whatever the
     /// order or duplicates of its tokens. Each is prunable, so only what kept
     /// code names survives `CodeWriter::prune`.
-    fn kind_set_fn(&mut self, tokens: &List<i32>) -> String {
+    fn kind_set_fn(&mut self, tokens: &List<i32>) -> String
+        contract !self.kind_set_fns_taken, "a kind-set helper defined after take_kind_set_fns is never placed"
+    {
         let canonical = self.analysis.canonical_ids(*tokens);
         let analysis = &self.analysis;
         let helper = self.kind_set_fns.hoist_fn(`${canonical:?}`, "_kind_set_", |w, name| {
@@ -752,11 +755,12 @@ impl EmitContext {
         return self.cursor.noted(helper);
     }
 
-    /// The kind-set helpers defined so far, for the parser to place before it
-    /// prunes.
+    /// The kind-set helpers, for the parser to place before it prunes. No check
+    /// may name a new one after.
     pub fn take_kind_set_fns(&mut self) -> CodeWriter {
+        self.kind_set_fns_taken = true;
         self.kind_set_fns.write_hoisted();
-        return builtin::replace(&mut self.kind_set_fns, CodeWriter::new());
+        return builtin::replace(&mut self.kind_set_fns, CodeWriter::with_capacity(0));
     }
 
     /// Render a guard: enter, or go round again, while the lookahead is in
