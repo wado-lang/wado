@@ -4721,6 +4721,10 @@ _Fields are private._
 A copy that already moved `chunk`, for a handler to answer
 `Stream::begin_read` with.
 
+#### `impl Waitable for StartedRead<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
 ### `pub affine struct ReadCopy<affine T>`
 
 One copy started on a stream end, holding the end until it is finished.

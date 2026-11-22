@@ -197,6 +197,15 @@ The first `len` bytes `stream` delivers, or every byte where it ends
 sooner, read as `read_stream` reads them. No copy asks for a byte past
 `len`, so the stream may go on for any length after them.
 
+#### `pub fn read_streams_prefix(streams: &List<&Stream<u8>>, lens: &List<i32>) -> List<LinearArray<u8>> with Stream`
+
+- `contract streams.len() == lens.len(), lens.into_iter().all(|len| *len >= 0)`
+
+The first `lens[i]` bytes each of `streams[i]` delivers, or every byte
+where it ends sooner, as `read_stream_prefix` reads them, but read at
+once: a copy is in flight on every stream that has bytes still to come,
+so the host fills them side by side rather than one after another.
+
 #### `impl IndexValue<i32> for LinearArray<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
