@@ -3,6 +3,7 @@
 Jade is JSON Schema Draft 2020-12 for Wado.
 
 - [WEP: Jade](../docs/wep-2026-06-13-jade.md) — the design and why.
+- [`TODO.md`](./TODO.md) — open work.
 - [`research-format.md`](./research-format.md) — what the specifications and
   implementations say about the date and time formats.
 
