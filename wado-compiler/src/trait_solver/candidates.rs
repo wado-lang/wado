@@ -304,7 +304,7 @@ fn linked_chain(program: &Program, receiver: &SolverType) -> Vec<(SolverType, u3
         | SolverType::Pack(_)
         | SolverType::Tuple(_)
         | SolverType::Projection { .. }
-        | SolverType::AnyRow
+        | SolverType::OpenRow(_)
         | SolverType::Var(_) => (None, Some(receiver.clone())),
     };
     let mut chain: Vec<(SolverType, u32)> = Vec::new();
@@ -349,7 +349,7 @@ fn generality(target: &SolverType) -> Generality {
         | SolverType::Ref { .. }
         | SolverType::Tuple(_)
         | SolverType::Projection { .. }
-        | SolverType::AnyRow => {
+        | SolverType::OpenRow(_) => {
             if target.mentions(&|_| true) {
                 Generality::Head
             } else {

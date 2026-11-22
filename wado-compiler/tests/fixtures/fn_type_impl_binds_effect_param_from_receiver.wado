@@ -1,0 +1,42 @@
+// An impl generic over a function type's row binds its effect parameter from
+// the receiver, so `held()` returns the receiver's own type, and a selection on
+// it reads that row.
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+trait Held with () {
+    type Out;
+    fn held(&self) -> Self::Out;
+}
+
+impl<effect E> Held for fn() with E {
+    type Out = fn() with E;
+    fn held(&self) -> fn() with E {
+        return *self;
+    }
+}
+
+export fn run() with Stdout {
+    let loud = || { println("x"); };
+    let quiet = || {};
+    println(loud.held().name());
+    println(quiet.held().name());
+}
+
+__DATA__
+{"stdout": "loud\npure\n"}

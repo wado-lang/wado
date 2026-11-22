@@ -596,6 +596,21 @@ fn quiet() {
 
 `Slot { v: || {} }.fire()` demands nothing.
 
+An effect written beside the parameter is one the receiver's row must hold, and
+the parameter stands for the rest:
+
+<!-- {"fixture":"error_fn_type_impl_row_binder_beside_written_effect.wado"} -->
+
+```wado
+impl<effect E> Tr for fn() with (E, Stdout) {
+    fn t(&self) -> String {
+        return "has stdout";
+    }
+}
+```
+
+A closure that prints reaches `t`, and `(|| {}).t()` is an error.
+
 A function generic over `E` holds for every row a caller may pick for it, the
 empty one among them. So a value it moves into a slot whose row is `E` may
 perform only `E`, and an `E` nothing at a call determines stands for no effect:

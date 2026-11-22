@@ -966,15 +966,17 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     /// The type arguments a head writes, resolved in the current frame — the
     /// reading the impl frame binds through, so a block's recorded arguments
-    /// and its bound parameters share one set of positions.
+    /// and its bound parameters share one set of positions. A function type
+    /// names no head, so its one position is itself.
     pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
         // Peeled as the frame peels it.
-        let inner = match ty {
-            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
-            other => other,
-        };
-        let Some(args) = impl_target_head_args(inner) else {
-            return Vec::new();
+        let inner = ty.referent();
+        let args = match inner {
+            Type::Function(_) => std::slice::from_ref(inner),
+            other => match impl_target_head_args(other) {
+                Some(args) => args,
+                None => return Vec::new(),
+            },
         };
         args.iter().map(|arg| self.resolve_type(arg)).collect()
     }

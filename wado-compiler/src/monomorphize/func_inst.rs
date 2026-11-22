@@ -1195,10 +1195,15 @@ impl Monomorphizer {
             .method_info
             .as_ref()
             .is_some_and(|info| info.receiver.is_declared_type());
+        let keyed_by_positions = one_arg_per_param
+            || generic
+                .method_info
+                .as_ref()
+                .is_some_and(|info| info.receiver.is_function());
         // A declared target's key is its positions, read structurally: a slot
         // nested in one (`T` in `Pair<List<T>, i32>`) is no key position. A
         // block whose trait reference sets a slot is keyed by every slot.
-        if one_arg_per_param
+        if keyed_by_positions
             && !generic.impl_type_params.is_empty()
             && let Some(block) = generic.impl_origin
             && !type_table.impl_trait_sets_params(block)

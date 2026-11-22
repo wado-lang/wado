@@ -7633,7 +7633,10 @@ impl TypeTable {
                 },
             ) => Some(
                 x_mut == y_mut
-                    && rows_agree(x_effects, y_effects)
+                    && rows_agree(
+                        &self.read_effect_row(x_effects),
+                        &self.read_effect_row(y_effects),
+                    )
                     && all(x_params, y_params)
                     && all(&[*x_ret], &[*y_ret]),
             ),
@@ -8034,11 +8037,22 @@ enum RowSpelling {
     Erased,
 }
 
-/// Whether two function types' rows can be one: equal, or one still open. An
-/// effect parameter stands for whatever row meets it, and a variable for the
-/// row the effect check solves it to.
+/// Whether two function types' rows can be one: equal, or an open one holding
+/// what the other names. An effect parameter stands for whatever row meets
+/// what is named beside it, and a variable for the row the effect check
+/// solves it to, which only grows.
 fn rows_agree(a: &[EffectRef], b: &[EffectRef]) -> bool {
-    a == b || is_open_row(a) || is_open_row(b)
+    let named_in = |row: &[EffectRef], other: &[EffectRef]| {
+        row.iter()
+            .filter(|e| !e.is_param() && !e.is_var())
+            .all(|e| other.contains(e))
+    };
+    match (is_open_row(a), is_open_row(b)) {
+        (false, false) => a == b,
+        (true, false) => named_in(a, b),
+        (false, true) => named_in(b, a),
+        (true, true) => true,
+    }
 }
 
 /// What one substitution replaces, leaf by leaf: a declaration's slots, solved

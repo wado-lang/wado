@@ -367,7 +367,7 @@ impl Lowering {
     /// what `table` has it solved to ([`TypeTable::read_effect_row`]). An
     /// effect parameter here is the asking frame's own, rigid: a body generic
     /// over it holds for every row, so it meets only an impl's row binder
-    /// ([`SolverType::AnyRow`]), never a row an impl writes out. A variable
+    /// ([`SolverType::OpenRow`]), never a row an impl writes out. A variable
     /// not solved yet selects nothing here: an impl is chosen as if it
     /// performed nothing.
     fn effect_row(&self, table: &TypeTable, effects: &[EffectRef]) -> SolverType {
@@ -634,7 +634,7 @@ impl Lowering {
                     })
                     .collect();
                 let row = if open {
-                    SolverType::AnyRow
+                    SolverType::OpenRow(as_set(heads))
                 } else {
                     closed_row(heads)
                 };
@@ -849,15 +849,19 @@ pub(super) fn lower_impls<'a>(
 
 /// A row naming the effects `heads`, as a set: one order, each once, so rows
 /// written in different orders are one type.
-fn closed_row(mut heads: Vec<TypeDeclId>) -> SolverType {
-    heads.sort_unstable();
-    heads.dedup();
+fn closed_row(heads: Vec<TypeDeclId>) -> SolverType {
     SolverType::Tuple(
-        heads
+        as_set(heads)
             .into_iter()
             .map(|head| SolverType::Decl(head, Vec::new()))
             .collect(),
     )
+}
+
+fn as_set(mut heads: Vec<TypeDeclId>) -> Vec<TypeDeclId> {
+    heads.sort_unstable();
+    heads.dedup();
+    heads
 }
 
 /// An impl header as the program states it.

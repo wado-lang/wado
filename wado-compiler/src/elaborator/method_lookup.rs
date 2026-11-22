@@ -241,12 +241,10 @@ pub(super) struct MethodInferenceInput<'a> {
 /// Naming and matching both read it here, so neither pins a position the
 /// other leaves free (WEP 2026-08-12).
 pub(super) fn impl_target_args(impl_ty: &Type) -> Option<&[Type]> {
-    let inner = match impl_ty {
-        Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
-        other => other,
-    };
+    let inner = impl_ty.referent();
     match inner {
         Type::Tuple(elems) => Some(elems),
+        Type::Function(_) => Some(std::slice::from_ref(inner)),
         other => impl_target_head_args(other),
     }
 }
@@ -356,12 +354,16 @@ impl TypeSystem {
     }
 
     /// What a receiver fills the positions [`impl_target_args`] reads, a
-    /// reference read through to its pointee's (WEP 2026-08-12).
+    /// reference read through to its pointee's (WEP 2026-08-12). A function
+    /// type fills its one position itself.
     pub(crate) fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
         let pointee = self.through_ref(receiver);
         let tt = self.type_table.borrow();
-        tt.nominal_type_args(tt.representation_head(pointee))
-            .filter(|args| !args.is_empty())
+        let head = tt.representation_head(pointee);
+        if matches!(tt.get(head), ResolvedType::Function { .. }) {
+            return Some(vec![head]);
+        }
+        tt.nominal_type_args(head).filter(|args| !args.is_empty())
     }
 
     /// Whether an implicit `&mut self` of a local receiver has to box
