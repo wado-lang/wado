@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795367541991,
+  "lastUpdate": 1795368388625,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81149,6 +81149,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f4547bf9ec951b3c7e73f687fc58b5a9438c9ff4"
         },
         "date": 1795367541346,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4c0088a2ea327ed5ee0bddacd3453297ee4efd89",
+          "message": "Merge pull request #2727 from wado-lang/linear-array-64\n\nfeat(core:linear): arrays past 4 GiB with LinearArray64",
+          "timestamp": "2026-11-23T01:50:50+09:00",
+          "tree_id": "b8f5246bc70b3920338bc59fdcbd5d9f687f55e0",
+          "url": "https://github.com/wado-lang/wado/commit/4c0088a2ea327ed5ee0bddacd3453297ee4efd89"
+        },
+        "date": 1795368387724,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
