@@ -26,8 +26,13 @@ plugin's, the budget in bytes their argument gives. Each check says how many of
 the experts the tokens picked the pools held already, and writes what each host
 step fetched to `build/fetches.json`:
 
-    wado run-webgpu webgpu.wado -- 3000000000
+    wado run-webgpu webgpu.wado -- 5000000000
     wado run-pjrt pjrt.wado -- 3000000000
+
+`profile.wado` splits a WebGPU run's time into the experts' reads, the
+device's kernels and the rest:
+
+    wado run-webgpu profile.wado -- 5000000000 8
 
 `tools/expert_eviction.wado` replays those fetches under each eviction order and
 budget. A run whose budget held some layer's experts whole fetched nothing for

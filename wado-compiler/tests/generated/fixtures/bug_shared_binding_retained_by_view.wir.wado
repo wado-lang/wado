@@ -762,10 +762,11 @@ it.collect(): "), used: 208 }, s1: struct.new "core:prelude/string.wado//String"
 }
 
 fn "bug_shared_binding_retained_by_view.wado/$test_1_a_slice_of_a_shared_binding_outlives_a_write_to_its_source"() {
+    let $v_0: ref "core:prelude/string.wado//String";
     let elements: ref "Array<core:prelude/string.wado/String>";
     let used: i32;
     let a_46: i32;
-    let v_60: ref "core:prelude/string.wado//String";
+    let $licm_repr_82: ref Array<u8>;
     used = builtin::array_len(local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))));
     let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>";
     $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(used);
@@ -808,31 +809,30 @@ fn "bug_shared_binding_retained_by_view.wado/$test_1_a_slice_of_a_shared_binding
         "core:prelude/slice.wado/core:prelude/slice.wado/Slice<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, used, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_shared_binding_retained_by_view.wado:26"), used: 43 });
         unreachable;
     }
-    used = local.tee v_60(builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4 + 1)).used;
-    v_60 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = v_60.repr; let $array_clone_dst_7: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>(used)), 0, $array_clone_src_6, 0, used); $array_clone_dst_7, used: used };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__19: block -> bool {
-        if used != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+    $v_0 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4 + 1);
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__18: block -> bool {
+        if local.tee used($v_0.used) != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
         }
         $array_clone_i_4 = 0;
-        $array_clone_src_6 = v_60.repr;
+        $licm_repr_82 = $v_0.repr;
         b36: block {
             l37: loop {
                 break_if b36 (builtin::i64_extend_i32_s($array_clone_i_4) + 3_i64) >= builtin::i64_extend_i32_s(used);
-                if builtin::array_get_value<u8>($array_clone_src_6, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                if builtin::array_get_value<u8>($licm_repr_82, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_6, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                if builtin::array_get_value<u8>($licm_repr_82, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_6, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                if builtin::array_get_value<u8>($licm_repr_82, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_6, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                if builtin::array_get_value<u8>($licm_repr_82, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 continue l37;
@@ -841,21 +841,21 @@ fn "bug_shared_binding_retained_by_view.wado/$test_1_a_slice_of_a_shared_binding
         b42: block {
             l43: loop {
                 break_if b42 $array_clone_i_4 >= used;
-                if builtin::array_get_value<u8>($array_clone_src_6, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                if builtin::array_get_value<u8>($licm_repr_82, $array_clone_i_4) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, $array_clone_i_4) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 continue l43;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__19: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__18: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v_60("core:prelude/string.wado/core:prelude/string.wado/String::format<bug_shared_binding_retained_by_view.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "bug_shared_binding_retained_by_view.wado//$tmpl$d48748ffcad618c0" { h0: v_60, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_slice_of_a_shared_binding_outlives_a_write_to_its_source at bug_shared_binding_retained_by_view.wado:26
+        "core:rt/panic"(local.tee $v_0("core:prelude/string.wado/core:prelude/string.wado/String::format<bug_shared_binding_retained_by_view.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "bug_shared_binding_retained_by_view.wado//$tmpl$d48748ffcad618c0" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_slice_of_a_shared_binding_outlives_a_write_to_its_source at bug_shared_binding_retained_by_view.wado:26
 condition: view[1] == \"b\"
 view[1]: "), used: 169 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_slice_of_a_shared_binding_outlives_a_write_to_its_source at bug_shared_binding_retained_by_view.wado:26
 condition: view[1] == \"b\"
-view[1]: "), used: 169 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v_60.used);
+view[1]: "), used: 169 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_0.used);
         unreachable;
     }
 }
@@ -990,12 +990,13 @@ fn "bug_shared_binding_retained_by_view.wado/$test_3_a_view_that_leaves_the_fram
     let $load_1: ref "Array<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>>";
     let src: ref "core:prelude/list.wado//List<core:prelude/string.wado/String>";
     let out: ref "core:prelude/list.wado//List<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>>";
+    let $v_0: ref "core:prelude/string.wado//String";
     let elements_15: ref "Array<core:prelude/string.wado/String>";
     let used_16: i32;
-    let v: ref "core:prelude/string.wado//String";
-    let self_20: ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>";
-    let self_33: ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>";
+    let self_19: ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>";
+    let self_32: ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>";
     let i: i32;
+    let $licm_repr_49: ref Array<u8>;
     used_16 = builtin::array_len(local.tee elements_15(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))));
     src = struct.new "core:prelude/list.wado//List<core:prelude/string.wado/String>" { repr: elements_15, used: used_16 };
     "bug_shared_binding_retained_by_view.wado/keep_view"(local.tee out(struct.new "core:prelude/list.wado//List<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>">(), used: 0 }), src);
@@ -1005,38 +1006,37 @@ fn "bug_shared_binding_retained_by_view.wado/$test_3_a_view_that_leaves_the_fram
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, used_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_shared_binding_retained_by_view.wado:44"), used: 43 });
         unreachable;
     }
-    self_20 = builtin::array_get_value<ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>">(local.tee $load_1(out.repr), 0);
-    used_16 = local.tee self_33(builtin::array_get_value<ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>">($load_1, 0)).end - self_33.start;
+    self_19 = builtin::array_get_value<ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>">(local.tee $load_1(out.repr), 0);
+    used_16 = local.tee self_32(builtin::array_get_value<ref "core:prelude/slice.wado//Slice<core:prelude/string.wado/String>">($load_1, 0)).end - self_32.start;
     if @unlikely(1 >= used_16) {
         cold_path;
         "core:prelude/slice.wado/core:prelude/slice.wado/Slice<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(1, used_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bug_shared_binding_retained_by_view.wado:44"), used: 43 });
         unreachable;
     }
-    used_16 = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">(self_20.repr, self_20.start + 1)).used;
-    v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(used_16)), 0, $array_clone_src_1, 0, used_16); $array_clone_dst_2, used: used_16 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
-        if used_16 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+    $v_0 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_19.repr, self_19.start + 1);
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
+        if local.tee used_16($v_0.used) != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
         i = 0;
-        $array_clone_src_1 = v.repr;
+        $licm_repr_49 = $v_0.repr;
         b70: block {
             l71: loop {
                 break_if b70 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(used_16);
-                if builtin::array_get_value<u8>($array_clone_src_1, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
                 continue l71;
@@ -1045,21 +1045,21 @@ fn "bug_shared_binding_retained_by_view.wado/$test_3_a_view_that_leaves_the_fram
         b76: block {
             l77: loop {
                 break_if b76 i >= used_16;
-                if builtin::array_get_value<u8>($array_clone_src_1, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                if builtin::array_get_value<u8>($licm_repr_49, i) != builtin::array_get_value<u8>(global:bug_shared_binding_retained_by_view.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
                 i = i + 1;
                 continue l77;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__9: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v("core:prelude/string.wado/core:prelude/string.wado/String::format<bug_shared_binding_retained_by_view.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "bug_shared_binding_retained_by_view.wado//$tmpl$d48748ffcad618c0" { h0: v, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_view_that_leaves_the_frame_outlives_a_write_to_its_source at bug_shared_binding_retained_by_view.wado:44
+        "core:rt/panic"(local.tee $v_0("core:prelude/string.wado/core:prelude/string.wado/String::format<bug_shared_binding_retained_by_view.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "bug_shared_binding_retained_by_view.wado//$tmpl$d48748ffcad618c0" { h0: $v_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_view_that_leaves_the_frame_outlives_a_write_to_its_source at bug_shared_binding_retained_by_view.wado:44
 condition: out[0][1] == \"b\"
 out[0][1]: "), used: 174 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_view_that_leaves_the_frame_outlives_a_write_to_its_source at bug_shared_binding_retained_by_view.wado:44
 condition: out[0][1] == \"b\"
-out[0][1]: "), used: 174 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v.used);
+out[0][1]: "), used: 174 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_0.used);
         unreachable;
     }
 }

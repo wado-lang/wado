@@ -1,0 +1,320 @@
+//! Fixing a graph's symbolic extents and choosing its outputs before stage 0.
+
+use { TreeMap } from "core:collections";
+use { Graph, ValueInfo } from "../src/graph.wado";
+use { infer } from "../src/infer.wado";
+use { read } from "../src/onnx_text.wado";
+use { OptionConflict, bind_dims, keep_last, keep_outputs, take_arg_max } from "../src/specialize.wado";
+
+fn is_error<E: Error>() {
+}
+
+test "an option the graph cannot take is an Error" {
+    is_error::<OptionConflict>();
+}
+
+fn dims_of(graph: &Graph, tensor: String) -> String {
+    for let declared of [&graph.inputs, &graph.outputs] {
+        for let vi of *declared {
+            if vi.name == tensor {
+                return `${vi.rank:?}`;
+            }
+        }
+    }
+    unreachable();
+}
+
+fn relu() -> Graph {
+    return read("g (float[N, 4] X) => (float[N, 4] Y) { Y = Relu(X) }").unwrap();
+}
+
+test "a bound dimension becomes static on every tensor declaring it, keeping its name" {
+    let mut graph = relu();
+    bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
+    assert dims_of(&graph, "X") == "Rank::Dims([Dim::Bound([\"N\", 2]), Dim::Static(4)])";
+    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Bound([\"N\", 2]), Dim::Static(4)])";
+}
+
+test "a dimension the graph never declares stops the build" {
+    let mut graph = relu();
+    let e = bind_dims(&mut graph, &({ M: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert e.option == "dims";
+    assert `${e}` == "dims: the graph declares no dimension M";
+}
+
+test "a negative extent stops the build" {
+    let mut graph = relu();
+    assert `${bind_dims(&mut graph, &({ N: -1 } as TreeMap<String, i32>)).unwrap_err()}` == "dims: N is -1, and an extent is not negative";
+}
+
+fn two_heads() -> Graph {
+    return read(
+        `g (float[4] X, float[4] U) => (float[4] Y, float[4] Z) <float[4] A, float[4] B> {
+            S = Add(X, A)
+            Y = Relu(S)
+            T = Mul(S, B)
+            Z = Add(T, U)
+        }`,
+    ).unwrap();
+}
+
+fn names_of(graph: &Graph) -> String {
+    let nodes: List<String> = graph.nodes.into_iter().map(|node| node.outputs[0]).collect();
+    return `${joined(&graph.inputs)} ${joined(&graph.initializers)} ${nodes.join(",")} ${joined(&graph.outputs)}`;
+}
+
+fn joined(values: &List<ValueInfo>) -> String {
+    let names: List<String> = values.into_iter().map(|vi| vi.name).collect();
+    return names.join(",");
+}
+
+test "keeping one output drops what only the other reads" {
+    let mut graph = two_heads();
+    keep_outputs(&mut graph, &["Y"]).unwrap();
+    assert names_of(&graph) == "X A S,Y Y";
+}
+
+test "the kept outputs take the order the option lists" {
+    let mut graph = two_heads();
+    keep_outputs(&mut graph, &["Z", "Y"]).unwrap();
+    assert names_of(&graph) == "X,U A,B S,Y,T,Z Z,Y";
+}
+
+test "no outputs listed keeps the graph whole" {
+    let mut graph = two_heads();
+    keep_outputs(&mut graph, &[]).unwrap();
+    assert names_of(&graph) == "X,U A,B S,Y,T,Z Y,Z";
+}
+
+test "an output the graph does not declare stops the build" {
+    let mut graph = two_heads();
+    let e = keep_outputs(&mut graph, &["S"]).unwrap_err();
+    assert e.option == "outputs";
+    assert `${e}` == "outputs: the graph declares no output S";
+}
+
+test "a bound dimension fixes the arithmetic a dim_param spells over it" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N + 1\", 4] Y) { Y = Relu(X) }").unwrap();
+    bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
+    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Bound([\"N + 1\", 3]), Dim::Static(4)])";
+}
+
+test "binding one name of a dim_param's arithmetic but not another stops the build" {
+    let mut graph = read("g (float[N, M] X) => (float[\"N + M\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N fixes part of the dimension \"N + M\", which also reads M";
+}
+
+test "arithmetic a bound dimension makes negative stops the build" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N - 3\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N makes the dimension \"N - 3\" -1, and an extent is not negative";
+}
+
+test "arithmetic a bound dimension takes past i64 stops the build" {
+    let mut graph = read("g (float[N, 4] X) => (float[\"N * N * N\", 4] Y) { Y = Relu(X) }").unwrap();
+    let e = bind_dims(&mut graph, &({ N: i32::MAX } as TreeMap<String, i32>)).unwrap_err();
+    assert `${e}` == "dims: N makes the dimension \"N * N * N\" more than i64 holds";
+}
+
+/// A decoder's last steps: a root-mean-square norm of each position, scaled,
+/// then the head's product, and a softmax across the positions beside them.
+fn head() -> Graph {
+    return read(
+        `g (float[N, S, 4] X, float[4] G, float[4, 3] W) => (float[N, S, 3] Y, float[N, S, 4] P) {
+            Q = Mul(X, X)
+            M = ReduceMean <axes = [-1]> (Q)
+            R = Sqrt(M)
+            D = Div(X, R)
+            H = Mul(D, G)
+            Y = MatMul(H, W)
+            P = Softmax <axis = 1> (X)
+        }`,
+    ).unwrap();
+}
+
+/// `graph` with `last` applied and checked, then each node as its operator
+/// over its operands.
+fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionConflict> {
+    let mut checked = infer(graph).unwrap();
+    for let [output, axis] of last.entries() {
+        keep_last(graph, &checked, output, *axis)?;
+        assert defined_before_read(graph);
+        checked = infer(graph).unwrap();
+    }
+    let nodes: List<String> = graph.nodes
+        .into_iter()
+        .filter(|n| n.op != "Constant")
+        .map(|n| `${n.outputs[0]}=${n.op}(${n.inputs[0..<i32::min(n.inputs.len(), 2)].to_list().join(",")})`)
+        .collect();
+    let out = checked.shapes.get("Y").unwrap();
+    return Result::Ok(`${nodes.join(" ")} | Y ${out.names().join(",")}`);
+}
+
+/// Whether each node reads only what the graph is given or an earlier node
+/// wrote.
+fn defined_before_read(graph: &Graph) -> bool {
+    let mut defined: List<String> = [];
+    for let given of [&graph.inputs, &graph.initializers] {
+        for let vi of *given {
+            defined.push(vi.name);
+        }
+    }
+    for let node of &graph.nodes {
+        if node.inputs.into_iter().any(|input| input != "" && !defined.contains_str(&input)) {
+            return false;
+        }
+        defined.extend(&node.outputs);
+    }
+    return true;
+}
+
+test "a cut moves back through a norm and a product's rows" {
+    let mut graph = head();
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) Q=Mul(X/last-2,X/last-2) M=ReduceMean(Q) R=Sqrt(M) D=Div(X/last-2,R) H=Mul(D,G) Y=MatMul(H,W) P=Softmax(X) | Y N,S,W1";
+}
+
+test "a cut moves back through a quantized product's rows, and its weights stay whole" {
+    let mut graph = read(
+        `g (float[N, S, 40] X, float[40] G) => (float[N, S, 3] Y) <uint8[3, 2, 16] B, float[3, 2] W, uint8[3, 1] Z> {
+            H = Mul(X, G)
+            Y = com.microsoft.MatMulNBits<K = 40, N = 3, block_size = 32, bits = 4>(H, B, W, Z)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) H=Mul(X/last-2,G) Y=com.microsoft.MatMulNBits(H,B) | Y N,S,Y2";
+}
+
+test "two outputs cut along one axis share the slices of what both read" {
+    let mut graph = read(
+        `g (float[N, S, 4] X, float[4] G, float[4, 3] W) => (float[N, S, 3] Y, float[N, S, 4] P) {
+            H = Mul(X, G)
+            Y = MatMul(H, W)
+            P = Relu(X)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) H=Mul(X/last-2,G) Y=MatMul(H,W) P=Relu(X/last-2) | Y N,S,W1";
+}
+
+test "a second cut along one axis slices what the first did not after the bounds" {
+    let mut graph = read(
+        `g (float[N, S, 4] X, float[N, S, 4] U, float[4, 3] W) => (float[N, S, 3] Y, float[N, S, 4] P) {
+            Y = MatMul(X, W)
+            P = Relu(U)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1, P: 1 }).unwrap() == "U/last-2=Slice(U,loam.last-2.starts) X/last-2=Slice(X,loam.last-2.starts) Y=MatMul(X/last-2,W) P=Relu(U/last-2) | Y N,S,W1";
+}
+
+test "what a product reads as its right operand stays whole" {
+    let mut graph = read(
+        `g (float[N, S, 4] X, float[N, 4, 3] B) => (float[N, S, 3] Y) {
+            V = Relu(B)
+            Y = MatMul(X, V)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) V=Relu(B) Y=MatMul(X/last-2,V) | Y N,S,B2";
+}
+
+test "a reduction's axes stay whole" {
+    let mut graph = read(
+        `<ir_version: 8, opset_import: [ "" : 13 ]>
+        g (float[N, S, 4] X, float[4, 3] W) => (float[N, S, 3] Y, float[1, 1, 4] P) {
+            Y = MatMul(X, W)
+            A = Constant <value_ints = [0, 1]> ()
+            P = ReduceSum <keepdims = 1> (X, A)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { P: 2 }).unwrap() == "X/last-1=Slice(X,loam.last-1.starts) Y=MatMul(X,W) P=ReduceSum(X/last-1,A) | Y N,S,W1";
+}
+
+test "a product by a vector computes no position of its batch alone" {
+    let mut graph = read(
+        `g (float[N, S, 4] X, float[4] G) => (float[N, S] Y) {
+            Y = MatMul(X, G)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 0 }).unwrap() == "Y/whole=MatMul(X,G) Y=Slice(Y/whole,loam.last-2.starts) | Y N,S";
+}
+
+test "a value stage 0 folds stays whole where a cut node reads it" {
+    let mut graph = read(
+        `g (float[N, S, 4] X) => (float[N, S, 4] Y) {
+            C = Constant <value = float[1, 1, 4] {1, 2, 3, 4}> ()
+            U = Cast <to = 1> (C)
+            Y = Add(X, U)
+        }`,
+    ).unwrap();
+    assert cut(&mut graph, { Y: 1 }).unwrap() == "X/last-2=Slice(X,loam.last-2.starts) U=Cast(C) Y=Add(X/last-2,U) | Y N,S,X2";
+}
+
+test "an output whose producer reads across the positions is cut where it is written" {
+    let mut graph = head();
+    assert cut(&mut graph, { P: 1 }).unwrap() == "Q=Mul(X,X) M=ReduceMean(Q) R=Sqrt(M) D=Div(X,R) H=Mul(D,G) Y=MatMul(H,W) P/whole=Softmax(X) P=Slice(P/whole,loam.last-2.starts) | Y N,S,W1";
+}
+
+test "a cut along the axis a reduction folds stays at the output" {
+    let mut graph = head();
+    let cut_along_embed = cut(&mut graph, { P: 2 }).unwrap();
+    assert cut_along_embed.contains("P=Slice(P/whole,loam.last-1.starts)");
+}
+
+test "an output the cut cannot take stops the build" {
+    assert `${cut(&mut head(), { Z: 1 }).unwrap_err()}` == "last: the graph declares no output Z";
+    assert `${cut(&mut head(), { Y: 3 }).unwrap_err()}` == "last: Y has 3 axes, and no axis 3";
+    let mut read_inside = read(
+        "g (float[N, S, 4] X) => (float[N, S, 4] Y, float[N, S, 4] Z) { Y = Relu(X) Z = Neg(Y) }",
+    ).unwrap();
+    assert `${cut(&mut read_inside, { Y: 1 }).unwrap_err()}` == "last: Y is read inside the graph, which needs all of it";
+    let mut given = read("g (float[N, S, 4] X) => (float[N, S, 4] X) { }").unwrap();
+    assert `${cut(&mut given, { X: 1 }).unwrap_err()}` == "last: no node computes X, which the graph is given";
+}
+
+/// `graph` with `arg_max` applied and checked, then each node as `cut` lists
+/// it and the output's element and axes.
+fn ranked(graph: &mut Graph, arg_max: TreeMap<String, i32>) -> Result<String, OptionConflict> {
+    for let [output, axis] of arg_max.entries() {
+        take_arg_max(graph, &infer(graph).unwrap(), output, *axis)?;
+    }
+    let checked = infer(graph).unwrap();
+    let nodes: List<String> = graph.nodes
+        .into_iter()
+        .map(|n| `${n.outputs[0]}=${n.op}(${n.inputs.join(",")})`)
+        .collect();
+    let out = checked.shapes.get("Y").unwrap();
+    let axes: List<String> = out.axes.into_iter().map(|a| `${a.name}=${a.extent}`).collect();
+    return Result::Ok(`${nodes.join(" ")} | Y ${checked.primitives["Y"]} ${axes.join(",")}`);
+}
+
+test "an output ranked along an axis is the index of its greatest element there" {
+    let mut graph = read(
+        `g (float[N, 4] X, float[4, 3] W) => (float[N, 3] Y) {
+            Y = MatMul(X, W)
+        }`,
+    ).unwrap();
+    assert ranked(&mut graph, { Y: 1 }).unwrap() == "Y/scores=MatMul(X,W) Y=ArgMax(Y/scores) | Y i64 N=N,Y1=1";
+    assert graph.outputs[0].dtype == "int64";
+}
+
+test "an output the ranking cannot take stops the build" {
+    let mut graph = read(
+        "g (float[N, 4] X) => (float[N, 4] Y, int64[N, 4] I, float[N, 4] Z) { Y = Relu(X) I = Cast <to = 7> (X) Z = Neg(Y) }",
+    ).unwrap();
+    assert `${ranked(&mut graph, { V: 1 }).unwrap_err()}` == "arg_max: the graph declares no output V";
+    assert `${ranked(&mut graph, { Z: 2 }).unwrap_err()}` == "arg_max: Z has 2 axes, and no axis 2";
+    assert `${ranked(&mut graph, { I: 0 }).unwrap_err()}` == "arg_max: I is i64, and ArgMax ranks a float";
+    assert `${ranked(&mut graph, { Y: 1 }).unwrap_err()}` == "arg_max: Y is read inside the graph, which needs its elements";
+    let mut given = read("g (float[N, 4] X) => (float[N, 4] X) { }").unwrap();
+    assert `${ranked(&mut given, { X: 1 }).unwrap_err()}` == "arg_max: no node computes X, which the graph is given";
+}
+
+test "keeping an If's output keeps what its branches read from around them" {
+    let mut graph = read(
+        `g (bool[1] C, float[4] X, float[4] U) => (float[4] Y, float[4] Z) <float[4] A> {
+            S = Add(X, A)
+            Z = Relu(U)
+            Y = If <then_branch = t () => (float[4] T) { T = Relu(S) }, else_branch = e () => (float[4] E) { E = Neg(X) }> (C)
+        }`,
+    ).unwrap();
+    keep_outputs(&mut graph, &["Y"]).unwrap();
+    assert names_of(&graph) == "C,X A S,Y Y";
+}

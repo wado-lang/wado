@@ -1,0 +1,550 @@
+//! Smoke tests for the GIR type surface.
+//!
+//! These tests do not exercise lowering or emission — those land
+//! in `lower_test.wado` (Phase 2) and the emit-side tests
+//! (Phase 4). The point here is to confirm that every `pub` GIR
+//! type is reachable, constructible, and round-trips through
+//! pattern matching.
+
+use {
+    LoweredGrammar,
+    Rule,
+    RuleHeader,
+    SimpleRule,
+    MultiAltRule,
+    LeftRecursiveRule,
+    LrDispatchData,
+    MultiAltDispatch,
+    DirectDispatch,
+    Admits,
+    AltClass,
+    DispatchBranch,
+    TournamentDispatch,
+    Diagnostic,
+    DiagnosticKind,
+    Diagnostics,
+    diagnostic_level,
+    DiagnosticOwner,
+    DiagnosticSite,
+    AltBody,
+    Op,
+    TokenOp,
+    LiteralOp,
+    RuleCallOp,
+    WildcardOp,
+    ExcludedOp,
+    RepeatOp,
+    RepeatBodyShape,
+    RepeatStrategy,
+    NonGreedyStrategy,
+    OptionalLookaheadStrategy,
+    OptionalShapeLookaheadStrategy,
+    OptionalLookaheadShape,
+    GroupShape,
+    SimpleCstShape,
+    TokenOnlyShape,
+    SingleAltShape,
+    GeneralShape,
+    ScanBody,
+    ScanElement,
+    ScanTokenElement,
+    ScanRuleCallElement,
+    ScanExcludedElement,
+    ScanRepeatElement,
+    FieldDecl,
+    FieldKind,
+    FollowArg,
+    rule_header,
+} from "../src/gir.wado";
+use { Visibility, RepeatKind } from "../src/ir.wado";
+
+fn empty_alt_body(idx: i32) -> AltBody {
+    return AltBody {
+        alt_index: idx,
+        case_name: "",
+        struct_name: "",
+        ops: [],
+        fields: [],
+        prefix_self_ref_min_prec: 0,
+    };
+}
+
+fn empty_scan_body() -> ScanBody {
+    return ScanBody { elements: [], gates: [], gate_cond: "" };
+}
+
+fn empty_header<S: AsStrSlice>(name: S) -> RuleHeader {
+    return RuleHeader {
+        name: name.to_string(),
+        snake_name: name.to_string(),
+        field_name: name.to_string(),
+        type_name: `${name}Node`,
+        visibility: Visibility::Default,
+        case_names: [],
+    };
+}
+
+fn direct_single_alt(idx: i32) -> MultiAltDispatch {
+    let branch = DispatchBranch { alt_class: AltClass::Nullable([]), alt_index: idx };
+    let mut branches: List<DispatchBranch> = [];
+    branches.push(branch);
+    return MultiAltDispatch::Direct(DirectDispatch { branches });
+}
+
+test "LoweredGrammar empty construction" {
+    let g = LoweredGrammar {
+        name: "Empty",
+        source_files: [],
+        options: [],
+        named_actions: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        lit_tokens: [],
+        parser_rules: [],
+        diagnostics: [],
+    };
+    assert g.name == "Empty";
+    assert g.parser_rules.is_empty();
+    assert g.mode_names.len() == 1;
+    assert g.diagnostics.is_empty();
+}
+
+test "Diagnostic round-trips through its kind" {
+    let d = Diagnostic {
+        owner: DiagnosticOwner::rule_dispatch("expr"),
+        kind: DiagnosticKind::OverlapTournament,
+        message: "alts 0, 1 share first {IDENT}",
+    };
+    assert d.owner.rule == "expr";
+    assert d.message == "alts 0, 1 share first {IDENT}";
+    if let _::OverlapTournament = &d.kind {
+    } else {
+        panic("expected OverlapTournament");
+    }
+}
+
+test "DiagnosticOwner compares by identity, not by label" {
+    let rule_site = DiagnosticOwner::rule_dispatch("expr");
+    let lr_site = DiagnosticOwner { rule: "expr", site: DiagnosticSite::LrAtomDispatch };
+    // Same rule, different decision points inside it.
+    assert rule_site.rule == lr_site.rule;
+    assert rule_site != lr_site;
+    assert rule_site == DiagnosticOwner::rule_dispatch("expr");
+    assert rule_site != DiagnosticOwner::rule_dispatch("stmt");
+}
+
+test "DiagnosticOwner labels every site" {
+    assert DiagnosticOwner::rule_dispatch("expr").label() == "rule 'expr'";
+    assert DiagnosticOwner { rule: "expr", site: DiagnosticSite::LrAtomDispatch }.label() == "LR rule 'expr' atom";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::GeneralGroup(0) }.label() == "General group rGroup0";
+    // The scan pass lowers a group with no index in scope; it never warns, so
+    // the label only has to name the rule.
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::GeneralGroup(-1) }.label() == "General group in rule 'r'";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::SimpleCstGroup }.label() == "SimpleCst group in rule 'r'";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::Optional("tail") }.label() == "optional 'tail' in rule 'r'";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::Action(7) }.label() == "action 7";
+    assert DiagnosticOwner { rule: "r", site: DiagnosticSite::AttrInit("n") }.label() == "initializer of 'n' in rule 'r'";
+    assert DiagnosticOwner { site: DiagnosticSite::LexerAction(7) }.label() == "lexer action 7";
+    assert DiagnosticOwner::host("@members").label() == "@members";
+}
+
+test "Rule::Simple round-trip" {
+    let rule = Rule::Simple(SimpleRule {
+        header: empty_header("value"),
+        body: empty_alt_body(0),
+        scan_body: empty_scan_body(),
+    });
+    let header = rule_header(&rule);
+    assert header.name == "value";
+    if let Simple(s) = &rule {
+        assert s.body.alt_index == 0;
+    } else {
+        panic("expected Simple");
+    }
+}
+
+test "Op::Token round-trip" {
+    let token = Op::Token(TokenOp { kind: 3, field: "id", dedup_base: "id" });
+    if let Token(t) = &token {
+        assert t.kind == 3;
+    } else {
+        panic("Token");
+    }
+}
+
+test "Op::Literal round-trip" {
+    let lit = Op::Literal(LiteralOp { kind: 4, field: "plus", dedup_base: "plus" });
+    if let Literal(l) = &lit {
+        assert l.kind == 4;
+    } else {
+        panic("Literal");
+    }
+}
+
+test "Op::RuleCall preserves follow_arg and min_prec" {
+    let call = Op::RuleCall(RuleCallOp {
+        target_name: "expr",
+        target_snake: "expr",
+        follow_arg: FollowArg::NoFollow,
+        min_prec_arg: null,
+        field: "expr",
+        dedup_base: "expr",
+    });
+    if let RuleCall(r) = &call {
+        assert r.target_snake == "expr";
+        assert r.follow_arg matches { _::NoFollow };
+        assert r.min_prec_arg matches { null };
+    } else {
+        panic("RuleCall");
+    }
+}
+
+test "Op::Wildcard / Excluded round-trip" {
+    let any = Op::Wildcard(WildcardOp { field: "wildcard", dedup_base: "wildcard" });
+    let excl = Op::Excluded(ExcludedOp {
+        kinds: [5, 6],
+        field: "not_foo",
+        dedup_base: "not_foo",
+    });
+
+    if let Wildcard(w) = &any {
+        assert w.field == "wildcard";
+    } else {
+        panic("Wildcard");
+    }
+    if let Excluded(e) = &excl {
+        assert e.kinds.len() == 2;
+    } else {
+        panic("Excluded");
+    }
+}
+
+test "Op::Repeat carries inner element and strategy" {
+    let inner = Op::Token(TokenOp { kind: 1, field: "x", dedup_base: "x" });
+    let scan_inner = ScanElement::Token(ScanTokenElement { kind: 1 });
+    let rep = Op::Repeat(RepeatOp {
+        kind: RepeatKind::Star,
+        body: inner,
+        scan_body: scan_inner,
+        strategy: RepeatStrategy::Plain,
+        field: "x_list",
+        caller_follow_first: [],
+        caller_follow_second: [],
+        body_scannable: true,
+        body_has_field: true,
+        body_admits: Admits::Kinds([1]),
+        body_is_single_alt_group: false,
+        body_second_position_first: [],
+        body_shape: RepeatBodyShape::LeafOther,
+        gate_caller_follow: false,
+    });
+    if let Repeat(r) = &rep {
+        if let _::Star = r.kind {
+            assert true;
+        } else {
+            panic("expected Star");
+        }
+    } else {
+        panic("Repeat");
+    }
+}
+
+test "RepeatStrategy variants round-trip" {
+    let plain = RepeatStrategy::Plain;
+    let non_greedy = RepeatStrategy::NonGreedy(NonGreedyStrategy {
+        exit_first: [7],
+        exit_second: [],
+    });
+    let lookahead_strategy = OptionalLookaheadStrategy {
+        sig: [
+            [1],
+            [2],
+        ],
+    };
+    let lookahead = RepeatStrategy::OptionalLookahead(lookahead_strategy);
+    let shape_strategy = OptionalShapeLookaheadStrategy {
+        shapes: [
+            OptionalLookaheadShape {
+                positions: [0, 1],
+                sig: [
+                    [1],
+                    [2],
+                ],
+                scan_body: empty_scan_body(),
+            },
+            OptionalLookaheadShape {
+                positions: [0],
+                sig: [
+                    [1],
+                ],
+                scan_body: empty_scan_body(),
+            },
+        ],
+    };
+    let shape_lookahead = RepeatStrategy::OptionalShapeLookahead(shape_strategy);
+    let scan_guard = RepeatStrategy::OptionalScanGuard;
+
+    if let _::Plain = &plain {
+        assert true;
+    } else {
+        panic("Plain");
+    }
+    if let NonGreedy(s) = &non_greedy {
+        assert s.exit_first[0] == 7;
+    } else {
+        panic("NonGreedy");
+    }
+    if let OptionalLookahead(s) = &lookahead {
+        assert s.sig[0][0] == 1;
+        assert s.sig[1][0] == 2;
+    } else {
+        panic("OptionalLookahead");
+    }
+    if let OptionalShapeLookahead(s) = &shape_lookahead {
+        assert s.shapes.len() == 2;
+        assert s.shapes[0].positions[0] == 0;
+        assert s.shapes[0].positions[1] == 1;
+        assert s.shapes[0].sig[0][0] == 1;
+    } else {
+        panic("OptionalShapeLookahead");
+    }
+    if let _::OptionalScanGuard = &scan_guard {
+        assert true;
+    } else {
+        panic("OptionalScanGuard");
+    }
+}
+
+test "GroupShape variants round-trip" {
+    let s = GroupShape::SimpleCst(SimpleCstShape {
+        type_name: "StmtOrExpr",
+        field: "stmt_or_expr",
+    });
+    let t = GroupShape::TokenOnly(TokenOnlyShape { field: "op", dedup_base: "op" });
+    let a = GroupShape::SingleAlt(SingleAltShape {
+        struct_name: "Pair",
+        field: "pair",
+        owner_rule: "obj",
+    });
+    let g = GroupShape::General(GeneralShape {
+        variant_type: "ExprGroup0",
+        alt_struct_names: ["ExprGroup0Alt0"],
+        field: "group0",
+        group_index: 0,
+    });
+    let tr = GroupShape::Transparent;
+
+    if let SimpleCst(x) = &s {
+        assert x.type_name == "StmtOrExpr";
+    } else {
+        panic("SimpleCst");
+    }
+    if let TokenOnly(x) = &t {
+        assert x.field == "op";
+    } else {
+        panic("TokenOnly");
+    }
+    if let SingleAlt(x) = &a {
+        assert x.owner_rule == "obj";
+    } else {
+        panic("SingleAlt");
+    }
+    if let General(x) = &g {
+        assert x.group_index == 0;
+    } else {
+        panic("General");
+    }
+    if let _::Transparent = &tr {
+        assert true;
+    } else {
+        panic("Transparent");
+    }
+}
+
+test "MultiAltDispatch flat variants round-trip" {
+    let direct = direct_single_alt(0);
+    let tournament = MultiAltDispatch::Tournament(TournamentDispatch {
+        alts: [0, 1],
+    });
+
+    if let Direct(d) = &direct {
+        assert d.branches.len() == 1;
+    } else {
+        panic("Direct");
+    }
+    if let Tournament(t) = &tournament {
+        assert t.alts.len() == 2;
+    } else {
+        panic("Tournament");
+    }
+}
+
+test "MultiAltDispatch variant set is exactly { Direct, Tournament }" {
+    // Exhaustive match — if a new variant is added (e.g. re-introducing
+    // PredictDispatch / PartialScanDispatch / SaveRewindDispatch),
+    // this `match` becomes non-exhaustive and the compiler will reject
+    // the test until both the variant's MultiAltDispatch doc-block and
+    // the matching emit translator are updated. See the doc-comment in
+    // gir.wado for the rationale.
+    let direct = direct_single_alt(0);
+    let tournament = MultiAltDispatch::Tournament(TournamentDispatch {
+        alts: [0],
+    });
+
+    let label_direct: String = match direct {
+        Direct(_) => "Direct",
+        Tournament(_) => "Tournament",
+    };
+    let label_tournament: String = match tournament {
+        Direct(_) => "Direct",
+        Tournament(_) => "Tournament",
+    };
+    assert label_direct == "Direct";
+    assert label_tournament == "Tournament";
+}
+
+test "ScanElement variants round-trip" {
+    let token = ScanElement::Token(ScanTokenElement { kind: 1 });
+    let call = ScanElement::RuleCall(ScanRuleCallElement {
+        target_snake: "expr",
+        follow_arg: FollowArg::NoFollow,
+        min_prec_arg: null,
+    });
+    let any = ScanElement::Wildcard;
+    let excl = ScanElement::Excluded(ScanExcludedElement {
+        kinds: [8],
+    });
+    let inner_scan = ScanElement::Token(ScanTokenElement { kind: 1 });
+    let rep = ScanElement::Repeat(ScanRepeatElement {
+        kind: RepeatKind::Plus,
+        body: inner_scan,
+        inner_admits: Admits::Kinds([1]),
+        caller_follow_first: [],
+        gate_caller_follow: false,
+        non_greedy: false,
+    });
+
+    if let Token(t) = &token {
+        assert t.kind == 1;
+    } else {
+        panic("Token");
+    }
+    if let RuleCall(c) = &call {
+        assert c.target_snake == "expr";
+    } else {
+        panic("RuleCall");
+    }
+    if let _::Wildcard = &any {
+        assert true;
+    } else {
+        panic("Wildcard");
+    }
+    if let Excluded(e) = &excl {
+        assert e.kinds[0] == 8;
+    } else {
+        panic("Excluded");
+    }
+    if let Repeat(r) = &rep {
+        if let _::Plus = r.kind {
+            assert true;
+        } else {
+            panic("Plus");
+        }
+    } else {
+        panic("Repeat");
+    }
+}
+
+test "FieldDecl" {
+    let f = FieldDecl {
+        name: "expr_2",
+        type_str: "Option<ExprNode>",
+        kind: FieldKind::Optional,
+    };
+    if let _::Optional = &f.kind {
+        assert true;
+    } else {
+        panic("Optional");
+    }
+    assert f.name == "expr_2";
+}
+
+test "rule_header reaches every Rule variant" {
+    let s = Rule::Simple(SimpleRule {
+        header: empty_header("a"),
+        body: empty_alt_body(0),
+        scan_body: empty_scan_body(),
+    });
+    let m = Rule::MultiAlt(MultiAltRule {
+        header: empty_header("b"),
+        alts: [empty_alt_body(0)],
+        scan_alts: [empty_scan_body()],
+        dispatch: direct_single_alt(0),
+    });
+    let lr_atom = MultiAltRule {
+        header: empty_header("c_atom"),
+        alts: [empty_alt_body(0)],
+        scan_alts: [empty_scan_body()],
+        dispatch: direct_single_alt(0),
+    };
+    let lr = Rule::LeftRecursive(LeftRecursiveRule {
+        header: empty_header("c"),
+        atom: lr_atom,
+        lr_alts: [],
+        lr_dispatch: LrDispatchData { valid_lr_alts: [], groups: [] },
+    });
+
+    assert rule_header(&s).name == "a";
+    assert rule_header(&m).name == "b";
+    assert rule_header(&lr).name == "c";
+}
+
+test "a diagnostic's level says what a default build shows" {
+    assert diagnostic_level(&DiagnosticKind::UnsupportedAction) matches { Some(_::Warn) };
+    assert diagnostic_level(&DiagnosticKind::HighlightQuery) matches { Some(_::Warn) };
+    assert diagnostic_level(&DiagnosticKind::FragmentEntry) matches { Some(_::Warn) };
+    assert diagnostic_level(&DiagnosticKind::OverlapTournament) matches { Some(_::Info) };
+    assert diagnostic_level(&DiagnosticKind::OptionalScanGuardFallback) matches { null };
+}
+
+test "warn dedupes diagnostics with the same owner and message" {
+    // A single prediction decision is revisited by lowering: the
+    // parse and scan passes lower the same alts twice. Each revisit
+    // re-enters the same warn site with an identical (owner, message),
+    // so `warn` must
+    // collapse them — otherwise the same overlap warning is reported
+    // N+1 times in `gale dump` and on `gale gen` stderr.
+    let mut diagnostics = Diagnostics {};
+    let owner = DiagnosticOwner::rule_dispatch("r");
+    let msg = String::from("alts 0, 1 share lookahead {TK_ID}");
+    diagnostics.warn(&owner, DiagnosticKind::OverlapTournament, msg);
+    diagnostics.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
+    diagnostics.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
+    let diags = diagnostics.to_list();
+    assert diags.len() == 1, "expected 1 deduped diagnostic";
+    assert diags[0].owner == owner;
+}
+
+test "warn keeps distinct diagnostics" {
+    // Different owner or different message → distinct warnings, not
+    // collapsed. Two decision sites in the same rule are distinct owners:
+    // the owner is structured, so two that render alike do not collide.
+    let mut diagnostics = Diagnostics {};
+    diagnostics.warn(&DiagnosticOwner::rule_dispatch("a"), DiagnosticKind::OverlapTournament, String::from(
+        "alts 0, 1 share lookahead {TK_ID}",
+    ));
+    diagnostics.warn(&DiagnosticOwner::rule_dispatch("b"), DiagnosticKind::OverlapTournament, String::from(
+        "alts 0, 1 share lookahead {TK_ID}",
+    ));
+    diagnostics.warn(&DiagnosticOwner::rule_dispatch("a"), DiagnosticKind::OverlapTournament, String::from(
+        "alts 0, 2 share lookahead {TK_X}",
+    ));
+    diagnostics.warn(
+        &DiagnosticOwner { rule: "a", site: DiagnosticSite::GeneralGroup(0) },
+        DiagnosticKind::OverlapTournament,
+        String::from("alts 0, 1 share lookahead {TK_ID}"),
+    );
+    let diags = diagnostics.to_list();
+    assert diags.len() == 4, "expected 4 distinct diagnostics";
+}

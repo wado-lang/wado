@@ -2,11 +2,11 @@
 
 Open work towards full ANTLR4 compatibility and the performance budget it implies. Read this together with:
 
-- [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility contract, prediction / codegen design, soundness invariants, descriptor pipeline, and triage workflow.
+- [`antlr4-compatibility.md`](./docs/antlr4-compatibility.md) — the compatibility contract, prediction / codegen design, soundness invariants, descriptor pipeline, and triage workflow.
 - [`AGENTS.md`](./AGENTS.md) — the rules for every change.
-- [`dead-ends.md`](./dead-ends.md) — the prediction, predicate and lexer approaches that failed.
-- [`import.md`](./import.md) — grammar composition: how `import S;` resolves and what a delegate contributes.
-- [`perf.md`](./perf.md) — runtime performance: benchmark state, live profile, what would move the needle, and measured perf dead-ends.
+- [`dead-ends.md`](./docs/dead-ends.md) — the prediction, predicate and lexer approaches that failed.
+- [`import.md`](./docs/import.md) — grammar composition: how `import S;` resolves and what a delegate contributes.
+- [`perf.md`](./docs/perf.md) — runtime performance: benchmark state, live profile, what would move the needle, and measured perf dead-ends.
 
 This file lists what is **not yet done** at a behavioral level; find the code via search, not line pointers. Closed work belongs in commit history.
 
@@ -40,7 +40,7 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 ## Stage C — action / predicate execution
 
-Design in [`action.md`](./action.md). Landed: every lexer emit the match can take replays its translatable actions in place (restructured repeats included), the lexer `$`-attribute surface answers in a `language = Wado` body, `@lexer::members` works under `language = Java`, and a same-named label resolves against the rule its own alternative called. A body the translator refuses is still reported and dropped rather than replayed — `UnsupportedAction`, warn-and-emit, unchanged. What is left below is held by something other than action execution.
+Design in [`action.md`](./docs/action.md). Landed: every lexer emit the match can take replays its translatable actions in place (restructured repeats included), the lexer `$`-attribute surface answers in a `language = Wado` body, `@lexer::members` works under `language = Java`, and a same-named label resolves against the rule its own alternative called. A body the translator refuses is still reported and dropped rather than replayed — `UnsupportedAction`, warn-and-emit, unchanged. What is left below is held by something other than action execution.
 
 One narrow gap remains in the surface itself: the lexer's `$line` has no `$`-form. The runtime's line index (`line_starts`) covers the whole input and is built after tokenizing, so a read while lexing would rescan from the start. The alternative is a lexer that counts lines as it goes, for an attribute no grammar asks for. A reference to it is a loud error.
 
@@ -60,7 +60,7 @@ And the corpus side, which is extractor work rather than codegen work (see "Desc
 
 ## Descriptor corpus — coverage and re-triage
 
-The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place and its pinned trees all pass — `[stage_b_oracle_todo]` is empty, so no prediction divergence is currently pinned there. Java is needed only at extract time, not in CI; the extract also needs the `vendor/antlr4` submodule initialized. Re-extract whenever both are at hand — it is what proves an entry is still blocked rather than merely old. Last full run 2026-09-01, all three phases, 98/98 oracle invocations clean; the 2026-09-05 re-extract for `import S;` ran phase 1 only and touched nothing outside the two composite categories.
+The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](./docs/antlr4-compatibility.md)) is in place and its pinned trees all pass — `[stage_b_oracle_todo]` is empty, so no prediction divergence is currently pinned there. Java is needed only at extract time, not in CI; the extract also needs the `vendor/antlr4` submodule initialized. Re-extract whenever both are at hand — it is what proves an entry is still blocked rather than merely old. Last full run 2026-09-01, all three phases, 98/98 oracle invocations clean; the 2026-09-05 re-extract for `import S;` ran phase 1 only and touched nothing outside the two composite categories.
 
 `[stage_b_oracle_skip]` has been re-triaged (2026-08-24) and is down to the seven descriptors whose oracle output is not a valid pin at all — TestRig encodes non-ASCII as `?` while Gale renders the real code points, so pinning would strictly worsen Gale. Those are permanent unless the oracle's output encoding is fixed upstream; nothing else is parked there.
 
@@ -97,7 +97,7 @@ Remaining:
 
 ### Composite (slave-grammar) descriptors
 
-`import S;` has landed; the contract is in [`import.md`](./import.md). All 17 `CompositeLexers` / `CompositeParsers` descriptors are under the ordinary eligibility rules: 15 claim (b), 2 claim (d) token dumps that pin the composite's token numbering, and 11 Stage C output-compares, none triaged. What is left:
+`import S;` has landed; the contract is in [`import.md`](./docs/import.md). All 17 `CompositeLexers` / `CompositeParsers` descriptors are under the ordinary eligibility rules: 15 claim (b), 2 claim (d) token dumps that pin the composite's token numbering, and 11 Stage C output-compares, none triaged. What is left:
 
 - [ ] **`import Foo = Bar;` is a loud error and should not stay one.** ANTLR4 accepts the aliased form, so rejecting it breaks Stage A claim (a) for a grammar upstream compiles, which is why claim (a) now carves it out. Composition itself needs nothing new, since the alias binds the same delegate `import Bar;` would. What is missing is the surface the alias exists for, ANTLR's `gFoo.rule` qualified references inside action bodies, and an oracle answer for the cases the corpus does not cover: two aliases of one grammar, and an alias shadowing another supplied grammar's declared name. Landing the binding without the qualified references would accept the form and silently drop what it means.
 - [ ] **An embedded delegate cannot also be used on its own.** Nesting a language needs the delegate's lexer rules in a mode (`example/MiniCss.g4`), and which mode a rule sits in is decided by the file that declares it. So a delegate written to be embedded starts standalone in an empty `DEFAULT_MODE` and lexes nothing, and one written to stand alone gets swallowed by the host's catch-all rule when composed. Closing it means the host saying where a delegate's rules land (`import MiniCss in mode CSS;` or equivalent), after which the delegate stays `DEFAULT_MODE` and works both ways. `rebase_lexer_rules` already remaps a delegate's modes, so the composition side is one extra argument. The cost is `.g4` syntax ANTLR4 has no counterpart for, which makes it a compatibility decision rather than an implementation one.
@@ -115,4 +115,4 @@ Not queued work: both are known edges of the static path, and the complete answe
 
 ## Performance
 
-Runtime performance — the benchmark state, the live profile, the directions that would move the needle, and measured dead-ends (e.g. data-driven scan) — lives in [`perf.md`](./perf.md).
+Runtime performance — the benchmark state, the live profile, the directions that would move the needle, and measured dead-ends (e.g. data-driven scan) — lives in [`perf.md`](./docs/perf.md).

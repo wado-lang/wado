@@ -521,6 +521,12 @@ wado exec <dep-name> [args...]     # pass arguments to the dependency
 
 The lock file's `command` field for the dependency determines which source file to compile and run. If the dependency has no `command` entry point, `wado exec` reports an error. If the dependency is a dev-dependency and dev-dependencies have not been fetched, `wado exec` reports an error.
 
+## Roadmap
+
+- [ ] `wado scaffold`: create a package in
+  [the standard layout](./spec-package-standard.md). Done when a package it
+  creates holds the required root files and passes `wado test`.
+
 ## Consequences
 
 ### Positive

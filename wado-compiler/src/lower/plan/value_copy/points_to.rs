@@ -29,6 +29,7 @@ use loc_set::{Loc, LocSet};
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
 use super::last_use::collect_child_exprs;
+use super::place::carries_storage;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
 use crate::cut_memo::CutWalk;
 use crate::defs::DefId;
@@ -38,8 +39,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
-    ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    ResolvedType, RetainInto, RetainSpec, ReturnConvention, StructFields, TirBlock, TirExpr,
+    TirExprKind, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::{TypeMemo, TypeTable};
@@ -261,12 +262,29 @@ impl PointsTo {
 
 /// What a handle held in a value lets its holder do to another local's storage.
 #[derive(Clone, Copy)]
-enum Handle {
+pub(super) enum Handle {
     /// Name it: a `&T` or a function value.
     Names,
     /// Write it: a `&mut T` or a function value, or one of those read through
     /// a `&T`.
     Writes,
+}
+
+/// Whether what `spec` retains out of an argument of type `source` names
+/// storage: anything but the elements of an array of plain values, which are
+/// copied and hold no handle.
+pub(super) fn retains_storage<P>(
+    spec: &RetainSpec<P>,
+    source: TypeId,
+    type_table: &TypeTable,
+    names: &HoldsHandle<'_>,
+) -> bool {
+    match (spec.elements, type_table.get(type_table.peel_refs(source))) {
+        (true, ResolvedType::BuiltinArray(element)) => {
+            carries_storage(*element, type_table) || names.of(*element)
+        }
+        _ => true,
+    }
 }
 
 /// The types a walk is inside of: a struct by its type, a variant by its
@@ -285,7 +303,7 @@ fn guarded(
 
 /// Whether a value of a type holds a [`Handle`] at any depth. Everything else
 /// is a value, which assignment copies.
-struct HoldsHandle<'a> {
+pub(super) struct HoldsHandle<'a> {
     type_table: &'a TypeTable,
     fields: &'a StructFields,
     handle: Handle,
@@ -293,7 +311,7 @@ struct HoldsHandle<'a> {
 }
 
 impl<'a> HoldsHandle<'a> {
-    fn new(type_table: &'a TypeTable, fields: &'a StructFields, handle: Handle) -> Self {
+    pub(super) fn new(type_table: &'a TypeTable, fields: &'a StructFields, handle: Handle) -> Self {
         Self {
             type_table,
             fields,
@@ -302,7 +320,7 @@ impl<'a> HoldsHandle<'a> {
         }
     }
 
-    fn of(&self, ty: TypeId) -> bool {
+    pub(super) fn of(&self, ty: TypeId) -> bool {
         self.known
             .get_or_compute(ty, || self.walk(ty, None, &mut UnderWay::new(false), 0))
     }
@@ -400,17 +418,17 @@ impl<'a> HoldsHandle<'a> {
 
 /// How a parameter takes its argument.
 #[derive(Clone, Copy)]
-struct Slot {
+pub(super) struct Slot {
     /// It takes the argument by reference, so the argument's own storage is
     /// handed too.
-    by_ref: bool,
+    pub(super) by_ref: bool,
     /// It is a `&mut`, so the callee may write that storage.
-    writes: bool,
+    pub(super) writes: bool,
 }
 
 impl Slot {
     /// A parameter the analysis knows nothing of.
-    const UNKNOWN: Slot = Slot {
+    pub(super) const UNKNOWN: Slot = Slot {
         by_ref: true,
         writes: true,
     };
@@ -427,28 +445,33 @@ struct Callee {
 }
 
 /// A function value's location: the function a call through it runs.
-struct Target {
+pub(super) struct Target {
     /// The value naming the closure itself, which its `$call` takes as `self`.
     /// `None` for a plain function.
-    this: Option<u32>,
-    params: Vec<u32>,
+    pub(super) this: Option<u32>,
+    pub(super) params: Vec<u32>,
     /// The node every argument flows into, for a function with no parameters
     /// the analysis sees.
-    sink: Option<u32>,
-    ret: u32,
+    pub(super) sink: Option<u32>,
+    pub(super) ret: u32,
 }
 
 /// What a call through a value hands each parameter.
-enum Args {
+pub(super) enum Args {
     Each(Vec<Option<u32>>),
     /// Every parameter takes this node: a caller the analysis cannot see.
     Every(u32),
 }
 
 /// A call through the value in some node.
-struct Site {
-    args: Args,
-    result: u32,
+pub(super) struct Site {
+    pub(super) args: Args,
+    pub(super) result: u32,
+    /// The function location a location with no [`Target`] binds the call to
+    /// instead: every function a value of the call's type may run. Such a
+    /// location is a function the body did not see made: one a caller passed,
+    /// a call returned, or a global held.
+    pub(super) fallback: Option<u32>,
 }
 
 /// A node's state in a cycle search, Tarjan's.
@@ -492,7 +515,7 @@ struct Carried {
 }
 
 #[derive(Default)]
-struct Graph {
+pub(super) struct Graph {
     /// Each set holds locations by their index in `locations`: about one node
     /// in ten is a location, so numbered apart they pack into dense words.
     pts: Vec<LocSet>,
@@ -513,9 +536,9 @@ struct Graph {
     /// `sites[n]`: calls through the value in `n`, bound to each target that
     /// reaches it.
     sites: Vec<Vec<Site>>,
-    targets: IndexMap<u32, Target>,
+    pub(super) targets: IndexMap<u32, Target>,
     /// Locations whose value names no storage, which nothing flows into.
-    inert: IndexSet<u32>,
+    pub(super) inert: IndexSet<u32>,
     edges: IndexSet<(u32, u32)>,
     /// Copy edges found with equal sets at both ends, each searched for a
     /// cycle once: lazy cycle detection (Hardekopf and Lin, PLDI 2007).
@@ -537,7 +560,7 @@ struct Graph {
 }
 
 impl Graph {
-    fn node(&mut self) -> u32 {
+    pub(super) fn node(&mut self) -> u32 {
         let id = self.rep.push();
         self.pts.push(LocSet::default());
         self.copy_to.push(Vec::new());
@@ -549,7 +572,7 @@ impl Graph {
         id
     }
 
-    fn call_site(&mut self, callee: u32, site: Site) {
+    pub(super) fn call_site(&mut self, callee: u32, site: Site) {
         let callee = self.find(callee);
         self.sites[callee as usize].push(site);
         let at = self.sites[callee as usize].len() - 1;
@@ -560,10 +583,23 @@ impl Graph {
 
     /// Connect call `at` through `callee` to `loc`, where `loc` is a function.
     fn bind(&mut self, callee: u32, at: usize, loc: u32) {
+        let (loc, supplied) = match self.sites[callee as usize][at].fallback {
+            Some(fallback) if !self.targets.contains_key(&loc) => (fallback, Some(loc)),
+            _ => (loc, None),
+        };
+        // A function the body did not see made is its own `self`, should it
+        // be a closure.
+        if let Some(supplied) = supplied
+            && let Some(this) = self.targets.get(&loc).and_then(|t| t.this)
+        {
+            let naming = self.node();
+            self.add(naming, supplied);
+            self.copy(naming, this);
+        }
+        let site = &self.sites[callee as usize][at];
         let Some(target) = self.targets.get(&loc) else {
             return;
         };
-        let site = &self.sites[callee as usize][at];
         let mut flows = vec![(target.ret, site.result)];
         if let (Some(sink), Args::Each(args)) = (target.sink, &site.args) {
             flows.extend(args.iter().flatten().map(|&arg| (arg, sink)));
@@ -597,6 +633,12 @@ impl Graph {
         self.rep.find(node)
     }
 
+    /// The location nodes in `node`'s set, once solved.
+    pub(super) fn solved(&mut self, node: u32) -> Vec<u32> {
+        let root = self.find(node);
+        self.locations_in(root)
+    }
+
     /// The location nodes in the set of `node`, a representative.
     fn locations_in(&self, node: u32) -> Vec<u32> {
         Locations {
@@ -607,7 +649,7 @@ impl Graph {
         .collect()
     }
 
-    fn add(&mut self, node: u32, loc: u32) {
+    pub(super) fn add(&mut self, node: u32, loc: u32) {
         let node = self.find(node);
         if self.inert.contains(&node) {
             return;
@@ -643,7 +685,7 @@ impl Graph {
         }
     }
 
-    fn copy(&mut self, from: u32, to: u32) {
+    pub(super) fn copy(&mut self, from: u32, to: u32) {
         let (from, to) = (self.find(from), self.find(to));
         // An inert node's set stays empty, so an edge at either end carries
         // nothing.
@@ -661,7 +703,7 @@ impl Graph {
         self.pts[from as usize] = carried;
     }
 
-    fn load(&mut self, from: u32, to: u32) {
+    pub(super) fn load(&mut self, from: u32, to: u32) {
         let from = self.find(from);
         self.loads[from as usize].push(to);
         for loc in self.locations_in(from) {
@@ -669,7 +711,7 @@ impl Graph {
         }
     }
 
-    fn store(&mut self, into: u32, from: u32) {
+    pub(super) fn store(&mut self, into: u32, from: u32) {
         let into = self.find(into);
         self.stores[into as usize].push(from);
         for loc in self.locations_in(into) {
@@ -983,7 +1025,7 @@ impl Graph {
         self.numbered = true;
     }
 
-    fn solve(&mut self) {
+    pub(super) fn solve(&mut self) {
         self.number_locations_in_node_order();
         self.substitute();
         while let Some(node) = self.work.pop() {
@@ -1179,6 +1221,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         Site {
             args: Args::Every(b.escape),
             result: b.escape,
+            fallback: None,
         },
     );
     let unseen = b.g.node();
@@ -1525,12 +1568,7 @@ impl Builder<'_> {
     /// A builtin, as its declaration states: the result is part of the
     /// arguments it names, and each retained argument — or what it points to
     /// — lands where the declaration says.
-    fn builtin_call(
-        &mut self,
-        decl: &BuiltinDeclaration,
-        returns_reference: bool,
-        args: &[&TirExpr],
-    ) -> Option<u32> {
+    fn builtin_call(&mut self, decl: &BuiltinDeclaration, args: &[&TirExpr]) -> Option<u32> {
         let handed: Vec<Option<u32>> = args
             .iter()
             .enumerate()
@@ -1550,7 +1588,7 @@ impl Builder<'_> {
         if let Some(ReturnConvention::PartOf(params)) = &decl.returns {
             for &p in params {
                 let Some(h) = handed[p] else { continue };
-                if self.type_table.is_reference(args[p].type_id) && !returns_reference {
+                if decl.reads_out_of(p) {
                     self.g.load(h, result);
                 } else {
                     self.g.copy(h, result);
@@ -1561,6 +1599,14 @@ impl Builder<'_> {
             let Some(source) = handed[spec.source] else {
                 continue;
             };
+            if !retains_storage(
+                spec,
+                args[spec.source].type_id,
+                self.type_table,
+                &self.names,
+            ) {
+                continue;
+            }
             let kept = if spec.elements {
                 self.held_by(source)
             } else {
@@ -1782,14 +1828,14 @@ impl Builder<'_> {
                 let mut args = args.iter().map(|a| &a.expr);
                 if let Some(decl) = self.builtins.get(&**func) {
                     let args: Vec<&TirExpr> = args.collect();
-                    let returns_reference = self.type_table.is_reference(expr.type_id);
-                    return self.builtin_call(decl, returns_reference, &args);
+                    return self.builtin_call(decl, &args);
                 }
                 match self.functions.id(&func.module_source, &func.name) {
                     Some(id) => self.call(id, &mut args),
                     None => self.opaque_call(&[], &mut args),
                 }
             }
+            TirExprKind::CmRawCall { args, .. } => self.opaque_call(&[], &mut args.iter()),
             TirExprKind::IndirectCall { callee, args } => {
                 let slots = self.fn_slots(callee.type_id);
                 let v = self
@@ -1812,6 +1858,7 @@ impl Builder<'_> {
                     Site {
                         args: Args::Each(args),
                         result,
+                        fallback: None,
                     },
                 );
                 Some(result)

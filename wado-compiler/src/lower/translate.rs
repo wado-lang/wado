@@ -549,6 +549,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &resolver,
                     base.value_copy,
                     &base.points_to,
+                    base.value_copy.flow.outlived(func),
                     &value_copy::reach::StorageReach::new(
                         &type_table,
                         &base.struct_fields_map,

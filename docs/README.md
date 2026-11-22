@@ -31,6 +31,7 @@
 - [Effect System](./spec-effects.md)
 - [Module System](./spec-modules.md)
 - [Packages](./spec-packages.md)
+- [The Standard Package Layout](./spec-package-standard.md)
 - [Kiln Generators](./spec-kiln.md)
 - [Worlds and Entry Points](./spec-worlds.md)
 - [Components](./spec-components.md)

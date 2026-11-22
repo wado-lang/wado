@@ -1,0 +1,38 @@
+// A closure literal is minted at a type carrying its own effect variable, and
+// reaches a `fn mut` parameter of a type spelled without one. A call through
+// the parameter still answers from that closure's row, which keeps nothing, so
+// `arms` is not escaped by the search and is returned without a copy.
+
+use { println, Stdout } from "core:cli";
+
+struct Arm {
+    keys: List<i32>,
+}
+
+#[inline(never)]
+fn arms_with(key: i32) -> List<Arm> {
+    let mut arms: List<Arm> = [Arm { keys: [1] }];
+    if let Some(i) = arms.iter_ref().position(|a| a.keys.len() == 1) {
+        arms[i].keys.push(key);
+    }
+    return arms;
+}
+
+export fn run() with Stdout {
+    let mut arms = arms_with(builtin::black_box(2));
+    arms[0].keys.push(3);
+    println(`${arms[0].keys.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n",
+    "wir_not_expect:O2": ["$array_clone"],
+    "wir_contrast": {"O2": [
+        {
+            "fn arms_with(key: i32)": "fn arms_with(key: i32, kept: &mut List<&Arm>)",
+            "|a| a.keys.len() == 1": "|a| { kept.push(a); return a.keys.len() == 1; }",
+            "arms_with(builtin::black_box(2))": "arms_with(builtin::black_box(2), &mut [])"
+        }
+    ]}
+}

@@ -99,14 +99,15 @@ Each chapter builds on the ones before it.
 14. [Effect System](./spec-effects.md): declaring, propagating and handling effects.
 15. [Module System](./spec-modules.md): visibility, imports and re-exports.
 16. [Packages](./spec-packages.md): the manifest, dependencies and package specifiers.
-17. [Kiln Generators](./spec-kiln.md): imports that a build-time generator writes.
-18. [Worlds and Entry Points](./spec-worlds.md): what a program imports from its host and exports to it.
-19. [Components](./spec-components.md): the Component Model boundary, concurrency and resources.
-20. [Serialization](./spec-serialization.md): `Serialize`, `Deserialize` and wire formats.
-21. [Compiler Attributes](./spec-attributes.md): the `#[...]` attributes.
-22. [Diagnostics](./spec-diagnostics.md): the warnings and remarks lints report on code the compiler accepts.
-23. [Testing](./spec-testing.md): `test` blocks, their outcomes and how `wado test` finds them.
-24. [Profile-Guided Optimization](./spec-pgo.md): recording how often code runs, and compiling by it.
+17. [The Standard Package Layout](./spec-package-standard.md): where a package keeps each kind of file.
+18. [Kiln Generators](./spec-kiln.md): imports that a build-time generator writes.
+19. [Worlds and Entry Points](./spec-worlds.md): what a program imports from its host and exports to it.
+20. [Components](./spec-components.md): the Component Model boundary, concurrency and resources.
+21. [Serialization](./spec-serialization.md): `Serialize`, `Deserialize` and wire formats.
+22. [Compiler Attributes](./spec-attributes.md): the `#[...]` attributes.
+23. [Diagnostics](./spec-diagnostics.md): the warnings and remarks lints report on code the compiler accepts.
+24. [Testing](./spec-testing.md): `test` blocks, their outcomes and how `wado test` finds them.
+25. [Profile-Guided Optimization](./spec-pgo.md): recording how often code runs, and compiling by it.
 
 ## Design Philosophy
 
