@@ -908,7 +908,7 @@ impl Expander<'_> {
         else {
             return self.bind(slot, sink);
         };
-        if names_storage(expr, self.items) {
+        if names_storage(expr, self.type_table) {
             return self.bind(slot, sink);
         }
         let read = self.bind(expr, sink);
