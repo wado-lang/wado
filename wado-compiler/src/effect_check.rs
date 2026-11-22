@@ -1910,6 +1910,46 @@ pub(crate) fn closure_row(
     closure: &ast::ClosureExpr,
     solved: &EffectRows,
 ) -> Option<Vec<EffectRef>> {
+    walk_early(facts, decls, module, solved, |walker| {
+        walker.closure_performs(closure)
+    })
+}
+
+/// What each variable the call `expr`, whose arguments the walk in `facts`
+/// has just finished, carries out in its type stands for. Empty where the call
+/// reads a row `solved` does not answer yet, or carries none out.
+pub(crate) fn call_rows(
+    facts: &WalkInProgress<'_>,
+    decls: &OwnedEffectData,
+    module: &ModuleSource,
+    expr: &Expr,
+    solved: &EffectRows,
+) -> EffectRows {
+    walk_early(facts, decls, module, solved, |walker| {
+        // Only the rows are wanted here, not what the call misses.
+        walker.holds_every_effect = true;
+        walker.check_call(expr);
+        walker
+            .rows
+            .solved
+            .iter()
+            .filter(|(var, _)| !solved.contains_key(*var))
+            .map(|(var, row)| (var.clone(), row.clone()))
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// What `walk` answers of a walker over the body the walk in `facts` is part
+/// way through, starting from `solved`. `None` where it read a row `solved`
+/// does not answer yet.
+fn walk_early<R>(
+    facts: &WalkInProgress<'_>,
+    decls: &OwnedEffectData,
+    module: &ModuleSource,
+    solved: &EffectRows,
+    walk: impl FnOnce(&mut SemEffectWalker<'_>) -> R,
+) -> Option<R> {
     let index = decls.index(facts.types);
     let mut found = Vec::new();
     let mut walker = SemEffectWalker {
@@ -1926,46 +1966,8 @@ pub(crate) fn closure_row(
         rows: Rows::starting_from(solved.clone()),
         reach: BodyReach::default(),
     };
-    let performed = walker.closure_performs(closure);
-    (walker.rows.read_final() && walker.rows.read_solved()).then_some(performed)
-}
-
-/// What each variable the call `expr`, whose arguments the walk in `facts`
-/// has just finished, carries out in its type stands for. Empty where the call
-/// reads a row `solved` does not answer yet, or carries none out.
-pub(crate) fn call_rows(
-    facts: &WalkInProgress<'_>,
-    decls: &OwnedEffectData,
-    module: &ModuleSource,
-    expr: &Expr,
-    solved: &EffectRows,
-) -> EffectRows {
-    let index = decls.index(facts.types);
-    let mut found = Vec::new();
-    let mut walker = SemEffectWalker {
-        sem: facts,
-        annotations: Some(&facts.sem.types),
-        index: &index,
-        current: IndexSet::default(),
-        holds_every_effect: true,
-        param_types: IndexMap::default(),
-        module: module.source_path(),
-        out: &mut found,
-        closures: ClosureEffects::default(),
-        collecting: None,
-        rows: Rows::starting_from(solved.clone()),
-        reach: BodyReach::default(),
-    };
-    walker.check_call(expr);
-    if !(walker.rows.read_final() && walker.rows.read_solved()) {
-        return EffectRows::default();
-    }
-    walker
-        .rows
-        .solved
-        .into_iter()
-        .filter(|(var, _)| !solved.contains_key(var))
-        .collect()
+    let answer = walk(&mut walker);
+    (walker.rows.read_final() && walker.rows.read_solved()).then_some(answer)
 }
 
 fn walk_body_effects(
