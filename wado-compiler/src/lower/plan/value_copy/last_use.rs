@@ -624,16 +624,17 @@ impl<'a> Analyzer<'a> {
         // parameter, a callee, a global. A write under the same reference root,
         // or into storage of this frame's own, is placed by its path. One under
         // another reference root may alias it, and a path past a reference
-        // field ends anywhere, so only its type can rule either out. So does a
-        // callee's write landing past the handle it was handed.
+        // field ends anywhere, so only its type can rule either out. So may a
+        // callee's write past a handle of this frame's own, through the
+        // references the handle holds.
         let behind_root = self.reference_locals.contains(&path.root);
         let referent = path.through_ref || behind_root;
         let share_safe = self.mutations.iter().zip(&inputs.at_write).all(|(m, r)| {
             let placed = !path.through_ref
-                && !matches!(m.lands, Lands::Reach(_))
                 && (!behind_root
                     || m.path.root == path.root
-                    || !self.reference_locals.contains(&m.path.root));
+                    || !(self.reference_locals.contains(&m.path.root)
+                        || matches!(m.lands, Lands::Reach(_))));
             !r.contains(&local)
                 || (placed && write_cannot_reach(m, path))
                 || (referent && !self.lands_in_reach(m.lands, path.root))
