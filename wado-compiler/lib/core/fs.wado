@@ -194,6 +194,44 @@ pub fn read_linear_range<S: AsStrSlice>(path: S, start: u64, len: i32) -> Result
     return Result::Ok(array);
 }
 
+/// `len` bytes of the regular file at `path` from byte `start` on.
+pub struct FileRange {
+    pub path: String,
+    pub start: u64,
+    pub len: i32,
+}
+
+/// The bytes of each of `ranges`, as [`read_linear_range`] reads one, but
+/// read at once: the host fills them side by side, which a host reading a
+/// file stream a piece at a time makes several times faster than one after
+/// another. The first range that fails is the error.
+pub fn read_linear_ranges(ranges: &List<FileRange>) -> Result<List<LinearArray<u8>>, FsError> with Preopens
+    contract ranges.into_iter().all(|r| r.len >= 0)
+{
+    let mut streams: List<Stream<u8>> = [];
+    let mut ends: List<Future<Result<(), ErrorCode>>> = [];
+    for let r of ranges {
+        let [stream, done] = open_regular(&r.path)?.read_via_stream(r.start as Filesize);
+        streams.push(stream);
+        ends.push(done);
+    }
+    let arrays = LinearArray::read_streams_prefix(&streams, &ranges.into_iter().map(|r| r.len).collect());
+    for let stream of streams {
+        stream.drop();
+    }
+    let mut at = 0;
+    for let done of ends {
+        finish(&ranges[at].path, done)?;
+        at += 1;
+    }
+    for let i of 0..<ranges.len() {
+        if arrays[i].len() < ranges[i].len {
+            return Result::Err(FsError { path: ranges[i].path, kind: FsErrorKind::PastEnd });
+        }
+    }
+    return Result::Ok(arrays);
+}
+
 /// The read stream of the regular file at `path`, the future it reports its
 /// end on, and the size the file states.
 fn open_read<S: AsStrSlice>(path: S) -> Result<[Stream<u8>, Future<Result<(), ErrorCode>>, i32], FsError> with Preopens {

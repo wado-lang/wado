@@ -342,6 +342,45 @@ impl LinearArray<u8> {
         return array;
     }
 
+    /// The first `lens[i]` bytes each of `streams[i]` delivers, or every byte
+    /// where it ends sooner, as `read_stream_prefix` reads them, but read at
+    /// once: a copy is in flight on every stream that has bytes still to come,
+    /// so the host fills them side by side rather than one after another.
+    pub fn read_streams_prefix(streams: &List<Stream<u8>>, lens: &List<i32>) -> List<LinearArray<u8>> with Stream
+        contract streams.len() == lens.len(), lens.into_iter().all(|len| *len >= 0)
+    {
+        let mut arrays: List<LinearArray<u8>> = [];
+        let mut set = WaitableSet::<Landing>::new();
+        for let i of 0..<lens.len() {
+            let mut array = LinearArray::<u8>::unwritten(lens[i]);
+            array.len = 0;
+            if lens[i] > 0 {
+                set.insert(landing(&streams[i], i, array.block.ptr, lens[i]));
+            }
+            arrays.push(array);
+        }
+        while !set.is_empty() {
+            let Landing { at, started, lending } = set.wait().member;
+            let mut settling = started;
+            let packed = settling.buffer.settle();
+            *lending = false;
+            let landed = cm_packed_upper(packed);
+            let array = &mut arrays[at];
+            if landed > 0 {
+                array.len += landed;
+            } else if !settling.items.is_empty() {
+                // A handler's items, held to the room the copy asked for.
+                let count = i32::min(settling.items.len(), array.block.bytes - array.len);
+                gc_array_to_memory(settling.items.internal_raw_data_ref(), 0, array.block.ptr + array.len, count);
+                array.len += count;
+            }
+            if array.len < lens[at] && copy_result(packed) == CopyResult::Completed {
+                set.insert(landing(&streams[at], at, array.block.ptr + array.len, lens[at] - array.len));
+            }
+        }
+        return arrays;
+    }
+
     /// One copy of what `stream` delivers next, appended. A host copy lands in
     /// the block's room. A full block reads into memory of the copy's own, so a
     /// stream exactly as long as the block ends without growing it.
@@ -371,6 +410,28 @@ impl LinearArray<u8> {
         }
         return copy_result(packed);
     }
+}
+
+/// A copy `read_streams_prefix` started on its stream `at`, into memory lent
+/// while `lending` holds.
+affine struct Landing {
+    at: i32,
+    started: StartedRead<u8>,
+    lending: &mut bool,
+}
+
+impl Waitable for Landing {
+    fn wait_on(&self) -> WaitOn {
+        return self.started.wait_on();
+    }
+}
+
+/// A copy on `stream`, its stream `at`, into the `room` bytes at `ptr`.
+fn landing(stream: &Stream<u8>, at: i32, ptr: i32, room: i32) -> Landing with Stream {
+    let mut lent = true;
+    let lending = &mut lent;
+    let into = ReadInto::lent(ptr, room, lending);
+    return Landing { at, started: stream.begin_read(room, into), lending };
 }
 
 /// A block holding the `len` bytes `block` starts with and room for `more`

@@ -73,6 +73,16 @@ impl WeightSource for TimedSource {
     fn len(&self, file: &String) -> Result<i64, LoadError> with Preopens {
         return self.files.len(file);
     }
+
+    fn read_many(
+        &self,
+        ranges: &List<[String, i32, i32]>,
+    ) -> Result<List<LinearArray<u8>>, LoadError> with (Preopens, MonotonicClock) {
+        let began = MonotonicClock::now();
+        let read = self.files.read_many(ranges);
+        READ_NANOSECONDS += (MonotonicClock::now() - began) as u64;
+        return read;
+    }
 }
 
 impl<affine Bk: Backend> Model<Bk> {
