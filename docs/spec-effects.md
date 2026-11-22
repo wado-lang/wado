@@ -608,6 +608,33 @@ fn make<effect E>() -> fn() with E {
 }
 ```
 
+For the same reason, a row holding `E` reaches only an impl generic over the
+row at that place, never one written for a row. A body that would select by its
+caller's row states it as a bound on the function's type (`F: Name`), which the
+caller's row then meets:
+
+<!-- {"fixture":"error_closed_row_impl_on_effect_param.wado"} -->
+
+```wado
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+fn pick<effect E>(f: fn() with E) -> String {
+    return f.name();
+}
+```
+
+`pick` is an error: `E` may be `Stdout` as well as nothing.
+
 ### `with _`
 
 `with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. Every `_` in one signature is the same parameter, distinct from any `<effect E>` the signature declares:

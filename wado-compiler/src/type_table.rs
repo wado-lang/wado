@@ -6313,10 +6313,10 @@ impl TypeTable {
                 // solved yet is nothing the source wrote, so nothing to show.
                 let effect_names: Vec<String> =
                     solve_row(effects, &self.early_effect_rows, &mut |_| {})
-                    .iter()
-                    .filter(|e| !e.is_var())
-                    .map(|e| e.display_name(qualified))
-                    .collect();
+                        .iter()
+                        .filter(|e| !e.is_var())
+                        .map(|e| e.display_name(qualified))
+                        .collect();
                 name::display_fn_type(
                     *is_mut,
                     &param_names,
