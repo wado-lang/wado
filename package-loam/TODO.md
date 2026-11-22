@@ -17,11 +17,11 @@ The devices keep in step. An item is finished on `Cpu`, `WebGpuBackend` and
 `PjrtBackend` alike, the last under the CPU plugin. A run on a TPU is measured
 beside the roadmap and holds no item up.
 
-1. [ ] gpt-oss-20b at speed. `example/gpt-oss-20b/` on the RTX 4060 Ti
-   generates at a 26th of llama.cpp's Vulkan release on the same device
-   ([measured](./benchmark/README.md#gpt-oss-20b)). Finished when Loam's
-   `WebGpuBackend` generates tokens at least 1/1.5 times as fast as llama.cpp's
-   fastest `--n-cpu-moe` there. Loading the model is not timed.
+1. [ ] gpt-oss-20b at speed. Finished when Loam's `WebGpuBackend` generates
+   tokens on the RTX 4060 Ti at least 1/1.5 times as fast as the fastest of
+   llama.cpp's Vulkan arms
+   ([measured](./benchmark/README.md#gpt-oss-20b)). Loading the model is not
+   timed.
 
 ## Later
 

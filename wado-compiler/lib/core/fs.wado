@@ -199,7 +199,8 @@ pub struct FileRange {
 /// The bytes of each of `ranges`, as [`read_linear_range`] reads one, but
 /// read at once: the host fills them side by side, which a host reading a
 /// file stream a piece at a time makes several times faster than one after
-/// another. The first range that fails is the error.
+/// another. A range whose file does not open is the error before any is read;
+/// past that, the first range that fails is.
 pub fn read_linear_ranges(ranges: &List<FileRange>) -> Result<List<LinearArray<u8>>, FsError> with Preopens
     contract ranges.into_iter().all(|r| r.len >= 0)
 {

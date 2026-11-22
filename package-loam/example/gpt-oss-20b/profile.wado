@@ -39,9 +39,6 @@ global STEPS: i32 = 8;
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuQuerySet, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
     let [budget, steps] = budget_and_steps(WEBGPU_BUDGET, STEPS);
-    let Some([generate, _]) = recorded("generate.json", "build/logits.bin") else {
-        return;
-    };
     let Some(mut gpu) = WebGpuBackend::new() else {
         eprintln("no WebGPU adapter");
         return;
@@ -50,6 +47,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
         writes(&mut gpu);
         return;
     }
+    let Some([generate, _]) = recorded("generate.json", "build/logits.bin") else {
+        return;
+    };
     let mut model = Model::load(gpu, budget).unwrap();
     let ids = &generate[0].ids;
     model.continued(ids, steps);
