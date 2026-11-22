@@ -1031,46 +1031,46 @@ fn try_I(src: &StrSlice, start: i32) -> i32 {
 
 fn try_K(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_1 = pos;
-    let mut la_reach_1: i32 = -1;
-    let mut la_win_1: i32 = -1;
-    let mut la_arm_1_0: i32 = -1;
-    la_alt_1_0: {
-        pos = la_saved_1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break la_alt_1_0; }
+    let la_saved_0 = pos;
+    let mut la_reach_0: i32 = -1;
+    let mut la_win_0: i32 = -1;
+    let mut la_arm_0_0: i32 = -1;
+    la_alt_0_0: {
+        pos = la_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break la_alt_0_0; }
         pos += 1;
-        la_arm_1_0 = pos;
+        la_arm_0_0 = pos;
     }
-    let mut la_arm_1_1: i32 = -1;
-    la_alt_1_1: {
-        pos = la_saved_1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break la_alt_1_1; }
+    let mut la_arm_0_1: i32 = -1;
+    la_alt_0_1: {
+        pos = la_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break la_alt_0_1; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'y' { break la_alt_1_1; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'y' { break la_alt_0_1; }
         pos += 1;
-        la_arm_1_1 = pos;
+        la_arm_0_1 = pos;
     }
-    for let mut la_i_1 = 0; la_i_1 < 2; la_i_1 += 1 {
-        let la_at_1 = match la_i_1 { 0 => la_arm_1_0, _ => la_arm_1_1 };
-        if la_at_1 < 0 { continue; }
-        pos = la_at_1;
-        let mut la_tot_1: i32 = -1;
-        let peek_save_2 = pos;
-        peek_2: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'y' { break peek_2; }
+    for let mut la_i_0 = 0; la_i_0 < 2; la_i_0 += 1 {
+        let la_at_0 = match la_i_0 { 0 => la_arm_0_0, _ => la_arm_0_1 };
+        if la_at_0 < 0 { continue; }
+        pos = la_at_0;
+        let mut la_tot_0: i32 = -1;
+        let peek_save_1 = pos;
+        peek_1: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'y' { break peek_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break peek_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break peek_1; }
             pos += 1;
-            la_tot_1 = pos;
+            la_tot_0 = pos;
         }
-        pos = peek_save_2;
-        if la_tot_1 > la_reach_1 {
-            la_reach_1 = la_tot_1;
-            la_win_1 = la_i_1;
+        pos = peek_save_1;
+        if la_tot_0 > la_reach_0 {
+            la_reach_0 = la_tot_0;
+            la_win_0 = la_i_0;
         }
     }
-    if la_win_1 < 0 { return -1; }
-    pos = la_reach_1;
+    if la_win_0 < 0 { return -1; }
+    pos = la_reach_0;
     return pos;
 }
 
@@ -1078,57 +1078,57 @@ fn try_M(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'm' { return -1; }
     pos += 1;
-    let alts_saved_3 = pos;
-    let mut alts_best_3 = -1;
-    alts_3_0: {
-        pos = alts_saved_3;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break alts_3_0; }
+    let alts_saved_0 = pos;
+    let mut alts_best_0 = -1;
+    alts_0_0: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break alts_0_0; }
         pos += 1;
-        if pos > alts_best_3 { alts_best_3 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_3_1: {
-        pos = alts_saved_3;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break alts_3_1; }
+    alts_0_1: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break alts_0_1; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { break alts_3_1; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { break alts_0_1; }
         pos += 1;
-        if pos > alts_best_3 { alts_best_3 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if alts_best_3 < 0 { return -1; }
-    pos = alts_best_3;
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 
 fn try_N(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_4 = pos;
-    let mut alts_best_4 = -1;
-    alts_4_0: {
-        pos = alts_saved_4;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'n' { break alts_4_0; }
+    let alts_saved_0 = pos;
+    let mut alts_best_0 = -1;
+    alts_0_0: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'n' { break alts_0_0; }
         pos += 1;
-        if pos > alts_best_4 { alts_best_4 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_4_1: {
-        pos = alts_saved_4;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'n' { break alts_4_1; }
+    alts_0_1: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'n' { break alts_0_1; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'o' { break alts_4_1; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'o' { break alts_0_1; }
         pos += 1;
-        if pos > alts_best_4 { alts_best_4 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_4_2: {
-        pos = alts_saved_4;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'n' { break alts_4_2; }
+    alts_0_2: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'n' { break alts_0_2; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'o' { break alts_4_2; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'o' { break alts_0_2; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'p' { break alts_4_2; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'p' { break alts_0_2; }
         pos += 1;
-        if pos > alts_best_4 { alts_best_4 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if alts_best_4 < 0 { return -1; }
-    pos = alts_best_4;
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 

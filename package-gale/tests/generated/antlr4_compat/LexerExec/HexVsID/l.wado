@@ -1031,29 +1031,29 @@ fn try_HexLiteral(src: &StrSlice, start: i32) -> i32 {
 
 fn try_DecimalLiteral(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_2 = pos;
-    alts_done_2: {
-        alts_2_0: {
-            pos = alts_saved_2;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_2_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_0_0; }
             pos += 1;
-            break alts_done_2;
+            break alts_done_0;
         }
-        alts_2_1: {
-            pos = alts_saved_2;
-            if pos >= src.len() { break alts_2_1; }
-            if !(unchecked src.byte_at(pos) matches { b'1'..=b'9' }) { break alts_2_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_1; }
+            if !(unchecked src.byte_at(pos) matches { b'1'..=b'9' }) { break alts_0_1; }
             pos += 1;
             loop {
-                rep_3: {
-                    if pos >= src.len() { break rep_3; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_3; }
+                rep_1: {
+                    if pos >= src.len() { break rep_1; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_1; }
                     pos += 1;
                     continue;
                 }
                 break;
             }
-            break alts_done_2;
+            break alts_done_0;
         }
         return -1;
     }
@@ -1062,66 +1062,66 @@ fn try_DecimalLiteral(src: &StrSlice, start: i32) -> i32 {
 
 fn try_FloatingPointLiteral(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_4 = pos;
-    alts_done_4: {
-        alts_4_0: {
-            pos = alts_saved_4;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_4_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_4_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_0_0; }
             pos += 1;
-            break alts_done_4;
+            break alts_done_0;
         }
-        alts_4_1: {
-            pos = alts_saved_4;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_4_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'X' { break alts_4_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'X' { break alts_0_1; }
             pos += 1;
-            break alts_done_4;
+            break alts_done_0;
         }
         return -1;
     }
-    let mut la_end_5: i32 = -1;
+    let mut la_end_1: i32 = -1;
     loop {
-        let mut la_tot_6: i32 = -1;
-        let peek_save_7 = pos;
-        let opt_saved_8 = pos;
-        let mut opt_ok_8 = false;
-        opt_8: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_8; }
+        let mut la_tot_2: i32 = -1;
+        let peek_save_3 = pos;
+        let opt_saved_4 = pos;
+        let mut opt_ok_4 = false;
+        opt_4: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_4; }
             pos += 1;
             loop {
-                rep_9: {
-                    if pos >= src.len() { break rep_9; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break rep_9; }
+                rep_5: {
+                    if pos >= src.len() { break rep_5; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break rep_5; }
                     pos += 1;
                     continue;
                 }
                 break;
             }
-            opt_ok_8 = true;
+            opt_ok_4 = true;
         }
-        if !opt_ok_8 { pos = opt_saved_8; }
-        la_tot_6 = pos;
-        pos = peek_save_7;
-        if la_tot_6 >= 0 && la_tot_6 >= la_end_5 {
-            la_end_5 = la_tot_6;
+        if !opt_ok_4 { pos = opt_saved_4; }
+        la_tot_2 = pos;
+        pos = peek_save_3;
+        if la_tot_2 >= 0 && la_tot_2 >= la_end_1 {
+            la_end_1 = la_tot_2;
         }
-        let la_saved_5 = pos;
-        la_rep_5: {
-            if pos >= src.len() { break la_rep_5; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_5; }
+        let la_saved_1 = pos;
+        la_rep_1: {
+            if pos >= src.len() { break la_rep_1; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_1; }
             pos += 1;
             continue;
         }
-        pos = la_saved_5;
+        pos = la_saved_1;
         break;
     }
-    if la_end_5 < 0 {
+    if la_end_1 < 0 {
         return -1;
     }
-    pos = la_end_5;
+    pos = la_end_1;
     return pos;
 }
 
@@ -1138,9 +1138,9 @@ fn try_ID(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        rep_10: {
-            if pos >= src.len() { break rep_10; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_10; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1155,9 +1155,9 @@ fn try_WS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'\x0a' | b' ' }) { return -1; }
     pos += 1;
     loop {
-        rep_12: {
-            if pos >= src.len() { break rep_12; }
-            if !(unchecked src.byte_at(pos) matches { b'\x0a' | b' ' }) { break rep_12; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'\x0a' | b' ' }) { break rep_0; }
             pos += 1;
             continue;
         }
