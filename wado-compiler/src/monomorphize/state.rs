@@ -12,8 +12,8 @@ use crate::monomorphize::{Pool, Templates};
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::written_impl_at;
 use crate::tir::{
-    FunctionRef, InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeArgMap,
-    TypeId, TypeParamId,
+    EffectRows, FunctionRef, InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam,
+    TypeArgMap, TypeId, TypeParamId,
 };
 use crate::token::Span;
 use crate::type_table::{AnonStructId, ReceiverAssocTypes, TypeTable};
@@ -131,7 +131,7 @@ pub(super) struct Monomorphizer {
     pub current_impl_receiver: Option<FqTypeName>,
     /// The row each effect parameter of the impl being instantiated stands for
     /// at this instance.
-    pub current_effect_rows: crate::tir::EffectRows,
+    pub current_effect_rows: EffectRows,
     /// Each type param of the function being instantiated, by the binder a
     /// `T^Trait<U>::method` name spells it as.
     pub current_param_substitution_key: IndexMap<FqTypeName, TypeParamId>,

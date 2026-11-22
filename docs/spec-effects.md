@@ -579,7 +579,7 @@ its row. An impl may name an effect parameter in its target. It then stands for
 the receiver's row at that place, and the impl's methods demand what that row
 holds:
 
-<!-- {"fixture":"effect_generic_impl_instance_per_row.wado"} -->
+<!-- {"fixture":"error_effect_generic_impl_receiver_row.wado"} -->
 
 ```wado
 impl<effect E> Slot<fn() with (E)> {
@@ -587,10 +587,14 @@ impl<effect E> Slot<fn() with (E)> {
         (self.v)();
     }
 }
+
+fn quiet() {
+    let s = Slot { v: || { println("loud"); } };
+    s.fire();   // ERROR: `E` is `Stdout` here, and `quiet` does not hold it
+}
 ```
 
-`Slot { v: || {} }.fire()` demands nothing, and `fire` on a `Slot` holding a
-closure that prints demands `Stdout`.
+`Slot { v: || {} }.fire()` demands nothing.
 
 A function generic over `E` holds for every row a caller may pick for it, the
 empty one among them. So a value it moves into a slot whose row is `E` may

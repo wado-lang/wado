@@ -14,7 +14,7 @@ impl<effect E> Slot<fn() with (E)> {
 
 fn quiet() {
     let s = Slot { v: || { println("loud"); } };
-    s.fire();
+    s.fire();   // ERROR: `E` is `Stdout` here, and `quiet` does not hold it
 }
 
 export fn run() {

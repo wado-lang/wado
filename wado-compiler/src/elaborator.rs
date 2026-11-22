@@ -62,6 +62,7 @@ use crate::ast::{
 use crate::compiler_host::{Code, CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::divergence;
+use crate::effect_check::OwnedEffectData;
 use crate::elaborator::item::OperationOwner;
 pub(crate) use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
@@ -235,7 +236,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// `AnnotateState::transpositions`.
     transpositions: Rc<hashmap::IndexMap<ast::AstId, transposition::Clean>>,
     /// `AnnotateState::effect_decls`.
-    effect_decls: Option<Rc<crate::effect_check::OwnedEffectData>>,
+    effect_decls: Option<Rc<OwnedEffectData>>,
 }
 
 /// What a default body's author selected at one call through a bound.

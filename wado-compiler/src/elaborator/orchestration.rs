@@ -22,6 +22,7 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::coverage::{CoverageMap, CoverageScope};
+use crate::effect_check::OwnedEffectData;
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::pgo::{Applied, MarkMap};
@@ -536,7 +537,7 @@ pub(crate) struct AnnotateState {
     /// What the effect check reads of the declarations, built once every
     /// module's declarations resolve, so a body walk can work out what a
     /// closure literal performs. `None` until then.
-    pub(super) effect_decls: Option<Rc<crate::effect_check::OwnedEffectData>>,
+    pub(super) effect_decls: Option<Rc<OwnedEffectData>>,
     /// Source-level liveness computed between `annotate_bodies` and `reify`
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
     /// reify item gating and the unused-diagnostics emitter.
@@ -1726,7 +1727,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 && liveness_scope.walks_bodies_of(module_source)
         };
         state.transpositions = Rc::new(transposition::transpositions(modules, walks_bodies_of));
-        let effect_decls = crate::effect_check::OwnedEffectData::build(
+        let effect_decls = OwnedEffectData::build(
             modules,
             &state.tysys.type_table.borrow(),
             state,
