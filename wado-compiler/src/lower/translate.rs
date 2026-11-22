@@ -1228,29 +1228,28 @@ impl FunctionTranslator<'_, '_> {
     /// is copied where a `let` binding it would be: `shared().a = v` must not
     /// write into the global `shared` hands back.
     fn convert_written_place(&self, place: &TirExpr) -> ExprId {
-        let base = match &place.kind {
-            TirExprKind::FieldAccess { expr, .. } | TirExprKind::Index { expr, .. } => expr,
-            _ => return self.convert_expr(place),
+        let written_base = |base: &TirExpr| {
+            if self.base.type_table.borrow().is_reference(base.type_id) {
+                self.convert_operand(base)
+            } else {
+                self.referent_operand(base)
+            }
         };
-        if self.names_storage(base) || self.base.type_table.borrow().is_reference(base.type_id) {
-            return self.convert_expr(place);
-        }
-        let base = self.assigned_value(base, base.type_id);
         let kind = match &place.kind {
             TirExprKind::FieldAccess {
+                expr,
                 field_index,
                 field_name,
-                ..
             } => ExprKind::FieldAccess {
-                expr: base,
+                expr: written_base(expr),
                 field_index: *field_index,
                 field_name: field_name.clone(),
             },
-            TirExprKind::Index { index, .. } => ExprKind::Index {
-                expr: base,
+            TirExprKind::Index { expr, index } => ExprKind::Index {
+                expr: written_base(expr),
                 index: self.convert_operand(index),
             },
-            _ => unreachable!("matched a projection above"),
+            _ => return self.convert_expr(place),
         };
         self.alloc_expr(kind, place.type_id, place.span)
     }
