@@ -1,0 +1,25 @@
+//! gpt-oss-20b on a PJRT plugin's device: checks the first tokens of each
+//! prompt `generate.json` records against onnxruntime, its pools holding the
+//! experts the budget the first argument gives in bytes holds, as many tokens
+//! as the second gives.
+
+use { println, Environment, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { PjrtHost } from "core:pjrt";
+use { MonotonicClock } from "wasi:clocks";
+use { PjrtBackend } from "lib:loam";
+use { budget_and_steps, checked } from "./model.wado";
+
+/// The bytes of experts the pools hold where no argument says.
+global BUDGET: i64 = 3_000_000_000;
+
+global STEPS: i32 = 8;
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, PjrtHost) {
+    let [budget, steps] = budget_and_steps(BUDGET, STEPS);
+    let Some(mut model) = checked(PjrtBackend::new(), budget, steps) else {
+        return;
+    };
+    let on = model.backend_mut();
+    println(`${on.executions()} programs ran, ${on.read_backs()} tensors read back`);
+}

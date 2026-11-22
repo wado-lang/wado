@@ -2464,12 +2464,15 @@ impl WebGpuBackend {
 
     /// A gather of `data` along `axis` by `indices`, a negative one counting
     /// from the end: the result's axes are `data`'s before `axis`, the
-    /// indices', then `data`'s after `axis`.
+    /// indices', then `data`'s after `axis`. Consecutive indices take a view,
+    /// which reads no element; any others a kernel, which reads each as an f32
+    /// and so only where `exact` says that holds it.
     internal fn gathered<Ix>(
         &mut self,
         data: &DeviceTensor,
         indices: &Tensor<i64, Ix>,
         axis: i32,
+        exact: bool,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let along = data.extents[axis];
         let mut words = List::<u32>::with_capacity(indices.data.len());
@@ -2494,6 +2497,9 @@ impl WebGpuBackend {
                 extents,
                 strides,
             });
+        }
+        if !exact {
+            return null;
         }
         // The output, its index axes as one, row by row of `words`.
         let mut flat = data.extents;

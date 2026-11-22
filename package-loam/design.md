@@ -365,44 +365,94 @@ a program, so a device still runs it whole.
 So a pass waits for the host once a layer, which
 [WEP: Loam § The MVP Is Tier 1 Only](../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only)
 says a `QMoE` spares it. That holds only where every expert fits, which a TPU
-chip does for gpt-oss-20b and a GPU of 8 GB does not.
+chip does for gpt-oss-20b
+([what it reports](./devices.md#gpt-oss-20b-compiled-for-a-tpu)) and a GPU of
+8 GB does not ([the devices' run](./devices.md#gpt-oss-20b-on-the-devices)).
 
 #### The pool
 
 An expert is one slice along the first axis of each `QMoE` input indexed by
-expert. The layers whose experts are laid out alike share a pool: one weight
-for each of those inputs, whose first axis is the pool's slots, so a slot holds
-one expert in each. The budget sets the number of slots, and each pool must
-hold one layer's experts, since one prompt may route to all of them.
+expert. A pool is one weight for each of those inputs, whose first axis is its
+slots, so a slot holds one expert in each. A layer whose pool has a slot for
+each of its experts holds its own, expert `e` in slot `e`, and its pass takes
+no host step. A larger pool is shared by a run of layers whose experts are laid
+out alike, and holds what their host steps put in it. It holds more than one
+layer's experts, since one prompt may route to all of them, and fewer than all
+of its layers'.
 
 The host step of a layer reads its picks back, and loads each picked expert the
-pool does not hold into the slot used longest ago, among those the layer does
-not need. Each backend writes a slot in place, as it laid the weight out. It
-gives the layer each distinct expert it picked and the slot holding it, and
-the layer runs those experts alone.
+pool does not hold into a slot the eviction order gives up, among those the
+layer does not need. Each backend writes a slot in place, as it laid the weight
+out. It gives the layer each distinct expert it picked and the slot holding it,
+and the layer runs those experts alone.
 
-`HeldExperts` keeps that store on the host. It counts the budget at the widths
-the checkpoint stores. Each pool group first gets one layer's slots, and the
-rest of the budget is shared in proportion to the bytes of the layers that
-group still lacks. A budget below one layer per group is a `LoadError`. Where
-a group's slots hold every layer, the slot of a layer's expert is fixed, so the
-pass takes no host step for it.
+#### The plan at load
+
+`HeldExperts` plans the pools when the model loads, so the device and the budget
+decide them, not the build. It counts the budget at the widths the checkpoint
+stores. Where the budget holds every expert of a layout, each layer holds its
+own. Otherwise each layout first gets one layer's experts and one more slot, and
+the rest of the budget is shared in proportion to the bytes each layout still
+lacks. A budget below that is a `LoadError`. A layout's layers then split into
+as few runs as keep each pool within what the backend holds in one tensor,
+`Backend::pool_slots`: bytes within `i32`, or on WebGPU one binding. A run of one
+layer holds its own experts.
+
+#### The eviction order
+
+A pass takes the layers in order, and the next pass takes them again. So when
+layer `l` runs, the layer whose experts are needed last is `l` itself, then
+`l - 1`. A shared pool gives up a slot of the layer that runs last from here,
+`Eviction::LayerOrder`, and among those the one used longest ago. The slot used
+longest ago alone, `Recent`, is the worst order for a cycle: it gives up the
+experts of the layer that runs next.
+
+`HeldExperts` counts the experts the steps picked and how many a pool held.
+After `record_fetches`, it also records each host step's fetch, with the shapes
+it planned the pools by. A replay counts each pick of a layer its budget gives
+its own experts as held, so every budget is measured over the same picks. The routing reads nothing the pools hold, so
+`replayed` reruns one record under any order and budget. `Farthest` knows when
+each expert is picked next, so no order holds more than it does.
+
+The share of the experts gpt-oss-20b's steps of one token picked that a pool
+held already, replayed under each order from the fetches of the two prompts
+`generate.json` records: 701 experts picked over the prompts, then 4,992 over
+52 steps. The run recorded them on `PjrtBackend` with a budget of 3 GB, and
+replaying that budget under `LayerOrder` gives the counts it reported:
+
+    wado run-pjrt package-loam/example/gpt-oss-20b/pjrt.wado -- 3000000000 64
+    wado run package-loam/tools/expert_eviction.wado -- package-loam/example/gpt-oss-20b/build/fetches.json 500000000 1000000000 2000000000 3000000000 4000000000 6000000000 8000000000
+
+| Budget, GB | `Recent` | `Frequent` | `LayerOrder` | `Farthest` |
+| ---------- | -------- | ---------- | ------------ | ---------- |
+| 0.5        | 0.0%     | 13.4%      | 14.1%        | 31.5%      |
+| 1          | 0.0%     | 25.7%      | 27.9%        | 54.2%      |
+| 2          | 46.1%    | 44.3%      | 47.0%        | 72.6%      |
+| 3          | 62.8%    | 58.5%      | 61.9%        | 82.2%      |
+| 4          | 72.7%    | 69.6%      | 73.0%        | 87.7%      |
+| 6          | 85.4%    | 85.1%      | 85.8%        | 92.5%      |
+| 8          | 91.4%    | 91.7%      | 91.9%        | 93.4%      |
+
+`LayerOrder` holds the most at every budget but 3 GB, where it is within a
+point of `Recent`. Below 2 GB `Recent` holds nothing at all, the cycle's worst
+case. What separates every order from `Farthest` is which experts a layer will
+pick, which only the router knows; that is what loading experts ahead would
+close.
 
 #### What the generator pools
 
 A `QMoE` is pooled where each expert weight it reads is an initializer that no
 other operand, branch or output reads, stored where the graph's other weights
-are. `Params` then holds a pool in place of those weights, and the layers whose
-weights have the same elements and extents share it. `Model::load` and
-`Model::embedded` take the budget; `Params::load` and `Params::embedded` hold
-every expert.
+are. `Params` then holds each of those weights as a pool, its first axis the
+slots of its layout. `Model::load` and `Model::embedded` take the budget;
+`Params::load` and `Params::embedded` give each layer its own experts.
 
 A program after a host step must not read a weight the step has since written.
 So `split` computes a value that reads only weights again in each program that
 reads it, rather than passing it across the step.
 
 `conformance/operators_test.wado`'s `QMoeLayers` runs two layers that share
-pools holding half their experts, on `Cpu`. Over two layers onnxruntime sits up
+pools holding 6 of their 8 experts, on `Cpu`. Over two layers onnxruntime sits up
 to 4e-4 from the value computed in f64, so the case holds Loam to that value.
 `held_experts.wado` holds each device's run of it to the same device's run with
 every expert held. Its second token is ill-conditioned: a device parts from

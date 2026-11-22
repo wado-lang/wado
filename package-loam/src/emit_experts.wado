@@ -1,6 +1,6 @@
-//! The `QMoE` layers whose expert weights `Params` holds in pools: one pool for
-//! each expert weight of a layout, its first axis the slots, shared by every
-//! layer laid out alike. A budget at load sets the slots.
+//! The `QMoE` layers whose expert weights `Params` holds as pools: one for each
+//! expert weight of each layer, its first axis the slots of the layers laid out
+//! alike. A budget at load sets the slots, and which layers share a pool.
 
 use { HashMap, HashSet } from "core:collections";
 use { Graph, Node, QMOE } from "./graph.wado";
@@ -24,18 +24,19 @@ internal struct ExpertGroup {
 }
 
 impl ExpertGroup {
-    /// The weight standing for each pool: the first layer's, whose name and
-    /// axes past the first the pool takes.
+    /// Every layer's pools, layer by layer.
     internal fn pools(&self) -> List<String> {
-        return self.layers[0];
+        let mut pools: List<String> = [];
+        for let layer of &self.layers {
+            pools.extend(layer);
+        }
+        return pools;
     }
 }
 
-/// Where one pooled `QMoE` reads its experts: its layer among those sharing
-/// its pools, the host step fetching them, and the pools' slot marker.
+/// Where one pooled `QMoE` reads its experts: the host step fetching them, and
+/// the pools' slot marker.
 internal struct PlacedExperts {
-    internal layer: i32,
-    internal layers: i32,
     internal step: i32,
     internal slots: String,
 }
@@ -45,8 +46,8 @@ internal struct ExpertPlan {
     internal groups: List<ExpertGroup>,
     /// Each pooled `QMoE`, by its first output: its group and layer.
     placed: HashMap<String, [i32, i32]>,
-    /// Each pooled weight, and the weight standing for its pool.
-    internal pooled: HashMap<String, String>,
+    /// Each weight held as a pool.
+    pooled: HashSet<String>,
 }
 
 impl ExpertPlan {
@@ -62,7 +63,7 @@ impl ExpertPlan {
         let mut plan = ExpertPlan {
             groups: [],
             placed: HashMap::new(),
-            pooled: HashMap::new(),
+            pooled: HashSet::new(),
         };
         let mut layouts: List<String> = [];
         for let node of &graph.nodes {
@@ -94,22 +95,16 @@ impl ExpertPlan {
             plan.placed[node.outputs[0]] = [at, group.layers.len()];
             group.layers.push(weights);
             group.steps.push(step);
-            for let [i, w] of weights.into_iter().enumerate() {
-                plan.pooled[w] = group.layers[0][i];
+            for let w of weights {
+                plan.pooled.insert(w);
             }
         }
         return plan;
     }
 
-    /// Whether `weight` is held in a pool.
+    /// Whether `weight` is held as a pool.
     internal fn is_pooled(&self, weight: &String) -> bool {
-        return self.pooled.contains_key(*weight);
-    }
-
-    /// The weight `Params` holds `weight` in: the one standing for its pool,
-    /// or `weight` itself.
-    internal fn held_in(&self, weight: &String) -> String {
-        return self.pooled.get(*weight).unwrap_or(*weight);
+        return self.pooled.contains(*weight);
     }
 
     /// Where each pooled `QMoE` reads its experts, by its first output.
@@ -117,18 +112,12 @@ impl ExpertPlan {
         let mut placements = HashMap::<String, PlacedExperts>::new();
         for let [output, [at, layer]] of self.placed.entries() {
             let group = &self.groups[*at];
-            placements[*output] = PlacedExperts {
-                layer: *layer,
-                layers: group.layers.len(),
-                step: group.steps[*layer],
-                slots: group.slots,
-            };
+            placements[*output] = PlacedExperts { step: group.steps[*layer], slots: group.slots };
         }
         return placements;
     }
 
-    /// The weight standing for each pool, group by group, in the order
-    /// `Params` holds the pools.
+    /// Every pool, group by group, in the order `Params` holds them.
     internal fn pools(&self) -> List<String> {
         let mut pools: List<String> = [];
         for let group of &self.groups {
@@ -137,8 +126,8 @@ impl ExpertPlan {
         return pools;
     }
 
-    /// The axes of the pool `pool` stands for: its group's slots, then the
-    /// axes of `pool` past its first.
+    /// The axes of the pool `pool`: its group's slots, then its own past its
+    /// first.
     internal fn pool_axes(&self, checked: &Checked, pool: &String) -> String {
         let group = self.groups.into_iter().find(|g| g.pools().contains(pool)).unwrap();
         let axes = checked.shapes[*pool].axes;
