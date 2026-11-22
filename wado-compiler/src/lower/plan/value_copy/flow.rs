@@ -306,7 +306,7 @@ fn shape(type_id: TypeId, type_table: &TypeTable) -> Shape {
     params
         .iter()
         .chain([return_type])
-        .map(|&t| type_table.mangle_type_arg_rowless(t))
+        .map(|&t| type_table.mangle_type_arg_erased(t))
         .collect()
 }
 
