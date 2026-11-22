@@ -6,13 +6,13 @@
 //! whether a line break ends a statement. These are the Wado twins of the
 //! upstream `JavaScriptLexerBase.java` and `JavaScriptParserBase.java`.
 
-use js from "../grammar/JavaScriptLexer.g4"
+use js from "../assets/grammar/JavaScriptLexer.g4"
     with {
         generator: {
             module: "lib:gale",
             inputs: [
-                "../grammar/JavaScriptParser.g4",
-                { path: "../grammar/JavaScript.highlights.scm", type: "tree-sitter-highlights" },
+                "../assets/grammar/JavaScriptParser.g4",
+                { path: "../assets/grammar/JavaScript.highlights.scm", type: "tree-sitter-highlights" },
             ],
         },
     };
@@ -37,7 +37,7 @@ use {
     TK_OpenBrace,
     TK_CloseBrace,
     TK_Function_,
-} from "../grammar/JavaScriptLexer.g4";
+} from "../assets/grammar/JavaScriptLexer.g4";
 use { Highlight } from "./highlight.wado";
 
 struct JsParserBase {

@@ -51,7 +51,7 @@ function spans(pattern, text) {
 function generate(input, output) {
   const cases = JSON.parse(readFileSync(new URL(`tests/${input}`, root), "utf8"));
   const lines = [
-    `#![generated(by = "package-re/scripts/oracle.mjs", sources = ["package-re/tests/${input}"])]`,
+    `#![generated(by = "package-re/tools/oracle.mjs", sources = ["package-re/tests/${input}"])]`,
     "// What Node's RegExp finds with the `u` flag. Regenerate with",
     "// `mise run oracle-re`; do not edit.",
     "",

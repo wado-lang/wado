@@ -69,6 +69,6 @@ first node it refuses, so this shows the rest before the build reaches them.
 
 ## Benchmarks
 
-[`benchmark/`](./benchmark/README.md) times Loam's backends against
+[`benchmark/`](../benchmark/README.md) times Loam's backends against
 onnxruntime, in the format of the repository's `benchmark/`. Its README says
 how to fetch the models and run it.

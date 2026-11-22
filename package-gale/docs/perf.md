@@ -16,7 +16,7 @@ Wado-wide performance rules — the WasmGC cost model, what decides adoption, an
 the measured dead-ends — live in the `wado-performance` skill; this file keeps
 what is true of Gale specifically.
 
-Read with [`AGENTS.md`](./AGENTS.md) (dev-cycle essentials) and
+Read with [`AGENTS.md`](../AGENTS.md) (dev-cycle essentials) and
 [`antlr4-compatibility.md`](./antlr4-compatibility.md) (prediction / codegen
 design). Design of the flat CST lives in
 [`resilient-parser.md`](./resilient-parser.md).
@@ -725,7 +725,7 @@ rebalancing ~5%) — the id-carrying lever above, applied to the name-keyed maps
 that are left.
 
 This references a list that is already a root, so it adds nothing to the live set
-— unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md)).
+— unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../../.claude/skills/wado-performance/dead-ends.md)).
 
 #### Work the generator repeated or copied (2026-10-06, landed)
 
@@ -760,7 +760,7 @@ whole set against `origin/main`, by GC heap size:
 The geometric mean is +17.2%. gale-gen's
 ranking can flip with the heap size, so a single size does not decide a change
 here. The reason, and two levers judged on one size only, are in
-[`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md).
+[`dead-ends.md`](../../.claude/skills/wado-performance/dead-ends.md).
 
 #### The lookahead DFA explorer (2026-10, landed)
 

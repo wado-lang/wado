@@ -35,7 +35,7 @@ dict = { path = "data/dict.bin" }
 ```
 
 A URL without `integrity` is pinned in `wado.lock` the first time it is
-fetched, as a [remote pin](../docs/spec-packages.md#remote-pins) is. The
+fetched, as a [remote pin](../../docs/spec-packages.md#remote-pins) is. The
 manifest is where other tools find the files as well, such as the oracle
 scripts.
 

@@ -94,7 +94,7 @@ no impl, so a value that never changes is passed as a `String`.
 - `src/signals.wado` — `signal`, `memo`, `observe`, `scope` and `flush`.
 - `src/view.wado` — `View` and its children, `build`, and `hydrate`, which
   builds a view on the served HTML as
-  [`static-generation.md`](./static-generation.md) describes.
+  [`static-generation.md`](./docs/static-generation.md) describes.
 - `example/todo/` — a to-do list, published as a static site. `site.wado`
   renders its initial page and bundles `src/main.wado`, the browser program
   that hydrates it; `mise run rill-todo-site` builds the site into

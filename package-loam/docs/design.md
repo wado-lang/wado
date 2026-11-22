@@ -1,6 +1,6 @@
 # Loam Design
 
-[WEP: Loam](../docs/wep-2026-09-20-loam.md) holds the design up to its
+[WEP: Loam](../../docs/wep-2026-09-20-loam.md) holds the design up to its
 completion, and this file what was built after it. These documents hold a part
 each:
 
@@ -11,7 +11,7 @@ each:
 - [Runtime Assets](./remote-import.md): files a program reads at run time, not
   settled.
 
-A roadmap item in [TODO.md](./TODO.md) writes its design here when it is
+A roadmap item in [TODO.md](../TODO.md) writes its design here when it is
 finished. Where it changes a decision the WEP made, it names the WEP's section.
 
 ## The Probe
@@ -26,7 +26,7 @@ A Kiln host serves the probe's stream a range at a time, then reads each input
 to its extent and no further, for `generate`, the cache key and the cache check
 alike. `wado test`'s result cache and the run's source watch record such an
 input as the prefix it is. The protocol is in
-[the Kiln spec](../docs/spec-kiln.md#the-probe).
+[the Kiln spec](../../docs/spec-kiln.md#the-probe).
 
 What a build reads of the checkpoint `tools/onnx_split.wado` writes for each
 model, counted with `strace -f -y -e trace=read,pread64` over
@@ -53,7 +53,7 @@ downloads the file the weights load from. Building a model downloads it, so
 ## Inferred Axis Names
 
 Every axis takes its name as
-[WEP: Loam § Axis Names Are Inferred From the Graph](../docs/wep-2026-09-20-loam.md#axis-names-are-inferred-from-the-graph)
+[WEP: Loam § Axis Names Are Inferred From the Graph](../../docs/wep-2026-09-20-loam.md#axis-names-are-inferred-from-the-graph)
 says, which also settles which name a class takes where several reach it.
 MNIST-12, the tiny GPT-2's three graphs, GPT-2 (124M) and Gemma 3 (270M) all
 build from the graph alone, and Loam takes no option that names an axis. An
@@ -64,7 +64,7 @@ example that wants a word of its own renames the axis where it imports it.
 ## The Decoder's Cache
 
 `Cache<Bk>` is built as
-[WEP: Loam § A Decoder's Cache Is One Value](../docs/wep-2026-09-20-loam.md#a-decoders-cache-is-one-value)
+[WEP: Loam § A Decoder's Cache Is One Value](../../docs/wep-2026-09-20-loam.md#a-decoders-cache-is-one-value)
 decided, but for two departures.
 
 The WEP stops the build at a past no present pairs with, or the reverse. Such
@@ -83,7 +83,7 @@ itself calls `retain_fields(&mut backend, &cache)` there.
 
 ## Weight Sources
 
-[WEP: Loam § The Graph Is the Schema, the Checkpoint Is Data](../docs/wep-2026-09-20-loam.md#the-graph-is-the-schema-the-checkpoint-is-data)
+[WEP: Loam § The Graph Is the Schema, the Checkpoint Is Data](../../docs/wep-2026-09-20-loam.md#the-graph-is-the-schema-the-checkpoint-is-data)
 gives the loader one `ByteList`. A model larger than the guest's memory cannot
 be one, so the loader reads from a source instead, a range at a time:
 
@@ -209,7 +209,7 @@ weight.
 
 A graph's `float16` and `bfloat16` tensors are `f16` and `bf16` on every device,
 as
-[WEP: Loam § Wado Stores a Half, a Device Computes In It](../docs/wep-2026-09-20-loam.md#wado-stores-a-half-a-device-computes-in-it)
+[WEP: Loam § Wado Stores a Half, a Device Computes In It](../../docs/wep-2026-09-20-loam.md#wado-stores-a-half-a-device-computes-in-it)
 decided, with one departure on `WebGpuBackend`.
 
 The WEP has a device with `shader-f16` compute in f16. `WebGpuBackend` reads
@@ -363,7 +363,7 @@ programs split the same way. A loop or branch without a host step stays inside
 a program, so a device still runs it whole.
 
 So a pass waits for the host once a layer, which
-[WEP: Loam § The MVP Is Tier 1 Only](../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only)
+[WEP: Loam § The MVP Is Tier 1 Only](../../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only)
 says a `QMoE` spares it. That holds only where every expert fits, which a TPU
 chip does for gpt-oss-20b
 ([what it reports](./devices.md#gpt-oss-20b-compiled-for-a-tpu)) and a GPU of

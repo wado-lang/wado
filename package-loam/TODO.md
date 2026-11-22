@@ -1,7 +1,7 @@
 # Loam TODO
 
 Open work on Loam. [`AGENTS.md`](./AGENTS.md) says how to work here, and
-[`design.md`](./design.md) holds the design and names the documents it builds
+[`design.md`](./docs/design.md) holds the design and names the documents it builds
 on. A section name below, such as The Graph Is ONNX, is one of
 [WEP: Loam](../docs/wep-2026-09-20-loam.md)'s.
 
@@ -19,7 +19,7 @@ beside the roadmap and holds no item up.
 
 1. [ ] gpt-oss-20b at speed. A step token of `example/gpt-oss-20b/` takes as
    long on the RTX 4060 Ti as on XLA's CPU plugin
-   ([measured](./devices.md#gpt-oss-20b-on-the-devices)), and its experts'
+   ([measured](./docs/devices.md#gpt-oss-20b-on-the-devices)), and its experts'
    loads, about 1 GB a token at a budget of 3 GB, are a guess at why. Finished
    when `devices.md` splits a step token's time on WebGPU and on the CPU plugin
    into reading experts from the files, writing them to the device, the host
@@ -37,7 +37,7 @@ Work no roadmap item holds yet. It is unordered.
 - [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
   shape class and compiled for each device: StableHLO through `core:pjrt` for
   a TPU, Loam's own compiler for WebGPU. See
-  [Loam on TPU and WebGPU](./devices.md), whose plan lists the steps, a TPU
+  [Loam on TPU and WebGPU](./docs/devices.md), whose plan lists the steps, a TPU
   run and many requests at once among them. Finished when every step of that
   plan is.
 - [ ] Narrowed outputs. A use site can name an output that each call reads at
@@ -257,7 +257,7 @@ alone.
 ### Element types and precision
 
 `WebGpuBackend` computes in f32 between the f16s it reads and writes
-([Half Element Types](./design.md#half-element-types)), so a device whose f16
+([Half Element Types](./docs/design.md#half-element-types)), so a device whose f16
 arithmetic is faster gains nothing from it. No Kiln option chooses arithmetic
 in f16 yet. One would, on a device that offers `shader-f16`, and a graph built
 with it would be held to a tolerance rather than to the f32 path's bits.
@@ -356,7 +356,7 @@ A `Cpu` keeps every weight it is given until it drops: `kept_weight` and `pool`
 only add to `Cpu.kept`. A model loaded again on the same `Cpu` holds its weights
 twice in linear memory.
 
-[Loam on TPU and WebGPU](./devices.md#known-gaps) lists the gaps of the device
+[Loam on TPU and WebGPU](./docs/devices.md#known-gaps) lists the gaps of the device
 design.
 
 ### Beyond tier 2

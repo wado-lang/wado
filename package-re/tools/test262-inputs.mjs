@@ -156,7 +156,7 @@ const cases = [...found].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([
 writeFileSync(join(root, "tests/generated/test262.json"), `${JSON.stringify(cases, null, 2)}\n`);
 
 const syntax = [
-  '#![generated(by = "package-re/scripts/test262-inputs.mjs", sources = ["vendor/test262"])]',
+  '#![generated(by = "package-re/tools/test262-inputs.mjs", sources = ["vendor/test262"])]',
   "// The patterns test262's RegExp tests run that Node's RegExp accepts with the",
   "// `u` flag and Re refuses. Regenerate with `mise run test262-re`; do not edit.",
   "",

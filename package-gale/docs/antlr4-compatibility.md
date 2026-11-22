@@ -6,7 +6,7 @@ The central reference for **how** Gale verifies it stays compatible with the ups
 - **The descriptor pipeline** — how the upstream `runtime-testsuite/` is turned into a Wado test suite.
 - **Triage** — how to read results, classify failures, and close gaps.
 
-Prediction and codegen design (LL prediction, soundness invariants, the ATN escalation) lives below; the failed approaches that shaped it are in [`dead-ends.md`](./dead-ends.md). Open work (remaining gaps, performance) lives in [`TODO.md`](./TODO.md). Live pass/fail numbers come from CI; this document does not snapshot them.
+Prediction and codegen design (LL prediction, soundness invariants, the ATN escalation) lives below; the failed approaches that shaped it are in [`dead-ends.md`](./dead-ends.md). Open work (remaining gaps, performance) lives in [`TODO.md`](../TODO.md). Live pass/fail numbers come from CI; this document does not snapshot them.
 
 ## The Compatibility Contract
 
@@ -29,7 +29,7 @@ interpretation. Every such grammar is listed under
 Where accepting a construct would require inventing behavior — the result is
 ambiguous, or context-defined with no single forced answer — Gale rejects
 loudly instead of guessing. The canonical statement of this rule is the
-"Compatibility Principle" in [`AGENTS.md`](./AGENTS.md).
+"Compatibility Principle" in [`AGENTS.md`](../AGENTS.md).
 
 The contract binds **capability**, not byte-for-byte output. Parse
 trees, token streams, and semantics must match ANTLR4; an incidental
@@ -144,7 +144,7 @@ Four more are decided as the text is read, so each carries a span:
 
 ### ICU is the source of truth for `\p{...}`
 
-`\p{...}` resolves through [`core:icu`](../docs/stdlib-core-icu.md), so its
+`\p{...}` resolves through [`core:icu`](../../docs/stdlib-core-icu.md), so its
 Unicode version is whatever the Wado release carries — 17.0.0 today. ANTLR4
 ships a property table frozen when the jar was built (4.13.2 is Unicode
 15.0.0). **Divergence that traces to ICU is accepted**, and it is not compared
@@ -434,12 +434,12 @@ whitespace (`BREAK: 'break '` renders `break  break`, the token's
 trailing space plus the child separator).
 
 The oracle is the published jar treated as a black box; the wrapper
-script `package-gale/scripts/antlr4_oracle.wado` runs it, captures the
+script `package-gale/tools/antlr4_oracle.wado` runs it, captures the
 S-expression tree, and the extractor embeds that tree verbatim into
 the generated test file. ANTLR4 source is **not** read by either the
 script or the extractor — only the public `-tree` / `-tokens` outputs
 of the published jar are consumed (clean-room, per the License
-hygiene rule in [`AGENTS.md`](./AGENTS.md)).
+hygiene rule in [`AGENTS.md`](../AGENTS.md)).
 
 Stage B′ runs at descriptor-extraction time, not at test time. Its
 inputs (grammar + input) are stable; its output (the oracle tree) is
@@ -498,7 +498,7 @@ hand-curated Stage B driver tests, whose expected trees are
 hand-written and so can silently encode a Gale-vs-ANTLR4 divergence
 rather than ANTLR4's actual output.
 
-`mise run oracle-gale-regen <key>` (`scripts/regen_oracle.wado`) extends
+`mise run oracle-gale-regen <key>` (`tools/regen_oracle.wado`) extends
 the Stage B′ mechanism to a real grammar: for each input in
 `tests/oracle/<key>/cases.*` it runs the same `antlr4_oracle.wado` black box to get the reference tree and Gale's
 generated parser to get its current tree, then regenerates
@@ -555,7 +555,7 @@ the probe reaches no `LexerAdaptor` member and both polarities agree, and
 its answer of `ID` is still wrong. Agreement is evidence about the
 stubbed predicates, never about the base class.
 
-`mise run oracle-gale-selftest` (`scripts/antlr4_oracle_selftest.wado`)
+`mise run oracle-gale-selftest` (`tools/antlr4_oracle_selftest.wado`)
 pins both paths.
 
 #### Comparing a whole TypeScript file
@@ -596,9 +596,9 @@ requires a cross-language translator (Java / Python / TypeScript /
 Rust / … → Wado) for the in-band action source, plus wiring for
 `superClass`, `tokenVocab`, and other host-side hooks. Sketch and
 rationale live in
-[`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md); the
+[`docs/wep-2026-03-02-gale.md`](../../docs/wep-2026-03-02-gale.md); the
 implementation design and what is left of it are in
-[`action.md`](./action.md) and [`TODO.md`](./TODO.md).
+[`action.md`](./action.md) and [`TODO.md`](../TODO.md).
 
 The goal is that a `.g4` taken as it is from elsewhere runs unchanged. The
 translator gets there one construct at a time, and the real-world corpus sets
@@ -1241,7 +1241,7 @@ that needs none carries none and is byte-for-byte unaffected.
 
 `prediction: "longest"` leaves every contested decision, 3 and 6 included, to
 the tournament and the continuation scan, and refuses a grammar that holds 1,
-2, 4 or 5. "Choosing a prediction mode" in the [README](./README.md) lists the
+2, 4 or 5. "Choosing a prediction mode" in the [README](../README.md) lists the
 modes.
 
 ### Known approximation gaps
@@ -1333,7 +1333,7 @@ A) plus per-descriptor parse-tree assertions (Stage B).
 vendor/antlr4/.../descriptors/<Category>/<Name>.txt
                   │
                   ▼
-   scripts/extract_antlr4_descriptors.wado
+   tools/extract_antlr4_descriptors.wado
    (reads [grammar] / [slaveGrammar], applies trim /
     triple-quote / trailing-newline rules from Java's
     RuntimeTestDescriptorParser.parse, mirrors them to disk)
@@ -1348,7 +1348,7 @@ tests/antlr4-compat/drivers/<Category>/<Category>_<k>_test.wado
                   │              │                   GRAMMARS_PER_FILE grammars:
                   │              │                   Stage A claims (b/c/d), Stage B
                   │              │                   full-tree or sub-tree, Stage B′
-                  │              │                   trees from scripts/antlr4_oracle.wado
+                  │              │                   trees from tools/antlr4_oracle.wado
                   │              │                   on the stripped grammar, Stage C
                   │              │                   action-print output)
                   │              └── all consult tests/antlr4-compat/status.toml
@@ -1371,7 +1371,7 @@ step for the Java target at extract time, so the committed `.g4` files
 carry real Java action bodies instead of testsuite-only notation. The
 expansion table was pinned clean-room — helper names, descriptor
 `[output]`s, and the public ANTLR4 runtime API; never the upstream
-`.stg` files (License hygiene in [`AGENTS.md`](./AGENTS.md)). An
+`.stg` files (License hygiene in [`AGENTS.md`](../AGENTS.md)). An
 unknown helper is left verbatim and warned to stderr: either add it to
 the table or triage the descriptor into `[skip]`.
 
@@ -1386,7 +1386,7 @@ descriptor is left testing something other than what it is for. So
 and `PositionAdjustingLexer` (overrides `nextToken()`) stay `[skip]`
 rather than being stubbed out.
 
-`scripts/expand_action_templates_in_place.wado` applies the identical
+`tools/expand_action_templates_in_place.wado` applies the identical
 transform to the committed corpus without `vendor/antlr4` (used for the
 initial conversion; on an expanded corpus it must report 0 rewrites).
 It cannot re-derive expansions — after a table change, regenerate via
@@ -1399,14 +1399,14 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 
 | Path                                       | Role                                                                                                                                          |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                                                                                           |
+| `tools/extract_antlr4_descriptors.wado`  | Extractor (single-file Wado script)                                                                                                           |
 | `tests/antlr4-compat/grammars/`            | Generated `.g4` files (committed)                                                                                                             |
 | `tests/antlr4-compat/<category>_test.wado` | Stage A claim-(a) per-category tests (committed; `#![generated(by=…)]`)                                                                       |
 | `tests/antlr4-compat/drivers/`             | Every stage's drivers (committed), in the [driver files](#driver-files)                                                                       |
 | `tests/generated/antlr4_compat/`           | Kiln-generated parsers/lexers, one per distinct grammar (committed)                                                                           |
 | `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                              |
-| `scripts/antlr4_oracle.wado`               | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `build/antlr4/`. Run at extract time only — CI does not need it.      |
-| `scripts/antlr4_oracle_selftest.wado`      | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.    |
+| `tools/antlr4_oracle.wado`               | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `build/antlr4/`. Run at extract time only — CI does not need it.      |
+| `tools/antlr4_oracle_selftest.wado`      | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.    |
 | `tools/tree_diff.wado`                     | Lists where the jar's parse tree and Gale's disagree, once per divergence rather than per line.                                               |
 | `tests/grammars/java/`                     | Base classes for `superClass` grammars, each the Java twin of a Wado `impl` in the matching driver test. Fed to `antlr4_oracle.wado --super`. |
 
@@ -1481,7 +1481,7 @@ mise run extract-gale-descriptors
 mise run extract-gale-descriptors ParserExec LeftRecursion
 ```
 
-The task runs `scripts/extract_antlr4_descriptors.wado` from the
+The task runs `tools/extract_antlr4_descriptors.wado` from the
 repository root, with the Java the jar needs. Generated `.g4` and
 `.wado` files go directly under `package-gale/tests/`. The Stage B′
 phase reaches `java` through `[process] read` in the user config (or
@@ -1572,8 +1572,8 @@ diagnostic environment variables (`WADO_TRACE`,
 
 ## See Also
 
-- [`AGENTS.md`](./AGENTS.md) — the rules for every change: compatibility principle, license hygiene, codegen, inlined runtime, tests.
+- [`AGENTS.md`](../AGENTS.md) — the rules for every change: compatibility principle, license hygiene, codegen, inlined runtime, tests.
 - [`dead-ends.md`](./dead-ends.md) — the prediction, predicate and lexer approaches that failed.
-- [`TODO.md`](./TODO.md) — open compatibility / performance work.
-- [`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md) — Gale's overall design rationale, including the long-term plan for Stage C (action-body translation).
+- [`TODO.md`](../TODO.md) — open compatibility / performance work.
+- [`docs/wep-2026-03-02-gale.md`](../../docs/wep-2026-03-02-gale.md) — Gale's overall design rationale, including the long-term plan for Stage C (action-body translation).
 - `vendor/antlr4/doc/` — the upstream `antlr4` documentation (vendored as a shallow git submodule). Read this for the canonical semantics of any `.g4` construct.

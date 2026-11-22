@@ -16,7 +16,7 @@
 //! that `WADO` names (default `target/debug/wado`).
 //!
 //! ```sh
-//! wado run package-gale/scripts/regen_oracle.wado [sqlite | json | all]   # default: all
+//! wado run package-gale/tools/regen_oracle.wado [sqlite | json | all]   # default: all
 //! ```
 
 use { args, env, eprint, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
@@ -190,7 +190,7 @@ fn regen(jar: &Jar, target: &Target) -> Result<(), String> with (Process, Preope
 
     let module = target.module;
     let out = fs::join(TESTS, `driver_cst_${target.key}_oracle_test.wado`);
-    let text = `#![generated(by = "package-gale/scripts/regen_oracle.wado")]
+    let text = `#![generated(by = "package-gale/tools/regen_oracle.wado")]
 // Do not edit by hand — re-run scripts/regen_oracle.wado ${target.key} to regenerate.
 // Generated against ANTLR4 ${jar.version} (the published jar, run as a black box).
 //

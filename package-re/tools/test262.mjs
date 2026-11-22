@@ -53,7 +53,7 @@ function knownToIcu(path) {
 
 
 const lines = [
-  '#![generated(by = "package-re/scripts/test262.mjs", sources = ["vendor/test262"])]',
+  '#![generated(by = "package-re/tools/test262.mjs", sources = ["vendor/test262"])]',
   "// The patterns test262's parse-phase negative tests hold to a SyntaxError,",
   "// which Node's RegExp rejects with the `u` flag too. Regenerate with",
   "// `mise run test262-re`; do not edit.",

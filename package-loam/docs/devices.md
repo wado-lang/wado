@@ -3,7 +3,7 @@
 This is the design for running Loam at the best speed both on a TPU and on
 WebGPU, for one request at a time and for many requests served at once. It
 starts from what sets the speed on each device. It changes decisions
-[WEP: Loam](../docs/wep-2026-09-20-loam.md) made, and
+[WEP: Loam](../../docs/wep-2026-09-20-loam.md) made, and
 [What this changes](#what-this-changes) names each one.
 
 A TPU and WebGPU have about the same priority. A trade-off between them that
@@ -14,20 +14,20 @@ cannot be resolved goes WebGPU's way.
 ### What sets the speed on a TPU
 
 A program reaches a TPU only as StableHLO, given to XLA through a PJRT plugin
-([research §2](../docs/research-tpu.md#2-the-only-public-entry-is-pjrt)).
+([research §2](../../docs/research-tpu.md#2-the-only-public-entry-is-pjrt)).
 So the following hold:
 
 - XLA fuses the whole program it is given. A fusion decision made before XLA
   sees the program buys nothing, and a program split into pieces leaves XLA
   less to fuse and pays a launch per piece.
 - Every extent is fixed when the program compiles
-  ([research §6](../docs/research-tpu.md#6-shapes-must-be-static)). A program
+  ([research §6](../../docs/research-tpu.md#6-shapes-must-be-static)). A program
   compiles once per set of extents, and a compile is far slower than a run. So
   extents that change on every call, such as a decoder's position, must not be
   extents.
 - A decoder's step over one token is bound by memory bandwidth. A product of
   one row by GPT-2's head does about 1.5 operations per byte it reads
-  ([research §7](../docs/research-tpu.md#7-the-compilers-cost-model)). Adding
+  ([research §7](../../docs/research-tpu.md#7-the-compilers-cost-model)). Adding
   rows adds operations and almost no bytes, so many requests in one pass cost
   little more than one. Serving many requests is where a TPU pays.
 - A step's time is the weights' bytes over the bandwidth, so bf16 weights halve
@@ -44,14 +44,14 @@ dispatch itself, as [Loam on WebGPU](./webgpu.md) records.
 
 - At one request, the dispatches a pass makes and the host's work to record them
   set the time
-  ([research §5](../docs/research-ml-inference-webgpu.md#5-at-batch-size-1-dispatch-count-is-the-bottleneck)).
+  ([research §5](../../docs/research-ml-inference-webgpu.md#5-at-batch-size-1-dispatch-count-is-the-bottleneck)).
   Once those were cut, the device set Gemma 3's time.
 - A read back is a synchronization. A decoder that reads its token back after
   every step stops the device once per token.
 - The device decides which shader is fastest. Its limits, its subgroup size, and
   whether it has `shader-f16` are known only when the program runs.
 - No barrier spans the device, so one dispatch cannot hold a whole model
-  ([research §6](../docs/research-ml-inference-webgpu.md#webgpu-cannot-host-a-true-megakernel)).
+  ([research §6](../../docs/research-ml-inference-webgpu.md#webgpu-cannot-host-a-true-megakernel)).
 - A step is bound by memory bandwidth here too, so a weight's storage width sets
   its cost.
 
@@ -102,7 +102,7 @@ runs that program, and reads back what it returns. Nothing in the generated
 module runs per operation on a call.
 
 This is tier 2 of
-[WEP: Loam § The MVP Is Tier 1 Only](../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only),
+[WEP: Loam § The MVP Is Tier 1 Only](../../docs/wep-2026-09-20-loam.md#the-mvp-is-tier-1-only),
 built: a cache of shape classes that fills on first use. A TPU makes it a
 requirement, since XLA compiles at run time whatever Loam does. Capacities are
 few by construction, so a model compiles a handful of programs, not one per
@@ -145,7 +145,7 @@ The graph's operations take their meaning from the StableHLO specification:
 `compare`, `case`, `while`, and `convolution` and `reduce_window` for a
 convolutional network. A specification fixes what each operation means, which
 Loam's own kernel set never did. The lowering to a TPU is then one to one. The
-StableHLO front end, an item of [TODO.md](./TODO.md#later), reads into the same
+StableHLO front end, an item of [TODO.md](../TODO.md#later), reads into the same
 graph.
 
 StableHLO has no error function, which GELU reads. `erf` takes its meaning from
@@ -223,7 +223,7 @@ lowest value, as GPT-2's is, rather than negative infinity, and that mask before
 the bias rather than after it. A padded position reads negative infinity past
 the composite's `reach`, as the softmax of the parts does. So `Cpu` computes what
 the graph says. A kernel may differ from its decomposition only in what
-[WEP: Loam § Results Are Held to a Tolerance, Not to the Bit](../docs/wep-2026-09-20-loam.md#results-are-held-to-a-tolerance-not-to-the-bit)
+[WEP: Loam § Results Are Held to a Tolerance, Not to the Bit](../../docs/wep-2026-09-20-loam.md#results-are-held-to-a-tolerance-not-to-the-bit)
 already allows: the order of a sum, a fused multiply-add, and an online
 softmax's rescaling, which reorders a sum. A kernel that replaced the mask by
 negative infinity, or skipped a `Cast`, would compute another function, so it
@@ -254,7 +254,7 @@ backend reaches NVIDIA GPUs through XLA's CUDA plugin.
 Loam's device compiler is part of the runtime library, so it ships in every
 program that uses WebGPU. Compiling ahead of time for a list of device profiles
 would multiply the variants by the profiles, which
-[research §11](../docs/research-ml-inference-webgpu.md#11-backend-abstraction)
+[research §11](../../docs/research-ml-inference-webgpu.md#11-backend-abstraction)
 says does not scale. The compiler takes the graph and the device's features,
 and makes a pass that runs from a list of dispatches:
 
@@ -554,7 +554,7 @@ steps a call. Over 100 tokens:
 | 32           | 1.03–1.06                    | 210                |
 | 99           | 1–1.03                       | 210                |
 
-[The benchmarks](./benchmark/README.md#gemma-3-270m) time the first prompt
+[The benchmarks](../benchmark/README.md#gemma-3-270m) time the first prompt
 against onnxruntime on CUDA and on WebGPU, and against llama.cpp.
 
 ### GPT-2 in slots
@@ -639,7 +639,7 @@ holds without loss, and 67,332,616 stay f32. Every matrix that takes part in a
 product is among the first. The second are the four rotary tables and the 111
 vectors and scalars that bf16 would round. A topology's `optimal_seconds` is a
 model, and it does not price 94 and 93 of each program's operations
-([research §7](../docs/research-tpu.md#7-the-compilers-cost-model)).
+([research §7](../../docs/research-tpu.md#7-the-compilers-cost-model)).
 
 ### gpt-oss-20b on the devices
 
@@ -753,7 +753,7 @@ chip: the plugin asks 34.74 GB of temporaries for that program, past its
   hand is reached only from Pallas, which runs in Python.
 - Text StableHLO carries no compatibility promise; only a portable artifact
   does, and writing one takes libStablehlo
-  ([research §4](../docs/research-tpu.md#4-the-program)).
+  ([research §4](../../docs/research-tpu.md#4-the-program)).
 - `libtpu.so` aborts the process on an unknown extent rather than returning an
   error, so a host cannot recover from a program that carries one.
 - No step here runs the CUDA plugin, so no run on an NVIDIA GPU is measured.

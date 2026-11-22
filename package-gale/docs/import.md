@@ -1,6 +1,6 @@
 # Gale — Grammar Composition (`import S;`)
 
-How a master `.g4` and the grammars its `import` names become one grammar. Companion to [`antlr4-compatibility.md`](./antlr4-compatibility.md) and [`TODO.md`](./TODO.md). The semantics are ANTLR4's, from `vendor/antlr4/doc/grammars.md` ("Grammar Imports"). Only the resolution model is Gale's own, because a Kiln generator has no filesystem.
+How a master `.g4` and the grammars its `import` names become one grammar. Companion to [`antlr4-compatibility.md`](./antlr4-compatibility.md) and [`TODO.md`](../TODO.md). The semantics are ANTLR4's, from `vendor/antlr4/doc/grammars.md` ("Grammar Imports"). Only the resolution model is Gale's own, because a Kiln generator has no filesystem.
 
 ## Resolution by declared name, over supplied inputs
 
@@ -42,7 +42,7 @@ Master rules come first in the composite, then delegates in that order. Two thin
 | Named actions (`@members`)               | Concatenated, each tagged with the recognizer that declared it                               |
 | Options (incl. `superClass`, `language`) | Not inherited — "ANTLR also ignores any options in imported grammars"                        |
 
-`language` follows the other options, so the master alone picks the action translator. A composite holds one action language today. A delegate that declares a different one has its bodies translated as the master's, which the translator reports rather than mistranslates. Letting a delegate bring its own is queued in [`TODO.md`](./TODO.md).
+`language` follows the other options, so the master alone picks the action translator. A composite holds one action language today. A delegate that declares a different one has its bodies translated as the master's, which the translator reports rather than mistranslates. Letting a delegate bring its own is queued in [`TODO.md`](../TODO.md).
 
 An overridden rule takes its own references with it. `DelegatorRuleOverridesDelegate` drops a delegate's `b : B` that is the only reference to `B`. Keeping that reference would fail `check_references`, which runs once over the whole composite.
 
@@ -55,7 +55,7 @@ As the jar does:
 - A `lexer grammar` or `parser grammar` importing a grammar of another kind (its error 111). A combined grammar imports any kind.
 - A rule its grammar's header forbids, such as a lexer rule in a `parser grammar` (errors 52 and 53). Every rule lands under the root's kind, so a grammar that a combined grammar reaches through imports is exempt.
 
-Unlike the jar: `import Foo = Bar;`. ANTLR4's aliased form names the delegate for qualified action references (`gFoo.x`), and Gale has no counterpart for those. Accepting it while dropping what the alias means would be worse than refusing it, so it is a loud error for now. Closing that is queued in [`TODO.md`](./TODO.md); it is the one place Gale rejects a grammar ANTLR4 compiles.
+Unlike the jar: `import Foo = Bar;`. ANTLR4's aliased form names the delegate for qualified action references (`gFoo.x`), and Gale has no counterpart for those. Accepting it while dropping what the alias means would be worse than refusing it, so it is a loud error for now. Closing that is queued in [`TODO.md`](../TODO.md); it is the one place Gale rejects a grammar ANTLR4 compiles.
 
 ## Embedding a language
 
@@ -92,5 +92,5 @@ delegate names no host.
 
 - Stage B′ does not oracle a composite: `antlr4_oracle.wado` invokes the jar on one grammar file with no slave lookup. Composite descriptors are pinned by Stage A and Stage C only.
 - An override replaces a rule. There is no "add an alternative", so a dialect restates any rule it extends.
-- A delegate written to be embedded cannot also be used on its own: the mode its rules sit in is decided by the file declaring them, so standalone it starts in an empty `DEFAULT_MODE`. Closing it means the host saying where a delegate's rules land; see [`TODO.md`](./TODO.md).
+- A delegate written to be embedded cannot also be used on its own: the mode its rules sit in is decided by the file declaring them, so standalone it starts in an empty `DEFAULT_MODE`. Closing it means the host saying where a delegate's rules land; see [`TODO.md`](../TODO.md).
 - Kiln `inputs` are relative paths inside the project, so a dialect living in its own repository still holds a copy of the grammar it extends. Resolution shrinks that from a drifting fork to a copy a checksum can hold. Reaching a grammar inside a dependency package is a Kiln gap.

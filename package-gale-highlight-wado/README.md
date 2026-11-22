@@ -1,8 +1,8 @@
 # gale-highlight-wado
 
 Syntax highlighter for the Wado language. The parser is generated at build time
-by [Gale](../package-gale) from the bundled grammar (`grammar/Wado.g4` +
-`grammar/Wado.highlights.scm`); no ANTLR/Gale runtime dependency leaks to
+by [Gale](../package-gale) from the bundled grammar (`assets/grammar/Wado.g4`
+and `assets/grammar/Wado.highlights.scm`); no ANTLR/Gale runtime dependency leaks to
 consumers — the runtime is inlined into the generated parser.
 
 ## Library
@@ -67,23 +67,7 @@ wado run package-gale-highlight-wado \
 
 Writes the HTML fragment for each input to `build/highlight/<path>.html`.
 
-## Layout
-
-```
-grammar/
-  Wado.g4               grammar (the single source of truth for Wado's syntax)
-  Wado.highlights.scm   capture query (tree-sitter .scm subset)
-src/
-  lib.wado              re-exports the generated parse/highlight API
-  main.wado             CLI (delegates to gale-highlight's run_cli)
-  lib_test.wado         highlight regression tests
-tools/
-  corpus_check.wado     parse verdicts, for `mise run check-grammar`
-  highlight_dump.wado   capture spans, for `mise run check-highlight`
-  spec_examples.wado    spec blocks quote fixtures, for `mise run check-spec-examples`
-example/
-  standalone.wado       styled full-page demo / CSS-class reference
-```
+`assets/grammar/Wado.g4` is the single source of truth for Wado's syntax.
 
 ## Held to the compiler
 

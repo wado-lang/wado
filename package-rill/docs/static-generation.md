@@ -127,7 +127,7 @@ HTML; only the bindings are missing.
 - [x] Add claim mode to that pass.
 - [x] Apply the mismatch policy.
 - [x] Render the to-do example's initial page at build time, and hydrate it
-  in the browser: [`example/todo/site.wado`](./example/todo/site.wado).
+  in the browser: [`example/todo/site.wado`](../example/todo/site.wado).
 - [ ] Host it on wado-lang.org.
 
 ## Known gaps

@@ -1,7 +1,7 @@
 # Loam on WebGPU
 
 This is the design of step 14 of the roadmap in
-[WEP: Loam](../docs/wep-2026-09-20-loam.md): a model that runs on a WebGPU
+[WEP: Loam](../../docs/wep-2026-09-20-loam.md): a model that runs on a WebGPU
 device from its first kernel to its last, with fusion chosen for the number of
 dispatches. [Loam on TPU and WebGPU](./devices.md) says how a pass is recorded
 and compiled. This document holds the device kernels and the fusion rules that
@@ -11,7 +11,7 @@ compiler applies.
 
 At batch size 1 the cost of a WebGPU forward pass is set by how many dispatches
 it makes, not by how good each kernel is
-([research §5](../docs/research-ml-inference-webgpu.md)). A read back waits for
+([research §5](../../docs/research-ml-inference-webgpu.md)). A read back waits for
 the device to finish, so a kernel that runs on the CPU after reading its
 operands back is a full synchronization.
 
@@ -245,7 +245,7 @@ parts took 178 on the same run.
 
 `example/gpt2-124m/webgpu.wado` continued "Hello, my name is" with eight
 greedy tokens on each backend, and `example/gemma3-270m/webgpu.wado` continued
-two prompts with eight each. [The benchmarks](./benchmark/README.md) time 32.
+two prompts with eight each. [The benchmarks](../benchmark/README.md) time 32.
 Both run one token a call against the attention cache, pick onnxruntime's
 tokens, and time each token after the prompt's first. The device is an RTX 4060
 Ti under Vulkan, and `wado run-webgpu` is the `dev` build of `wado-run-webgpu`.

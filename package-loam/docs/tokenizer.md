@@ -2,7 +2,7 @@
 
 Text reaches a model as token ids, and a tokenizer turns one into the other.
 This is the design of the tokenizer Loam ships, step 10 of the roadmap in
-[WEP: Loam](../docs/wep-2026-09-20-loam.md).
+[WEP: Loam](../../docs/wep-2026-09-20-loam.md).
 
 ## Context
 

@@ -1,6 +1,6 @@
 # Gale — Action / Predicate Execution Design
 
-Design notes for executing `{ ... }` actions and `{ ... }?` semantic predicates in generated parsers. Companion to [`TODO.md`](./TODO.md) and [`antlr4-compatibility.md`](./antlr4-compatibility.md), which track this work as the final compatibility stage. Design only — no implementation detail; progress is tracked in `TODO.md`.
+Design notes for executing `{ ... }` actions and `{ ... }?` semantic predicates in generated parsers. Companion to [`TODO.md`](../TODO.md) and [`antlr4-compatibility.md`](./antlr4-compatibility.md), which track this work as the final compatibility stage. Design only — no implementation detail; progress is tracked in `TODO.md`.
 
 ## Requirements
 

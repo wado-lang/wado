@@ -32,8 +32,8 @@ use wado_compiler::syntax::{
     CONTEXTUAL_KEYWORDS, KEYWORDS, KeywordCategory, NAME_KEYWORDS, OPERATORS,
 };
 
-const GRAMMAR: &str = "../package-gale-highlight-wado/grammar/Wado.g4";
-const QUERY: &str = "../package-gale-highlight-wado/grammar/Wado.highlights.scm";
+const GRAMMAR: &str = "../package-gale-highlight-wado/assets/grammar/Wado.g4";
+const QUERY: &str = "../package-gale-highlight-wado/assets/grammar/Wado.highlights.scm";
 
 /// Highlight operators `Wado.g4` cannot spell as a literal, with the spelling
 /// it uses instead. `'>' '>'` is what lets `List<Box<i32>>` close, so `>>`
