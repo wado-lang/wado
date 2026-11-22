@@ -966,10 +966,10 @@ impl<'a> Analyzer<'a> {
                     live: live.clone(),
                 });
             }
-            // A write to storage no local names lands where points-to says.
-            // Points-to gives no location to a part that holds no reference,
-            // such as `GD.a`, so such a write lands beyond what calls are
-            // handed, as a callee's own such write does in `ModRef`.
+            // A write to storage no local names, a global's say, lands where
+            // points-to says. Through a reference points-to cannot evaluate it
+            // names nothing, so the write lands beyond what calls are handed,
+            // as a callee's own such write does in `ModRef`.
             if self.mutations.len() == recorded {
                 let locations = self.landed(lands);
                 let beyond_handed = locations.is_empty();

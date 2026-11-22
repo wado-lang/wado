@@ -1223,6 +1223,38 @@ impl FunctionTranslator<'_, '_> {
         place::names_storage(value, &self.base.type_table.borrow())
     }
 
+    /// The place an assignment writes. A projection of a value that names no
+    /// storage, such as a call's result, writes a value of its own, so its base
+    /// is copied where a `let` binding it would be: `shared().a = v` must not
+    /// write into the global `shared` hands back.
+    fn convert_written_place(&self, place: &TirExpr) -> ExprId {
+        let base = match &place.kind {
+            TirExprKind::FieldAccess { expr, .. } | TirExprKind::Index { expr, .. } => expr,
+            _ => return self.convert_expr(place),
+        };
+        if self.names_storage(base) || self.base.type_table.borrow().is_reference(base.type_id) {
+            return self.convert_expr(place);
+        }
+        let base = self.assigned_value(base, base.type_id);
+        let kind = match &place.kind {
+            TirExprKind::FieldAccess {
+                field_index,
+                field_name,
+                ..
+            } => ExprKind::FieldAccess {
+                expr: base,
+                field_index: *field_index,
+                field_name: field_name.clone(),
+            },
+            TirExprKind::Index { index, .. } => ExprKind::Index {
+                expr: base,
+                index: self.convert_operand(index),
+            },
+            _ => unreachable!("matched a projection above"),
+        };
+        self.alloc_expr(kind, place.type_id, place.span)
+    }
+
     /// What `&mut value` refers to. A value that names no storage, such as a
     /// call's result, is the reference's own, so it is copied where a `let`
     /// binding it would be: `&mut n.get(0)` must not write into `n`.
@@ -2419,7 +2451,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Assign { target, value } => {
                 let value = self.convert_stored_operand(value);
                 ExprKind::Assign {
-                    target: self.convert_expr(target),
+                    target: self.convert_written_place(target),
                     value,
                 }
             }
