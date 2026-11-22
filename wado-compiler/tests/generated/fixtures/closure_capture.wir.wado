@@ -827,29 +827,27 @@ fn "closure_capture.wado/$test_31_a_capture_read_after_the_closure_sees_writes_t
 }
 
 fn "closure_capture.wado/$test_32_a_closure_over_one_local_leaves_a_sibling_loop_free_to_move"() {
-    let $load_3: i32;
+    let $load_2: i32;
     let out: ref "core:prelude/list.wado//List<closure_capture.wado/S>";
     let v_43: ref "closure_capture.wado//S";
     let v_44: ref "core:prelude/list.wado//List<i32>";
     let $sroa_$iter_0_index_94: i32;
-    let $av_96: i32;
     out = struct.new "core:prelude/list.wado//List<closure_capture.wado/S>" { repr: array.new_fixed<ref "closure_capture.wado//S">(), used: 0 };
     $sroa_$iter_0_index_94 = 0;
     b19: block {
         l20: loop {
             break_if b19 $sroa_$iter_0_index_94 >= 1;
-            $av_96 = local.tee v_43(builtin::array_get_value<ref "closure_capture.wado//S">(global:closure_capture.wado::$const_obj_2, $sroa_$iter_0_index_94)).tag;
-            v_43 = struct.new "closure_capture.wado//S" { items: v_44 = v_43.items; struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_44.repr; $load_3 = v_44.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_3)), 0, $array_clone_src_1, 0, $load_3); $array_clone_dst_2, used: $load_3 }, tag: $av_96 };
+            v_43 = struct.new "closure_capture.wado//S" { items: v_44 = local.tee v_43(builtin::array_get_value<ref "closure_capture.wado//S">(global:closure_capture.wado::$const_obj_2, $sroa_$iter_0_index_94)).items; struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_44.repr; $load_2 = v_44.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, tag: v_43.tag };
             $sroa_$iter_0_index_94 = $sroa_$iter_0_index_94 + 1;
-            if $av_96 == -1 {
+            if v_43.tag == -1 {
                 out = struct.new "core:prelude/list.wado//List<closure_capture.wado/S>" { repr: array.new_fixed<ref "closure_capture.wado//S">(), used: 0 };
             } else {
-                if @unlikely(local.tee $av_96(out.used) >= builtin::array_len(out.repr)) {
+                if @unlikely(local.tee $load_2(out.used) >= builtin::array_len(out.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<closure_capture.wado/S>::grow"(out);
                 }
-                builtin::array_set<ref "closure_capture.wado//S">(out.repr, $av_96, v_43);
-                out.used = $av_96 + 1;
+                builtin::array_set<ref "closure_capture.wado//S">(out.repr, $load_2, v_43);
+                out.used = $load_2 + 1;
             }
             continue l20;
         };

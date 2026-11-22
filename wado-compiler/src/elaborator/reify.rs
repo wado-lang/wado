@@ -6180,21 +6180,10 @@ impl<'a> Reify<'a> {
             let table = self.tysys.type_table.borrow();
             table.representation_head(table.peel_refs(t))
         });
-        let params: Vec<(String, TypeId)> = closure
-            .params
-            .iter()
-            .map(|p| {
-                let type_id = self.ann_local_type(p.id).unwrap_or(TypeTable::UNKNOWN);
-                closure_ctx.add_local_at(
-                    p.name.clone(),
-                    type_id,
-                    p.is_mut,
-                    Some(p.id),
-                    p.name_span,
-                );
-                (p.name.clone(), type_id)
-            })
-            .collect();
+        for p in &closure.params {
+            let type_id = self.ann_local_type(p.id).unwrap_or(TypeTable::UNKNOWN);
+            closure_ctx.add_local_at(p.name.clone(), type_id, p.is_mut, Some(p.id), p.name_span);
+        }
 
         // Step 4: reify the body in the closure scope.
         // An explicit `|params| -> Type ...` annotation is the authoritative
@@ -6247,20 +6236,15 @@ impl<'a> Reify<'a> {
 
         let body = self.probe_expr(ProbeSite::Around, closure.body.id(), body);
 
-        let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
+        let mut params = closure_ctx.locals;
+        let body_locals = params.split_off(closure.params.len());
+        let param_types: Vec<TypeId> = params.iter().map(|p| p.type_id).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
             cap_info.is_mutating,
             param_types,
             cap_info.return_type,
             Vec::new(),
         );
-
-        let mut all_locals = closure_ctx.locals;
-        let body_locals = if params.len() <= all_locals.len() {
-            all_locals.split_off(params.len())
-        } else {
-            Vec::new()
-        };
         let address_taken_locals = closure_ctx.address_taken_locals;
 
         let closure_tir = TirExpr::new(

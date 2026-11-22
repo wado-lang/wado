@@ -791,14 +791,13 @@ fn "spec_traits_supertraits.wado/spec_traits_supertraits.wado/dedup_sorted<spec_
     let $sroa_out_used_40: i32;
     let $sroa_write_back_41: ref "core:prelude/list.wado//List<spec_traits_supertraits.wado/Id>";
     let $sroa_$iter_0_index_45: i32;
-    let $av_47: i32;
     $sroa_out_repr_39 = array.new_fixed<ref "spec_traits_supertraits.wado//Id">();
     $sroa_out_used_40 = 0;
     $sroa_$iter_0_index_45 = 0;
     b52: block {
         l53: loop {
             break_if b52 $sroa_$iter_0_index_45 >= 3;
-            item = struct.new "spec_traits_supertraits.wado//Id" { n: local.tee $av_47(builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">($mv$items$repr, $sroa_$iter_0_index_45).n) };
+            item = struct.new "spec_traits_supertraits.wado//Id" { n: builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">($mv$items$repr, $sroa_$iter_0_index_45).n };
             $sroa_$iter_0_index_45 = $sroa_$iter_0_index_45 + 1;
             if (if $sroa_out_used_40 == 0 -> i32 {
                 1;
@@ -807,7 +806,7 @@ fn "spec_traits_supertraits.wado/spec_traits_supertraits.wado/dedup_sorted<spec_
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<spec_traits_supertraits.wado/Id>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $sroa_out_used_40, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("spec_traits_supertraits.wado:29"), used: 31 });
                     unreachable;
-                }; builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">($sroa_out_repr_39, $contract_arg_0).n == $av_47 == 0;
+                }; builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">($sroa_out_repr_39, $contract_arg_0).n == item.n == 0;
             }) {
                 if @unlikely($sroa_out_used_40 >= builtin::array_len($sroa_out_repr_39)) {
                     cold_path;

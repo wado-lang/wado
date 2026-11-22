@@ -417,8 +417,8 @@ impl Gen {
             Some(f) && *f == "uuid" => ["core:uuid", "Uuid"],
             Some(f) && *f == "uri" => ["core:uri", "Uri"],
             Some(f) && *f == "uri-reference" => ["core:uri", "UriReference"],
-            // `Instant`'s grammar is Temporal's, not RFC 3339's: see the WEP's
-            // known gap.
+            // The one exception to the rule above: `Instant` reads and writes
+            // Temporal's grammar, not RFC 3339's.
             Some(f) && *f == "date-time" => ["core:temporal", "Instant"],
             _ => {
                 return Ty { text: "String", lit: Lit::Text };
@@ -858,7 +858,8 @@ fn leaf_text(o: &SchemaObject) -> String {
 }
 
 /// The type of a schema holding `type` alone, by its value. An integer is
-/// unbounded, which no Wado type is: see the WEP's known gap.
+/// unbounded, which no Wado type is, so a document whose integer is beyond
+/// `i64` matches the schema but does not decode.
 global SCALARS: List<[JsonTypes, Ty]> = [
     [
         JsonTypes::Null,
