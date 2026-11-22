@@ -1358,11 +1358,12 @@ pub(super) struct ReadBridgeMember {
 /// `$…$S$V(v: &S, index: i32) -> V`, dereferencing a field that holds its
 /// value by handle.
 ///
-/// Keyed by the value type's *erased* mangle. `erase_newtypes_and_flags`
-/// (after monomorphize, before lower) collapses `Newtype`/`Flags` to their
-/// base, and the marker call site mangles through that erasure — so a helper
-/// minted under the pre-erasure name would never be found. Members sharing an
-/// erased type share one helper.
+/// Named by the struct's and the value type's *erased* mangles.
+/// `erase_newtypes_and_flags` (after monomorphize, before lower) collapses
+/// `Newtype`/`Flags` to their base and drops function rows, and the marker
+/// call site mangles through that erasure — so a helper minted under the
+/// pre-erasure name would never be found. Members sharing an erased type share
+/// one helper.
 pub(super) fn generate_read_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     members: &[ReadBridgeMember],
