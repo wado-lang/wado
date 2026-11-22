@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795338436886,
+  "lastUpdate": 1795344262377,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80993,6 +80993,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "68e0dbbb7dd3d98a6f9abac2b7a17cdc7c4cfbb0",
+          "message": "Merge pull request #2725 from wado-lang/gfx/value-copy-one-resolver\n\nfix(value-copy): elide a copy only where one resolver proves no alias writes the storage",
+          "timestamp": "2026-11-22T19:24:42+09:00",
+          "tree_id": "307df18538ea1a0be79d6b7d81da5b004c10eb0d",
+          "url": "https://github.com/wado-lang/wado/commit/68e0dbbb7dd3d98a6f9abac2b7a17cdc7c4cfbb0"
+        },
+        "date": 1795344261051,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353496,
             "unit": "bytes"
           }
         ]
