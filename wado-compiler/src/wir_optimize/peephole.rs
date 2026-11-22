@@ -1,8 +1,9 @@
 //! Per-function peephole rewrites for WIR: constant folding on comparisons and
-//! branches, dead `If` and redundant `ValueCopy` elision, sign-extension folding into
-//! loads, redundant `ref.cast` / `ref.test` removal, and `local.set` +
-//! `local.get` fusion into `local.tee`. All are instruction-selection-level and
-//! have no NIR analogue, the shapes they match existing only after lowering.
+//! branches, dead `If` and redundant `ValueCopy` elision, sign-extension
+//! folding into loads, redundant `ref.cast` / `ref.test` removal, and
+//! `local.set` + `local.get` fusion into `local.tee`. All are
+//! instruction-selection-level and have no NIR analogue, the shapes they match
+//! existing only after lowering.
 
 use crate::compiler_trace;
 use crate::wir::{WirInstr, WirLocals, WirPackage, WirType, WirTypeDef, WirTypeId};

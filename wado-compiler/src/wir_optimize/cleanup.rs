@@ -1,8 +1,9 @@
 //! Cleanup and normalization pass for WIR.
 //!
 //! Removes dead locals, nops, redundant `ref.as_non_null`, and dead code after
-//! an instruction that always diverges. Leaves unnarrowed what an instruction traps on when null, which
-//! turns a non-null read of a nullable slot into a nullable one. Called multiple
+//! an instruction that always diverges. Leaves unnarrowed what an instruction
+//! traps on when null, which turns a non-null read of a nullable slot into a
+//! nullable one. Called multiple
 //! times throughout the pipeline as an interpass utility rather than a
 //! standalone optimization.
 
@@ -370,7 +371,10 @@ mod tests {
             return_seven(),
         ];
         clean_body(&mut body, &IndexSet::default());
-        assert_matches!(body.as_slice(), [WirInstr::If { .. }, WirInstr::Return { .. }]);
+        assert_matches!(
+            body.as_slice(),
+            [WirInstr::If { .. }, WirInstr::Return { .. }]
+        );
     }
 
     #[test]
@@ -389,6 +393,9 @@ mod tests {
             return_seven(),
         ];
         clean_body(&mut body, &IndexSet::default());
-        assert_matches!(body.as_slice(), [WirInstr::Block { .. }, WirInstr::Return { .. }]);
+        assert_matches!(
+            body.as_slice(),
+            [WirInstr::Block { .. }, WirInstr::Return { .. }]
+        );
     }
 }
