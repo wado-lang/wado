@@ -3454,6 +3454,23 @@ impl TypeTable {
         row
     }
 
+    /// `id` with each variable solved so far replaced by its solution, noted
+    /// as read as [`Self::read_effect_row`] notes it.
+    pub fn read_effect_rows_in(&mut self, id: TypeId) -> TypeId {
+        let mut vars: IndexSet<EffectRef> = IndexSet::default();
+        self.zip_rows(id, id, true, &mut |row, _| {
+            vars.extend(row.iter().filter(|e| e.is_var()).cloned());
+        });
+        let rows: EffectRows = vars
+            .into_iter()
+            .map(|var| {
+                let row = self.read_effect_row(std::slice::from_ref(&var));
+                (var.name().to_string(), row)
+            })
+            .collect();
+        self.substitute_effect_rows(id, &rows)
+    }
+
     /// How many variables a question has read so far, to pass to
     /// [`Self::close_effect_rows_read_since`].
     pub fn effect_vars_read(&self) -> usize {
@@ -6167,17 +6184,6 @@ impl TypeTable {
     /// `Ok(v)` in `f32::from_str_lenient` with no resolved type.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
         self.any_infer_var(id, &mut |_| true)
-    }
-
-    /// Whether a function type in `id` carries a row the effect check has yet
-    /// to solve, as a closure literal's does until then.
-    pub fn contains_effect_var(&self, id: TypeId) -> bool {
-        if let ResolvedType::Function { effects, .. } = self.get(id)
-            && effects.iter().any(EffectRef::is_var)
-        {
-            return true;
-        }
-        self.any_constituent(id, &mut |t| self.contains_effect_var(t))
     }
 
     /// Whether `id` is an inference variable itself, not a type naming one.

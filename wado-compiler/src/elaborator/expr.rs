@@ -657,6 +657,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .close_effect_rows_read_since(reads, &closing);
         }
         self.record_expression_type(ast_id, type_id);
+        if matches!(
+            expr,
+            Expr::Call(_)
+                | Expr::TaggedTemplate(_)
+                | Expr::MethodCall(_)
+                | Expr::StaticMethodCall(_)
+        ) {
+            self.solve_call_rows(expr);
+        }
         type_id
     }
 

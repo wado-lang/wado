@@ -18,8 +18,7 @@ solved, and reads a variable as the empty row:
   row. Where only the effectful impl answers, `T::Out` stays unresolved
   (`fn_type_impl_effectful_closure_assoc_type.wado`).
 
-A bound asked of a type holding a variable is already deferred: the effect
-check records it as a `DeferredBound`, and `unmet_deferred_bounds` asks it again
+A bound asked of a type holding a variable could be deferred and asked again
 once the rows are solved. That repairs a yes-or-no question after the fact. It
 cannot repair a question whose answer the elaborator has already built on: a
 selected impl, or a type it resolved.
@@ -71,8 +70,7 @@ the site that closed it.
 ### What goes
 
 The effect check verifies rows it is given; it no longer solves any.
-`DeferredBound`, `unmet_deferred_bounds`, `write_back_effect_rows` and the
-effect check's fixed point over the program (`solve_rows`) are deleted. Every
+`write_back_effect_rows` and the effect check's fixed point over the program (`solve_rows`) are deleted. Every
 type the elaborator writes back holds solved rows, so reify and the TIR never
 see an effect variable.
 
@@ -88,13 +86,14 @@ Each step keeps every fixture passing and deletes what it replaces.
   `fn_type_impl_effectful_closure_assoc_type.wado` pass.
 - [x] A row closed early reports a widening flow
   (`error_effect_row_widened_after_read.wado`).
+- [x] A call's row is solved where the call resolves, so a bound is answered
+  at once on solved rows, and no bound is deferred.
 - [ ] The prerequisites in
   [WEP: One Inference Context](./wep-2026-11-20-inference-context.md):
   selection as obligations, and a context per body.
 - [ ] Row variables live in the context, with the inclusions above recorded as
   each body is elaborated. The effect check reads the solution, and agrees
   with its own on every fixture.
-- [ ] Selection and associated types wait for every row they read, a call's
-  row included, and `DeferredBound` with its recheck is deleted.
+- [ ] Selection and associated types wait for every row they read.
 - [ ] The effect check solves nothing: `solve_rows` and the write-back are
   deleted.

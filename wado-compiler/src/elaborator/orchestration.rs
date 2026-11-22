@@ -1324,7 +1324,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             resolutions,
             trait_env,
             solver: None,
-            deferred_bounds: Rc::default(),
             cm_interface_registry,
             builtin_registry: Rc::new(builtin_registry),
             included_files,

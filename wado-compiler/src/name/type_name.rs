@@ -1169,15 +1169,6 @@ impl FqTypeName {
         out
     }
 
-    /// Whether a function type in this name, nested ones included, has a row
-    /// holding an effect variable.
-    #[must_use]
-    pub fn names_effect_var(&self) -> bool {
-        self.mentions(&|head| {
-            matches!(head, TypeHead::Function { effects, .. } if effects.iter().any(tir::EffectRef::is_var))
-        })
-    }
-
     /// The spelling a diagnostic prints: the type as source writes it, modules
     /// dropped from the head and, recursively, from every type in it.
     #[must_use]

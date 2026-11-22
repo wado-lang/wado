@@ -19,6 +19,7 @@ use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_bindi
 use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
 use crate::defs::DefId;
 use crate::effect_check::BodyFacts;
+use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
@@ -26,7 +27,6 @@ use crate::elaborator::sem::types::{
     CoercionKind, DesugarKind, FallbackSite, MethodDispatch, TypeAnnotations,
 };
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
-use crate::elaborator::{Elaborator, TypeError};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
@@ -212,11 +212,9 @@ impl TirMutVisitor for EffectRowWriter<'_> {
 impl Semantics {
     /// Write the row the effect check solved each effect variable to into every
     /// type the TIR holds, so no TIR type names a variable from here on.
-    /// Answers the bounds that were asked of a type with a row unsolved, and
-    /// that are unmet with it solved.
-    pub fn write_back_effect_rows(&mut self, solved: &EffectRows) -> Vec<TypeError> {
+    pub fn write_back_effect_rows(&mut self, solved: &EffectRows) {
         let Some(state) = &self.state else {
-            return Vec::new();
+            return;
         };
         {
             let table = state.tysys.type_table.borrow();
@@ -230,7 +228,6 @@ impl Semantics {
             }
         }
         let rows = state.tysys.type_table.borrow().solved_effect_rows(solved);
-        let unmet = state.tysys.unmet_deferred_bounds(&rows);
         let mut table = state.tysys.type_table.borrow_mut();
         table.close_effect_rows();
         let mut writer = EffectRowWriter {
@@ -246,7 +243,6 @@ impl Semantics {
                 writer.walk_global(global);
             }
         }
-        unmet
     }
 
     /// Power-assert capture plans across every module that annotate reached,

@@ -1930,6 +1930,44 @@ pub(crate) fn closure_row(
     (walker.rows.read_final() && walker.rows.read_solved()).then_some(performed)
 }
 
+/// What each variable the call `expr`, whose arguments the walk in `facts`
+/// has just finished, carries out in its type stands for. Empty where the call
+/// reads a row `solved` does not answer yet, or carries none out.
+pub(crate) fn call_rows(
+    facts: &WalkInProgress<'_>,
+    decls: &OwnedEffectData,
+    module: &ModuleSource,
+    expr: &Expr,
+    solved: &EffectRows,
+) -> EffectRows {
+    let index = decls.index(facts.types);
+    let mut found = Vec::new();
+    let mut walker = SemEffectWalker {
+        sem: facts,
+        annotations: Some(&facts.sem.types),
+        index: &index,
+        current: IndexSet::default(),
+        holds_every_effect: true,
+        param_types: IndexMap::default(),
+        module: module.source_path(),
+        out: &mut found,
+        closures: ClosureEffects::default(),
+        collecting: None,
+        rows: Rows::starting_from(solved.clone()),
+        reach: BodyReach::default(),
+    };
+    walker.check_call(expr);
+    if !(walker.rows.read_final() && walker.rows.read_solved()) {
+        return EffectRows::default();
+    }
+    walker
+        .rows
+        .solved
+        .into_iter()
+        .filter(|(var, _)| !solved.contains_key(var))
+        .collect()
+}
+
 fn walk_body_effects(
     sem: &Semantics,
     module: &ModuleSource,
@@ -3398,6 +3436,14 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
         // A call is checked after its arguments, so a variable a call among
         // them mints is solved before this one reads it.
         ast::walk_expr(self, expr);
+        self.check_call(expr);
+    }
+}
+
+impl SemEffectWalker<'_> {
+    /// Check what `expr` demands where it is a call, its arguments already
+    /// walked, solving the variables its type carries out.
+    fn check_call(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
                 self.check_call_effects(&call.callee, call.id, &call.args, call.span);

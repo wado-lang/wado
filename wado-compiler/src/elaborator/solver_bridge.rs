@@ -2295,55 +2295,6 @@ impl SolverBridge {
         self.answer(tysys, || binder_types(ctx), type_id, &q)
     }
 
-    /// `asked` of `type_id` as [`Self::answer_owing`] would ask it, kept to be
-    /// asked again once the effect check has solved the rows in either.
-    /// `None` where the question cannot be put, which `answer_owing` answers
-    /// at once.
-    pub(super) fn deferred(
-        &self,
-        tysys: &TypeSystem,
-        ctx: &scope::Scope,
-        type_id: TypeId,
-        asked: &FqTraitName,
-    ) -> Option<DeferredQuestion> {
-        let question = self.question(tysys, ctx, type_id, asked).ok()?;
-        Some(DeferredQuestion {
-            question,
-            binders: binder_types(ctx),
-        })
-    }
-
-    /// The answer to `deferred`, asked of `closed` at `asked`, the type and
-    /// the trait it was put for with their rows solved.
-    pub(super) fn answer_deferred(
-        &self,
-        tysys: &TypeSystem,
-        deferred: DeferredQuestion,
-        closed: TypeId,
-        asked: &FqTraitName,
-    ) -> Option<DeferredAnswer> {
-        let DeferredQuestion {
-            mut question,
-            binders,
-        } = deferred;
-        {
-            let table = tysys.type_table.borrow();
-            question.ty = self
-                .lowering
-                .type_id(&table, closed, &place_binder(&binders, &table))
-                .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"));
-            let ParamBound { trait_, args } = self
-                .lowering
-                .bound_named(&table, asked, &place_head(&binders, &table))
-                .unwrap_or_else(|_| panic!("the bound lowered before its rows were solved"));
-            question.trait_ = trait_;
-            question.args = args;
-        }
-        let owed = self.answer(tysys, || binders, closed, &question)?;
-        let tied = self.order_of(&question, tied_blankets);
-        Some(DeferredAnswer { owed, tied })
-    }
-
     /// Whether `q` holds, with the bodies the answer owes. `binders` are the
     /// asking scope's [`binder_types`].
     fn answer(
@@ -3158,20 +3109,6 @@ fn tied_blankets(selection: Selection) -> Vec<usize> {
         | Selection::Duplicated(_) => Vec::new(),
         Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
     }
-}
-
-/// A deferred bound met: the bodies its answer owes, and the impls the order
-/// ties for it, as [`SolverBridge::tied_through_bound`] answers.
-pub(super) struct DeferredAnswer {
-    pub(super) owed: Vec<OwedBody>,
-    pub(super) tied: Vec<Option<DefId>>,
-}
-
-/// A question whose rows the effect check has yet to solve, with
-/// the binders of the scope that put it.
-pub(super) struct DeferredQuestion {
-    question: Question,
-    binders: Vec<TypeId>,
 }
 
 /// A `type_implements_trait` question as the solver reads it.

@@ -4,9 +4,9 @@
 //! the caller's typecheck, and records the
 //! [`super::sem::types::ClosureCaptureInfo`] reify rebuilds from.
 
-use crate::ast::{self};
+use crate::ast::{self, Expr};
 use crate::compiler_host::CompilerHost;
-use crate::effect_check::{WalkInProgress, closure_row};
+use crate::effect_check::{WalkInProgress, call_rows, closure_row};
 use crate::name::capture_ref_name;
 use crate::tir::{CaptureSource, EffectRef, ResolvedType, RowClosing, TirCapture, TypeId};
 use crate::type_table::TypeTable;
@@ -386,5 +386,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             closure,
             types.early_effect_rows(),
         )
+    }
+
+    /// Solve each variable the call `expr`, just resolved, carries out in its
+    /// type, where every row it reads is solved: what reads it next, a bound
+    /// among them, reads the row the effect check ends with.
+    pub(super) fn solve_call_rows(&self, expr: &Expr) {
+        let Some(decls) = self.effect_decls.as_ref() else {
+            return;
+        };
+        let solved = {
+            let types = self.tysys.type_table.borrow();
+            let facts = WalkInProgress {
+                types: &types,
+                sem: &self.sem,
+            };
+            call_rows(
+                &facts,
+                decls,
+                &self.current_module_source,
+                expr,
+                types.early_effect_rows(),
+            )
+        };
+        let site = RowClosing {
+            span: expr.span(),
+            module: self.home_module(expr.id()).source_path(),
+        };
+        let mut table = self.tysys.type_table.borrow_mut();
+        for (var, row) in solved {
+            table.solve_effect_var(&var, row, site.clone());
+        }
     }
 }
