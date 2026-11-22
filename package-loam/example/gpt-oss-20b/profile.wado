@@ -78,14 +78,16 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
     writes(model.backend_mut());
 }
 
-/// The host time of the writes of a slot of an expert's `gate_up_proj`, and
-/// of its scales.
+/// The host time of the writes of the scales of a slot of an expert's
+/// `gate_up_proj`, and of the slot.
 fn writes(
     g: &mut WebGpuBackend,
 ) with (Stdout, MonotonicClock, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
-    println("a slot of an expert's `gate_up_proj` written 32 times, then its scales:");
-    timed_writes(g, ElementKind::U8, [5760, 1440], 32);
+    // The writes after a batch of hundreds of MB wait while the host frees
+    // its staging memory, so the smaller batch goes first.
+    println("the scales of a slot of an expert's `gate_up_proj` written 32 times, then the slot:");
     timed_writes(g, ElementKind::F16, [5760, 90], 32);
+    timed_writes(g, ElementKind::U8, [5760, 1440], 32);
 }
 
 /// The host time `times` writes of a slot of `kind` and `extents` take.
