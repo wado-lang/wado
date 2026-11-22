@@ -190,4 +190,4 @@ the first 8 that `example/gpt-oss-20b/generate.json` records.
 | llama.cpp Vulkan, 10 layers on the CPU | 40.38 tokens/s |   792.421 ms | 1.00x   |
 | llama.cpp Vulkan, 14 layers on the CPU | 33.31 tokens/s |   960.788 ms | 1.21x   |
 | llama.cpp Vulkan, 24 layers on the CPU | 22.02 tokens/s |  1453.414 ms | 1.83x   |
-| **Loam** `WebGpuBackend`               |  1.57 tokens/s | 20359.268 ms | 25.72x  |
+| **Loam** `WebGpuBackend`               |  1.59 tokens/s | 20176.990 ms | 25.46x  |

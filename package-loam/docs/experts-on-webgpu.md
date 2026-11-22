@@ -67,25 +67,38 @@ routing stays operations before it.
 
 The recorder records it as one node, `Operation::ExpertMixture`, unless it
 decomposes. `Cpu` and `PjrtBackend` run the decomposition. `WebGpuBackend` runs
-a decode step's form, fewer picks than experts, in two kernels:
+a decode step's form, fewer picks than experts, as two quantized products a
+pick, each reading the expert's weight, scales and bias where its pool holds
+them:
 
-- The first runs a workgroup for each pick and block of the first projection's
-  rows. It reads the pick's slot, its token's row, and the expert's weight,
-  scales and bias where the pool holds them. Its epilogue is the SwiGLU of each
-  gate and up pair, so it writes each pick's inner row.
-- The second runs a workgroup for each token and block of the output's rows. It
-  runs the token's picks in order through the second projection, each read in
-  its pool, adds the bias, weighs it by the pick's weight, zero where that is
-  not positive, and sums them.
+- `gated_up` is a paired product over the token's row, the weight's rows
+  alternating between gate and up. Its epilogue adds the bias and takes the
+  SwiGLU of each pair, so it writes the pick's inner row.
+- `weighed_down` runs the inner row through the second projection. Its epilogue
+  adds the bias, weighs the result by the pick's weight, zero where that is not
+  positive, and adds the running total of the token's earlier picks.
 
-The sum runs in pick order, as the decomposition's loop does, so the kernel
-differs from it only by what
+The sum runs in pick order, as the decomposition's loop does, so the products
+differ from it only by what
 [Results Are Held to a Tolerance, Not to the Bit](../../docs/wep-2026-09-20-loam.md#results-are-held-to-a-tolerance-not-to-the-bit)
 allows. A prompt's form, at least as many picks as experts, decomposes until
 it is measured.
 
-A layer's experts then take 2 dispatches rather than about 76, and nothing is
-copied out of a pool.
+A layer's experts then take 2 dispatches a pick, 8 for gpt-oss-20b's 4, and
+nothing is copied out of a pool. The same step with the expert writes left out:
+
+| Experts                       | Throughput     | A token |
+| ----------------------------- | -------------- | ------- |
+| Decomposed                    | 6.39 tokens/s  | 157 ms  |
+| Two products a pick, in place | 24.28 tokens/s | 41.2 ms |
+
+```sh
+(cd package-loam/benchmark && mise run gpt-oss-20b)
+```
+
+Both rows left the call to `written` in `HeldExperts::fetched` out by hand.
+With the writes in, the step runs at 1.59 tokens/s, so writing the experts
+the device lacks now sets the speed.
 
 ### A gather read in place
 
