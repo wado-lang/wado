@@ -45,8 +45,9 @@ A binder that takes a name already reaching a known symbol is legal and warns.
 Every binder counts: a `let`, a parameter, a closure parameter, a type
 parameter, a pattern binding, a local item. So does every kind of symbol, in
 any namespace: a function, a global, a type, a trait, a case, an outer binding.
-The exemption is a binder whose value derives from the name it takes, which
-[Variable Scoping](./spec-expressions.md#variable-scoping) already sanctions.
+Two binders are exempt: one whose value derives from the name it takes, which
+[Variable Scoping](./spec-expressions.md#variable-scoping) already sanctions,
+and a closure parameter taking a local's name, below.
 
 <!-- {"fixture":"spec_lexical_shadowed_name.wado"} -->
 
@@ -69,6 +70,23 @@ fn twice(#[allow(shadowed_name)] String: i32) -> i32 { return String * 2; }
 
 test {
     assert twice(21) == 42;
+}
+```
+
+A closure parameter may take the name of a local binding, a `let` or a
+parameter the closure sits in, without a warning. It receives that name's value
+afresh as an argument, which is how a closure hands a value back to itself:
+`emit(w, |w| …)`. The name of a declaration still warns.
+
+<!-- {"fixture":"shadowed_name_closure_param.wado"} -->
+
+```wado
+test {
+    let w = 3;
+    assert twice(w, |w| w + 1) == 8;                            // no warning: `w` is a local
+    let item = 5;
+    assert twice(item, |item| twice(item, |item| item)) == 20;  // no warning either
+    assert twice(1, |len| len) == 2 + len(0);                   // warns: `len` is a function
 }
 ```
 

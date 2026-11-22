@@ -209,6 +209,7 @@ let println = 1;                                  // warns: shadows the function
 if let Some(x) = x { }                            // exempt: derives from old x
 if let Some(x) = y { }                            // warns: derives from y
 match x { Some(x) => ... }                        // warns: x means two things here
+emit(w, |w| w.line("…"));                         // exempt: a closure param over a local
 
 // A variable or parameter nothing reads warns (`unused_variables`), and so
 // does one only ever assigned to. A leading `_` keeps it on purpose. The
