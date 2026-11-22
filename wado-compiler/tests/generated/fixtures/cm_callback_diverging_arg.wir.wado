@@ -85,35 +85,33 @@ type "functype//cm_callback_diverging_arg.wado/run" = fn();  // TypeId(26)
 
 type "functype//cm_callback_diverging_arg.wado/$cm_binding__example:demo/global#target" = fn() -> ref extern;  // TypeId(27)
 
-type "functype//cm_callback_diverging_arg.wado/$cm_binding__example:demo/target#listen" = fn(ref extern, ref extern);  // TypeId(28)
+type "functype//cm_callback_diverging_arg.wado/$cm_callback__call-i32" = fn(ref extern, i32);  // TypeId(28)
 
-type "functype//cm_callback_diverging_arg.wado/$cm_callback__call-i32" = fn(ref extern, i32);  // TypeId(29)
+type "functype//cm_callback_diverging_arg.wado/$cm_export__run" = fn();  // TypeId(29)
 
-type "functype//cm_callback_diverging_arg.wado/$cm_export__run" = fn();  // TypeId(30)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(30)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(31)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(31)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(32)
+type "functype//core:rt/unreachable" = fn();  // TypeId(32)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(33)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(33)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(34)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(34)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(35)
+type "functype//cm_callback_diverging_arg.wado/cm_callback_diverging_arg.wado/$Closure_0::$call$dae[self]" = fn() -> ref extern;  // TypeId(35)
 
-type "functype//cm_callback_diverging_arg.wado/cm_callback_diverging_arg.wado/$Closure_0::$call$dae[self]" = fn() -> ref extern;  // TypeId(36)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(38)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(39)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(39)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(40)
+type "functype//cm_callback_diverging_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(40)
 
-type "functype//cm_callback_diverging_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(41)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(42)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -140,10 +138,6 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
     let mock: ref "cm_callback_diverging_arg.wado//Mock";
     let $save_cm_callback_diverging_arg.wado/Demo: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo";
     let $save_cm_callback_diverging_arg.wado/Target: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target";
-    let self_6: ref null "core:prelude//$Cell<extern>";
-    let listener: ref null "canonical//CanonicalClosure_0";
-    let $local_2_8: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target";
-    let $local_3: ref "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target";
     let $local_1: ref "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo";
     let $local_2_12: ref extern;
     let $cm_pair_7: i64;
@@ -154,7 +148,7 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
     global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo = struct.new "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo" { outer: local.tee $save_cm_callback_diverging_arg.wado/Demo(global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo), op_target: struct.new "canonical//CanonicalClosure_1" { env: struct.new "cm_callback_diverging_arg.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/cm_callback_diverging_arg.wado/$closure_wrapper_0" } };
     global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = struct.new "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target" { outer: local.tee $save_cm_callback_diverging_arg.wado/Target(global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target), op_listen: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_diverging_arg.wado//$Closure_1" { $capture_0: mock }, func: ref.func "closure/cm_callback_diverging_arg.wado/$closure_wrapper_1" } };
     if @unlikely(black_box(0)) {
-        $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: block {
+        block {
             drop($inline__effect_dispatch__cm_callback_diverging_arg_wado_Demo__target_2: block -> ref extern {
                 if ref.is_null(local.tee $save_cm_callback_diverging_arg.wado/Demo(global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo)) == 0 {
                     global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo = local.tee $local_1(ref.as_non_null($save_cm_callback_diverging_arg.wado/Demo)).outer;
@@ -172,14 +166,6 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
             let $mv_arg_2: ref "core:prelude/string.wado//String";
             "core:rt/panic"(local.tee $mv_arg_2(global:cm_callback_diverging_arg.wado::$const_obj_1).repr, $mv_arg_2.used);
             unreachable;
-            if ref.is_null(local.tee $local_2_8(global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target)) == 0 {
-                global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = local.tee $local_3(ref.as_non_null($local_2_8)).outer;
-                let $indirect_call_3: ref null "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_3.func, local.tee $indirect_call_3($local_3.op_listen).env, ref.as_non_null(self_6), ref.as_non_null(listener));
-                break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = $local_2_8;
-            } else {
-                break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: "cm_callback_diverging_arg.wado/$cm_binding__example:demo/target#listen"(self_6.value, extern.externalize(ref.as_non_null(listener)));
-            }
         };
     }
     global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = $save_cm_callback_diverging_arg.wado/Target;
@@ -204,10 +190,6 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
 
 fn "cm_callback_diverging_arg.wado/$cm_binding__example:demo/global#target"() with Demo {
     return "wasi/$example:demo/global#target"();
-}
-
-fn "cm_callback_diverging_arg.wado/$cm_binding__example:demo/target#listen"(self, listener) with Target {
-    "wasi/$example:demo/target#listen"(self, listener);
 }
 
 fn "cm_callback_diverging_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -280,9 +262,9 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b14: block {
-        l15: loop {
-            break_if b14 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
+    $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b13: block {
+        l14: loop {
+            break_if b13 (builtin::i64_extend_i32_s(i) + 8_i64) > builtin::i64_extend_i32_s($licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -291,20 +273,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l15;
+            continue l14;
         };
-    }; b16: block {
-        l17: loop {
-            break_if b16 i > $licm_arith_7;
+    }; b15: block {
+        l16: loop {
+            break_if b15 i > $licm_arith_7;
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l17;
+            continue l16;
         };
-    }; b18: block {
-        l19: loop {
-            break_if b18 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
+    }; b17: block {
+        l18: loop {
+            break_if b17 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -313,19 +295,19 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l19;
+            continue l18;
         };
-    }; b20: block {
-        l21: loop {
-            break_if b20 i >= $mv$data$end;
+    }; b19: block {
+        l20: loop {
+            break_if b19 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l21;
+            continue l20;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     ptr_13 = 0;
     block {
-        l23: loop {
+        l22: loop {
             i = $mv$data$start + ptr_13;
             $licm_arith_7 = $mv$data$end - ptr_13;
             $licm_arith_7 = local.tee i($inline_cm_await_blocked_5: block -> i32 {
@@ -357,7 +339,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return i;
             }
-            continue l23;
+            continue l22;
         };
     };
 }
@@ -369,17 +351,17 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
     let status: i32;
     let i: i32;
     let w: i64;
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 5); i = 0; b29: block {
-        l30: loop {
-            break_if b29 i > -3;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 5); i = 0; b28: block {
+        l29: loop {
+            break_if b28 i > -3;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, i + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l30;
+            continue l29;
         };
-    }; b31: block {
-        l32: loop {
-            break_if b31 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(5);
+    }; b30: block {
+        l31: loop {
+            break_if b30 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(5);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -388,19 +370,19 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
-            continue l32;
+            continue l31;
         };
-    }; b33: block {
-        l34: loop {
-            break_if b33 i >= 5;
+    }; b32: block {
+        l33: loop {
+            break_if b32 i >= 5;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
-            continue l34;
+            continue l33;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | 21474836480_i64);
     i = 0;
     block {
-        l36: loop {
+        l35: loop {
             ptr_18 = ptr_13 + i;
             count_19 = 5 - i;
             count_19 = local.tee ptr_18($inline_cm_await_blocked_5: block -> i32 {
@@ -432,7 +414,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
                 drop("mem/realloc"(ptr_13, 5, 1, 0));
                 return;
             }
-            continue l36;
+            continue l35;
         };
     };
 }

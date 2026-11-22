@@ -136,7 +136,10 @@ the `git-upstream-sync` skill.
 Answer a review, human or bot, with the `code-review-response` skill.
 
 Turn the PR back into a draft while you answer a review, so nobody merges a
-branch that is still changing. Run `gh pr ready --undo <N>` before the first
-fix, and `gh pr ready <N>` once the fixes are pushed and the reply is posted.
+branch that is still changing. Make it a draft before the first fix, and mark
+it ready once the fixes are pushed and the reply is posted: with
+`mcp__github__update_pull_request` (`draft: true`, then `false`), or
+`gh pr ready --undo <N>` and `gh pr ready <N>` where `gh` reaches GraphQL.
+Answer a review thread with `mcp__github__add_reply_to_pull_request_comment`.
 A PR that was already a draft stays one: whoever made it a draft marks it
 ready.
