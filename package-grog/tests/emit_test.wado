@@ -1,0 +1,357 @@
+use { ModuleSpec } from "lib:wadopoet";
+use { emit } from "../src/emit.wado";
+use { read } from "../src/parse.wado";
+
+fn generate(source: String) -> String {
+    return match emit(&read(source).unwrap(), &ModuleSpec::new("lib:grog", ["point.proto"]), "lib:grog") {
+        Ok(text) => text,
+        Err(e) => `error: ${e}`,
+    };
+}
+
+test "nested declarations flatten by path" {
+    let out = generate(
+        "syntax = \"proto3\"; message Outer { message Inner { enum Kind { A = 0; } Kind kind = 1; } Inner inner = 1; }",
+    );
+    assert out.contains("pub struct Outer {");
+    assert out.contains("pub inner: Option<OuterInner> = null,");
+    assert out.contains("pub kind: OuterInnerKind = OuterInnerKind::A,");
+}
+
+test "a repeated message field is read one value at a time" {
+    let out = generate("syntax = \"proto3\"; message M { repeated M children = 3; repeated int32 n = 4; }");
+    assert out.contains("use { LinearBuffer } from \"core:linear\";");
+    assert out.contains("pub fn children_of(input: LinearBuffer) -> grog::Messages<M> {");
+    assert out.contains("return grog::each::<M>(input, 3, grog::WireType::Len);");
+    assert !out.contains("fn n_of");
+    assert !generate("syntax = \"proto3\"; message M { repeated int32 n = 4; }").contains("core:linear");
+}
+
+test "a message named as an import is suffixed" {
+    let out = generate("syntax = \"proto3\"; message TreeMap {} message LinearBuffer { repeated TreeMap m = 1; }");
+    assert out.contains("pub struct TreeMap_ {");
+    assert out.contains("pub struct LinearBuffer_ {");
+    assert out.contains("pub fn m_of(input: LinearBuffer) -> grog::Messages<TreeMap_> {");
+}
+
+test "a map is a TreeMap" {
+    let out = generate(
+        "syntax = \"proto3\"; message M { map<sint32, M> children = 1; map<string, E> e = 2; } enum E { Z = 0; }",
+    );
+    assert out.contains("use { TreeMap } from \"core:collections\";");
+    assert out.contains("pub children: TreeMap<i32, M> = TreeMap::new(),");
+    assert out.contains("n += s.message_map::<grog::SInt32, i32, M>(1, &self.children);");
+    assert out.contains("2 => return r.map::<grog::Str, grog::Enum<E>, String, E>(&mut self.e),");
+}
+
+test "proto2 labels" {
+    let out = generate(
+        "syntax = \"proto2\"; message M { required int32 a = 1; optional int32 b = 2; required M c = 3; }",
+    );
+    assert out.contains("pub a: Option<i32> = null,");
+    assert out.contains("pub b: Option<i32> = null,");
+    assert out.contains("pub c: Option<M> = null,");
+}
+
+test "edition features resolve from the field outward" {
+    let out = generate("edition = \"2023\";
+option features.field_presence = IMPLICIT;
+message M {
+  int32 a = 1;
+  int32 b = 2 [features.field_presence = EXPLICIT];
+  message N { option features.field_presence = LEGACY_REQUIRED; int32 c = 1; }
+}
+message P { int32 d = 1; }
+");
+    assert out.contains("pub a: i32 = 0,");
+    assert out.contains("pub b: Option<i32> = null,");
+    assert out.contains("pub c: Option<i32> = null,");
+    assert out.contains("pub d: i32 = 0,");
+}
+
+test "an edition's default presence is explicit" {
+    assert generate("edition = \"2024\"; message M { int32 a = 1; }").contains("pub a: Option<i32> = null,");
+}
+
+test "a keyword or prelude name is suffixed" {
+    let out = generate(
+        "syntax = \"proto3\"; message Option { int32 match = 1; int32 type = 2; } enum E { E_NONE = 0; E_FN = 1; }",
+    );
+    assert out.contains("pub struct Option_ {");
+    assert out.contains("pub match_: i32 = 0,");
+    assert out.contains("pub type: i32 = 0,");
+    assert out.contains("    None,");
+    assert out.contains("    Fn,");
+}
+
+test "a oneof's variant named like a prelude type is suffixed" {
+    let out = generate("syntax = \"proto3\"; message Byte { oneof list { int32 a = 1; } }");
+    assert out.contains("pub variant ByteList_ {");
+    assert out.contains("pub unknown_fields: ByteList = b\"\",");
+}
+
+test "an alias is a constant" {
+    let out = generate("syntax = \"proto3\"; enum E { option allow_alias = true; E_A = 0; E_B = 0; }");
+    assert out.contains("impl E {
+    pub const B: E = E::A;
+}");
+}
+
+test "an alias may not take a case's name" {
+    assert generate("syntax = \"proto3\";\nenum E { option allow_alias = true; E_A = 0; B = 1; E_B = 0; }") == "error: 2: E: 'B' and 'E_B' are both B in Wado";
+    assert generate("syntax = \"proto3\";\nenum E { option allow_alias = true; E_A = 0; E_B = 0; B = 1; }") == "error: 2: E: 'E_B' and 'B' are both B in Wado";
+}
+
+test "an enum's default is its first value" {
+    let out = generate("syntax = \"proto2\"; enum E { A = 1; Z = 0; }");
+    assert out.contains("fn first() -> E {
+        return E::A;");
+}
+
+test "an acronym in the enum name still prefixes its values" {
+    assert generate("syntax = \"proto3\"; enum HTTPStatus { HTTP_STATUS_OK = 0; }").contains("    Ok,");
+}
+
+test "a value whose remainder starts with a digit keeps its prefix" {
+    assert generate("syntax = \"proto3\"; enum Size { SIZE_2X = 0; }").contains("    Size2x,");
+}
+
+test "an unresolved type names the field" {
+    assert generate("syntax = \"proto3\"; message M { other.Thing t = 3; }") == "error: 1: t: no message or enum named 'other.Thing' is declared in this file, and Grog reads no import";
+}
+
+test "a relative name resolves outward, a leading dot from the root" {
+    let out = generate(
+        "syntax = \"proto3\"; package p; message A { message B {} B one = 1; .p.A.B two = 2; A.B three = 3; }",
+    );
+    assert out.contains("pub one: Option<AB> = null,");
+    assert out.contains("pub two: Option<AB> = null,");
+    assert out.contains("pub three: Option<AB> = null,");
+}
+
+test "flattened names that collide are refused" {
+    assert generate("syntax = \"proto3\"; message AB {} message A { message B {} }") == "error: 1: 'A.B' and 'AB' are both named AB once flattened";
+}
+
+test "a group is a message delimited by tags" {
+    let out = generate(
+        "syntax = \"proto2\"; message M { optional group G = 1 { optional int32 x = 2; } repeated group H = 3 {} }",
+    );
+    assert out.contains("pub struct MG {");
+    assert out.contains("pub g: Option<MG> = null,");
+    assert out.contains("n += s.optional_group(1, &self.g);");
+    assert out.contains("3 => return r.groups(&mut self.h),");
+}
+
+test "a DELIMITED message is written as a group" {
+    let out = generate("edition = \"2023\"; message M { M m = 1 [features.message_encoding = DELIMITED]; }");
+    assert out.contains("w.optional_group(1, &self.m);");
+}
+
+test "descriptor.proto generates" {
+    let out = generate(#include_str("./proto/protobuf/src/google/protobuf/descriptor.proto"));
+    assert !out.starts_with("error");
+    assert out.contains("pub struct FieldDescriptorProto {");
+    assert out.contains("pub enum FieldDescriptorProtoType {");
+}
+
+test "digit parts keep their separator" {
+    assert generate("syntax = \"proto3\"; enum V { V_2017_11_3 = 0; V_2017_1_13 = 1; }").contains("    V2017_11_3,");
+}
+
+test "a map value is length-prefixed whatever the file's encoding" {
+    let out = generate(
+        "edition = \"2023\"; option features.message_encoding = DELIMITED; message M { map<string, M> m = 1; }",
+    );
+    assert out.contains("s.message_map::<grog::Str, String, M>(1, &self.m);");
+}
+
+test "an enum with no value is refused" {
+    assert generate("syntax = \"proto2\";\nenum E {}") == "error: 2: E declares no value";
+}
+
+test "an open enum's first value is 0" {
+    assert generate("syntax = \"proto3\";\nenum E { A = 1; B = 0; }") == "error: 2: E: an open enum's first value must be 0";
+    assert generate("edition = \"2023\";\nenum E { A = 1; }") == "error: 2: E: an open enum's first value must be 0";
+}
+
+test "an implicit field holds neither a closed enum nor a message" {
+    assert generate(
+        "edition = \"2023\";\nenum E { option features.enum_type = CLOSED; A = 0; }\nmessage M { E e = 1 [features.field_presence = IMPLICIT]; }",
+    ) == "error: 3: e: a closed enum field cannot have implicit presence";
+    assert generate("edition = \"2023\";\nmessage M { M m = 1 [features.field_presence = IMPLICIT]; }") == "error: 2: m: a message field cannot have implicit presence";
+    assert !generate("edition = \"2023\"; option features.field_presence = IMPLICIT; message M { M m = 1; }").starts_with(
+        "error",
+    );
+}
+
+test "two oneofs whose Wado names meet are refused" {
+    assert generate("syntax = \"proto3\";\nmessage M { oneof match { int32 a = 1; } oneof match_ { int32 b = 2; } }") == "error: 2: M has two fields named match_ in Wado";
+}
+
+test "a field number the wire format does not admit is refused" {
+    assert generate("syntax = \"proto3\";\nmessage M { int32 a = 0; }") == "error: 2: a: 0 is not a field number the wire format admits";
+    assert generate("syntax = \"proto3\";\nmessage M { int32 a = 19000; }") == "error: 2: a: 19000 is not a field number the wire format admits";
+    assert generate("syntax = \"proto3\";\nmessage M { int32 a = 536870912; }") == "error: 2: a: 536870912 is not a field number the wire format admits";
+}
+
+test "a field number used twice is refused" {
+    assert generate("syntax = \"proto3\";\nmessage M { int32 a = 1;\n int32 b = 1; }") == "error: 3: M: a and b are both field 1";
+}
+
+test "a proto3 message and its impl" {
+    assert generate("syntax = \"proto3\";
+message Point {
+  int32 x = 1;
+  optional sint64 y = 2;
+  repeated fixed32 tags = 3;
+  Point next = 5;
+  oneof choice { string label = 7; Point other = 8; }
+}
+") == "#![generated(by = \"lib:grog\", sources = [\"point.proto\"])]
+
+use grog from \"lib:grog\";
+
+pub struct Point {
+    pub x: i32 = 0,
+    pub y: Option<i64> = null,
+    pub tags: List<u32> = [],
+    pub next: Option<Point> = null,
+    pub choice: Option<PointChoice> = null,
+    pub unknown_fields: ByteList = b\"\",
+}
+
+pub variant PointChoice {
+    Label(String),
+    Other(Point),
+}
+
+impl grog::Message for Point {
+    fn size(&self, s: &mut grog::Sizer) -> i64 {
+        let mut n = self.unknown_fields.len() as i64;
+        n += s.implicit::<grog::Int32>(1, &self.x);
+        n += s.optional::<grog::SInt64>(2, &self.y);
+        n += s.packed::<grog::Fixed32>(3, &self.tags);
+        n += s.optional_message(5, &self.next);
+        if let Some(PointChoice::Label(v)) = &self.choice {
+            n += s.scalar::<grog::Str>(7, v);
+        }
+        if let Some(PointChoice::Other(v)) = &self.choice {
+            n += s.message(8, v);
+        }
+        return n;
+    }
+
+    fn write(&self, w: &mut grog::Writer) {
+        w.implicit::<grog::Int32>(1, &self.x);
+        w.optional::<grog::SInt64>(2, &self.y);
+        w.packed::<grog::Fixed32>(3, &self.tags);
+        w.optional_message(5, &self.next);
+        if let Some(PointChoice::Label(v)) = &self.choice {
+            w.scalar::<grog::Str>(7, v);
+        }
+        if let Some(PointChoice::Other(v)) = &self.choice {
+            w.message(8, v);
+        }
+        w.raw(&self.unknown_fields);
+    }
+
+    fn merge_field<B: grog::Input>(&mut self, number: i32, r: &mut grog::Reader<B>) -> Result<bool, grog::DecodeError> {
+        match number {
+            1 => {
+                let Some(v) = r.scalar::<grog::Int32>()? else {
+                    return Result::Ok(false);
+                };
+                self.x = v;
+                return Result::Ok(true);
+            },
+            2 => {
+                let Some(v) = r.scalar::<grog::SInt64>()? else {
+                    return Result::Ok(false);
+                };
+                self.y = Option::Some(v);
+                return Result::Ok(true);
+            },
+            3 => return r.repeated::<grog::Fixed32>(&mut self.tags),
+            5 => return r.optional_message(&mut self.next),
+            7 => {
+                let Some(v) = r.scalar::<grog::Str>()? else {
+                    return Result::Ok(false);
+                };
+                self.choice = Option::Some(PointChoice::Label(v));
+                return Result::Ok(true);
+            },
+            8 => {
+                if let Some(PointChoice::Other(held)) = &mut self.choice {
+                    return r.message(held);
+                }
+                let mut v = Point {};
+                if !r.message(&mut v)? {
+                    return Result::Ok(false);
+                }
+                self.choice = Option::Some(PointChoice::Other(v));
+                return Result::Ok(true);
+            },
+            _ => {},
+        }
+        return Result::Ok(false);
+    }
+
+    fn unknown_fields(&mut self) -> &mut ByteList {
+        return &mut self.unknown_fields;
+    }
+}
+";
+}
+
+test "an open enum holds a number it does not declare" {
+    let out = generate("syntax = \"proto3\"; enum Color { COLOR_UNSPECIFIED = 0; COLOR_DARK_RED = -1; }");
+    assert out.contains("pub variant Color {
+    Unspecified,
+    DarkRed,
+    Unrecognized(i32),
+}");
+    assert out.contains("Color::DarkRed => -1,");
+    assert out.contains("Color::Unrecognized(n) => *n,");
+    assert out.contains("-1 => Option::Some(Color::DarkRed),");
+    assert out.contains("_ => Option::Some(Color::Unrecognized(number)),");
+    assert out.contains("impl Eq for Color {");
+    assert out.contains("impl Ord for Color {");
+}
+
+test "a closed enum refuses a number it does not declare" {
+    for let source of [
+        "syntax = \"proto2\"; enum E { A = 0; }",
+        "edition = \"2023\"; enum E { option features.enum_type = CLOSED; A = 0; }",
+        "edition = \"2023\"; option features.enum_type = CLOSED; message M { enum E { A = 0; } }",
+    ] {
+        let out = generate(source);
+        assert out.contains("pub enum ");
+        assert out.contains("_ => null,");
+    }
+}
+
+test "packing follows the syntax, the option and the feature" {
+    let proto3 = generate(
+        "syntax = \"proto3\"; message M { repeated int32 a = 1; repeated int32 b = 2 [packed = false]; repeated string c = 3; }",
+    );
+    assert proto3.contains("s.packed::<grog::Int32>(1, &self.a);");
+    assert proto3.contains("s.repeated::<grog::Int32>(2, &self.b);");
+    assert proto3.contains("s.repeated::<grog::Str>(3, &self.c);");
+    let proto2 = generate(
+        "syntax = \"proto2\"; message M { repeated int32 a = 1; repeated int32 b = 2 [packed = true]; }",
+    );
+    assert proto2.contains("s.repeated::<grog::Int32>(1, &self.a);");
+    assert proto2.contains("s.packed::<grog::Int32>(2, &self.b);");
+    let edition = generate(
+        "edition = \"2023\"; message M { repeated int32 a = 1; repeated int32 b = 2 [features.repeated_field_encoding = EXPANDED]; }",
+    );
+    assert edition.contains("s.packed::<grog::Int32>(1, &self.a);");
+    assert edition.contains("s.repeated::<grog::Int32>(2, &self.b);");
+}
+
+test "a field named for the unknown fields is suffixed" {
+    assert generate("syntax = \"proto3\"; message M { int32 unknown_fields = 1; }").contains(
+        "pub unknown_fields_: i32 = 0,",
+    );
+}

@@ -4,7 +4,9 @@ Syntax highlighter for HTML that highlights what is embedded in a page as the
 language it is written in. A `<script>` body is highlighted as JavaScript and a
 `<style>` body as CSS. The parsers are generated at build time by
 [Gale](../package-gale) from the [grammars-v4](https://github.com/antlr/grammars-v4)
-grammars in `grammar/`.
+grammars in `assets/grammar/`.
+[WEP: Gale Highlight Query](../docs/wep-2026-07-12-gale-highlight-query.md)
+holds the design of the highlight queries.
 
 ## Library
 
@@ -70,24 +72,3 @@ wado run package-gale-highlight-html \
 
 Writes the HTML fragment for each input to `build/highlight/<path>.html`. Add
 `--standalone` (with `--theme light|dark`) for full themed pages.
-
-## Layout
-
-```
-grammar/
-  HTMLLexer.g4, HTMLParser.g4, HTML.highlights.scm
-  css3Lexer.g4, css3Parser.g4, css3.highlights.scm
-  JavaScriptLexer.g4, JavaScriptParser.g4, JavaScript.highlights.scm
-  JSON.g4, JSON.highlights.scm
-src/
-  lib.wado          the page: markup, regions, and their languages
-  javascript.wado   the JavaScript recognizer with its base installed
-  css.wado          stylesheets and declaration lists
-  json.wado         JSON
-  highlight.wado    the shared capture type and the HTML renderer
-  main.wado         CLI (delegates to gale-highlight's run_cli)
-  lib_test.wado     highlight tests
-example/
-  page.html         a page using every language
-benchmark/          throughput against tree-sitter and Prism
-```

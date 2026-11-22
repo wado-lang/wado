@@ -27,7 +27,7 @@ type Vendor = {
 };
 
 const ANTLR4 =
-  "License hygiene (package-gale/AGENTS.md): ANTLR4 implementation source under vendor/antlr4/{tool,runtime} must not be read. To settle what ANTLR does, run the published jar as a black box (`mise run oracle-gale`, package-gale/scripts/antlr4_oracle.wado) or read vendor/antlr4/doc/*.md. Reading a .g4 file or a runtime-testsuite descriptor by its name is allowed.";
+  "License hygiene (package-gale/AGENTS.md): ANTLR4 implementation source under vendor/antlr4/{tool,runtime} must not be read. To settle what ANTLR does, run the published jar as a black box (`mise run oracle-gale`, package-gale/tools/antlr4_oracle.wado) or read vendor/antlr4/doc/*.md. Reading a .g4 file or a runtime-testsuite descriptor by its name is allowed.";
 
 const VENDORS: Vendor[] = [
   { roots: ["vendor/antlr4/tool"], allowed: [], extensions: /\.(java|g)$/, reason: ANTLR4 },

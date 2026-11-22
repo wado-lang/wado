@@ -2657,6 +2657,18 @@ pub struct TirGlobal {
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
+    pub role: GlobalRole,
+}
+
+/// What a global's value may outlive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GlobalRole {
+    /// Held for the rest of the run.
+    Persistent,
+    /// An effect's handler slot. Only a `with` writes it, and every path out
+    /// of the `with` restores what it saved, so what it installs lives no
+    /// longer than the installing frame.
+    HandlerSlot,
 }
 
 #[derive(Debug, Clone)]
@@ -2890,6 +2902,8 @@ pub struct DeclarationShape {
     pub immediate_params: IndexSet<usize>,
     /// It returns neither `()` nor `!`.
     pub returns_value: bool,
+    /// It returns `&` or `&mut`.
+    pub returns_reference: bool,
     /// It returns `&mut`.
     pub returns_mut_ref: bool,
     /// The declaration returns `!`, so every call ends in a trap.
@@ -2921,6 +2935,7 @@ impl DeclarationShape {
             mut_params: positions(params, |p| p.is_mut_ref),
             immediate_params,
             returns_value: ret.returns_value,
+            returns_reference: ret.is_reference,
             returns_mut_ref: ret.is_mut_ref,
             returns_never: ret.is_never,
         }
@@ -2956,6 +2971,9 @@ pub struct BuiltinDeclaration {
     pub immediate_params: IndexSet<usize>,
     /// The array parameter whose one element the call reaches, and how.
     pub element_access: Option<(usize, ArrayElementAccess)>,
+    /// The declared return type is a reference, so a `part_of_args` result
+    /// names part of what the argument names.
+    pub returns_reference: bool,
     /// Every call ends in a trap, as a `!` return states.
     pub never_returns: bool,
     /// No parameter's type can carry storage, so the call is handed nothing it
@@ -2964,6 +2982,16 @@ pub struct BuiltinDeclaration {
 }
 
 impl BuiltinDeclaration {
+    /// Whether a `part_of_args` result from `position` is a value read out of
+    /// what the argument refers to, as `array_get_value(&Array<&X>, i)` reads
+    /// an element. Only a declared reference parameter says so: through a
+    /// type parameter (`black_box<T>(value: T) -> T`) the argument itself
+    /// comes back, a reference or not.
+    #[must_use]
+    pub fn reads_out_of(&self, position: usize) -> bool {
+        self.reference_params.contains(&position) && !self.returns_reference
+    }
+
     /// The declaration `facts` make of a signature shaped as `shape`.
     pub fn new(facts: BuiltinFacts<usize>, shape: DeclarationShape) -> Self {
         let returns = match facts.storage {
@@ -3043,6 +3071,7 @@ impl BuiltinDeclaration {
             ranged_params,
             immediate_params: shape.immediate_params,
             element_access,
+            returns_reference: shape.returns_reference,
             never_returns: shape.returns_never,
             handed_no_storage,
         }

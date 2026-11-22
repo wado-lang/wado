@@ -1,0 +1,780 @@
+use {
+    Grammar,
+    GrammarKind,
+    ParserRule,
+    Alternative,
+    Element,
+    RuleRefElement,
+    TokenRefElement,
+    LiteralElement,
+    RepeatElement,
+    LabelElement,
+    RepeatKind,
+    LexerRule,
+    LexerAlternative,
+    LexerElement,
+    CharClass,
+    CharRange,
+    Visibility,
+    synthesize_implicit_tokens,
+    check_references,
+    merge_grammars,
+    compose_grammars,
+    assign_action_ids,
+    alias_parser_literals,
+    is_lexer_members,
+    is_parser_members,
+    normalize_caches,
+} from "../src/ir.wado";
+use { parse } from "../src/g4/parser.wado";
+
+test "assign_action_ids numbers a rule's actions in source order and every action apart" {
+    let input = "grammar Test;
+@members { int i = 0; }
+r @init { x = 0; } @after { print(x); } : A {act1();} B {p()}? C ;
+    catch [RecognitionException e] { h(); } finally { f(); }
+TOK : 'a' {more();} 'b' ;
+";
+    let mut g = parse(input).unwrap();
+    assign_action_ids(&mut g);
+    let rule = &g.parser_rules[0];
+    let mut ids: List<i32> = [rule.init_action.unwrap().action_id];
+    for let act of &rule.alternatives[0].actions {
+        ids.push(act.source.action_id);
+    }
+    ids.push(rule.after_action.unwrap().action_id);
+    ids.push(rule.catches[0].body.action_id);
+    ids.push(rule.finally_action.unwrap().action_id);
+    assert ids == [0, 1, 2, 3, 4, 5];
+    let lexer_id = g.lexer_rules[0].body[0].actions[0].source.action_id;
+    let named_id = g.named_actions[0].body.action_id;
+    assert lexer_id > 5 && named_id > 5 && lexer_id != named_id;
+}
+
+test "merge_grammars strips matching Lexer/Parser suffix to a common base" {
+    let lexer = parse("lexer grammar FooLexer;\nA : 'a' ;").unwrap();
+    let parser = parse("parser grammar FooParser;\nr : A ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    assert merged.name == "Foo";
+}
+
+test "merge_grammars keeps a name that IS the suffix (no empty base)" {
+    // `parser grammar Parser;` must not strip to the empty string.
+    let parser = parse("parser grammar Parser;\nr : A ;").unwrap();
+    let lexer = parse("lexer grammar Lexer;\nA : 'a' ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    assert merged.name == "Parser";
+}
+
+test "merge_grammars keeps each split's bare @members with the recognizer that declared it" {
+    // The merged grammar is `Combined`, so a bare `@members` carries no kind of
+    // its own past the merge — and would arrive owned by the parser, taking the
+    // lexer's members away and giving the parser ones it cannot compile.
+    let lexer = parse("lexer grammar FooLexer;\n@members { depth: i32 = 0; }\nA : 'a' ;").unwrap();
+    let parser = parse("parser grammar FooParser;\n@members { tag: String = \"\"; }\nr : A ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+
+    // The bodies, not just the counts: swapping the two blocks keeps one of each.
+    let mut lexer_body = String::new();
+    let mut parser_body = String::new();
+    for let act of &merged.named_actions {
+        if is_lexer_members(act, &merged.kind) {
+            lexer_body.push_str(&act.body.text);
+        }
+        if is_parser_members(act, &merged.kind) {
+            parser_body.push_str(&act.body.text);
+        }
+    }
+    assert lexer_body.contains("depth");
+    assert !lexer_body.contains("tag");
+    assert parser_body.contains("tag");
+    assert !parser_body.contains("depth");
+}
+
+test "merge_grammars tolerates a numeric channel id with no channels block" {
+    // `channel(2)` is a legal ANTLR4 integer-literal channel that is stored
+    // as-is and does NOT come from a `channels { }` block, so it has no
+    // remap entry. Merging (2+ grammars) must leave it unchanged, not panic.
+    let lexer = parse("lexer grammar FooLexer;\nC : '#' -> channel(2) ;").unwrap();
+    let parser = parse("parser grammar FooParser;\nr : C ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    let mut found = false;
+    for let r of &merged.lexer_rules {
+        if r.name == "C" {
+            assert r.channel == 2;
+            found = true;
+        }
+    }
+    assert found, "rule C not found in merged grammar";
+}
+
+test "merge_grammars unions the halves' imports and keeps every source path" {
+    let mut lexer = parse("lexer grammar FooLexer;\nimport L, C;\nA : 'a' ;").unwrap();
+    lexer.source_files.push("FooLexer.g4");
+    let mut parser = parse("parser grammar FooParser;\nimport C, P;\nr : A ;").unwrap();
+    parser.source_files.push("FooParser.g4");
+    let merged = merge_grammars([parser, lexer]);
+    assert merged.imports == ["C", "P", "L"];
+    assert merged.source_files == ["FooParser.g4", "FooLexer.g4"];
+}
+
+test "merge_grammars carries a mode command onto the merged mode table" {
+    let lexer = parse("lexer grammar FooLexer;\nA : 'a' -> mode(M) ;\nmode M;\nB : 'b' -> mode(DEFAULT_MODE) ;").unwrap();
+    let parser = parse("parser grammar FooParser;\nr : A B ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    for let r of &merged.lexer_rules {
+        let target = merged.mode_names[r.set_mode];
+        let want = if r.name == "A" { "M" } else { "DEFAULT_MODE" };
+        assert target == want;
+    }
+}
+
+fn compose(sources: List<String>) -> Grammar {
+    let mut grammars: List<Grammar> = [];
+    for let s of &sources {
+        grammars.push(parse(*s).unwrap());
+    }
+    return compose_grammars(grammars).unwrap();
+}
+
+fn rule_names(g: &Grammar) -> List<String> {
+    let mut out: List<String> = [];
+    for let r of &g.parser_rules {
+        out.push(r.name);
+    }
+    return out;
+}
+
+fn token_names(g: &Grammar) -> List<String> {
+    let mut out: List<String> = [];
+    for let r of &g.lexer_rules {
+        out.push(r.name);
+    }
+    return out;
+}
+
+fn channel_of<S: AsStrSlice>(g: &Grammar, name: S) -> i32 {
+    for let r of &g.lexer_rules {
+        if r.name == name.to_string() {
+            return r.channel;
+        }
+    }
+    assert false;
+    return -1;
+}
+
+test "compose_grammars leaves a grammar with no import on the merge path" {
+    let lexer = parse("lexer grammar FooLexer;\nA : 'a' ;").unwrap();
+    let parser = parse("parser grammar FooParser;\nr : A ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    let composed = compose_grammars([parser, lexer]).unwrap();
+    assert composed.name == merged.name;
+    assert rule_names(&composed) == rule_names(&merged);
+    assert token_names(&composed) == token_names(&merged);
+    assert composed.kind matches { _::Combined };
+}
+
+test "compose_grammars keeps the master's name and kind" {
+    let g = compose(["lexer grammar M;\nimport S;\nB : 'b' ;", "lexer grammar S;\nA : 'a' ;"]);
+    assert g.name == "M";
+    assert g.kind matches { _::Lexer };
+}
+
+test "compose_grammars puts master rules ahead of imported ones" {
+    // Lexer precedence is rule order: `KeywordVSIDOrder` needs the master's
+    // `A : 'abc'` to beat the imported `ID : 'a'..'z'+`.
+    let g = compose(["grammar M;\nimport S;\na : A ;\nA : 'abc' ;", "lexer grammar S;\nID : 'a'..'z'+ ;"]);
+    assert token_names(&g) == ["A", "ID"];
+}
+
+test "compose_grammars resolves an import by declared name, not filename" {
+    // `DelegatorInvokesFirstVersionOfDelegateRule` writes `import S,T;` where
+    // the extracted files are `.slave1` (grammar T) and `.slave2` (grammar S).
+    let g = compose([
+        "grammar M;\nimport S,T;\ns : a ;\nB : 'b' ;", "parser grammar T;\na : B ;",
+        "parser grammar S;\na : b ;\nb : B ;",
+    ]);
+    // S comes first in import order, so its `a` is the version that survives
+    // — and it brings `b` with it.
+    assert rule_names(&g) == ["s", "a", "b"];
+}
+
+test "compose_grammars lets a master rule override a delegate's" {
+    let g = compose(["grammar M;\nimport S;\nb : 'b' | 'c' ;", "parser grammar S;\na : b ;\nb : B ;"]);
+    assert rule_names(&g) == ["b", "a"];
+    // The overridden `b : B` was the only reference to `B`, and it went with
+    // the rule — nothing is left to resolve.
+    for let pr of &g.pending_refs {
+        assert pr.referenced_name != "B";
+    }
+}
+
+test "compose_grammars keeps a surviving reference from an overridden rule's sibling" {
+    let g = compose(["grammar M;\nimport S;\nb : 'b' ;\nB : 'b' ;", "parser grammar S;\na : b B ;\nb : B ;"]);
+    let mut refs_from_a = 0;
+    for let pr of &g.pending_refs {
+        if pr.containing_rule == "a" && pr.referenced_name == "B" {
+            refs_from_a += 1;
+        }
+    }
+    assert refs_from_a == 1;
+}
+
+test "compose_grammars composes one token space out of tokens blocks" {
+    // `DelegatesSeeSameTokenType`: three declarations of `A`, one token.
+    let g = compose([
+        "grammar M;\nimport S,T;\ns : x y ;\nB : 'b' ;\nA : 'a' ;\nC : 'c' ;",
+        "parser grammar T;\ntokens { C, B, A }\ny : A ;", "parser grammar S;\ntokens { A, B, C }\nx : A ;",
+    ]);
+    assert token_names(&g) == ["B", "A", "C"];
+    for let r of &g.lexer_rules {
+        assert !r.is_virtual;
+    }
+}
+
+test "compose_grammars lets a delegate's real rule take a master placeholder's slot" {
+    let g = compose(["grammar M;\nimport S;\ntokens { INT }\ns : INT ;", "lexer grammar S;\nINT : '0'..'9'+ ;"]);
+    assert token_names(&g) == ["INT"];
+    assert !g.lexer_rules[0].is_virtual, "the real rule must win the slot";
+    assert !g.lexer_rules[0].body.is_empty(), "the real rule's body must survive";
+}
+
+test "compose_grammars inherits named actions but not options" {
+    // `doc/grammars.md`: named actions are merged, options are ignored.
+    let g = compose([
+        "grammar M;\nimport S;\ns : 'b' ;",
+        "parser grammar S;\noptions { superClass = Base; }\n@parser::members { int x; }\na : B ;",
+    ]);
+    let mut members = 0;
+    for let act of &g.named_actions {
+        if act.name == "members" {
+            members += 1;
+        }
+    }
+    assert members == 1;
+    assert g.parser_superclass.is_empty();
+    for let o of &g.options {
+        assert o.name != "superClass", "delegate options must not be inherited";
+    }
+}
+
+test "compose_grammars keeps the master's action language" {
+    // `language` is an option, so it is not inherited either — a composite
+    // holds one action language, and the master picks it.
+    let g = compose(["grammar M;\nimport S;\ns : 'b' ;", "parser grammar S;\noptions { language = Wado; }\na : B ;"]);
+    assert g.action_language matches { _::Java };
+}
+
+test "compose_grammars walks nested imports depth-first" {
+    // `doc/grammars.md`: Nested imports G1, G2; G1 imports G3 — the tool
+    // examines Nested, G1, G3, G2, and the first version of a rule wins.
+    let g = compose([
+        "grammar Nested;\nimport G1,G2;\ns : r ;", "parser grammar G1;\nimport G3;\na : r ;",
+        "parser grammar G2;\nr : B ;\nb2 : B ;", "parser grammar G3;\nr : B ;\nb3 : B ;",
+    ]);
+    assert rule_names(&g) == ["s", "a", "r", "b3", "b2"];
+}
+
+test "compose_grammars rejects two inputs declaring one grammar name" {
+    // The mirror of the unresolved import: a name that resolves to two inputs
+    // identifies neither. Rejected on both paths, since either half of a split
+    // grammar is looked up the same way.
+    let master = parse("grammar M;\nimport S;\ns : a ;").unwrap();
+    let first = parse("parser grammar S;\na : B ;").unwrap();
+    let second = parse("parser grammar S;\na : C ;").unwrap();
+    assert compose_grammars([master, first, second]) matches { Err(_) }, "a duplicate delegate name must be reported, not silently dropped";
+
+    let one = parse("grammar Dup;\nr : 'x' ;").unwrap();
+    let two = parse("grammar Dup;\nq : 'y' ;").unwrap();
+    assert compose_grammars([one, two]) matches { Err(_) }, "a duplicate name must be reported with no import in play too";
+}
+
+test "compose_grammars rejects an input the composite never reaches" {
+    // A cycle among inputs no master imports leaves them neither merged (their
+    // names are imported, so they are not masters) nor folded (nothing the
+    // master imports reaches them). Dropping them would be the silent omission
+    // the other failure modes are loud about.
+    let master = parse("grammar P;\np : ID ;").unwrap();
+    let m = parse("parser grammar M;\nimport S;\nm : ID ;").unwrap();
+    let s = parse("parser grammar S;\nimport M;\ns : ID ;").unwrap();
+    assert compose_grammars([master, m, s]) matches { Err(_) }, "an unreachable cycle must be reported, not dropped";
+
+    // A cycle the master does reach is not an error: the walk cuts it on the
+    // second visit.
+    let g = compose([
+        "grammar P2;\nimport M2;\np : m ;", "parser grammar M2;\nimport S2;\nm : s ;",
+        "parser grammar S2;\nimport M2;\ns : ID ;",
+    ]);
+    assert rule_names(&g) == ["p", "m", "s"];
+}
+
+test "an embedded delegate names its tokens rather than spelling them" {
+    // A parser literal aliases only to a DEFAULT_MODE rule. In a delegate whose
+    // rules live in a mode, `':'` therefore mints an anonymous DEFAULT_MODE
+    // token the lexer never reaches, and the parser waits for one that cannot
+    // arrive. The gate is deliberate: a parser rule is reached in whatever mode
+    // its caller pushed, and nothing records that.
+    let host = "grammar H;\nimport C;\nd : OPEN s CLOSE ;\nOPEN : '<' -> pushMode(M) ;";
+    let tail = "mode M;\nCLOSE : '>' -> popMode ;\nCOLON : ':' ;\nID : [a-z]+ ;";
+
+    let mut spelled = compose([host, `grammar C;\ns : ID ':' ID ;\n${tail}`]);
+    alias_parser_literals(&mut spelled);
+    assert has_literal(&spelled, "s"), "a spelled literal stays one, and mints a token nothing emits";
+
+    let mut named = compose([host, `grammar C;\ns : ID COLON ID ;\n${tail}`]);
+    alias_parser_literals(&mut named);
+    assert !has_literal(&named, "s"), "a named token is what the lexer produces";
+}
+
+/// Whether the named parser rule's first alternative still holds a `Literal`.
+fn has_literal<S: AsStrSlice>(g: &Grammar, rule: S) -> bool {
+    for let r of &g.parser_rules {
+        if r.name == rule.to_string() {
+            for let e of &r.alternatives[0].elements {
+                if e matches { Literal(_) } {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+test "compose_grammars rejects an import naming no supplied input" {
+    let master = parse("grammar M;\nimport S;\ns : ID ;").unwrap();
+    let result = compose_grammars([master]);
+    assert result matches { Err(_) }, "expected an unresolved import to be rejected";
+}
+
+test "compose_grammars discards a mode left empty by an override" {
+    let g = compose([
+        "lexer grammar M;\nimport S;\nOPEN : '<' ;",
+        "lexer grammar S;\nOPEN : '<' -> pushMode(TAG) ;\nmode TAG;\nCLOSE : '>' ;",
+    ]);
+    // `CLOSE` survives, so `TAG` keeps its rule and its name.
+    assert g.mode_names == ["DEFAULT_MODE", "TAG"];
+
+    let empty = compose([
+        "lexer grammar M2;\nimport S2;\nCLOSE : '>' ;", "lexer grammar S2;\nOPEN : '<' ;\nmode TAG;\nCLOSE : '>' ;",
+    ]);
+    assert empty.mode_names == ["DEFAULT_MODE"];
+    for let r of &empty.lexer_rules {
+        assert r.mode == 0;
+    }
+}
+
+test "compose_grammars renumbers a mode command past a discarded mode" {
+    let g = compose(
+        [
+            "lexer grammar M;\nimport S;\nIN_A : 'a' ;",
+            "lexer grammar S;\nGO : '!' -> mode(B) ;\nPUSH : '<' -> pushMode(B) ;\nmode A;\nIN_A : 'a' ;\nmode B;\nIN_B : 'b' ;",
+        ],
+    );
+    assert g.mode_names == ["DEFAULT_MODE", "B"];
+    for let r of &g.lexer_rules {
+        if r.name == "GO" {
+            assert r.set_mode == 1;
+        }
+        if r.name == "PUSH" {
+            assert r.push_mode == 1;
+        }
+        if r.name == "IN_B" {
+            assert r.mode == 1;
+        }
+    }
+}
+
+test "compose_grammars gives each delegate's channels a slot of their own" {
+    let g = compose([
+        "lexer grammar M;\nimport S, T;\nchannels { A }\nM_C : 'm' -> channel(A) ;",
+        "lexer grammar S;\nchannels { B }\nS_C : 's' -> channel(B) ;",
+        "lexer grammar T;\nchannels { C }\nT_C : 't' -> channel(C) ;",
+    ]);
+    assert g.channels == ["A", "B", "C"];
+    assert channel_of(&g, "M_C") == 2;
+    assert channel_of(&g, "S_C") == 3;
+    assert channel_of(&g, "T_C") == 4;
+}
+
+test "compose_grammars merges two delegates naming one channel onto one slot" {
+    let g = compose([
+        "lexer grammar M;\nimport S, T;\nM_C : 'm' ;",
+        "lexer grammar S;\nchannels { NOTE }\nS_C : 's' -> channel(NOTE) ;",
+        "lexer grammar T;\nchannels { NOTE }\nT_C : 't' -> channel(NOTE) ;",
+    ]);
+    assert g.channels == ["NOTE"];
+    assert channel_of(&g, "S_C") == 2;
+    assert channel_of(&g, "T_C") == 2;
+}
+
+test "Grammar construction" {
+    let g = Grammar {
+        name: "JSON",
+        kind: GrammarKind::Combined,
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        pending_refs: [],
+        source_files: [],
+    };
+    assert g.name == "JSON";
+    assert g.parser_rules.is_empty();
+    assert g.lexer_rules.is_empty();
+    assert g.mode_names.len() == 1;
+    assert g.channels.is_empty();
+    assert g.options.is_empty();
+    assert g.named_actions.is_empty();
+    assert g.source_files.is_empty();
+}
+
+test "ParserRule with alternatives" {
+    let rule = ParserRule::new(
+        "value",
+        Visibility::Default,
+        [],
+        [
+            Alternative {
+                label: Option::<String>::Some("Str"),
+                options: [],
+                elements: [Element::TokenRef(TokenRefElement::new("STRING"))],
+            },
+            Alternative {
+                label: Option::<String>::Some("Num"),
+                options: [],
+                elements: [Element::TokenRef(TokenRefElement::new("NUMBER"))],
+            },
+            Alternative {
+                label: null,
+                options: [],
+                elements: [Element::Literal(LiteralElement::new("true"))],
+            },
+        ],
+    );
+    assert rule.name == "value";
+    assert rule.alternatives.len() == 3;
+    if let Some(label) = rule.alternatives[0].label {
+        assert label == "Str";
+    } else {
+        panic("expected label");
+    }
+}
+
+test "Element variants" {
+    let rule_ref = Element::RuleRef(RuleRefElement::new("expr"));
+    let token_ref = Element::TokenRef(TokenRefElement::new("INT"));
+    let literal = Element::Literal(LiteralElement::new("+"));
+    let repeat = Element::Repeat(RepeatElement {
+        kind: RepeatKind::Star,
+        element: Element::TokenRef(TokenRefElement::new("INT")),
+        non_greedy: false,
+    });
+    let label = Element::Label(LabelElement::new(
+        "op",
+        false,
+        Element::Literal(LiteralElement::new("+")),
+    ));
+
+    if let RuleRef(r) = rule_ref {
+        assert r.name == "expr";
+    } else {
+        panic("expected RuleRef");
+    }
+
+    if let TokenRef(t) = token_ref {
+        assert t.name == "INT";
+    } else {
+        panic("expected TokenRef");
+    }
+
+    if let Literal(l) = literal {
+        assert l.text == "+";
+    } else {
+        panic("expected Literal");
+    }
+
+    if let Repeat(r) = repeat {
+        if let TokenRef(t) = r.element {
+            assert t.name == "INT";
+        } else {
+            panic("expected TokenRef inside Repeat");
+        }
+    } else {
+        panic("expected Repeat");
+    }
+
+    if let Label(l) = label {
+        assert l.name == "op";
+        assert !l.list;
+    } else {
+        panic("expected Label");
+    }
+}
+
+test "normalize_caches fills the name caches a struct literal leaves empty" {
+    let mut g = parsed("grammar T; a : ;");
+    let body = Element::Label(LabelElement {
+        name: "loopBody",
+        list: false,
+        element: Element::RuleRef(RuleRefElement { name: "match", options: [] }),
+    });
+    let alt = Alternative {
+        label: null,
+        options: [],
+        elements: [
+            Element::RuleRef(RuleRefElement { name: "typeRef", options: [] }),
+            Element::TokenRef(TokenRefElement { name: "IF", options: [] }),
+            body,
+        ],
+    };
+    g.parser_rules.push(ParserRule {
+        name: "exprList",
+        visibility: Visibility::Default,
+        options: [],
+        alternatives: [alt],
+    });
+    normalize_caches(&mut g);
+
+    let rule = &g.parser_rules[1];
+    assert [rule.snake_name, rule.field_name, rule.type_name] == ["expr_list", "expr_list", "ExprListNode"];
+    let es = &rule.alternatives[0].elements;
+    let RuleRef(r) = es[0] else {
+        panic("RuleRef");
+    };
+    assert [r.snake_name, r.field_name] == ["type_ref", "type_ref"];
+    let TokenRef(t) = es[1] else {
+        panic("TokenRef");
+    };
+    assert [t.lower_name, t.field_name] == ["if", "if_"];
+    let Label(lab) = es[2] else {
+        panic("Label");
+    };
+    assert [lab.snake_name, lab.field_name] == ["loop_body", "loop_body"];
+    let RuleRef(inner) = lab.element else {
+        panic("labeled RuleRef");
+    };
+    assert inner.field_name == "match_";
+}
+
+test "a string superClass option names its base like a dotted one" {
+    // ANTLR4 emits the string verbatim (`extends my.Base`); the base is its last component.
+    let g = parsed("parser grammar P;\noptions { superClass = 'my.Base'; }\ns : ;");
+    assert g.parser_superclass == "Base";
+}
+
+test "LexerRule construction" {
+    let rule = LexerRule {
+        name: "WS",
+        visibility: Visibility::Default,
+        is_fragment: false,
+        skip: true,
+        more: false,
+        type_override: null,
+        channel: 0,
+        mode: 0,
+        set_mode: -1,
+        push_mode: -1,
+        pop_mode: false,
+        is_virtual: false,
+        options: [],
+        body: [
+            LexerAlternative {
+                elements: [
+                    LexerElement::CharClass(CharClass {
+                        ranges: [
+                            CharRange::single(' '),
+                            CharRange::single('\t'),
+                            CharRange::single('\n'),
+                            CharRange::single('\r'),
+                        ],
+                        negated: false,
+                    }),
+                ],
+            },
+        ],
+    };
+    assert rule.name == "WS";
+    assert rule.skip == true;
+    assert rule.is_fragment == false;
+}
+
+test "CharRange helpers" {
+    let single = CharRange::single('a');
+    assert single.start == 'a';
+    assert single.end == 'a';
+
+    let range = CharRange::range('0', '9');
+    assert range.start == '0';
+    assert range.end == '9';
+}
+
+fn parsed<S: AsStrSlice>(src: S) -> Grammar {
+    let mut g = parse(src).unwrap();
+    g.source_files.push("(test)");
+    return g;
+}
+
+test "synthesize_implicit_tokens: undefined parser-rule TokenRef becomes a virtual rule" {
+    let mut g = parsed("grammar T; prog : ID K_IN ID EOF; ID : [a-z]+; WS : [ \\t]+ -> skip;");
+    synthesize_implicit_tokens(&mut g);
+    let mut found_k_in = false;
+    for let lr of &g.lexer_rules {
+        if lr.name == "K_IN" {
+            found_k_in = true;
+            assert lr.is_virtual;
+            assert lr.body.len() == 0;
+        }
+    }
+    assert found_k_in;
+    assert check_references(&g) matches { Ok(_) };
+}
+
+test "check_references: a lexer rule cannot reference a tokens { } declaration" {
+    let g = parsed("grammar T; tokens { VIRT } s : A ; A : VIRT ; WS : ' ' -> skip;");
+    assert check_references(&g) matches { Err(_) }, "a declaration has no text for a lexer rule to match";
+}
+
+test "check_references: a parser rule may reference a tokens { } declaration" {
+    let g = parsed("grammar T; tokens { VIRT } s : VIRT ; WS : ' ' -> skip;");
+    assert check_references(&g) matches { Ok(_) }, "declaring a token is what tokens { } is for";
+}
+
+test "synthesize_implicit_tokens: dedups repeated references" {
+    let mut g = parsed("grammar T; prog : K_IN K_IN EOF;");
+    synthesize_implicit_tokens(&mut g);
+    let mut count = 0;
+    for let lr of &g.lexer_rules {
+        if lr.name == "K_IN" {
+            count += 1;
+        }
+    }
+    assert count == 1;
+}
+
+test "synthesize_implicit_tokens: defined tokens are left alone" {
+    let mut g = parsed("grammar T; prog : K_IN EOF; K_IN : 'in'; WS : [ \\t]+ -> skip;");
+    let before = g.lexer_rules.len();
+    synthesize_implicit_tokens(&mut g);
+    assert g.lexer_rules.len() == before;
+    for let lr of &g.lexer_rules {
+        if lr.name == "K_IN" {
+            assert !lr.is_virtual;
+        }
+    }
+}
+
+test "synthesize_implicit_tokens: EOF is built-in, never synthesized" {
+    let mut g = parsed("grammar T; prog : ID EOF; ID : [a-z]+;");
+    synthesize_implicit_tokens(&mut g);
+    for let lr of &g.lexer_rules {
+        assert lr.name != "EOF";
+    }
+}
+
+fn sole_element(g: &Grammar) -> Element {
+    return g.parser_rules[0].alternatives[0].elements[0];
+}
+
+test "alias_parser_literals: a literal duplicating a whole lexer rule body becomes a TokenRef" {
+    let mut g = parsed("grammar T; s : 'kw'; K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut g);
+    if let TokenRef(t) = sole_element(&g) {
+        assert t.name == "K";
+    } else {
+        panic("expected a TokenRef");
+    }
+}
+
+test "alias_parser_literals: aliasing reaches nested elements" {
+    let mut g = parsed("grammar T; s : ('kw' | ~'kw')* ; K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut g);
+    if let Repeat(rep) = sole_element(&g) {
+        if let Group(grp) = &rep.element {
+            if let TokenRef(t) = &grp.alternatives[0].elements[0] {
+                assert t.name == "K";
+            } else {
+                panic("expected a TokenRef in the first alt");
+            }
+            if let Not(n) = &grp.alternatives[1].elements[0] {
+                assert n.element matches { TokenRef(_) }, "expected ~TokenRef";
+            } else {
+                panic("expected a Not in the second alt");
+            }
+        } else {
+            panic("expected a Group");
+        }
+    } else {
+        panic("expected a Repeat");
+    }
+}
+
+test "alias_parser_literals: a concatenated or wrapped body does not alias" {
+    let mut concat = parsed("grammar T; s : 'kw'; K : 'k' 'w'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut concat);
+    assert sole_element(&concat) matches { Literal(_) }, "concatenation must not alias";
+
+    let mut wrapped = parsed("grammar T; s : 'kw'; K : ('kw'); WS : ' ' -> skip;");
+    alias_parser_literals(&mut wrapped);
+    assert sole_element(&wrapped) matches { Literal(_) }, "a wrapped body must not alias";
+}
+
+test "alias_parser_literals: an action does not block the alias" {
+    let mut g = parsed(
+        "grammar T; options { language = Wado; } s : 'kw'; K : 'kw' { lx.count += 1 }; WS : ' ' -> skip;",
+    );
+    alias_parser_literals(&mut g);
+    if let TokenRef(t) = sole_element(&g) {
+        assert t.name == "K";
+    } else {
+        panic("expected a TokenRef");
+    }
+}
+
+// The jar maps `'}'` to TypeScriptLexer's `CloseBrace : '}' {…}`, not to the
+// earlier `TemplateCloseBrace : {…}? '}' -> popMode`: code ahead of the literal
+// blocks the alias, code after it does not.
+test "alias_parser_literals: an action or predicate ahead of the literal blocks the alias" {
+    let mut pred = parsed("grammar T; s : 'kw'; P : {true}? 'kw'; K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut pred);
+    if let TokenRef(t) = sole_element(&pred) {
+        assert t.name == "K";
+    } else {
+        panic("expected a TokenRef");
+    }
+
+    let mut act = parsed("grammar T; s : 'kw'; K : {act();} 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut act);
+    assert sole_element(&act) matches { Literal(_) }, "a leading action must not alias";
+}
+
+test "alias_parser_literals: a trailing predicate does not block the alias" {
+    let mut g = parsed("grammar T; s : 'kw'; K : 'kw' {true}?; WS : ' ' -> skip;");
+    alias_parser_literals(&mut g);
+    if let TokenRef(t) = sole_element(&g) {
+        assert t.name == "K";
+    } else {
+        panic("expected a TokenRef");
+    }
+}
+
+test "alias_parser_literals: a fragment or a non-default-mode rule does not alias" {
+    let mut frag = parsed("grammar T; s : 'kw'; fragment K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut frag);
+    assert sole_element(&frag) matches { Literal(_) }, "a fragment must not alias";
+
+    let mut moded = parsed("grammar T; s : 'kw'; BT : '`' -> pushMode(M); mode M; K : 'kw';");
+    alias_parser_literals(&mut moded);
+    assert sole_element(&moded) matches { Literal(_) }, "a moded rule must not alias";
+}
+
+test "alias_parser_literals: the first rule with the text wins" {
+    let mut g = parsed("grammar T; s : 'kw'; J : 'kw'; K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut g);
+    if let TokenRef(t) = sole_element(&g) {
+        assert t.name == "J";
+    } else {
+        panic("expected a TokenRef");
+    }
+}

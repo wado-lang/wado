@@ -1,0 +1,1556 @@
+//! What stage 0 proves of a graph, and what it stops the build for.
+
+use { Extent } from "../src/extent.wado";
+use { Attr, Elements, Node } from "../src/graph.wado";
+use {
+    AttributeConflict,
+    Checked,
+    DeclaredConflict,
+    DeclaredElementConflict,
+    DeclaredRankConflict,
+    InferError,
+    NodeConflict,
+    OperandCountConflict,
+    OperandRankConflict,
+    OutputCountConflict,
+    Refusal,
+    infer,
+    softmax_lane,
+} from "../src/infer.wado";
+use { read } from "../src/onnx_text.wado";
+use { Poly } from "../src/poly.wado";
+use { AxisConflict } from "../src/shape.wado";
+use { bind_dims } from "../src/specialize.wado";
+use { TreeMap } from "core:collections";
+
+fn is_error<E: Error>() {
+}
+
+test "every error stage 0 reports is an Error" {
+    is_error::<InferError>();
+    is_error::<Refusal>();
+    is_error::<NodeConflict>();
+    is_error::<AxisConflict>();
+    is_error::<OperandCountConflict>();
+    is_error::<OutputCountConflict>();
+    is_error::<OperandRankConflict>();
+    is_error::<AttributeConflict>();
+    is_error::<DeclaredRankConflict>();
+    is_error::<DeclaredConflict>();
+    is_error::<DeclaredElementConflict>();
+}
+
+/// `Y`'s axes after stage 0, as `name=extent` pairs, or the build error.
+fn y_axes(source: String) -> Result<String, String> {
+    let graph = read(&source).unwrap();
+    return match infer(&graph) {
+        Ok(Checked { shapes, .. }) => {
+            let axes: List<String> = shapes["Y"].axes.into_iter().map(|a| `${a.name}=${a.extent}`).collect();
+            Result::Ok(axes.join(","));
+        },
+        Err(e) => Result::Err(`${e}`),
+    };
+}
+
+/// The shapes stage 0 gives `source`.
+fn shapes_of(source: String) -> TreeMap<String, List<String>> {
+    let graph = read(&source).unwrap();
+    let mut names = TreeMap::<String, List<String>>::new();
+    for let [tensor, shape] of infer(&graph).unwrap().shapes.entries() {
+        names[*tensor] = shape.names();
+    }
+    return names;
+}
+
+/// The error stage 0 stops the build of `source` with.
+fn refused(source: String) -> String {
+    return `${infer(&read(&source).unwrap()).unwrap_err()}`;
+}
+
+fn mlp(hidden_in_w2: i32) -> String {
+    return `mlp (float[N, 128] X) => (float[N, 10] Y)
+    <float[128, 64] W1, float[64] B1, float[${hidden_in_w2}, 10] W2, float[10] B2>
+    {
+        H = MatMul(X, W1)
+        HB = Add(H, B1)
+        A = Relu(HB)
+        T = MatMul(A, W2)
+        Y = Add(T, B2)
+    }`;
+}
+
+test "a consistent MLP infers its output shape, each axis named from the graph" {
+    assert y_axes(mlp(64)).unwrap() == "N=N,Y1=10";
+}
+
+test "an extent mismatch between the layers names the axis where it first reached a tensor" {
+    assert y_axes(mlp(32)).unwrap_err() == "T = MatMul: axis W1[1] is 64 on the left and 32 on the right";
+}
+
+test "a symbolic batch axis flows through both layers" {
+    let graph = read(&mlp(64)).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["H"].axes[0].extent.agrees(&Extent::symbol(&"N"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"N"));
+}
+
+test "a bias broadcasts against the batch axis ahead of it" {
+    let shapes = shapes_of(mlp(64));
+    assert shapes["HB"].len() == 2;
+    assert shapes["HB"][1] == shapes["B1"][0];
+}
+
+test "a dim_param on two inputs is one axis, though no operation meets them" {
+    let graph = read(
+        `g (float[N, 2] A, float[N, 3] B) => (float[N, 2] Y, float[N, 3] Z) {
+            Y = Relu(A)
+            Z = Relu(B)
+        }`,
+    ).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["Y"].axes[0].name == "N";
+    assert shapes["Z"].axes[0].name == "N";
+
+    let mut bound = graph;
+    bind_dims(&mut bound, &({ N: 1 } as TreeMap<String, i32>)).unwrap();
+    let fixed = infer(&bound).unwrap().shapes;
+    assert `${fixed["Y"].axes[0].name}=${fixed["Y"].axes[0].extent}` == "N=1";
+    assert fixed["Z"].axes[0].name == "N";
+}
+
+test "a class two dim_params reach takes the one the graph declares first" {
+    let source = `g (float[S, 2] A, float[T, 2] B) => (float[T, 2] Y) {
+        Y = Add(A, B)
+    }`;
+    assert y_axes(source).unwrap() == "S=S,A1=2";
+}
+
+test "a dim_param on a merged axis names nothing, since a merge takes its parts' names" {
+    let source = `g (float[2, 3, 4] X) => (float[rows, 4] Y) <int64[2] S = {6, 4}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap() == "Merged<[X0, X1]>=6,X2=4";
+}
+
+test "a dim_param joining axes of two lengths stops the build" {
+    let source = `g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, T, 8] Y) {
+        Y = Concat<axis = -2>(P, N)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y: axis T is declared T and produced T + 1";
+}
+
+test "a dim_param minted into a name the module may import takes another" {
+    let source = `g (float[weight_source, 2] X) => (float[weight_source, 2] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(source).unwrap() == "WeightSource_=weight_source,X1=2";
+}
+
+test "an outer constant both branches read is one tensor, under one name" {
+    let source = `g (bool[1] C, float[2] X, float[2] Z) => (float[2] Y) {
+        K = Constant<value_floats = [1.0, 2.0]>()
+        Y = If <then_branch = t () => (float[2] A) { A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Mul(K, Z) }> (C)
+    }`;
+    let shapes = shapes_of(source);
+    assert shapes["Y"] == shapes["K"];
+    assert shapes["Y"] == shapes["X"];
+    assert shapes["Y"] == shapes["Z"];
+}
+
+test "an outer constant read in the branches and around them is one tensor" {
+    let source = `g (bool[1] C, float[2] X, float[2] H) => (float[2] Y) {
+        K = Constant<value_floats = [1.0, 2.0]>()
+        V = If <then_branch = t () => (float[2] A) { A = Mul(H, K) }, else_branch = e () => (float[2] B) { B = Add(H, K) }> (C)
+        Y = Add(X, K)
+    }`;
+    let shapes = shapes_of(source);
+    assert shapes["V"] == shapes["H"];
+    assert shapes["Y"] == shapes["H"];
+}
+
+test "a class a branch output and a graph output declare takes the graph output's dim_param" {
+    let source = `g (bool[1] C, float[N, 2] X, float[M, 2] Z) => (float[total, 2] Y) {
+        Y = If <then_branch = t () => (float[part, 2] A) { A = Concat<axis = 0>(X, Z) }, else_branch = e () => (float[part, 2] B) { B = Concat<axis = 0>(X, Z) }> (C)
+    }`;
+    assert y_axes(source).unwrap() == "Total=M + N,X1=2";
+}
+
+test "a dim_param names its axis in PascalCase" {
+    let source = `g (float[batch_size, 2] X) => (float[batch_size, 2] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(source).unwrap() == "BatchSize=batch_size,X1=2";
+}
+
+test "a dim_param naming one of the module's own names takes another" {
+    let source = `g (float[tensor] X) => (float[tensor] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(source).unwrap() == "Tensor_=tensor";
+}
+
+test "each axis's name says where it came from" {
+    let graph = read(&mlp(64)).unwrap();
+    let names = infer(&graph).unwrap().axis_names;
+    let said: List<String> = names.into_iter().map(|n| `${n.name}: ${n.source}`).collect();
+    assert said == ["N: dim_param N at X", "X1: minted from X[1]", "Y1: minted from Y[1]", "W11: minted from W1[1]"] as List<String>;
+}
+
+test "an operator with no shape rule stops the build naming it" {
+    let source = `agraph (float[2, 3] X) => (float[2, 3] Y) {
+        Y = LpNormalization(X)
+    }`;
+    assert refused(source) == "LpNormalization: no shape rule for this operator";
+    let indices = `agraph (int64[2, 3] X) => (int64[2, 3] Y) {
+        Y = NonZero(X)
+    }`;
+    assert refused(indices) == "NonZero: no shape rule for this operator";
+}
+
+test "an unknown dimension's length is a symbol of where it was declared" {
+    let graph = read(
+        `agraph (float[?, 4] X, float[4, 4] W) => (float[?, 4] Y) {
+            Y = MatMul(X, W)
+        }`,
+    ).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"X[0]"));
+}
+
+test "an operator given too few operands stops the build rather than trapping" {
+    let source = `agraph (float[2, 3] X) => (float[2, 3] Y) {
+        Y = Add(X)
+    }`;
+    assert refused(source) == "Y = Add: reads 2 operands and was given 1";
+}
+
+test "a node the build folds, given too few operands, stops the build rather than trapping" {
+    let source = `g (float[2] X) => (float[2] Y) {
+        S = Shape(X)
+        G = Gather(S)
+        Y = Relu(X)
+    }`;
+    assert y_axes(source).unwrap_err() == "G = Gather: reads 2 operands and was given 1";
+}
+
+test "a node the build folds, reading an undefined tensor, stops the build" {
+    let source = `g (float[2] X) => (float[2] Y) {
+        S = Shape(Missing)
+        Y = Relu(X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Missing: no graph input, initializer or node defines this";
+}
+
+test "Unsqueeze listing an axis twice stops the build rather than trapping" {
+    let source = `g (float[3] X) => (float[1, 1, 3] Y) {
+        A = Constant<value_ints = [0, 0]>()
+        Y = Unsqueeze(X, A)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Unsqueeze: axis 0 is listed twice";
+}
+
+test "the axis Unsqueeze inserts is new, even ahead of an operand axis of extent 1" {
+    let source = `g (float[1] X) => (float[1, 1] Y) {
+        A = Constant<value_ints = [0]>()
+        Y = Unsqueeze(X, A)
+    }`;
+    assert y_axes(source).unwrap() == "Y0=1,X0=1";
+}
+
+test "Squeeze keeps the operand's axes it does not list, extent 1 or not" {
+    let source = `g (float[1, 1, 3] X) => (float[1, 3] Y) {
+        A = Constant<value_ints = [0]>()
+        Y = Squeeze(X, A)
+    }`;
+    assert y_axes(source).unwrap() == "X1=1,X2=3";
+}
+
+test "Slice given more starts than axes stops the build rather than trapping" {
+    let source = `g (float[2, 3] X) => (float[2, 3] Y) <int64[2] B = {0, 0}, int64[2] E = {1, 1}, int64[1] P = {0}> {
+        S = Shape(X)
+        T = Slice(S, B, E, P)
+        Y = Relu(X)
+    }`;
+    assert y_axes(source).unwrap_err() == "T = Slice: 2 starts, 2 ends, 1 axes and 2 steps do not pair up";
+}
+
+test "a Constant written as value_floats folds" {
+    let source = `g (float[2] X) => (float[2] Y) {
+        C = Constant<value_floats = [0.5, 2.0]>()
+        Y = Mul(X, C)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2";
+}
+
+test "Flatten of a tensor with no elements keeps the extents on each side" {
+    let source = `g (float[0, 3, 4] X) => (float[0, 12] Y) {
+        Y = Flatten <axis = 1> (X)
+    }`;
+    assert y_axes(source).unwrap() == "Y0=0,Y1=12";
+}
+
+test "a folded tensor of one element keeps its rank" {
+    let source = `g (float[3] X) => (float[1, 3] Y) <int64[2] S = {1, 1}> {
+        C = ConstantOfShape(S)
+        Y = Add(X, C)
+    }`;
+    assert y_axes(source).unwrap() == "Y0=1,X0=3";
+}
+
+test "a node naming several outputs stops the build rather than trapping" {
+    let source = `agraph (float[2, 3] X) => (float[2, 3] Y) {
+        Y, Z = Relu(X)
+    }`;
+    assert refused(source) == "Y = Relu: produces one output and names 2";
+}
+
+test "a weight's axis contracts with a regrouped activation's merged axis" {
+    let source = `g (float[1, 4, 2, 8] X) => (float[1, 4, 6] Y) <float[16, 6] W, int64[3] S = {1, 4, 16}> {
+        R = Reshape(X, S)
+        Y = MatMul(R, W)
+    }`;
+    let shapes = shapes_of(source);
+    assert shapes["W"][0] == shapes["R"][2];
+    assert y_axes(source).unwrap() == "X0=1,X1=4,Y2=6";
+}
+
+test "Split cuts an axis into parts, each new" {
+    let source = `g (float[1, 4, 24] X) => (float[1, 4, 8] Y) {
+        S = Constant<value_ints = [8, 8, 8]>()
+        Q, Y, V = Split<axis = 2>(X, S)
+    }`;
+    assert y_axes(source).unwrap() == "X0=1,X1=4,Y2=8";
+}
+
+test "Split with no sizes cuts equal parts, the last taking what remains" {
+    let source = `g (float[1, 4, 23] X) => (float[1, 4, 7] V) {
+        Q, Y, V = Split<axis = -1>(X)
+    }`;
+    let graph = read(&source).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["Y"].axes[2].extent.agrees(&Extent::Static(8));
+    assert shapes["V"].axes[2].extent.agrees(&Extent::Static(7));
+}
+
+test "Split sizes that miss the axis's extent stop the build" {
+    let source = `g (float[1, 4, 24] X) => (float[1, 4, 8] Y) {
+        S = Constant<value_ints = [8, 8, 4]>()
+        Q, Y, V = Split<axis = 2>(X, S)
+    }`;
+    assert y_axes(source).unwrap_err() == "Q = Split: the parts sum to 20, which must be axis 2's 24, and it is not";
+}
+
+test "a Split size past the axis stops the build rather than wrapping into it" {
+    let source = `g (float[1, 4, 24] X) => (float[1, 4, 8] Y) {
+        S = Constant<value_ints = [4294967304, 8, 8]>()
+        Q, Y, V = Split<axis = 2>(X, S)
+    }`;
+    assert y_axes(source).unwrap_err() == "Q = Split: a part is 4294967304, which must lie within axis 2's 24, and it is not";
+}
+
+/// One query head over a past of three positions, its sequence lengths `L`
+/// and `T`.
+fn attention(heads: String, seqlens: String) -> String {
+    return `g (float[1, 1, 8] Q, float[1, 1, 8] K, float[1, 1, 8] V, float[1, 1, 3, 8] PK, float[1, 1, 3, 8] PV)
+        => (float[1, 1, 8] Y) {
+        L = Constant<value_ints = [${seqlens}]>()
+        T = Constant<value_ints = [4]>()
+        Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = ${heads}, kv_num_heads = 1>(Q, K, V, PK, PV, L, T)
+    }`;
+}
+
+test "a GroupQueryAttention that names no present stops the build" {
+    let source = `g (float[1, 1, 8] Q, float[1, 1, 8] K, float[1, 1, 8] V, float[1, 1, 3, 8] PK, float[1, 1, 3, 8] PV)
+        => (float[1, 1, 8] Y) {
+        L = Constant<value_ints = [3]>()
+        T = Constant<value_ints = [4]>()
+        Y = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = com.microsoft.GroupQueryAttention: neither present output is named, and the kernel's call spells their positions";
+}
+
+test "GroupQueryAttention's sequence lengths are checked against its shapes" {
+    let ok = y_axes(attention("1", "3"));
+    assert ok == Result::Ok("Q0=1,Q1=1,Q2=8"), `${ok:?}`;
+    let e = y_axes(attention("1", "9223372036854775807")).unwrap_err();
+    assert e == "Y = com.microsoft.GroupQueryAttention: seqlens_k must be one short of the total, and it is not";
+}
+
+test "GroupQueryAttention's heads times the head are counted past i32" {
+    // 536870913 heads of 8 are 2^32 + 8, which an i32 product wraps to 8.
+    let e = y_axes(attention("536870913", "3")).unwrap_err();
+    assert e == "Y = com.microsoft.GroupQueryAttention: axis Q[2] would be 4294967304 long, which no axis is";
+}
+
+/// A `MatMulNBits` of 40 columns in blocks of 32 into 3 rows, its weight `B`,
+/// scales and zero points declared as `weight` writes them.
+fn quantized_product(weight: String, attrs: String) -> String {
+    return `g (float[1, T, 40] A) => (float[1, T, 3] Y) <${weight}> {
+        Y = com.microsoft.MatMulNBits<K = 40, N = 3, block_size = 32${attrs}>(A, B, S, Z)
+    }`;
+}
+
+global PACKED: String = "uint8[3, 2, 16] B, float[3, 2] S, uint8[3, 1] Z";
+
+test "MatMulNBits puts the weight's rows where its input's last axis was" {
+    let source = quantized_product(PACKED, "");
+    let shapes = shapes_of(source);
+    assert shapes["Y"][2] == shapes["B"][0];
+    assert y_axes(source).unwrap() == "A0=1,T=T,Y2=3";
+}
+
+test "a MatMulNBits weight laid out apart from what K, N and its packing say stops the build" {
+    let short = y_axes(quantized_product("uint8[3, 2, 8] B, float[3, 2] S, uint8[3, 1] Z", "")).unwrap_err();
+    assert short == "Y = com.microsoft.MatMulNBits: operand 1 is [3, 2, 8], and its packing makes it [3, 2, 16]";
+    let zeros = y_axes(quantized_product("uint8[3, 2, 16] B, float[3, 2] S, uint8[3, 2] Z", "")).unwrap_err();
+    assert zeros == "Y = com.microsoft.MatMulNBits: operand 3 is [3, 2], and its packing makes it [3, 1]";
+    let input = y_axes(quantized_product(PACKED, "").replace("40] A", "32] A")).unwrap_err();
+    assert input == "Y = com.microsoft.MatMulNBits: the input's last axis is 32 long, and K is 40";
+}
+
+/// A `QMoE` of 4 experts over tokens of 32, each picking 2, its first weight
+/// `up` and its attributes past the required ones `attrs`.
+fn experts(up: String, attrs: String) -> String {
+    return `g (float[T, 32] X, float[T, 4] R) => (float[T, 32] Y) <${up}, float[4, 64, 1] S1, uint8[4, 32, 16] W2, float[4, 32, 1] S2> {
+        Y = com.microsoft.QMoE<k = 2, activation_type = "swiglu", swiglu_fusion = 1, expert_weight_bits = 4, block_size = 32${attrs}>(X, R, W1, S1, "", W2, S2)
+    }`;
+}
+
+global SWIGLU: String = ", activation_alpha = 1.702, activation_beta = 1.0";
+
+test "QMoE gives each token back its hidden width" {
+    assert y_axes(experts("uint8[4, 64, 16] W1", SWIGLU)).unwrap() == "T=T,X1=32";
+}
+
+test "QMoE refuses what onnxruntime leaves open, and weights laid out apart from their packing" {
+    let alpha = y_axes(experts("uint8[4, 64, 16] W1", ", activation_beta = 1.0")).unwrap_err();
+    assert alpha == "Y = com.microsoft.QMoE: activation_alpha is absent, and onnxruntime documents no default";
+    let fusion = y_axes(experts("uint8[4, 64, 16] W1", SWIGLU).replace("swiglu_fusion = 1", "swiglu_fusion = 2")).unwrap_err();
+    assert fusion == "Y = com.microsoft.QMoE: swiglu_fusion is not 1, which alone is supported";
+    let k = y_axes(experts("uint8[4, 64, 16] W1", SWIGLU).replace("k = 2", "k = 5")).unwrap_err();
+    assert k == "Y = com.microsoft.QMoE: attribute k is 5, and there are 4 experts";
+    let short = y_axes(experts("uint8[4, 64, 8] W1", SWIGLU)).unwrap_err();
+    assert short == "Y = com.microsoft.QMoE: operand 2 is [4, 64, 8], and its packing makes it [4, 64, 16]";
+    let gate = y_axes(
+        experts("uint8[4, 64, 16] W1, uint8[4, 64, 16] W3", SWIGLU).replace(
+            "(X, R, W1, S1, \"\", W2, S2)",
+            "(X, R, W1, S1, \"\", W2, S2, \"\", W3)",
+        ),
+    ).unwrap_err();
+    assert gate == "Y = com.microsoft.QMoE: operand 8 is given, and separate gate weights, router weights and scales of other formats are not supported";
+}
+
+test "MatMulNBits packs 2, 4 or 8 bits in blocks of a power of two from 16" {
+    let bits = y_axes(quantized_product(PACKED, ", bits = 3")).unwrap_err();
+    assert bits == "Y = com.microsoft.MatMulNBits: attribute bits is 3, and a byte packs 2, 4 or 8";
+    let block = y_axes(quantized_product(PACKED, "").replace("block_size = 32", "block_size = 24")).unwrap_err();
+    assert block == "Y = com.microsoft.MatMulNBits: attribute block_size is 24, which must be a power of two from 16 to 16777216";
+    let huge = y_axes(quantized_product(PACKED, "").replace("block_size = 32", "block_size = 536870912")).unwrap_err();
+    assert huge == "Y = com.microsoft.MatMulNBits: attribute block_size is 536870912, which must be a power of two from 16 to 16777216";
+}
+
+test "MatMulNBits's g_idx stops the build naming it" {
+    let source = `g (float[1, T, 40] A, int32[40] G) => (float[1, T, 3] Y) <${PACKED}> {
+        Y = com.microsoft.MatMulNBits<K = 40, N = 3, block_size = 32>(A, B, S, Z, G)
+    }`;
+    assert refused(source) == "Y = com.microsoft.MatMulNBits: g_idx is deprecated, and not supported";
+}
+
+test "MatMulNBits's input is K long in its last axis, which no symbol is" {
+    let source = `g (float[1, T, L] A) => (float[1, T, 3] Y) <${PACKED}> {
+        Y = com.microsoft.MatMulNBits<K = 40, N = 3, block_size = 32>(A, B, S, Z)
+    }`;
+    assert refused(source) == "Y = com.microsoft.MatMulNBits: the input's last axis is L long, and K is 40";
+}
+
+test "MatMulNBits's zero points in the input's element stop the build" {
+    let e = refused(quantized_product("uint8[3, 2, 16] B, float[3, 2] S, float[3, 1] Z", ""));
+    assert e == "Y = com.microsoft.MatMulNBits: operand Z is f32, and zero points are packed in u8";
+}
+
+/// A `GatherBlockQuantized` of a table of 5 rows of 40 values in blocks of 32.
+fn quantized_gather(attrs: String) -> String {
+    return `g (int64[1, T] I) => (float[1, T, 40] Y) <uint8[5, 20] D, float[5, 2] S, uint8[5, 1] Z> {
+        Y = com.microsoft.GatherBlockQuantized<bits = 4, block_size = 32${attrs}>(D, I, S, Z)
+    }`;
+}
+
+test "GatherBlockQuantized puts a row's values after its indices' axes" {
+    assert y_axes(quantized_gather(", gather_axis = 0, quantize_axis = -1")).unwrap() == "I0=1,T=T,Y2=40";
+}
+
+test "GatherBlockQuantized takes blocks of 128 where it names none" {
+    let source = `g (int64[1, T] I) => (float[1, T, 256] Y) <uint8[5, 128] D, float[5, 2] S> {
+        Y = com.microsoft.GatherBlockQuantized<bits = 4>(D, I, S)
+    }`;
+    assert y_axes(source).unwrap() == "I0=1,T=T,Y2=256";
+}
+
+test "GatherBlockQuantized of a table without rows stops the build" {
+    let source = `g (int64[1, T] I) => (float[1, T, 16] Y) <uint8[0, 8] D, float[0, 1] S> {
+        Y = com.microsoft.GatherBlockQuantized<bits = 4, block_size = 16>(D, I, S)
+    }`;
+    assert refused(source) == "Y = com.microsoft.GatherBlockQuantized: a packed table holds a row";
+}
+
+test "GatherBlockQuantized gathers a packed table's rows only" {
+    let e = y_axes(quantized_gather(", quantize_axis = 0")).unwrap_err();
+    assert e == "Y = com.microsoft.GatherBlockQuantized: attribute quantize_axis is 0, and a packed table is quantized along its rows";
+}
+
+test "Concat sums the axis it joins, on an axis of its own" {
+    let source = `g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, ?, 8] Y) {
+        Y = Concat<axis = -2>(P, N)
+    }`;
+    let graph = read(&source).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["Y"].axes[1].name != shapes["P"].axes[1].name;
+    assert shapes["Y"].axes[1].extent.agrees(&Extent::Symbolic(Poly::symbol(&"T").try_add(&Poly::constant(1)).unwrap()));
+}
+
+test "Concat of one operand is that operand, as a Split into one part is" {
+    let source = `g (float[1, T, 8] P) => (float[1, T, 8] Y) {
+        Y = Concat<axis = -2>(P)
+    }`;
+    assert y_axes(source).unwrap() == "P0=1,T=T,P2=8";
+}
+
+test "Concat of operands that disagree on another axis stops the build" {
+    let source = `g (float[1, 3, 8] P, float[1, 1, 4] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Concat: axis P[2] is 8 on the left and 4 on the right";
+}
+
+test "Concat of operands of different ranks stops the build" {
+    let source = `g (float[1, 3, 8] P, float[1, 8] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Concat: operand 1 has rank 2 and the operator reads rank 3";
+}
+
+test "Concat of operands held in different elements stops the build" {
+    let source = `g (float[1, 3, 8] P, int64[1, 1, 8] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Concat: operand N is i64 and P is f32, and Concat joins one element";
+}
+
+test "the axis Concat joins is new" {
+    let source = `g (float[1, 3, 8] P, float[1, 1, 8] N) => (float[1, 4, 8] Y) {
+        Y = Concat<axis = 1>(P, N)
+    }`;
+    assert y_axes(source).unwrap() == "P0=1,Y1=4,P2=8";
+}
+
+test "a scalar operand to MatMul stops the build rather than trapping" {
+    let source = `agraph (float S, float[2, 3] W) => (float[2, 3] Y) {
+        Y = MatMul(S, W)
+    }`;
+    assert refused(source) == "Y = MatMul: a scalar operand has no axis to contract";
+}
+
+test "a declared output extent disagreeing with the produced one stops the build" {
+    let source = `agraph (float[2, 3] X, float[3, 10] W) => (float[2, 7] Y) {
+        Y = MatMul(X, W)
+    }`;
+    assert refused(source) == "Y: axis W[1] is declared 7 and produced 10";
+}
+
+test "a declared output rank disagreeing with the produced one stops the build" {
+    let source = `agraph (float[2, 3] X) => (float[2] Y) {
+        Y = Relu(X)
+    }`;
+    assert refused(source) == "Y: the graph declares rank 1 and the nodes produce rank 2";
+}
+
+test "a declared symbolic name need not be the length the nodes produced" {
+    let graph = read(
+        `agraph (float[?, 3] X) => (float[N, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"X[0]"));
+    assert shapes["Y"].axes[0].name == shapes["X"].axes[0].name;
+}
+
+test "a declared static extent settles an axis the nodes left symbolic" {
+    let graph = read(
+        `agraph (float[N, 3] X) => (float[8, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
+    // Only the declared output is settled; the input keeps what it stated.
+    assert shapes["X"].axes[0].extent.agrees(&Extent::symbol(&"N"));
+}
+
+test "a declared `?` claims nothing about the produced extent" {
+    let graph = read(
+        `agraph (float[N, 3] X) => (float[?, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"N"));
+}
+
+test "a graph output no node produces stops the build" {
+    let source = `agraph (float[2, 3] X) => (float[2, 3] Y, float[2, 3] Z) {
+        Y = Relu(X)
+    }`;
+    assert refused(source) == "Z: no graph input, initializer or node defines this";
+}
+
+test "Gemm contracts the axis its transpose flags leave facing" {
+    let shapes = shapes_of(
+        `agraph (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y) {
+            Y = Gemm <transB = 1> (A, B, C)
+        }`,
+    );
+    assert shapes["Y"] == [shapes["A"][0], shapes["B"][0]] as List<String>;
+    assert shapes["A"][1] == shapes["B"][1];
+}
+
+test "Gemm without its C operand is the product alone" {
+    let graph = read(
+        `agraph (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y) {
+            Y = Gemm(A, B)
+        }`,
+    ).unwrap();
+    let shapes = infer(&graph).unwrap().shapes;
+    assert shapes["Y"].axes[1].extent.agrees(&Extent::Static(4));
+}
+
+test "a Gemm operand that is not a matrix stops the build" {
+    let source = `agraph (float[3] A, float[3, 4] B) => (float[4] Y) {
+        Y = Gemm(A, B)
+    }`;
+    assert refused(source) == "Y = Gemm: operand 0 has rank 1 and the operator reads rank 2";
+}
+
+test "Transpose reorders the axes its perm names" {
+    let source = `agraph (float[2, 3] X) => (float[3, 2] Y) {
+        Y = Transpose <perm = [1, 0]> (X)
+    }`;
+    let shapes = shapes_of(source);
+    assert shapes["Y"] == [shapes["X"][1], shapes["X"][0]] as List<String>;
+    assert y_axes(source).unwrap() == "X1=3,X0=2";
+}
+
+test "Transpose with no perm reverses the axes, as ONNX defaults it" {
+    let shapes = shapes_of(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X)
+        }`,
+    );
+    assert shapes["Y"] == [shapes["X"][1], shapes["X"][0]] as List<String>;
+}
+
+test "a perm that is not a permutation stops the build" {
+    let source = `agraph (float[2, 3] X) => (float[3, 2] Y) {
+        Y = Transpose <perm = [1, 1]> (X)
+    }`;
+    assert refused(source) == "Y = Transpose: attribute perm is not a permutation of 2 axes";
+}
+
+test "a perm naming the wrong number of axes stops the build" {
+    let source = `agraph (float[2, 3] X) => (float[3, 2] Y) {
+        Y = Transpose <perm = [0]> (X)
+    }`;
+    assert refused(source) == "Y = Transpose: attribute perm names 1 axes and the operand has 2";
+}
+
+test "Softmax keeps its operand's shape" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax <axis = -1> (X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,X1=4,X2=8";
+}
+
+test "a Softmax axis outside the operand stops the build" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax <axis = 3> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Softmax: attribute axis is 3, outside rank 3";
+}
+
+test "Softmax before opset 13 normalizing past one axis keeps its operand's shape" {
+    let source = `<ir_version: 7, opset_import: ["" : 11]>
+    g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax(X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,X1=4,X2=8";
+}
+
+test "Softmax before opset 13 normalizes from axis 1 on, and along the last axis is the one-axis Softmax" {
+    let softmax = |axis: Option<String>| Node {
+        op: "Softmax",
+        outputs: ["Y"],
+        inputs: ["X"],
+        attrs: match axis {
+            Some(v) => [
+                Attr {
+                    name: "axis",
+                    values: [v],
+                    is_list: false,
+                },
+            ],
+            null => [],
+        },
+    };
+    let old = Option::Some(11 as i64);
+    let fallback = softmax_lane(&softmax(null), 3, old).unwrap();
+    assert fallback.axis == 1 && fallback.flattened;
+    let last = softmax_lane(&softmax(Option::Some("2")), 3, old).unwrap();
+    assert last.axis == 2 && !last.flattened;
+    let current = softmax_lane(&softmax(null), 3, Option::Some(13 as i64)).unwrap();
+    assert current.axis == 2 && !current.flattened;
+}
+
+test "arithmetic before opset 7 aligns B at A's axis and stretches it over the axes after" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+    g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y) {
+        Y = Add <broadcast = 1, axis = 1> (X, B)
+    }`;
+    let shapes = shapes_of(source);
+    assert shapes["Y"][1] == shapes["B"][0];
+    assert y_axes(source).unwrap() == "X0=2,X1=4,X2=8";
+}
+
+test "arithmetic before opset 7 aligning B past A's last axis stops the build" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+    g (float[2, 4, 8] X, float[4, 8] B) => (float[2, 4, 8] Y) {
+        Y = Add <broadcast = 1, axis = 2> (X, B)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Add: attribute axis is 2, and B's 2 axes from there pass A's 3";
+}
+
+test "a reduction that keeps its axes leaves each at extent 1 under its name" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 1] Y) {
+        Y = ReduceMean <axes = [-1]> (X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,X1=4,X2=1";
+}
+
+test "a reduction that drops its axes removes them" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 8] Y) {
+        A = Constant <value_ints = [1]> ()
+        Y = ReduceSum <keepdims = 0> (X, A)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,X2=8";
+}
+
+test "a reduction naming no axes reduces every axis" {
+    let source = `g (float[2, 4, 8] X) => (float[1, 1, 1] Y) {
+        Y = ReduceMean(X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=1,X1=1,X2=1";
+}
+
+test "a reduction axis outside the operand stops the build" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 1] Y) {
+        Y = ReduceMean <axes = [3]> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = ReduceMean: axis 3 is outside rank 3";
+}
+
+test "ArgMax taking the last of equal greatest elements stops the build" {
+    let source = `g (float[2, 4] X) => (int64[2, 1] Y) {
+        Y = ArgMax <axis = 1, select_last_index = 1> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = ArgMax: attribute select_last_index is set, and the kernels take the first index";
+}
+
+test "ArgMax of an i64 operand stops the build" {
+    let source = `g (int64[2, 4] X) => (int64[2, 1] Y) {
+        Y = ArgMax <axis = 1> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = ArgMax: operand X is i64, and ArgMax ranks a float";
+}
+
+test "Reshape merges adjacent axes into one named by its parts" {
+    let source = `g (float[1, 16, 4, 4] X) => (float[1, 256] Y) <int64[2] S = {1, 256}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap() == "X0=1,Merged<[X1, X2, X3]>=256";
+}
+
+test "a split puts back the extent-1 axis the merge before it took in" {
+    // An exporter's linear layer over a batch of one: the batch goes into the
+    // rows and comes back out of them.
+    let shapes = shapes_of(`g (float[1, 4, 8] X) => (float[1, 4, 8] Y)
+    <int64[2] Flat = {-1, 8}, int64[3] Back = {1, 4, 8}> {
+        F = Reshape(X, Flat)
+        R = Relu(F)
+        Y = Reshape(R, Back)
+    }`);
+    assert shapes["Y"] == shapes["X"];
+    assert shapes["F"] == shapes["X"][1..<3].to_list();
+}
+
+test "Reshape reads 0 as the input's extent and -1 as what remains" {
+    let source = `g (float[1, 16, 4, 4] X) => (float[1, 256] Y) <int64[2] S = {0, -1}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap() == "X0=1,Merged<[X1, X2, X3]>=256";
+}
+
+test "a Reshape target the graph computes from Shape folds at build time" {
+    // An exporter's spelling of `x.view(x.size(0), -1)`.
+    let source = `g (float[2, 3, 4] X) => (float[2, 12] Y) <int64[1] M = {-1}> {
+        S = Shape(X)
+        I = Constant<value_int = 0>()
+        B = Gather(S, I)
+        A = Constant<value_ints = [0]>()
+        U = Unsqueeze(B, A)
+        T = Concat<axis = 0>(U, M)
+        Y = Reshape(X, T)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,Merged<[X1, X2]>=12";
+}
+
+/// An attention mask as an exporter writes it: an int64 input reshaped and
+/// widened by two unit axes before it becomes a float.
+global MASK: String = `g (int64[1, 4] M) => (float[1, 1, 1, 4] Y) <int64[2] T = {1, -1}> {
+    R = Reshape(M, T)
+    A = Constant<value_ints = [1]>()
+    U = Unsqueeze(R, A)
+    B = Constant<value_ints = [2]>()
+    V = Unsqueeze(U, B)
+    Y = Cast<to = 1>(V)
+}`;
+
+test "an int64 input keeps its element until Cast makes it a float" {
+    let graph = read(&MASK).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.primitives["R"] == "i64";
+    assert checked.primitives["V"] == "i64";
+    assert checked.primitives["Y"] == "f32";
+    assert y_axes(MASK).unwrap() == "M0=1,Y1=1,Y2=1,M1=4";
+}
+
+test "a Cast without `to` stops the build, folded or not" {
+    let runtime = `g (float[2] X) => (float[2] Y) { Y = Cast(X) }`;
+    let folded = `g (float[2] X) => (int64[1] Y) { C = Constant<value_ints = [1]>() Y = Cast(C) }`;
+    for let source of [runtime, folded] {
+        assert y_axes(source).unwrap_err() == "Y = Cast: attribute to is absent and the operator reads it";
+    }
+}
+
+test "arithmetic ONNX defines on integers keeps an int64 operand's element" {
+    let source = `g (int64[4] M, int32[4] N) => (int64[1] Y, int32[4] Z) {
+        S = Sub(M, M)
+        Y = ReduceSum<keepdims = 1>(S)
+        Z = Mul(N, N)
+    }`;
+    let checked = infer(&read(&source).unwrap()).unwrap();
+    assert checked.primitives["Y"] == "i64";
+    assert checked.primitives["Z"] == "i32";
+}
+
+test "a float operator on an int64 tensor, or two integers mixed, stops the build" {
+    let float_only = `g (int64[4] M) => (int64[4] Y) {
+        Y = Pow(M, M)
+    }`;
+    assert y_axes(float_only).unwrap_err() == "Y = Pow: operand M is i64, and Pow computes in a float";
+    let mixed = `g (int64[4] M, int32[4] N) => (int64[4] Y) {
+        Y = Add(M, N)
+    }`;
+    assert y_axes(mixed).unwrap_err() == "Y = Add: operand N is i32 and M is i64, and Add computes in one element";
+}
+
+test "a kernel computes in its operands' float, and Cast names another" {
+    let source = `g (float16[4] X, bfloat16[4] B) => (float16[4] Y, int64[] I, bfloat16[4] Z, float16[4] H) {
+        Y = Add(X, X)
+        I = ArgMax<keepdims = 0>(Y)
+        Z = Relu(B)
+        H = Cast<to = 10>(Z)
+    }`;
+    let checked = infer(&read(&source).unwrap()).unwrap();
+    assert checked.primitives["Y"] == "f16";
+    assert checked.primitives["I"] == "i64";
+    assert checked.primitives["Z"] == "bf16";
+    assert checked.primitives["H"] == "f16";
+}
+
+test "operands of two floats stop the build" {
+    let source = `g (float16[4] X, float[4] W) => (float16[4] Y) {
+        Y = Add(X, W)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Add: operand W is f32 and X is f16, and Add computes in one element";
+}
+
+test "Where broadcasts its three operands and takes its branches' element" {
+    let source = `g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y) <float S> {
+        C = Cast<to = 9>(M)
+        Y = Where(C, X, S)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,X1=3,M2=4,M3=4";
+}
+
+test "a Where condition other than bool stops the build" {
+    let source = `g (float[4] M, float[4] X) => (float[4] Y) {
+        Y = Where(M, X, X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Where: operand M is f32, and Where selects with bool";
+}
+
+test "Where between two element types stops the build" {
+    let source = `g (float[4] M, float[4] X, int64[4] I) => (float[4] Y) {
+        C = Cast<to = 9>(M)
+        Y = Where(C, X, I)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Where: operand X is f32 and I is i64, and Where returns one of them";
+}
+
+test "Gather along axis 0 puts the indices' axes where the row's was" {
+    let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W> {
+        Y = Gather(W, I)
+    }`;
+    assert y_axes(source).unwrap() == "I0=1,I1=4,Y2=8";
+}
+
+test "Gather indexing with floats stops the build" {
+    let source = `g (float[4] I) => (float[4, 8] Y) <float[16, 8] W> {
+        Y = Gather(W, I)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Gather: operand I is f32, and Gather indexes with i64";
+}
+
+test "an output declared as an element other than the one computed stops the build" {
+    let source = `g (int64[4] M) => (float[4] Y) {
+        Y = Identity(M)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y: declared float and computed in i64";
+}
+
+test "a Reshape to the Shape of a symbolic tensor keeps its axes" {
+    let source = `g (float[N, 3] X) => (float[N, 3] Y) {
+        S = Shape(X)
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap() == "N=N,X1=3";
+}
+
+test "a Reshape's -1 takes what the symbolic rest leaves" {
+    // An exporter writes `x.view(-1, x.size(1))` as a Shape, a Gather and a
+    // Concat, so the target holds the symbol itself.
+    let source = `g (float[B, N, 4] X) => (float[B, N, 4] Y) <int64[1] Minus = {-1}, int64[1] Four = {4}, int64[1] Zero = {0}> {
+        One = Constant <value = int64 {1}> ()
+        S = Shape(X)
+        N = Gather <axis = 0> (S, One)
+        U = Unsqueeze(N, Zero)
+        T = Concat <axis = 0> (Minus, U, Four)
+        Y = Reshape(X, T)
+    }`;
+    assert y_axes(source).unwrap() == "B=B,N=N,X2=4";
+}
+
+test "a Reshape merging symbolic axes gives the merge their product" {
+    let source = `g (float[B, N, 4] X) => (float[?, 4] Y) <int64[2] T = {-1, 4}> {
+        Y = Reshape(X, T)
+    }`;
+    assert y_axes(source).unwrap() == "Merged<[B, N]>=B * N,X2=4";
+}
+
+test "Reshape splits a merged axis back into its parts" {
+    let source = `g (float[2, 3, 4] X) => (float[2, 3, 4] Y) <int64[2] F = {2, 12}, int64[3] S = {2, 3, 4}> {
+        M = Reshape(X, F)
+        Y = Reshape(M, S)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,X1=3,X2=4";
+}
+
+test "Reshape drops an extent-1 axis it merges past" {
+    let source = `g (float[2, 16, 1, 1] X) => (float[2, 16] Y) <int64[2] S = {2, 16}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,X1=16";
+}
+
+test "Flatten merges the axes on each side of its axis" {
+    let source = `g (float[2, 16, 4, 4] X) => (float[2, 256] Y) {
+        Y = Flatten <axis = 1> (X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,Merged<[X1, X2, X3]>=256";
+}
+
+test "Flatten at axis 0 puts a new unit axis first" {
+    let source = `g (float[2, 3] X) => (float[1, 6] Y) {
+        Y = Flatten <axis = 0> (X)
+    }`;
+    assert y_axes(source).unwrap() == "Y0=1,Merged<[X0, X1]>=6";
+}
+
+test "an axis no regrouping determines is new" {
+    let source = `g (float[2, 12] X) => (float[2, 3, 4] Y) <int64[3] S = {2, 3, 4}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap() == "X0=2,Y1=3,Y2=4";
+}
+
+test "a Reshape target computed at run time stops the build" {
+    let source = `g (float[2, 12] X, float[2] S) => (float[24] Y) {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Reshape: operand S is computed at run time, and the build reads it";
+}
+
+test "a Reshape target that changes the element count stops the build" {
+    let source = `g (float[2, 12] X) => (float[5, 5] Y) <int64[2] S = {5, 5}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Reshape: 24 elements cannot take the shape [5, 5]";
+}
+
+/// The axis of `Y`, which slices an axis of 8 from `start` to `end` by `step`,
+/// each an expression of `X`'s length `N`. The inputs owe nothing for it.
+fn sliced(start: String, end: String, step: String = "One") -> String {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[1] Three = {3}, int64[1] Back = {-1}> {
+        S = Shape(X)
+        Y = Slice(M, ${start}, ${end}, Z, ${step})
+    }`;
+    assert owed_by(source).is_empty();
+    return y_axes(source).unwrap();
+}
+
+test "a Slice bound the build cannot decide is clamped by a length the run derives" {
+    assert sliced("Z", "S") == "Y0=min(N, 8)";
+}
+
+test "a Slice from a number to a symbol clamps its count at none" {
+    assert sliced("Three", "S") == "Y0=max(min(N, 8) - 3, 0)";
+}
+
+test "a Slice counted from a symbol's negation counts from the end only where it is negative" {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Eight = {8}> {
+        S = Shape(X)
+        B = Sub(Z, S)
+        Y = Slice(M, B, Eight)
+    }`;
+    assert y_axes(source).unwrap() == "Y0=-max(from_end(-N, 8), 0) + 8";
+}
+
+test "a backward Slice starts at the last position a bound reaches" {
+    assert sliced("S", "Z", "Back") == "Y0=min(N, 7)";
+}
+
+test "a clamp read as its operand where the graph meets that operand is owed by the inputs" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        Y = Add(A, X)
+    }`;
+    assert owed_by(source) == ["A = Slice: N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+    assert y_axes(source).unwrap() == "N=N";
+}
+
+test "a Slice running backwards between numbers is empty, as ONNX counts it" {
+    let source = `g (float[N] X) => (float[?] Y) <int64[1] B = {5}, int64[1] E = {3}> {
+        Y = Slice(X, B, E)
+    }`;
+    assert y_axes(source).unwrap() == "Y0=0";
+}
+
+test "a Slice running backwards by a symbolic amount for every input is empty" {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+        S = Shape(X)
+        B = Add(S, Three)
+        Y = Slice(M, B, Z)
+    }`;
+    assert y_axes(source).unwrap() == "Y0=0";
+}
+
+test "a Range over a symbolic start counts a span the build knows, however it divides" {
+    let source = `g (float[N] X) => (int64[?] Y, int64[?] W) <int64[1] Three = {3}, int64[1] Two = {2}> {
+        S = Shape(X)
+        L = Add(S, Three)
+        Y = Range(S, L, Two)
+        W = Range(L, S, Two)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.shapes["Y"].axes[0].extent.agrees(&Extent::Static(2));
+    assert checked.shapes["W"].axes[0].extent.agrees(&Extent::Static(0));
+    assert checked.owed.is_empty();
+}
+
+test "Slice bounds past either end of a symbolic axis keep it whole and owe nothing" {
+    let source = `g (float[N] X) => (float[N] Y) <int64[1] B = {-4000000000}, int64[1] E = {4000000000}> {
+        Y = Slice(X, B, E)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.owed.is_empty();
+    assert checked.shapes["Y"].axes[0].name == checked.shapes["X"].axes[0].name;
+}
+
+test "a symbolic Slice bound past the end for every input clamps there and owes nothing" {
+    let source = `g (float[N] X) => (float[N] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+        S = Shape(X)
+        E = Add(S, Three)
+        Y = Slice(X, Z, E)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.owed.is_empty();
+    assert checked.shapes["Y"].axes[0].name == checked.shapes["X"].axes[0].name;
+}
+
+test "Slice listing an axis twice stops the build rather than guessing" {
+    let source = `g (float[4] X) => (float[1] Y) <int64[2] B = {0, 1}, int64[2] E = {3, 2}, int64[2] P = {0, 0}> {
+        Y = Slice(X, B, E, P)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Slice: axis 0 is listed twice";
+}
+
+test "an output declared static where the nodes left a symbol owes the two equal" {
+    let source = `g (float[N] X) => (float[8] Y) {
+        Y = Relu(X)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
+    assert owed_by(source) == [
+        "Y: axis N must be 8, as the graph declares (N - 8 >= 0)",
+        "Y: axis N must be 8, as the graph declares (-N + 8 >= 0)",
+    ] as List<String>;
+}
+
+test "an output declared static that no symbol value produces stops the build" {
+    let source = `g (float[N] X) => (int64[3] Y) <int64[1] Z = {0}, int64[1] Ten = {10}, int64[1] One = {1}> {
+        S = Shape(X)
+        L = Add(S, Ten)
+        Y = Range(Z, L, One)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y: axis Y[0] is declared 3 and produced N + 10";
+}
+
+test "a symbolic integer cast to int32 wraps as the run does, where an extent cannot show it fits" {
+    let source = `g (float[N] X) => (int64[?] Y) <int64[1] Z = {0}, int64[1] Big = {100000}, int64[1] One = {1}> {
+        S = Shape(X)
+        W = Cast<to = 6>(S)
+        P = Mul(S, Big)
+        Q = Cast<to = 6>(P)
+        Y = Range(Z, Q, One)
+    }`;
+    assert owed_by(source).is_empty();
+    assert y_axes(source).unwrap() == "Y0=max(wrap32(100000 * N), 0)";
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.known["W"].elements == Elements::integers([Poly::symbol(&"N")]);
+}
+
+test "a string attribute an operator reads as a number stops the build" {
+    let source = `g (float[2, 3] X) => (float[2, 3] Y) {
+        Y = Softmax <axis = "1"> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Softmax: attribute axis holds strings, and the operator reads numbers";
+}
+
+test "a ConstantOfShape value the build cannot read, or not of one element, stops the build" {
+    let filled = |value: String| y_axes(
+        `g (float[1] X) => (float[?] Y) <int64[1] S = {3}> {
+            Y = ConstantOfShape <value = ${value}> (S)
+        }`,
+    );
+    assert filled("double[1] {5}").unwrap_err() == "Y = ConstantOfShape: attribute value holds no tensor the build reads";
+    assert filled("3").unwrap_err() == "Y = ConstantOfShape: attribute value holds no tensor the build reads";
+    assert filled("float[0] {}").unwrap_err() == "Y = ConstantOfShape: attribute value holds 0 elements, and the operator fills with one";
+    assert filled("float[2] {1, 2}").unwrap_err() == "Y = ConstantOfShape: attribute value holds 2 elements, and the operator fills with one";
+}
+
+test "an attribute an operator reads as numbers, holding a tensor, stops the build" {
+    let source = `g (float[1, 3] X) => (float[3] Y) {
+        Y = Squeeze <axes = int64[1] {0}> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Squeeze: attribute axes holds a tensor, and the operator reads numbers";
+}
+
+test "a string attribute of no value, or a number where a string is read, stops the build" {
+    let padded = |auto_pad: String| y_axes(
+        `g (float[1, 1, 4, 4] X) => (float[1, 1, 2, 2] Y) {
+            Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2], auto_pad = ${auto_pad}> (X)
+        }`,
+    );
+    assert padded("[]").unwrap_err() == "Y = MaxPool: attribute auto_pad is a list and the operator reads one value";
+    assert padded("3").unwrap_err() == "Y = MaxPool: attribute auto_pad holds numbers, and the operator reads a string";
+}
+
+test "a ConstantOfShape whose shape a kernel computes stops the build" {
+    let source = `g (float[1] X) => (float[?] Y) {
+        S = Cast <to = 7> (X)
+        Y = ConstantOfShape(S)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = ConstantOfShape: operand S is computed at run time, and the build reads it";
+}
+
+test "a Range the run computes, longer than any list, stops the build" {
+    let source = `g (float[N] X) => (int64[?] Y) <int64[1] Far = {3000000000}, int64[1] One = {1}> {
+        S = Shape(X)
+        L = Add(S, Far)
+        Y = Range(S, L, One)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Range: 3000000000 elements are more than a list holds";
+}
+
+test "a condition every layer repeats is owed once" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        B = Slice(M, Z, S)
+        C = Add(A, X)
+        Y = Add(B, C)
+    }`;
+    assert owed_by(source).len() == 1;
+}
+
+test "a Reshape carries a symbolic extent past the axes it splits" {
+    let source = `g (float[N, 12] X) => (float[N, 3, 4] Y) <int64[3] S = {0, 3, 4}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap() == "N=N,Y1=3,Y2=4";
+}
+
+test "a Reshape whose target cannot hold the symbolic count stops the build" {
+    let source = `g (float[N, 12] X) => (float[N, 3, 4] Y) <int64[2] S = {3, 4}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Reshape: 12 * N elements cannot take the shape [3, 4]";
+}
+
+test "MaxPool's window output axes are new" {
+    let source = `g (float[1, 3, 7, 7] X) => (float[1, 3, 4, 4] Y) {
+        Y = MaxPool <kernel_shape = [3, 3], strides = [2, 2], pads = [1, 1, 1, 1]> (X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=1,X1=3,Y2=4,Y3=4";
+}
+
+test "MaxPool rounds its output extent up under ceil_mode" {
+    let source = `g (float[1, 1, 5, 5] X) => (float[1, 1, 3, 3] Y) {
+        Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2], ceil_mode = 1> (X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=1,X1=1,Y2=3,Y3=3";
+}
+
+test "Conv under SAME_UPPER keeps the spatial extents, on axes of its own" {
+    let source = `g (float[1, 1, 28, 28] X) => (float[1, 8, 28, 28] Y) <float[8, 1, 5, 5] W> {
+        Y = Conv <kernel_shape = [5, 5], auto_pad = "SAME_UPPER"> (X, W)
+    }`;
+    assert y_axes(source).unwrap() == "X0=1,Y1=8,Y2=28,Y3=28";
+}
+
+test "Conv reads its kernel off the weight and its bias checks against the output channels" {
+    let source = `g (float[2, 3, 7, 5] X) => (float[2, 4, 5, 4] Y) <float[4, 3, 3, 2] W, float[4] B> {
+        Y = Conv (X, W, B)
+    }`;
+    let shapes = shapes_of(source);
+    assert shapes["Y"][1] == shapes["B"][0];
+    assert shapes["W"][1] == shapes["X"][1];
+    assert y_axes(source).unwrap() == "X0=2,Y1=4,Y2=5,Y3=4";
+}
+
+test "Conv whose weight reads another channel count stops the build" {
+    let source = `g (float[1, 1, 28, 28] X) => (float[1, 8, 24, 24] Y) <float[8, 2, 5, 5] W> {
+        Y = Conv (X, W)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Conv: axis X[1] is 1 on the left and 2 on the right";
+}
+
+test "Conv over several groups reads a group's share of the input channels" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 2, 3, 3] W> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    let shapes = shapes_of(source);
+    assert shapes["W"][1] != shapes["X"][1];
+    assert y_axes(source).unwrap() == "X0=1,Y1=6,Y2=6,Y3=6";
+}
+
+test "Conv groups sharing out other than all the input channels stop the build" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 1, 3, 3] W> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Conv: axis X[1] is 4 on the left and 2 on the right";
+}
+
+test "a grouped Conv over a scalar weight stops the build on the weight's rank" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float W = {1}> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Conv: operand 1 has rank 0 and the operator reads rank 4";
+}
+
+test "a Conv group count that does not divide the output channels stops the build" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 1, 3, 3] W> {
+        Y = Conv <group = 4> (X, W)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Conv: attribute group is 4, which does not divide the 6 output channels";
+}
+
+test "a node reading an undefined tensor stops the build" {
+    let source = `agraph (float[2, 3] X) => (float[2, 3] Y) {
+        Y = Add(X, Missing)
+    }`;
+    assert refused(source) == "Missing: no graph input, initializer or node defines this";
+}
+
+test "a tensor of more elements than a list holds stops the build, however it arises" {
+    let declared = `g (float[N, 65536, 65536] X) => (float[N, 65536, 65536] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(declared).unwrap_err() == "X: its extents multiply past what a list can hold";
+
+    // Empty, but a kernel counting the trailing axes would still overflow.
+    let empty = `g (float[0, 65536, 65536] X) => (float[0, 65536, 65536] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(empty).unwrap_err() == "X: its extents multiply past what a list can hold";
+
+    let produced = `g (float[65536, 1] A, float[1, 65536] B) => (float[65536, 65536] Y) {
+        Y = MatMul(A, B)
+    }`;
+    assert y_axes(produced).unwrap_err() == "Y: its extents multiply past what a list can hold";
+}
+
+test "a symbolic integer some input could carry past i64 stops the build, since the run would wrap it" {
+    let source = `g (float[N] X) => (int64[1] Y) <int64[1] Big = {5000000000000000000}> {
+        S = Shape(X)
+        Y = Mul(S, Big)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = Mul: N Mul 5000000000000000000 leaves i64";
+}
+
+test "a Reshape target whose symbolic extents multiply past i64 stops the build rather than trapping" {
+    let source = `g (float[N] X) => (float[?, ?, ?] Y) <int64[1] Big = {3000000000}> {
+        S = Shape(X)
+        B = Mul(S, Big)
+        T = Concat<axis = 0>(B, B, B)
+        Y = Reshape(X, T)
+    }`;
+    let e = y_axes(source).unwrap_err();
+    assert e == "Y = Reshape: the target shape [3000000000 * N, 3000000000 * N, 3000000000 * N] multiplies past what a list can hold";
+}
+
+/// What the inputs owe a graph, as `reason (slack >= 0)`.
+fn owed_by(source: String) -> List<String> {
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    return checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
+}
+
+test "a symbolic Reshape extent owes that it is not 0, which would copy the input's extent instead" {
+    let source = `g (float[4, N] X) => (float[N, 4] Y) <int64[1] Four = {4}, int64[1] One = {1}, int64[1] Two = {2}> {
+        S = Shape(X)
+        L = Slice(S, One, Two)
+        T = Concat<axis = 0>(L, Four)
+        Y = Reshape(X, T)
+    }`;
+    assert owed_by(source) == [
+        "Y = Reshape: the target's N must not be 0, which reads the input's extent 4 instead (N - 1 >= 0)",
+    ] as List<String>;
+}
+
+test "a symbolic Reshape extent that is the input's own at its position owes nothing, since 0 copies the same" {
+    let source = `g (float[N, 4] X) => (float[N, 2, 2] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[2] Halves = {2, 2}> {
+        S = Shape(X)
+        L = Slice(S, Z, One)
+        T = Concat<axis = 0>(L, Halves)
+        Y = Reshape(X, T)
+    }`;
+    assert owed_by(source).is_empty();
+}
+
+test "a Reshape -1 beside a symbolic extent owes that the rest do not multiply to 0" {
+    let source = `g (float[N, 4] X) => (float[N, 4] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[1] Rest = {-1}> {
+        S = Shape(X)
+        L = Slice(S, Z, One)
+        T = Concat<axis = 0>(L, Rest)
+        Y = Reshape(X, T)
+    }`;
+    assert owed_by(source) == [
+        "Y = Reshape: the target's extents besides -1 multiply to N, which must not be 0 (N - 1 >= 0)",
+    ] as List<String>;
+}
+
+test "int32 arithmetic the build folds keeps the low 32 bits, as the run's int32 does" {
+    let source = `g (float[1] X) => (int64[1] Y) <int32[1] A = {50000}> {
+        M = Mul(A, A)
+        Y = Cast<to = 7>(M)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.known["Y"].elements == Elements::Ints([-1794967296]);
+}
+
+test "symbolic int32 arithmetic wraps as the run does, as a Cast to int32 does" {
+    let source = `g (float[N] X) => (int64[1] Y) {
+        S = Shape(X)
+        W = Cast<to = 6>(S)
+        P = Mul(W, W)
+        Y = Cast<to = 7>(P)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.owed.is_empty();
+    let Symbolic(values) = checked.known["Y"].elements else {
+        unreachable();
+    };
+    assert `${values[0]}` == "wrap32(N * N)";
+}
+
+test "a Reshape whose count agrees once a clamp is read as its operand owes that reading" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        Y = Reshape(A, S)
+    }`;
+    assert owed_by(source) == ["A = Slice: N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+    assert y_axes(source).unwrap() == "N=N";
+}
+
+test "a Reshape -1 the build cannot divide out rounds down, and owes that the rest divide the count" {
+    let source = `g (float[N] X) => (float[?, 2] Y) <int64[2] T = {-1, 2}> {
+        Y = Reshape(X, T)
+    }`;
+    assert owed_by(source) == [
+        "Y = Reshape: the target's extents besides -1 multiply to 2, which must divide N (-N + 2 * floor(N / 2) >= 0)",
+    ] as List<String>;
+    assert y_axes(source).unwrap() == "Y0=floor(N / 2),Y1=2";
+}
+
+/// Both branches of an `If` over `X`, each `then_body` / `else_body` producing
+/// its one output from the outer scope.
+fn branching(declared: String, cond: String, then_body: String, else_body: String) -> String {
+    return `g (${cond} C, float[N, 4] X, float[N, 4] Z) => (${declared} Y) {
+        Y = If <then_branch = t () => (${declared} A) { ${then_body} }, else_branch = e () => (${declared} B) { ${else_body} }> (C)
+    }`;
+}
+
+test "an If's output is its branches' shape where the two agree" {
+    let source = branching("float[N, 4]", "bool[1]", "A = Relu(X)", "B = Neg(X)");
+    assert y_axes(source).unwrap() == "N=N,X1=4";
+}
+
+test "an If's output axis is new where its branches give it two axes" {
+    let source = branching("float[N, 4]", "bool[1]", "A = Relu(X)", "B = Neg(Z)");
+    assert y_axes(source).unwrap() == "N=N,Y1=4";
+}
+
+test "each branch keeps the tensors it computes, apart from the other's" {
+    let graph = read(&branching("float[N, 4]", "bool[1]", "H = Relu(X) A = Neg(H)", "H = Neg(Z) B = Relu(H)")).unwrap();
+    let checked = infer(&graph).unwrap();
+    let [then_branch, else_branch] = checked.branches["Y"];
+    assert then_branch.shapes.contains_key("H") && then_branch.shapes.contains_key("A");
+    assert else_branch.shapes.contains_key("B") && !else_branch.shapes.contains_key("A");
+    assert !checked.shapes.contains_key("H");
+}
+
+test "an If's output takes a fresh length where its branches' lengths differ" {
+    let source = `g (bool[1] C, float[N, 4] X, float[M, 4] P) => (float[?, 4] Y) {
+        Y = If <then_branch = t () => (float[?, 4] A) { A = Concat<axis = 0>(P, X) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
+    }`;
+    assert y_axes(source).unwrap() == `Y0="Y[0]",X1=4`;
+}
+
+test "an If's output takes the length each branch owes its own equal to" {
+    // As a merged decoder's present is the past and the step in the branch
+    // with a past, and the step alone in the other: the mask's length in both.
+    let source = `g (bool[1] C, float[N, 4] X, float[M, 4] P, float[T, 4] K) => (float[?, 4] Y) {
+        Y = If <then_branch = t () => (float[?, 4] A) { J = Concat<axis = 0>(P, X) A = Add(J, K) }, else_branch = e () => (float[N, 4] B) { B = Add(X, K) }> (C)
+    }`;
+    assert y_axes(source).unwrap() == `N=T,X1=4`;
+}
+
+test "an If's output axis its branches give apart is minted" {
+    let source = `g (bool[1] C, float[N, 4] X, float[M, 4] Z) => (float[?, 4] Y) {
+        Y = If <then_branch = t () => (float[?, 4] A) { A = Relu(X) }, else_branch = e () => (float[?, 4] B) { B = Neg(Z) }> (C)
+    }`;
+    assert y_axes(source).unwrap() == `Y0="Y[0]",Y1=4`;
+}
+
+test "each branch's regrouping mints classes of its own, so the output's axes are new" {
+    let source = `g (bool[1] C, float[2, 3] X) => (float[3, 2] Y) <int64[2] S = {3, 2}> {
+        Y = If <then_branch = t () => (float[3, 2] A) { A = Reshape(X, S) }, else_branch = e () => (float[3, 2] B) { B = Reshape(X, S) }> (C)
+    }`;
+    assert y_axes(source).unwrap() == "Y0=3,Y1=2";
+}
+
+test "what a branch owes is owed only where it runs" {
+    let source = `g (bool[1] C, float[N, 4] X, float[M, 4] Z) => (float[N, 4] Y) {
+        Y = If <then_branch = t () => (float[N, 4] A) { A = Add(X, Z) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph).unwrap();
+    assert checked.owed.is_empty();
+    let [then_branch, else_branch] = checked.branches["Y"];
+    assert then_branch.owed.len() == 2;
+    assert else_branch.owed.is_empty();
+}
+
+test "an If's condition is one bool" {
+    let source = branching("float[N, 4]", "float[1]", "A = Relu(X)", "B = Neg(Z)");
+    assert y_axes(source).unwrap_err() == "Y = If: operand C is f32, and If branches on bool";
+    let two = branching("float[N, 4]", "bool[2]", "A = Relu(X)", "B = Neg(Z)");
+    assert y_axes(two).unwrap_err() == "Y = If: operand C holds 2 elements, and If branches on one";
+}
+
+test "an If's branches agree on each output's rank and element" {
+    let rank = `g (bool[1] C, float[N, 4] X) => (float[N, 4] Y) <int64[1] Axes = {1}> {
+        Y = If <then_branch = t () => (float[N, 4] A) { A = Relu(X) }, else_branch = e () => (float[N] B) { B = ReduceSum<keepdims = 0>(X, Axes) }> (C)
+    }`;
+    assert y_axes(rank).unwrap_err() == "Y = If: output 0 has rank 2 in then_branch and 1 in else_branch";
+    let element = `g (bool[1] C, float[N, 4] X) => (float[N, 4] Y) {
+        Y = If <then_branch = t () => (float[N, 4] A) { A = Relu(X) }, else_branch = e () => (int64[N, 4] B) { B = Cast<to = 7>(X) }> (C)
+    }`;
+    assert y_axes(element).unwrap_err() == "Y = If: output 0 is f32 in then_branch and i64 in else_branch";
+}
+
+test "an If's branches give as many outputs as it names" {
+    let source = `g (bool[1] C, float[N, 4] X) => (float[N, 4] Y) {
+        Y = If <then_branch = t () => (float[N, 4] A, float[N, 4] A2) { A = Relu(X) A2 = Neg(X) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = If: then_branch gives 2 outputs, and the node names 1";
+}
+
+test "a branch that takes inputs is refused" {
+    let source = `g (bool[1] C, float[N, 4] X) => (float[N, 4] Y) {
+        Y = If <then_branch = t (float[N, 4] I) => (float[N, 4] A) { A = Relu(I) }, else_branch = e () => (float[N, 4] B) { B = Relu(X) }> (C)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = If: then_branch declares inputs, and a branch reads only the scope around it";
+}
+
+test "a tensor defined twice in one scope is refused" {
+    let over_input = `g (float[N, 4] X) => (float[N, 4] X) {
+        X = Relu(X)
+    }`;
+    assert y_axes(over_input).unwrap_err() == "X = Relu: X is already defined in its graph";
+    let twice = `g (float[N, 4] X) => (float[N, 4] Y) {
+        Y = Relu(X)
+        Y = Neg(X)
+    }`;
+    assert y_axes(twice).unwrap_err() == "Y = Neg: Y is already defined in its graph";
+}
+
+test "two branches may name a tensor alike, and a branch may not redefine one around it" {
+    let alike = branching("float[N, 4]", "bool[1]", "T = Relu(X) A = Neg(T)", "T = Neg(X) B = Relu(T)");
+    assert y_axes(alike).unwrap() == "N=N,X1=4";
+    let shadowing = branching("float[N, 4]", "bool[1]", "X = Relu(Z) A = Neg(X)", "B = Neg(Z)");
+    assert y_axes(shadowing).unwrap_err() == "X = Relu: X is already defined in its graph";
+}
+
+test "a spelled length over names no input binds alone is one symbol" {
+    let source = `g (float["batch * seq", 4] X) => (float["batch * seq", 4] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=\"batch * seq\",X1=4";
+}
+
+test "a spelled length over names the inputs bind stays arithmetic" {
+    let source = `g (float["n + 1", 4] X, float[n, 4] P) => (float["n + 1", 4] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(source).unwrap() == "X0=n + 1,X1=4";
+}

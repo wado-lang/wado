@@ -7,7 +7,7 @@ keeping the upstream directory layout, so a path here names the path there.
 
 Each `model.onnx` is a graph Loam compiles, and the `test_data_set_0/` beside it
 holds the inputs and the output ONNX's own runtime produces. That output is the
-oracle: `package-loam/conformance/` runs the generated kernels against the same
+oracle: `package-loam/tests/conformance/` runs the generated kernels against the same
 inputs and compares. `light/` holds one larger model, read by the protobuf
 reader's own tests rather than compiled.
 

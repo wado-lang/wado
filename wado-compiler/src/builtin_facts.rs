@@ -325,6 +325,8 @@ pub struct ReturnShape {
     pub carries_storage: bool,
     /// An `Array<T>`, by value or through a reference.
     pub is_array: bool,
+    /// A `&` or `&mut`.
+    pub is_reference: bool,
     /// A `&mut`.
     pub is_mut_ref: bool,
     /// `!`, so every call ends in a trap.
@@ -339,6 +341,7 @@ impl ReturnShape {
             returns_value: !matches!(resolved, ResolvedType::Unit | ResolvedType::Never),
             carries_storage: may_carry_storage(ty, type_table),
             is_array: is_array(ty, type_table),
+            is_reference: type_table.is_reference(ty),
             is_mut_ref: matches!(resolved, ResolvedType::MutRef(_)),
             is_never: matches!(resolved, ResolvedType::Never),
         }
@@ -788,6 +791,7 @@ mod tests {
         returns_value: false,
         carries_storage: false,
         is_array: false,
+        is_reference: false,
         is_mut_ref: false,
         is_never: false,
     };

@@ -1,9 +1,11 @@
 # gale-highlight-wado
 
 Syntax highlighter for the Wado language. The parser is generated at build time
-by [Gale](../package-gale) from the bundled grammar (`grammar/Wado.g4` +
-`grammar/Wado.highlights.scm`); no ANTLR/Gale runtime dependency leaks to
+by [Gale](../package-gale) from the bundled grammar (`assets/grammar/Wado.g4`
+and `assets/grammar/Wado.highlights.scm`); no ANTLR/Gale runtime dependency leaks to
 consumers — the runtime is inlined into the generated parser.
+[WEP: Gale Highlight Query](../docs/wep-2026-07-12-gale-highlight-query.md)
+holds the design of the highlight queries.
 
 ## Library
 
@@ -67,41 +69,10 @@ wado run package-gale-highlight-wado \
 
 Writes the HTML fragment for each input to `build/highlight/<path>.html`.
 
-## Layout
-
-```
-grammar/
-  Wado.g4               grammar (the single source of truth for Wado's syntax)
-  Wado.highlights.scm   capture query (tree-sitter .scm subset)
-src/
-  lib.wado              re-exports the generated parse/highlight API
-  main.wado             CLI (delegates to gale-highlight's run_cli)
-  lib_test.wado         highlight regression tests
-tools/
-  corpus_check.wado     parse verdicts, for `mise run check-grammar`
-  highlight_dump.wado   capture spans, for `mise run check-highlight`
-  spec_examples.wado    spec blocks quote fixtures, for `mise run check-spec-examples`
-example/
-  standalone.wado       styled full-page demo / CSS-class reference
-```
-
 ## Held to the compiler
 
-`wado-compiler` owns Wado's syntax; three checks keep this package on it:
-
-- `mise run check-grammar` — the grammar must accept exactly what the
-  compiler's parser accepts, over the stdlib + fixture corpus. It may accept
-  more only where the parser's error is a `ParseErrorKind::Restriction`, a rule
-  no context-free grammar states, such as a nesting limit.
-- `mise run check-highlight` — the two must _colour_ that corpus the same.
-  Every class but the identifier kinds is decidable without name resolution
-  and fails on disagreement; those are reported as a capability gap instead.
-- `mise run check-highlight-vocab` — the vocabulary half of that check, over
-  the registries rather than a corpus, so it runs in milliseconds: every
-  keyword carries the capture its `KeywordCategory` implies, nothing else is
-  captured as one, and every keyword the parser takes as a name is a name in
-  the grammar too. That last one a corpus cannot report: a file the grammar
-  rejects is dropped from the comparison rather than compared.
+`assets/grammar/Wado.g4` states Wado's whole syntax, and checks hold it to
+what `wado-compiler` parses and colours.
 
 ## The gale-highlight framework
 

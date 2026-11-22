@@ -1,0 +1,1009 @@
+# Gale Performance Notes
+
+Performance notes for the Gale code generator and its generated parsers, in
+three parts:
+
+- **Current state** — what the benchmarks measure, the latest numbers, and the
+  representation and standing rules that shape them.
+- **What's next** — candidate levers not yet taken.
+- **Tried and didn't pan out** — measured dead-ends and non-levers, kept so we
+  don't repeat them.
+
+A lever that landed is history, which `git log` keeps. Cut its entry to the cost
+that stays open, or delete it.
+
+Wado-wide performance rules — the WasmGC cost model, what decides adoption, and
+the measured dead-ends — live in the `wado-performance` skill; this file keeps
+what is true of Gale specifically.
+
+Read with [`AGENTS.md`](../AGENTS.md) (dev-cycle essentials) and
+[`antlr4-compatibility.md`](./antlr4-compatibility.md) (prediction / codegen
+design). Design of the flat CST lives in
+[`resilient-parser.md`](./resilient-parser.md).
+
+**Performance-related TODO items live here, not in `TODO.md`.**
+
+## Current state
+
+### Benchmarks
+
+The basis is **`benchmark/syntax_highlight`**: it builds the full CST _and_
+walks it (highlighting), so it exercises the realistic consumer path — build +
+traverse. `benchmark/sqlite_parse` (parse only: build the CST, then
+`result.ok()`) is the build-isolation companion. Both run the same 13366-byte
+SQLite fixture, guest at `-O2`.
+
+Dev-host split (`cargo run` `wado`; post-flat-CST, 2026-07), as a multiple of
+`syntax_highlight` under `copying`. On 2026-09-02 the same benchmark measured
+inside a release host's spread on a dev host, because `Cargo.toml` raises
+`opt-level` on the compiler's dependencies and wasmtime is one of them.
+Re-measure both columns before sizing a GC lever off them.
+
+| benchmark                         | `copying` (default) | `null` (no GC) | GC share |
+| --------------------------------- | ------------------: | -------------: | -------: |
+| `syntax_highlight` (build + walk) |                   1 |          ~0.61 |     ~42% |
+| `sqlite_parse` (build only)       |               ~0.46 |              — |        — |
+
+`syntax_highlight` is **no longer GC-bound**: collection was ~42% of wall-clock
+at that snapshot, down from ~73% on the old node tree (see "The CST is a flat
+store"). The release headline + comparison baselines (Gale vs `tree-sitter` for
+highlight, vs `sqlparser-rs` for parse) come from `mise run syntax-highlight` /
+`mise run sqlite-parse` on a release host; not reproduced here (dev-only).
+
+> **Measurement note.** These are dev-profile `wado` profiles, which over-weight
+> allocation/GC frames; read the percentages as relative and size any GC win by
+> its release number. Mechanism: the `wado-performance` skill.
+
+Reproduce (guest self-time profile, and the collector split for GC cost):
+
+```sh
+cd benchmark
+wado run --no-cache --profile guest,../scratchpad/p.json,1 -O2 syntax_highlight/syntax_highlight.wado
+wado run --collector null   -O2 syntax_highlight/syntax_highlight.wado   # no GC
+wado run --collector copying -O2 syntax_highlight/syntax_highlight.wado   # default
+```
+
+(`wado` = `cargo run --bin wado --`. Analyze `p.json` with the `wado-performance`
+skill's script — count **leaf** frames for self-time — or upload to
+profiler.firefox.com. `copying − null` is the collection cost; `drc` is
+pathological here (~25× `copying`) — never use it. `null` leaks, so use a
+fixed-iteration driver, not the auto-tuned harness, which OOMs the heap under
+`null`.)
+
+### The CST is a flat store (SSOT)
+
+The parser records a flat i32-column event stream that _is_ the tree (single
+source of truth), finalized in one linear pass; consumers read it through
+`CstStore` cursor methods over an `i32` row index (`s.kind(i)`,
+`s.first_child`/`s.next_sibling`, `s.child_kind`, …). This retired the per-node
+`CstNode` / `CstChild` object tree (and the `List<BuildEvent>` it was built
+from) — thousands of small WasmGC objects the copying collector re-traced every
+cycle, which is what made `syntax_highlight` GC-bound. Design in
+`resilient-parser.md`.
+
+Result vs the old node tree (dev host, `benchmark-syntax-highlight`):
+
+| collector           | node tree / flat store |
+| ------------------- | ---------------------: |
+| `copying` (default) |         **~3.0× wall** |
+| `null` (no GC)      |                  ~1.4× |
+| GC portion          |         **~5.2× less** |
+
+On the **release** host the same change is only **~1.47×**
+(`benchmark/README.md`) — the dev multiple is GC-inflated (the `wado-performance`
+skill's §1). Still enough to move Gale from 4th to 2nd place, ahead of native
+tree-sitter and Lezer.
+
+The residual GC is highlight's own captures/HTML allocation (the profile
+below), not the CST — `sqlite_parse` (build-then-discard,
+no highlight) did not regress. One known transient:
+`TreeBuilder::finish` copies the `tag`/`a`/`b`/`alt` columns into the store
+because Wado has no by-value `self` / move (methods are `&self`/`&mut self`);
+each copy is exact-sized (a `List` value copy right-sizes to `used`) and the
+builder's originals die with the parse.
+
+**Column pre-size (landed).** `TreeBuilder::with_capacity` sizes the event columns
+to `4 × tokens` (measured `rows ≈ 3.44 × tokens`) so they never grow from empty —
+one right-sized `array.new_default` instead of `log2(rows)` doubling reallocs, at
+~16% over-fill (comparable to `TokenStream`'s `chars/4`). Release `sqlite_parse`
+~6% faster (build-heavy), `syntax_highlight` ~2% (build is a smaller share); no
+over-fill regression.
+
+### Dispatch reaches every lexer rule (landed, 2026-08)
+
+Two emit-site defects had the tokenizer call rules that could not match: a
+reference to a non-fragment lexer rule counted as unbounded (Rust: 325 `try_`
+call sites → 161), and a `mode` grammar skipped first-char dispatch outright
+(TypeScript 0 → 57 branches, 116 calls per character → 10 worst case).
+
+Unmeasured here — both benchmarks run a modeless grammar whose first sets were
+already exact, so size this on a keyword-dense or mode-bearing grammar.
+
+### String tokens stay off the lexer ATN, and the ATN got cheaper (landed, 2026-09)
+
+JSON's `STRING` ran through `latn_match` on every string. Every rule ref was
+read case-folded, and a negated set read that way counted as unknown, so the
+`SAFECODEPOINT` arm "might collide" with `ESC`. A leading-chars read now folds
+as the emitter does: a non-recursive fragment in its caller's casing, a rule
+with its own matcher in `Casing::Unknown`, a superset of either. With it,
+`STRING` is a static matcher. Tokenizing `twitter.json` got 420 times as fast.
+
+Rust's `STRING_LITERAL` and `BYTE_STRING_LITERAL` stayed on the ATN because
+every escape arm starts with `\`. Two arms sharing a first char now collide only
+if they can share the second too (`second_chars_apart`), and none of those can.
+
+Rust's identifier class spent 66% of tokenizing in a `c matches { … }` over
+`\p{L}`. The compiler tested an or-pattern one range at a time, with no short
+circuit. It now binary-searches a set too sparse for a bitset or a `br_table`.
+With both changes, tokenizing 1.5 MB of Rust got 15 times as fast.
+
+A rule that does need the ATN (a nested block comment, a raw string) paid
+for a formatted `String` key and a `TreeSet` insert per visited state per
+character, plus a copy of the rule stack per thread. Stacks are now interned
+ids, and the visited set is a stamp per state. An ATN-routed JSON string rule
+got 9 times as fast. What is left is the closure walk itself, which a
+DFA cache would remove (see "What's next").
+
+### The simulator keeps its predictions for the program's life
+
+A prediction's closures took 95% of a Rust parse once the simulator decided
+every ambiguity. `AtnDfa` in `src/runtime/atn_predict.wado` now keeps them, as
+ANTLR4's DFA does. A state is the closure of the configurations a token moved
+into it, with one edge per token. A start state is keyed by the decision,
+`min_prec` and the false predicates. The cache and its context arena are a
+global of the generated module, so they outlive one parse, and they reset
+together at `ATN_DFA_NODE_CAP` context nodes.
+
+A state does not hold the stacks its configurations return through. It holds
+slots, and a walk binds each slot to a stack of its own ("A state is keyed by
+the stack frames its closure read" below).
+
+A parse after the first is almost all cache hits. The first pays every closure,
+and that is the open cost:
+
+| 13 KB input, × `main` | `main` | first parse, before | first parse | later parses |
+| --------------------- | -----: | ------------------: | ----------: | -----------: |
+| CSS                   |      1 |                  51 |          12 |          1.6 |
+| SQLite                |      1 |                1300 |         490 |          9.6 |
+| Rust                  |      1 |                1100 |         410 |          3.4 |
+| TypeScript            |      1 |                2000 |        2500 |          3.9 |
+
+`main` and "before" are the `gale-parse` benchmarks (`benchmark/<grammar>`).
+"Before" is the simulator without the cache. The other two columns time three
+`parse` calls in one program. TypeScript's first parse is slower than without
+the cache, because the arena and its maps grow for the whole parse instead of
+starting empty per prediction. That also times out its benchmark's
+`input parses` test.
+
+The first parse's closures were mostly ε-walks through blocks of one-token
+alternatives. SQLite's `keyword` has 136, and `any_name` reaches it from `expr`,
+so every closure entering an expression kept one configuration per keyword. A
+block whose alternatives are distinct bare terminals is now one `Set`
+transition, as in ANTLR4, and a sequence is entered at its first element rather
+than through an ε state of its own. SQLite's first parse expands 5.5 times fewer
+configurations and runs 4 times faster. Computing the LR continuation tables
+only for the states the simulator reads them at (a call's return state, a
+precedence edge's target) cut module init by a further factor of 5.
+
+Revealing the caller stack in growing windows (0, 1, 2, 4… innermost frames,
+every caller assumed below them) settled 96% of Rust's predictions without the
+whole stack. It doubled the first parse and gained nothing after it: a window
+with no frames returns into every call site of the rule, so its closures are
+the largest. The 586-file Rust corpus took 1.23 times as long with the windows
+as without them.
+
+### A state is keyed by the stack frames its closure read (landed, 2026-11)
+
+A state used to be interned by its configurations, stacks included. A stack
+names every rule entered since the start rule, so the same statement at another
+nesting depth reached states of its own. Parsing
+`wado-compiler/src/elaborator/reify.rs` missed the cache on 46% of its steps,
+and the configurations of those misses took 60 times fewer shapes once their
+stacks were left out.
+
+A closure reads little of a stack: the frames a configuration returns through,
+and whether one alternative's stacks cover another's. So a state now names its
+stacks by slot. A walk binds each slot to a real stack (`RealStacks`), and the
+closure reveals a slot's top frame only where it pops, collapses or merges it.
+The frames it revealed, and each answer to "does this stack cover that one",
+key the state under its seed configurations. Two walks whose stacks agree on
+those reach one state, whatever lies below.
+
+A comparison or merge that reaches a slot on either side is a question answered
+on the real stacks, and so is a cover test between open stacks. Comparing
+frames instead re-read every frame below the top with no memo, so
+`Performance/DropLoopEntryBranchInLRRule_4` grew exponentially with its nested
+`between … and` lines.
+
+The trees are those of the full-stack cache: `rust_corpus_check.wado --tree-hash` prints the same hash for every `.rs` file in the repository before
+and after. Dev host, `-O2`, one `wado run` of that tool:
+
+| Input                            | Before / after |
+| -------------------------------- | -------------: |
+| `reify.rs`, 430 KB               |            5.1 |
+| The 10 largest `.rs`, 2.8 MB     |            6.5 |
+| Every tracked `.rs`, in 4 shards |            6.8 |
+
+### Nesting no longer doubles the scan (landed, 2026-09)
+
+Scan time used to double with each level of nesting. In Rust's `f(f(…))`, the
+atom tournament scans the argument once for `enumerationVariantExpression`'s
+`Path(args)`, and the LR loop scans it again for the call suffix. `A { x: … }`
+and `((…))` do the same through two candidates that share a prefix. The
+parse-side tournaments repeat all of it.
+
+A scan decides nothing and reads only its arguments, so the parser now keeps
+each left-recursive rule's answer for the whole parse (`ScanMemo`, in
+`src/runtime/scan_memo.wado`). The key is the position, `min_prec`, `follow`,
+`lr_cont` and the gate. The answer is the end and the gate the scan leaves.
+
+A simulator decision inside the walk also reads the ATN caller stack, which the
+key does not hold. The walk hides the frames below it (`AtnPredictor::hide_callers`).
+A prediction still undecided when it pops into them reads the whole stack, and
+the walk's answer is then not kept. A left-recursion loop the simulator decides
+reads its callers outside that check, so a grammar with one has no memo.
+
+What the simulator still costs a grammar that never needs a hidden caller is the
+stack itself: a scan pushes a return state around each call that can reach a
+decision the simulator makes. TypeScript's `exportStatement` is one such
+decision, and a statement reaches it through every function body. The parse
+runs at 0.84 times the speed it has with the pushes removed, and 3.7 times the
+speed it has with no memo.
+
+A failing optional or loop body repeats a scan too. HTML's `htmlElement` scans
+`(htmlContent '<' '/' TAG_NAME '>')?`, and an unclosed `<br>` scans every
+sibling after it as its content before the close fails. Each of those siblings
+does the same, so without a memo the time doubles with every two `<br>`s, and a
+40 KB page takes minutes. The memo also keeps the answer of a recursive rule that
+a repeat body calls with a required element after it (`GrammarAnalysis::rule_rescans`).
+Keeping every recursive rule costs the Rust parse a third of its speed: that
+memoizes 145 rules, and most of them are never scanned twice.
+
+Release host, `-O2`, one parse of Rust nested 14 deep:
+
+| Rust input   | before / after |
+| ------------ | -------------: |
+| `f(f(…))`    |           246× |
+| `A { x: … }` |           466× |
+| `((…))`      |            18× |
+
+The per-parse cost did not show on SQLite, which ran 1.08 times as fast on
+`package-gale/benchmark/sqlite`. TypeScript ran 2.9 times as fast, and Rust 4.7
+times.
+
+### A loop parses its iteration rather than scanning it first (landed, 2026-10)
+
+A scan-guarded loop used to scan each iteration to decide whether to take it,
+then parse the same tokens again. SQLite's `sql_stmt_list` scans every
+statement after the first this way. The loop now parses the iteration under
+`speculating`, and rewinds the position, the tree and `pending` when it fails
+or declines (`gen_rep_speculative_iteration`). `speculating` skips actions and
+predicates, so only a grammar that runs neither speculates
+(`ParserPlan::speculates`). The other exclusions are in `repeat_speculates`.
+
+`-O3`, one parse of each benchmark input, same window (`Benchmark` over the
+parser generated before and after):
+
+| grammar | change |
+| ------- | -----: |
+| SQLite  | +19.1% |
+| css3    |  +5.1% |
+
+Rust and TypeScript run predicates, so their parsers do not change.
+
+The loop's caller-FOLLOW gate is settled by the same parse
+(`gen_speculative_follow_gate`). It asks whether the caller's continuation
+starts at the iteration, and then whether it resumes where the parse ended,
+rewinding when it does not. Scanning the iteration first read SQLite's every
+statement twice, since a `;` also starts the next `sql_stmt_list`.
+`benchmark/sqlite_parse`, `-O2` fuel (`mise run update-baselines`):
+
+| `gale/sqlite/parse` |       fuel |
+| ------------------- | ---------: |
+| scan, then parse    | 15,393,731 |
+| parse only          | 14,524,325 |
+
+### A tournament skips the candidates ANTLR4 never takes (landed, 2026-10)
+
+SQLite's `sql_stmt` scanned four SELECT statements for every `SELECT`.
+`simple_select_stmt` is `factored_select_stmt` without its compound loop, and
+`select_stmt` is the same statement over a copy of `select_core`. ANTLR4
+resolves the ambiguity to the earliest of them, so the two later ones never
+win. `alt_subsumption` finds such an alternative from the grammar alone, and
+the decision leaves it out. The scan memo could not share the work instead:
+each candidate passes `select_core` a different FOLLOW, which the memo key
+holds.
+
+Measured as the section above measures:
+
+| grammar | change |
+| ------- | -----: |
+| SQLite  | +13.5% |
+| css3    |   flat |
+
+Rust and TypeScript (their `benchmark/` drivers, one after the other) stay
+within 1%: what they lose is an ATN decision or two between keywords that an
+`identifier` alternative already matches.
+
+### The lookahead DFAs share their nodes (landed, 2026-11)
+
+The lookahead DFAs the explorer builds made up nearly all of a parser that
+asks the simulator often: 93% of SQLite's source under `prediction: "exact"`. The
+simulator itself, its runtime and the `ATN_SIM` table, is a fixed 0.1 to
+0.2 MB. A DFA was emitted as a tree, sharing only a node more than one edge
+reached, so the nodes that decide alike were emitted once per place. Most of
+them recur: SQLite's 7,946 branches held 2,191 distinct ones. `SllForest` now
+makes one node of the nodes that decide alike, within a DFA, across the
+decisions and across depths, and emits a node more than one place reads once,
+as a function taking the position it reads at.
+
+| SQLite parser          |  before |   after |
+| ---------------------- | ------: | ------: |
+| `exact`, source        |  9.5 MB |  2.9 MB |
+| `exact`, Wasm at `-O2` |  2.4 MB |  1.1 MB |
+| `auto`, source         |  1.8 MB |  1.5 MB |
+| `auto`, Wasm at `-O2`  | 0.83 MB | 0.78 MB |
+
+The source is `gale gen --atn <mode>`, as the option was named then, when
+`exact` was `always`. `auto`, since removed, handed the simulator less. The
+Wasm is a `wado compile -O2` of a module that calls `parse`. TypeScript's
+`auto` parser went from 2.4 MB to 1.8 MB of source. The `gale-parse`
+benchmarks for SQLite, Rust and TypeScript stay within their noise; a shared
+node costs a call where the tree inlined it.
+
+At `-O1` the `exact` parser is 0.98 MB. `-O2` inlines each node function
+under the inliner's threshold at every call site.
+
+### A tournament scans its fallback only once another candidate won (landed, 2026-11)
+
+A longest-match tournament commits its last candidate when no scan wins, so
+that candidate's scan only matters once an earlier one succeeded. The emitter
+guards it on that (`unrefused_fallback`, and `fallback` in
+`emit_scan_tournament_winner`). A refusable or gated tournament, a shadow
+tournament and `trace` still scan every candidate, since each tells a lost
+tournament apart from the fallback. SQLite's parse fuel: +5.4%.
+
+### A token's fields share one array (landed, 2026-11)
+
+`TokenStream` keeps `kinds` dense, since every scan reads it, and stores the
+rest of a token (start, end, its trivia range and flags) side by side in one
+`List<i32>`, five slots per token. A trivia takes four slots in a second one.
+Past the `chars/4` pre-size, a token then grows two arrays where it grew six,
+and a trivia one where it grew four.
+
+| input                                    | ms/iter, ten arrays | ms/iter, two |   change |
+| ---------------------------------------- | ------------------: | -----------: | -------: |
+| 200 KB, mostly one-character trivia      |                4.81 |         4.20 |     +14% |
+| SQLite `queries.sql` (fits the pre-size) |               0.940 |        0.950 | in noise |
+
+Best of six alternating `wado run -O2` runs of a `core:benchmark` loop over
+`tokenize` and `parse`. SQLite's fuel moves +0.6%: a push still reads and
+writes the list's `used` once per slot.
+
+### Standing rules (measured)
+
+The four rules these benchmarks established — live set over allocation count,
+module-lifetime GC data as a per-collection tax, benchmark on an idle host
+against a same-window arm, and size a GC win by its release number — are Wado's,
+not Gale's, and live in the `wado-performance` skill with the evidence from here.
+
+What is Gale's: the decoded ATN is the module-lifetime data those rules are
+about. `state_cont_*` is flat offset/count columns and the LR fixpoint is gated
+behind `needs_lr_atn` for exactly that reason (#1475) — a change that puts one
+`List` per ATN state back into a global will cost 3–6× on `sqlite_parse` however
+fast its own code is.
+
+### The highlight phase pays only for what a query asks for (landed, 2026-09-02)
+
+Two levers, both in the consumer half of `syntax_highlight`, worth **+8.0%**
+together on a release host (alternating best of five per arm, arms' ranges
+disjoint):
+
+- **No rule-context capture, no CST walk (+6.5%).** `highlight_walk` visits
+  every CST row — `rows ≈ 3.44 × tokens` — only to maintain the visitor's rule
+  stack, which `classify` reads inside the override loop and nowhere else. A
+  query with no rule-context capture leaves that loop empty, so the walk is
+  unobservable: `hl_cover_unvisited`'s token sweep reaches the same captures.
+  `gen_highlight` emitted the call only when the query resolved an override.
+  Skipping the walk **without** also gating `hl_cover_unvisited`'s sort is a
+  _loss_ (0.1–4% slower than before) — the sweep alone is already in start order, and sorting
+  ~2900 captures costs more than the walk did. The gate has since been removed.
+  Every query in the tree carries a rule context, so no generated parser took
+  the skip, and the second path cost more to reason about than it saved.
+- **Escape HTML by byte run (+1.8%).** `highlight_html` drove a `StrCharIter`
+  and called `escape_html_char`, which called `String::push` — three calls per
+  source character, ~40K per iteration. The escapable set is ASCII, so a byte
+  walk is UTF-8-correct (only a lead byte advances the char position) and the
+  stretch between two escapes is one `array.copy`.
+
+Note what the second one is not: the 2026-07 run-batching attempt below, which
+kept the char iterator and measured flat. Batching was never the lever; the
+calls were.
+
+`nir/drop_value` (`docs/optimizer.md`) took another 3.3% on top of the two, so
+the three come to **+12.1%** against `origin/main`,
+three alternating pairs with the order swapped and the arms disjoint. That pass
+is Wado-wide rather than Gale's, but this is the benchmark it showed on: the
+parser and `TreeBuilder` discard a `pop()` per closed node, and each was
+allocating the `Option` it threw away.
+
+### Three Wado-wide gaps, read off Gale's WIR (landed, 2026-09-05)
+
+All three were found by reading the `-O2` WIR of the frames the profile below
+ranks, and all three were fixed in the compiler rather than here.
+
+- **The inliner held `classify` forever.** A function that would fold a loop
+  away under constant parameters is kept small, so it stays admissible once
+  those constants arrive. No call site passes a constant token kind, so they
+  never arrived, and meanwhile `classify` received no inlining of its own:
+  `List::len`, `into_iter` and a `SliceRefIter::next` boxing an `i32` per
+  rule-stack element stayed calls, on ~5300 calls per highlight. A hold is now
+  released once the loop converges with it still in place.
+- **`drop_value` kept a dead `Option`.** A discarded `pop()` closing an `if`
+  body built one anyway, at 26 sites in the SQLite parser.
+- **Every `_kind_set_*` branched on its key.** They are all
+  `k matches { TK_… | … }`, which became a `br_table` from twelve members up —
+  an indirect branch on a data-dependent key, 4.5% self-time in `_kind_set_4`
+  alone. `nir/match_to_bitset` makes it a branch-free mask test, and the
+  functions then inline at every site. `_kind_set_37`'s members are
+  contiguous, so it is one unsigned compare.
+
+The lexer's char classes are the same shape. A range member (`'0'..='9'`) was
+refused at first and the review caught it, so `latn_match` and the first-char
+dispatch kept their cascades until it was widened; that is where sqlite-parse's
+share of the gain comes from.
+
+Whole branch against `origin/main`, four alternating pairs, ranges disjoint:
+
+| ms/iter          | main        | branch      |
+| ---------------- | ----------- | ----------- |
+| syntax-highlight | 1.535–1.576 | 1.199–1.291 |
+| sqlite-parse     | 1.137–1.166 | 0.940–0.989 |
+
+The mask test also retires the "multi-token guard re-test" item below as a
+cost: the re-tested `_kind_set_37` is now a subtract and a compare.
+
+The last lever in the highlight half has landed too. `HighlightVisitor::new`
+used to re-resolve a fully static mapping on every call: ~170 `capture_id_of`
+scans plus the `class_text` rewrites, about 2.5% of the profile. The
+compile-time engine could not fold it, because its 10K-step budget is far below
+the string compares that takes. `highlight_gen` now emits the resolved tables as
+the `HIGHLIGHT_MAPPING` global, and the visitor reads it by reference.
+
+### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
+
+Taken after the two levers above, before `nir/drop_value` and before the token
+sweep stopped marking `visited`. The dev profile is noisy per-frame; mid-size
+frames swing ±several points across runs, so read the buckets, not the rows.
+
+|  Pct | Symbol                             | bucket                        |
+| ---: | ---------------------------------- | ----------------------------- |
+| 5.8% | `TreeBuilder::push_row`            | CST column build              |
+| 5.7% | `scan_any_name`                    | scan                          |
+| 5.5% | `scan_expr`                        | scan                          |
+| 5.5% | `try_IDENTIFIER`                   | lexer                         |
+| 4.8% | `push_escaped_upto`                | highlight (HTML output)       |
+| 4.8% | `TreeBuilder::finish`              | CST finalize + column copy    |
+| 4.7% | `_kind_set_4`                      | kind-set membership           |
+| 4.4% | `TokenStream::push_token_flagged`  | tokenize                      |
+| 4.2% | `bubble_to_parent`                 | CST finalize                  |
+| 3.2% | `HighlightVisitor::hl_visit_token` | highlight                     |
+| 3.1% | `follow_yields`                    | scan/predict (LL FOLLOW gate) |
+| 2.8% | `String::grow`                     | HTML output realloc           |
+| 2.8% | `highlight_html`                   | highlight (HTML output)       |
+| 2.7% | `tokenize`                         | lexer                         |
+
+Inclusive buckets: **parse** ~51%, **tokenize** ~20%, **highlight** ~17%
+(`highlight_html` 10.4% + the token sweep 6.8%), **CST finalize**
+(`TreeBuilder::finish`) 9.0%. Highlight was ~23% before the two levers above.
+
+## What's next
+
+Pick the current top frame off the live profile above rather than a fixed recipe
+here: the frames shift as levers land, and the mid-size ones are noisy, so
+re-measure before committing. Candidates read off the profile above:
+
+- **`TreeBuilder::finish`'s four column copies (measured, reverted 2026-09-03).**
+  It value-copies `tag` / `a` / `b` / `alt` out of the builder into the
+  returned `CstStore`, because Wado has no by-value `self` — four
+  ~10K-element arrays per parse. Having the builder hold the `CstStore`
+  directly and fill `end` / `flags` / `next` in place removes all four
+  copies, confirmed in the WIR, but **loses** on `sqlite_parse`: the extra
+  `self.store.` indirection is paid on every field access inside
+  `push_row` (6.4% self-time, called every row) and `finish` itself, and
+  that per-access cost on the hot path outweighs the per-parse copies it
+  removes. Full numbers in the `wado-performance` skill's `dead-ends.md`.
+- **First-char dispatch is linear in the branches.** The dispatch is a `match` over
+  the first-char sets, tested arm by arm. Since the compiler searches an or-pattern's
+  ranges, a `[\p{L}]` arm costs a search rather than ~700 compares, but a char
+  falling through still tests every arm before it (Rust: 56 branches, 161 `try_`
+  calls). ASCII resolves early (single-char branches are sorted and come first), so
+  this is a worst case rather than a benchmark-visible cost.
+- **Most non-left-recursive rules' scans have no memo.** SQLite's four select
+  alternatives each scan a plain `SELECT` to its end. The scan memo
+  ("Nesting no longer doubles the scan", above) covers left-recursive rules and
+  the recursive rules a failing repeat body rescans, so this is still paid once
+  per alternative.
+- **Reading the caller's continuation costs SQLite's parse 34% (2026-11).**
+  Under `longest` a tournament's scan carries the continuation it is called
+  with, and a gated repeat reads two continuations through every frame:
+  `exit` where it stops, and `after_iteration` where an iteration ends. Each
+  read goes `FOLLOW_MAX_DEPTH` tokens deep. `benchmark/sqlite_parse`, `-O2`
+  fuel, one parse:
+
+  | Continuation read                 |       fuel |
+  | --------------------------------- | ---------: |
+  | every frame, four tokens deep     | 17,900,538 |
+  | every frame, resumption one token | 14,524,325 |
+  | (no continuation)                 | 13,405,970 |
+
+  A one-token resumption is cheaper but wrong: `a : X?` in
+  `s : a X X Y EOF` takes the `x` that `X X Y` needs. A one-entry cache in
+  front of the link table saved under 1%. The levers left are a frame width
+  sized to the grammar's site count, so fewer pushes overflow into the link
+  table; a cache of each read by position and continuation; and leaving the
+  continuation out of a tournament candidate's scan where the decision is
+  proven not to depend on it.
+
+Found by reading generated code (2026-09), not yet measured on a benchmark:
+
+- [ ] **Left-recursive wraps shift the event columns.** `start_node_at` inserts
+  into four columns at the loop's checkpoint on every LR iteration, so a
+  chain of N operators moves O(N²) rows. A forward-parent record resolved in
+  `finish()` would make each wrap O(1).
+- [ ] **`atn_predict` allocates per prediction.** Each call builds a fresh
+  `CtxArena` and `ClosureScratch`, and each step a new `AtnKeyMap`, move list
+  and one `AtnConfig` per work item. Keeping the scratch in `AtnPredictor` and
+  clearing it would remove most of that.
+- [ ] **The LR scan gate runs before every suffix.** `scan_<rule>_lr_N` re-scans
+  the right operand even where the suffix's first token already decides.
+  Emitting it only when FIRST(suffix) meets the atom's FIRST or the non-LR
+  FOLLOW would skip it on plain arithmetic.
+- [ ] **A loop's reserve walk can scan to EOF.** After Rust's last `#![..]`, the
+  `innerAttribute*` reserve check scans `item* EOF`, the whole file. Two
+  tokens (`# !` against `# [`) already decide it.
+- [ ] **`exact` parses Rust and TypeScript about twice as slowly as
+  `longest` (2026-10).** One run each of
+  `package-gale/benchmark/{rust,typescript}` in ms/iter, under the modes then
+  named `never` and `always`:
+
+  | Grammar    | longest | exact |
+  | ---------- | ------- | ----- |
+  | Rust       | 1.83    | 3.86  |
+  | TypeScript | 1.95    | 4.95  |
+
+  A third mode, since removed, let the lookahead DFA, the LR table and the
+  tournament settle what they could, and ran 5.50 and 9.32: slower than
+  giving the simulator everything.
+- [ ] **The lexer ATN re-walks its closure per character.** Rules without
+  recursion are regular, so a DFA built lazily per (state set, char class)
+  would make an ATN-routed string rule as cheap as a static one.
+
+### Generation-time cost: the generator itself (2026-07)
+
+Distinct from the _generated parser_: how long `gale gen` takes to emit a large
+grammar. Keyword-heavy grammars (SQLite, TypeScript, Rust) are slow; the Kiln
+build path (copying collector + fuel) makes TypeScript/Rust slower still.
+Measured findings, `wado run … gen` (`cargo run` host):
+
+- **The dominant cost was not GC — it was an exponential analysis (2026-07,
+  fixed).** `gale gen` on TypeScript (over 30 times SQLite's) and Rust was ~99% inside
+  `GrammarAnalysis::is_rule_scannable_at`, the recursive scannability check the
+  optional-scan-guard lowering runs per optional/repeat element. Profiling the
+  exploding run (guest profiler with a `WADO_PROFILE_MAX_SECS` bounded flush —
+  the profile only writes on clean exit, so an unbounded run is unusable)
+  put `is_element/alt/rule_scannable_at` at **98.8% inclusive**; it barely
+  registered on SQLite. Root cause: the SCC-aware memoization (`80ab9ed7e`)
+  caches a rule only once its SCC has closed (`local_min >= p`); in a large
+  mutual-recursion SCC (TS's expression / type / statement web) nearly every node
+  stays provisional and is recomputed on every path → exponential (a synthetic
+  dense-recursion grammar scaled ≈`1.4^R`).
+  Scannability is actually pure reachability — a rule is non-scannable iff it can
+  reach an _undefined_-rule reference, the only `false` source in
+  `is_element_scannable_at` — so `precompute_scannability` computes it once in
+  O(V+E) and seeds `scannable_cache`, making the recursion O(1). **Byte-identical
+  output** (css3 / SQLite / follow_gate md5 unchanged); **TypeScript's gen over
+  120× faster** (the generator's own recompile now takes 3 times the gen), **Rust
+  similar**; the synthetic repro 56× faster. Lesson: profile keyword-heavy grammars
+  end-to-end — a super-linear analysis hides behind the GC number, and micro-
+  grammars miss it (the trigger is deep _mutual recursion_, not size/alt-count).
+  The four other SCC-memoized analyses — `first_of_rule_at`, `rule_is_nullable_at`,
+  `rule_is_single_token_at`, `tail_greedy_first_of_rule_at` — share the same
+  SCC-root-only caching (`local_min >= p`) and are latent suspects on other
+  grammars (they did _not_ dominate the TS/Rust profiles, so not yet active).
+  Unlike scannability (pure reachability, precomputable), these compute real
+  fixpoint values, so the fix is a shared SCC-complete cache (Tarjan: fix all
+  members once the SCC closes), not a reachability precompute.
+
+- **Two levers only: compute, and GC.** Isolate GC with `--collector null` (no
+  GC; leaks, so only for a one-shot gen) vs the default `copying`:
+
+  | grammar | output  | first-sets      | copying / null | GC share |
+  | ------- | ------- | --------------- | -------------- | -------- |
+  | css3    | 1.76 MB | small           | 1.06           | **6%**   |
+  | SQLite  | 786 KB  | large (150+ kw) | ~1.6           | **~38%** |
+
+- **GC scales with distinct-token count, not output size.** css3 emits a _bigger_
+  file with ~10× _less_ GC — its first-sets are tiny. So the copying collector's
+  cost is re-tracing the thousands of `String` token objects held in the
+  long-lived first / kind / FOLLOW caches, and it explodes on keyword grammars
+  (TypeScript `null`-gen OOMs — it accumulates that many token Strings).
+  `follow_env`'s bitset FOLLOW fixed point (2026-07) removed one such holder;
+  the FIRST-set caches and kind-set registry are the remaining ones.
+
+- **Collector switch is a non-lever.** DRC (cost ∝ garbage) is _worse_ on small
+  grammars — SQLite takes 1.9 times as long under DRC as under copying — because
+  its per-alloc overhead dwarfs the small live set; it only wins where copying
+  thrashes a huge live set (TypeScript ~8× faster). A blanket kiln→DRC switch would regress the common
+  case. Reduce allocation instead.
+
+- **The lever (landing): the token's identity _is_ a dense integer, carried on
+  the IR, not a name we cache.** `token_slot_order` already numbers every token
+  (slot index == the emitted `TK_*` value); `token_kinds.wado`'s `TokenKinds`
+  table (id ↔ name) is built once and `resolve_kind_ids` stamps each
+  `Element::kind_id`. FIRST/kind/FOLLOW sets are then `List<i32>`; names are
+  recovered only at emit (`token_names_of` / `kind_check_str`).
+
+  **Do NOT re-cache via a lazy `String→i32` intern in the hot path** — measured a
+  net loss (SQLite 1.31 times as long under copying, 1.25 under null): the per-call intern is a
+  String tree-lookup costing more than the compare it replaced, and it still
+  rebuilds `TK_{name}`. The fast path is `elem.kind_id` (resolved once); the only
+  fallback intern is for unresolved IR in unit tests.
+
+  Byte-identity rules: FIRST-set order = insertion order of ids (== today's name
+  order, 1:1); kind sets still canonicalise **by name** at `intern_kind_set`
+  (sort names, then map to ids) so emit order/dedup are unchanged; emit writes
+  the name, not the number. Measure the win as the `copying` − `null` GC delta.
+
+  Progress (SQLite `wado run gen`, `copying` − `null` GC), as a multiple of the
+  baseline:
+  - P0 (table + `kind_id` + resolution pass, inert) — byte-identical.
+  - P1+P2 (FIRST sets + prediction carry ids) — GC 0.88, copying 0.97, compute
+    back to baseline.
+  - P3 (kind/sync/follow-mask registries store ids) — GC 0.73, copying 0.93.
+    Remaining P4 (the `lower`/`parser_gen` FIRST-set boundary, `rule_follow_kinds`)
+    is smaller and coupled on SQLite; the keyword-dense TS/Rust grammars (GC-bound)
+    are where the accumulated cut should matter most.
+
+- **Compute-side gen levers (2026-08, landed).** `benchmark/gale_gen` (Rust
+  grammar, dev host) profiled four compute hot spots; fixing them (plus the
+  review round: in-place FOLLOW propagation instead of per-contribution
+  FollowBits copies, and the left-corner reachability walks precomputed in id
+  space) made best-of-three ~2.2× faster, generated
+  output byte-identical for the Rust and SQLite grammars:
+  - `build_dispatch_groups` + first-char accumulation (~25% self): `add_range`
+    and the distinct-range collection deduped by linear scan, each (char, call)
+    probe walked the whole range list, and `ranges_meet_unclaimed` counted
+    claimed chars by filtering the full list per range. Now packed-i64 set
+    probes (insertion order kept), a sorted-starts/prefix-max-end index per
+    call, and binary-search claimed counts.
+  - `follow_env` fixed point (~11%): re-derived FIRST names and re-interned
+    them through a String TreeMap every iteration. FIRST contributions are
+    iteration-invariant, so each RuleRef site flattens once to (callee, static
+    kind-id bits, inherits-caller-FOLLOW) and the loop is pure bitset
+    propagation in the kind-id space.
+  - Kind-set canonicalisation (~6%): the per-call String sort + name-joined
+    registry key became an id sort by a lazily-rebuilt name-rank table with an
+    id-joined key. Rank order == name order, so canonical order and helper ids
+    are unchanged.
+  - `check_left_recursion` (~4%): per-element visiting-set nullable recursion
+    with a linear rule-name scan → one worklist nullable table + name→index
+    map per grammar (same least fixed point).
+
+  Remaining top self frames after these: `String^Eq::eq` + `String^Ord::cmp` +
+  `TreeMap<String, i32>` probes (~14%, the `visiting` lists and rule-name maps
+  of the SCC-memoized analyses), `$value_copy$` IR deep copies (~12%, diffuse
+  across lower / prediction / parse), and prediction (`build_sll_node` ~14%
+  inclusive).
+
+  (A `type TokenId = i32` newtype for the id — so a `Display` can format token
+  names later — currently trips a `$value_copy` codegen ICE when a
+  newtype-valued `TreeMap` coexists with its `i32` base in a value-copied struct
+  (minimal repro saved). A compiler P0; use plain `i32` until it is fixed.)
+
+- **Reference the IR the generator only reads (2026-08-25, landed).** A
+  release-host guest profile of `benchmark/gale_gen` (4026 leaf samples) put
+  **23%** of the run in `$value_copy$` helpers — `RuleRefElement` 5.2%,
+  `TokenRefElement` 3.5%, `Alternative` 2.8% — prediction paying 10.1% of it and
+  `lower` 7.0%. Two shapes:
+
+- `SllConfig.elements` / `SllReturn.elements` are now `&List<Element>`.
+  Prediction rebuilds a config per token per alternative (`SllConfig { ..*c, pos }`) and deep-copied the element list — every `String` of every
+  `RuleRefElement` — per rebuild. `push_return` / `build_prediction` hand the
+  reference out rather than copying the list.
+- Five by-value `for` bindings became `for … of &…` (`lexer_elem_refs_rule`,
+  `collect_literal_tokens`, `merge_grammars`, `sll_advance`,
+  `try_expand_opaque`). A by-value binding deep-copies each element inside
+  `SliceValueIter<T>::next`; a by-ref one SROAs to a bare indexed load.
+
+Alternating A/B best-of-five, `-O2`: **222.6 → 294.5 KB/s** (154.5 → 116.3
+ms/iter, **+32%**), 5/5 rounds; the by-ref loops are ~5 points of it. Generated
+Rust parser byte-identical. Copies fall to 13.9% of the profile and
+by-value-`for` copies to 1.3%; the top frame is now string-keyed `TreeMap`
+probing (`String^Ord::cmp` 8.8%, `Eq::eq` 4.3%, `find_index` 3.1%,
+rebalancing ~5%) — the id-carrying lever above, applied to the name-keyed maps
+that are left.
+
+This references a list that is already a root, so it adds nothing to the live set
+— unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../../.claude/skills/wado-performance/dead-ends.md)).
+
+#### Work the generator repeated or copied (2026-10-06, landed)
+
+Release-host profiles of `benchmark/gale_gen` found seven levers:
+
+- `quoted_char` asked ICU three times per char past ASCII, by run-time name and
+  across the component boundary. The `Z`/`M`/`C` ranges are now read once and
+  binary-searched.
+- `canonical_ids` sorted every interned kind set with a closure comparator. It
+  now sets each id's rank bit and reads the bits back in order.
+- `lexer_alts_can_collide` computed every arm's second chars before testing a
+  pair. It now reads them only for arms whose first chars overlap.
+- `lower_alt_scan_element` deep-copied the alt once per position it lowered.
+- `try_expand_opaque` and `repeat_entry_alts` copied elements and alternative
+  lists they only inspect. They take them by reference now.
+- The kind, sync and follow-mask registries formatted id lists into string
+  keys. The id list is the key now.
+- `rule_takes_min_prec_arg` and `rule_reads_follow` scanned a list of names.
+
+Generated Rust, SQLite, css3 and TypeScript parsers are byte-identical. The
+whole set against `origin/main`, by GC heap size:
+
+| heap | change |
+| ---- | -----: |
+| 256m | +18.0% |
+| 384m | +16.8% |
+| 512m | +14.1% |
+| 640m | +17.7% |
+| 768m | +17.4% |
+| 1g   | +19.3% |
+
+The geometric mean is +17.2%. gale-gen's
+ranking can flip with the heap size, so a single size does not decide a change
+here. The reason, and two levers judged on one size only, are in
+[`dead-ends.md`](../../.claude/skills/wado-performance/dead-ends.md).
+
+#### The lookahead DFA explorer (2026-10, landed)
+
+`SllExplorer` (`atn_sll.wado`) builds each ATN decision's lookahead DFA at
+generation time. It made `benchmark/gale_gen` about 160 times as slow, nearly
+all of it in `gen_atn_decide_fns`. Six changes brought it back:
+
+- Configurations are `i64` keys, and the ATN's transitions are flat columns.
+  The output is byte-identical.
+- The closure walk reuses one stamped open-addressing set instead of a fresh
+  `HashSet` per closure.
+- A stack id is `chain * SLL_BOTTOMS + bottom`, so a place on escape frame
+  `1 + j` shares the memoized closure of the same place on frame 1.
+- A moved set that already settles on one alternative becomes an `Alt` node.
+  `reaches_any` checks only that some configuration survives, stopping at the
+  first one, so no closure is computed.
+- At `SLL_MAX_DEPTH`, a moved set that does not settle asks without a closure.
+  Pruning would drop that edge anyway.
+- A node's closure is computed when the node is branched, not when an edge
+  first reaches it (`DfaBuild`). The closure decides the node's identity, so a
+  node whose closure another node at its depth holds becomes an alias of it.
+  When closures were computed on creation, 93% of the depth-3 nodes ended up
+  asking: the budget ran out before breadth-first order branched them, so
+  nearly all the budget bought nodes that were never used.
+
+The last three save expansions, so a smaller `SLL_DECISION_BUDGET` explores
+as much as the old one did. The budget is chosen by the parses' simulator
+misses, the `atn_predict_once` calls the verdict cache cannot answer. Fuel is
+not a good guide here, because a miss costs mostly GC. A 150k arm ran 1.3%
+more fuel than the old parser and took 10.5% longer.
+
+| `SLL_DECISION_BUDGET`        | TypeScript misses | Rust misses | Rust gen (dev host) |
+| ---------------------------- | ----------------: | ----------: | ------------------: |
+| 2M, before the changes       |              1135 |         319 |              13.8 s |
+| 800k, closures on creation   |              1125 |         316 |              1.53 s |
+| 120k, closures when branched |              1273 |         321 |              0.31 s |
+| 200k, closures when branched |              1101 |         316 |              0.43 s |
+| 300k, closures when branched |              1098 |         316 |              0.57 s |
+
+At 200k the four parse benchmarks match the old parser in an alternating A/B.
+The budget must stay below `SLL_MAX_STACKS / SLL_BOTTOMS` chains, which
+`stacks_full` asserts.
+
+These did not pay, measured on the same harness:
+
+- A closure relative to its stack, rooted per use: 6.9–7.1 s against 5.1 s. The
+  kept places mostly sit on distinct relative stacks, so rooting cost more than
+  sharing saved.
+- The stamped set in place of `push_stack`'s `HashMap`: 4.31 s against 4.06 s.
+- Grouping a closure's seeds by place, so that one merge run covers every
+  alternative, and sorting each moved set first: both slower.
+- A node keyed by its moved set rather than its closure: the TypeScript DFAs
+  doubled, and misses rose to 1331. Distinct moved sets close over one set
+  often enough that merging them matters, hence the aliases.
+- A stack-free test of whether a depth-3 node can settle at all: it ruled out
+  3 of 40,712 nodes. The nodes were dead because the budget never reached
+  them, not because they could not settle.
+
+Open levers on `benchmark/gale_gen`:
+
+- [ ] **Kind sets still arrive as names.** `kind_check_str` gets `TK_*` names
+  from the lowered IR, so `names_to_ids` interns each name again through a
+  string-keyed map. Fixing this means threading ids through `lower` and
+  prediction.
+- [ ] **The rule-name maps behind the SCC-memoised analyses** (`first_of_rule_at`,
+  `rule_is_nullable_at` and the rest) hash the rule name on every visit. A
+  stamped rule index measured flat at 512m only; sweep it before deciding.
+- [ ] **`second_char_arms` tests every member's ranges at every cut point**,
+  and formats each span's pattern before knowing whether its arm survives.
+
+## Tried and didn't pan out
+
+### Flat green-tree + cursor CST — NO-GO (2026-06), later done right
+
+The **first** attempt at a flat CST: a SoA `CstArena` + `Cst` cursor
+(rowan-style), built in one pass over the `BuildEvent` log. In isolation the SoA
+build was ~2× faster, but `sqlite-parse` (build then discard) regressed 3.7×: a
+loose `List::with_capacity(n)` zero-fills via `array.new_default`, so nine
+over-sized arrays dominated (27× before exact-sizing, which cut it to 3.7× but
+no further). `syntax-highlight` also lost — 1.64 times as long — because `children()`
+boxed a `CstChild` + `Cst` per visited node, moving allocation from build-time to
+walk-time instead of removing it. Reverted in `37d6597`.
+
+**Done right (2026-07, now the current state).** The retry lever recorded here —
+scalar child accessors so the walk allocates nothing, and the parser's event
+stream _as_ the store (no second arena, columns grown by `push` not
+`with_capacity`) — is exactly what shipped: `copying` ~3.0× faster. The two
+losses to avoid, confirmed: **value-cursor re-boxing** (a struct per visited node
+— every Wado struct is a WasmGC object) and **`array.new_default` zero-fill of an
+over-sized arena**.
+
+### Data-driven (bytecode VM) scan — NO-GO (2026-06)
+
+**Goal.** Replace the per-rule compiled `scan_*` functions with a single
+bytecode interpreter over the scan IR (`ScanBody`/`ScanElement`) + per-rule op
+tables, to shrink the generated artifact (scan is ~21% of the compiled module /
+~27% of `wado compile -O2` time) and speed up the build-to-test cycle.
+
+**Spike.** The three hottest _leaf_ scanners were rewritten to delegate to a
+faithful flat-`List<i32>` bytecode VM (bounds-checked `SCAN_PROG[ip]` fetches).
+Output was identical, so the timing is valid.
+
+| build (SQLite, 600 iters)   | per-parse, vs baseline |
+| --------------------------- | ---------------------: |
+| baseline (compiled scan)    |                      — |
+| VM for 3 leaf scanners only |               **+24%** |
+
+Converting ~4.9% of self-time cost +24% wall ⇒ implied slowdown **K ≈ 5.9**; a
+full conversion projects **+30–60%** parse time.
+
+**Why K is structurally high in Wado (not tunable away):** (1) no `unsafe` — every
+bytecode fetch is a bounds-checked list index; (2) loss of inlining — a 3-line
+`scan_keyword` inlines at `-O2`, a VM call never does, and the tiniest scanners
+benefit most from inlining; (3) GC + value semantics add per-call overhead the
+compiled path avoids.
+
+**Decision.** Keep the compiled scanner. A hybrid was rejected on maintainability
+(two scanner backends in lockstep). Dev-cycle wins should come from the build
+pipeline (subset/lower-opt inner-loop builds), not from interpreting scan.
+
+### `core:cbor` / `core:serde` for the ATN blob codec — NO-GO (2026-06)
+
+**Goal.** Replace the hand-written ATN wire-format codec (`atn_blob_bytes` +
+`atn_decode`) with derived `Serialize`/`Deserialize` + `core:cbor`, so the field
+layout is generated from the struct.
+
+**Spike (isolated wasm size, -O2):** hand `i32`-array decode = 7,740 B; cbor +
+serde = 20,622 B ⇒ **~+12.9 KB** (decode-only est. +6–9 KB net per parser). The
+whole Binding2 parser+driver is ~33.6 KB at -O2, so **+18–40%** on every ATN-using
+parser; `report-wasm-size` is a tracked budget. Also: decode runs once per
+`parse()`, and a generic `Deserializer` is structurally slower than a single
+linear `array.get i32` walk — wrong direction for parse speed.
+
+**Decision.** Keep the hand-written codec — one writer + one reader + one shared
+constant set, round-trip-tested (`atn_test.wado`). (Separable, still open:
+embedding the blob as base64/`#data` rather than an `i32`-array literal — a
+source-size/compile-time lever, worth revisiting only once a _large_ grammar's
+ATN literal is a measured problem.)
+
+### Measured non-levers
+
+General findings — forcing inlining, raising the inline threshold, `br_table`
+over a compare cascade, `String::grow` pre-sizing, index loops in place of
+`for x of &List<i32>` — were all first measured here and now live in the
+`wado-performance` skill and its `dead-ends.md`. What stays is bound to Gale's
+own shapes:
+
+- **Re-sizing `TokenStream::new`'s arrays** (~8.5% self-time). The cost is
+  inherent WasmGC `array.new_default` zero-fill, `chars/4` slots per token or
+  trivia field (measured with ten `List<i32>` columns, one per field, before
+  they were packed into three arrays). Measured fill for the benchmark input:
+  2892 tokens + 2431 trivia vs a 3342 cap — only ~19% over-allocation; `chars/4`
+  zero-fills ~3342/array vs ~8191 for grow-from-`[]` doubling (~2.4× better), so
+  `[]` would be worse. Exact-sizing every array gained only ~2%, two-thirds
+  within jitter. Leave the `chars/4` pre-size.
+- **Kind-set membership** (`_kind_set_*`, ~3%). A `k matches { TK_… | … }` test
+  over the large SQLite keyword set, called from scan dispatch and lookahead
+  gates. Lowering it to a `br_table` left self-time unchanged, so kind-set is
+  **call-frequency-bound, not dispatch-bound** — cut the calls, not the branch.
+  The same answer came back for `classify_keyword`'s first-char dispatch.
+- **Run-at-a-time HTML escaping** (2026-07). `highlight_html` escapes char by
+  char; batching the stretches between escapable bytes into one
+  `push_str_range_unchecked` measured **flat** (medians 1% apart). The
+  captures are dense — ~2900 over 13366 chars, so the mean unescaped stretch is
+  ~4.6 chars and the per-run bookkeeping costs what the batching saves.
+  Input-shape-bound: sparse captures would answer differently. Batching the
+  _same_ runs off a byte walk instead of the char iterator did pay (+1.8%,
+  2026-09-02) — what the loop dropped was three calls per character, not the
+  copies.
+- **Hoisting `HighlightVisitor::classify`'s default path** (2026-09-02) to get it
+  under the inline budget: flat, and the WIR shows it still not inlined.
+  `.claude/skills/wado-performance/dead-ends.md` has the numbers. Deleting the
+  call's _caller_ is what paid.
+- **The simulator at a hot LR loop entry** (2026-07). Routing SQLite's
+  `expr NOT? BETWEEN expr AND expr` mid operand to the simulator took
+  `SELECT … BETWEEN 1 AND 10 AND y = 2` over 40 statements to 56 times as long
+  on the dev profile. That shape is decided on the scan instead (`lr_cont`).
+
+## Correctness items with a performance flavor
+
+These are ATN-class prediction gaps tracked for compatibility — Gale's static
+predictor committing where ANTLR4 defers, or deferring where the lookahead
+would have settled it — relevant when reasoning about the scan/predict hot
+path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
+`antlr4-compatibility.md` (prediction design, soundness invariants).
+
+**The simulator is the last resort, and a wrong parse is worse than it.** Reach
+for the scan and the runtime FOLLOW gate first. A decision neither settles as
+ANTLR4 does goes to the simulator, whatever it costs, and its cost is then the
+thing to work on. The lookahead DFA ("The simulator keeps its predictions for
+the program's life") is the lever that landed. ANTLR4 with its DFA takes 86
+times as long as Gale on this grammar and input (`benchmark/README.md`), so a
+cache does not by itself close the gap to the scan.
+
+- **A tournament asks the simulator once per alternative it scans**
+  (`DropLoopEntryBranchInLRRule_4`). Each loop-entry prediction there looks
+  ahead to EOF, since the ambiguity is real, and `stat`'s tournament scans
+  `expr` once for `';'` and once for `'.'`. At 15 lines that is 92 predictions,
+  quadratic in the input. Deciding `stat` with the
+  simulator would ask each question once. The tournament's longest match and
+  ANTLR4's lowest alternative can disagree, though, so that is a routing
+  decision rather than a tuning one.
+- **`lr_between.g4` is ATN-class and may not need to be.** Its shared-delimiter
+  competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
+  self-reference), so the continuation gate (`lr_cont`) does not reach it. The question it
+  asks is the same one, so the same gate may apply; if it does, the simulator comes
+  out of grammars that embed it today. Untried.
+- **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match — closed on
+  the scan, not the simulator (2026-07).** The simulator answer was implemented
+  and reverted at release `sqlite_parse` **155× slower**:
+  one prediction was a full closure over the grammar, before the simulator
+  cached its predictions, and neither bounding the lookahead nor gating it
+  brought that down. What shipped decides the ambiguity
+  with the compiled scan instead — a greedy `?` scans its body then the
+  continuation before entering, a non-greedy loop scans the continuation before
+  exiting. Where the scan runs out — the rule's tail — the verdict asks the
+  caller's continuation, or the rule's classical FOLLOW where the rule carries
+  none, which cost one bug fix in `follow_env` (an optional's callee was
+  receiving the inner's own FIRST). That last question is why a continuation scan
+  may ask it only where the walk really reaches the rule's tail (soundness invariant
+  10). Release
+  `sqlite_parse` measured unchanged at every step, each arm's own spread moving
+  further than any gap between the arms.
+- **Recursive lexer rule with `.+?` / `.*?`**
+  (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`): the static single-pass
+  emitter over-consumes nested `/* … */` comments.
+- **A `Repeat` config is walked as a single iteration, so a decision the
+  lookahead could settle buys a scan instead — probably not worth acting on
+  (2026-08).** `sll_advance` moves a `Repeat` config past the repeat and never
+  emits the "still looping" reading, so `a : X+ Y | X Z` on `X X Y` has no
+  branch for the second `X` and drops into the dispatch's fallback tournament,
+  which scans each alt from the decision point
+  (`tests/grammars/ll_repeat_alt_gap.g4`). The tree is right either way: the
+  tournament picks the alt whose body parses, and the `else` is always there
+  for a well-formed grammar — `dispatch_fallback_indices` withholds it only
+  where the cascade provably claims every first token, or where an alt is not
+  fully scannable, which needs a reference to a name that is not a parser rule.
+  What makes it hard to price: the fallback tournament is emitted at 32 sites
+  across TypeScript (20), css3 (7), Rust (3) and ANTLRv4 (2) and at **none** in
+  `sqlite` or `json`, so nothing in the benchmark set pays for it, and those
+  sites are not all this shape (`typeParameter : identifier constraint? | …` is
+  an at-end gap, not a repeat one). Worth revisiting only if a profile puts one
+  of them on top; the repair is not cheap either, since a second config per alt
+  collides with the `alt_index` dedup key — the failed approach `dead-ends.md`
+  names first — so it wants dedup keyed by position, which is walk work the
+  runtime simulator is the complete form of.

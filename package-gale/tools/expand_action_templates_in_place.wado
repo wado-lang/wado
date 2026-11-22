@@ -1,0 +1,98 @@
+#!/usr/bin/env wado
+//! Re-run the StringTemplate-helper expansion over the committed descriptor
+//! grammars in `tests/antlr4-compat/grammars/`, in place.
+//!
+//! The canonical pipeline expands templates at extract time
+//! (`extract_antlr4_descriptors.wado`), which needs the `vendor/antlr4`
+//! submodule. This script applies the identical transform to the committed
+//! `.g4` files instead, for two situations:
+//!
+//! - bootstrapping: converting an already-extracted corpus without
+//!   re-running the full vendor extract;
+//! - verifying idempotency: on an expanded corpus the script must report
+//!   zero rewrites.
+//!
+//! It cannot *re-derive* an expansion: once a template is expanded the
+//! original helper text is gone, so after a change to the expansion table
+//! the corpus must be regenerated via the vendor extract (or edited
+//! manually for a targeted fix).
+//!
+//! Usage (from the repository root):
+//!   wado run package-gale/tools/expand_action_templates_in_place.wado
+
+use { println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { expand_action_templates } from "../src/g4/action_templates.wado";
+
+global GRAMMARS_ROOT: String = "package-gale/tests/antlr4-compat/grammars";
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
+    let categories = match list_dir(&GRAMMARS_ROOT) {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln(`expand: ${e} — run from the repository root`);
+            exit(1);
+        },
+    };
+
+    let mut total = 0;
+    let mut rewritten = 0;
+    let mut warned = 0;
+    for let category of categories {
+        if !category.type matches { _::Directory } {
+            continue;
+        }
+        let dir = fs::join(&GRAMMARS_ROOT, &category.name);
+        for let name of grammar_names(&dir) {
+            total += 1;
+            let path = fs::join(&dir, &name);
+            let text = match fs::read_to_string(&path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln(`expand: ${e}`);
+                    exit(1);
+                },
+            };
+            let outcome = expand_action_templates(&text);
+            for let w of outcome.warnings {
+                eprintln(`expand: ${category.name}/${name}: ${w}`);
+                warned += 1;
+            }
+            if outcome.text == text {
+                continue;
+            }
+            if let Err(e) = fs::write(&path, &outcome.text) {
+                eprintln(`expand: ${e}`);
+                exit(1);
+            }
+            rewritten += 1;
+        }
+    }
+    println(`expand: ${total} grammars scanned, ${rewritten} rewritten, ${warned} warnings`);
+}
+
+/// The entries of `path`, sorted by name — the walk is ordered so a rewrite
+/// run reports the same way twice.
+fn list_dir<S: AsStrSlice>(path: S) -> Result<List<fs::DirEntry>, fs::FsError> with Preopens {
+    let mut entries = fs::read_dir(path)?;
+    entries.sort_by(|a: &fs::DirEntry, b: &fs::DirEntry| a.name.cmp(&b.name));
+    return Result::Ok(entries);
+}
+
+fn grammar_names<S: AsStrSlice>(dir: S) -> List<String> with (Stderr, Preopens, Exit) {
+    let entries = match list_dir(dir) {
+        Ok(list) => list,
+        Err(e) => {
+            eprintln(`expand: ${e}`);
+            exit(1);
+        },
+    };
+    let mut out: List<String> = [];
+    for let entry of entries {
+        if entry.type matches { _::File } && entry.name.ends_with(".g4") {
+            out.push(entry.name);
+        }
+    }
+    return out;
+}

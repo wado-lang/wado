@@ -16,7 +16,7 @@
 //! over every expression minting a value of that type — where it cannot.
 
 use super::analyze::{Slot, SlotTypes};
-use super::callgraph::{CallGraph, body_ids};
+use super::callgraph::{CallGraph, SpecializedCalls, body_ids};
 use super::funcset::FuncKeyMap;
 use super::place::{PlaceKind, PlaceRef, field_owner, unwrap_ref};
 use super::reach::ClosureCaptures;
@@ -91,6 +91,40 @@ impl RetentionFacts {
                 .get_mut(&source)
                 .is_some_and(|mine| extend(mine, types)),
         }
+    }
+
+    /// A `$call`'s facts as a call through its function value states them:
+    /// the receiver is the value called, not an argument, so each other
+    /// position moves down one, and one landing in the receiver lands in
+    /// storage the caller cannot name, so it escapes.
+    fn past_receiver(&self) -> RetentionFacts {
+        let shift = |positions: &IndexSet<u32>| -> IndexSet<u32> {
+            positions.iter().filter_map(|&p| p.checked_sub(1)).collect()
+        };
+        let mut out = RetentionFacts {
+            escapes: shift(&self.escapes),
+            escape_types: self
+                .escape_types
+                .iter()
+                .filter_map(|(&p, types)| Some((p.checked_sub(1)?, types.clone())))
+                .collect(),
+            into_result: shift(&self.into_result),
+            into_param: IndexMap::default(),
+            elements: shift(&self.elements),
+        };
+        for (&source, destinations) in &self.into_param {
+            let Some(source) = source.checked_sub(1) else {
+                continue;
+            };
+            if destinations.contains(&0) {
+                out.escape_as(source, None);
+            }
+            let named = shift(destinations);
+            if !named.is_empty() {
+                out.into_param.insert(source, named);
+            }
+        }
+        out
     }
 
     /// Whether any channel claims `source`.
@@ -694,6 +728,8 @@ mod oracle {
     use std::cell::Cell;
 
     use super::{CallGraph, CallRetention, Callees, FunctorParams, FunctorRows, RetentionFacts};
+    use crate::hashmap::IndexMap;
+    use crate::module_source::ModuleSource;
     use crate::tir::TirExpr;
 
     /// A callee's facts, in the current fixpoint iteration.
@@ -705,6 +741,9 @@ mod oracle {
         /// Which of each function's parameters take a function value, by the
         /// dense id the call graph uses.
         functor_params: &'a [FunctorParams],
+        /// The `$call` a call through each function-valued local of the body
+        /// being walked runs, where closure lifting specialized it.
+        specialized: Option<&'a IndexMap<u32, (ModuleSource, String)>>,
     }
 
     impl<'a> StoresOracle<'a> {
@@ -713,6 +752,7 @@ mod oracle {
             rows: &'a FunctorRows,
             call_graph: &'a CallGraph,
             functor_params: &'a [FunctorParams],
+            specialized: Option<&'a IndexMap<u32, (ModuleSource, String)>>,
         ) -> Self {
             Self {
                 calls,
@@ -720,7 +760,15 @@ mod oracle {
                 read_rows: Cell::new(false),
                 call_graph,
                 functor_params,
+                specialized,
             }
+        }
+
+        /// Facts for a call through `local`, of the body being walked, where
+        /// that is a specialized functor's `$call`: its own, past the receiver.
+        pub(super) fn through_specialized(&self, local: u32) -> Option<RetentionFacts> {
+            let (module, name) = self.specialized?.get(&local)?;
+            Some(self.calls.bodies.get(module, name)?.past_receiver())
         }
 
         pub(super) fn rows(&self) -> &FunctorRows {
@@ -803,6 +851,7 @@ pub fn compute_retention(
     call_graph: &CallGraph,
     builtins: &BuiltinDeclarations,
     closure_captures: &ClosureCaptures,
+    specialized: &SpecializedCalls,
 ) -> RetentionSummary {
     let type_table = project.type_table.borrow();
     let mut calls = CallRetention {
@@ -852,7 +901,13 @@ pub fn compute_retention(
                 .map(|p| (p.local_index, p.type_id))
                 .collect();
             let (found, from_body) = {
-                let oracle = StoresOracle::new(&calls, &rows, call_graph, &functor_params);
+                let oracle = StoresOracle::new(
+                    &calls,
+                    &rows,
+                    call_graph,
+                    &functor_params,
+                    specialized.in_function(&func.module_source, &func.name),
+                );
                 let walked = facts_of_body(
                     &positions,
                     &functor_params[id as usize],
@@ -1436,6 +1491,19 @@ struct StoresWalker<'a> {
 }
 
 impl StoresWalker<'_> {
+    /// What a call through `callee`, which may hold `callees`, keeps. One
+    /// through a parameter closure lifting specialized runs that functor's
+    /// `$call`, whichever values the walk resolved.
+    fn indirect_facts(&self, callees: &Callees, callee: &TirExpr, arity: usize) -> RetentionFacts {
+        if let Owner::Named(_) = self.owner
+            && let TirExprKind::Local { index, .. } = &callee.kind
+            && let Some(facts) = self.oracle.through_specialized(*index)
+        {
+            return facts;
+        }
+        self.oracle.indirect(callees, callee, arity)
+    }
+
     /// What the value of `expr` hands on, and how: a reference derived from a
     /// parameter, a value holding one, or both. See [`Carried`].
     fn carried(&self, expr: &TirExpr) -> Carried {
@@ -1500,9 +1568,7 @@ impl StoresWalker<'_> {
                 self.placed(expr.type_id, routed)
             }
             TirExprKind::IndirectCall { callee, args } => {
-                let facts = self
-                    .oracle
-                    .indirect(&self.reaching_of(callee), callee, args.len());
+                let facts = self.indirect_facts(&self.reaching_of(callee), callee, args.len());
                 let routed = self.carried_args(args.iter(), &facts.into_result, &facts);
                 self.placed(expr.type_id, routed)
             }
@@ -2032,7 +2098,7 @@ impl TirRefVisitor for StoresWalker<'_> {
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let callees = self.reaching_of(callee);
-                let facts = self.oracle.indirect(&callees, callee, args.len());
+                let facts = self.indirect_facts(&callees, callee, args.len());
                 let exprs: Vec<&TirExpr> = args.iter().collect();
                 self.call_hands_on(&exprs, &facts);
                 let landings = self.landings(&callees);
