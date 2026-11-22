@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795365984942,
+  "lastUpdate": 1795367541991,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81105,6 +81105,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b65db2f9a0d7f3c5b5af4050f83cdfb2d1b3eba6"
         },
         "date": 1795365983968,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f4547bf9ec951b3c7e73f687fc58b5a9438c9ff4",
+          "message": "Merge pull request #2723 from wado-lang/gfx/inference-context-literals\n\nfeat(elaborator): a literal is typed by its own expression, and a `_` inside a turbofish is a variable",
+          "timestamp": "2026-11-23T01:50:09+09:00",
+          "tree_id": "49b7274696db5b78d043c13716b0b8e4a010cdff",
+          "url": "https://github.com/wado-lang/wado/commit/f4547bf9ec951b3c7e73f687fc58b5a9438c9ff4"
+        },
+        "date": 1795367541346,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
