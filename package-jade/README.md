@@ -39,10 +39,10 @@ assertion keyword, format or attribute of its own:
 ### What a schema promises
 
 A derived schema describes the shape `core:json` writes, and the derived
-`Deserialize` reads that shape. So, apart from the cases
-[`TODO.md`](./TODO.md) lists, every value a type writes validates against its
-schema, and a document that validates decodes. D reads the same table backwards, so deriving the
-schema of a generated type gives back the keywords D read.
+`Deserialize` reads that shape. D reads the same table backwards. So, apart
+from the cases [`TODO.md`](./TODO.md) lists, every value a type writes
+validates against its schema, a document that validates decodes, and deriving
+the schema of a generated type gives back the keywords D read.
 
 ## The Schema Model
 
