@@ -6309,9 +6309,10 @@ impl TypeTable {
                 effects,
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| render(*p)).collect();
-                // A variable is a row still to be worked out: nothing the
-                // source wrote, so nothing to show.
-                let effect_names: Vec<String> = effects
+                // A variable shows as what it is solved to so far. One not
+                // solved yet is nothing the source wrote, so nothing to show.
+                let effect_names: Vec<String> =
+                    solve_row(effects, &self.early_effect_rows, &mut |_| {})
                     .iter()
                     .filter(|e| !e.is_var())
                     .map(|e| e.display_name(qualified))

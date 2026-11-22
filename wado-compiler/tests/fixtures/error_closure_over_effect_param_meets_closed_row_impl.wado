@@ -1,5 +1,6 @@
 // A closure literal calling a function value of an effect parameter carries
-// that parameter in its row, which meets an impl for any row.
+// that parameter in its row, so it meets no impl written for one row: the
+// body holds for every row `E` may be.
 
 use { println, Stdout } from "core:cli";
 
@@ -29,4 +30,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "pure\n"}
+{"compile_error": ":25:13: error: no method 'name' found on type 'fn() -> () with E'"}

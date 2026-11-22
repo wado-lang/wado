@@ -364,16 +364,14 @@ impl Lowering {
     }
 
     /// A row of named effects as the solver spells it, each variable read as
-    /// what `table` has it solved to ([`TypeTable::read_effect_row`]). One
-    /// holding an effect parameter, there or through a variable's solution, is
-    /// [`SolverType::AnyRow`]: it stands for whatever row meets it. A variable
+    /// what `table` has it solved to ([`TypeTable::read_effect_row`]). An
+    /// effect parameter here is the asking frame's own, rigid: a body generic
+    /// over it holds for every row, so it meets only an impl's row binder
+    /// ([`SolverType::AnyRow`]), never a row an impl writes out. A variable
     /// not solved yet selects nothing here: an impl is chosen as if it
     /// performed nothing.
     fn effect_row(&self, table: &TypeTable, effects: &[EffectRef]) -> SolverType {
         let row = table.read_effect_row(effects);
-        if row.iter().any(EffectRef::is_param) {
-            return SolverType::AnyRow;
-        }
         closed_row(
             row.iter()
                 .filter(|e| !e.is_var())

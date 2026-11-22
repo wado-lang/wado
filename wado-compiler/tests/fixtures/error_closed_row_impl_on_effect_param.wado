@@ -1,0 +1,31 @@
+// A body generic over an effect holds for every row its caller picks, so a
+// method on `fn() with E` reaches no impl written for one row: `E` may be
+// `Stdout` as well as nothing.
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+fn pick<effect E>(f: fn() with E) -> String {
+    return f.name();
+}
+
+export fn run() with Stdout {
+    println(pick(|| { println("x"); }));
+}
+
+__DATA__
+{"compile_error": ":23:12: error: no method 'name' found on type 'fn() -> () with E'"}
