@@ -39,12 +39,13 @@ it holds.
 ## Documents
 
 `README.md` is where a reader starts. It says what the package does and how to
-use it, and links `docs/design.md`, which holds the design. Every other
-document in `docs/` is named for its topic.
+use it, and links the document that holds the design: `docs/design.md`, or the
+WEP that proposed the package. Every other document in `docs/` is named for its
+topic.
 
 A package's documents are its own record. Once the WEP that proposed the
-package is complete, they hold its design and its open work, and none of them
-links the WEP.
+package is complete, nothing edits the WEP, and a design decided after it is
+written in the package's documents.
 
 ## `AGENTS.md`
 
