@@ -24,6 +24,8 @@ cached under `~/.cache/loam`:
   pins. `mise run update-llama-cpp` pins the newest.
 - `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp: F16,
   and Q4_0 and Q4_1 for the `q4` table.
+- `gpt_oss_20b/fetch_gguf.sh`: gpt-oss-20b as ggml-org's MXFP4 GGUF, for
+  llama.cpp.
 
 The WebGPU arm of onnxruntime runs onnxruntime-node, which
 `mise run loam-oracle-deps` installs as `package-lock.json` pins it. Without
@@ -36,6 +38,7 @@ cd package-loam/benchmark
 mise run gpt2-124m     # GPT-2 (124M) greedy generation
 mise run gemma3-270m   # Gemma 3 (270M) greedy generation
 mise run gemma3-270m-quantized   # its q4 and q4f16 exports
+mise run gpt-oss-20b   # gpt-oss-20b greedy generation
 mise run all
 ```
 
@@ -115,7 +118,7 @@ Google ships no F16 GGUF and ggml-org only Q8_0, so it is unsloth's conversion.
 | --------------------------- | --------------------------------------------------- |
 | onnxruntime CUDA            | `gemma3_270m/onnxruntime.cpp`                       |
 | onnxruntime WebGPU          | `onnxruntime_webgpu.mjs`, Node                      |
-| llama.cpp Vulkan            | `gemma3_270m/llama_cpp.cpp`                         |
+| llama.cpp Vulkan            | `llama_cpp.cpp`                                     |
 | Loam `WebGpuBackend`        | `gemma3_270m_webgpu.wado`, `wado run-webgpu`        |
 | Loam `WebGpuBackend` decode | `gemma3_270m_webgpu.wado decode`, `wado run-webgpu` |
 | Loam `Cpu`                  | `gemma3_270m.wado`, `wado run --collector drc`      |
@@ -147,7 +150,7 @@ than the exports, so its rows are for reference:
 | Arm                         | Program                                                |
 | --------------------------- | ------------------------------------------------------ |
 | onnxruntime WebGPU          | `onnxruntime_webgpu.mjs`, `decoderQ4` / `decoderQ4f16` |
-| llama.cpp Vulkan            | `gemma3_270m/llama_cpp.cpp`, `Q4_0` / `Q4_1`           |
+| llama.cpp Vulkan            | `llama_cpp.cpp`, `Q4_0` / `Q4_1`                       |
 | Loam `WebGpuBackend` decode | `gemma3_270m/q4_webgpu.wado`, `q4f16_webgpu.wado`      |
 
 Loam picks the tokens `generate_q4.json` and `generate_q4f16.json` record.
@@ -162,3 +165,29 @@ both exports.
 | **Loam** `WebGpuBackend` decode `q4f16` | 338.58 tokens/s |  94.511 ms | 1.44x   |
 | onnxruntime WebGPU `q4`                 | 174.58 tokens/s | 183.299 ms | 2.79x   |
 | onnxruntime WebGPU `q4f16`              | 139.89 tokens/s | 228.754 ms | 3.49x   |
+
+## gpt-oss-20b
+
+`mise run gpt-oss-20b` runs the model on the RTX 4060 Ti, whose 8 GB the
+model's 12 GB outgrow. onnxruntime holds every weight on the device, so
+llama.cpp is the arm to reach. It keeps the experts of the first layers on the
+CPU, as its `--n-cpu-moe` does, and the rest on the device; with none on the
+CPU, the device runs out of memory. Its release reads ggml-org's MXFP4 GGUF,
+the precision OpenAI released the experts in. Loam reads the `q4f16` export
+`example/gpt-oss-20b/fetch.sh` downloads, holds 5 GB of its experts on the
+device, and writes the rest there as a token picks them.
+
+| Arm                  | Program                                                        |
+| -------------------- | -------------------------------------------------------------- |
+| llama.cpp Vulkan     | `llama_cpp.cpp`, the experts of 10, 14 or 24 layers on the CPU |
+| Loam `WebGpuBackend` | `gpt_oss_20b/gpt_oss_20b_webgpu.wado`, `wado run-webgpu`       |
+
+The two read other weights, and pick other tokens from the first on. Loam picks
+the first 8 that `example/gpt-oss-20b/generate.json` records.
+
+| Implementation                         |     Throughput |      ms/iter | vs best |
+| -------------------------------------- | -------------: | -----------: | ------- |
+| llama.cpp Vulkan, 10 layers on the CPU | 40.38 tokens/s |   792.421 ms | 1.00x   |
+| llama.cpp Vulkan, 14 layers on the CPU | 33.31 tokens/s |   960.788 ms | 1.21x   |
+| llama.cpp Vulkan, 24 layers on the CPU | 22.02 tokens/s |  1453.414 ms | 1.83x   |
+| **Loam** `WebGpuBackend`               |  1.57 tokens/s | 20359.268 ms | 25.72x  |

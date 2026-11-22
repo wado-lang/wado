@@ -118,6 +118,21 @@ impl Packed {
     }
 }
 
+/// The words a slot of `elements` of `kind` takes in a pool, and how they
+/// pack: bytes four to a word, halves two where they fill whole words, and any
+/// other float one.
+internal fn slot_layout(kind: ElementKind, elements: i32) -> [i32, Option<Packed>] {
+    return match kind {
+        _::U8 => [
+            elements.div_ceil(4),
+            Option::Some(Packed::U8),
+        ],
+        _::F16 && elements % 2 == 0 => [elements / 2, Option::Some(Packed::F16)],
+        _::BF16 && elements % 2 == 0 => [elements / 2, Option::Some(Packed::BF16)],
+        _ => [elements, null],
+    };
+}
+
 /// A tensor where the WebGPU backend holds it.
 pub variant Placed<E, Axes> {
     Host(Tensor<E, Axes>),
@@ -1262,18 +1277,32 @@ impl WebGpuBackend {
             for let i of at..<end {
                 words[i - at] = word(i);
             }
-            let bytes = words.cast::<u8>();
-            if self.queue
-                .write_buffer_with_copy(
-                    self.buffer(slot),
-                    (at * 4) as u64 as GpuSize64,
-                    &bytes,
-                    null,
-                    null,
-                )
-                .is_err() {
-                panic("loam: a host tensor did not write to the device");
-            }
+            self.written_bytes(slot, at * 4, &words.cast::<u8>());
+        }
+    }
+
+    /// Writes `bytes` to the buffer at `slot` from its byte `from`, as they lie:
+    /// four to a word, little-endian, the last word padded with zeros. The
+    /// host copies the whole of what it is lent, so a write past `WRITE_BYTES`
+    /// is lent a piece at a time.
+    internal fn write_linear(&self, slot: i32, from: i32, bytes: &LinearArray<u8>) with (GpuQueue, GpuBuffer)
+        contract from % 4 == 0
+    {
+        if bytes.len() <= WRITE_BYTES && bytes.len() % 4 == 0 {
+            self.written_bytes(slot, from, bytes);
+            return;
+        }
+        for let mut at = 0; at < bytes.len(); at += WRITE_BYTES {
+            let size = i32::min(WRITE_BYTES, bytes.len() - at);
+            let mut piece = LinearArray::<u8>::filled(4 * size.div_ceil(4), 0);
+            piece.copy_from(0, bytes, at, size);
+            self.written_bytes(slot, from + at, &piece);
+        }
+    }
+
+    fn written_bytes(&self, slot: i32, from: i32, bytes: &LinearArray<u8>) with (GpuQueue, GpuBuffer) {
+        if self.queue.write_buffer_with_copy(self.buffer(slot), from as u64 as GpuSize64, bytes, null, null).is_err() {
+            panic("loam: a host tensor did not write to the device");
         }
     }
 
@@ -1340,7 +1369,11 @@ impl WebGpuBackend {
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
         if E::kind() matches { _::U8 } {
             let bytes = self.reserved_bytes(t.extents, kept);
-            self.write_bytes(&bytes, |i| t.data[i].cast_to::<i64>() as u32);
+            let mut linear = LinearArray::<u8>::filled(t.data.len(), 0);
+            for let i of 0..<t.data.len() {
+                linear[i] = t.data[i].cast_to::<i64>() as u8;
+            }
+            self.write_linear(bytes.slot, 0, &linear);
             return bytes;
         }
         let slot = self.written(t.data.len(), |i| t.data[i].cast_to::<f32>().to_bits(), kept);
@@ -1348,7 +1381,7 @@ impl WebGpuBackend {
     }
 
     /// A new buffer for a tensor of bytes of `extents`, four to a word, for a
-    /// `write_bytes`.
+    /// `write_linear`.
     internal fn reserved_bytes(
         &mut self,
         extents: List<i32>,
@@ -1359,18 +1392,6 @@ impl WebGpuBackend {
             ..contiguous(slot, 0, extents),
             packed: Option::Some(Packed::U8),
         };
-    }
-
-    /// Writes the bytes `byte(i)` of `t`, little-endian within each word.
-    internal fn write_bytes(&self, t: &DeviceTensor, byte: fn(i32) -> u32) with (GpuQueue, GpuBuffer) {
-        let count = element_count(&t.extents);
-        self.write(t.slot, 0, count.div_ceil(4), |w| {
-            let mut word: u32 = 0;
-            for let i of 4 * w..<i32::min(4 * w + 4, count) {
-                word |= byte(i) << (i % 4 * 8) as u32;
-            }
-            return word;
-        });
     }
 
     /// A `[k, n]` matrix of `parts`, `at(parts, r, c)` its element at row `r`
@@ -1421,8 +1442,8 @@ impl WebGpuBackend {
         };
     }
 
-    /// A buffer kept for a pool of `kind` and `extents`, as `kept_plain` lays
-    /// a weight: four bytes to a word, or a float to a word.
+    /// A buffer kept for a pool of `kind` and `extents`, laid as
+    /// `slot_layout` lays a slot.
     internal fn pooled(
         &mut self,
         kind: ElementKind,
@@ -1430,39 +1451,41 @@ impl WebGpuBackend {
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer)
         contract kind matches { _::U8 | _::F32 | _::F16 | _::BF16 }
     {
-        if kind matches { _::U8 } {
-            return self.reserved_bytes(extents, true);
-        }
-        return contiguous(self.reserved(element_count(&extents), true), 0, extents);
+        let [words, packed] = slot_layout(kind, element_count(&extents) / extents[0]);
+        return DeviceTensor { ..contiguous(self.reserved(words * extents[0], true), 0, extents), packed };
     }
 
     /// Writes `row` over the slot `slot` of the pool `pool` laid as `pooled`
-    /// lays one.
+    /// lays one: packed elements as the checkpoint stores them, any other as
+    /// the f32 holding it.
     internal fn written_slot(&self, pool: &DeviceTensor, slot: i32, row: &HostWeight) with (GpuQueue, GpuBuffer) {
         let width = row.count();
         assert width * pool.extents[0] == element_count(&pool.extents), "a row fills one slot of the pool";
         let start = slot * width;
-        if row.kind matches { _::U8 } {
-            assert width % 4 == 0, "a slot of bytes fills whole words";
-            let bytes = row.bytes();
-            self.write(
-                pool.slot,
-                start / 4,
-                (start + width) / 4,
-                |w| {
-                    let at = 4 * w - start;
-                    return bytes[at] as u32 | bytes[at + 1] as u32 << 8 | bytes[at + 2] as u32 << 16 | bytes[at + 3] as u32 << 24;
-                },
-            );
-            return;
+        match pool.packed {
+            Some(_::U8) => {
+                assert width % 4 == 0, "a slot of bytes fills whole words";
+                self.write_linear(pool.slot, start, row.bytes());
+            },
+            Some(_::F16 | _::BF16) => self.write_linear(pool.slot, 2 * start, row.bytes()),
+            null => self.write_values(pool.slot, start, row),
         }
-        self.write(pool.slot, start, start + width, |i| row.value(i - start).to_bits());
+    }
+
+    /// Writes each element of `row` as the f32 holding it, from the word
+    /// `from` of the buffer at `slot`.
+    fn write_values(&self, slot: i32, from: i32, row: &HostWeight) with (GpuQueue, GpuBuffer) {
+        let per_write = WRITE_BYTES / 4;
+        for let mut at = 0; at < row.count(); at += per_write {
+            let end = i32::min(at + per_write, row.count());
+            self.written_bytes(slot, 4 * (from + at), &row.f32_bits(at, end));
+        }
     }
 
     /// `w`, whose every element an f32 holds, kept in a buffer of its own.
     internal fn kept_values(&mut self, w: &HostWeight) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
         let slot = self.reserved(w.count(), true);
-        self.write(slot, 0, w.count(), |i| w.value(i).to_bits());
+        self.write_values(slot, 0, w);
         return contiguous(slot, 0, w.extents);
     }
 

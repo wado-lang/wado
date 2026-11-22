@@ -1,11 +1,13 @@
-// Gemma 3 (270M) on llama.cpp's own C API, against its release as shipped
-// (../fetch_llama_cpp.sh): the program generate.wado times, from the prompt ids
+// A model on llama.cpp's own C API, against its release as shipped
+// (fetch_llama_cpp.sh): the program generate.wado times, from the prompt ids
 // the example's generate.json records. Each run clears the attention cache,
 // reads the prompt in one batch, then each new token alone against the cache.
+// The experts of the first <cpu experts> layers stay on the CPU, as llama.cpp's
+// `--n-cpu-moe` keeps them.
 //
-//   llama_cpp <model.gguf> <backends dir> <gpu layers> <threads>
+//   llama_cpp <model.gguf> <backends dir> <generate.json> <gpu layers> <threads> <cpu experts>
 //
-// `mise run gemma3-270m` builds and runs it.
+// `mise run gemma3-270m` and `mise run gpt-oss-20b` build and run it.
 
 #include <ggml-backend.h>
 #include <llama.h>
@@ -13,6 +15,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 #include "harness.hpp"
@@ -56,8 +59,10 @@ static void quiet(ggml_log_level level, const char* text, void*) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 5) {
-        std::fprintf(stderr, "usage: %s <model.gguf> <backends dir> <gpu layers> <threads>\n", argv[0]);
+    if (argc != 7) {
+        std::fprintf(stderr,
+                     "usage: %s <model.gguf> <backends dir> <generate.json> <gpu layers> <threads> <cpu experts>\n",
+                     argv[0]);
         return 1;
     }
     llama_log_set(quiet, nullptr);
@@ -65,18 +70,29 @@ int main(int argc, char** argv) {
     llama_backend_init();
 
     llama_model_params model_params = llama_model_default_params();
-    model_params.n_gpu_layers = std::atoi(argv[3]);
+    model_params.n_gpu_layers = std::atoi(argv[4]);
+    // GGUF names a layer's experts `blk.<layer>.ffn_<part>_exps.<weight or bias>`.
+    std::vector<std::string> patterns;
+    for (int layer = 0; layer < std::atoi(argv[6]); layer++) {
+        patterns.push_back("blk\\." + std::to_string(layer) + "\\.ffn_[a-z]+_exps");
+    }
+    std::vector<llama_model_tensor_buft_override> overrides;
+    for (const std::string& pattern : patterns) {
+        overrides.push_back({pattern.c_str(), ggml_backend_cpu_buffer_type()});
+    }
+    overrides.push_back({nullptr, nullptr});
+    model_params.tensor_buft_overrides = overrides.data();
     llama_model* model = llama_model_load_from_file(argv[1], model_params);
     if (model == nullptr) {
         std::fprintf(stderr, "cannot load %s\n", argv[1]);
         return 1;
     }
-    const std::vector<int64_t> oracle = harness::prompt_ids("../example/gemma3-270m/generate.json");
+    const std::vector<int64_t> oracle = harness::prompt_ids(argv[3]);
     const std::vector<llama_token> ids(oracle.begin(), oracle.end());
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = static_cast<uint32_t>(ids.size() + harness::STEPS);
     ctx_params.n_batch = static_cast<uint32_t>(ids.size());
-    ctx_params.n_threads = std::atoi(argv[4]);
+    ctx_params.n_threads = std::atoi(argv[5]);
     ctx_params.n_threads_batch = ctx_params.n_threads;
     llama_context* ctx = llama_init_from_model(model, ctx_params);
     if (ctx == nullptr) {

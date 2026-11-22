@@ -183,15 +183,51 @@ pub fn read_linear<S: AsStrSlice>(path: S) -> Result<LinearArray<u8>, FsError> w
 pub fn read_linear_range<S: AsStrSlice>(path: S, start: u64, len: i32) -> Result<LinearArray<u8>, FsError> with Preopens
     contract len >= 0
 {
-    let file = open_regular(path)?;
-    let [stream, done] = file.read_via_stream(start as Filesize);
-    let array = LinearArray::<u8>::read_stream_prefix(&stream, len);
-    stream.drop();
-    finish(path, done)?;
-    if array.len() < len {
-        return Result::Err(FsError { path: path.to_string(), kind: FsErrorKind::PastEnd });
+    let mut read = read_linear_ranges(&[
+        FileRange { path: path.to_string(), start, len },
+    ])?;
+    return Result::Ok(read.pop().unwrap());
+}
+
+/// `len` bytes of the regular file at `path` from byte `start` on.
+pub struct FileRange {
+    pub path: String,
+    pub start: u64,
+    pub len: i32,
+}
+
+/// The bytes of each of `ranges`, as [`read_linear_range`] reads one, but
+/// read at once: the host fills them side by side, which a host reading a
+/// file stream a piece at a time makes several times faster than one after
+/// another. A range whose file does not open is the error before any is read;
+/// past that, the first range that fails is.
+pub fn read_linear_ranges(ranges: &List<FileRange>) -> Result<List<LinearArray<u8>>, FsError> with Preopens
+    contract ranges.into_iter().all(|r| r.len >= 0)
+{
+    let mut streams: List<Stream<u8>> = [];
+    let mut ends: List<Future<Result<(), ErrorCode>>> = [];
+    for let r of ranges {
+        let [stream, done] = open_regular(&r.path)?.read_via_stream(r.start as Filesize);
+        streams.push(stream);
+        ends.push(done);
     }
-    return Result::Ok(array);
+    let mut reading: List<&Stream<u8>> = [];
+    for let i of 0..<streams.len() {
+        reading.push(&streams[i]);
+    }
+    let arrays = LinearArray::read_streams_prefix(&reading, &ranges.into_iter().map(|r| r.len).collect());
+    for let stream of streams {
+        stream.drop();
+    }
+    let mut at = 0;
+    for let done of ends {
+        finish(&ranges[at].path, done)?;
+        if arrays[at].len() < ranges[at].len {
+            return Result::Err(FsError { path: ranges[at].path, kind: FsErrorKind::PastEnd });
+        }
+        at += 1;
+    }
+    return Result::Ok(arrays);
 }
 
 /// The read stream of the regular file at `path`, the future it reports its

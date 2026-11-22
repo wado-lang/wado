@@ -55,7 +55,7 @@ run = "wado run update_llama_cpp.wado"
 [tasks.build-llama-cpp]
 description = "Build the llama.cpp arm, where the host has its release"
 hide = true
-sources = ["fetch_llama_cpp.sh", "llama_cpp.lock", "harness.hpp", "gemma3_270m/llama_cpp.cpp"]
+sources = ["fetch_llama_cpp.sh", "llama_cpp.lock", "harness.hpp", "llama_cpp.cpp"]
 outputs = ["build/llama_cpp"]
 run = """
 #!/usr/bin/env bash
@@ -66,7 +66,7 @@ if [ -z "$llama" ]; then
     exit 0
 fi
 mkdir -p build
-c++ -O2 -std=c++17 -I. -I"$llama/include" gemma3_270m/llama_cpp.cpp \
+c++ -O2 -std=c++17 -I. -I"$llama/include" llama_cpp.cpp \
     -L"$llama" -lllama -lggml -lggml-base -Wl,-rpath,"$llama" -o build/llama_cpp
 """
 
@@ -119,7 +119,7 @@ fi
 
 ./onnxruntime_webgpu.sh $model
 
-gemma3_270m/llama_cpp.sh F16
+./llama_cpp.sh F16 $model/generate.json 0 gemma3_270m/fetch_gguf.sh F16
 
 echo "=== Loam (WebGPU) ==="
 WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado
@@ -153,8 +153,31 @@ for export in q4 q4f16; do
     WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/${export}_webgpu.wado
 done
 
-gemma3_270m/llama_cpp.sh Q4_0
-gemma3_270m/llama_cpp.sh Q4_1
+for precision in Q4_0 Q4_1; do
+    ./llama_cpp.sh $precision $model/generate.json 0 gemma3_270m/fetch_gguf.sh $precision
+done
+"""
+
+[tasks.gpt-oss-20b]
+description = "Run gpt-oss-20b greedy generation (Loam WebGPU vs llama.cpp, its experts of some layers on the CPU)"
+depends = ["build", "build-llama-cpp"]
+run = """
+#!/usr/bin/env bash
+set -e
+model=../example/gpt-oss-20b
+if [ ! -f $model/build/model_q4f16.onnx_data ]; then
+    echo "SKIP: run $model/fetch.sh first"
+    exit 0
+fi
+wado_exe="${WADO_BIN:-$(cd ../.. && pwd)/target/release/wado}"
+
+# Of the layers' experts on the CPU tried, 10 ran fastest on the RTX 4060 Ti.
+for layers in 10 14 24; do
+    ./llama_cpp.sh "MXFP4, $layers layers' experts on the CPU" $model/generate.json $layers gpt_oss_20b/fetch_gguf.sh
+done
+
+echo "=== Loam (WebGPU) ==="
+WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gpt_oss_20b/gpt_oss_20b_webgpu.wado
 """
 
 [tasks.all]
@@ -165,4 +188,5 @@ set -e
 MISE_JOBS=1 mise run gpt2-124m
 MISE_JOBS=1 mise run gemma3-270m
 MISE_JOBS=1 mise run gemma3-270m-quantized
+MISE_JOBS=1 mise run gpt-oss-20b
 """

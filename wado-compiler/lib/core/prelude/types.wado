@@ -535,7 +535,13 @@ impl<affine T> Waitable for ReadCopy<T> {
         let Some([_, started]) = &self.copy else {
             unreachable();
         };
-        return started.buffer.wait_on();
+        return started.wait_on();
+    }
+}
+
+impl<affine T> Waitable for StartedRead<T> {
+    fn wait_on(&self) -> WaitOn {
+        return self.buffer.wait_on();
     }
 }
 

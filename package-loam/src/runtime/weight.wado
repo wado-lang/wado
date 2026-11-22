@@ -143,6 +143,23 @@ impl HostWeight {
         };
     }
 
+    /// Elements `start..<end` as the bits of the f32s `value` gives, four
+    /// bytes each, little-endian.
+    pub fn f32_bits(&self, start: i32, end: i32) -> LinearArray<u8>
+        contract 0 <= start <= end <= self.count(), !self.kind matches { _::I64 | _::I32 }
+    {
+        let count = end - start;
+        let mut words = LinearArray::<u8>::filled(4 * count, 0);
+        if self.kind matches { _::F32 } {
+            words.copy_from(0, &self.bytes, 4 * start, 4 * count);
+            return words;
+        }
+        for let i of 0..<count {
+            words.store_at::<u32>(4 * i, self.value(start + i).to_bits());
+        }
+        return words;
+    }
+
     /// The elements, decoded as `Cpu` holds a value.
     pub fn decoded(&self) -> Any<Cpu> {
         return match self.kind {

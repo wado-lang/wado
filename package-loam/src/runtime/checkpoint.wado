@@ -1,7 +1,7 @@
 use json from "core:json";
 use { HashMap } from "core:collections";
 use fs from "core:fs";
-use { FsError, Preopens } from "core:fs";
+use { FileRange, FsError, Preopens } from "core:fs";
 use { LinearArray } from "core:linear";
 use { Deserialize, DeserializeError, Deserializer, IgnoredAny, report_duplicate_field } from "core:serde";
 use { Element } from "./tensor.wado";
@@ -16,6 +16,15 @@ pub affine trait WeightSource with _ {
         contract 0 <= start <= end;
     /// How many bytes `file` holds.
     fn len(&self, file: &String) -> Result<i64, LoadError>;
+    /// The bytes of each of `ranges`, `[file, start, end]`, as `read` reads
+    /// one. A source that reads them faster at once does.
+    fn read_many(&self, ranges: &List<[String, i32, i32]>) -> Result<List<LinearArray<u8>>, LoadError> {
+        let mut read: List<LinearArray<u8>> = [];
+        for let [file, start, end] of ranges {
+            read.push(self.read(file, *start, *end)?);
+        }
+        return Result::Ok(read);
+    }
 }
 
 /// The files of a directory, each read a range at a time.
@@ -30,6 +39,14 @@ impl WeightSource for FileSource {
 
     fn len(&self, file: &String) -> Result<i64, LoadError> with Preopens {
         return fs::metadata(fs::join(&self.dir, file)).map(|meta| meta.size as i64).map_err(failed);
+    }
+
+    fn read_many(&self, ranges: &List<[String, i32, i32]>) -> Result<List<LinearArray<u8>>, LoadError> with Preopens {
+        let files: List<FileRange> = ranges
+            .into_iter()
+            .map(|r| FileRange { path: fs::join(&self.dir, &r.0), start: r.1 as u64, len: r.2 - r.1 })
+            .collect();
+        return fs::read_linear_ranges(&files).map_err(failed);
     }
 }
 
