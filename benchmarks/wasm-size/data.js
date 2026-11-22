@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795368388625,
+  "lastUpdate": 1795378653502,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81213,6 +81213,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 353496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0103a9b860a2a5a6ba9105355e457a49afc7d1a4",
+          "message": "Merge pull request #2729 from wado-lang/gfx/value-copy-names-storage\n\nfix(value_copy): a write through a reference a call or an `if` returns reaches the referent",
+          "timestamp": "2026-11-23T05:03:15+09:00",
+          "tree_id": "864bb3c9d921c371ad848a90d2661f3fcc3d1c71",
+          "url": "https://github.com/wado-lang/wado/commit/0103a9b860a2a5a6ba9105355e457a49afc7d1a4"
+        },
+        "date": 1795378653151,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
             "unit": "bytes"
           }
         ]
