@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795334050434,
+  "lastUpdate": 1795338436886,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80929,6 +80929,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ee69701c4b77f19d713d0be3136bf8fe40b65646"
         },
         "date": 1795334049621,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bdb6f424f5ebb772de89227d5ea0441b6382246f",
+          "message": "Merge pull request #2722 from wado-lang/ccr-25ccfb89-atykhb\n\nchore(packages): one standard layout for every package",
+          "timestamp": "2026-11-22T17:53:29+09:00",
+          "tree_id": "d1aa35b8c475ff99b47c2702f8f14999166b0c60",
+          "url": "https://github.com/wado-lang/wado/commit/bdb6f424f5ebb772de89227d5ea0441b6382246f"
+        },
+        "date": 1795338435965,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
