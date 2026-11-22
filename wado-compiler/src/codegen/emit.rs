@@ -7,8 +7,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirMemoryRef, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef, WirTypeId,
-    WirVariantType,
+    WirInstr, WirMemoryRef, WirPackage, WirScalarKind, WirStructType, WirType, WirTypeDef,
+    WirTypeId, WirVariantType,
 };
 
 use crate::codegen_flags::CodegenFlags;
@@ -1780,7 +1780,9 @@ impl<'a> WirEmitter<'a> {
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I32Load(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Load8U {
                 memory,
@@ -1789,7 +1791,9 @@ impl<'a> WirEmitter<'a> {
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load8U(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I32Load8U(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Load8S {
                 memory,
@@ -1798,7 +1802,9 @@ impl<'a> WirEmitter<'a> {
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load8S(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I32Load8S(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Load16U {
                 memory,
@@ -1807,7 +1813,9 @@ impl<'a> WirEmitter<'a> {
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load16U(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I32Load16U(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Load16S {
                 memory,
@@ -1816,7 +1824,9 @@ impl<'a> WirEmitter<'a> {
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load16S(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I32Load16S(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Store {
                 memory,
@@ -1827,7 +1837,9 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I32Store(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Store8 {
                 memory,
@@ -1838,7 +1850,9 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store8(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I32Store8(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I32Store16 {
                 memory,
@@ -1849,7 +1863,9 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store16(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I32Store16(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I64Load {
                 memory,
@@ -1858,7 +1874,9 @@ impl<'a> WirEmitter<'a> {
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I64Load(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I64Load(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::I64Store {
                 memory,
@@ -1869,7 +1887,9 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I64Store(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::I64Store(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::V128Load {
                 memory,
@@ -1878,7 +1898,9 @@ impl<'a> WirEmitter<'a> {
                 addr,
             } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::V128Load(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::V128Load(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::V128Store {
                 memory,
@@ -1889,7 +1911,9 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::V128Store(self.mem_arg(*memory, *offset, *align)));
+                f.instruction(&Instruction::V128Store(
+                    self.mem_arg(*memory, *offset, *align),
+                ));
             }
             WirInstr::MemorySize { memory } => {
                 f.instruction(&Instruction::MemorySize(self.memory_index(*memory)));

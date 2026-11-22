@@ -437,8 +437,11 @@ fn wide_pages_after_round(largest: i64) -> i64 {
 test "a dropped wide array's bytes are taken again" {
     let pages = wide_pages_after_round(40);
     assert wide_pages_after_round(40) == pages;
-    let kept = [WideArray::<u8>::filled(100000, 1), WideArray::<u8>::filled(5, 2), WideArray::<u8>::filled(70000, 3)];
-    let _ = kept;
+    let _held = [
+        WideArray::<u8>::filled(100000, 1),
+        WideArray::<u8>::filled(5, 2),
+        WideArray::<u8>::filled(70000, 3),
+    ];
     assert wide_pages_after_round(40) <= pages + 3;
 }
 

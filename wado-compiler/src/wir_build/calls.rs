@@ -92,7 +92,12 @@ fn memory_load(memory: WirMemoryRef, prim: PrimitiveType, addr: Box<WirInstr>) -
 }
 
 /// The store [`memory_load`] reads back.
-fn memory_store(memory: WirMemoryRef, prim: PrimitiveType, addr: Box<WirInstr>, value: Box<WirInstr>) -> WirInstr {
+fn memory_store(
+    memory: WirMemoryRef,
+    prim: PrimitiveType,
+    addr: Box<WirInstr>,
+    value: Box<WirInstr>,
+) -> WirInstr {
     use PrimitiveType as P;
     match prim {
         P::I8 | P::U8 => WirInstr::I32Store8 {
@@ -116,7 +121,12 @@ fn memory_store(memory: WirMemoryRef, prim: PrimitiveType, addr: Box<WirInstr>, 
             addr,
             value,
         },
-        P::F32 => memory_store(memory, P::I32, addr, Box::new(WirInstr::I32ReinterpretF32(value))),
+        P::F32 => memory_store(
+            memory,
+            P::I32,
+            addr,
+            Box::new(WirInstr::I32ReinterpretF32(value)),
+        ),
         P::I64 | P::U64 => WirInstr::I64Store {
             memory,
             offset: 0,
@@ -124,7 +134,12 @@ fn memory_store(memory: WirMemoryRef, prim: PrimitiveType, addr: Box<WirInstr>, 
             addr,
             value,
         },
-        P::F64 => memory_store(memory, P::I64, addr, Box::new(WirInstr::I64ReinterpretF64(value))),
+        P::F64 => memory_store(
+            memory,
+            P::I64,
+            addr,
+            Box::new(WirInstr::I64ReinterpretF64(value)),
+        ),
         P::V128 => WirInstr::V128Store {
             memory,
             offset: 0,
@@ -596,21 +611,25 @@ impl FunctionTranslator<'_, '_> {
                 i32::try_from(width).expect("a primitive is a few bytes wide"),
             ));
         }
-        let access = match builtin_name {
-            "i32_load" | "i32_store" => Some((WirMemoryRef::Main, PrimitiveType::I32)),
-            "i32_load8_u" | "i32_store8" => Some((WirMemoryRef::Main, PrimitiveType::U8)),
-            "i32_load8_s" => Some((WirMemoryRef::Main, PrimitiveType::I8)),
-            "i32_load16_u" | "i32_store16" => Some((WirMemoryRef::Main, PrimitiveType::U16)),
-            "i32_load16_s" => Some((WirMemoryRef::Main, PrimitiveType::I16)),
-            "i64_load" | "i64_store" => Some((WirMemoryRef::Main, PrimitiveType::I64)),
-            "f32_load" | "f32_store" => Some((WirMemoryRef::Main, PrimitiveType::F32)),
-            "f64_load" | "f64_store" => Some((WirMemoryRef::Main, PrimitiveType::F64)),
-            "v128_load" | "v128_store" => Some((WirMemoryRef::Main, PrimitiveType::V128)),
-            "load" | "store" => Some((WirMemoryRef::Main, self.any_bits_primitive(type_args))),
-            "wide_load" | "wide_store" => Some((WirMemoryRef::Wide, self.any_bits_primitive(type_args))),
+        // `wide_` names an operation of the wide memory.
+        let (memory, operation) = match builtin_name.strip_prefix("wide_") {
+            Some(operation) => (WirMemoryRef::Wide, operation),
+            None => (WirMemoryRef::Main, builtin_name),
+        };
+        let access = match operation {
+            "i32_load" | "i32_store" => Some(PrimitiveType::I32),
+            "i32_load8_u" | "i32_store8" => Some(PrimitiveType::U8),
+            "i32_load8_s" => Some(PrimitiveType::I8),
+            "i32_load16_u" | "i32_store16" => Some(PrimitiveType::U16),
+            "i32_load16_s" => Some(PrimitiveType::I16),
+            "i64_load" | "i64_store" => Some(PrimitiveType::I64),
+            "f32_load" | "f32_store" => Some(PrimitiveType::F32),
+            "f64_load" | "f64_store" => Some(PrimitiveType::F64),
+            "v128_load" | "v128_store" => Some(PrimitiveType::V128),
+            "load" | "store" => Some(self.any_bits_primitive(type_args)),
             _ => None,
         };
-        if let Some((memory, prim)) = access {
+        if let Some(prim) = access {
             let addr = Box::new(self.translate_operand(args[0].expr));
             return Some(if let Some(value) = args.get(1) {
                 let value = Box::new(self.translate_operand(value.expr));
@@ -820,18 +839,9 @@ impl FunctionTranslator<'_, '_> {
                 self.operand_const_wide_int(args[0].expr)
                     .expect("a v128 bit pattern must be an i128 / u128 literal"),
             )),
-            "memory_size" => Some(WirInstr::MemorySize {
-                memory: WirMemoryRef::Main,
-            }),
-            "wide_memory_size" => Some(WirInstr::MemorySize {
-                memory: WirMemoryRef::Wide,
-            }),
+            "memory_size" | "wide_memory_size" => Some(WirInstr::MemorySize { memory }),
             "memory_grow" | "wide_memory_grow" => Some(WirInstr::MemoryGrow {
-                memory: if builtin_name == "memory_grow" {
-                    WirMemoryRef::Main
-                } else {
-                    WirMemoryRef::Wide
-                },
+                memory,
                 delta: Box::new(self.translate_operand(args[0].expr)),
             }),
             "heap_base" => Some(WirInstr::I32Const(self.ctx.package.heap_base())),
@@ -840,11 +850,7 @@ impl FunctionTranslator<'_, '_> {
                 let value = self.translate_operand(args[1].expr);
                 let len = self.translate_operand(args[2].expr);
                 Some(WirInstr::MemoryFill {
-                    memory: if builtin_name == "memory_fill" {
-                        WirMemoryRef::Main
-                    } else {
-                        WirMemoryRef::Wide
-                    },
+                    memory,
                     dst: Box::new(dst),
                     value: Box::new(value),
                     len: Box::new(len),

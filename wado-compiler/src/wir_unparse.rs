@@ -1811,27 +1811,42 @@ impl<'a> WirUnparser<'a> {
                 self.write_args(&[dst, src, len]);
             }
             WirInstr::I32Load {
-                memory, offset, addr, ..
+                memory,
+                offset,
+                addr,
+                ..
             } => {
                 self.write_mem_load(*memory, "load_i32", *offset, addr);
             }
             WirInstr::I32Load8U {
-                memory, offset, addr, ..
+                memory,
+                offset,
+                addr,
+                ..
             } => {
                 self.write_mem_load(*memory, "load_u8", *offset, addr);
             }
             WirInstr::I32Load8S {
-                memory, offset, addr, ..
+                memory,
+                offset,
+                addr,
+                ..
             } => {
                 self.write_mem_load(*memory, "load_i8", *offset, addr);
             }
             WirInstr::I32Load16U {
-                memory, offset, addr, ..
+                memory,
+                offset,
+                addr,
+                ..
             } => {
                 self.write_mem_load(*memory, "load_u16", *offset, addr);
             }
             WirInstr::I32Load16S {
-                memory, offset, addr, ..
+                memory,
+                offset,
+                addr,
+                ..
             } => {
                 self.write_mem_load(*memory, "load_i16", *offset, addr);
             }
@@ -1863,7 +1878,10 @@ impl<'a> WirUnparser<'a> {
                 self.write_mem_store(*memory, "store_u16", *offset, addr, value);
             }
             WirInstr::I64Load {
-                memory, offset, addr, ..
+                memory,
+                offset,
+                addr,
+                ..
             } => {
                 self.write_mem_load(*memory, "load_i64", *offset, addr);
             }
@@ -1877,7 +1895,10 @@ impl<'a> WirUnparser<'a> {
                 self.write_mem_store(*memory, "store_i64", *offset, addr, value);
             }
             WirInstr::V128Load {
-                memory, offset, addr, ..
+                memory,
+                offset,
+                addr,
+                ..
             } => {
                 self.write_mem_load(*memory, "load_v128", *offset, addr);
             }
@@ -2026,7 +2047,14 @@ impl<'a> WirUnparser<'a> {
         self.write_args(&[addr]);
     }
 
-    fn write_mem_store(&mut self, memory: WirMemoryRef, name: &str, offset: u64, addr: &WirInstr, value: &WirInstr) {
+    fn write_mem_store(
+        &mut self,
+        memory: WirMemoryRef,
+        name: &str,
+        offset: u64,
+        addr: &WirInstr,
+        value: &WirInstr,
+    ) {
         self.write_memory_builtin(memory, name);
         if offset != 0 {
             self.write(&format!("[{offset}]"));

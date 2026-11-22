@@ -458,6 +458,11 @@ fn grown(block: &Block, len: i32, more: i32) -> Block {
 /// The bytes of one page of Wasm memory.
 global PAGE: i64 = 65536;
 
+/// The most bytes a wide array holds, 256 TiB: more than a host maps, and far
+/// enough below `i64::MAX` that no size rounded up to `ALIGN` or `PAGE`
+/// overflows.
+global WIDE_MOST: i64 = 1 << 48;
+
 /// The wide memory's free ranges, `[start, bytes]`, in address order and none
 /// touching the next, so a range given back merges with its neighbours.
 global mut WIDE_FREE: List<[i64, i64]> = [];
@@ -543,17 +548,20 @@ impl<T: AnyBits> WideArray<T> {
     /// An array of `len` elements whose bytes the caller writes before any
     /// read.
     fn unwritten(len: i64) -> WideArray<T>
-        contract 0 <= len <= i64::MAX / 2 / builtin::size_of::<T>() as i64
+        contract 0 <= len <= WIDE_MOST / builtin::size_of::<T>() as i64
     {
         let bytes = len * builtin::size_of::<T>() as i64;
-        let held = (bytes + ALIGN as i64 - 1) / ALIGN as i64 * ALIGN as i64;
+        let held = bytes.div_ceil(ALIGN as i64) * ALIGN as i64;
         let ptr = if held == 0 { 0 } else { wide_taken(held) };
-        return WideArray::<T> { block: WideBlock { ptr, bytes: held }, len };
+        return WideArray::<T> {
+            block: WideBlock { ptr, bytes: held },
+            len,
+        };
     }
 
     /// An array of `len` elements, each `value`.
     pub fn filled(len: i64, value: T) -> WideArray<T>
-        contract 0 <= len <= i64::MAX / 2 / builtin::size_of::<T>() as i64
+        contract 0 <= len <= WIDE_MOST / builtin::size_of::<T>() as i64
     {
         let mut array = unchecked WideArray::<T>::unwritten(len);
         if len == 0 {
