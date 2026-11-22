@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795312648406,
+  "lastUpdate": 1795327327183,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80841,6 +80841,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fce56a414759eab9de08fff53f1fe86401cd56e0"
         },
         "date": 1795312647087,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ecc1d6f94972a38494d50657890156682bbc71cc",
+          "message": "Merge pull request #2716 from wado-lang/claude/emi-fix-20261122\n\nfix(EMI): closures keep their locals' mut, and two optimizer miscompilations",
+          "timestamp": "2026-11-22T14:44:12+09:00",
+          "tree_id": "6d5cc964a79e1a7e6bed10db8aa03187256282b0",
+          "url": "https://github.com/wado-lang/wado/commit/ecc1d6f94972a38494d50657890156682bbc71cc"
+        },
+        "date": 1795327325911,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
