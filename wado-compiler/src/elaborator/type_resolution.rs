@@ -142,10 +142,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     TypeTable::ERROR
                 }
             }
-            // Inference placeholder `_` → UNKNOWN, the same value an omitted
-            // turbofish slot carries. Turbofish resolution detects `_` slots
-            // structurally (see `resolve_call`) and fills them; other positions
-            // are rejected during validation.
+            Type::Infer(span) if self.infer_holes.holes_writable => self.written_hole(*span),
+            // A position that takes no `_` is rejected during validation.
             Type::Infer(_) => TypeTable::UNKNOWN,
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so resolve to the error type to suppress cascades.
@@ -422,7 +420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(owner) = owner.filter(|_| !params.is_empty()) else {
             return Some(Vec::new());
         };
-        let args = self.resolve_turbofish_args(&namespaced.args);
+        let args = self.resolve_path_args(&namespaced.args);
         let owed = self.param_bounds_at(owner, &namespaced.name, site, &args);
         for (((param, &arg), written), refs) in
             params.iter().zip(&args).zip(&namespaced.args).zip(owed)
@@ -665,7 +663,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// silence.
     pub(super) fn resolve_turbofish_args(&mut self, args: &[Type]) -> Vec<TypeId> {
         self.reject_unresolved_args(args);
+        // A `_` standing for a whole slot still reaches the call as `unknown`,
+        // which the call paths read as a slot left to inference.
+        self.with_writable_holes(|e| {
+            args.iter()
+                .map(|ty| match ty {
+                    Type::Infer(_) => TypeTable::UNKNOWN,
+                    written => e.resolve_type(written),
+                })
+                .collect()
+        })
+    }
+
+    /// The types a path segment's arguments supply (`Option::<i32>::None`,
+    /// `Bx::<_>::make`), where a `_` stands only for a whole argument.
+    pub(super) fn resolve_path_args(&mut self, args: &[Type]) -> Vec<TypeId> {
+        self.reject_unresolved_args(args);
         args.iter().map(|ty| self.resolve_type(ty)).collect()
+    }
+
+    /// Run `resolve` where a `_` the source wrote is a variable.
+    pub(super) fn with_writable_holes<R>(&mut self, resolve: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = std::mem::replace(&mut self.infer_holes.holes_writable, true);
+        let resolved = resolve(self);
+        self.infer_holes.holes_writable = outer;
+        resolved
     }
 
     /// Walk the named heads a written type reaches, outermost first. `head`

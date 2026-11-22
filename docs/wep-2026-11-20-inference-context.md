@@ -41,18 +41,44 @@ what is known.
 ### Variables
 
 A variable is created where the source leaves a type to inference: an omitted
-type argument, a `_` the source writes, a numeric literal. It records its
-origin, the span and the sentence it reports if never settled.
+type argument or a `_` the source writes. It records its origin, the span and
+the sentence it reports if never settled.
+
+A `_` may stand at any depth of any type an expression writes: a turbofish, a
+struct literal's, a `let` annotation, an `as` target. This is Rust's reach. It
+widens what the language accepted before, where only a whole turbofish slot
+took one.
 
 Variables are kept in a union-find. Two variables found equal become one, and
 the root carries both origins. A variable is settled once; settling it again to
 another type is a mismatch at the second cause.
 
-A numeric literal's variable has a kind, integer or float. It joins only a
-variable of its kind or a type of its kind. Joined with a variable that has no
-kind, the root takes the literal's kind. One left unsettled when the body
-ends takes its kind's default type, `i32` or `f64`, as an unannotated literal
-does today.
+### Numeric literals
+
+A numeric literal is not one of the body's variables. It takes its type within
+the expression it is written in, and its default where nothing there answers
+it, as
+[the specification](./spec-literals.md#where-a-literals-context-ends) states. A
+later statement never retypes it.
+
+Rust leaves a literal open until the body ends, so a later use settles it. That
+was this WEP's first design, and it was dropped for three reasons:
+
+- A later line would change what an earlier one computes. In
+  `let b = put(none(), 2_000_000_000)`, then `b.v.unwrap() + b.v.unwrap()`, then
+  `take64(b)`, the last line makes the sum `i64` and stops it overflowing. An
+  omitted type argument has no default, so settling it late only accepts a
+  program that was refused. A literal has one, so settling it late changes a
+  program that already compiled.
+- What it buys is an annotation saved: `let mut xs: List<i64> = []` in place of
+  `let mut xs = empty()` before `xs.push(5)`. Nothing in the repository needed
+  it.
+- Every site that reads a type would have to meet an open literal, and each
+  would choose alone between waiting and defaulting. That is the defect this
+  WEP removes. Leaving literals open broke 114 fixtures at sites that read a
+  head (a `for-of` over `0..<n`, `==` on `Option<T>`, an inherent method, a
+  subscript, a template hole). Rust's users meet the same thing as "can't call
+  method on ambiguous numeric type", reported far from the literal.
 
 ### `equate(a, b, cause)`
 
@@ -115,8 +141,7 @@ nothing reports it again.
 
 ### End of the body
 
-When the body ends, the queue runs to its fixed point, the literal variables
-take their defaults, and the queue runs again. Then:
+When the body ends, the queue runs to its fixed point. Then:
 
 - each obligation left is reported at its cause;
 - each root variable left unsettled is reported once, by the origin of the
@@ -150,22 +175,30 @@ Each step keeps every fixture passing and deletes what it replaces.
   one an open variable may yet meet keeps the candidate, and the selected impl
   requires it (`require_selected_impl_bounds`). This replaces standing a
   variable awaiting its report in as the error type, which met every bound.
-- [ ] A numeric literal's variable has a kind and a default. The open item of
-  [WEP: Omitted Type Arguments](./wep-2026-11-19-omitted-type-arguments.md)
-  closes with it, and so does `Settles::Nothing`, which until then keeps a
-  literal's default type from settling a variable. It needs the step before:
-  a literal's variable left open past its call meets every selection the call
-  and its later uses make (a bound's impl, a tagged template's hole types, a
-  method on `Box<_>`), and a selection that cannot wait reports it. Done, a
-  later use settles it: `put(none(), 5)` then an `i64` use, `xs.push(5)` on
-  `empty()` then a `List<i64>` use, and `f(1, 2)` for
-  `fn f<A: Src<Item = B>, B>(a: A, b: B)`, where `i32`'s `Src::Item` settles
-  `B` (until then the second literal defaults to `i32` and fails the bound).
-- [ ] A `_` the source writes in an expression's types is a variable. No
-  inference path reads `unknown` for it.
+- [x] A numeric literal keeps its type within its expression (see Numeric
+  literals). Within a call, a literal at a slot that an associated-type
+  equality on another slot names answers last, so `f(1, 2)` for
+  `fn f<A: Src<Item = B>, B>(a: A, b: B)` takes `B` from `i32`'s `Src::Item`.
+  A call links its slots' equalities (`Obligation::Projection`) before its
+  arguments resolve, and settles a variable one of them answers after the rest,
+  whatever the argument order. An operation over literals waits as a literal
+  does.
+- [x] A `_` below a call's turbofish slot, and any `_` in a struct literal's
+  turbofish, is a variable (`InferHoleTable::written`), minted afresh each time
+  its expression is elaborated. A slot meets it as it meets a written type, and
+  an unsettled one reports as its slot would. The call counts it among its own
+  variables, so a literal under it waits for the expected type. A struct
+  literal's turbofish names its slots, as a call's does.
+- [ ] A `_` standing for a whole turbofish slot, or anywhere in a path's type
+  argument, is a variable, so no call path reads `unknown` for it.
+- [ ] A `_` in a `let` annotation and after `as` is a variable.
 - [ ] The context is per body rather than per module.
 
 ## Known gaps
 
 - `InferCtx` in `infer.rs` infers a single call's type arguments with
   parameters as holes, apart from the context's variables.
+- A mismatch at a later statement does not name the literal whose default
+  caused it. In `let b = put(none(), 5)` followed by `take64(b)`, the report
+  reads `expected 'Bx<i64>', found 'Bx<i32>'` at `take64(b)`. By then `b`'s
+  type is `Bx<i32>`, which no longer says where its `i32` came from.

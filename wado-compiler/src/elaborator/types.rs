@@ -604,6 +604,11 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `_` below the top of a type argument a path segment writes.
+    InferInPathArg {
+        span: Span,
+    },
+
     InferInLetAnnotation {
         span: Span,
     },
@@ -1942,7 +1947,14 @@ impl TypeError {
             ),
             TypeError::InferPlaceholderNotAllowed { span } => (
                 Code::UnknownType,
-                "`_` type placeholder is only allowed as a turbofish type argument".to_string(),
+                "`_` type placeholder is not allowed here; only a turbofish takes one".to_string(),
+                *span,
+            ),
+            TypeError::InferInPathArg { span } => (
+                Code::UnknownType,
+                "a path's type argument takes `_` only for the whole argument; \
+                 write the type around it"
+                    .to_string(),
                 *span,
             ),
             TypeError::InferInLetAnnotation { span } => (

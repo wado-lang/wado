@@ -1,0 +1,42 @@
+// A `_` anywhere inside a turbofish argument is a variable: the arguments, the
+// expected type or a later use settle it.
+
+fn pick<A, B>(a: A, b: B) -> A {
+    return a;
+}
+
+fn none_of<T>() -> Option<T> {
+    return null;
+}
+
+struct Bx<T> {
+    v: T,
+}
+
+test "from an argument" {
+    let a = pick::<Option<_>, bool>(Some(1), true);
+    assert a.unwrap() == 1;
+}
+
+test "from the expected type" {
+    let n: Option<List<i64>> = none_of::<List<_>>();
+    assert n == null;
+}
+
+test "in a struct literal" {
+    let b = Bx::<List<_>> { v: ["x"] };
+    assert b.v[0] == "x";
+}
+
+type Opt<T> = Option<T>;
+
+test "through a newtype's case" {
+    let xs: List<i32> = [1, 2];
+    let o = Opt::Some::<List<_>>(xs);
+    assert o.unwrap()[1] == 2;
+}
+
+test "beside a written type" {
+    let p = pick::<[_, String], _>([1, "s"], true);
+    assert p.0 == 1 && p.1 == "s";
+}

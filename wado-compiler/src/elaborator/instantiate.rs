@@ -11,7 +11,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::call::bound_targets;
+use super::call::{bound_targets, slot_names};
 use super::coercion::ExpectedReturn;
 use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
@@ -149,26 +149,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let var = self.mint_infer_var_named(&name);
             subst.insert(param, var);
             vars.push(var);
-            // Answered here, so an argument meets what the source wrote.
+            // The parameter and the rest of the sentence stay apart so
+            // `finalize_infer_holes` can name every unsolved slot of this use
+            // site in one message.
+            let owner = format!(
+                "of {} `{}`; add a turbofish (`{}::<...>{}`) or a type annotation",
+                of.kind.noun(),
+                of.name,
+                of.name,
+                of.kind.turbofish_tail(),
+            );
+            // Answered here, so an argument meets what the source wrote. A `_`
+            // in it reports as this slot would.
             if let Some(named) = named {
+                for hole in self.written_holes_in(named) {
+                    self.attach_infer_var_blame(hole, of.span, name.clone(), owner.clone());
+                }
                 self.settle_as_written(var, named);
                 diags.push(None);
                 continue;
             }
-            // The parameter and the rest of the sentence stay apart so
-            // `finalize_infer_holes` can name every unsolved slot of this use
-            // site in one message.
-            diags.push(Some((
-                of.span,
-                name,
-                format!(
-                    "of {} `{}`; add a turbofish (`{}::<...>{}`) or a type annotation",
-                    of.kind.noun(),
-                    of.name,
-                    of.name,
-                    of.kind.turbofish_tail(),
-                ),
-            )));
+            diags.push(Some((of.span, name, owner)));
         }
         Instantiated { vars, subst, diags }
     }
@@ -296,6 +297,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.impl_args, of.span);
+        let names = slot_names(own_params, &self.tysys.resolutions);
+        self.link_deferred_assoc_equalities(
+            own_params,
+            &names,
+            &inst.vars,
+            of.self_binding,
+            of.span,
+        );
         let param_types = self.instantiate_types(param_types, &inst);
         let ret = ret.map(|ret| ExpectedReturn {
             declared: self.instantiate_type(ret.declared, &inst),
