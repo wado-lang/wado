@@ -1,6 +1,4 @@
-use { ReflectTemplate } from "core:prelude";
 use { HashMap, HashSet } from "core:collections";
-use { Origin } from "core:kiln";
 
 /// What a call does with the callee's result.
 pub variant CallForm {
@@ -21,6 +19,20 @@ pub struct CallStmt {
     pub form: CallForm = CallForm::Discard,
     pub callee: String,
     pub args: List<String>,
+}
+
+/// What `CodeWriter` keeps of a function head `FnSpec` opens.
+internal struct FnHead {
+    /// The doc comment and attribute lines above the signature, each ending in
+    /// a newline, so `prune` drops them with the function.
+    internal pre: String,
+    internal signature: String,
+    internal name: String,
+    internal params: List<String>,
+    /// Each parameter's default; empty for none.
+    internal defaults: List<String>,
+    internal prunable: bool,
+    internal returns_unit: bool,
 }
 
 enum SegKind {
@@ -63,7 +75,8 @@ struct Seg {
     /// Names the segment references for `prune`, beyond a call's callee.
     names_start: i32 = 0,
     names_end: i32 = 0,
-    /// `Call`, `Line`: statements run first, each ending in a newline.
+    /// `Call`, `Line`: statements run first. `FnOpen`: the lines above the
+    /// signature. Each ends in a newline.
     pre_start: i32 = 0,
     pre_end: i32 = 0,
     /// `Call`: the arguments, joined by `, `.
@@ -111,11 +124,11 @@ pub struct CodeWriter {
     cur: Seg,
     indent_level: i32,
     fresh_line: bool,
-    id_counter: i32,
-    /// Per open block, whether it is a function body `FnSpec::emit_begin` opened.
+    /// Per open block, whether it is a function body `FnSpec::emit` opened.
     fn_blocks: List<bool> = [],
     hoisted_names: List<[String, String]> = [],
-    hoisted: String = "",
+    hoisted: List<CodeWriter> = [],
+    pruned: bool = false,
 }
 
 impl CodeWriter {
@@ -133,7 +146,6 @@ impl CodeWriter {
             cur: Seg { kind: SegKind::Text, depth: 0 },
             indent_level: 0,
             fresh_line: true,
-            id_counter: 0,
         };
     }
 
@@ -199,13 +211,11 @@ impl CodeWriter {
     }
 
     /// End a block: decreases indentation and emits "}".
-    pub fn end(&mut self) {
+    pub fn end(&mut self)
+        contract !self.innermost_is_fn_body(), "CodeWriter: a function body is closed by `FnSpec::emit`"
+    {
         self.indent_level -= 1;
-        if self.fn_blocks.pop().unwrap_or(false) {
-            self.flush_text();
-            self.push_seg(Seg { kind: SegKind::Close, depth: self.indent_level });
-            return;
-        }
+        self.fn_blocks.pop();
         self.write_indent();
         self.buf.push_str("}\n");
         self.cur.lines += 1;
@@ -222,15 +232,15 @@ impl CodeWriter {
         return self.buf.is_empty();
     }
 
-    /// Whether the innermost open block is a function body `FnSpec::emit_begin`
+    /// Whether the innermost open block is a function body `FnSpec::emit`
     /// opened.
-    pub fn innermost_is_fn_body(&self) -> bool {
+    fn innermost_is_fn_body(&self) -> bool {
         return self.fn_blocks.last().unwrap_or(false);
     }
 
     /// End a block with a trailing suffix, e.g. "," or "\n".
     pub fn end_with<S: AsStrSlice>(&mut self, suffix: S)
-        contract !self.innermost_is_fn_body(), "CodeWriter: a function body closes with `end`"
+        contract !self.innermost_is_fn_body(), "CodeWriter: a function body is closed by `FnSpec::emit`"
     {
         self.indent_level -= 1;
         self.fn_blocks.pop();
@@ -327,41 +337,53 @@ impl CodeWriter {
         self.fresh_line = true;
     }
 
-    fn open_fn(&mut self, spec: &FnSpec) {
+    internal fn open_fn(&mut self, head: &FnHead)
+        contract head.params.len() == head.defaults.len()
+    {
         self.flush_text();
         let mut seg = Seg {
             kind: SegKind::FnOpen,
             depth: self.indent_level,
-            param_count: spec.params.len(),
-            prunable: spec.prunable,
-            returns_unit: spec.returns_unit(),
+            param_count: head.params.len(),
+            prunable: head.prunable,
+            returns_unit: head.returns_unit,
         };
+        seg.pre_start = self.buf.len();
+        self.buf.push_str(&head.pre);
+        seg.pre_end = self.buf.len();
         seg.text_start = self.buf.len();
-        self.buf.push_str(&spec.signature());
+        self.buf.push_str(&head.signature);
         seg.text_end = self.buf.len();
         seg.name_start = self.buf.len();
-        self.buf.push_str(&spec.name);
+        self.buf.push_str(&head.name);
         seg.name_end = self.buf.len();
         seg.params_start = self.buf.len();
-        for let mut i = 0; i < spec.params.len(); i += 1 {
+        for let mut i = 0; i < head.params.len(); i += 1 {
             if i > 0 {
                 self.buf.push_str(", ");
             }
-            self.buf.push_str(&spec.params[i].name);
+            self.buf.push_str(&head.params[i]);
         }
         seg.params_end = self.buf.len();
         seg.defaults_start = self.buf.len();
-        for let p of &spec.params {
-            if let Some(d) = &p.default_value {
-                assert !d.contains("\n"), "CodeWriter: a default spanning lines";
-                self.buf.push_str(d);
-            }
+        for let d of &head.defaults {
+            assert !d.contains("\n"), "CodeWriter: a default spanning lines";
+            self.buf.push_str(d);
             self.buf.push('\n');
         }
         seg.defaults_end = self.buf.len();
         self.push_seg(seg);
         self.indent_level += 1;
         self.fn_blocks.push(true);
+    }
+
+    internal fn close_fn(&mut self)
+        contract self.innermost_is_fn_body(), "CodeWriter: every block a function body opens is closed before it ends"
+    {
+        self.indent_level -= 1;
+        self.fn_blocks.pop();
+        self.flush_text();
+        self.push_seg(Seg { kind: SegKind::Close, depth: self.indent_level });
     }
 
     /// Add a segment other than text. The caller has ended the text before it
@@ -407,41 +429,53 @@ impl CodeWriter {
         self.indent_level -= 1;
     }
 
-    /// Generate a unique ID (replaces manual counter threading).
-    pub fn next_id(&mut self) -> i32 {
-        let id = self.id_counter;
-        self.id_counter += 1;
-        return id;
-    }
-
-    /// The name of a top-level function defined once per distinct `key`: `define`
-    /// renders it from the name, and `write_hoisted` places it.
-    pub fn hoist_fn<S: AsStrSlice, S1: AsStrSlice>(
+    /// The name of a top-level function defined once per distinct `key`:
+    /// `define` writes it, under the name it is handed, into a writer of its
+    /// own, and `write_hoisted` places what it wrote. A function `define`
+    /// hoists in turn joins this writer's queue, ahead of the one it serves.
+    pub fn hoist_fn<S: AsStrSlice, S1: AsStrSlice, effect E>(
         &mut self,
         key: S,
         prefix: S1,
-        define: fn(&String) -> String,
-    ) -> String {
+        mut define: fn mut(&mut CodeWriter, String) with E,
+    ) -> String with E
+        contract !self.pruned, "CodeWriter: nothing is hoisted after prune, which may drop what a key names"
+    {
         if let Some(hit) = self.hoisted_names.iter_ref().find(|kn| kn.0 == key.as_str_slice()) {
             return hit.1;
         }
-        let name = `${prefix}${self.hoisted_names.len()}`;
+        let mut n = self.hoisted_names.len();
+        while self.hoisted_names.iter_ref().any(|kn| kn.1 == `${prefix}${n}`) {
+            n += 1;
+        }
+        let name = `${prefix}${n}`;
         self.hoisted_names.push([key.to_string(), name]);
-        self.hoisted.push_str(&define(&name));
+        let mut def = CodeWriter::with_capacity(256);
+        def.hoisted_names = self.hoisted_names;
+        define(&mut def, name);
+        self.hoisted_names = def.hoisted_names;
+        self.hoisted.extend(&def.hoisted);
+        def.hoisted = [];
+        def.hoisted_names = [];
+        self.hoisted.push(def);
         return name;
     }
 
     /// Whether `hoist_fn` has queued a definition `write_hoisted` has not
     /// written yet.
-    pub fn has_pending_hoisted(&self) -> bool {
+    fn has_pending_hoisted(&self) -> bool {
         return !self.hoisted.is_empty();
     }
 
     /// Write every definition `hoist_fn` has queued since the last call.
-    pub fn write_hoisted(&mut self) {
-        let text = self.hoisted;
-        self.hoisted = "";
-        self.raw(&text);
+    pub fn write_hoisted(&mut self)
+        contract self.depth() == 0, "CodeWriter: a hoisted function is written at the top level"
+    {
+        let defs = self.hoisted;
+        self.hoisted = [];
+        for let def of &defs {
+            self.append(def);
+        }
     }
 
     /// Append raw text with no indentation handling.
@@ -488,6 +522,7 @@ impl CodeWriter {
     /// passing anything else is renamed to the inner callee instead, where the
     /// body forwards every parameter in order and runs nothing before.
     pub fn prune(&mut self) {
+        self.pruned = true;
         self.flush_text();
         let items = self.items();
         let mut item_of = HashMap::<String, i32>::new();
@@ -851,6 +886,7 @@ impl CodeWriter {
         match seg.kind {
             _::Text => print_shifted(out, self.slice(seg.text_start, seg.text_end), seg.depth),
             _::FnOpen => {
+                print_lines(out, self.slice(seg.pre_start, seg.pre_end), seg.depth);
                 push_indent(out, seg.depth);
                 out.push_str(self.slice(seg.text_start, seg.text_end));
                 out.push_str(" {\n");
@@ -980,866 +1016,4 @@ fn print_shifted(out: &mut String, text: StrSlice, levels: i32) {
         }
         out.push(c);
     }
-}
-
-/// The lexical state the template text of a `wado` tag is in at a hole: the
-/// contexts the compiler's own lexer has, which this must agree with. `Tpl`
-/// needs no nesting count, since the tag's own holes are the interpolations.
-enum Ctx {
-    Code,
-    CodeSlash,
-    Str,
-    StrEscape,
-    Chr,
-    ChrEscape,
-    Tpl,
-    TplEscape,
-    LineComment,
-    BlockComment,
-    BlockCommentStar,
-}
-
-/// The state one character further on.
-fn step(ctx: Ctx, c: char) -> Ctx {
-    return match ctx {
-        Ctx::Code => open(c),
-        Ctx::CodeSlash => match c {
-            '/' => Ctx::LineComment,
-            '*' => Ctx::BlockComment,
-            _ => open(c),
-        },
-        Ctx::Str => match c {
-            '\\' => Ctx::StrEscape,
-            '"' => Ctx::Code,
-            _ => Ctx::Str,
-        },
-        Ctx::StrEscape => Ctx::Str,
-        Ctx::Chr => match c {
-            '\\' => Ctx::ChrEscape,
-            '\'' => Ctx::Code,
-            _ => Ctx::Chr,
-        },
-        Ctx::ChrEscape => Ctx::Chr,
-        Ctx::Tpl => match c {
-            '\\' => Ctx::TplEscape,
-            '`' => Ctx::Code,
-            _ => Ctx::Tpl,
-        },
-        Ctx::TplEscape => Ctx::Tpl,
-        Ctx::LineComment => match c {
-            '\n' => Ctx::Code,
-            _ => Ctx::LineComment,
-        },
-        Ctx::BlockComment => match c {
-            '*' => Ctx::BlockCommentStar,
-            _ => Ctx::BlockComment,
-        },
-        Ctx::BlockCommentStar => match c {
-            '/' => Ctx::Code,
-            '*' => Ctx::BlockCommentStar,
-            _ => Ctx::BlockComment,
-        },
-    };
-}
-
-/// The state `c` opens from code.
-fn open(c: char) -> Ctx {
-    return match c {
-        '"' => Ctx::Str,
-        '\'' => Ctx::Chr,
-        '`' => Ctx::Tpl,
-        '/' => Ctx::CodeSlash,
-        _ => Ctx::Code,
-    };
-}
-
-/// Advance the lexical state over one literal segment. Kept apart from `step`
-/// so both fit the inliner's budget: the whole walk then folds to a constant at
-/// -O2 and the tag pays nothing for it.
-fn advance<S: AsStrSlice>(ctx: Ctx, lit: S) -> Ctx {
-    let mut cur = ctx;
-    for let c of lit.chars() {
-        cur = step(cur, c);
-    }
-    return cur;
-}
-
-/// The delimiter a hole landing in `ctx` is escaped for, or none where it is
-/// written as it renders.
-fn hole_quote(ctx: Ctx) -> Option<u8> {
-    return match ctx {
-        Ctx::Code | Ctx::CodeSlash | Ctx::LineComment | Ctx::BlockComment | Ctx::BlockCommentStar => null,
-        Ctx::Str | Ctx::StrEscape => Option::Some(b'"'),
-        Ctx::Chr | Ctx::ChrEscape => Option::Some(b'\''),
-        Ctx::Tpl | Ctx::TplEscape => Option::Some(b'`'),
-    };
-}
-
-/// Whether `b` may not stand as itself inside a Wado literal delimited by
-/// `quote`. Every other byte passes through, so printable non-ASCII survives.
-fn needs_escape(b: u8, quote: u8) -> bool {
-    return b < 0x20 || b == 0x7f || b == quote || b == b'\\' || quote == b'`' && b == b'$';
-}
-
-/// Append `b` in the form a Wado literal delimited by `quote` reads back. The
-/// control-char policy mirrors `Inspect for String` in core's `format.wado`;
-/// keep the two in lockstep (see WEP: Inspect).
-fn write_escaped(out: &mut String, b: u8, quote: u8)
-    contract needs_escape(b, quote)
-{
-    if b == quote || b == b'\\' || b == b'$' {
-        out.push('\\');
-        unchecked out.push_ascii(b);
-        return;
-    }
-    match b {
-        b'\n' => out.push_str("\\n"),
-        b'\r' => out.push_str("\\r"),
-        b'\t' => out.push_str("\\t"),
-        _ => out.push_str(`\\u{${b:x}}`),
-    }
-}
-
-/// Escape in place the text `out` grew past `at`, which is one hole's
-/// rendering, for a literal delimited by `quote`. Nothing to escape costs one
-/// scan and no copy.
-fn escape_in_place(out: &mut String, at: i32, quote: u8) {
-    let n = out.len();
-    let mut i = at;
-    while i < n && !needs_escape(unchecked out.byte_at(i), quote) {
-        i += 1;
-    }
-    if i == n {
-        return;
-    }
-    let tail = unchecked out.substr_bytes(i, n);
-    unchecked out.truncate(i);
-    let end = tail.len();
-    let mut from = 0;
-    for let mut j = 0; j < end; j += 1 {
-        let b = unchecked tail.byte_at(j);
-        if !needs_escape(b, quote) {
-            continue;
-        }
-        if j > from {
-            out.push_str(unchecked tail.slice(from, j));
-        }
-        write_escaped(out, b, quote);
-        from = j + 1;
-    }
-    if end > from {
-        out.push_str(unchecked tail.slice(from, end));
-    }
-}
-
-/// Build a fragment of Wado source (WEP: Tagged Template Literals), escaping
-/// each hole for the lexical context the template's own text put it in.
-pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
-    let mut out = String::with_capacity(64);
-    let mut ctx = Ctx::Code;
-    for let h of ReflectTemplate::<T>::members() {
-        let lit = h.lit(&t);
-        out.push_str(&lit);
-        ctx = advance(ctx, &lit);
-        // A backslash left pending at a hole binds the hole's first byte, and
-        // which state that lands in depends on the value: `z` stays in the
-        // string, an escaped `"` closes it. The scan reads literals only, so it
-        // cannot answer for the rest of the template. The template is malformed.
-        assert !ctx matches { Ctx::StrEscape | Ctx::ChrEscape | Ctx::TplEscape }, "a `wado` hole cannot follow a dangling backslash";
-        let at = out.len();
-        h.fmt(&t, &mut Formatter::new(&mut out));
-        if let Some(quote) = hole_quote(ctx) {
-            escape_in_place(&mut out, at, quote);
-        }
-    }
-    out.push_str(&ReflectTemplate::<T>::tail(&t));
-    return out;
-}
-
-/// `bytes` as a byte string literal. Printable ASCII other than `"` and `\`
-/// stands as itself, and every other byte is a `\x` escape.
-pub fn byte_string_literal<S: AsByteSlice>(bytes: S) -> String {
-    let view = bytes.as_byte_slice();
-    let mut out = String::with_capacity(view.len() * 4 + 3);
-    out.push_str("b\"");
-    for let mut i = 0; i < view.len(); i += 1 {
-        let b = unchecked view[i];
-        if b'\x20' <= b <= b'\x7e' && b != b'"' && b != b'\\' {
-            unchecked out.push_ascii(b);
-        } else {
-            out.push_str("\\x");
-            unchecked out.push_ascii(unchecked HEX_DIGITS.byte_at((b >> 4) as i32));
-            unchecked out.push_ascii(unchecked HEX_DIGITS.byte_at((b & 0xf) as i32));
-        }
-    }
-    out.push('"');
-    return out;
-}
-
-global HEX_DIGITS: String = "0123456789abcdef";
-
-pub type CharRangePat = RangeInclusive<char>;
-
-pub fn char_range_pat(range: RangeInclusive<char>) -> CharRangePat {
-    return range as CharRangePat;
-}
-
-impl Display for CharRangePat {
-    pub fn fmt(&self, f: &mut Formatter) {
-        let range = *self as RangeInclusive<char>;
-        if range.start == range.end {
-            f.write_str(wado`'${range.start}'`);
-            return;
-        }
-        f.write_str(wado`'${range.start}'..='${range.end}'`);
-    }
-}
-
-/// Visibility modifier for an emitted Wado declaration — the scope ladder
-/// (file-private / `internal` / `pub`). Passed to the spec builders as a
-/// defaulted argument, so the common file-private case stays implicit.
-pub enum Vis {
-    Private,
-    Internal,
-    Pub,
-}
-
-impl Vis {
-    /// Source keyword with a trailing space (`""`, `"internal "`, `"pub "`).
-    pub fn prefix(&self) -> String {
-        let p = match *self {
-            Vis::Private => "",
-            Vis::Internal => "internal ",
-            Vis::Pub => "pub ",
-        };
-        return p;
-    }
-}
-
-pub struct FieldSpec {
-    pub name: String,
-    pub type_str: String,
-    pub is_pub: bool,
-    /// Optional field default (`field: T = default`), so a struct literal can
-    /// omit the field.
-    pub default: Option<String> = null,
-    /// Attribute bodies, each written `#[body]` on its own line above the field.
-    pub attrs: List<String> = [],
-    pub doc: Option<String> = null,
-}
-
-impl FieldSpec {
-    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> FieldSpec {
-        return FieldSpec {
-            name: name.to_string(),
-            type_str: type_str.to_string(),
-            is_pub: false,
-        };
-    }
-
-    pub fn new_pub<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> FieldSpec {
-        return FieldSpec {
-            name: name.to_string(),
-            type_str: type_str.to_string(),
-            is_pub: true,
-        };
-    }
-}
-
-pub struct StructSpec {
-    pub name: String,
-    fields: List<FieldSpec>,
-    visibility: Vis,
-    /// Generic type parameters, each rendered verbatim after the name.
-    generics: List<String>,
-    head: DeclHead = DeclHead {},
-}
-
-impl StructSpec {
-    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> StructSpec {
-        return StructSpec { name: name.to_string(), fields: [], visibility, generics: [] };
-    }
-
-    /// Sets the doc comment, written as `///` lines above the declaration.
-    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut StructSpec {
-        self.head.doc = Option::Some(doc.to_string());
-        return self;
-    }
-
-    /// Adds an attribute, written `#[body]` above the declaration.
-    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut StructSpec {
-        self.head.attrs.push(body.to_string());
-        return self;
-    }
-
-    /// Adds a type parameter, written as it renders (`"T: Default"`).
-    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut StructSpec {
-        self.generics.push(generic.to_string());
-        return self;
-    }
-
-    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec {
-        self.fields.push(FieldSpec::new(name, type_str));
-        return self;
-    }
-
-    pub fn add_pub_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec {
-        self.fields.push(FieldSpec::new_pub(name, type_str));
-        return self;
-    }
-
-    pub fn add_field_default<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
-        &mut self,
-        name: S,
-        type_str: S1,
-        default: S2,
-    ) -> &mut StructSpec {
-        self.fields.push(FieldSpec {
-            name: name.to_string(),
-            type_str: type_str.to_string(),
-            is_pub: false,
-            default: Option::Some(default.to_string()),
-        });
-        return self;
-    }
-
-    pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec {
-        self.fields.push(field);
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        self.head.emit(w);
-        let head = `${self.visibility.prefix()}struct ${self.name}${generic_list(&self.generics)}`;
-        if self.fields.is_empty() {
-            w.line(`${head} {}`);
-            return;
-        }
-        w.begin(head);
-        for let field of &self.fields {
-            write_doc(w, &field.doc);
-            write_attrs(w, &field.attrs);
-            let vis = if field.is_pub { "pub " } else { "" };
-            match &field.default {
-                Some(d) => w.line(`${vis}${field.name}: ${field.type_str} = ${*d},`),
-                null => w.line(`${vis}${field.name}: ${field.type_str},`),
-            }
-        }
-        w.end();
-    }
-}
-
-pub struct WadoVariantCase {
-    pub name: String,
-    pub payload: Option<String>,
-    pub attrs: List<String> = [],
-    pub doc: Option<String> = null,
-}
-
-pub struct VariantSpec {
-    pub name: String,
-    cases: List<WadoVariantCase>,
-    visibility: Vis,
-    head: DeclHead = DeclHead {},
-}
-
-impl VariantSpec {
-    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> VariantSpec {
-        return VariantSpec { name: name.to_string(), cases: [], visibility };
-    }
-
-    /// Sets the doc comment, written as `///` lines above the declaration.
-    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut VariantSpec {
-        self.head.doc = Option::Some(doc.to_string());
-        return self;
-    }
-
-    /// Adds an attribute, written `#[body]` above the declaration.
-    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut VariantSpec {
-        self.head.attrs.push(body.to_string());
-        return self;
-    }
-
-    pub fn add_case_spec(&mut self, case: WadoVariantCase) -> &mut VariantSpec {
-        self.cases.push(case);
-        return self;
-    }
-
-    pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec {
-        self.cases.push(WadoVariantCase { name: name.to_string(), payload: null });
-        return self;
-    }
-
-    pub fn add_case_with_payload<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, payload: S1) -> &mut VariantSpec {
-        self.cases.push(WadoVariantCase {
-            name: name.to_string(),
-            payload: Option::<String>::Some(payload.to_string()),
-        });
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        self.head.emit(w);
-        w.begin(`${self.visibility.prefix()}variant ${self.name}`);
-        for let case of &self.cases {
-            write_doc(w, &case.doc);
-            write_attrs(w, &case.attrs);
-            if let Some(p) = &case.payload {
-                w.line(`${case.name}(${*p}),`);
-            } else {
-                w.line(`${case.name},`);
-            }
-        }
-        w.end();
-    }
-}
-
-pub struct EnumMember {
-    pub name: String,
-    pub trailing_comment: Option<String>,
-    pub attrs: List<String> = [],
-    pub doc: Option<String> = null,
-}
-
-fn write_attrs(w: &mut CodeWriter, attrs: &List<String>) {
-    for let attr of attrs {
-        w.line(`#[${attr}]`);
-    }
-}
-
-/// Writes `doc` as `///` lines, one per line of its text.
-fn write_doc(w: &mut CodeWriter, doc: &Option<String>) {
-    let Some(text) = doc else {
-        return;
-    };
-    for let line of text.lines() {
-        if line.is_empty() {
-            w.line("///");
-        } else {
-            w.line(`/// ${line}`);
-        }
-    }
-}
-
-/// What a declaration writes above its head: its doc comment, then its
-/// attributes.
-struct DeclHead {
-    doc: Option<String> = null,
-    attrs: List<String> = [],
-}
-
-impl DeclHead {
-    fn emit(&self, w: &mut CodeWriter) {
-        write_doc(w, &self.doc);
-        write_attrs(w, &self.attrs);
-    }
-}
-
-pub struct EnumSpec {
-    pub name: String,
-    members: List<EnumMember>,
-    visibility: Vis,
-    head: DeclHead = DeclHead {},
-}
-
-impl EnumSpec {
-    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> EnumSpec {
-        return EnumSpec { name: name.to_string(), members: [], visibility };
-    }
-
-    /// Sets the doc comment, written as `///` lines above the declaration.
-    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut EnumSpec {
-        self.head.doc = Option::Some(doc.to_string());
-        return self;
-    }
-
-    /// Adds an attribute, written `#[body]` above the declaration.
-    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut EnumSpec {
-        self.head.attrs.push(body.to_string());
-        return self;
-    }
-
-    pub fn add_member_spec(&mut self, member: EnumMember) -> &mut EnumSpec {
-        self.members.push(member);
-        return self;
-    }
-
-    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut EnumSpec {
-        self.members.push(EnumMember { name: name.to_string(), trailing_comment: null });
-        return self;
-    }
-
-    pub fn add_member_with_attrs<S: AsStrSlice>(&mut self, name: S, attrs: List<String>) -> &mut EnumSpec {
-        self.members.push(EnumMember { name: name.to_string(), trailing_comment: null, attrs });
-        return self;
-    }
-
-    pub fn add_member_with_comment<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, comment: S1) -> &mut EnumSpec {
-        self.members.push(EnumMember {
-            name: name.to_string(),
-            trailing_comment: Option::<String>::Some(comment.to_string()),
-        });
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        self.head.emit(w);
-        w.begin(`${self.visibility.prefix()}enum ${self.name}`);
-        for let member of &self.members {
-            write_doc(w, &member.doc);
-            write_attrs(w, &member.attrs);
-            if let Some(c) = &member.trailing_comment {
-                w.line(`${member.name},  // ${*c}`);
-            } else {
-                w.line(`${member.name},`);
-            }
-        }
-        w.end();
-    }
-}
-
-pub struct FlagsSpec {
-    pub name: String,
-    members: List<String>,
-    visibility: Vis,
-    head: DeclHead = DeclHead {},
-}
-
-impl FlagsSpec {
-    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> FlagsSpec {
-        return FlagsSpec { name: name.to_string(), members: [], visibility };
-    }
-
-    /// Sets the doc comment, written as `///` lines above the declaration.
-    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut FlagsSpec {
-        self.head.doc = Option::Some(doc.to_string());
-        return self;
-    }
-
-    /// Adds an attribute, written `#[body]` above the declaration.
-    pub fn add_attr<S: AsStrSlice>(&mut self, body: S) -> &mut FlagsSpec {
-        self.head.attrs.push(body.to_string());
-        return self;
-    }
-
-    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut FlagsSpec {
-        self.members.push(name.to_string());
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        self.head.emit(w);
-        w.begin(`${self.visibility.prefix()}flags ${self.name}`);
-        for let member of &self.members {
-            w.line(`${member},`);
-        }
-        w.end();
-    }
-}
-
-/// A newtype, `type Name = Base;`.
-pub struct NewtypeSpec {
-    pub name: String,
-    base: String,
-    visibility: Vis,
-    head: DeclHead = DeclHead {},
-}
-
-impl NewtypeSpec {
-    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, base: S1, visibility: Vis = Vis::Private) -> NewtypeSpec {
-        return NewtypeSpec {
-            name: name.to_string(),
-            base: base.to_string(),
-            visibility,
-        };
-    }
-
-    /// Sets the doc comment, written as `///` lines above the declaration.
-    pub fn set_doc<S: AsStrSlice>(&mut self, doc: S) -> &mut NewtypeSpec {
-        self.head.doc = Option::Some(doc.to_string());
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        self.head.emit(w);
-        w.line(`${self.visibility.prefix()}type ${self.name} = ${self.base};`);
-    }
-}
-
-pub struct ParamSpec {
-    pub name: String,
-    pub type_str: String,
-    pub is_mut: bool = false,
-    pub default_value: Option<String> = null,
-}
-
-impl ParamSpec {
-    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> ParamSpec {
-        return ParamSpec {
-            name: name.to_string(),
-            type_str: type_str.to_string(),
-        };
-    }
-}
-
-/// Join strings with ", " — the separator every spec list (generics,
-/// effects, …) renders with.
-fn join_comma(items: &List<String>) -> String {
-    let mut out = String::with_capacity(items.len() * 8);
-    for let mut i = 0; i < items.len(); i += 1 {
-        if i > 0 {
-            out.push_str(", ");
-        }
-        out.push_str(&items[i]);
-    }
-    return out;
-}
-
-pub struct FnSpec {
-    pub name: String,
-    params: List<ParamSpec>,
-    return_type: Option<String>,
-    visibility: Vis,
-    is_export: bool,
-    /// Generic type parameters, each rendered verbatim between the name
-    /// and the parameter list (e.g. `"V: Visitor"` → `fn walk<V: Visitor>(`).
-    generics: List<String>,
-    /// Effect names for the `with …` clause, rendered after the return
-    /// type (e.g. `["Stdout", "Stderr"]` → ` with (Stdout, Stderr)`).
-    effects: List<String>,
-    receiver: Option<String>,
-    /// Whether `CodeWriter::prune` may drop it when nothing kept references it.
-    prunable: bool = false,
-}
-
-impl FnSpec {
-    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> FnSpec {
-        return FnSpec {
-            name: name.to_string(),
-            params: [],
-            return_type: null,
-            visibility,
-            is_export: false,
-            generics: [],
-            effects: [],
-            receiver: null,
-        };
-    }
-
-    /// Let `CodeWriter::prune` drop the function when nothing kept calls it or
-    /// `note`s its name, and forward calls through it. Every reference to it
-    /// must then be a `CallStmt` or a `note`.
-    pub fn set_prunable(&mut self) -> &mut FnSpec {
-        self.prunable = true;
-        return self;
-    }
-
-    fn returns_unit(&self) -> bool {
-        return match &self.return_type {
-            null => true,
-            Some(t) => *t == "()",
-        };
-    }
-
-    /// Mark the function `export` (component-model export). `export` implies
-    /// `pub`; the signature emits just `export`, never `pub export`.
-    pub fn set_export(&mut self) -> &mut FnSpec {
-        self.is_export = true;
-        return self;
-    }
-
-    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut FnSpec {
-        self.generics.push(generic.to_string());
-        return self;
-    }
-
-    pub fn add_effect<S: AsStrSlice>(&mut self, effect_name: S) -> &mut FnSpec {
-        self.effects.push(effect_name.to_string());
-        return self;
-    }
-
-    pub fn set_receiver<S: AsStrSlice>(&mut self, recv: S) -> &mut FnSpec {
-        self.receiver = Option::<String>::Some(recv.to_string());
-        return self;
-    }
-
-    pub fn add_param<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut FnSpec {
-        self.params.push(ParamSpec::new(name, type_str));
-        return self;
-    }
-
-    pub fn add_param_spec(&mut self, param: ParamSpec) -> &mut FnSpec {
-        self.params.push(param);
-        return self;
-    }
-
-    pub fn set_return_type<S: AsStrSlice>(&mut self, type_str: S) -> &mut FnSpec {
-        self.return_type = Option::<String>::Some(type_str.to_string());
-        return self;
-    }
-
-    /// Emit the function signature as a `begin` block (opens `{`).
-    /// Caller writes the body via `w`, then calls `w.end()`.
-    pub fn emit_begin(&self, w: &mut CodeWriter) {
-        w.open_fn(self);
-    }
-
-    /// Build the full signature string.
-    pub fn signature(&self) -> String {
-        let mut sig = String::with_capacity(64);
-        if self.is_export {
-            sig.push_str("export ");
-        } else {
-            sig.push_str(&self.visibility.prefix());
-        }
-        sig.push_str(`fn ${self.name}${generic_list(&self.generics)}`);
-        sig.push_str("(");
-        let mut first = true;
-        if let Some(recv) = &self.receiver {
-            sig.push_str(recv);
-            first = false;
-        }
-        for let param of &self.params {
-            if !first {
-                sig.push_str(", ");
-            }
-            if param.is_mut {
-                sig.push_str("mut ");
-            }
-            sig.push_str(`${param.name}: ${param.type_str}`);
-            if let Some(d) = &param.default_value {
-                sig.push_str(` = ${*d}`);
-            }
-            first = false;
-        }
-        sig.push_str(")");
-        if let Some(ret) = &self.return_type {
-            sig.push_str(` -> ${*ret}`);
-        }
-        let mut clauses: List<String> = [];
-        for let e of &self.effects {
-            clauses.push(*e);
-        }
-        if clauses.len() == 1 {
-            sig.push_str(` with ${clauses[0]}`);
-        } else if clauses.len() > 1 {
-            sig.push_str(` with (${join_comma(&clauses)})`);
-        }
-        return sig;
-    }
-}
-
-/// The head of a generated module: the `#![generated]` header that says where
-/// it came from.
-pub struct ModuleSpec {
-    origin: Origin,
-}
-
-impl ModuleSpec {
-    /// The head of a module a Kiln generator writes, from its request's
-    /// `origin()`.
-    pub fn from_origin(origin: &Origin) -> ModuleSpec {
-        return ModuleSpec { origin: *origin };
-    }
-
-    /// The head of a module a script writes outside Kiln: `by` names the
-    /// script, `sources` what it read, each from the repository root.
-    pub fn new<S: AsStrSlice>(by: S, sources: List<String> = []) -> ModuleSpec {
-        return ModuleSpec {
-            origin: Origin { by: by.to_string(), sources },
-        };
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter)
-        contract w.is_empty(), "the header opens the module"
-    {
-        w.raw(self.origin.header());
-    }
-}
-
-pub struct GlobalSpec {
-    pub name: String,
-    type_str: String,
-    initializer: String,
-    visibility: Vis,
-    is_mut: bool,
-    trailing_comment: Option<String>,
-}
-
-impl GlobalSpec {
-    pub fn new<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
-        name: S,
-        type_str: S1,
-        initializer: S2,
-        visibility: Vis = Vis::Private,
-    ) -> GlobalSpec {
-        return GlobalSpec {
-            name: name.to_string(),
-            type_str: type_str.to_string(),
-            initializer: initializer.to_string(),
-            visibility,
-            is_mut: false,
-            trailing_comment: null,
-        };
-    }
-
-    pub fn set_trailing_comment<S: AsStrSlice>(&mut self, comment: S) -> &mut GlobalSpec {
-        self.trailing_comment = Option::<String>::Some(comment.to_string());
-        return self;
-    }
-
-    pub fn emit(&self, w: &mut CodeWriter) {
-        let vis = self.visibility.prefix();
-        let mutability = if self.is_mut { "mut " } else { "" };
-        let trailer = if let Some(c) = &self.trailing_comment {
-            `  // ${*c}`;
-        } else {
-            "";
-        };
-        w.line(`${vis}global ${mutability}${self.name}: ${self.type_str} = ${self.initializer};${trailer}`);
-    }
-}
-
-pub struct ImplSpec {
-    type_name: String,
-    trait_name: Option<String>,
-    /// The impl's type parameters, each rendered verbatim after `impl`.
-    generics: List<String>,
-}
-
-impl ImplSpec {
-    pub fn new<S: AsStrSlice>(type_name: S) -> ImplSpec {
-        return ImplSpec { type_name: type_name.to_string(), trait_name: null, generics: [] };
-    }
-
-    pub fn new_trait<S: AsStrSlice, S1: AsStrSlice>(trait_name: S, type_name: S1) -> ImplSpec {
-        return ImplSpec {
-            type_name: type_name.to_string(),
-            trait_name: Option::<String>::Some(trait_name.to_string()),
-            generics: [],
-        };
-    }
-
-    /// Adds a type parameter of the impl, written as it renders (`"T: Default"`).
-    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut ImplSpec {
-        self.generics.push(generic.to_string());
-        return self;
-    }
-
-    pub fn emit_begin(&self, w: &mut CodeWriter) {
-        let head = `impl${generic_list(&self.generics)}`;
-        if let Some(t) = &self.trait_name {
-            w.begin(`${head} ${*t} for ${self.type_name}`);
-        } else {
-            w.begin(`${head} ${self.type_name}`);
-        }
-    }
-}
-
-/// `<A, B>` for the parameters `generics`, or nothing for none.
-fn generic_list(generics: &List<String>) -> String {
-    if generics.is_empty() {
-        return "";
-    }
-    return `<${join_comma(generics)}>`;
 }

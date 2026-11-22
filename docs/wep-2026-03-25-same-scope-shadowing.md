@@ -154,6 +154,14 @@ next to it. That is the confusion the lint names.
 waives it for a module. A condition and a match arm take no attribute, so
 there a rename or an attribute on the enclosing node is the answer.
 
+A closure parameter is exempt where the name reaches a local binding. It
+receives its value as an argument, often the very local it shadows
+(`emit(w, |w| …)`), so the two names carry one thing rather than two a reader
+must tell apart. Warning there forced an API that hands a value to a closure to
+have its callers mint a second name for it. The exemption gives up the warning
+on a closure that meant to capture the local and took a parameter of its name
+instead. A parameter taking a declaration's name still warns.
+
 A bare identifier pattern is exempt where the name reaches a case or a
 `global`. Such a pattern matches by value rather than binding, and the
 scrutinee's type decides which it does. The resolution pass has no types, so it

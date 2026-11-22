@@ -8,17 +8,17 @@ use { to_string } from "core:json";
 use { Uri } from "core:uri";
 use { percent_decode, percent_encode } from "core:url";
 use {
+    CaseSpec,
     CodeWriter,
-    EnumMember,
     EnumSpec,
     FieldSpec,
     FlagsSpec,
     ModuleSpec,
+    NameRegistry,
     NewtypeSpec,
     StructSpec,
     VariantSpec,
     Vis,
-    WadoVariantCase,
     is_keyword,
     is_reserved,
     wado,
@@ -155,7 +155,7 @@ struct Gen {
     /// The schemas named and not declared yet, as `[uri#pointer, name]`.
     pending: List<[String, String]> = [],
     /// The names declared at the module's top level.
-    taken: HashSet<String> = HashSet::new(),
+    taken: NameRegistry = NameRegistry::new(),
     imports: List<String> = [],
     decls: CodeWriter = CodeWriter::new(),
 }
@@ -231,12 +231,13 @@ impl Gen {
         });
     }
 
-    /// `name` for a declaration at the top level, which no other may take.
+    /// `name` for a declaration at the top level, which no other may take, with
+    /// a `_` after a reserved one.
     fn claim(&mut self, name: String, at: &String) -> Result<String, SchemaError> {
-        if !self.taken.insert(name) {
-            return fail(at, `names \`${name}\`, which another declaration takes`);
-        }
-        return Result::Ok(name);
+        return match self.taken.claim(&name, at) {
+            Ok(claimed) => Result::Ok(claimed),
+            Err(clash) => fail(at, `names \`${clash.name}\`, which another declaration takes`),
+        };
     }
 
     /// The namespace `module` is imported under: its last segment.
@@ -523,16 +524,13 @@ impl Gen {
             }
             let ty = self.type_of(property, &pat, &`${name}${decl_name(key, &pat)?}`)?;
             let p = property.into_object();
-            let mut f = FieldSpec {
-                ..FieldSpec::new_pub(field, ty.text),
-                doc: doc_of(&p),
-            };
+            let mut f = FieldSpec { name: field, type: ty.text, vis: Vis::Pub, doc: doc_of(&p) };
             if !o.required.contains_str(key) {
                 if let Some(d) = &p.default {
                     self.check_default(&pat, &d.root())?;
                     f.default = Option::Some(self.literal(&ty, &d.root()));
                 } else {
-                    f.type_str = `Option<${ty.text}>`;
+                    f.type = `Option<${ty.text}>`;
                     f.default = Option::Some("null");
                 }
             }
@@ -548,7 +546,7 @@ impl Gen {
             if let Some(a) = &names[i] {
                 field.attrs.push(*a);
             }
-            spec.add_field_spec(field);
+            spec.add_field(field);
         }
         spec.emit(self.next_decl());
         return Result::Ok(());
@@ -570,7 +568,7 @@ impl Gen {
                 Some(a) => [*a],
                 null => [],
             };
-            spec.add_member_spec(EnumMember { name: pair.0, trailing_comment: null, attrs });
+            spec.add_member({ name: pair.0, attrs });
         }
         spec.emit(self.next_decl());
         return Result::Ok(());
@@ -606,7 +604,7 @@ impl Gen {
             spec.add_attr(attr);
         }
         for let pair of &pairs {
-            spec.add_member(pair.0);
+            spec.add_member({ name: pair.0 });
         }
         spec.emit(self.next_decl());
         return true;
@@ -628,7 +626,7 @@ impl Gen {
         if let Some(t) = &tag {
             spec.add_attr(wado`wire(tag = "${*t}")`);
         }
-        let mut cases: List<WadoVariantCase> = [];
+        let mut cases: List<CaseSpec> = [];
         let mut wires: List<String> = [];
         for let [i, branch] of o.one_of.iter_ref().enumerate() {
             let bat = `${*at}/oneOf/${i}`;
@@ -644,7 +642,7 @@ impl Gen {
                 Some([p, within]) => Option::Some(self.type_of(&p, &`${bat}${within}`, &`${name}${case}`)?.text),
                 null => null,
             };
-            cases.push(WadoVariantCase { name: case, payload, doc: doc_of(&b) });
+            cases.push(CaseSpec { name: case, payload, doc: doc_of(&b) });
             wires.push(wire);
         }
         let mut pairs: List<[String, String]> = [];
@@ -664,7 +662,7 @@ impl Gen {
             if let Some(a) = &names[i] {
                 case.attrs.push(*a);
             }
-            spec.add_case_spec(case);
+            spec.add_case(case);
         }
         spec.emit(self.next_decl());
         return Result::Ok(());
@@ -1070,13 +1068,12 @@ fn members(names: &List<String>, at: &String) -> Result<List<[String, String]>, 
     return Result::Ok(pairs);
 }
 
-/// A declaration's name for `text`: its words in PascalCase, with a `_` after
-/// a reserved one.
+/// A declaration's name for `text`: its words in PascalCase.
 fn decl_name(text: &String, at: &String) -> Result<String, SchemaError> {
     let Some(name) = pascal(text) else {
         return fail(at, `names \`${*text}\`, which has no word to name a declaration by`);
     };
-    return Result::Ok(if is_reserved(name) { `${name}_` } else { name });
+    return Result::Ok(name);
 }
 
 /// A member's or case's name for `text`, which needs only to avoid a keyword,

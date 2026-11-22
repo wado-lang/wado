@@ -2,15 +2,11 @@ use {
     CodeWriter,
     CallStmt,
     CallForm,
-    FieldSpec,
     StructSpec,
     VariantSpec,
-    WadoVariantCase,
     EnumSpec,
-    EnumMember,
     FlagsSpec,
     NewtypeSpec,
-    ParamSpec,
     FnSpec,
     GlobalSpec,
     ImplSpec,
@@ -19,7 +15,7 @@ use {
     wado,
     char_range_pat,
     byte_string_literal,
-} from "../src/wadopoet.wado";
+} from "../src/lib.wado";
 use { eval, EvalHost } from "core:eval";
 use { Origin } from "core:kiln";
 
@@ -139,32 +135,80 @@ test "raw bypasses indentation" {
     assert w.to_string() == expected;
 }
 
-test "next_id generates unique ids" {
-    let mut w = CodeWriter::new();
-    let a = w.next_id();
-    let b = w.next_id();
-    let c = w.next_id();
-    assert a == 0;
-    assert b == 1;
-    assert c == 2;
-}
-
 test "hoist_fn defines each distinct key once, where write_hoisted is" {
     let mut w = CodeWriter::new();
-    let define = |name: &String| `fn ${*name}() {}\n`;
+    let mut defined = 0;
+    let mut define = |w: &mut CodeWriter, name: String| {
+        defined += 1;
+        FnSpec::new(name).emit(w, |w| w.line("return;"));
+    };
     let a = w.hoist_fn("x", "f", define);
     let b = w.hoist_fn("y", "f", define);
     let again = w.hoist_fn("x", "f", define);
     w.line("// body");
     w.write_hoisted();
     assert a == "f0" && b == "f1" && again == "f0";
-    assert w.to_string() == "// body\nfn f0() {}\nfn f1() {}\n";
+    assert defined == 2;
+    assert w.to_string() == "// body\nfn f0() {\n    return;\n}\nfn f1() {\n    return;\n}\n";
+}
+
+test "a hoisted function prunable and never called is pruned" {
+    let mut w = CodeWriter::new();
+    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).set_prunable().emit(w, |w| w.line("work();")));
+    w.write_hoisted();
+    w.prune();
+    assert w.to_string() == "";
+}
+
+#[expect_trap]
+test "hoist_fn after prune traps, as prune may have dropped what a key names" {
+    let mut w = CodeWriter::new();
+    w.prune();
+    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |w| w.line("work();")));
+}
+
+test "a function hoisted while another is defined is queued beside it, under a name of its own" {
+    let mut w = CodeWriter::new();
+    let outer = w.hoist_fn("outer", "f", |w, name| {
+        let inner = w.hoist_fn("inner", "f", |w, name| FnSpec::new(name).emit(w, |w| w.line("return;")));
+        FnSpec::new(name).emit(w, |w| w.line(`${inner}();`));
+    });
+    w.write_hoisted();
+    assert outer == "f0";
+    assert w.to_string() == "fn f1() {\n    return;\n}\nfn f0() {\n    f1();\n}\n";
+}
+
+test "hoisted names stay distinct where one prefix extends another" {
+    let mut w = CodeWriter::new();
+    let mut names: List<String> = [];
+    names.push(w.hoist_fn("y", "f1", |w, name| FnSpec::new(name).emit(w, |_| {
+    })));
+    for let i of 0..<11 {
+        names.push(w.hoist_fn(`k${i}`, "f", |w, name| FnSpec::new(name).emit(w, |_| {
+        })));
+    }
+    for let i of 0..<names.len() {
+        for let j of i + 1..<names.len() {
+            assert names[i] != names[j];
+        }
+    }
+    w.write_hoisted();
+}
+
+#[expect_trap]
+test "write_hoisted refuses an open block" {
+    let mut w = CodeWriter::new();
+    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |_| {
+    }));
+    w.begin("impl T");
+    w.write_hoisted();
 }
 
 #[expect_trap]
 test "to_string refuses a hoisted definition never written" {
     let mut w = CodeWriter::new();
-    w.hoist_fn("x", "f", |name: &String| `fn ${*name}() {}\n`);
+    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |_| {
+    }));
     w.to_string();
 }
 
@@ -194,13 +238,11 @@ test "manual indent/dedent" {
 /// A private unit function `name(p: i32)` whose body `body` writes.
 fn unit_fn(w: &mut CodeWriter, name: String, prunable: bool, body: fn(&mut CodeWriter)) {
     let mut f = FnSpec::new(name);
-    f.add_param("p", "i32");
+    f.add_param({ name: "p", type: "i32" });
     if prunable {
         f.set_prunable();
     }
-    f.emit_begin(w);
-    body(w);
-    w.end();
+    f.emit(w, body);
     w.blank();
 }
 
@@ -398,8 +440,8 @@ test "same_code compares what two writers hold" {
 
 test "StructSpec basic" {
     let mut s = StructSpec::new("Point");
-    s.add_field("x", "i32");
-    s.add_field("y", "i32");
+    s.add_field({ name: "x", type: "i32" });
+    s.add_field({ name: "y", type: "i32" });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -409,8 +451,8 @@ test "StructSpec basic" {
 
 test "StructSpec pub with pub fields" {
     let mut s = StructSpec::new("Token", Vis::Pub);
-    s.add_pub_field("kind", "i32");
-    s.add_pub_field("text", "String");
+    s.add_field({ name: "kind", type: "i32", vis: Vis::Pub });
+    s.add_field({ name: "text", type: "String", vis: Vis::Pub });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -420,18 +462,19 @@ test "StructSpec pub with pub fields" {
 
 test "StructSpec mixed visibility fields" {
     let mut s = StructSpec::new("Config", Vis::Pub);
-    s.add_pub_field("name", "String");
-    s.add_field("secret", "i32");
+    s.add_field({ name: "name", type: "String", vis: Vis::Pub });
+    s.add_field({ name: "cache", type: "i32", vis: Vis::Internal });
+    s.add_field({ name: "secret", type: "i32" });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
-    let expected = "pub struct Config {\n    pub name: String,\n    secret: i32,\n}\n";
+    let expected = "pub struct Config {\n    pub name: String,\n    internal cache: i32,\n    secret: i32,\n}\n";
     assert w.to_string() == expected;
 }
 
-test "StructSpec with FieldSpec" {
+test "StructSpec with a pub field" {
     let mut s = StructSpec::new("Foo");
-    s.add_field_spec(FieldSpec::new_pub("x", "f64"));
+    s.add_field({ name: "x", type: "f64", vis: Vis::Pub });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -441,10 +484,10 @@ test "StructSpec with FieldSpec" {
 
 test "a field's attributes precede it, one a line" {
     let mut s = StructSpec::new("Foo");
-    s.add_field_spec(FieldSpec {
+    s.add_field({
         name: "x",
-        type_str: "i32",
-        is_pub: true,
+        type: "i32",
+        vis: Vis::Pub,
         default: Option::Some("0"),
         attrs: ["wire(name = \"y\")", "secret"],
     });
@@ -457,7 +500,10 @@ test "a field's attributes precede it, one a line" {
 
 test "an enum member's attributes precede it" {
     let mut e = EnumSpec::new("Corpus");
-    e.add_member_with_attrs("Web", ["wire(name = \"web\")"]);
+    e.add_member({
+        name: "Web",
+        attrs: ["wire(name = \"web\")"],
+    });
 
     let mut w = CodeWriter::new();
     e.emit(&mut w);
@@ -467,30 +513,37 @@ test "an enum member's attributes precede it" {
 test "a declaration's doc comment and attributes precede it, and its members' theirs" {
     let mut s = StructSpec::new("Point", Vis::Pub);
     s.set_doc("A point.\n\nIn the plane.").add_attr("wire(name_policy = \"camelCase\")");
-    s.add_field_spec(FieldSpec {
-        ..FieldSpec::new_pub("x_pos", "i32"),
+    s.add_field({
+        name: "x_pos",
+        type: "i32",
+        vis: Vis::Pub,
         doc: Option::Some("Across."),
     });
     let mut e = EnumSpec::new("Color");
     e.set_doc("A hue.");
-    e.add_member_spec(EnumMember {
+    e.add_member({
         name: "Red",
-        trailing_comment: null,
         attrs: ["wire(name = \"red\")"],
         doc: Option::Some("Warm."),
     });
     let mut v = VariantSpec::new("Shape");
     v.add_attr("wire(tag = \"kind\")");
-    v.add_case_spec(WadoVariantCase {
+    v.add_case({
         name: "Dot",
-        payload: null,
         attrs: ["wire(name = \"dot\")"],
         doc: Option::Some("No size."),
     });
     let mut f = FlagsSpec::new("Perms", Vis::Pub);
-    f.set_doc("Access.").add_attr("wire(name_policy = \"kebab-case\")").add_member("Read").add_member("Write");
+    f.set_doc("Access.").add_attr("wire(name_policy = \"kebab-case\")");
+    f.add_member({ name: "Read", doc: Option::Some("Look.") }).add_member({ name: "Write" });
     let mut n = NewtypeSpec::new("Meters", "f64", Vis::Pub);
-    n.set_doc("A length.");
+    n.set_doc("A length.").add_attr("allow(unused)");
+    let mut g = GlobalSpec::new("ORIGIN", "i32", "0");
+    g.set_doc("Where it starts.").add_attr("allow(unused)").set_mut();
+    let mut i = ImplSpec::new("Meters");
+    i.set_doc("Lengths.").add_attr("coverage(off)");
+    let mut m = FnSpec::new("zero", Vis::Pub);
+    m.set_doc("None at all.").add_attr("inline").set_return_type("Meters");
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -498,6 +551,8 @@ test "a declaration's doc comment and attributes precede it, and its members' th
     v.emit(&mut w);
     f.emit(&mut w);
     n.emit(&mut w);
+    g.emit(&mut w);
+    i.emit(&mut w, |w| m.emit(w, |w| w.line("return 0.0;")));
     assert w.to_string() == "/// A point.
 ///
 /// In the plane.
@@ -521,18 +576,66 @@ variant Shape {
 /// Access.
 #[wire(name_policy = \"kebab-case\")]
 pub flags Perms {
+    /// Look.
     Read,
     Write,
 }
 /// A length.
+#[allow(unused)]
 pub type Meters = f64;
+/// Where it starts.
+#[allow(unused)]
+global mut ORIGIN: i32 = 0;
+/// Lengths.
+#[coverage(off)]
+impl Meters {
+    /// None at all.
+    #[inline]
+    pub fn zero() -> Meters {
+        return 0.0;
+    }
+}
 ";
+}
+
+test "what every spec writes above a declaration compiles" {
+    let mut w = CodeWriter::new();
+    let mut f = FlagsSpec::new("Perms");
+    f.add_member({ name: "Read", doc: Option::Some("Look.") });
+    f.emit(&mut w);
+    let mut n = NewtypeSpec::new("Bag", "List<T>");
+    n.set_doc("Some.").add_generic("T");
+    n.emit(&mut w);
+    let mut v = VariantSpec::new("Maybe");
+    v.set_doc("Perhaps.").add_generic("T").add_case({ name: "Just", payload: Option::Some("T") });
+    v.add_case({ name: "Nothing" });
+    v.emit(&mut w);
+    let mut g = GlobalSpec::new("HITS", "i32", "0");
+    g.set_doc("Counted.").set_mut();
+    g.emit(&mut w);
+    let mut i = ImplSpec::new("Perms");
+    i.set_doc("Bits.").add_attr("coverage(off)");
+    let mut m = FnSpec::new("read");
+    m.set_doc("Readable.").set_return_type("Perms");
+    i.emit(&mut w, |w| m.emit(w, |w| w.line("return Perms::Read;")));
+    let run = "HITS += 1; let b: Bag<i32> = [1]; let j: Maybe<i32> = Just(2); print(`${Perms::read() as u32}${b.len()}${HITS}${j matches { Just(2) }}`);";
+    assert printed(run, w.to_string()) == "111true";
+}
+
+test "prune drops a function's doc comment and attributes with it" {
+    let mut w = CodeWriter::new();
+    let mut f = FnSpec::new("dead");
+    f.set_doc("Gone.").add_attr("inline").set_prunable();
+    f.emit(&mut w, |w| w.ret());
+    w.line("global G: i32 = 0;");
+    w.prune();
+    assert w.to_string() == "global G: i32 = 0;\n";
 }
 
 test "a doc comment reaches reflection as written" {
     let mut s = StructSpec::new("Point");
     s.set_doc("Title\n\n  indented\nlast");
-    s.add_field("x", "i32");
+    s.add_field({ name: "x", type: "i32" });
     let mut items = CodeWriter::new();
     s.emit(&mut items);
     assert printed("print(Reflect::<Point>::doc().unwrap());", items.to_string()) == "Title\n\n  indented\nlast";
@@ -540,9 +643,9 @@ test "a doc comment reaches reflection as written" {
 
 test "VariantSpec unit cases" {
     let mut v = VariantSpec::new("TokenKind", Vis::Pub);
-    v.add_case("Number");
-    v.add_case("String");
-    v.add_case("Eof");
+    v.add_case({ name: "Number" });
+    v.add_case({ name: "String" });
+    v.add_case({ name: "Eof" });
 
     let mut w = CodeWriter::new();
     v.emit(&mut w);
@@ -552,9 +655,10 @@ test "VariantSpec unit cases" {
 
 test "VariantSpec with payloads" {
     let mut v = VariantSpec::new("Shape");
-    v.add_case_with_payload("Circle", "f64");
-    v.add_case_with_payload("Rect", "[f64, f64]");
-    v.add_case("Point");
+    v
+        .add_case({ name: "Circle", payload: Option::Some("f64") })
+        .add_case({ name: "Rect", payload: Option::Some("[f64, f64]") });
+    v.add_case({ name: "Point" });
 
     let mut w = CodeWriter::new();
     v.emit(&mut w);
@@ -565,9 +669,9 @@ test "VariantSpec with payloads" {
 
 test "EnumSpec basic" {
     let mut e = EnumSpec::new("Color", Vis::Pub);
-    e.add_member("Red");
-    e.add_member("Green");
-    e.add_member("Blue");
+    e.add_member({ name: "Red" });
+    e.add_member({ name: "Green" });
+    e.add_member({ name: "Blue" });
 
     let mut w = CodeWriter::new();
     e.emit(&mut w);
@@ -578,16 +682,22 @@ test "EnumSpec basic" {
 
 test "FnSpec simple" {
     let mut f = FnSpec::new("add");
-    f.add_param("a", "i32");
-    f.add_param("b", "i32");
+    f.add_param({ name: "a", type: "i32" });
+    f.add_param({ name: "b", type: "i32" });
     f.set_return_type("i32");
 
     let mut w = CodeWriter::new();
-    f.emit_begin(&mut w);
-    w.line("return a + b;");
-    w.end();
+    f.emit(&mut w, |w| w.line("return a + b;"));
     let expected = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
     assert w.to_string() == expected;
+}
+
+/// The line `f` opens its body with, without the brace.
+fn signature_of(f: &FnSpec) -> String {
+    let mut w = CodeWriter::new();
+    f.emit(&mut w, |_| {
+    });
+    return w.to_string().trim_suffix(" {\n}\n").to_string();
 }
 
 test "FnSpec with receiver" {
@@ -595,20 +705,20 @@ test "FnSpec with receiver" {
     f.set_receiver("&self");
     f.set_return_type("i32");
 
-    assert f.signature() == "pub fn len(&self) -> i32";
+    assert signature_of(&f) == "pub fn len(&self) -> i32";
 }
 
-test "FnSpec with default-valued param" {
+test "FnSpec with default-valued and mut params" {
     let mut f = FnSpec::new("parse_expr");
-    f.add_param("p", "&mut Parser");
-    f.add_param_spec(ParamSpec {
+    f.add_param({ name: "p", type: "Parser", is_mut: true });
+    f.add_param({
         name: "min_prec",
-        type_str: "i32",
-        default_value: Option::<String>::Some("0"),
+        type: "i32",
+        default: Option::Some("0"),
     });
     f.set_return_type("ExprNode");
 
-    assert f.signature() == "fn parse_expr(p: &mut Parser, min_prec: i32 = 0) -> ExprNode";
+    assert signature_of(&f) == "fn parse_expr(mut p: Parser, min_prec: i32 = 0) -> ExprNode";
 }
 
 test "FnSpec no return type" {
@@ -616,9 +726,7 @@ test "FnSpec no return type" {
     f.set_receiver("&mut self");
 
     let mut w = CodeWriter::new();
-    f.emit_begin(&mut w);
-    w.line("self.x = 0;");
-    w.end();
+    f.emit(&mut w, |w| w.line("self.x = 0;"));
     let expected = "fn reset(&mut self) {\n    self.x = 0;\n}\n";
     assert w.to_string() == expected;
 }
@@ -626,12 +734,11 @@ test "FnSpec no return type" {
 test "FnSpec signature string" {
     let mut f = FnSpec::new("transform", Vis::Pub);
     f.set_receiver("&self");
-    f.add_param("input", "&String");
-    f.add_param("scale", "f64");
+    f.add_param({ name: "input", type: "&String" });
+    f.add_param({ name: "scale", type: "f64" });
     f.set_return_type("String");
 
-    let sig = f.signature();
-    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String";
+    assert signature_of(&f) == "pub fn transform(&self, input: &String, scale: f64) -> String";
 }
 
 test "FnSpec export with effects" {
@@ -641,8 +748,7 @@ test "FnSpec export with effects" {
     f.add_effect("Stderr");
     f.add_effect("Environment");
 
-    let sig = f.signature();
-    assert sig == "export fn run() with (Stdout, Stderr, Environment)";
+    assert signature_of(&f) == "export fn run() with (Stdout, Stderr, Environment)";
 }
 
 // A row of one goes bare; only a row of more than one takes parentheses.
@@ -651,30 +757,27 @@ test "FnSpec with a single effect" {
     f.set_export();
     f.add_effect("Stdout");
 
-    let sig = f.signature();
-    assert sig == "export fn run() with Stdout";
+    assert signature_of(&f) == "export fn run() with Stdout";
 }
 
 test "FnSpec generic type parameter" {
     let mut f = FnSpec::new("walk_stmt", Vis::Pub);
     f.add_generic("V: Visitor");
-    f.add_param("v", "&mut V");
-    f.add_param("node", "&StmtNode");
+    f.add_param({ name: "v", type: "&mut V" });
+    f.add_param({ name: "node", type: "&StmtNode" });
 
-    let sig = f.signature();
-    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)";
+    assert signature_of(&f) == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)";
 }
 
 test "FnSpec multiple generics" {
     let mut f = FnSpec::new("zip");
     f.add_generic("A");
     f.add_generic("B");
-    f.add_param("a", "A");
-    f.add_param("b", "B");
+    f.add_param({ name: "a", type: "A" });
+    f.add_param({ name: "b", type: "B" });
     f.set_return_type("[A, B]");
 
-    let sig = f.signature();
-    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]";
+    assert signature_of(&f) == "fn zip<A, B>(a: A, b: B) -> [A, B]";
 }
 
 
@@ -701,8 +804,8 @@ test "struct + impl + fn composition" {
 
     // struct Lexer { chars: List<char>, pos: i32, }
     let mut s = StructSpec::new("Lexer");
-    s.add_field("chars", "List<char>");
-    s.add_field("pos", "i32");
+    s.add_field({ name: "chars", type: "List<char>" });
+    s.add_field({ name: "pos", type: "i32" });
     s.emit(&mut w);
     w.blank();
 
@@ -710,19 +813,15 @@ test "struct + impl + fn composition" {
     w.begin("impl Lexer");
 
     let mut f = FnSpec::new("new");
-    f.add_param("input", "&String");
+    f.add_param({ name: "input", type: "&String" });
     f.set_return_type("Lexer");
-    f.emit_begin(&mut w);
-    w.line("return Lexer { chars: input.chars().collect(), pos: 0 };");
-    w.end();
+    f.emit(&mut w, |w| w.line("return Lexer { chars: input.chars().collect(), pos: 0 };"));
     w.blank();
 
     let mut f2 = FnSpec::new("at_end");
     f2.set_receiver("&self");
     f2.set_return_type("bool");
-    f2.emit_begin(&mut w);
-    w.line("return self.pos >= self.chars.len();");
-    w.end();
+    f2.emit(&mut w, |w| w.line("return self.pos >= self.chars.len();"));
 
     w.end();
 
@@ -734,9 +833,9 @@ test "variant + global composition" {
     let mut w = CodeWriter::new();
 
     let mut v = VariantSpec::new("TokenKind", Vis::Pub);
-    v.add_case("Number");
-    v.add_case("Eof");
-    v.add_case("Error");
+    v.add_case({ name: "Number" });
+    v.add_case({ name: "Eof" });
+    v.add_case({ name: "Error" });
     v.emit(&mut w);
     w.blank();
 
@@ -750,7 +849,7 @@ test "variant + global composition" {
 
 test "chaining builder methods" {
     let mut s = StructSpec::new("Pair", Vis::Pub);
-    s.add_pub_field("first", "i32").add_pub_field("second", "i32");
+    s.add_field({ name: "first", type: "i32", vis: Vis::Pub }).add_field({ name: "second", type: "i32", vis: Vis::Pub });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -880,13 +979,9 @@ test "byte_string_literal reads back byte for byte" {
 test "ImplSpec basic" {
     let mut w = CodeWriter::new();
     let i = ImplSpec::new("Point");
-    i.emit_begin(&mut w);
     let mut f = FnSpec::new("origin");
     f.set_return_type("Point");
-    f.emit_begin(&mut w);
-    w.line("return Point { x: 0, y: 0 };");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| f.emit(w, |w| w.line("return Point { x: 0, y: 0 };")));
     let expected = "impl Point {\n    fn origin() -> Point {\n        return Point { x: 0, y: 0 };\n    }\n}\n";
     assert w.to_string() == expected;
 }
@@ -894,15 +989,11 @@ test "ImplSpec basic" {
 test "ImplSpec trait impl" {
     let mut w = CodeWriter::new();
     let i = ImplSpec::new_trait("Eq", "Point");
-    i.emit_begin(&mut w);
     let mut f = FnSpec::new("eq");
     f.set_receiver("&self");
-    f.add_param("other", "&Self");
+    f.add_param({ name: "other", type: "&Self" });
     f.set_return_type("bool");
-    f.emit_begin(&mut w);
-    w.line("return self.x == other.x && self.y == other.y;");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| f.emit(w, |w| w.line("return self.x == other.x && self.y == other.y;")));
     let expected = "impl Eq for Point {\n    fn eq(&self, other: &Self) -> bool {\n        return self.x == other.x && self.y == other.y;\n    }\n}\n";
     assert w.to_string() == expected;
 }
@@ -910,17 +1001,13 @@ test "ImplSpec trait impl" {
 test "a generic struct and its impl compile" {
     let mut w = CodeWriter::new();
     let mut s = StructSpec::new("Holder", Vis::Pub);
-    s.add_generic("T: Default").add_pub_field("value", "T");
+    s.add_generic("T: Default").add_field({ name: "value", type: "T", vis: Vis::Pub });
     s.emit(&mut w);
     let mut i = ImplSpec::new("Holder<T>");
     i.add_generic("T: Default");
-    i.emit_begin(&mut w);
     let mut f = FnSpec::new("fresh", Vis::Pub);
     f.set_return_type("Holder<T>");
-    f.emit_begin(&mut w);
-    w.line("return Holder { value: T::default() };");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| f.emit(w, |w| w.line("return Holder { value: T::default() };")));
     let source = w.to_string();
     assert source.starts_with("pub struct Holder<T: Default> {\n");
     assert source.contains("impl<T: Default> Holder<T> {\n");
@@ -932,20 +1019,16 @@ test "struct + impl trait composition" {
 
     // struct
     let mut s = StructSpec::new("Article", Vis::Pub);
-    s.add_pub_field("name", "String");
+    s.add_field({ name: "name", type: "String", vis: Vis::Pub });
     s.emit(&mut w);
     w.blank();
 
     // impl trait for struct
     let i = ImplSpec::new_trait("Summary", "Article");
-    i.emit_begin(&mut w);
     let mut f = FnSpec::new("title");
     f.set_receiver("&self");
     f.set_return_type("String");
-    f.emit_begin(&mut w);
-    w.line("return self.name;");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| f.emit(w, |w| w.line("return self.name;")));
 
     let items = `trait Summary with () {
     fn title(&self) -> String;

@@ -3393,19 +3393,19 @@ fn try_HTML_CONDITIONAL_COMMENT(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_1 = pos;
-        let mut ng_exit_1 = false;
-        ng_1: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_1; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_1 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_1 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_1;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3425,17 +3425,17 @@ fn try_XML(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'l' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_2 = pos;
-        let mut ng_exit_2 = false;
-        ng_2: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_2; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_2 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_2 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_2;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3463,21 +3463,21 @@ fn try_CDATA(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_3 = pos;
-        let mut ng_exit_3 = false;
-        ng_3: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_3; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_3 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_3 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_3;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3491,17 +3491,17 @@ fn try_DTD(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_4 = pos;
-        let mut ng_exit_4 = false;
-        ng_4: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_4; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_4 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_4 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_4;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3510,57 +3510,57 @@ fn try_DTD(src: &StrSlice, start: i32) -> i32 {
 
 fn try_SCRIPTLET(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_5 = pos;
-    alts_done_5: {
-        alts_5_0: {
-            pos = alts_saved_5;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break alts_5_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { break alts_5_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { break alts_0_0; }
             pos += 1;
             loop {
-                let ng_saved_6 = pos;
-                let mut ng_exit_6 = false;
-                ng_6: {
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { break ng_6; }
+                let ng_saved_1 = pos;
+                let mut ng_exit_1 = false;
+                ng_1: {
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { break ng_1; }
                     pos += 1;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_6; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_1; }
                     pos += 1;
-                    ng_exit_6 = true;
+                    ng_exit_1 = true;
                 }
-                if ng_exit_6 {
+                if ng_exit_1 {
                     break;
                 }
-                pos = ng_saved_6;
-                if pos >= src.len() { break alts_5_0; }
+                pos = ng_saved_1;
+                if pos >= src.len() { break alts_0_0; }
                 pos = src.ceil_char_boundary(pos + 1);
             }
-            break alts_done_5;
+            break alts_done_0;
         }
-        alts_5_1: {
-            pos = alts_saved_5;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break alts_5_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break alts_5_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break alts_0_1; }
             pos += 1;
             loop {
-                let ng_saved_7 = pos;
-                let mut ng_exit_7 = false;
-                ng_7: {
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break ng_7; }
+                let ng_saved_2 = pos;
+                let mut ng_exit_2 = false;
+                ng_2: {
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break ng_2; }
                     pos += 1;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_7; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_2; }
                     pos += 1;
-                    ng_exit_7 = true;
+                    ng_exit_2 = true;
                 }
-                if ng_exit_7 {
+                if ng_exit_2 {
                     break;
                 }
-                pos = ng_saved_7;
-                if pos >= src.len() { break alts_5_1; }
+                pos = ng_saved_2;
+                if pos >= src.len() { break alts_0_1; }
                 pos = src.ceil_char_boundary(pos + 1);
             }
-            break alts_done_5;
+            break alts_done_0;
         }
         return -1;
     }
@@ -3569,64 +3569,64 @@ fn try_SCRIPTLET(src: &StrSlice, start: i32) -> i32 {
 
 fn try_SEA_WS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_9 = pos;
-    alts_done_9: {
-        alts_9_0: {
-            pos = alts_saved_9;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break alts_9_0; }
+    let alts_saved_1 = pos;
+    alts_done_1: {
+        alts_1_0: {
+            pos = alts_saved_1;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break alts_1_0; }
             pos += 1;
-            break alts_done_9;
+            break alts_done_1;
         }
-        alts_9_1: {
-            pos = alts_saved_9;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\x09' { break alts_9_1; }
+        alts_1_1: {
+            pos = alts_saved_1;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\x09' { break alts_1_1; }
             pos += 1;
-            break alts_done_9;
+            break alts_done_1;
         }
-        alts_9_2: {
-            pos = alts_saved_9;
-            opt_10: {
-                if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break opt_10; }
+        alts_1_2: {
+            pos = alts_saved_1;
+            opt_2: {
+                if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break opt_2; }
                 pos += 1;
             }
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_9_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_1_2; }
             pos += 1;
-            break alts_done_9;
+            break alts_done_1;
         }
         return -1;
     }
     loop {
-        let rep_saved_8 = pos;
-        rep_8: {
-            let alts_saved_12 = pos;
-            alts_done_12: {
-                alts_12_0: {
-                    pos = alts_saved_12;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break alts_12_0; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_4 = pos;
+            alts_done_4: {
+                alts_4_0: {
+                    pos = alts_saved_4;
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break alts_4_0; }
                     pos += 1;
-                    break alts_done_12;
+                    break alts_done_4;
                 }
-                alts_12_1: {
-                    pos = alts_saved_12;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\x09' { break alts_12_1; }
+                alts_4_1: {
+                    pos = alts_saved_4;
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\x09' { break alts_4_1; }
                     pos += 1;
-                    break alts_done_12;
+                    break alts_done_4;
                 }
-                alts_12_2: {
-                    pos = alts_saved_12;
-                    opt_13: {
-                        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break opt_13; }
+                alts_4_2: {
+                    pos = alts_saved_4;
+                    opt_5: {
+                        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break opt_5; }
                         pos += 1;
                     }
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_12_2; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_4_2; }
                     pos += 1;
-                    break alts_done_12;
+                    break alts_done_4;
                 }
-                break rep_8;
+                break rep_0;
             }
             continue;
         }
-        pos = rep_saved_8;
+        pos = rep_saved_0;
         break;
     }
     return pos;
@@ -3649,17 +3649,17 @@ fn try_SCRIPT_OPEN(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b't' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_14 = pos;
-        let mut ng_exit_14 = false;
-        ng_14: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_14; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_14 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_14 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_14;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3681,17 +3681,17 @@ fn try_STYLE_OPEN(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_15 = pos;
-        let mut ng_exit_15 = false;
-        ng_15: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_15; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_15 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_15 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_15;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3711,9 +3711,9 @@ fn try_HTML_TEXT(src: &StrSlice, start: i32) -> i32 {
     if (unchecked src.byte_at(pos) matches { b'<' }) { return -1; }
     pos = src.ceil_char_boundary(pos + 1);
     loop {
-        rep_16: {
-            if pos >= src.len() { break rep_16; }
-            if (unchecked src.byte_at(pos) matches { b'<' }) { break rep_16; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if (unchecked src.byte_at(pos) matches { b'<' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -3758,9 +3758,9 @@ fn try_TAG_NAME(src: &StrSlice, start: i32) -> i32 {
     if !(char_at(src, pos) matches { ':' | 'A'..='Z' | 'a'..='z' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { return -1; }
     pos = src.ceil_char_boundary(pos + 1);
     loop {
-        rep_18: {
-            if pos >= src.len() { break rep_18; }
-            if !(char_at(src, pos) matches { '-'..='.' | '0'..=':' | 'A'..='Z' | '_' | 'a'..='z' | '·' | '\u{300}'..='\u{36f}' | '‿'..='⁀' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { break rep_18; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(char_at(src, pos) matches { '-'..='.' | '0'..=':' | 'A'..='Z' | '_' | 'a'..='z' | '·' | '\u{300}'..='\u{36f}' | '‿'..='⁀' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -3780,33 +3780,33 @@ fn try_TAG_WHITESPACE(src: &StrSlice, start: i32) -> i32 {
 fn try_SCRIPT_BODY(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
-        let ng_saved_19 = pos;
-        let mut ng_exit_19 = false;
-        ng_19: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_19; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'r' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'r' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'p' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'p' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b't' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b't' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_19 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_19 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_19;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3816,21 +3816,21 @@ fn try_SCRIPT_BODY(src: &StrSlice, start: i32) -> i32 {
 fn try_SCRIPT_SHORT_BODY(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
-        let ng_saved_20 = pos;
-        let mut ng_exit_20 = false;
-        ng_20: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_20; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_20; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_20; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_20 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_20 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_20;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3840,31 +3840,31 @@ fn try_SCRIPT_SHORT_BODY(src: &StrSlice, start: i32) -> i32 {
 fn try_STYLE_BODY(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
-        let ng_saved_21 = pos;
-        let mut ng_exit_21 = false;
-        ng_21: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_21; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b't' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b't' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'y' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'y' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'l' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'l' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_21 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_21 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_21;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3874,21 +3874,21 @@ fn try_STYLE_BODY(src: &StrSlice, start: i32) -> i32 {
 fn try_STYLE_SHORT_BODY(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
-        let ng_saved_22 = pos;
-        let mut ng_exit_22 = false;
-        ng_22: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_22; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_22; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_22; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_22 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_22 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_22;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -3898,86 +3898,86 @@ fn try_STYLE_SHORT_BODY(src: &StrSlice, start: i32) -> i32 {
 fn try_ATTVALUE_VALUE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
-        rep_23: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break rep_23; }
+        rep_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break rep_0; }
             pos += 1;
             continue;
         }
         break;
     }
-    let alts_saved_24 = pos;
-    let mut alts_best_24 = -1;
-    alts_24_0: {
-        pos = alts_saved_24;
+    let alts_saved_1 = pos;
+    let mut alts_best_1 = -1;
+    alts_1_0: {
+        pos = alts_saved_1;
         pos = frag_DOUBLE_QUOTE_STRING(src, pos);
-        if pos < 0 { break alts_24_0; }
-        if pos > alts_best_24 { alts_best_24 = pos; }
+        if pos < 0 { break alts_1_0; }
+        if pos > alts_best_1 { alts_best_1 = pos; }
     }
-    alts_24_1: {
-        pos = alts_saved_24;
+    alts_1_1: {
+        pos = alts_saved_1;
         pos = frag_SINGLE_QUOTE_STRING(src, pos);
-        if pos < 0 { break alts_24_1; }
-        if pos > alts_best_24 { alts_best_24 = pos; }
+        if pos < 0 { break alts_1_1; }
+        if pos > alts_best_1 { alts_best_1 = pos; }
     }
-    alts_24_2: {
-        pos = alts_saved_24;
+    alts_1_2: {
+        pos = alts_saved_1;
         pos = frag_ATTCHARS(src, pos);
-        if pos < 0 { break alts_24_2; }
-        if pos > alts_best_24 { alts_best_24 = pos; }
+        if pos < 0 { break alts_1_2; }
+        if pos > alts_best_1 { alts_best_1 = pos; }
     }
-    alts_24_3: {
-        pos = alts_saved_24;
+    alts_1_3: {
+        pos = alts_saved_1;
         pos = frag_HEXCHARS(src, pos);
-        if pos < 0 { break alts_24_3; }
-        if pos > alts_best_24 { alts_best_24 = pos; }
+        if pos < 0 { break alts_1_3; }
+        if pos > alts_best_1 { alts_best_1 = pos; }
     }
-    alts_24_4: {
-        pos = alts_saved_24;
+    alts_1_4: {
+        pos = alts_saved_1;
         pos = frag_DECCHARS(src, pos);
-        if pos < 0 { break alts_24_4; }
-        if pos > alts_best_24 { alts_best_24 = pos; }
+        if pos < 0 { break alts_1_4; }
+        if pos > alts_best_1 { alts_best_1 = pos; }
     }
-    if alts_best_24 < 0 { return -1; }
-    pos = alts_best_24;
+    if alts_best_1 < 0 { return -1; }
+    pos = alts_best_1;
     return pos;
 }
 
 fn try_ATTRIBUTE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_25 = pos;
-    let mut alts_best_25 = -1;
-    alts_25_0: {
-        pos = alts_saved_25;
+    let alts_saved_0 = pos;
+    let mut alts_best_0 = -1;
+    alts_0_0: {
+        pos = alts_saved_0;
         pos = frag_DOUBLE_QUOTE_STRING(src, pos);
-        if pos < 0 { break alts_25_0; }
-        if pos > alts_best_25 { alts_best_25 = pos; }
+        if pos < 0 { break alts_0_0; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_25_1: {
-        pos = alts_saved_25;
+    alts_0_1: {
+        pos = alts_saved_0;
         pos = frag_SINGLE_QUOTE_STRING(src, pos);
-        if pos < 0 { break alts_25_1; }
-        if pos > alts_best_25 { alts_best_25 = pos; }
+        if pos < 0 { break alts_0_1; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_25_2: {
-        pos = alts_saved_25;
+    alts_0_2: {
+        pos = alts_saved_0;
         pos = frag_ATTCHARS(src, pos);
-        if pos < 0 { break alts_25_2; }
-        if pos > alts_best_25 { alts_best_25 = pos; }
+        if pos < 0 { break alts_0_2; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_25_3: {
-        pos = alts_saved_25;
+    alts_0_3: {
+        pos = alts_saved_0;
         pos = frag_HEXCHARS(src, pos);
-        if pos < 0 { break alts_25_3; }
-        if pos > alts_best_25 { alts_best_25 = pos; }
+        if pos < 0 { break alts_0_3; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_25_4: {
-        pos = alts_saved_25;
+    alts_0_4: {
+        pos = alts_saved_0;
         pos = frag_DECCHARS(src, pos);
-        if pos < 0 { break alts_25_4; }
-        if pos > alts_best_25 { alts_best_25 = pos; }
+        if pos < 0 { break alts_0_4; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if alts_best_25 < 0 { return -1; }
-    pos = alts_best_25;
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 
@@ -3986,9 +3986,9 @@ fn frag_DOUBLE_QUOTE_STRING(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     loop {
-        rep_26: {
-            if pos >= src.len() { break rep_26; }
-            if (unchecked src.byte_at(pos) matches { b'<' | b'"' }) { break rep_26; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if (unchecked src.byte_at(pos) matches { b'<' | b'"' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -4004,9 +4004,9 @@ fn frag_SINGLE_QUOTE_STRING(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     loop {
-        rep_27: {
-            if pos >= src.len() { break rep_27; }
-            if (unchecked src.byte_at(pos) matches { b'<' | b'\'' }) { break rep_27; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if (unchecked src.byte_at(pos) matches { b'<' | b'\'' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -4019,36 +4019,36 @@ fn frag_SINGLE_QUOTE_STRING(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_ATTCHARS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let mut la_end_28: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'#' | b'+'..=b';' | b'=' | b'?' | b'A'..=b'Z' | b'_' | b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        let mut la_tot_29: i32 = -1;
-        let peek_save_30 = pos;
-        opt_31: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break opt_31; }
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        opt_3: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break opt_3; }
             pos += 1;
         }
-        la_tot_29 = pos;
-        pos = peek_save_30;
-        if la_tot_29 >= 0 && la_tot_29 >= la_end_28 {
-            la_end_28 = la_tot_29;
+        la_tot_1 = pos;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_28 = pos;
-        la_rep_28: {
-            if pos >= src.len() { break la_rep_28; }
-            if !(unchecked src.byte_at(pos) matches { b'#' | b'+'..=b';' | b'=' | b'?' | b'A'..=b'Z' | b'_' | b'a'..=b'z' }) { break la_rep_28; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'#' | b'+'..=b';' | b'=' | b'?' | b'A'..=b'Z' | b'_' | b'a'..=b'z' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
-        pos = la_saved_28;
+        pos = la_saved_0;
         break;
     }
-    if la_end_28 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_28;
+    pos = la_end_0;
     return pos;
 }
 
@@ -4060,9 +4060,9 @@ fn frag_HEXCHARS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { return -1; }
     pos += 1;
     loop {
-        rep_32: {
-            if pos >= src.len() { break rep_32; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { break rep_32; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4077,16 +4077,16 @@ fn frag_DECCHARS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
-        rep_34: {
-            if pos >= src.len() { break rep_34; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_34; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_0; }
             pos += 1;
             continue;
         }
         break;
     }
-    opt_36: {
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break opt_36; }
+    opt_2: {
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break opt_2; }
         pos += 1;
     }
     return pos;

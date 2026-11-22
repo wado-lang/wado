@@ -29,6 +29,7 @@ use { push_unique } from "./list_util.wado";
 use { alt_is_left_recursive } from "./lr_util.wado";
 use { sets_overlap } from "./token_kinds.wado";
 use { HashMap, HashSet } from "core:collections";
+use { IdGen } from "lib:wadopoet";
 
 /// The parser's ATN predictor (`AtnPredictor`): its field, and the name of the
 /// `&mut` parameter a scan function takes it through.
@@ -76,9 +77,10 @@ pub struct EmitCursor {
     ref_frames: List<HashSet<String>> = [],
     /// Names referenced outside any function frame.
     root_refs: HashSet<String> = HashSet::new(),
-    /// Monotonic counter for scan-group label uniqueness (`sg_<n>` etc.), fresh
-    /// per generation so labels do not depend on run order.
-    scan_group_counter: i32 = 0,
+    /// The ids that keep the labels and locals a scan mints (`sg_<n>`,
+    /// `cont_done_<n>`) apart, fresh per generation so they do not depend on
+    /// run order.
+    scan_ids: IdGen = IdGen::new(),
     /// Per rule index, whether emitted code calls one of the rule's scan
     /// functions; `scan_queue` holds the called rules not yet emitted.
     scan_called: List<bool> = [],
@@ -253,11 +255,8 @@ impl EmitCursor {
         return name;
     }
 
-    /// Return the next scan-group id and advance the counter.
-    pub fn next_scan_group(&mut self) -> i32 {
-        let id = self.scan_group_counter;
-        self.scan_group_counter += 1;
-        return id;
+    pub fn next_scan_id(&mut self) -> i32 {
+        return self.scan_ids.next();
     }
 
     /// Record that emitted code calls rule `rule`'s scan functions.

@@ -33,33 +33,31 @@ pub fn gen_highlight(
     if grammar.parser_rules.len() > 0 {
         let mut fr = FnSpec::new("highlight_result", Vis::Pub);
         fr.add_generic("S: AsStrSlice");
-        fr.add_param("result", "&ParseResult");
-        fr.add_param("input", "S");
+        fr.add_param({ name: "result", type: "&ParseResult" });
+        fr.add_param({ name: "input", type: "S" });
         fr.set_return_type("String");
-        fr.emit_begin(w);
-        w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
-        w.line("highlight_walk(&mut visitor, &result.tokens, &result.cst);");
-        w.line("visitor.hl_cover_unvisited(&result.tokens);");
-        w.line("return highlight_html(input, &visitor.captures, &HIGHLIGHT_MAPPING.capture_classes);");
-        w.end();
+        fr.emit(w, |w| {
+            w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
+            w.line("highlight_walk(&mut visitor, &result.tokens, &result.cst);");
+            w.line("visitor.hl_cover_unvisited(&result.tokens);");
+            w.line("return highlight_html(input, &visitor.captures, &HIGHLIGHT_MAPPING.capture_classes);");
+        });
         w.blank();
 
-        let mut f = highlight_entry(settings);
-        f.emit_begin(w);
-        w.line("let result = parse(input);");
-        w.line("return highlight_result(&result, input);");
-        w.end();
+        highlight_entry(settings).emit(w, |w| {
+            w.line("let result = parse(input);");
+            w.line("return highlight_result(&result, input);");
+        });
     } else {
         // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
-        let mut f = highlight_entry(settings);
-        f.emit_begin(w);
-        w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
-        w.line("let tokens = tokenize(input);");
-        w.begin("for let mut _i = 0; _i < tokens.len(); _i += 1");
-        w.line("visitor.hl_capture_token(&tokens, _i);");
-        w.end();
-        w.line("return highlight_html(input, &visitor.captures, &HIGHLIGHT_MAPPING.capture_classes);");
-        w.end();
+        highlight_entry(settings).emit(w, |w| {
+            w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
+            w.line("let tokens = tokenize(input);");
+            w.begin("for let mut _i = 0; _i < tokens.len(); _i += 1");
+            w.line("visitor.hl_capture_token(&tokens, _i);");
+            w.end();
+            w.line("return highlight_html(input, &visitor.captures, &HIGHLIGHT_MAPPING.capture_classes);");
+        });
     }
     w.blank();
 }
@@ -69,7 +67,7 @@ pub fn gen_highlight(
 fn highlight_entry(settings: &GenSettings) -> FnSpec {
     let mut f = FnSpec::new("highlight", Vis::Pub);
     f.add_generic("S: AsStrSlice");
-    f.add_param("input", "S");
+    f.add_param({ name: "input", type: "S" });
     f.set_return_type("String");
     for let base of &settings.base_effects() {
         f.add_effect(base);
@@ -456,8 +454,6 @@ fn gen_highlight_mapping(
 
     let mut f = FnSpec::new("capture_vocabulary", Vis::Pub);
     f.set_return_type("List<String>");
-    f.emit_begin(w);
-    w.line("return HIGHLIGHT_MAPPING.capture_names;");
-    w.end();
+    f.emit(w, |w| w.line("return HIGHLIGHT_MAPPING.capture_names;"));
     w.blank();
 }

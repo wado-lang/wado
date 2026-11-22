@@ -1099,27 +1099,27 @@ fn apply_D_actions(lx: &mut Lexer, start: i32, end: i32) {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'd' { return; }
     pos += 1;
     loop {
-        let ng_saved_3 = pos;
-        let mut ng_exit_3 = false;
-        ng_3: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_3; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_0; }
             pos += 1;
-            ng_exit_3 = true;
+            ng_exit_0 = true;
         }
-        pos = ng_saved_3;
-        if ng_exit_3 {
+        pos = ng_saved_0;
+        if ng_exit_0 {
             break;
         }
-        let rep_probe_4_saved = pos;
-        let mut rep_probe_4_ok = false;
-        rep_probe_4: {
-            if pos >= src.len() { break rep_probe_4; }
-            if (unchecked src.byte_at(pos) matches { b'b' }) { break rep_probe_4; }
+        let rep_probe_1_saved = pos;
+        let mut rep_probe_1_ok = false;
+        rep_probe_1: {
+            if pos >= src.len() { break rep_probe_1; }
+            if (unchecked src.byte_at(pos) matches { b'b' }) { break rep_probe_1; }
             pos = src.ceil_char_boundary(pos + 1);
-            rep_probe_4_ok = true;
+            rep_probe_1_ok = true;
         }
-        if !rep_probe_4_ok || pos > end { pos = rep_probe_4_saved; return; }
-        pos = rep_probe_4_saved;
+        if !rep_probe_1_ok || pos > end { pos = rep_probe_1_saved; return; }
+        pos = rep_probe_1_saved;
         if pos >= src.len() { return; }
         if (unchecked src.byte_at(pos) matches { b'b' }) { return; }
         pos = src.ceil_char_boundary(pos + 1);
@@ -1135,45 +1135,45 @@ fn apply_E_actions(lx: &mut Lexer, start: i32, end: i32) {
     let mut pos = start;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { return; }
     pos += 1;
-    let la_start_5 = pos;
-    let mut accept_5: i32 = -1;
-    let mut la_end_5: i32 = -1;
+    let la_start_0 = pos;
+    let mut accept_0: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return; }
     if (unchecked src.byte_at(pos) matches { b'b' }) { return; }
     pos = src.ceil_char_boundary(pos + 1);
     loop {
-        let mut la_tot_6: i32 = -1;
-        let peek_save_7 = pos;
-        peek_7: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break peek_7; }
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break peek_2; }
             pos += 1;
-            la_tot_6 = pos;
+            la_tot_1 = pos;
         }
-        pos = peek_save_7;
-        if la_tot_6 >= 0 && la_tot_6 >= la_end_5 {
-            la_end_5 = la_tot_6;
-            accept_5 = pos;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
+            accept_0 = pos;
         }
-        let la_saved_5 = pos;
-        la_rep_5: {
-            if pos >= src.len() { break la_rep_5; }
-            if (unchecked src.byte_at(pos) matches { b'b' }) { break la_rep_5; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if (unchecked src.byte_at(pos) matches { b'b' }) { break la_rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
-        pos = la_saved_5;
+        pos = la_saved_0;
         break;
     }
-    if la_end_5 < 0 {
+    if la_end_0 < 0 {
         return;
     }
-    pos = la_start_5;
-    while pos < accept_5 {
+    pos = la_start_0;
+    while pos < accept_0 {
         if pos >= src.len() { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
         if (unchecked src.byte_at(pos) matches { b'b' }) { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
         pos = src.ceil_char_boundary(pos + 1);
     }
-    if pos != accept_5 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
+    if pos != accept_0 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
     lx.count = pos - start;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { return; }
     pos += 1;
@@ -1186,16 +1186,16 @@ fn apply_G_actions(lx: &mut Lexer, start: i32, end: i32) {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'g' { return; }
     pos += 1;
     loop {
-        let ng_saved_8 = pos;
-        let mut ng_exit_8 = false;
-        ng_8: {
-            if !( pos > start + 2 ) { break ng_8; }
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_8; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if !( pos > start + 2 ) { break ng_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_0; }
             pos += 1;
-            ng_exit_8 = true;
+            ng_exit_0 = true;
         }
-        pos = ng_saved_8;
-        if ng_exit_8 {
+        pos = ng_saved_0;
+        if ng_exit_0 {
             break;
         }
         if pos >= src.len() { return; }
@@ -1229,36 +1229,36 @@ fn try_A(lx: &Lexer, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { return -1; }
     pos += 1;
-    let mut la_end_10: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return -1; }
     if (unchecked src.byte_at(pos) matches { b'b' }) { return -1; }
     pos = src.ceil_char_boundary(pos + 1);
     loop {
-        let mut la_tot_11: i32 = -1;
-        let peek_save_12 = pos;
-        peek_12: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break peek_12; }
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break peek_2; }
             pos += 1;
-            la_tot_11 = pos;
+            la_tot_1 = pos;
         }
-        pos = peek_save_12;
-        if la_tot_11 >= 0 && la_tot_11 >= la_end_10 {
-            la_end_10 = la_tot_11;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_10 = pos;
-        la_rep_10: {
-            if pos >= src.len() { break la_rep_10; }
-            if (unchecked src.byte_at(pos) matches { b'b' }) { break la_rep_10; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if (unchecked src.byte_at(pos) matches { b'b' }) { break la_rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
-        pos = la_saved_10;
+        pos = la_saved_0;
         break;
     }
-    if la_end_10 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_10;
+    pos = la_end_0;
     return pos;
 }
 
@@ -1268,17 +1268,17 @@ fn try_D(lx: &Lexer, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'd' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_13 = pos;
-        let mut ng_exit_13 = false;
-        ng_13: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_13; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_0; }
             pos += 1;
-            ng_exit_13 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_13 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_13;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         if (unchecked src.byte_at(pos) matches { b'b' }) { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
@@ -1291,36 +1291,36 @@ fn try_E(lx: &Lexer, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { return -1; }
     pos += 1;
-    let mut la_end_14: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return -1; }
     if (unchecked src.byte_at(pos) matches { b'b' }) { return -1; }
     pos = src.ceil_char_boundary(pos + 1);
     loop {
-        let mut la_tot_15: i32 = -1;
-        let peek_save_16 = pos;
-        peek_16: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break peek_16; }
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break peek_2; }
             pos += 1;
-            la_tot_15 = pos;
+            la_tot_1 = pos;
         }
-        pos = peek_save_16;
-        if la_tot_15 >= 0 && la_tot_15 >= la_end_14 {
-            la_end_14 = la_tot_15;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_14 = pos;
-        la_rep_14: {
-            if pos >= src.len() { break la_rep_14; }
-            if (unchecked src.byte_at(pos) matches { b'b' }) { break la_rep_14; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if (unchecked src.byte_at(pos) matches { b'b' }) { break la_rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
-        pos = la_saved_14;
+        pos = la_saved_0;
         break;
     }
-    if la_end_14 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_14;
+    pos = la_end_0;
     return pos;
 }
 
@@ -1330,18 +1330,18 @@ fn try_G(lx: &Lexer, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'g' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_17 = pos;
-        let mut ng_exit_17 = false;
-        ng_17: {
-            if !( pos > start + 2 ) { break ng_17; }
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_17; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if !( pos > start + 2 ) { break ng_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_0; }
             pos += 1;
-            ng_exit_17 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_17 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_17;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }

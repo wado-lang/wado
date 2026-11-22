@@ -4228,54 +4228,54 @@ fn try_RAW_IDENTIFIER(src: &StrSlice, start: i32) -> i32 {
 
 fn try_LINE_COMMENT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_4 = pos;
-    let mut alts_best_4 = -1;
-    alts_4_0: {
-        pos = alts_saved_4;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_4_0; }
+    let alts_saved_0 = pos;
+    let mut alts_best_0 = -1;
+    alts_0_0: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_0_0; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_4_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_0_0; }
         pos += 1;
-        let alts_saved_5 = pos;
-        alts_done_5: {
-            alts_5_0: {
-                pos = alts_saved_5;
-                if pos >= src.len() { break alts_5_0; }
-                if (unchecked src.byte_at(pos) matches { b'/' | b'!' | b'\x0d' | b'\x0a' }) { break alts_5_0; }
+        let alts_saved_1 = pos;
+        alts_done_1: {
+            alts_1_0: {
+                pos = alts_saved_1;
+                if pos >= src.len() { break alts_1_0; }
+                if (unchecked src.byte_at(pos) matches { b'/' | b'!' | b'\x0d' | b'\x0a' }) { break alts_1_0; }
                 pos = src.ceil_char_boundary(pos + 1);
-                break alts_done_5;
+                break alts_done_1;
             }
-            alts_5_1: {
-                pos = alts_saved_5;
-                if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_5_1; }
+            alts_1_1: {
+                pos = alts_saved_1;
+                if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_1_1; }
                 pos += 1;
-                if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_5_1; }
+                if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_1_1; }
                 pos += 1;
-                break alts_done_5;
+                break alts_done_1;
             }
-            break alts_4_0;
+            break alts_0_0;
         }
         loop {
-            rep_6: {
-                if pos >= src.len() { break rep_6; }
-                if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_6; }
+            rep_2: {
+                if pos >= src.len() { break rep_2; }
+                if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_2; }
                 pos = src.ceil_char_boundary(pos + 1);
                 continue;
             }
             break;
         }
-        if pos > alts_best_4 { alts_best_4 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_4_1: {
-        pos = alts_saved_4;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_4_1; }
+    alts_0_1: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_0_1; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_4_1; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_0_1; }
         pos += 1;
-        if pos > alts_best_4 { alts_best_4 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if alts_best_4 < 0 { return -1; }
-    pos = alts_best_4;
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 
@@ -4292,9 +4292,9 @@ fn try_INNER_LINE_DOC(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
     loop {
-        rep_7: {
-            if pos >= src.len() { break rep_7; }
-            if (unchecked src.byte_at(pos) matches { b'\x0a' | b'\x0d' }) { break rep_7; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if (unchecked src.byte_at(pos) matches { b'\x0a' | b'\x0d' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -4315,24 +4315,24 @@ fn try_OUTER_LINE_DOC(src: &StrSlice, start: i32) -> i32 {
     pos += 1;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
-    let opt_saved_8 = pos;
-    let mut opt_ok_8 = false;
-    opt_8: {
-        if pos >= src.len() { break opt_8; }
-        if (unchecked src.byte_at(pos) matches { b'/' | b'\x0d' | b'\x0a' }) { break opt_8; }
+    let opt_saved_0 = pos;
+    let mut opt_ok_0 = false;
+    opt_0: {
+        if pos >= src.len() { break opt_0; }
+        if (unchecked src.byte_at(pos) matches { b'/' | b'\x0d' | b'\x0a' }) { break opt_0; }
         pos = src.ceil_char_boundary(pos + 1);
         loop {
-            rep_9: {
-                if pos >= src.len() { break rep_9; }
-                if (unchecked src.byte_at(pos) matches { b'\x0a' | b'\x0d' }) { break rep_9; }
+            rep_1: {
+                if pos >= src.len() { break rep_1; }
+                if (unchecked src.byte_at(pos) matches { b'\x0a' | b'\x0d' }) { break rep_1; }
                 pos = src.ceil_char_boundary(pos + 1);
                 continue;
             }
             break;
         }
-        opt_ok_8 = true;
+        opt_ok_0 = true;
     }
-    if !opt_ok_8 { pos = opt_saved_8; }
+    if !opt_ok_0 { pos = opt_saved_0; }
     return pos;
 }
 
@@ -4343,8 +4343,8 @@ fn try_OUTER_BLOCK_DOC(src: &StrSlice, start: i32) -> i32 {
 fn try_SHEBANG(src: &StrSlice, start: i32) -> i32 with RustLexerBase {
     let mut pos = start;
     if !RustLexerBase::sof(LexerView { src, start, pos }) { return -1; }
-    opt_10: {
-        if pos + 3 > src.len() || unchecked src.byte_at(pos) != b'\xef' || unchecked src.byte_at(pos + 1) != b'\xbb' || unchecked src.byte_at(pos + 2) != b'\xbf' { break opt_10; }
+    opt_0: {
+        if pos + 3 > src.len() || unchecked src.byte_at(pos) != b'\xef' || unchecked src.byte_at(pos + 1) != b'\xbb' || unchecked src.byte_at(pos + 2) != b'\xbf' { break opt_0; }
         pos += 3;
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'#' { return -1; }
@@ -4355,9 +4355,9 @@ fn try_SHEBANG(src: &StrSlice, start: i32) -> i32 with RustLexerBase {
     if (unchecked src.byte_at(pos) matches { b'[' | b'\x0d' | b'\x0a' }) { return -1; }
     pos = src.ceil_char_boundary(pos + 1);
     loop {
-        rep_11: {
-            if pos >= src.len() { break rep_11; }
-            if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_11; }
+        rep_1: {
+            if pos >= src.len() { break rep_1; }
+            if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_1; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -4376,25 +4376,25 @@ fn try_WHITESPACE(src: &StrSlice, start: i32) -> i32 {
 
 fn try_NEWLINE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_12 = pos;
-    let mut alts_best_12 = -1;
-    alts_12_0: {
-        pos = alts_saved_12;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break alts_12_0; }
+    let alts_saved_0 = pos;
+    let mut alts_best_0 = -1;
+    alts_0_0: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break alts_0_0; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_12_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_0_0; }
         pos += 1;
-        if pos > alts_best_12 { alts_best_12 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_12_1: {
-        pos = alts_saved_12;
-        if pos >= src.len() { break alts_12_1; }
-        if !(unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break alts_12_1; }
+    alts_0_1: {
+        pos = alts_saved_0;
+        if pos >= src.len() { break alts_0_1; }
+        if !(unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break alts_0_1; }
         pos += 1;
-        if pos > alts_best_12 { alts_best_12 = pos; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if alts_best_12 < 0 { return -1; }
-    pos = alts_best_12;
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 
@@ -4402,32 +4402,32 @@ fn try_CHAR_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
-    let alts_saved_13 = pos;
-    alts_done_13: {
-        alts_13_0: {
-            pos = alts_saved_13;
-            if pos >= src.len() { break alts_13_0; }
-            if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' | b'\x0a' | b'\x0d' | b'\x09' }) { break alts_13_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' | b'\x0a' | b'\x0d' | b'\x09' }) { break alts_0_0; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_13;
+            break alts_done_0;
         }
-        alts_13_1: {
-            pos = alts_saved_13;
+        alts_0_1: {
+            pos = alts_saved_0;
             pos = frag_QUOTE_ESCAPE(src, pos);
-            if pos < 0 { break alts_13_1; }
-            break alts_done_13;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
-        alts_13_2: {
-            pos = alts_saved_13;
+        alts_0_2: {
+            pos = alts_saved_0;
             pos = frag_ASCII_ESCAPE(src, pos);
-            if pos < 0 { break alts_13_2; }
-            break alts_done_13;
+            if pos < 0 { break alts_0_2; }
+            break alts_done_0;
         }
-        alts_13_3: {
-            pos = alts_saved_13;
+        alts_0_3: {
+            pos = alts_saved_0;
             pos = frag_UNICODE_ESCAPE(src, pos);
-            if pos < 0 { break alts_13_3; }
-            break alts_done_13;
+            if pos < 0 { break alts_0_3; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -4441,46 +4441,46 @@ fn try_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_14 = pos;
-        rep_14: {
-            let alts_saved_15 = pos;
-            alts_done_15: {
-                alts_15_0: {
-                    pos = alts_saved_15;
-                    if pos >= src.len() { break alts_15_0; }
-                    if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_15_0; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            alts_done_1: {
+                alts_1_0: {
+                    pos = alts_saved_1;
+                    if pos >= src.len() { break alts_1_0; }
+                    if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_1_0; }
                     pos = src.ceil_char_boundary(pos + 1);
-                    break alts_done_15;
+                    break alts_done_1;
                 }
-                alts_15_1: {
-                    pos = alts_saved_15;
+                alts_1_1: {
+                    pos = alts_saved_1;
                     pos = frag_QUOTE_ESCAPE(src, pos);
-                    if pos < 0 { break alts_15_1; }
-                    break alts_done_15;
+                    if pos < 0 { break alts_1_1; }
+                    break alts_done_1;
                 }
-                alts_15_2: {
-                    pos = alts_saved_15;
+                alts_1_2: {
+                    pos = alts_saved_1;
                     pos = frag_ASCII_ESCAPE(src, pos);
-                    if pos < 0 { break alts_15_2; }
-                    break alts_done_15;
+                    if pos < 0 { break alts_1_2; }
+                    break alts_done_1;
                 }
-                alts_15_3: {
-                    pos = alts_saved_15;
+                alts_1_3: {
+                    pos = alts_saved_1;
                     pos = frag_UNICODE_ESCAPE(src, pos);
-                    if pos < 0 { break alts_15_3; }
-                    break alts_done_15;
+                    if pos < 0 { break alts_1_3; }
+                    break alts_done_1;
                 }
-                alts_15_4: {
-                    pos = alts_saved_15;
+                alts_1_4: {
+                    pos = alts_saved_1;
                     pos = frag_ESC_NEWLINE(src, pos);
-                    if pos < 0 { break alts_15_4; }
-                    break alts_done_15;
+                    if pos < 0 { break alts_1_4; }
+                    break alts_done_1;
                 }
-                break rep_14;
+                break rep_0;
             }
             continue;
         }
-        pos = rep_saved_14;
+        pos = rep_saved_0;
         break;
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
@@ -4498,26 +4498,26 @@ fn try_BYTE_LITERAL(src: &StrSlice, start: i32) -> i32 {
     pos += 1;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
-    let alts_saved_16 = pos;
-    alts_done_16: {
-        alts_16_0: {
-            pos = alts_saved_16;
-            if pos >= src.len() { break alts_16_0; }
-            if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' }) { break alts_16_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' }) { break alts_0_0; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_16;
+            break alts_done_0;
         }
-        alts_16_1: {
-            pos = alts_saved_16;
+        alts_0_1: {
+            pos = alts_saved_0;
             pos = frag_QUOTE_ESCAPE(src, pos);
-            if pos < 0 { break alts_16_1; }
-            break alts_done_16;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
-        alts_16_2: {
-            pos = alts_saved_16;
+        alts_0_2: {
+            pos = alts_saved_0;
             pos = frag_BYTE_ESCAPE(src, pos);
-            if pos < 0 { break alts_16_2; }
-            break alts_done_16;
+            if pos < 0 { break alts_0_2; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -4533,40 +4533,40 @@ fn try_BYTE_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_17 = pos;
-        rep_17: {
-            let alts_saved_18 = pos;
-            alts_done_18: {
-                alts_18_0: {
-                    pos = alts_saved_18;
-                    if pos >= src.len() { break alts_18_0; }
-                    if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_18_0; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            alts_done_1: {
+                alts_1_0: {
+                    pos = alts_saved_1;
+                    if pos >= src.len() { break alts_1_0; }
+                    if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_1_0; }
                     pos = src.ceil_char_boundary(pos + 1);
-                    break alts_done_18;
+                    break alts_done_1;
                 }
-                alts_18_1: {
-                    pos = alts_saved_18;
+                alts_1_1: {
+                    pos = alts_saved_1;
                     pos = frag_QUOTE_ESCAPE(src, pos);
-                    if pos < 0 { break alts_18_1; }
-                    break alts_done_18;
+                    if pos < 0 { break alts_1_1; }
+                    break alts_done_1;
                 }
-                alts_18_2: {
-                    pos = alts_saved_18;
+                alts_1_2: {
+                    pos = alts_saved_1;
                     pos = frag_BYTE_ESCAPE(src, pos);
-                    if pos < 0 { break alts_18_2; }
-                    break alts_done_18;
+                    if pos < 0 { break alts_1_2; }
+                    break alts_done_1;
                 }
-                alts_18_3: {
-                    pos = alts_saved_18;
+                alts_1_3: {
+                    pos = alts_saved_1;
                     pos = frag_ESC_NEWLINE(src, pos);
-                    if pos < 0 { break alts_18_3; }
-                    break alts_done_18;
+                    if pos < 0 { break alts_1_3; }
+                    break alts_done_1;
                 }
-                break rep_17;
+                break rep_0;
             }
             continue;
         }
-        pos = rep_saved_17;
+        pos = rep_saved_0;
         break;
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
@@ -4585,46 +4585,46 @@ fn try_C_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_19 = pos;
-        rep_19: {
-            let alts_saved_20 = pos;
-            alts_done_20: {
-                alts_20_0: {
-                    pos = alts_saved_20;
-                    if pos >= src.len() { break alts_20_0; }
-                    if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_20_0; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            alts_done_1: {
+                alts_1_0: {
+                    pos = alts_saved_1;
+                    if pos >= src.len() { break alts_1_0; }
+                    if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_1_0; }
                     pos = src.ceil_char_boundary(pos + 1);
-                    break alts_done_20;
+                    break alts_done_1;
                 }
-                alts_20_1: {
-                    pos = alts_saved_20;
+                alts_1_1: {
+                    pos = alts_saved_1;
                     pos = frag_QUOTE_ESCAPE(src, pos);
-                    if pos < 0 { break alts_20_1; }
-                    break alts_done_20;
+                    if pos < 0 { break alts_1_1; }
+                    break alts_done_1;
                 }
-                alts_20_2: {
-                    pos = alts_saved_20;
+                alts_1_2: {
+                    pos = alts_saved_1;
                     pos = frag_BYTE_ESCAPE(src, pos);
-                    if pos < 0 { break alts_20_2; }
-                    break alts_done_20;
+                    if pos < 0 { break alts_1_2; }
+                    break alts_done_1;
                 }
-                alts_20_3: {
-                    pos = alts_saved_20;
+                alts_1_3: {
+                    pos = alts_saved_1;
                     pos = frag_UNICODE_ESCAPE(src, pos);
-                    if pos < 0 { break alts_20_3; }
-                    break alts_done_20;
+                    if pos < 0 { break alts_1_3; }
+                    break alts_done_1;
                 }
-                alts_20_4: {
-                    pos = alts_saved_20;
+                alts_1_4: {
+                    pos = alts_saved_1;
                     pos = frag_ESC_NEWLINE(src, pos);
-                    if pos < 0 { break alts_20_4; }
-                    break alts_done_20;
+                    if pos < 0 { break alts_1_4; }
+                    break alts_done_1;
                 }
-                break rep_19;
+                break rep_0;
             }
             continue;
         }
-        pos = rep_saved_19;
+        pos = rep_saved_0;
         break;
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
@@ -4638,60 +4638,60 @@ fn try_RAW_C_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
 
 fn try_INTEGER_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_21 = pos;
-    let mut la_reach_21: i32 = -1;
-    let mut la_win_21: i32 = -1;
-    let mut la_arm_21_0: i32 = -1;
-    la_alt_21_0: {
-        pos = la_saved_21;
+    let la_saved_0 = pos;
+    let mut la_reach_0: i32 = -1;
+    let mut la_win_0: i32 = -1;
+    let mut la_arm_0_0: i32 = -1;
+    la_alt_0_0: {
+        pos = la_saved_0;
         pos = try_DEC_LITERAL(src, pos);
-        if pos < 0 { break la_alt_21_0; }
-        la_arm_21_0 = pos;
+        if pos < 0 { break la_alt_0_0; }
+        la_arm_0_0 = pos;
     }
-    let mut la_arm_21_1: i32 = -1;
-    la_alt_21_1: {
-        pos = la_saved_21;
+    let mut la_arm_0_1: i32 = -1;
+    la_alt_0_1: {
+        pos = la_saved_0;
         pos = try_BIN_LITERAL(src, pos);
-        if pos < 0 { break la_alt_21_1; }
-        la_arm_21_1 = pos;
+        if pos < 0 { break la_alt_0_1; }
+        la_arm_0_1 = pos;
     }
-    let mut la_arm_21_2: i32 = -1;
-    la_alt_21_2: {
-        pos = la_saved_21;
+    let mut la_arm_0_2: i32 = -1;
+    la_alt_0_2: {
+        pos = la_saved_0;
         pos = try_OCT_LITERAL(src, pos);
-        if pos < 0 { break la_alt_21_2; }
-        la_arm_21_2 = pos;
+        if pos < 0 { break la_alt_0_2; }
+        la_arm_0_2 = pos;
     }
-    let mut la_arm_21_3: i32 = -1;
-    la_alt_21_3: {
-        pos = la_saved_21;
+    let mut la_arm_0_3: i32 = -1;
+    la_alt_0_3: {
+        pos = la_saved_0;
         pos = try_HEX_LITERAL(src, pos);
-        if pos < 0 { break la_alt_21_3; }
-        la_arm_21_3 = pos;
+        if pos < 0 { break la_alt_0_3; }
+        la_arm_0_3 = pos;
     }
-    for let mut la_i_21 = 0; la_i_21 < 4; la_i_21 += 1 {
-        let la_at_21 = match la_i_21 { 0 => la_arm_21_0, 1 => la_arm_21_1, 2 => la_arm_21_2, _ => la_arm_21_3 };
-        if la_at_21 < 0 { continue; }
-        pos = la_at_21;
-        let mut la_tot_21: i32 = -1;
-        let peek_save_22 = pos;
-        let opt_saved_23 = pos;
-        let mut opt_ok_23 = false;
-        opt_23: {
+    for let mut la_i_0 = 0; la_i_0 < 4; la_i_0 += 1 {
+        let la_at_0 = match la_i_0 { 0 => la_arm_0_0, 1 => la_arm_0_1, 2 => la_arm_0_2, _ => la_arm_0_3 };
+        if la_at_0 < 0 { continue; }
+        pos = la_at_0;
+        let mut la_tot_0: i32 = -1;
+        let peek_save_1 = pos;
+        let opt_saved_2 = pos;
+        let mut opt_ok_2 = false;
+        opt_2: {
             pos = frag_INTEGER_SUFFIX(src, pos);
-            if pos < 0 { break opt_23; }
-            opt_ok_23 = true;
+            if pos < 0 { break opt_2; }
+            opt_ok_2 = true;
         }
-        if !opt_ok_23 { pos = opt_saved_23; }
-        la_tot_21 = pos;
-        pos = peek_save_22;
-        if la_tot_21 > la_reach_21 {
-            la_reach_21 = la_tot_21;
-            la_win_21 = la_i_21;
+        if !opt_ok_2 { pos = opt_saved_2; }
+        la_tot_0 = pos;
+        pos = peek_save_1;
+        if la_tot_0 > la_reach_0 {
+            la_reach_0 = la_tot_0;
+            la_win_0 = la_i_0;
         }
     }
-    if la_win_21 < 0 { return -1; }
-    pos = la_reach_21;
+    if la_win_0 < 0 { return -1; }
+    pos = la_reach_0;
     return pos;
 }
 
@@ -4701,9 +4701,9 @@ fn try_DEC_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
-        rep_24: {
-            if pos >= src.len() { break rep_24; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_24; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4719,8 +4719,8 @@ fn try_HEX_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { return -1; }
     pos += 1;
     loop {
-        rep_25: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_25; }
+        rep_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4730,9 +4730,9 @@ fn try_HEX_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { return -1; }
     pos += 1;
     loop {
-        rep_26: {
-            if pos >= src.len() { break rep_26; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break rep_26; }
+        rep_1: {
+            if pos >= src.len() { break rep_1; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break rep_1; }
             pos += 1;
             continue;
         }
@@ -4748,8 +4748,8 @@ fn try_OCT_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'o' { return -1; }
     pos += 1;
     loop {
-        rep_27: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_27; }
+        rep_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4759,9 +4759,9 @@ fn try_OCT_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { return -1; }
     pos += 1;
     loop {
-        rep_28: {
-            if pos >= src.len() { break rep_28; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' | b'_' }) { break rep_28; }
+        rep_1: {
+            if pos >= src.len() { break rep_1; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' | b'_' }) { break rep_1; }
             pos += 1;
             continue;
         }
@@ -4777,8 +4777,8 @@ fn try_BIN_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { return -1; }
     pos += 1;
     loop {
-        rep_29: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_29; }
+        rep_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4788,9 +4788,9 @@ fn try_BIN_LITERAL(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0' | b'1' }) { return -1; }
     pos += 1;
     loop {
-        rep_30: {
-            if pos >= src.len() { break rep_30; }
-            if !(unchecked src.byte_at(pos) matches { b'0' | b'1' | b'_' }) { break rep_30; }
+        rep_1: {
+            if pos >= src.len() { break rep_1; }
+            if !(unchecked src.byte_at(pos) matches { b'0' | b'1' | b'_' }) { break rep_1; }
             pos += 1;
             continue;
         }
@@ -4802,51 +4802,51 @@ fn try_BIN_LITERAL(src: &StrSlice, start: i32) -> i32 {
 fn try_FLOAT_LITERAL(src: &StrSlice, start: i32) -> i32 with RustLexerBase {
     let mut pos = start;
     if !RustLexerBase::float_literal_possible(LexerView { src, start, pos }) { return -1; }
-    let alts_saved_31 = pos;
-    let mut alts_best_31 = -1;
-    alts_31_0: {
-        pos = alts_saved_31;
+    let alts_saved_0 = pos;
+    let mut alts_best_0 = -1;
+    alts_0_0: {
+        pos = alts_saved_0;
         pos = try_DEC_LITERAL(src, pos);
-        if pos < 0 { break alts_31_0; }
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break alts_31_0; }
+        if pos < 0 { break alts_0_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break alts_0_0; }
         pos += 1;
-        if !RustLexerBase::float_dot_possible(LexerView { src, start, pos }) { break alts_31_0; }
-        if pos > alts_best_31 { alts_best_31 = pos; }
+        if !RustLexerBase::float_dot_possible(LexerView { src, start, pos }) { break alts_0_0; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_31_1: {
-        pos = alts_saved_31;
+    alts_0_1: {
+        pos = alts_saved_0;
         pos = try_DEC_LITERAL(src, pos);
-        if pos < 0 { break alts_31_1; }
-        let opt_saved_32 = pos;
-        let mut opt_ok_32 = false;
-        opt_32: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_32; }
+        if pos < 0 { break alts_0_1; }
+        let opt_saved_1 = pos;
+        let mut opt_ok_1 = false;
+        opt_1: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_1; }
             pos += 1;
             pos = try_DEC_LITERAL(src, pos);
-            if pos < 0 { break opt_32; }
-            opt_ok_32 = true;
+            if pos < 0 { break opt_1; }
+            opt_ok_1 = true;
         }
-        if !opt_ok_32 { pos = opt_saved_32; }
-        let opt_saved_33 = pos;
-        let mut opt_ok_33 = false;
-        opt_33: {
+        if !opt_ok_1 { pos = opt_saved_1; }
+        let opt_saved_2 = pos;
+        let mut opt_ok_2 = false;
+        opt_2: {
             pos = frag_FLOAT_EXPONENT(src, pos);
-            if pos < 0 { break opt_33; }
-            opt_ok_33 = true;
+            if pos < 0 { break opt_2; }
+            opt_ok_2 = true;
         }
-        if !opt_ok_33 { pos = opt_saved_33; }
-        let opt_saved_34 = pos;
-        let mut opt_ok_34 = false;
-        opt_34: {
+        if !opt_ok_2 { pos = opt_saved_2; }
+        let opt_saved_3 = pos;
+        let mut opt_ok_3 = false;
+        opt_3: {
             pos = frag_FLOAT_SUFFIX(src, pos);
-            if pos < 0 { break opt_34; }
-            opt_ok_34 = true;
+            if pos < 0 { break opt_3; }
+            opt_ok_3 = true;
         }
-        if !opt_ok_34 { pos = opt_saved_34; }
-        if pos > alts_best_31 { alts_best_31 = pos; }
+        if !opt_ok_3 { pos = opt_saved_3; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if alts_best_31 < 0 { return -1; }
-    pos = alts_best_31;
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 
@@ -5266,27 +5266,27 @@ fn frag_QUOTE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_ASCII_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_35 = pos;
-    alts_done_35: {
-        alts_35_0: {
-            pos = alts_saved_35;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_35_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_35_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() { break alts_35_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { break alts_35_0; }
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() { break alts_35_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_35_0; }
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_0_0; }
             pos += 1;
-            break alts_done_35;
+            break alts_done_0;
         }
-        alts_35_1: {
-            pos = alts_saved_35;
+        alts_0_1: {
+            pos = alts_saved_0;
             pos = frag_COMMON_ESCAPE(src, pos);
-            if pos < 0 { break alts_35_1; }
-            break alts_done_35;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -5304,148 +5304,148 @@ fn frag_UNICODE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { return -1; }
     pos += 1;
-    let mut la_end_36: i32 = -1;
-    let mut la_once_36 = false;
+    let mut la_end_0: i32 = -1;
+    let mut la_once_0 = false;
     loop {
-        let mut la_tot_37: i32 = -1;
-        let peek_save_38 = pos;
-        peek_38: {
-            let mut la_end_39: i32 = -1;
-            let mut la_once_39 = false;
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            let mut la_end_3: i32 = -1;
+            let mut la_once_3 = false;
             loop {
-                let mut la_tot_40: i32 = -1;
-                let peek_save_41 = pos;
-                peek_41: {
-                    let mut la_end_42: i32 = -1;
-                    let mut la_once_42 = false;
+                let mut la_tot_4: i32 = -1;
+                let peek_save_5 = pos;
+                peek_5: {
+                    let mut la_end_6: i32 = -1;
+                    let mut la_once_6 = false;
                     loop {
-                        let mut la_tot_43: i32 = -1;
-                        let peek_save_44 = pos;
-                        peek_44: {
-                            let mut la_end_45: i32 = -1;
-                            let mut la_once_45 = false;
+                        let mut la_tot_7: i32 = -1;
+                        let peek_save_8 = pos;
+                        peek_8: {
+                            let mut la_end_9: i32 = -1;
+                            let mut la_once_9 = false;
                             loop {
-                                let mut la_tot_46: i32 = -1;
-                                let peek_save_47 = pos;
-                                peek_47: {
-                                    let mut la_end_48: i32 = -1;
-                                    let mut la_once_48 = false;
+                                let mut la_tot_10: i32 = -1;
+                                let peek_save_11 = pos;
+                                peek_11: {
+                                    let mut la_end_12: i32 = -1;
+                                    let mut la_once_12 = false;
                                     loop {
-                                        let mut la_tot_49: i32 = -1;
-                                        let peek_save_50 = pos;
-                                        peek_50: {
-                                            if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { break peek_50; }
+                                        let mut la_tot_13: i32 = -1;
+                                        let peek_save_14 = pos;
+                                        peek_14: {
+                                            if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { break peek_14; }
                                             pos += 1;
-                                            la_tot_49 = pos;
+                                            la_tot_13 = pos;
                                         }
-                                        pos = peek_save_50;
-                                        if la_tot_49 >= 0 && la_tot_49 >= la_end_48 {
-                                            la_end_48 = la_tot_49;
+                                        pos = peek_save_14;
+                                        if la_tot_13 >= 0 && la_tot_13 >= la_end_12 {
+                                            la_end_12 = la_tot_13;
                                         }
-                                        if la_once_48 { break; }
-                                        la_once_48 = true;
-                                        let la_saved_48 = pos;
-                                        la_rep_48: {
-                                            if pos >= src.len() { break la_rep_48; }
-                                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_48; }
+                                        if la_once_12 { break; }
+                                        la_once_12 = true;
+                                        let la_saved_12 = pos;
+                                        la_rep_12: {
+                                            if pos >= src.len() { break la_rep_12; }
+                                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_12; }
                                             pos += 1;
                                             continue;
                                         }
-                                        pos = la_saved_48;
+                                        pos = la_saved_12;
                                         break;
                                     }
-                                    if la_end_48 < 0 {
-                                        break peek_47;
+                                    if la_end_12 < 0 {
+                                        break peek_11;
                                     }
-                                    pos = la_end_48;
-                                    la_tot_46 = pos;
+                                    pos = la_end_12;
+                                    la_tot_10 = pos;
                                 }
-                                pos = peek_save_47;
-                                if la_tot_46 >= 0 && la_tot_46 >= la_end_45 {
-                                    la_end_45 = la_tot_46;
+                                pos = peek_save_11;
+                                if la_tot_10 >= 0 && la_tot_10 >= la_end_9 {
+                                    la_end_9 = la_tot_10;
                                 }
-                                if la_once_45 { break; }
-                                la_once_45 = true;
-                                let la_saved_45 = pos;
-                                la_rep_45: {
-                                    if pos >= src.len() { break la_rep_45; }
-                                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_45; }
+                                if la_once_9 { break; }
+                                la_once_9 = true;
+                                let la_saved_9 = pos;
+                                la_rep_9: {
+                                    if pos >= src.len() { break la_rep_9; }
+                                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_9; }
                                     pos += 1;
                                     continue;
                                 }
-                                pos = la_saved_45;
+                                pos = la_saved_9;
                                 break;
                             }
-                            if la_end_45 < 0 {
-                                break peek_44;
+                            if la_end_9 < 0 {
+                                break peek_8;
                             }
-                            pos = la_end_45;
-                            la_tot_43 = pos;
+                            pos = la_end_9;
+                            la_tot_7 = pos;
                         }
-                        pos = peek_save_44;
-                        if la_tot_43 >= 0 && la_tot_43 >= la_end_42 {
-                            la_end_42 = la_tot_43;
+                        pos = peek_save_8;
+                        if la_tot_7 >= 0 && la_tot_7 >= la_end_6 {
+                            la_end_6 = la_tot_7;
                         }
-                        if la_once_42 { break; }
-                        la_once_42 = true;
-                        let la_saved_42 = pos;
-                        la_rep_42: {
-                            if pos >= src.len() { break la_rep_42; }
-                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_42; }
+                        if la_once_6 { break; }
+                        la_once_6 = true;
+                        let la_saved_6 = pos;
+                        la_rep_6: {
+                            if pos >= src.len() { break la_rep_6; }
+                            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_6; }
                             pos += 1;
                             continue;
                         }
-                        pos = la_saved_42;
+                        pos = la_saved_6;
                         break;
                     }
-                    if la_end_42 < 0 {
-                        break peek_41;
+                    if la_end_6 < 0 {
+                        break peek_5;
                     }
-                    pos = la_end_42;
-                    la_tot_40 = pos;
+                    pos = la_end_6;
+                    la_tot_4 = pos;
                 }
-                pos = peek_save_41;
-                if la_tot_40 >= 0 && la_tot_40 >= la_end_39 {
-                    la_end_39 = la_tot_40;
+                pos = peek_save_5;
+                if la_tot_4 >= 0 && la_tot_4 >= la_end_3 {
+                    la_end_3 = la_tot_4;
                 }
-                if la_once_39 { break; }
-                la_once_39 = true;
-                let la_saved_39 = pos;
-                la_rep_39: {
-                    if pos >= src.len() { break la_rep_39; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_39; }
+                if la_once_3 { break; }
+                la_once_3 = true;
+                let la_saved_3 = pos;
+                la_rep_3: {
+                    if pos >= src.len() { break la_rep_3; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_3; }
                     pos += 1;
                     continue;
                 }
-                pos = la_saved_39;
+                pos = la_saved_3;
                 break;
             }
-            if la_end_39 < 0 {
-                break peek_38;
+            if la_end_3 < 0 {
+                break peek_2;
             }
-            pos = la_end_39;
-            la_tot_37 = pos;
+            pos = la_end_3;
+            la_tot_1 = pos;
         }
-        pos = peek_save_38;
-        if la_tot_37 >= 0 && la_tot_37 >= la_end_36 {
-            la_end_36 = la_tot_37;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        if la_once_36 { break; }
-        la_once_36 = true;
-        let la_saved_36 = pos;
-        la_rep_36: {
-            if pos >= src.len() { break la_rep_36; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_36; }
+        if la_once_0 { break; }
+        la_once_0 = true;
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
-        pos = la_saved_36;
+        pos = la_saved_0;
         break;
     }
-    if la_end_36 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_36;
+    pos = la_end_0;
     return pos;
 }
 
@@ -5460,27 +5460,27 @@ fn frag_ESC_NEWLINE(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_BYTE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_51 = pos;
-    alts_done_51: {
-        alts_51_0: {
-            pos = alts_saved_51;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_51_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_51_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() { break alts_51_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_51_0; }
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() { break alts_51_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_51_0; }
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_0_0; }
             pos += 1;
-            break alts_done_51;
+            break alts_done_0;
         }
-        alts_51_1: {
-            pos = alts_saved_51;
+        alts_0_1: {
+            pos = alts_saved_0;
             pos = frag_COMMON_ESCAPE(src, pos);
-            if pos < 0 { break alts_51_1; }
-            break alts_done_51;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -5489,135 +5489,135 @@ fn frag_BYTE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_INTEGER_SUFFIX(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_52 = pos;
-    alts_done_52: {
-        alts_52_0: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_52_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_0_0; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_1: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_52_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_52_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_0_1; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_2: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_2; }
+        alts_0_2: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_2; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_52_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_0_2; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_52_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_0_2; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_3: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_3; }
+        alts_0_3: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_3; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_52_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_0_3; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_52_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_0_3; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_4: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_4; }
+        alts_0_4: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_4; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_52_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_0_4; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_52_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_0_4; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_52_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_0_4; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_5: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_52_5; }
+        alts_0_5: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_5; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_52_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_0_5; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_5; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_52_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_0_5; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_52_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_0_5; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_6: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_6; }
+        alts_0_6: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_6; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_52_6; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_0_6; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_7: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_7; }
+        alts_0_7: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_7; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_52_7; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_0_7; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_52_7; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_0_7; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_8: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_8; }
+        alts_0_8: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_8; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_52_8; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_0_8; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_52_8; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_0_8; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_9: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_9; }
+        alts_0_9: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_9; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_52_9; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_0_9; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_52_9; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_0_9; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_10: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_10; }
+        alts_0_10: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_10; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_52_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_0_10; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_52_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_0_10; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_52_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_0_10; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
-        alts_52_11: {
-            pos = alts_saved_52;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_11; }
+        alts_0_11: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_11; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_52_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_0_11; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_52_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_11; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_52_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_0_11; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_52_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_0_11; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_0;
         }
         return -1;
     }
@@ -5629,14 +5629,14 @@ fn frag_FLOAT_EXPONENT(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'e' | b'E' }) { return -1; }
     pos += 1;
-    opt_53: {
-        if pos >= src.len() { break opt_53; }
-        if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_53; }
+    opt_0: {
+        if pos >= src.len() { break opt_0; }
+        if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_0; }
         pos += 1;
     }
     loop {
-        rep_54: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_54; }
+        rep_1: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_1; }
             pos += 1;
             continue;
         }
@@ -5649,27 +5649,27 @@ fn frag_FLOAT_EXPONENT(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_FLOAT_SUFFIX(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_55 = pos;
-    alts_done_55: {
-        alts_55_0: {
-            pos = alts_saved_55;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_55_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_55_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_55_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_0_0; }
             pos += 1;
-            break alts_done_55;
+            break alts_done_0;
         }
-        alts_55_1: {
-            pos = alts_saved_55;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_55_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_55_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_55_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_0_1; }
             pos += 1;
-            break alts_done_55;
+            break alts_done_0;
         }
         return -1;
     }

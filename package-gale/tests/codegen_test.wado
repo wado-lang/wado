@@ -1952,14 +1952,16 @@ WS : ' ' -> skip ;";
 
 test "virtual tokens are marked and not match-generated" {
     // A virtual token (`tokens { }`, no lexer rule) gets a TK_ constant and a name,
-    // tagged `// virtual`, but no `try_` matcher: the tokenizer never produces it.
+    // documented as virtual, but no `try_` matcher: the tokenizer never produces it.
     let input = "grammar Test;
 tokens { VIRTUAL_TOK }
 rule : ID ;
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;";
     let output = gen_source(input);
-    assert output.contains("global TK_VIRTUAL_TOK: i32 = ") && output.contains(";  // virtual");
+    assert output.contains(
+        "/// Virtual: declared in `tokens { }`, matched by no lexer rule.\npub global TK_VIRTUAL_TOK: i32 = ",
+    );
     assert output.contains("== TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual");
     assert !output.contains("fn try_VIRTUAL_TOK(");
 }
