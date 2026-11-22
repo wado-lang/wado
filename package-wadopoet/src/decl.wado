@@ -372,8 +372,8 @@ impl FnSpec {
         return self;
     }
 
-    pub fn set_return_type<S: AsStrSlice>(&mut self, type_str: S) -> &mut FnSpec {
-        self.return_type = Option::Some(type_str.to_string());
+    pub fn set_return_type<S: AsStrSlice>(&mut self, ty: S) -> &mut FnSpec {
+        self.return_type = Option::Some(ty.to_string());
         return self;
     }
 
@@ -464,7 +464,7 @@ impl FnSpec {
 /// `global Name: T = init;`.
 pub struct GlobalSpec {
     pub name: String,
-    type_str: String,
+    type: String,
     initializer: String,
     vis: Vis,
     is_mut: bool = false,
@@ -474,13 +474,13 @@ pub struct GlobalSpec {
 impl GlobalSpec {
     pub fn new<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         name: S,
-        type_str: S1,
+        ty: S1,
         initializer: S2,
         vis: Vis = Vis::Private,
     ) -> GlobalSpec {
         return GlobalSpec {
             name: name.to_string(),
-            type_str: type_str.to_string(),
+            type: ty.to_string(),
             initializer: initializer.to_string(),
             vis,
         };
@@ -507,7 +507,7 @@ impl GlobalSpec {
     pub fn emit(&self, w: &mut CodeWriter) {
         self.head.emit(w);
         let binding = if self.is_mut { "mut " } else { "" };
-        w.line(`${self.vis.prefix()}global ${binding}${self.name}: ${self.type_str} = ${self.initializer};`);
+        w.line(`${self.vis.prefix()}global ${binding}${self.name}: ${self.type} = ${self.initializer};`);
     }
 }
 
