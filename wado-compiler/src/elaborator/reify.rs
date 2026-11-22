@@ -27,10 +27,11 @@ use crate::name::{
 use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
-    TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember,
-    TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirTest, TirUnaryOp, TirVariantDecl, TypeId, assign_stmt, transpose_tuple_expr,
+    self as tir, CallArg, GlobalInit, GlobalRole, InstancePattern, LetStorage, LocalFrame,
+    ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags,
+    TirFlagsMember, TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl, TypeId, assign_stmt,
+    transpose_tuple_expr,
 };
 use crate::type_table::TypeTable;
 
@@ -1880,6 +1881,7 @@ impl<'a> Reify<'a> {
                 visibility: global_decl.visibility,
                 module_source: self.current_module_source.clone(),
                 span,
+                role: GlobalRole::Persistent,
             },
             init_fn,
         ))

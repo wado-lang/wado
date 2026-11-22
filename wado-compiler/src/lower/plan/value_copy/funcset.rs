@@ -48,6 +48,13 @@ impl FuncKeySet {
             .get_mut(module)
             .is_some_and(|names| names.swap_remove(name))
     }
+
+    /// Keep only the keys `keep` holds of.
+    pub fn retain(&mut self, mut keep: impl FnMut(&ModuleSource, &str) -> bool) {
+        for (module, names) in &mut self.by_module {
+            names.retain(|name| keep(module, name));
+        }
+    }
 }
 
 /// A map from `(module_source, name)` to `V`, queryable by borrow.

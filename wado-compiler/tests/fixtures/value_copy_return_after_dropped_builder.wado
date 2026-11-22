@@ -1,0 +1,42 @@
+// `f.add(…);` hands back `&mut f`, which the statement drops. Nothing keeps a
+// reference to `f` past it, so `f` is returned without a copy.
+
+use { println, Stdout } from "core:cli";
+
+struct Spec {
+    params: List<String>,
+}
+
+impl Spec {
+    #[inline(never)]
+    fn add(&mut self, name: String) -> &mut Spec {
+        self.params.push(name);
+        return self;
+    }
+}
+
+#[inline(never)]
+fn spec(name: String) -> Spec {
+    let mut f = Spec { params: [] };
+    f.add(name);
+    return f;
+}
+
+export fn run() with Stdout {
+    let mut s = spec(builtin::black_box("p"));
+    s.params.push("q");
+    println(`${s.params.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "wir_not_expect:O2": ["$value_copy$"],
+    "wir_contrast": {"O2": [
+        {
+            "fn spec(name: String)": "fn spec(name: String, sink: &mut List<&Spec>)",
+            "    f.add(name);": "    sink.push(f.add(name));",
+            "spec(builtin::black_box(\"p\"))": "spec(builtin::black_box(\"p\"), &mut [])"
+        }
+    ]}
+}
