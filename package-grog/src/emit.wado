@@ -471,8 +471,10 @@ impl Emitter {
     }
 
     fn take(&mut self, name: String, owner: String, line: i32) -> Result<String, EmitError> {
-        return self.taken.claim(&name, &owner).map_err(|other| {
-            return EmitError::Invalid(`${line}: '${owner}' and '${other}' are both named ${name} once flattened`);
+        return self.taken.claim(&name, &owner).map_err(|clash| {
+            return EmitError::Invalid(
+                `${line}: '${owner}' and '${clash.owner}' are both named ${clash.name} once flattened`,
+            );
         });
     }
 

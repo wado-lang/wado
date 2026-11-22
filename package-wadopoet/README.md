@@ -12,15 +12,18 @@ body is plain lines.
 
 A spec builds one declaration and emits it into a writer: `StructSpec`,
 `VariantSpec`, `EnumSpec`, `FlagsSpec`, `NewtypeSpec`, `GlobalSpec`, `FnSpec`
-and `ImplSpec`. Every spec is built the same way:
+and `ImplSpec`. The specs are built alike:
 
-- `new(name, vis)` creates it. `vis` defaults to file-private.
+- `new` takes the name, then what the declaration needs besides (a
+  `NewtypeSpec` its base, a `GlobalSpec` its type and initializer), then `vis`,
+  which defaults to file-private. `ImplSpec::new` takes the type, and
+  `ImplSpec::new_trait` the trait and the type.
 - `set_doc` sets the doc comment and `add_attr` adds an attribute.
 - `add_generic` adds a type parameter, where the declaration takes one.
-- `add_field`, `add_case`, `add_member` and `add_param` add a member by its
-  name and type. Each has a `_spec` form taking a `FieldSpec`, `CaseSpec`,
-  `MemberSpec` or `ParamSpec`, for a member with a default, a payload, a doc
-  comment or attributes.
+- `add_field` and `add_param` add a member by its name and type, `add_case` and
+  `add_member` by its name. Each has a `_spec` form taking a `FieldSpec`,
+  `CaseSpec`, `MemberSpec` or `ParamSpec`, for a member with a default, a
+  payload, a doc comment or attributes.
 
 Every setter returns the spec, so calls chain.
 
@@ -104,16 +107,16 @@ A name the generator mints from its input must not be reserved. Check it with
 
 `NameRegistry` holds the names one scope declares, past the reserved ones and
 those `bind` adds, such as the module's imports. `claim(name, owner)` takes a
-`_` after a bound name and refuses a held one with its owner, so whether two
-names meet does not depend on which came first. `fresh(wanted)` takes the first
-of `wanted`, `wanted_`, … that is free.
+`_` after a bound name. A held one is refused with a `NameClash` naming it and
+its owner, so whether two names meet does not depend on which came first.
+`fresh(wanted, owner)` takes the first of `wanted`, `wanted_`, … that is free.
 
 ```wado
 let mut names = NameRegistry::new();
 names.bind("grog");
 assert names.claim("List", "pkg.List") == Ok("List_");
-assert names.claim("List", "other.List") == Err("pkg.List");
-assert names.fresh("grog") == "grog_";
+assert names.claim("List", "other.List") == Err(NameClash { name: "List_", owner: "pkg.List" });
+assert names.fresh("grog", "runtime alias") == "grog_";
 ```
 
 `IdGen` hands out 0, 1, 2, …, for the locals a generator suffixes so two never

@@ -142,9 +142,9 @@ test "raw bypasses indentation" {
 test "hoist_fn defines each distinct key once, where write_hoisted is" {
     let mut w = CodeWriter::new();
     let mut defined = 0;
-    let mut define = |w: &mut CodeWriter, name: &String| {
+    let mut define = |w: &mut CodeWriter, name: String| {
         defined += 1;
-        FnSpec::new(*name).emit(w, |w| w.line("return;"));
+        FnSpec::new(name).emit(w, |w| w.line("return;"));
     };
     let a = w.hoist_fn("x", "f", define);
     let b = w.hoist_fn("y", "f", define);
@@ -158,16 +158,53 @@ test "hoist_fn defines each distinct key once, where write_hoisted is" {
 
 test "a hoisted function prunable and never called is pruned" {
     let mut w = CodeWriter::new();
-    w.hoist_fn("x", "f", |w, name| FnSpec::new(*name).set_prunable().emit(w, |w| w.line("work();")));
+    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).set_prunable().emit(w, |w| w.line("work();")));
     w.write_hoisted();
     w.prune();
     assert w.to_string() == "";
 }
 
+test "a function hoisted while another is defined is queued beside it, under a name of its own" {
+    let mut w = CodeWriter::new();
+    let outer = w.hoist_fn("outer", "f", |w, name| {
+        let inner = w.hoist_fn("inner", "f", |w, name| FnSpec::new(name).emit(w, |w| w.line("return;")));
+        FnSpec::new(name).emit(w, |w| w.line(`${inner}();`));
+    });
+    w.write_hoisted();
+    assert outer == "f0";
+    assert w.to_string() == "fn f1() {\n    return;\n}\nfn f0() {\n    f1();\n}\n";
+}
+
+test "hoisted names stay distinct where one prefix extends another" {
+    let mut w = CodeWriter::new();
+    let mut names: List<String> = [];
+    names.push(w.hoist_fn("y", "f1", |w, name| FnSpec::new(name).emit(w, |_| {
+    })));
+    for let i of 0..<11 {
+        names.push(w.hoist_fn(`k${i}`, "f", |w, name| FnSpec::new(name).emit(w, |_| {
+        })));
+    }
+    for let i of 0..<names.len() {
+        for let j of i + 1..<names.len() {
+            assert names[i] != names[j];
+        }
+    }
+    w.write_hoisted();
+}
+
+#[expect_trap]
+test "write_hoisted refuses an open block" {
+    let mut w = CodeWriter::new();
+    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |_| {
+    }));
+    w.begin("impl T");
+    w.write_hoisted();
+}
+
 #[expect_trap]
 test "to_string refuses a hoisted definition never written" {
     let mut w = CodeWriter::new();
-    w.hoist_fn("x", "f", |w, name| FnSpec::new(*name).emit(w, |_| {
+    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |_| {
     }));
     w.to_string();
 }

@@ -342,7 +342,7 @@ impl Naming {
         if let Some(name) = self.words.get(*word) {
             return name;
         }
-        let name = self.taken.fresh(pascal(word));
+        let name = self.taken.fresh(pascal(word), word);
         self.words[*word] = name;
         return name;
     }
@@ -446,7 +446,7 @@ fn name_root(root: &String, origin: String, axes: &Axes, sources: &mut List<Axis
     }
     let [name, source] = match axes.word(root) {
         Some(w) => [naming.param(&w.word), `dim_param ${w.word} at ${w.tensor}`],
-        null => [naming.taken.fresh(pascal(&origin)), `minted from ${origin}`],
+        null => [naming.taken.fresh(pascal(&origin), &origin), `minted from ${origin}`],
     };
     naming.names[*root] = name;
     sources.push(AxisName { name, source });

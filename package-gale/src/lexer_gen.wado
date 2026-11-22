@@ -3921,7 +3921,7 @@ fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
     }
     let key = cc.ranges.iter_ref().map(|r| `${r.start as u32:x}-${r.end as u32:x}`).collect().join(",");
     let name = w.hoist_fn(&key, "in_char_set_", |w, name| {
-        FnSpec::new(*name).add_param("c", "char").set_return_type("bool").emit(w, |w| {
+        FnSpec::new(name).add_param("c", "char").set_return_type("bool").emit(w, |w| {
             w.line(`return c matches { ${pattern()} };`);
         });
         w.blank();

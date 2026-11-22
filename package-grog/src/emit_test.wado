@@ -133,6 +133,10 @@ test "flattened names that collide are refused" {
     assert generate("syntax = \"proto3\"; message AB {} message A { message B {} }") == "error: 1: 'A.B' and 'AB' are both named AB once flattened";
 }
 
+test "a reserved name collides under the name it is suffixed to" {
+    assert generate("syntax = \"proto3\"; message List_ {} message List {}") == "error: 1: 'List' and 'List_' are both named List_ once flattened";
+}
+
 test "a group is a message delimited by tags" {
     let out = generate(
         "syntax = \"proto2\"; message M { optional group G = 1 { optional int32 x = 2; } repeated group H = 3 {} }",

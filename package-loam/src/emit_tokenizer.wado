@@ -22,7 +22,13 @@ pub fn emit_tokenizer(bpe: &BpePipeline, path: &String, runtime: &String) -> Str
         `TokenSpelling::${bpe.spelling}`, `PieceSplit::${bpe.split}`, `${bpe.ignore_merges}`, `${bpe.unknown}`,
         `[${prefix.join(", ")}]`,
     ];
-    GlobalSpec::new("TOKENIZER", "BpeTokenizer", `BpeTokenizer::new(${args.join(", ")})`).emit(&mut w);
+    // One argument a line: the first three hold the whole vocabulary and merges.
+    let mut init = "BpeTokenizer::new(\n";
+    for let arg of &args {
+        init.push_str(`    ${arg},\n`);
+    }
+    init.push(')');
+    GlobalSpec::new("TOKENIZER", "BpeTokenizer", init).emit(&mut w);
     w.blank();
     StructSpec::new("Tokenizer", Vis::Pub).set_doc("BPE over this file's vocabulary and merges.").emit(&mut w);
     w.blank();

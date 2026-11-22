@@ -237,7 +237,7 @@ impl Gen {
     fn claim(&mut self, name: String, at: &String) -> Result<String, SchemaError> {
         return match self.taken.claim(&name, at) {
             Ok(claimed) => Result::Ok(claimed),
-            Err(_) => fail(at, `names \`${name}\`, which another declaration takes`),
+            Err(clash) => fail(at, `names \`${clash.name}\`, which another declaration takes`),
         };
     }
 

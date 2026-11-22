@@ -377,7 +377,7 @@ impl CodeWriter {
     }
 
     internal fn close_fn(&mut self)
-        contract self.innermost_is_fn_body(), "CodeWriter: a block the function body opened is still open"
+        contract self.innermost_is_fn_body(), "CodeWriter: every block a function body opens is closed before it ends"
     {
         self.indent_level -= 1;
         self.fn_blocks.pop();
@@ -430,20 +430,29 @@ impl CodeWriter {
 
     /// The name of a top-level function defined once per distinct `key`:
     /// `define` writes it, under the name it is handed, into a writer of its
-    /// own, and `write_hoisted` places what it wrote.
+    /// own, and `write_hoisted` places what it wrote. A function `define`
+    /// hoists in turn joins this writer's queue, ahead of the one it serves.
     pub fn hoist_fn<S: AsStrSlice, S1: AsStrSlice, effect E>(
         &mut self,
         key: S,
         prefix: S1,
-        mut define: fn mut(&mut CodeWriter, &String) with E,
+        mut define: fn mut(&mut CodeWriter, String) with E,
     ) -> String with E {
         if let Some(hit) = self.hoisted_names.iter_ref().find(|kn| kn.0 == key.as_str_slice()) {
             return hit.1;
         }
-        let name = `${prefix}${self.hoisted_names.len()}`;
+        let mut n = self.hoisted_names.len();
+        while self.hoisted_names.iter_ref().any(|kn| kn.1 == `${prefix}${n}`) {
+            n += 1;
+        }
+        let name = `${prefix}${n}`;
         self.hoisted_names.push([key.to_string(), name]);
         let mut def = CodeWriter::with_capacity(256);
-        define(&mut def, &name);
+        def.hoisted_names = self.hoisted_names;
+        define(&mut def, name);
+        self.hoisted_names = def.hoisted_names;
+        self.hoisted.extend(&def.hoisted);
+        def.hoisted = [];
         self.hoisted.push(def);
         return name;
     }
@@ -455,7 +464,9 @@ impl CodeWriter {
     }
 
     /// Write every definition `hoist_fn` has queued since the last call.
-    pub fn write_hoisted(&mut self) {
+    pub fn write_hoisted(&mut self)
+        contract self.depth() == 0, "CodeWriter: a hoisted function is written at the top level"
+    {
         let defs = self.hoisted;
         self.hoisted = [];
         for let def of &defs {

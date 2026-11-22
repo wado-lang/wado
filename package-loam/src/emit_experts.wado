@@ -88,7 +88,7 @@ impl ExpertPlan {
             let at = match layouts.into_iter().position(|l| l == layout) {
                 Some(at) => at,
                 null => {
-                    let slots = taken.fresh("ExpertSlots");
+                    let slots = taken.fresh("ExpertSlots", &layout);
                     layouts.push(layout);
                     plan.groups.push(ExpertGroup { layers: [], steps: [], slots });
                     plan.groups.len() - 1;

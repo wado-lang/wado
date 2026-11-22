@@ -235,6 +235,11 @@ test "a declaration taking a reserved name takes a suffix" {
     assert generated(schema).contains("pub type String_ = i64;");
 }
 
+test "a reserved name is refused under the name it is suffixed to" {
+    let schema = ##"{"$defs": {"List_": {"type": "string"}, "list": {"type": "string"}}, "$ref": "#/$defs/List_"}"##;
+    assert refused(schema) == "/$defs/list: names `List_`, which another declaration takes";
+}
+
 test "two names converting to one Wado name are refused at the second" {
     let schema = ##"{"$defs": {"a-b": {"type": "string"}, "aB": {"type": "string"}}, "$ref": "#/$defs/a-b"}"##;
     assert refused(schema) == "/$defs/aB: names `AB`, which another declaration takes";

@@ -115,15 +115,19 @@ impl Names {
             }
             match registry.claim(ident, tensor) {
                 Ok(claimed) => idents[*tensor] = claimed,
-                Err(other) => {
+                Err(clash) => {
                     builtin::cold_path();
-                    return Result::Err(EmitError::Collision(NameCollision { tensor: *tensor, other, ident: *ident }));
+                    return Result::Err(EmitError::Collision(NameCollision {
+                        tensor: *tensor,
+                        other: clash.owner,
+                        ident: clash.name,
+                    }));
                 },
             }
         }
         for let [tensor, ident] of sanitized.entries() {
             if registry.is_bound(ident) {
-                idents[*tensor] = registry.fresh(ident);
+                idents[*tensor] = registry.fresh(ident, tensor);
             }
         }
         return Result::Ok(Names { idents });

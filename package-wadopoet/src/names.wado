@@ -21,6 +21,12 @@ impl IdGen {
     }
 }
 
+/// A claim refused: the name it would take, and the owner already holding it.
+pub struct NameClash {
+    pub name: String,
+    pub owner: String,
+}
+
 /// The names one scope of generated source declares, each held by the owner
 /// that claimed it, past those the language reserves and those `bind` adds.
 pub struct NameRegistry {
@@ -45,29 +51,29 @@ impl NameRegistry {
         return is_reserved(name) || self.bound.contains_str(name);
     }
 
-    /// `name` for `owner`, with a `_` after it for each time it is bound, or
-    /// the owner already holding that. A held name is refused rather than
-    /// renamed, so whether two names meet does not hang on which came first.
-    pub fn claim<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, owner: S1) -> Result<String, String> {
+    /// `name` for `owner`, with a `_` after it for each time it is bound. A
+    /// held name is refused rather than renamed, so whether two names meet
+    /// does not hang on which came first.
+    pub fn claim<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, owner: S1) -> Result<String, NameClash> {
         let mut claimed = name.to_string();
         while self.is_bound(&claimed) {
             claimed.push('_');
         }
         if let Some(other) = self.owners.get_str(&claimed) {
-            return Err(other);
+            return Err(NameClash { name: claimed, owner: other });
         }
         self.owners[claimed] = owner.to_string();
         return Ok(claimed);
     }
 
     /// The first of `wanted`, `wanted_`, `wanted__`, … that is neither bound nor
-    /// held, held now as its own owner.
-    pub fn fresh<S: AsStrSlice>(&mut self, wanted: S) -> String {
+    /// held, held now by `owner`.
+    pub fn fresh<S: AsStrSlice, S1: AsStrSlice>(&mut self, wanted: S, owner: S1) -> String {
         let mut name = wanted.to_string();
         while self.is_bound(&name) || self.owners.contains_key_str(&name) {
             name.push('_');
         }
-        self.owners[name] = name;
+        self.owners[name] = owner.to_string();
         return name;
     }
 }
