@@ -24,6 +24,8 @@ cached under `~/.cache/loam`:
   pins. `mise run update-llama-cpp` pins the newest.
 - `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp: F16,
   and Q4_0 and Q4_1 for the `q4` table.
+- `gpt_oss_20b/fetch_gguf.sh`: gpt-oss-20b as ggml-org's MXFP4 GGUF, for
+  llama.cpp.
 
 The WebGPU arm of onnxruntime runs onnxruntime-node, which
 `mise run loam-oracle-deps` installs as `package-lock.json` pins it. Without
@@ -162,3 +164,27 @@ both exports.
 | **Loam** `WebGpuBackend` decode `q4f16` | 338.58 tokens/s |  94.511 ms | 1.44x   |
 | onnxruntime WebGPU `q4`                 | 174.58 tokens/s | 183.299 ms | 2.79x   |
 | onnxruntime WebGPU `q4f16`              | 139.89 tokens/s | 228.754 ms | 3.49x   |
+
+## gpt-oss-20b
+
+The model's 12 GB outgrow the RTX 4060 Ti's 8, and onnxruntime holds every
+weight on the device, so llama.cpp is the arm to reach. It runs the experts of
+the layers `--n-cpu-moe` names on the CPU, where they stay, and the rest on the
+device; with none on the CPU, the device runs out of memory. Its release reads
+ggml-org's MXFP4 GGUF, the precision OpenAI released the experts in:
+
+```sh
+cd package-loam/benchmark
+gpt_oss_20b/llama_bench.sh 10 14 24
+```
+
+| Layers' experts on the CPU | Prompt of 13   | 32 tokens after it |
+| -------------------------- | -------------- | ------------------ |
+| 10                         | 75.89 tokens/s | 42.40 tokens/s     |
+| 14                         | 80.25 tokens/s | 35.96 tokens/s     |
+| 24                         | 54.92 tokens/s | 25.14 tokens/s     |
+
+Loam's `WebGpuBackend` holds 3 GB of the experts on the device and writes the
+rest there as a token picks them. `example/gpt-oss-20b/profile.wado` times the
+prompt of 5 and 8 tokens after it: 0.66 tokens/s over the whole, 64 times as
+long a token as llama.cpp's 10 layers on the CPU.
