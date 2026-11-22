@@ -57,13 +57,17 @@ test "a non-empty set renders the same either way" {
     assert selects == narrows, "which reading an empty set takes cannot change a non-empty one";
 }
 
+/// The kind-set helpers the checks so far defined, as written.
+fn kind_set_fns_text(ctx: &mut EmitContext) -> String {
+    return ctx.take_kind_set_fns().to_string();
+}
+
 test "kind_check_str: single token uses '==' not 'matches'" {
     let mut ctx = mk_ctx();
     let toks = ids(&mut ctx, ["TK_FOO"]);
     let s = ctx.kind_check_str(&toks, "kind");
     assert s == "kind == TK_FOO", "expected \"kind == TK_FOO\"";
-    // Single-token check must NOT intern (no helper would be emitted).
-    assert ctx.tables.kind_sets().is_empty(), "single-token check should not intern";
+    assert kind_set_fns_text(&mut ctx) == "", "a single-token check defines no helper";
 }
 
 test "kind_check_str: multi-token uses helper call" {
@@ -71,55 +75,34 @@ test "kind_check_str: multi-token uses helper call" {
     let toks = ids(&mut ctx, ["TK_FOO", "TK_BAR"]);
     let s = ctx.kind_check_str(&toks, "k");
     assert s == "_kind_set_0(k)", "expected helper call";
-    assert ctx.tables.kind_sets().len() == 1;
+    assert kind_set_fns_text(&mut ctx).contains("fn _kind_set_0(k: i32) -> bool {");
 }
 
-test "intern_kind_set: same set returns same id (insertion order)" {
+test "a kind set names one helper, in first-seen order" {
     let mut ctx = mk_ctx();
     let ab = ids(&mut ctx, ["TK_A", "TK_B"]);
     let cd = ids(&mut ctx, ["TK_C", "TK_D"]);
-    let id1 = ctx.intern_kind_set(&ab);
-    let id2 = ctx.intern_kind_set(&cd);
-    let id1_again = ctx.intern_kind_set(&ab);
-    assert id1 == 0;
-    assert id2 == 1;
-    assert id1_again == id1;
+    assert ctx.kind_check_str(&ab, "k") == "_kind_set_0(k)";
+    assert ctx.kind_check_str(&cd, "k") == "_kind_set_1(k)";
+    assert ctx.kind_check_str(&ab, "k") == "_kind_set_0(k)";
+    let text = kind_set_fns_text(&mut ctx);
+    assert text.find("fn _kind_set_0").unwrap() < text.find("fn _kind_set_1").unwrap();
+    assert !text.contains("_kind_set_2");
 }
 
-test "intern_kind_set: order-independent (sets are unordered)" {
+test "a kind set's order and duplicates do not make another helper" {
     let mut ctx = mk_ctx();
     let abc = ids(&mut ctx, ["TK_A", "TK_B", "TK_C"]);
-    let cab = ids(&mut ctx, ["TK_C", "TK_A", "TK_B"]);
-    let bca = ids(&mut ctx, ["TK_B", "TK_C", "TK_A"]);
-    let id1 = ctx.intern_kind_set(&abc);
-    let id2 = ctx.intern_kind_set(&cab);
-    let id3 = ctx.intern_kind_set(&bca);
-    assert id1 == id2 && id2 == id3, "permutations must collapse";
-    assert ctx.tables.kind_sets().len() == 1;
+    let cab = ids(&mut ctx, ["TK_C", "TK_A", "TK_B", "TK_A"]);
+    assert ctx.kind_check_str(&abc, "k") == ctx.kind_check_str(&cab, "k");
+    assert !kind_set_fns_text(&mut ctx).contains("_kind_set_1");
 }
 
-test "intern_kind_set: duplicates within a set are deduplicated" {
-    let mut ctx = mk_ctx();
-    let with_dup = ids(&mut ctx, ["TK_A", "TK_B", "TK_A"]);
-    let no_dup = ids(&mut ctx, ["TK_A", "TK_B"]);
-    let id1 = ctx.intern_kind_set(&with_dup);
-    let id2 = ctx.intern_kind_set(&no_dup);
-    assert id1 == id2, "duplicate-tolerant interning";
-    let entries = ctx.tables.kind_sets();
-    assert entries.len() == 1;
-    assert entries[0].tokens.len() == 2, "expected 2 unique tokens";
-}
-
-test "intern_kind_set: stored tokens are sorted by name" {
+test "a kind-set helper matches its tokens sorted by name" {
     let mut ctx = mk_ctx();
     let unsorted = ids(&mut ctx, ["TK_C", "TK_A", "TK_B"]);
-    ctx.intern_kind_set(&unsorted);
-    let entries = ctx.tables.kind_sets();
-    assert entries.len() == 1;
-    let toks = ctx.analysis.token_names_of(&entries[0].tokens);
-    assert toks[0] == "TK_A";
-    assert toks[1] == "TK_B";
-    assert toks[2] == "TK_C";
+    ctx.kind_check_str(&unsorted, "k");
+    assert kind_set_fns_text(&mut ctx).contains("return k matches { == TK_A | == TK_B | == TK_C };");
 }
 
 test "a table reference belongs to the innermost function frame, else to the root" {
@@ -138,31 +121,12 @@ test "a table reference belongs to the innermost function frame, else to the roo
     assert root.contains("FOLLOW_SITE_0") && root.len() == 1;
 }
 
-test "kind_sets: returns entries in insertion order" {
-    let mut ctx = mk_ctx();
-    let xy = ids(&mut ctx, ["TK_X", "TK_Y"]);
-    let ab = ids(&mut ctx, ["TK_A", "TK_B"]);
-    let mn = ids(&mut ctx, ["TK_M", "TK_N"]);
-    ctx.intern_kind_set(&xy);
-    ctx.intern_kind_set(&ab);
-    ctx.intern_kind_set(&mn);
-    let entries = ctx.tables.kind_sets();
-    assert entries.len() == 3;
-    assert entries[0].id == 0;
-    assert entries[1].id == 1;
-    assert entries[2].id == 2;
-    // First-seen set should come first regardless of token order.
-    assert ctx.analysis.token_name(entries[0].tokens[0]) == "TK_X";
-    assert ctx.analysis.token_name(entries[1].tokens[0]) == "TK_A";
-    assert ctx.analysis.token_name(entries[2].tokens[0]) == "TK_M";
-}
-
 test "kind_negate_check_str: single token uses '!='" {
     let mut ctx = mk_ctx();
     let toks = ids(&mut ctx, ["TK_FOO"]);
     let s = ctx.kind_negate_check_str(&toks, "k");
     assert s == "k != TK_FOO", "expected \"k != TK_FOO\"";
-    assert ctx.tables.kind_sets().is_empty();
+    assert kind_set_fns_text(&mut ctx) == "";
 }
 
 test "kind_negate_check_str: multi-token uses negated helper" {
@@ -170,7 +134,7 @@ test "kind_negate_check_str: multi-token uses negated helper" {
     let toks = ids(&mut ctx, ["TK_A", "TK_B"]);
     let s = ctx.kind_negate_check_str(&toks, "k");
     assert s == "!_kind_set_0(k)", "expected negated helper";
-    assert ctx.tables.kind_sets().len() == 1;
+    assert kind_set_fns_text(&mut ctx).contains("fn _kind_set_0(k: i32) -> bool {");
 }
 
 test "kind_negate_check_str: shares ids with kind_check_str" {
@@ -181,5 +145,5 @@ test "kind_negate_check_str: shares ids with kind_check_str" {
     // Both reference the same helper id, just with/without the leading `!`.
     assert pos == "_kind_set_0(k)";
     assert neg == "!_kind_set_0(k)";
-    assert ctx.tables.kind_sets().len() == 1, "positive and negative must share";
+    assert !kind_set_fns_text(&mut ctx).contains("_kind_set_1"), "positive and negative must share";
 }

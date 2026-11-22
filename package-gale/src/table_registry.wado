@@ -1,17 +1,14 @@
 //! The token-set tables a generated parser declares once and names from its
-//! rule bodies: `_kind_set_<id>` helpers, `SYNC_<id>` / `EXPECTED_<id>`
-//! recovery sets and `FOLLOW_SITE_<id>` continuation sites. Lowering interns
-//! the sites, emit the rest; ids are first-seen order, so the same grammar
-//! always produces the same names.
+//! rule bodies: `SYNC_<id>` / `EXPECTED_<id>` recovery sets and
+//! `FOLLOW_SITE_<id>` continuation sites. Lowering interns the sites, emit the
+//! rest; ids are first-seen order, so the same grammar always produces the same
+//! names.
 
 use { HashMap } from "core:collections";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { Reading } from "./readings.wado";
 
-/// A token-kind set interned during parser codegen. Multi-element
-/// `<expr> matches { == TK_X | == TK_Y | ... }` checks are emitted as
-/// `_kind_set_<id>(<expr>)`; the body is shared via a single
-/// helper function emitted at the end of the parser section.
+/// A recovery sync set interned during parser codegen.
 pub struct KindSetEntry {
     pub id: i32,
     /// Canonical (name-sorted, unique) token list, as kind ids. Emitted as the
@@ -24,7 +21,6 @@ pub global FOLLOW_SITE_DEPTH: i32 = FOLLOW_MAX_DEPTH;
 
 /// The interned tables, each keyed by its canonical (`canonical_ids`) form.
 pub struct TableRegistry {
-    kind_sets: HashMap<List<i32>, KindSetEntry>,
     sync_sets: HashMap<List<i32>, KindSetEntry>,
     /// The id of each interned continuation site.
     follow_site_ids: HashMap<List<Reading>, i32>,
@@ -39,27 +35,10 @@ impl TableRegistry {
     /// No table interned.
     pub fn new() -> TableRegistry {
         return TableRegistry {
-            kind_sets: HashMap::new(),
             sync_sets: HashMap::new(),
             follow_site_ids: HashMap::new(),
             follow_sites: [],
         };
-    }
-
-    /// Intern a canonical token-kind set; the same set maps to a single `id`.
-    pub fn intern_kind_set(&mut self, ids: List<i32>) -> i32 {
-        if let Some(entry) = self.kind_sets.get(ids) {
-            return entry.id;
-        }
-        let id = self.kind_sets.len();
-        self.kind_sets[ids] = KindSetEntry { id, tokens: ids };
-        return id;
-    }
-
-    /// All interned kind sets in helper-ID order (i.e. insertion order).
-    /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
-    pub fn kind_sets(&self) -> List<KindSetEntry> {
-        return self.kind_sets.values().iter_value().collect();
     }
 
     /// Intern a canonical recovery sync set (a leaf's FIRST-of-rest). Returns
@@ -112,9 +91,4 @@ pub fn sync_list_name(id: i32) -> String {
 /// The `FOLLOW_SITE_<id>` global.
 pub fn follow_site_name(id: i32) -> String {
     return `FOLLOW_SITE_${id}`;
-}
-
-/// The `_kind_set_<id>` membership helper.
-pub fn kind_set_fn_name(id: i32) -> String {
-    return `_kind_set_${id}`;
 }
