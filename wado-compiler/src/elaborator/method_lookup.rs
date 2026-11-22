@@ -28,8 +28,8 @@ use crate::type_table::{TargetBinding, TypeTable};
 
 use super::Elaborator;
 use super::call::{
-    CallSolve, DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args,
-    omits_a_default, slot_names, slot_type_bindings, turbofish_leaves_slot,
+    CallSolve, DefaultTypeBinding, SettledAs, bind_nearer,
+    omits_a_default, slot_names, slot_type_bindings,
 };
 use super::coercion::ExpectedReturn;
 use super::infer::{infer_var_answers, unify};
@@ -1922,13 +1922,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A method call's type arguments: what its turbofish names, plus inference
-    /// for each `_`, which reaches here as [`TypeTable::UNKNOWN`] in `explicit`.
+    /// for each `_`.
     fn resolve_method_type_args(
         &mut self,
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
     ) -> Vec<TypeId> {
-        if !turbofish_leaves_slot(&explicit, input.slots.len()) {
+        if !self.turbofish_leaves_slot(&explicit, input.slots.len()) {
             return explicit;
         }
         let inferred = self.infer_method_type_args(input);
@@ -1936,7 +1936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return inferred;
         }
         let mut merged = explicit;
-        merge_turbofish_type_args(&mut merged, &inferred);
+        self.merge_turbofish_type_args(&mut merged, &inferred);
         merged
     }
 
@@ -4411,7 +4411,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // from the `operator_dispatch` recorded above; the index was resolved
         // there for its side effects.
 
-        // A `_` resolves to UNKNOWN, and inference fills it below.
         let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
         if self.group_variadic_type_args_of(
             &method_call.method,

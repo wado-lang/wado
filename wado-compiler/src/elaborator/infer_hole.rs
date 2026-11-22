@@ -487,6 +487,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
+    /// Whether `ty` is a `_` the source wrote for a whole slot, still open.
+    pub(super) fn is_bare_written_hole(&self, ty: TypeId) -> bool {
+        let applied = self.apply_infer_holes(ty);
+        self.tysys.type_table.borrow().is_infer_var(applied) && !self.written_holes_in(ty).is_empty()
+    }
+
     /// The variables of the `_`s the source wrote that `ty` still holds.
     pub(super) fn written_holes_in(&self, ty: TypeId) -> Vec<TypeId> {
         let ty = self.apply_infer_holes(ty);
@@ -713,6 +719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `t` is a bare parameter or variable that is not one of the
     /// enclosing declaration's `scope_params`.
     pub(super) fn is_open_slot(&self, t: TypeId, scope_params: &ScopeParams) -> bool {
+        let t = self.apply_infer_holes(t);
         self.tysys.is_unbound_type_param(t)
             && !scope_params.owns(&self.tysys.type_table.borrow(), t)
     }

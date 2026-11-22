@@ -22,7 +22,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::call::{
-    ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer, turbofish_leaves_slot,
+    ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer,
 };
 use super::callee::StaticMethodRef;
 use super::coercion::{ExpectedReturn, answers_last};
@@ -431,7 +431,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 this.receiver_waits(receiver, &method_call.method, method_call.span, None)
             },
             |this, receiver, ctx| {
-                // A `_` resolves to UNKNOWN, so these are their own hole mask.
                 let type_args: Vec<TypeId> = this.resolve_turbofish_args(&method_call.type_args);
                 let outcome = this.resolve_method_call_with(
                     MethodCallInput {
@@ -977,7 +976,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
         };
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
-            let mut known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
+            let mut known = if self.turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
                 let mut infer =
                     InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
                 let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
@@ -2986,7 +2985,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .is_some_and(|sig| self.own_from_sig(sig));
         if let Some(sig) = callee_sig
-            && turbofish_leaves_slot(&method_type_args, sig.own_params.len())
+            && self.turbofish_leaves_slot(&method_type_args, sig.own_params.len())
             && !sig.own_params.is_empty()
             && let Some(receiver) = &lookup_receiver
         {

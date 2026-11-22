@@ -166,7 +166,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.attach_infer_var_blame(hole, of.span, name.clone(), owner.clone());
                 }
                 self.settle_as_written(var, named);
-                diags.push(None);
+                // A `_` standing for the whole slot leaves it to inference, as
+                // an omitted argument does.
+                let leaves_slot = self.tysys.type_table.borrow().is_infer_var(named);
+                diags.push(leaves_slot.then(|| (of.span, name, owner)));
                 continue;
             }
             diags.push(Some((of.span, name, owner)));

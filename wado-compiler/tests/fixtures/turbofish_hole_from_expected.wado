@@ -14,6 +14,12 @@ test "a call" {
     assert o.unwrap() == 5_000_000_000;
 }
 
+test "a whole slot" {
+    let n: i64 = id::<_>(5_000_000_000);
+    let o: Option<Option<i64>> = Option::Some::<_>(null);
+    assert n == 5_000_000_000 && o matches { Some(null) };
+}
+
 test "a struct literal" {
     let b: Bx<i64> = Bx::<_> { v: 5_000_000_000 };
     let c: Bx<List<i64>> = Bx::<List<_>> { v: [5_000_000_000] };

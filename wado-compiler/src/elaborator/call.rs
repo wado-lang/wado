@@ -57,7 +57,7 @@ use crate::escape::bytes_value;
 use crate::marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
-use crate::{Span, token};
+use crate::{IndexSet, Span, token};
 
 /// The builtin that reads an `Array<T>` out of a byte literal.
 pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
@@ -284,10 +284,15 @@ pub(super) fn arg_sites_of(raw_args: &[Expr], resolved: usize, call_span: Span) 
         .collect()
 }
 
-/// Whether `slot_count` slots leave anything for inference: a `_` among the
-/// written args, or fewer written than there are slots.
-pub(super) fn turbofish_leaves_slot(type_args: &[TypeId], slot_count: usize) -> bool {
-    type_args.len() < slot_count || type_args.contains(&TypeTable::UNKNOWN)
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Whether `slot_count` slots leave anything for inference: a `_` among
+    /// the written args, at any depth, or fewer written than there are slots.
+    pub(super) fn turbofish_leaves_slot(&self, type_args: &[TypeId], slot_count: usize) -> bool {
+        type_args.len() < slot_count
+            || type_args
+                .iter()
+                .any(|&arg| !self.written_holes_in(arg).is_empty())
+    }
 }
 
 /// Group flat turbofish args written for `slots` slots, one of them the pack
@@ -311,12 +316,23 @@ fn absorb_into_pack(
 
 /// Fill the `_` and unwritten slots of `explicit` from `inferred`, in place.
 /// Every other slot keeps what the source wrote, so an explicit type wins.
-pub(super) fn merge_turbofish_type_args(explicit: &mut Vec<TypeId>, inferred: &[TypeId]) {
-    for (i, &filled) in inferred.iter().enumerate() {
-        match explicit.get_mut(i) {
-            Some(slot) if *slot == TypeTable::UNKNOWN => *slot = filled,
-            Some(_) => {}
-            None => explicit.push(filled),
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Fill `explicit` from `inferred`: a slot the turbofish left out takes its
+    /// answer, and one holding a `_` meets it.
+    pub(super) fn merge_turbofish_type_args(
+        &mut self,
+        explicit: &mut Vec<TypeId>,
+        inferred: &[TypeId],
+    ) {
+        for (i, &filled) in inferred.iter().enumerate() {
+            match explicit.get(i).copied() {
+                Some(written) if !self.written_holes_in(written).is_empty() => {
+                    self.equate(written, filled);
+                    explicit[i] = self.apply_infer_holes(written);
+                }
+                Some(_) => {}
+                None => explicit.push(filled),
+            }
         }
     }
 }
@@ -1904,7 +1920,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declared_param_types = param_types.clone();
 
         // Read before the instantiation below, which answers a named slot with
-        // it. A `_` resolves to UNKNOWN.
+        // it.
         let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
         // The turbofish names the method's own slots, after the declaring
         // block's, which the arguments answer.
@@ -2764,10 +2780,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             type_args =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-        } else if turbofish_leaves_slot(&type_args, RealTypeParams::borrowed(&declared).len()) {
+        } else if self.turbofish_leaves_slot(&type_args, RealTypeParams::borrowed(&declared).len()) {
             let inferred =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-            merge_turbofish_type_args(&mut type_args, &inferred);
+            self.merge_turbofish_type_args(&mut type_args, &inferred);
         }
 
         // Before the bound check and defer/report below, so the bound check
@@ -3798,7 +3814,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             raw_args,
             ret,
         } = solve;
-        let mut infer = InferCtx::new(&self.tysys.type_table, slots.to_vec());
+        // A `_` the turbofish wrote stands in a parameter type where its slot
+        // would, and is solved with the slots.
+        let holes: IndexSet<TypeId> = param_types
+            .iter()
+            .flat_map(|&ty| self.tysys.type_table.borrow().infer_vars_in(ty))
+            .filter(|&var| !self.written_holes_in(var).is_empty())
+            .collect();
+        let mut infer = InferCtx::new(
+            &self.tysys.type_table,
+            slots.iter().copied().chain(holes.iter().copied()).collect(),
+        );
         for (i, (&param_type, &arg)) in param_types.iter().zip(args).enumerate() {
             if answers_last(raw_args.get(i)) {
                 infer.add_deferred(param_type, arg);
@@ -3809,7 +3835,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some((declared, expected)) = ret {
             infer.add_expected_return(declared, expected);
         }
-        infer.solve_with_bindings()
+        let (mut inferred, bindings) = infer.solve_with_bindings();
+        inferred.truncate(slots.len());
+        for hole in holes {
+            if let Some(&answer) = bindings.get(&hole) {
+                self.equate(hole, answer);
+            }
+        }
+        (inferred, bindings)
     }
 
     /// Resolve a type parameter appearing only inside another's
@@ -4755,7 +4788,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ],
                 )
             });
-        let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
+        let names_own = !written.is_empty() && !self.turbofish_leaves_slot(&written, own_slots);
         // A turbofish names only the method's own slots, so the receiver's are
         // inferred wherever it declares any.
         let (impl_args, mut method_args) = if names_own && declaring_slots == 0 {
@@ -4770,7 +4803,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             );
             if !names_own {
-                merge_turbofish_type_args(&mut written, &inferred);
+                self.merge_turbofish_type_args(&mut written, &inferred);
             }
             (impl_args, written)
         };
@@ -5539,9 +5572,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let slots = &case.variant.type_param_type_ids;
-        let hints = self
+        // A `_` for a whole slot takes what the expected type has there, as an
+        // omitted argument does.
+        let bare: Vec<bool> = case
+            .written
+            .iter()
+            .map(|&t| self.is_bare_written_hole(t))
+            .collect();
+        let written: Vec<TypeId> = case
+            .written
+            .iter()
+            .zip(&bare)
+            .map(|(&t, &bare)| if bare { TypeTable::UNKNOWN } else { t })
+            .collect();
+        let mut hints = self
             .tysys
-            .variant_slot_hints(case.variant, case.written, expected_type);
+            .variant_slot_hints(case.variant, &written, expected_type);
+        for (i, &hole) in case.written.iter().enumerate() {
+            if !bare[i] {
+                continue;
+            }
+            match hints.get(i).copied() {
+                Some(hint) if hint != TypeTable::UNKNOWN => self.equate(hole, hint),
+                _ => {
+                    hints.resize(hints.len().max(i + 1), TypeTable::UNKNOWN);
+                    hints[i] = hole;
+                }
+            }
+        }
         let inst = self.instantiate(
             slots,
             &Instantiation {
@@ -5615,7 +5673,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let written = case
                     .written
                     .get(i)
-                    .is_some_and(|&t| t != TypeTable::UNKNOWN);
+                    .is_some_and(|&t| t != TypeTable::UNKNOWN && !self.is_bare_written_hole(t));
                 let at_site = self.instantiate_type(slot, inst);
                 let at_site = self.apply_infer_holes(at_site);
                 let answer = match from_payload.get(&slot).copied().filter(|_| !written) {

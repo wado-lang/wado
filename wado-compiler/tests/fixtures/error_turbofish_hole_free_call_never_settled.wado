@@ -1,0 +1,13 @@
+// A `_` standing for a whole slot of a free call's turbofish, which nothing
+// settles, asks for its argument as an omitted one does.
+
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+test {
+    let _o = none::<_>();
+}
+
+__DATA__
+{"compile_error": ":9:14: analysis error: cannot infer type parameter `T` of function `none`; add a turbofish (`none::<...>()`) or a type annotation"}

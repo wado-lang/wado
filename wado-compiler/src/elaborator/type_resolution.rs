@@ -663,16 +663,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// silence.
     pub(super) fn resolve_turbofish_args(&mut self, args: &[Type]) -> Vec<TypeId> {
         self.reject_unresolved_args(args);
-        // A `_` standing for a whole slot still reaches the call as `unknown`,
-        // which the call paths read as a slot left to inference.
-        self.with_writable_holes(|e| {
-            args.iter()
-                .map(|ty| match ty {
-                    Type::Infer(_) => TypeTable::UNKNOWN,
-                    written => e.resolve_type(written),
-                })
-                .collect()
-        })
+        self.with_writable_holes(|e| args.iter().map(|ty| e.resolve_type(ty)).collect())
     }
 
     /// The types a path segment's arguments supply (`Option::<i32>::None`,
