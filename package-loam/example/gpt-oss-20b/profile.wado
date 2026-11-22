@@ -53,10 +53,6 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
     let mut model = Model::load(gpu, budget).unwrap();
     let ids = &generate[0].ids;
     model.continued(ids, steps);
-    if !model.backend_mut().profile() {
-        eprintln("no timestamp-query");
-        return;
-    }
     let read_before = read_nanoseconds();
     let loaded_before = model.experts().counts().loaded_bytes;
     let began = MonotonicClock::now();
@@ -64,6 +60,13 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
     let wall = (MonotonicClock::now() - began) as i64;
     let read = (read_nanoseconds() - read_before) as i64;
     let loaded = model.experts().counts().loaded_bytes - loaded_before;
+    // A profile submits each dispatch alone to time it, so it runs apart
+    // from the timed pass.
+    if !model.backend_mut().profile() {
+        eprintln("no timestamp-query");
+        return;
+    }
+    model.continued(ids, steps);
     let times = model.backend_mut().profiled();
     let device = times.into_iter().map(|t| t.nanoseconds).sum().unwrap_or(0);
     println(`the prompt of ${ids.len()} and ${steps} tokens, ${loaded} bytes of experts loaded:`);
@@ -124,6 +127,13 @@ fn report(times: &List<KernelTime>, total: i64) with Stdout {
     kinds.sort_by(|a, b| b.2.cmp(&a.2));
     for let [kernel, dispatches, nanoseconds] of kinds {
         println(`  ${kernel:<18} ${dispatches:>7} x ${ms(nanoseconds):>9.1} ms ${share(nanoseconds, total):>5.1}%`);
+    }
+    println("the costliest kernels by their workgroups:");
+    for let t of times.into_iter().take(12) {
+        let each = t.nanoseconds as f64 / t.dispatches as f64 / 1e3;
+        println(
+            `  ${t.kernel:<18} ${t.groups:?} ${t.dispatches:>6} x ${each:>8.1} us ${share(t.nanoseconds, total):>5.1}%`,
+        );
     }
 }
 
