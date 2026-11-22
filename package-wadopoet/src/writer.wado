@@ -110,6 +110,12 @@ struct Seg {
     returns_unit: bool = false,
 }
 
+/// The names `hoist_fn` has defined, by key and as a set.
+struct HoistedNames {
+    by_key: HashMap<String, String> = HashMap::new(),
+    taken: HashSet<String> = HashSet::new(),
+}
+
 /// Generated Wado source: indentation and blocks for the text, and the
 /// functions, calls and references within it held apart, so `prune` can forward
 /// and drop functions before anything is printed. The builder specs
@@ -126,7 +132,8 @@ pub struct CodeWriter {
     fresh_line: bool,
     /// Per open block, whether it is a function body `FnSpec::emit` opened.
     fn_blocks: List<bool> = [],
-    hoisted_names: List<[String, String]> = [],
+    /// Created by the first `hoist_fn`, as most writers never hoist.
+    hoisted_names: Option<HoistedNames> = null,
     hoisted: List<CodeWriter> = [],
     pruned: bool = false,
 }
@@ -441,22 +448,27 @@ impl CodeWriter {
     ) -> String with E
         contract !self.pruned, "CodeWriter: nothing is hoisted after prune, which may drop what a key names"
     {
-        if let Some(hit) = self.hoisted_names.iter_ref().find(|kn| kn.0 == key.as_str_slice()) {
-            return hit.1;
+        if let Some(names) = &self.hoisted_names && let Some(hit) = names.by_key.get_str(key) {
+            return hit;
         }
-        let mut n = self.hoisted_names.len();
-        while self.hoisted_names.iter_ref().any(|kn| kn.1 == `${prefix}${n}`) {
+        // Moved rather than copied, so a definition costs no copy of every name
+        // hoisted before it.
+        let mut names = match self.hoisted_names.take() {
+            Some(names) => names,
+            null => HoistedNames {},
+        };
+        let mut n = names.by_key.len();
+        while names.taken.contains(`${prefix}${n}`) {
             n += 1;
         }
         let name = `${prefix}${n}`;
-        self.hoisted_names.push([key.to_string(), name]);
+        names.by_key[key.to_string()] = name;
+        names.taken.insert(name);
         let mut def = CodeWriter::with_capacity(256);
-        def.hoisted_names = self.hoisted_names;
+        def.hoisted_names = Option::Some(names);
         define(&mut def, name);
-        self.hoisted_names = def.hoisted_names;
-        self.hoisted.extend(&def.hoisted);
-        def.hoisted = [];
-        def.hoisted_names = [];
+        self.hoisted_names = def.hoisted_names.take();
+        self.hoisted.extend(&builtin::replace(&mut def.hoisted, []));
         self.hoisted.push(def);
         return name;
     }

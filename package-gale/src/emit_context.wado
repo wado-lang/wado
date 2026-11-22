@@ -756,9 +756,7 @@ impl EmitContext {
     /// prunes.
     pub fn take_kind_set_fns(&mut self) -> CodeWriter {
         self.kind_set_fns.write_hoisted();
-        let fns = self.kind_set_fns;
-        self.kind_set_fns = CodeWriter::new();
-        return fns;
+        return builtin::replace(&mut self.kind_set_fns, CodeWriter::new());
     }
 
     /// Render a guard: enter, or go round again, while the lookahead is in
