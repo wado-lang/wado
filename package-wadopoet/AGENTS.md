@@ -1,11 +1,14 @@
 # Wadopoet Development Guide
 
-[README.md](./README.md) is the API. `src/vocabulary.wado` is generated from
-the compiler: regenerate it with `mise run update-wadopoet-vocabulary`.
+Wadopoet builds generated Wado source, and holds the reserved vocabulary a
+minted name must avoid. The `wado-package-standard` skill says where each kind
+of file goes. [README.md](./README.md) is the API. `src/vocabulary.wado` is
+generated from the compiler: regenerate it with
+`mise run update-wadopoet-vocabulary`.
 
 ## Round Trips
 
-`src/wadopoet_test.wado` has a `printed` helper. It wraps a body in a `run()`
+`tests/wadopoet_test.wado` has a `printed` helper. It wraps a body in a `run()`
 that may call `print`, evaluates it, asserts it exited with 0, and returns
 what it printed. A round trip reads like this:
 

@@ -1,7 +1,7 @@
 # Grog TODO
 
 Open work on Grog. [`AGENTS.md`](./AGENTS.md) says how to work here, and
-[WEP: Grog](../docs/wep-2026-09-22-grog.md) holds the design.
+[`docs/design.md`](./docs/design.md) holds the design.
 
 Each entry says what is missing and what it admits, not how to close it.
 Closed work belongs in commit history.

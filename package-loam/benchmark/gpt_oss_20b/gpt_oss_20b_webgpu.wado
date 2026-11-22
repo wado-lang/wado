@@ -1,0 +1,60 @@
+//! gpt-oss-20b on Loam's `WebGpuBackend`, its pools holding `WEBGPU_BUDGET`
+//! bytes of experts, under `wado run-webgpu` with the model's directory as the
+//! one grant, as `mise run gpt-oss-20b` does:
+//!
+//!     wado run-webgpu --dir ../example/gpt-oss-20b gpt_oss_20b/gpt_oss_20b_webgpu.wado
+//!
+//! A run keeps the experts the one before left in the pools, as llama.cpp keeps
+//! its weights where it loaded them.
+
+use { eprintln, Environment, Stderr, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedFeatures,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { Backend, WebGpuBackend } from "lib:loam";
+use { Model, Tokenizer, WEBGPU_BUDGET } from "../../example/gpt-oss-20b/model.wado";
+use { Generator, STEPS, timed_by } from "../generate.wado";
+
+impl<affine Bk: Backend> Generator for Model<Bk> {
+    /// Each run starts from an empty attention cache already.
+    fn reset(&mut self) {
+    }
+
+    fn step(&mut self, ids: &List<i32>) -> i32 with (_, Preopens, MonotonicClock) {
+        return self.continued(ids, 1).0[0];
+    }
+
+    fn encode(text: &String) -> List<i32> {
+        return Tokenizer::encode(text);
+    }
+
+    fn decode(ids: &List<i32>) -> String {
+        return Tokenizer::decode(ids);
+    }
+}
+
+export fn run() with (Environment, Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    let mut model = Model::load(gpu, WEBGPU_BUDGET).unwrap();
+    timed_by("gpt-oss-20b, Loam WebGPU", &mut model, |m, ids| m.continued(ids, STEPS).0);
+}

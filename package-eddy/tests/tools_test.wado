@@ -1,0 +1,148 @@
+use { env, Environment } from "core:cli";
+use fs from "core:fs";
+use { from_string } from "core:json";
+use { Command, Process } from "core:process";
+use { Value } from "core:value";
+use { Runner, Workspace } from "../src/tools.wado";
+
+test "Write and Run are offered only with a runner" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Write", &tool_input(`{"file_path": "x.txt", "content": ""}`)).unwrap_err() == "no tool named Write";
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
+    let names = Workspace { root: "src", runner: Some(runner) }.tools().into_iter().map(|t| t.name).collect();
+    assert names.contains_str("Write") && names.contains_str("Run");
+}
+
+test "only Run has a limit on its calls" {
+    let ws = Workspace { root: "src" };
+    assert ws.call_limit(&"Run") matches { Some(n) && n > 0 };
+    assert ws.call_limit(&"Read") matches { null };
+}
+
+test "Write creates the file and its directories inside the root" {
+    let root = "build/tools-test";
+    fs::remove_dir_all(root).unwrap();
+    fs::create_dir_all(root).unwrap();
+    let runner = Runner { target_dir: "build/target", cargo_home: "", rustup_home: "", mise_data_dir: "" };
+    let ws = Workspace { root, runner: Some(runner) };
+    assert ws.call(&"Write", &tool_input(`{"file_path": "/a/b.txt", "content": "hi\\n"}`)).unwrap() == "Wrote /a/b.txt";
+    assert fs::read_to_string("build/tools-test/a/b.txt").unwrap() == "hi\n";
+    assert ws
+        .call(&"Write", &tool_input(`{"file_path": "../escape.txt", "content": ""}`))
+        .unwrap_err()
+        .contains("outside the repository");
+}
+
+/// Whether Grep and Glob can run here. A test of them returns early on a machine
+/// with no `rg`, so CI, which installs it, must never answer no: those tests
+/// would pass there without running.
+fn has_rg() -> bool with (Environment, Process) {
+    if Command::new("rg").arg("--version").output().is_ok() {
+        return true;
+    }
+    assert env("CI") matches { null }, "CI must install ripgrep";
+    return false;
+}
+
+test "Read numbers the lines of the range it reads" {
+    let ws = Workspace { root: "src" };
+    let out = ws.call(&"Read", &tool_input(`{"file_path": "/testdata/shapes.rs", "offset": 2, "limit": 2}`)).unwrap();
+    assert out == "     2\t    pub radius: f64,\n     3\t}\n";
+    assert ws.call(&"Read", &tool_input(`{"file_path": "."}`)).unwrap_err().contains("is a directory");
+}
+
+test "a path that leaves the root is refused" {
+    let ws = Workspace { root: "src" };
+    assert ws
+        .call(&"Read", &tool_input(`{"file_path": "../wado.toml"}`))
+        .unwrap_err()
+        .contains("outside the repository");
+}
+
+test "Grep and Glob answer with paths from the root" {
+    if !has_rg() {
+        return;
+    }
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn run_agent", "glob": "*.wado"}`)).unwrap() == "agent.wado\n";
+    let hit = ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn run_agent\\\\(", "output_mode": "content"}`)).unwrap();
+    assert hit.starts_with("agent.wado:") && hit.contains(":pub fn run_agent(");
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "no such[ ]text", "path": "/"}`)).unwrap() == "No matches found";
+    assert ws.call(&"Glob", &tool_input(`{"pattern": "/a*.wado"}`)).unwrap() == "agent.wado\nanthropic.wado\n";
+    assert ws.call(&"Glob", &tool_input(`{"pattern": "**/agent.wado"}`)).unwrap() == "agent.wado\n";
+}
+
+fn tool_input(json: String) -> Value {
+    return from_string::<Value, String>(json).unwrap();
+}
+
+test "an input out of range is an error the model can retry" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "Workspace", "offset": -5}`)).is_err();
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "Workspace", "head_limit": -1}`)).is_err();
+    assert ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "limit": 0}`)).is_err();
+}
+
+test "Run runs its runner's programs and no other" {
+    let runner = Runner {
+        target_dir: "build/target",
+        cargo_home: "",
+        rustup_home: "",
+        mise_data_dir: "",
+        programs: ["cargo", "mise", "node"],
+    };
+    let ws = Workspace { root: "src", runner: Some(runner) };
+    assert ws
+        .call(&"Run", &tool_input(`{"program": "sh", "args": ["-c", "true"]}`))
+        .unwrap_err()
+        .contains("one of: cargo, mise, node");
+    assert ws.run_command(&["sh", "-c", "true"], 1).is_err() && ws.run_command(&[], 1).is_err();
+    let run = ws.tools().into_iter().filter(|t| t.name == "Run").collect()[0];
+    assert `${run.input_schema:?}`.contains("node") && run.description.contains("task runner");
+}
+
+test "Run reads the checkout around the tree, and writes only the tree and the target directory" {
+    let dir = "build/run-grants";
+    fs::remove_dir_all(dir).unwrap();
+    for let sub of ["tree", "target"] {
+        fs::create_dir_all(`${dir}/${sub}`).unwrap();
+    }
+    let runner = Runner {
+        target_dir: `${dir}/target`,
+        cargo_home: "",
+        rustup_home: "",
+        mise_data_dir: "",
+        programs: ["sh"],
+    };
+    let ws = Workspace { root: `${dir}/tree`, runner: Some(runner) };
+    let writes = |path: String| ws.run_command(&["sh", "-c", `echo x > ${path}`], 10).unwrap().succeeded;
+    assert writes("in-tree") && writes("$CARGO_TARGET_DIR/built");
+    assert !writes("../outside");
+    assert fs::exists(`${dir}/tree/in-tree`) && fs::exists(`${dir}/target/built`);
+    assert !fs::exists(`${dir}/outside`);
+    // cargo reads each `.cargo/config.toml` above the tree, and stops at one
+    // it cannot read.
+    fs::write(`${dir}/above.toml`, &"").unwrap();
+    assert ws.run_command(&["sh", "-c", "cat ../above.toml"], 10).unwrap().succeeded;
+}
+
+test "a limit past the end reads the rest" {
+    let ws = Workspace { root: "src" };
+    let out = ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "offset": 2, "limit": 2147483647}`)).unwrap();
+    assert out.starts_with("     2\t");
+    if !has_rg() {
+        return;
+    }
+    let rest = ws
+        .call(&"Grep", &tool_input(
+            `{"pattern": "^pub fn", "glob": "*.wado", "offset": 1, "head_limit": 2147483647}`,
+        ))
+        .unwrap();
+    assert !rest.is_empty();
+}
+
+test "a reply names paths from the root, never the host's" {
+    let ws = Workspace { root: "src" };
+    let e = ws.call(&"Read", &tool_input(`{"file_path": "missing.wado"}`)).unwrap_err();
+    assert e.contains("missing.wado") && !e.contains("src/");
+}

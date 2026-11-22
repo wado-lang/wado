@@ -1,0 +1,65 @@
+use { Theme, stylesheet, default_theme } from "../../src/highlight/theme.wado";
+
+test "stylesheet emits one color rule per class, in insertion order" {
+    let mut t = Theme::new();
+    t.set("keyword", "#ff0000");
+    t.set("string", "#00ff00");
+    assert stylesheet(&t) == ".keyword { color: #ff0000; }\n.string { color: #00ff00; }\n";
+}
+
+test "a dotted capture name becomes a compound selector" {
+    let mut t = Theme::new();
+    t.set("constant.builtin", "#123456");
+    assert stylesheet(&t) == ".constant.builtin { color: #123456; }\n";
+}
+
+test "set is last-write-wins" {
+    let mut t = Theme::new();
+    t.set("keyword", "#111");
+    t.set("keyword", "#222");
+    assert t.color("keyword").unwrap() == "#222";
+    assert stylesheet(&t) == ".keyword { color: #222; }\n";
+}
+
+test "default_theme colors the common vocabulary and leaves unknowns unstyled" {
+    let t = default_theme();
+    assert t.color("comment") matches { Some(_) };
+    assert t.color("constant.builtin") matches { Some(_) };
+    assert t.color("keyword") matches { Some(_) };
+    assert t.color("nonexistent") matches { null };
+}
+
+test "an empty theme yields an empty stylesheet" {
+    assert stylesheet(&Theme::new()) == "";
+}
+
+test "unstyled names the vocabulary classes a theme leaves without a color" {
+    let mut t = Theme::new();
+    t.set("keyword", "#111");
+    t.set("constant.builtin", "#222");
+    let vocabulary: List<String> = ["comment", "constant.builtin", "keyword"];
+    assert t.unstyled(&vocabulary) == ["comment"];
+}
+
+test "unstyled is empty when the theme covers the vocabulary" {
+    let mut t = Theme::new();
+    t.set("keyword", "#111");
+    let vocabulary: List<String> = ["keyword"];
+    assert t.unstyled(&vocabulary).is_empty();
+}
+
+test "unknown is sorted, not in the order the theme was built" {
+    let mut t = Theme::new();
+    t.set("zeta", "#111");
+    t.set("alpha", "#222");
+    let vocabulary: List<String> = [];
+    assert t.unknown(&vocabulary) == ["alpha", "zeta"];
+}
+
+test "unknown names the theme classes no grammar emits" {
+    let mut t = Theme::new();
+    t.set("keyword", "#111");
+    t.set("kyeword", "#222");
+    let vocabulary: List<String> = ["keyword"];
+    assert t.unknown(&vocabulary) == ["kyeword"];
+}

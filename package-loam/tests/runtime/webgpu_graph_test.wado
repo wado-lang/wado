@@ -1,0 +1,10 @@
+use { quantized_layer_pass } from "../../src/runtime/graph_cases.wado";
+use { Recorder } from "../../src/runtime/recorded.wado";
+use { joined_products } from "../../src/runtime/webgpu_graph.wado";
+
+test "products join where their weights, laid as one, fit a buffer" {
+    let recorded = quantized_layer_pass(&mut Recorder::new());
+    // Each packed weight is 24 words, two side by side 48.
+    assert joined_products(&recorded, 48).len() == 2;
+    assert joined_products(&recorded, 47).is_empty();
+}

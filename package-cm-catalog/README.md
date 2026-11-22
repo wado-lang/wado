@@ -6,99 +6,72 @@ its argument unchanged, so it exercises lowering (the parameter) and lifting
 (the result) for exactly one shape. A few exports instead read several params
 back, to reach a calling convention an identity cannot.
 
-[`cm-catalog.wit`](./cm-catalog.wit) is the artifact: a self-describing WIT
-document listing every covered shape. It is meant to be published to a registry
-and reused by other toolchains as a fixed lift/lower test corpus.
+[`assets/cm-catalog.wit`](./assets/cm-catalog.wit) is the artifact: a
+self-describing WIT document listing every covered shape. It is meant to be
+published to a registry and reused by other toolchains as a fixed lift/lower
+test corpus.
 
 ## Covered
 
-[`cm-catalog.wit`](./cm-catalog.wit) is the authoritative, complete list. In
-short: the whole value-type surface (primitives, containers, named types, and
-their nested compositions), plus the async handle types `future` and `stream`.
+[`assets/cm-catalog.wit`](./assets/cm-catalog.wit) is the authoritative,
+complete list. In short: the whole value-type surface (primitives, containers,
+named types, and their nested compositions), plus the async handle types
+`future` and `stream`. [`TODO.md`](./TODO.md) lists what is not covered yet.
 
 For `future`/`stream` two flavours appear:
 
 - **Consume/produce** — a bare `future<T>` reads the payload from its argument
   and writes it into a fresh future, so the payload itself round-trips (not just
-  the handle).
+  the handle). The test asserts the payload survives, not only the handle.
 - **Pass-through** — a handle returned unchanged, exercising lift/lower of the
   handle slot itself (`stream<u8>` and the aggregate-embedded handles).
 
-## TODO
-
-Full intended scope; checked items are implemented.
-
 ### Value types
 
-- [x] Primitives (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`, `string`)
-- [x] Containers (`list`, `tuple`, `option`, all four `result` forms)
-- [x] Named types (`record`, `variant`, `enum`, `flags`, newtype)
-- [x] Nested compositions
-- [x] `flags` inside `option` / `list` / `tuple` — the CM width (one byte at ≤8
+- Primitives (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`, `string`)
+- Containers (`list`, `tuple`, `option`, all four `result` forms)
+- Named types (`record`, `variant`, `enum`, `flags`, newtype)
+- Nested compositions
+- `flags` inside `option` / `list` / `tuple` — the CM width (one byte at ≤8
   labels) only shows up where the ABI reads a stride or an offset
-- [x] A `variant` with no payload-bearing case, bare and inside
-  `option` / `list` / `tuple` — it lays out as its bare discriminant, and
-  the same stride-or-offset reads are what show that width
-- [x] `map<k, v>`: the same bytes as `list<tuple<k, v>>` under its own type
-  constructor. One row per key shape that lowers differently (`string`,
-  a scalar), a repeated-key round trip for the last-wins rule, and a `map`
-  in an async call's params buffer
+- A `variant` with no payload-bearing case, bare and inside
+  `option` / `list` / `tuple` — it lays out as its bare discriminant, and the
+  same stride-or-offset reads are what show that width
+- `map<k, v>`: the same bytes as `list<tuple<k, v>>` under its own type
+  constructor. One row per key shape that lowers differently (`string`, a
+  scalar), a repeated-key round trip for the last-wins rule, and a `map` in an
+  async call's params buffer
 
 ### `future<T>` (consume/produce)
 
-- [x] Scalar payloads (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`)
-- [x] `string`
-- [x] `record`
-- [x] `option<_>`
-- [x] `result<_, _>`, including the unit-Ok form — `future<result<_, string>>`
-  has the shape of the WASI transmission future, and only a WASI error-code
-  on the Err side makes it one
-- [x] `list<_>`
-- [x] `tuple<…>`
-- [x] `variant` / `enum` / `flags` payloads
+- Scalar payloads (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`)
+- `string`
+- `record`
+- `option<_>`
+- `result<_, _>`, including the unit-Ok form — `future<result<_, string>>` has
+  the shape of the WASI transmission future, and only a WASI error-code on the
+  Err side makes it one
+- `list<_>`
+- `tuple<…>`
+- `variant` / `enum` / `flags` payloads
 
 ### `stream<T>`
 
-- [x] `stream<u8>` (pass-through)
-- [x] `stream<T>` consume/produce — scalar element payloads (`stream<u32>`)
-- [x] `stream<T>` consume/produce — aggregate element payloads (`stream<string>`, `stream<point>`)
-- [x] `stream<T>` consume/produce — `variant` / `enum` / `flags` element payloads
-- `stream<char>` is intentionally out of scope (rejected by the Component Model)
+- `stream<u8>` (pass-through)
+- Consume/produce of scalar element payloads (`stream<u32>`)
+- Consume/produce of aggregate element payloads (`stream<string>`,
+  `stream<point>`)
+- Consume/produce of `variant` / `enum` / `flags` element payloads
+
+`stream<char>` is out of scope: the Component Model rejects it.
 
 ### Embedded handles (pass-through)
 
-- [x] `option<future>`, `result<future, _>`, `list<future>`, `list<stream>`,
+- `option<future>`, `result<future, _>`, `list<future>`, `list<stream>`,
   `tuple<future, _>`, a record with a `future` field
 
 ### Calling conventions
 
-- [x] Narrow scalars in the indirect params buffer. Past four flat params an
-  async call puts every param in one buffer, each at its tuple-layout
-  offset, so a scalar stored wider than its CM size writes past its slot
-
-### Test oracle
-
-- [x] Async value read-back — assert the payload survives the round-trip, not
-  only the handle
-
-### Handles
-
-- [ ] `own<resource>` / `borrow<resource>` identity. A resource does travel as
-  `own<r>` inside a `future` / `stream` payload
-  (`wasi_tls_send_done_future.wado`), but the catalog declares no resource of
-  its own to write an identity export against
-
-## Regenerating the WIT
-
-`cm_catalog_matches_committed_wit` in `wado-compiler/tests/integration/wit.rs`
-is the generator of record: it re-emits the interface from the source, asserts
-it matches this file, and prints the emitted text on mismatch. Edit the source,
-run the test, and take what it prints — the artifact cannot drift from the
-source.
-
-```sh
-cd package-cm-catalog && wado wit --lib
-```
-
-emits the same library world, but with the imports the compiled component makes
-(`wasi:cli/stderr`), so it reads the exports back without producing this file.
+- Narrow scalars in the indirect params buffer. Past four flat params an async
+  call puts every param in one buffer, each at its tuple-layout offset, so a
+  scalar stored wider than its CM size writes past its slot

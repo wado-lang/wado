@@ -4,7 +4,7 @@
 // ranges at grammar-parse time — see `expand_unicode_property` in
 // `g4/unicode.wado`.
 //
-// The existing `src/g4/parser_test.wado` verifies the ranges are
+// The existing `tests/g4/parser_test.wado` verifies the ranges are
 // emitted correctly, but no driver-level test exercises the match
 // path with non-ASCII input. This grammar plugs that gap.
 

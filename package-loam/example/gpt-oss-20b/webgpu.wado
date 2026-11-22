@@ -25,16 +25,12 @@ use {
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
 use { WebGpuBackend } from "lib:loam";
-use { budget_and_steps, checked } from "./model.wado";
-
-/// The bytes of experts the pools hold where no argument says: what a device
-/// of 8 GB keeps beside the other weights and a pass's own buffers.
-global BUDGET: i64 = 3_000_000_000;
+use { WEBGPU_BUDGET, budget_and_steps, checked } from "./model.wado";
 
 global STEPS: i32 = 8;
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let [budget, steps] = budget_and_steps(BUDGET, STEPS);
+    let [budget, steps] = budget_and_steps(WEBGPU_BUDGET, STEPS);
     let Some(gpu) = WebGpuBackend::new() else {
         eprintln("no WebGPU adapter");
         return;

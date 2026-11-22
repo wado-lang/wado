@@ -420,7 +420,7 @@ cannot reach is unowned and sits below.
   renaming it, so a directory can collect `<name>.wado-tmp*` entries that no
   writer owns. What makes one stale is undecided, and while another process may
   be mid-write on the same name no answer is safe.
-- `package-gale/scripts/extract_antlr4_descriptors.wado` keeps its own
+- `package-gale/tools/extract_antlr4_descriptors.wado` keeps its own
   descriptor plumbing, a shadow copy of some seven functions here. Its helpers
   each take a subdirectory `Descriptor`, which this module cannot express
   because every path resolves against the first preopen, and it opens

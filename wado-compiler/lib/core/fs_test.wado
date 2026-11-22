@@ -1,5 +1,5 @@
 use fs from "core:fs";
-use { ErrorCode, Preopens, Descriptor, FsError } from "core:fs";
+use { ErrorCode, Preopens, Descriptor, FileRange, FsError } from "core:fs";
 
 // `wado test` preopens the package root, so each test owns a directory
 // under the gitignored `target/` and reads only what it wrote there. The
@@ -85,6 +85,43 @@ test "read_linear_range refuses a range past the file's end" {
     assert e.kind matches { _::PastEnd };
     assert `${e}` == `${path}: the file ends before the bytes asked for`;
     assert fs::read_linear_range(`${dir}/nope.bin`, 0, 1).unwrap_err().kind matches { _::NotFound };
+}
+
+test "read_linear_ranges reads every range at once, of one file or several" {
+    let dir = scratch("linear-ranges");
+    let [first, second] = [`${dir}/first.bin`, `${dir}/second.bin`];
+    let mut bytes = ByteList::with_capacity(200000);
+    for let i of 0..<200000 {
+        bytes.push((i * 7) as u8);
+    }
+    fs::write(&first, &bytes).unwrap();
+    fs::write(&second, &b"abcdef").unwrap();
+    let whole = bytes as List<u8>;
+    let read = fs::read_linear_ranges(&[
+        FileRange { path: first, start: 70001, len: 100000 },
+        FileRange { path: second, start: 2, len: 3 },
+        FileRange { path: first, start: 0, len: 5 },
+        FileRange { path: second, start: 6, len: 0 },
+    ]).unwrap();
+    assert read[0].to_list() == whole[70001..<170001].to_list();
+    assert read[1].to_list() == b"cde" as List<u8>;
+    assert read[2].to_list() == whole[0..<5].to_list();
+    assert read[3].is_empty();
+}
+
+test "read_linear_ranges refuses a range past its file's end, or of a file that is not there" {
+    let dir = scratch("linear-ranges-past");
+    let path = `${dir}/raw.bin`;
+    fs::write(&path, &b"abcdef").unwrap();
+    let past = fs::read_linear_ranges(&[
+        FileRange { path, start: 0, len: 2 },
+        FileRange { path, start: 4, len: 3 },
+    ]).unwrap_err();
+    assert past.kind matches { _::PastEnd };
+    let missing = fs::read_linear_ranges(&[
+        FileRange { path: `${dir}/nope.bin`, start: 0, len: 1 },
+    ]).unwrap_err();
+    assert missing.kind matches { _::NotFound };
 }
 
 /// A file's stream that serves fixed bytes in place of the file's own. The

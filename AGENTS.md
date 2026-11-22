@@ -118,8 +118,10 @@ holds only what to keep in mind on every change there. Neither states what is
 obvious, deducible from another rule, or common knowledge.
 
 History, design notes, procedures and open work go elsewhere, linked from
-`AGENTS.md` with a one-line summary: a package's into its own directory, a
-crate's internals into its module docs.
+`AGENTS.md` with a one-line summary: a package's where
+[the standard package layout](./docs/spec-package-standard.md) puts them, a
+crate's internals into its module docs. The `wado-package-standard` skill holds
+the rules for changing a package's layout.
 
 ## The Wado Language
 

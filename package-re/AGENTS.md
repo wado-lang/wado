@@ -1,7 +1,17 @@
 # Re Development Guide
 
-Re is linear-time regular expressions in ECMA-262's syntax.
+Re is linear-time regular expressions in ECMA-262's syntax. The
+`wado-package-standard` skill says where each kind of file goes.
 [WEP: Re](../docs/wep-2026-11-02-re.md) holds the design and why.
+
+## Architecture
+
+A pattern parses to a tree, `rex`'s syntax included, and compiles to Pike VM
+instructions over UTF-8 bytes. Three engines run a program: the Pike VM runs
+every one, a lazy DFA finds a match's bounds for the programs it can run, and a
+backtracker reads the groups of a short span the DFAs found. `Regex` picks the
+engine for each search. The `re` and `rex` tags build a pattern from a
+template.
 
 ## Sources
 
@@ -16,36 +26,20 @@ read, whatever its license. Node's `RegExp` may be run as a black-box oracle.
 `\p{…}` takes what `core:icu` knows, at its Unicode version. Where that differs
 from ECMA-262's tables or from an engine, `core:icu` is right.
 
-## Layout
-
-- `src/ast.wado` — the tree a pattern parses to.
-- `src/parse.wado` — the parser, `rex`'s syntax included, `PatternError`, and
-  `validate_ecma262_syntax`.
-- `src/charset.wado` — code point sets, and what each named set holds.
-- `src/utf8.wado` — a code point range as the UTF-8 byte sequences encoding it.
-- `src/program.wado` — the tree compiled to Pike VM instructions over bytes.
-- `src/pike.wado` — the Pike VM, which runs every program.
-- `src/dfa.wado` — the lazy DFA, which finds a match's bounds for the programs
-  it runs.
-- `src/backtrack.wado` — the backtracker, which reads the groups of a short
-  span the DFAs found.
-- `src/regex.wado` — `Regex`, its searches, `replace` and `split`, and which
-  engine answers each.
-- `benchmark/` — the comparison with Node's `RegExp`, and the fuel test that
-  tells two versions of Re apart; its `README.md` says how to run both.
-- `src/template.wado` — the tags `re` and `rex`, and `PatternPart`.
-
 ## Tests
 
 A test writes a pattern as a raw string, `#"\d+"#`, so that it reads as the
 pattern it is. A cooked one needs a reason, such as a newline ending a `rex`
 comment. A program uses `re` and `rex`, whose templates are raw already.
 
-## Running tests
-
 ```sh
 wado test package-re
 ```
+
+`benchmark/README.md` says how to run the comparison with Node's `RegExp` and
+the fuel test.
+
+## Oracles
 
 `tests/generated/` holds what the oracles answered, committed so that CI needs
 neither:

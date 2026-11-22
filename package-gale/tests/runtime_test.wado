@@ -1,0 +1,340 @@
+use {
+    Span,
+    TokenFlags,
+    TokenStream,
+    span_text,
+    push_escaped,
+    char_at,
+    char_count,
+    char_pos_in_line,
+    line_starts,
+    line_col_at,
+    with_expected,
+    kind_set_has,
+} from "../src/runtime/lex.wado";
+use { kind_bitset_words } from "../src/kind_set_gen.wado";
+use { to_lexer_string } from "../src/runtime/tools.wado";
+use {
+    HighlightMapping,
+    RuleCapture,
+    HighlightCapture,
+    HighlightVisitor,
+    highlight_html,
+} from "../src/runtime/highlight.wado";
+
+use { stream_of } from "./support/fixtures.wado";
+
+test "to_lexer_string interleaves non-default-channel trivia in source order" {
+    // `A: 'a' -> mode(for);` then `B: 'b' -> channel(break);` (channel 2).
+    // The B token is non-default-channel, so the generated tokenizer parks it
+    // in the following token's leading_trivia. ANTLR4 still emits it into the
+    // stream in source order with a `channel=N` attribute and a sequential
+    // index. Mirrors `LexerExec/ReservedWordsEscaping`.
+    let mut ts = TokenStream::new("ab".as_str_slice());
+    let lo_a = ts.trivia_mark();
+    ts.push_token(0, 0, 1, lo_a, ts.trivia_mark());  // 'a', channel 0
+    let lo_eof = ts.trivia_mark();
+    ts.push_trivia(1, 1, 2, 2);  // 'b', channel 2 (hidden)
+    ts.push_token(2, 2, 2, lo_eof, ts.trivia_mark());  // EOF carrying 'b' as trivia
+    let actual = to_lexer_string(&ts, 2);
+    let expected = "[@0,0:0='a',<1>,1:0]
+[@1,1:1='b',<2>,channel=2,1:1]
+[@2,2:1='<EOF>',<-1>,1:2]
+";
+    assert actual == expected;
+}
+
+test "to_lexer_string skips default-channel (skip) trivia without consuming an index" {
+    // Skip tokens also land in leading_trivia but carry channel 0; ANTLR4
+    // discards them entirely, so they must neither appear in the dump nor
+    // advance the `@index` counter.
+    let mut ts = TokenStream::new("a c".as_str_slice());
+    let lo_a = ts.trivia_mark();
+    ts.push_token(0, 0, 1, lo_a, ts.trivia_mark());  // 'a'
+    let lo_c = ts.trivia_mark();
+    ts.push_trivia(1, 1, 2, 0);  // ' ' skip (channel 0)
+    ts.push_token(0, 2, 3, lo_c, ts.trivia_mark());  // 'c' with skip trivia
+    let actual = to_lexer_string(&ts, 2);
+    let expected = "[@0,0:0='a',<1>,1:0]
+[@1,2:2='c',<1>,1:2]
+";
+    assert actual == expected;
+}
+
+test "Span::new creates span" {
+    let s = Span::new(0, 5);
+    assert s.start == 0;
+    assert s.end == 5;
+}
+
+test "TokenStream reads back each token's and each trivia's fields" {
+    // Source "ab c": tokens 'a'(0..1), 'b'(1..2), 'c'(3..4); a single space
+    // (1 char) is leading trivia of 'c'.
+    let mut ts = TokenStream::new("ab c".as_str_slice());
+
+    let lo0 = ts.trivia_mark();
+    ts.push_token(10, 0, 1, lo0, ts.trivia_mark());
+    let lo1 = ts.trivia_mark();
+    ts.push_token(11, 1, 2, lo1, ts.trivia_mark());
+    // 'c' has one leading space (skip/hidden trivia on channel 0).
+    let lo2 = ts.trivia_mark();
+    ts.push_trivia(99, 2, 3, 0);
+    ts.push_token(12, 3, 4, lo2, ts.trivia_mark());
+
+    assert ts.len() == 3;
+    assert ts.kind_at(0) == 10;
+    assert ts.kind_at(2) == 12;
+    assert ts.span_at(2) == Span::new(3, 4);
+    assert ts.start_at(1) == 1 && ts.end_at(1) == 2;
+    assert ts.token_text(0) == "a";
+    assert ts.token_text(2) == "c";
+    assert !ts.is_empty_text(0);
+
+    // Token 2 owns exactly the one trivia entry; tokens 0 and 1 own none.
+    assert ts.trivia_lo_at(0) == ts.trivia_hi_at(0);
+    assert ts.trivia_hi_at(2) - ts.trivia_lo_at(2) == 1;
+    let t = ts.trivia_lo_at(2);
+    assert ts.trivia_kind_at(t) == 99;
+    assert ts.trivia_start_at(t) == 2 && ts.trivia_end_at(t) == 3;
+    assert ts.trivia_channel_at(t) == 0;
+}
+
+test "TokenStream keeps every field across growth past its initial capacity" {
+    let mut ts = TokenStream::new("".as_str_slice());
+    for let i of 0..<40 {
+        let lo = ts.trivia_mark();
+        ts.push_trivia(100 + i, i * 3, i * 3 + 1, i & 3);
+        ts.push_trivia(200 + i, i * 3 + 1, i * 3 + 2, 1);
+        let _ = ts.push_token_flagged(i, i * 3 + 2, i * 3 + 3, lo, ts.trivia_mark(), TokenFlags::Synthetic);
+    }
+    ts.mark_skipped(7);
+    for let i of 0..<40 {
+        assert ts.kind_at(i) == i;
+        assert ts.start_at(i) == i * 3 + 2 && ts.end_at(i) == i * 3 + 3;
+        assert ts.trivia_lo_at(i) == i * 2 && ts.trivia_hi_at(i) == i * 2 + 2;
+        assert ts.trivia_kind_at(i * 2) == 100 + i && ts.trivia_kind_at(i * 2 + 1) == 200 + i;
+        assert ts.trivia_start_at(i * 2) == i * 3 && ts.trivia_end_at(i * 2 + 1) == i * 3 + 2;
+        assert ts.trivia_channel_at(i * 2) == i & 3;
+        assert ts.is_synthetic(i);
+        assert ts.is_skipped(i) == (i == 7);
+    }
+}
+
+test "TokenStream empty-text token reports empty (EOF sentinel)" {
+    let mut ts = TokenStream::new("x".as_str_slice());
+    let lo = ts.trivia_mark();
+    ts.push_token(0, 1, 1, lo, ts.trivia_mark());
+    assert ts.is_empty_text(0);
+    assert ts.token_text(0) == "";
+}
+
+test "with_expected composes the expected set with the message" {
+    // `message` says what was found; `expected` says what was wanted. Neither
+    // repeats the other, so every failure path phrases the pair identically.
+    assert with_expected(`got ")"`, &["','"]) == `expected ','; got ")"`;
+    assert with_expected(`got ")"`, &["','", "';'"]) == `expected ',' or ';'; got ")"`;
+    assert with_expected(`got ")"`, &["A", "B", "C"]) == `expected A, B or C; got ")"`;
+    assert with_expected(`unexpected token "for"`, &[]) == `unexpected token "for"`;
+}
+
+test "span_text copies a byte window of non-ASCII chars" {
+    let src = "aé日🎉b".as_str_slice();
+    assert span_text(&src, 1, 10) == "é日🎉";
+    assert span_text(&src, 3, 3) == "";
+}
+
+test "char_at decodes the UTF-8 char at a boundary" {
+    let src = "aé日🎉b".as_str_slice();
+    let mut decoded: List<char> = [];
+    for let mut i = 0; i < src.len(); i = src.ceil_char_boundary(i + 1) {
+        decoded.push(char_at(&src, i));
+    }
+    assert decoded == ['a', 'é', '日', '🎉', 'b'];
+    assert char_count(&src, 0, src.len()) == 5;
+    assert char_count(&src, 1, 6) == 2;
+}
+
+test "push_escaped escapes the whitespace control chars" {
+    let src = "a\nb\tc\ré".as_str_slice();
+    let mut out = String::new();
+    push_escaped(&mut out, &src, 0, src.len());
+    assert out == "a\\nb\\tc\\ré";
+}
+
+test "line_col_at answers from the line starts" {
+    let src = "ab\ncd\n\ne".as_str_slice();
+    let starts = line_starts(&src);
+    assert line_col_at(&src, &starts, 0) == [1, 0];
+    assert line_col_at(&src, &starts, 1) == [1, 1];
+    assert line_col_at(&src, &starts, 3) == [2, 0];
+    assert line_col_at(&src, &starts, 6) == [3, 0];
+    assert line_col_at(&src, &starts, 7) == [4, 0];
+    assert line_col_at(&src, &starts, 8) == [4, 1];
+    assert char_pos_in_line(&src, 4) == 1;
+}
+
+test "a column counts chars, not bytes" {
+    let src = "é\n日🎉x".as_str_slice();
+    let starts = line_starts(&src);
+    assert line_col_at(&src, &starts, 10) == [2, 2];
+    assert char_pos_in_line(&src, 10) == 2;
+}
+
+test "to_lexer_string reports char indices over a byte-offset stream" {
+    let mut ts = TokenStream::new("日本 x\né y".as_str_slice());
+    let lo = ts.trivia_mark();
+    ts.push_token(0, 0, 6, lo, ts.trivia_mark());
+    let lo_x = ts.trivia_mark();
+    ts.push_trivia(1, 6, 7, 0);
+    ts.push_token(0, 7, 8, lo_x, ts.trivia_mark());
+    let lo_e = ts.trivia_mark();
+    ts.push_trivia(1, 8, 9, 0);
+    ts.push_token(0, 9, 11, lo_e, ts.trivia_mark());
+    let lo_y = ts.trivia_mark();
+    ts.push_trivia(1, 11, 12, 0);
+    ts.push_token(0, 12, 13, lo_y, ts.trivia_mark());
+    ts.push_token(2, 13, 13, ts.trivia_mark(), ts.trivia_mark());
+    let expected = "[@0,0:1='日本',<1>,1:0]
+[@1,3:3='x',<1>,1:3]
+[@2,5:5='é',<1>,2:0]
+[@3,7:7='y',<1>,2:2]
+[@4,8:7='<EOF>',<-1>,2:3]
+";
+    assert to_lexer_string(&ts, 2) == expected;
+}
+
+test "kind_set_has reads the bitset words the generator emits" {
+    assert kind_bitset_words(&[0, 5, 31, 32, 70]) == ["-2147483615", "1", "64"];
+    assert kind_bitset_words(&[31]) == ["i32::MIN"];
+    let set: List<i32> = [-2147483615, 1, 64];
+    for let k of [0, 5, 31, 32, 70] {
+        assert kind_set_has(&set, k);
+    }
+    for let k of [1, 30, 33, 69, 71, 200] {
+        assert !kind_set_has(&set, k);
+    }
+}
+
+test "Span::len returns length" {
+    let s = Span::new(3, 10);
+    assert s.len() == 7;
+}
+
+test "highlight_html escapes HTML and wraps captures" {
+    let source = "<div>";
+    let captures: List<HighlightCapture> = [
+        HighlightCapture { capture_id: 0, start: 0, end: 5 },
+    ];
+    let html = highlight_html(&source, &captures, &["tag"]);
+    assert html == `<span class="tag">&lt;div&gt;</span>`;
+}
+
+test "highlight_html emits plain text for gaps" {
+    let source = "a + b";
+    let captures: List<HighlightCapture> = [
+        HighlightCapture { capture_id: 0, start: 2, end: 3 },
+    ];
+    let html = highlight_html(&source, &captures, &["operator"]);
+    assert html == `a <span class="operator">+</span> b`;
+}
+
+fn mapping_of(capture_names: List<String>, default_ids: List<i32>) -> HighlightMapping {
+    return HighlightMapping {
+        capture_names,
+        capture_classes: capture_names,
+        default_ids,
+        overrides_by_kind: [],
+        rule_captures: [],
+    };
+}
+
+test "HighlightVisitor collects captures from tokens" {
+    let mapping = mapping_of(["string", "number"], [0, 1, -1]);
+    let ts = stream_of("01234567", [
+        [0, 0, 4],
+        [1, 5, 7],
+        [2, 7, 8],
+    ]);
+    let mut visitor = HighlightVisitor::new(&mapping);
+    visitor.hl_enter(0);
+    visitor.hl_visit_token(&ts, 0);
+    visitor.hl_visit_token(&ts, 1);
+    visitor.hl_visit_token(&ts, 2);
+    visitor.hl_exit();
+    assert visitor.captures.len() == 2;
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "string";
+    assert visitor.captures[0].start == 0;
+    assert visitor.captures[0].end == 4;
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "number";
+    assert visitor.captures[1].start == 5;
+    assert visitor.captures[1].end == 7;
+}
+
+test "HighlightVisitor applies context overrides" {
+    let mut mapping = mapping_of(["string", "string.special.key"], [0]);
+    mapping.overrides_by_kind = [
+        [
+            RuleCapture { rule_id: 1, capture_id: 1, order: 0 },
+        ],
+    ];
+    let ts = stream_of("0123456789012345", [
+        [0, 0, 5],
+        [0, 11, 16],
+    ]);
+    let mut visitor = HighlightVisitor::new(&mapping);
+    visitor.hl_enter(0);
+    visitor.hl_enter(1);
+    visitor.hl_visit_token(&ts, 0);
+    visitor.hl_exit();
+    visitor.hl_visit_token(&ts, 1);
+    visitor.hl_exit();
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "string.special.key";
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "string";
+}
+
+test "hl_cover_unvisited sweeps every token, and only once" {
+    let mapping = mapping_of(["string", "number"], [0, 1]);
+    let ts = stream_of("01234567", [
+        [0, 0, 3],
+        [1, 4, 7],
+    ]);
+    let mut visitor = HighlightVisitor::new(&mapping);
+    visitor.hl_cover_unvisited(&ts);
+    assert visitor.captures.len() == 2;
+    // It is a finishing pass: running it again must add nothing.
+    visitor.hl_cover_unvisited(&ts);
+    assert visitor.captures.len() == 2;
+}
+
+test "hl_cover_unvisited keeps what the walk took and sorts the merge" {
+    let mapping = mapping_of(["string", "number"], [0, 1]);
+    let ts = stream_of("01234567", [
+        [0, 0, 3],
+        [1, 4, 7],
+    ]);
+    let mut visitor = HighlightVisitor::new(&mapping);
+    // The walk reaches the later token first, so the sweep's capture for the
+    // earlier one lands out of order and the merge has to be sorted.
+    visitor.hl_visit_token(&ts, 1);
+    visitor.hl_cover_unvisited(&ts);
+    assert visitor.captures.len() == 2;
+    assert visitor.captures[0].start == 0;
+    assert visitor.captures[1].start == 4;
+}
+
+test "HighlightVisitor handles trivia" {
+    let mapping = mapping_of(["comment", "keyword"], [0, 1]);
+    let mut ts = TokenStream::new("0123456789a".as_str_slice());
+    let lo = ts.trivia_mark();
+    ts.push_trivia(0, 0, 8, 0);  // "/* hi */" comment trivia
+    ts.push_token(1, 9, 11, lo, ts.trivia_mark());  // "if" keyword
+    let mut visitor = HighlightVisitor::new(&mapping);
+    visitor.hl_enter(0);
+    visitor.hl_visit_token(&ts, 0);
+    visitor.hl_exit();
+    assert visitor.captures.len() == 2;
+    assert mapping.capture_names[visitor.captures[0].capture_id] == "comment";
+    assert visitor.captures[0].start == 0;
+    assert mapping.capture_names[visitor.captures[1].capture_id] == "keyword";
+    assert visitor.captures[1].start == 9;
+}

@@ -1,7 +1,7 @@
 # Loam TODO
 
 Open work on Loam. [`AGENTS.md`](./AGENTS.md) says how to work here, and
-[`design.md`](./design.md) holds the design and names the documents it builds
+[`design.md`](./docs/design.md) holds the design and names the documents it builds
 on. A section name below, such as The Graph Is ONNX, is one of
 [WEP: Loam](../docs/wep-2026-09-20-loam.md)'s.
 
@@ -17,14 +17,11 @@ The devices keep in step. An item is finished on `Cpu`, `WebGpuBackend` and
 `PjrtBackend` alike, the last under the CPU plugin. A run on a TPU is measured
 beside the roadmap and holds no item up.
 
-1. [ ] gpt-oss-20b at speed. A step token of `example/gpt-oss-20b/` takes as
-   long on the RTX 4060 Ti as on XLA's CPU plugin
-   ([measured](./devices.md#gpt-oss-20b-on-the-devices)), and its experts'
-   loads, about 1 GB a token at a budget of 3 GB, are a guess at why. Finished
-   when `devices.md` splits a step token's time on WebGPU and on the CPU plugin
-   into reading experts from the files, writing them to the device, the host
-   steps' waits, and computing; and on each device a step token takes at most
-   1.1× the larger of its computing and its loading of experts.
+1. [ ] gpt-oss-20b at speed. Finished when Loam's `WebGpuBackend` generates
+   tokens on the RTX 4060 Ti at least 1/1.5 times as fast as the fastest of
+   llama.cpp's Vulkan arms
+   ([measured](./benchmark/README.md#gpt-oss-20b)). Loading the model is not
+   timed.
 
 ## Later
 
@@ -37,7 +34,7 @@ Work no roadmap item holds yet. It is unordered.
 - [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
   shape class and compiled for each device: StableHLO through `core:pjrt` for
   a TPU, Loam's own compiler for WebGPU. See
-  [Loam on TPU and WebGPU](./devices.md), whose plan lists the steps, a TPU
+  [Loam on TPU and WebGPU](./docs/devices.md), whose plan lists the steps, a TPU
   run and many requests at once among them. Finished when every step of that
   plan is.
 - [ ] Narrowed outputs. A use site can name an output that each call reads at
@@ -149,7 +146,7 @@ Work no roadmap item holds yet. It is unordered.
 
 ### Operators
 
-`conformance/operators_test.wado` lists the operators Loam lowers. Five
+`tests/conformance/operators_test.wado` lists the operators Loam lowers. Five
 outside ONNX's default domain are among them, onnxruntime's:
 
 - `GroupQueryAttention`, without position ids, interleaved rotation, a
@@ -257,7 +254,7 @@ alone.
 ### Element types and precision
 
 `WebGpuBackend` computes in f32 between the f16s it reads and writes
-([Half Element Types](./design.md#half-element-types)), so a device whose f16
+([Half Element Types](./docs/design.md#half-element-types)), so a device whose f16
 arithmetic is faster gains nothing from it. No Kiln option chooses arithmetic
 in f16 yet. One would, on a device that offers `shader-f16`, and a graph built
 with it would be held to a tolerance rather than to the f32 path's bits.
@@ -297,7 +294,7 @@ than JSON, so its probe has to parse one to report an extent.
 
 The conformance suite reaches the graphs ONNX commits, not the per-operator
 cases. `onnx/backend/test/data/node` is generated rather than checked in, so
-what `conformance/` runs against is `pytorch-operator/` and
+what `tests/conformance/` runs against is `pytorch-operator/` and
 `pytorch-converted/`: whole small graphs with their inputs and outputs beside
 them.
 
@@ -345,7 +342,7 @@ first call.
 
 ### Experts held on demand
 
-- [ ] `conformance/held_experts.wado` on an input that is not ill-conditioned
+- [ ] `tests/conformance/held_experts.wado` on an input that is not ill-conditioned
   and that still reaches every product. Its second token moves by 1.7e-4 with
   the order a held pass sums in, so the device tests hold it to 4e-4 rather
   than to `LOAM_TOLERANCE`.
@@ -356,7 +353,7 @@ A `Cpu` keeps every weight it is given until it drops: `kept_weight` and `pool`
 only add to `Cpu.kept`. A model loaded again on the same `Cpu` holds its weights
 twice in linear memory.
 
-[Loam on TPU and WebGPU](./devices.md#known-gaps) lists the gaps of the device
+[Loam on TPU and WebGPU](./docs/devices.md#known-gaps) lists the gaps of the device
 design.
 
 ### Beyond tier 2
