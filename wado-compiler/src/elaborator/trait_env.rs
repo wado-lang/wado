@@ -1764,6 +1764,23 @@ impl TraitEnv {
             })
     }
 
+    /// Whether a marker on `receiver` asks for `trait_`'s derived impl.
+    pub(crate) fn has_marker_by_receiver(&self, receiver: &name::Receiver, trait_: DefId) -> bool {
+        self.entries_by_receiver(receiver).any(|entry| {
+            let header = &self.impl_headers[&entry];
+            header.is_synthesize_request && header.trait_def() == Some(trait_)
+        })
+    }
+
+    /// Whether impl block `block` bounds a parameter, so it may answer some
+    /// instances of its target and not others.
+    pub(crate) fn is_bounded_impl(&self, block: DefId) -> bool {
+        self.impl_headers[&block]
+            .type_params
+            .iter()
+            .any(|param| !param.bounds.is_empty())
+    }
+
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         let header = &self.impl_headers[&entry];
         !header.methods.is_empty() && header.trait_def() == Some(trait_)

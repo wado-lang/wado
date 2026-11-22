@@ -304,7 +304,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             body => {
                 let body_type = self.resolve_expr(body, &mut closure_ctx, body_expected);
-                declared_return.unwrap_or(body_type)
+                // A diverging body returns what its context expects, as a
+                // block body's does: its type is not the closure's to settle.
+                let diverged_into = body_expected.filter(|_| body_type == TypeTable::NEVER);
+                declared_return.or(diverged_into).unwrap_or(body_type)
             }
         };
 

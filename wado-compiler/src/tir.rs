@@ -1390,7 +1390,9 @@ pub enum TirExprKind {
     },
 
     Closure {
-        params: Vec<(String, TypeId)>,
+        /// The parameter slots, `0..params.len()` in the closure's local-index
+        /// namespace.
+        params: Vec<TirLocal>,
         body: Box<TirExpr>,
         captures: Vec<TirCapture>,
         /// Optional functor ID assigned during lowering.
@@ -3588,7 +3590,7 @@ impl TirFunction {
 /// `FunctionContext::locals` is the single source of truth — every parameter,
 /// `let`, destructure binding and elaborator temporary — and is projected onto
 /// `TirFunction::locals` (keyed by Wasm local index) and onto
-/// `Closure { body_locals }`, whose params stay in `params` instead.
+/// `Closure { params, body_locals }`.
 #[derive(Debug, Clone)]
 pub struct TirLocal {
     /// Source-level name of the binding (or a synthesised `$name` for
@@ -3623,7 +3625,7 @@ pub enum FrameLocals<'a> {
         local_count: &'a mut u32,
     },
     Closure {
-        params: &'a [(String, TypeId)],
+        params: &'a [TirLocal],
         body_locals: &'a mut Vec<TirLocal>,
     },
 }
@@ -3640,12 +3642,10 @@ impl FrameLocals<'_> {
             Self::Closure {
                 params,
                 body_locals,
-            } => match params.get(index) {
-                Some((name, type_id)) => Some((name, *type_id)),
-                None => body_locals
-                    .get(index - params.len())
-                    .map(|local| (local.name.as_str(), local.type_id)),
-            },
+            } => params
+                .get(index)
+                .or_else(|| body_locals.get(index - params.len()))
+                .map(|local| (local.name.as_str(), local.type_id)),
         }
     }
 

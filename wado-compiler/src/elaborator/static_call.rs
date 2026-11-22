@@ -929,7 +929,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The generic struct or variant `key`'s declaration declares, at the
     /// `args` the call settled: the receiver an inherited default reads as
     /// `Self`.
-    fn declared_type_at(&self, key: &ImplTargetKey, args: &[TypeId]) -> Option<TypeId> {
+    pub(super) fn declared_type_at(&self, key: &ImplTargetKey, args: &[TypeId]) -> Option<TypeId> {
         let def = key.decl()?;
         let params = self.type_lookup().declared_type_param_ids(def)?;
         if args.is_empty() {
@@ -938,6 +938,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assert_eq!(params.len(), args.len(), "one argument per parameter");
         let mut table = self.tysys.type_table.borrow_mut();
         Some(table.make_generic_instance(def, args.to_vec()))
+    }
+
+    /// The generic type `key` declares at a fresh variable per parameter, each
+    /// named after it, with those variables: what a receiver spelled without
+    /// its arguments (`Bx::make()`) is asked at, so an impl written for any
+    /// instance may answer it.
+    pub(super) fn declared_type_at_variables(
+        &mut self,
+        key: &ImplTargetKey,
+    ) -> Option<(TypeId, Vec<TypeId>)> {
+        let declared = self.declared_self_type(key.decl()?)?;
+        let names: Vec<String> = {
+            let tt = self.tysys.type_table.borrow();
+            let params = tt.nominal_type_args(declared)?;
+            params.iter().map(|&param| tt.name(param)).collect()
+        };
+        let vars: Vec<TypeId> = names
+            .iter()
+            .map(|name| self.mint_infer_var_named(name))
+            .collect();
+        let instance = self.declared_type_at(key, &vars)?;
+        Some((instance, vars))
     }
 
     /// The type a struct, resource, variant, enum, flags or newtype declaration

@@ -2399,16 +2399,32 @@ impl Monomorphizer {
                 body_locals,
                 ..
             } => {
-                for (_, type_id) in params {
-                    *type_id = self.substitute_type(*type_id, substitution, type_table);
-                }
                 for cap in captures {
                     cap.type_id = self.substitute_type(cap.type_id, substitution, type_table);
                 }
-                for local in body_locals {
+                for local in params.iter_mut().chain(body_locals.iter_mut()) {
                     local.type_id = self.substitute_type(local.type_id, substitution, type_table);
                 }
-                self.substitute_types_in_expr(body, substitution, type_table, local_count, locals);
+                // A closure numbers its locals in a frame of its own, so an
+                // unroll in its body allocates and claims slots there.
+                let mut frame: Vec<TirLocal> =
+                    params.iter().chain(body_locals.iter()).cloned().collect();
+                let mut frame_count = frame.len() as u32;
+                let outer_claims = self.unrolled_local_claims.take();
+                self.substitute_types_in_expr(
+                    body,
+                    substitution,
+                    type_table,
+                    &mut frame_count,
+                    &mut frame,
+                );
+                *self.unrolled_local_claims.borrow_mut() = outer_claims;
+                assert_eq!(
+                    frame.len() as u32,
+                    frame_count,
+                    "a frame holds every local it allocates"
+                );
+                *body_locals = frame.split_off(params.len());
             }
             TirExprKind::StructLiteral {
                 struct_type,
@@ -3813,13 +3829,11 @@ impl Monomorphizer {
             if !self.claim_unrolled_local(body_local) {
                 let new_idx = *local_count;
                 *local_count += 1;
-                let body_local_type = concrete_type.unwrap_or_else(|| {
-                    locals
-                        .get(body_local as usize)
-                        .map(|l| l.type_id)
-                        .unwrap_or(TypeTable::UNIT)
-                });
-                locals.push(TirLocal::synth(new_idx, body_local_type, false));
+                let template = locals.get(body_local as usize);
+                let body_local_type = concrete_type
+                    .unwrap_or_else(|| template.map_or(TypeTable::UNIT, |l| l.type_id));
+                let is_mut = template.is_some_and(|l| l.is_mut);
+                locals.push(TirLocal::synth(new_idx, body_local_type, is_mut));
                 for s in &mut body.stmts {
                     Self::rewrite_local_index_in_stmt(s, body_local, new_idx);
                 }

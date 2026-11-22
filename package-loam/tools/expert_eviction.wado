@@ -1,0 +1,81 @@
+//! How often a shared pool already held the experts a run picked, under each
+//! eviction order and each budget, replayed from the fetches the run recorded.
+//! The routing reads none of what the pools hold, so one run's fetches answer
+//! for every order and budget, so long as every layer fetched in it: a run
+//! whose budget held a layer's experts whole recorded nothing of that layer.
+//! `Farthest` knows the future, so it bounds what any order can reach.
+//!
+//!     wado run tools/expert_eviction.wado -- fetches.json 2000000000 4000000000
+
+use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { from_string } from "core:json";
+use { Eviction, ExpertCounts, Fetches, replayed } from "../src/runtime/held_experts.wado";
+
+global ORDERS: List<[String, Eviction]> = [
+    ["Recent", Eviction::Recent],
+    ["Frequent", Eviction::Frequent],
+    ["LayerOrder", Eviction::LayerOrder],
+    ["Farthest", Eviction::Farthest],
+];
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
+    let given = args();
+    if given.len() < 2 {
+        eprintln("usage: expert_eviction <fetches.json> <budget in bytes>...");
+        exit(2);
+    }
+    let text = match fs::read_to_string(&given[0]) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln(`${e}`);
+            exit(1);
+        },
+    };
+    let record = match from_string::<Fetches>(&text) {
+        Ok(record) => record,
+        Err(e) => {
+            eprintln(`${given[0]}: ${e}`);
+            exit(1);
+        },
+    };
+    println("| Budget, bytes | Order | Prompt experts held | Step experts held | Bytes a step token loads |");
+    println("| ------------- | ----- | ------------------- | ----------------- | ------------------------ |");
+    let step_tokens = step_tokens(&record);
+    for let budget of given[1..<given.len()] {
+        let Ok(bytes) = i64::from_str(budget) else {
+            eprintln(`not a budget: ${budget}`);
+            exit(2);
+        };
+        for let [name, eviction] of ORDERS {
+            match replayed(&record.shapes, &record.fetches, bytes, eviction) {
+                Ok([prompts, steps]) => println(
+                    `| ${bytes} | ${name} | ${share(&prompts)} | ${share(&steps)} | ${steps.loaded_bytes / i64::max(
+                        step_tokens,
+                        1,
+                    )} |`,
+                ),
+                Err(e) => println(`| ${bytes} | ${name} | ${e} | | |`),
+            }
+        }
+    }
+}
+
+/// The tokens the recorded steps of one token ran: the fetches of one host
+/// step, which fetches once for each of them.
+fn step_tokens(record: &Fetches) -> i64 {
+    let singles = record.fetches.into_iter().filter(|f| f.tokens == 1).collect();
+    if singles.is_empty() {
+        return 0;
+    }
+    let step = singles[0].step;
+    return singles.into_iter().filter(|f| f.step == step).count() as i64;
+}
+
+fn share(counts: &ExpertCounts) -> String {
+    if counts.picked == 0 {
+        return "none picked";
+    }
+    return `${counts.held as f64 * 100.0 / counts.picked as f64:.1}% of ${counts.picked}`;
+}

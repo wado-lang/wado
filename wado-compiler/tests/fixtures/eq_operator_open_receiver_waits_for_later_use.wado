@@ -1,0 +1,26 @@
+// While `T` is open, the written `Eq` (where `T: Cap`) and the marker (where
+// `T: Eq`) may both answer `a == a`, so the comparison waits for the line that
+// settles `T` to `bool`, where only the marker does.
+
+struct Box<T> { v: T }
+
+trait Cap with () { fn cap(&self) -> i32; }
+impl Cap for i32 { fn cap(&self) -> i32 { return 1; } }
+
+impl<T: Cap> Eq for Box<T> { fn eq(&self, _o: &Self) -> bool { return false; } }
+impl<T: Eq> Eq for Box<T>;
+
+fn mk<T: Default>() -> Box<T> {
+    return Box { v: T::default() };
+}
+
+test {
+    let a = mk();
+    let b = mk();
+    #[allow(self_comparison)]
+    let same = a == a;
+    let differ = a != b;
+    let _c: Box<bool> = a;
+    assert same;
+    assert !differ;
+}

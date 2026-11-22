@@ -2088,7 +2088,7 @@ fn replace_through(
 /// through `Capture` and numbers its own locals, parameters first, so it gets
 /// a frame of its own.
 fn elab_closure(
-    params: &[(String, TypeId)],
+    params: &[TirLocal],
     body: &mut TirExpr,
     body_locals: &mut Vec<TirLocal>,
     cx: &mut Cx,
@@ -2096,11 +2096,11 @@ fn elab_closure(
     let owned: Vec<Live> = params
         .iter()
         .enumerate()
-        .filter(|(_, (_, type_id))| cx.carries_affine(*type_id))
-        .map(|(index, (name, type_id))| Live {
+        .filter(|(_, param)| cx.carries_affine(param.type_id))
+        .map(|(index, param)| Live {
             local: index as u32,
-            name: name.clone(),
-            type_id: *type_id,
+            name: param.name.clone(),
+            type_id: param.type_id,
             origin: Origin::Bound,
         })
         .collect();

@@ -15,7 +15,7 @@ use crate::tir::{EffectRef, InferVarId, ResolvedType, TypeId, TypeParamId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Candidates, Declaration, Env, Fact, ImplDef, ImplId,
     ImplOrigin, MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule,
-    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, answering_link,
+    Selection, SolverType, Source, TraitDeclId, TypeDeclId, TypeDef, Var, Verdict, answering_link,
     bound_candidates, candidates, cmp_giving_eq, comparison_row, derive, derive_alongside,
     holds_with_args, instance_candidates, mark_rejected, owed, pair_comparisons, rank, rank_open,
     sourced, written_comparison, written_over,
@@ -2212,8 +2212,9 @@ impl SolverBridge {
         ctx: &scope::Scope,
         type_id: TypeId,
         asked: &FqTraitName,
+        variables: Variables<'_>,
     ) -> Result<Question, Unsaid> {
-        let (env, ty) = self.env_for(tysys, ctx, type_id, Variables::Refused)?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id, variables)?;
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return Err(Unsaid::Unsayable);
         }
@@ -2272,7 +2273,7 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Option<Vec<OwedBody>> {
-        let q = match self.question(tysys, ctx, type_id, asked) {
+        let q = match self.question(tysys, ctx, type_id, asked, Variables::Refused) {
             Ok(q) => q,
             // Its failure was reported where it failed, so it meets every
             // bound rather than failing them over again.
@@ -2295,6 +2296,110 @@ impl SolverBridge {
         self.answer(tysys, || binder_types(ctx), type_id, &q)
     }
 
+<<<<<<< HEAD
+||||||| 301fe6d017d
+    /// `asked` of `type_id` as [`Self::answer_owing`] would ask it, kept to be
+    /// asked again once the effect check has solved the rows in either.
+    /// `None` where the question cannot be put, which `answer_owing` answers
+    /// at once.
+    pub(super) fn deferred(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> Option<DeferredQuestion> {
+        let question = self.question(tysys, ctx, type_id, asked).ok()?;
+        Some(DeferredQuestion {
+            question,
+            binders: binder_types(ctx),
+        })
+    }
+
+    /// The answer to `deferred`, asked of `closed` at `asked`, the type and
+    /// the trait it was put for with their rows solved.
+    pub(super) fn answer_deferred(
+        &self,
+        tysys: &TypeSystem,
+        deferred: DeferredQuestion,
+        closed: TypeId,
+        asked: &FqTraitName,
+    ) -> Option<DeferredAnswer> {
+        let DeferredQuestion {
+            mut question,
+            binders,
+        } = deferred;
+        {
+            let table = tysys.type_table.borrow();
+            question.ty = self
+                .lowering
+                .type_id(&table, closed, &place_binder(&binders, &table))
+                .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"));
+            let ParamBound { trait_, args } = self
+                .lowering
+                .bound_named(asked, &place_head(&binders, &table))
+                .unwrap_or_else(|_| panic!("the bound lowered before its rows were solved"));
+            question.trait_ = trait_;
+            question.args = args;
+        }
+        let owed = self.answer(tysys, || binders, closed, &question)?;
+        let tied = self.order_of(&question, tied_blankets);
+        Some(DeferredAnswer { owed, tied })
+    }
+
+=======
+    /// `asked` of `type_id` as [`Self::answer_owing`] would ask it, kept to be
+    /// asked again once the effect check has solved the rows in either.
+    /// `None` where the question cannot be put, which `answer_owing` answers
+    /// at once.
+    pub(super) fn deferred(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> Option<DeferredQuestion> {
+        let question = self
+            .question(tysys, ctx, type_id, asked, Variables::Refused)
+            .ok()?;
+        Some(DeferredQuestion {
+            question,
+            binders: binder_types(ctx),
+        })
+    }
+
+    /// The answer to `deferred`, asked of `closed` at `asked`, the type and
+    /// the trait it was put for with their rows solved.
+    pub(super) fn answer_deferred(
+        &self,
+        tysys: &TypeSystem,
+        deferred: DeferredQuestion,
+        closed: TypeId,
+        asked: &FqTraitName,
+    ) -> Option<DeferredAnswer> {
+        let DeferredQuestion {
+            mut question,
+            binders,
+        } = deferred;
+        {
+            let table = tysys.type_table.borrow();
+            question.ty = self
+                .lowering
+                .type_id(&table, closed, &place_binder(&binders, &table))
+                .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"));
+            let ParamBound { trait_, args } = self
+                .lowering
+                .bound_named(asked, &place_head(&binders, &table))
+                .unwrap_or_else(|_| panic!("the bound lowered before its rows were solved"));
+            question.trait_ = trait_;
+            question.args = args;
+        }
+        let owed = self.answer(tysys, || binders, closed, &question)?;
+        let tied = self.order_of(&question, tied_blankets);
+        Some(DeferredAnswer { owed, tied })
+    }
+
+>>>>>>> origin/main
     /// Whether `q` holds, with the bodies the answer owes. `binders` are the
     /// asking scope's [`binder_types`].
     fn answer(
@@ -2361,6 +2466,33 @@ impl SolverBridge {
             })
             .collect();
         Some(bodies)
+    }
+
+    /// Whether `type_id` may satisfy `asked` once its variables settle: the
+    /// solver's answer in three values, where only a refutation says no. A
+    /// type the lowering cannot say keeps the two-valued answer, which is no.
+    pub(super) fn may_hold(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> bool {
+        let literal = |var: TypeId| ctx.awaits_literal(var);
+        match self.question(
+            tysys,
+            ctx,
+            type_id,
+            asked,
+            Variables::Asked { literal: &literal },
+        ) {
+            Ok(q) => !matches!(
+                holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args),
+                Verdict::Fails
+            ),
+            Err(Unsaid::Failed | Unsaid::Open) => true,
+            Err(Unsaid::Unsayable) => false,
+        }
     }
 
     /// Each anonymous shape `id` is built over, with its lowering: what a
@@ -2466,7 +2598,7 @@ impl SolverBridge {
         asked: &FqTraitName,
         pick: impl FnOnce(Selection) -> Vec<usize>,
     ) -> Vec<Option<DefId>> {
-        let Ok(q) = self.question(tysys, ctx, type_id, asked) else {
+        let Ok(q) = self.question(tysys, ctx, type_id, asked, Variables::Refused) else {
             return Vec::new();
         };
         self.order_of(&q, pick)

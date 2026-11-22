@@ -25,6 +25,7 @@ use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
+use super::pending_selection::{PendingOp, PendingOperator};
 use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
@@ -2015,12 +2016,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
             }
-            // An unsolved variable is reported where it stays unsolved, and the
-            // rest are either reported already or accepted anywhere.
-            ResolvedType::InferVar(_)
-            | ResolvedType::Unknown
-            | ResolvedType::Error
-            | ResolvedType::Never => return (0, TypeTable::UNKNOWN),
+            // A variable may settle later, past the access typed without it.
+            ResolvedType::InferVar(_) => {
+                let answered = self.apply_infer_holes(struct_type);
+                if answered != struct_type {
+                    return self.lookup_field_type(answered, field_name, span);
+                }
+                let name = self.tysys.type_table.borrow().name(struct_type);
+                let _ = self.emit(TypeError::CannotInferType {
+                    message: format!(
+                        "cannot infer `{name}` far enough to read its field `{field_name}`; annotate it"
+                    ),
+                    span,
+                });
+                self.close_infer_var(struct_type);
+                return (0, TypeTable::ERROR);
+            }
+            // The rest are either reported already or accepted anywhere.
+            ResolvedType::Unknown | ResolvedType::Error | ResolvedType::Never => {
+                return (0, TypeTable::UNKNOWN);
+            }
             // Read on each instance the body is monomorphized at.
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
@@ -2294,6 +2309,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
+            if let Some(item) = self.index_waits(base_type_id, access, index_type) {
+                let result = self.mint_infer_var_named("Output");
+                self.wait_for_operator(PendingOperator {
+                    op: PendingOp::Index {
+                        receiver: expr_type,
+                        access,
+                        key: index_type,
+                    },
+                    item,
+                    left: base_type_id,
+                    span: index.span,
+                    origin: index.id,
+                    result,
+                });
+                return result;
+            }
+            return self.dispatch_index(index.id, index.span, expr_type, access, index_type);
+        }
+
+        self.report_not_indexable(expr_type, index.span)
+    }
+
+    /// The trait the subscript `access` on `base` would select an impl of,
+    /// where which impl waits on a variable `base` holds.
+    fn index_waits(&self, base: TypeId, access: IndexAccess, key: TypeId) -> Option<CompilerItem> {
+        let items: &[CompilerItem] = match access {
+            IndexAccess::Value => &[CompilerItem::IndexValue, CompilerItem::IndexRef],
+            IndexAccess::Mutable => &[CompilerItem::IndexRefMut, CompilerItem::IndexRef],
+            IndexAccess::Shared => &[CompilerItem::IndexRef],
+        };
+        items
+            .iter()
+            .copied()
+            .find(|&item| self.selection_waits(base, item, Some(key)))
+    }
+
+    fn report_not_indexable(&mut self, receiver: TypeId, span: Span) -> TypeId {
+        let type_name = self.tysys.type_table.borrow().name(receiver);
+        let _ = self.emit(TypeError::MissingTraitImpl {
+            type_name,
+            trait_name: "IndexValue or IndexRef".to_string(),
+            span,
+        });
+        TypeTable::ERROR
+    }
+
+    /// Dispatch the subscript `id` on a struct-headed `receiver` by a key of
+    /// `index_type` to the indexing impl `access` reaches.
+    pub(super) fn dispatch_index(
+        &mut self,
+        id: AstId,
+        span: Span,
+        receiver: TypeId,
+        access: IndexAccess,
+        index_type: TypeId,
+    ) -> TypeId {
+        let base_type_id = self.tysys.through_ref(receiver);
+        let lookup_type_id = self.tysys.newtype_base_lookup(base_type_id);
+        {
             // A `&mut` subscript asks `IndexRefMut` first so the element arrives
             // as `&mut T` from a `&mut` container. Its `Output: RefMut` bound is
             // what turns a replace-on-assign element back to the shared lookup.
@@ -2344,7 +2418,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
 
-                let func = self.indexing_function_ref(&trait_info, index_method, index.span);
+                let func = self.indexing_function_ref(&trait_info, index_method, span);
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2353,7 +2427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `Ref(Output)` `return_type` is the signal that the
                 // outer `Deref` wrap is needed.
                 self.record_operator_dispatch(
-                    index.id,
+                    id,
                     OperatorDispatch {
                         function_ref: func,
                         method_def: Some(trait_info.method_def),
@@ -2375,7 +2449,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let func = self.indexing_function_ref(&trait_info, "index_value", index.span);
+                let func = self.indexing_function_ref(&trait_info, "index_value", span);
 
                 // Record the
                 // operator dispatch keyed off the `IndexExpr`'s
@@ -2384,7 +2458,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // outer `Deref` wrap is needed — the IndexValue
                 // shape returns the value by copy.
                 self.record_operator_dispatch(
-                    index.id,
+                    id,
                     OperatorDispatch {
                         function_ref: func,
                         method_def: Some(trait_info.method_def),
@@ -2406,19 +2480,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     CompilerItem::IndexRefMut,
                 ],
                 Some(index_type),
-                index.span,
+                span,
             ) {
                 return TypeTable::ERROR;
             }
         }
-
-        let type_name = self.tysys.type_table.borrow().name(expr_type);
-        let _ = self.emit(TypeError::MissingTraitImpl {
-            type_name,
-            trait_name: "IndexValue or IndexRef".to_string(),
-            span: index.span,
-        });
-        TypeTable::ERROR
+        self.report_not_indexable(receiver, span)
     }
 
     /// The key type of the `Index` / `IndexAssign` impl dispatching

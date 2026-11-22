@@ -69,6 +69,9 @@ pub(crate) struct MethodDispatch {
     /// transfers ownership of the receiver. The resource move check reads this
     /// to flag a use of the receiver binding after a consuming call.
     pub(crate) consumes_self: bool,
+    /// The pending selection this call waits on, whose dispatch the module-end
+    /// sweep writes over `method_def` and `function_ref`.
+    pub(crate) selection: Option<usize>,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at

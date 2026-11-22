@@ -38,6 +38,7 @@ use crate::knobs::CompileKnobs;
 use crate::run_cache::ReadLog;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
 use wado_host::guest::CAPTURED_STDIO_CAPACITY;
+use wado_host::options::OptLevel;
 use wado_host::random;
 use wado_host::sync::{join_in_drop, joined, lock};
 
@@ -83,6 +84,17 @@ const CLI_INTERFACES: &[&str] = &[
 /// anything else is refused as `Unavailable` before it is instantiated.
 fn is_linked(interface: &str) -> bool {
     CLI_INTERFACES.contains(&interface) || random::INTERFACES.contains(&interface)
+}
+
+/// The level an evaluated program compiles at: the test's, but no higher than
+/// `-O1`. A test evaluates a program per case, so the compile is most of its
+/// cost, and `-O2` compiles a generated Gale parser in 1.5 times what `-O1`
+/// takes.
+const fn eval_opt_level(test: OptLevel) -> OptLevel {
+    match test {
+        OptLevel::O0 => OptLevel::O0,
+        OptLevel::O1 | OptLevel::O2 | OptLevel::O3 | OptLevel::Os => OptLevel::O1,
+    }
 }
 
 /// The `core:eval` host for one `wado test` run, shared by every test in it.
@@ -132,15 +144,18 @@ impl Drop for EvalHost {
 }
 
 impl EvalHost {
-    /// A host compiling at the test's `-O` and with its `-f` flags, on permits
-    /// of `cpu`, which holds `parallelism` of them. `--no-cache` skips reading
-    /// the outcome cache.
+    /// A host compiling at [`eval_opt_level`] and with the test's `-f` flags,
+    /// on permits of `cpu`, which holds `parallelism` of them. `--no-cache`
+    /// skips reading the outcome cache.
     #[must_use]
     pub fn new(knobs: &CompileKnobs, cpu: Arc<Semaphore>, parallelism: usize) -> Self {
         assert!(parallelism > 0, "a CPU budget of zero never runs anything");
         Self {
             compiler_digest: compiler_digest(),
-            knobs: knobs.clone(),
+            knobs: CompileKnobs {
+                opt_level: eval_opt_level(knobs.opt_level),
+                ..knobs.clone()
+            },
             engine: OnceLock::new(),
             slots: Mutex::new(IndexMap::default()),
             dependencies: Mutex::new(IndexMap::default()),
@@ -874,8 +889,14 @@ pub fn add_to_linker<T: Send + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use super::{Outcome, current_thread_runtime, program_linker, run};
+    use std::sync::Arc;
+
+    use tokio::sync::Semaphore;
+
+    use super::{EvalHost, Outcome, current_thread_runtime, program_linker, run};
+    use crate::knobs::CompileKnobs;
     use wado_host::engine::fuel_engine;
+    use wado_host::options::OptLevel as Level;
     use wasm_encoder::{
         Component, ComponentImportSection, ComponentTypeRef, ComponentTypeSection, InstanceType,
     };
@@ -890,6 +911,24 @@ mod tests {
         let mut component = Component::new();
         component.section(&types).section(&imports);
         component.finish()
+    }
+
+    #[test]
+    fn a_program_compiles_at_the_tests_level_capped_at_o1() {
+        for (test, program) in [
+            (Level::O0, Level::O0),
+            (Level::O1, Level::O1),
+            (Level::O2, Level::O1),
+            (Level::O3, Level::O1),
+            (Level::Os, Level::O1),
+        ] {
+            let knobs = CompileKnobs {
+                opt_level: test,
+                ..CompileKnobs::default()
+            };
+            let host = EvalHost::new(&knobs, Arc::new(Semaphore::new(1)), 1);
+            assert_eq!(host.knobs.opt_level, program, "{test:?}");
+        }
     }
 
     #[test]

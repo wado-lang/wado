@@ -1,0 +1,55 @@
+// A closure's `mut` parameter is a slot its body writes: no pass may read the
+// argument in place of it.
+
+struct Point {
+    x: i32,
+}
+
+// The loop keeps `apply` out of line, so `param_spec` clones the closure body
+// on the constant argument rather than the inliner splicing it.
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+    while builtin::black_box(false) {
+        builtin::black_box(f);
+        builtin::black_box(x);
+    }
+    return f(x);
+}
+
+fn apply_point(f: fn(Point) -> i32, p: Point) -> i32 {
+    builtin::black_box(f);
+    return f(p);
+}
+
+test "a constant argument does not stand in for a reassigned parameter" {
+    let strict = builtin::black_box(false);
+    let out = apply(|mut x: i32| {
+        while builtin::black_box(false) {
+            builtin::black_box(strict);
+            builtin::black_box(x);
+        }
+        if strict {
+            x = panic("no");
+        }
+        x = x + 3;
+        return x;
+    }, 1);
+    assert out == 4;
+}
+
+test "a write to a parameter's field leaves the caller's value alone" {
+    let p = Point { x: 1 };
+    let out = apply_point(|mut q: Point| {
+        q.x += 10;
+        return q.x;
+    }, p);
+    assert out == 11;
+    assert p.x == 1;
+}
+
+test "Inspect spells a closure's mut parameter" {
+    let f = |mut x: i32| {
+        x += 1;
+        return x;
+    };
+    assert `${f:#?}`.contains("mut x");
+}

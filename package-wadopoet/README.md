@@ -8,9 +8,11 @@ it. A package names it under `[dependencies]` and imports it from
 
 `CodeWriter` holds the text and its indentation. `begin` opens a block, `end`
 closes it, and `line` writes one line at the current depth. The specs
-(`StructSpec`, `VariantSpec`, `EnumSpec`, `FnSpec`, `GlobalSpec`, `ImplSpec`)
-build a declaration and emit it into a writer. Most of a function body is
-plain lines.
+(`StructSpec`, `VariantSpec`, `EnumSpec`, `FlagsSpec`, `NewtypeSpec`, `FnSpec`,
+`GlobalSpec`, `ImplSpec`) build a declaration and emit it into a writer. A type
+declaration takes a doc comment, and attributes too unless it is a newtype,
+which takes none. A field, a case and an enum member take both, and a flags
+member neither. Most of a function body is plain lines.
 
 ```wado
 use { CodeWriter, FnSpec, StructSpec, Vis } from "lib:wadopoet";

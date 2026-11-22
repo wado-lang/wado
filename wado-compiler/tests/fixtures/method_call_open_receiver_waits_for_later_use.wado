@@ -1,0 +1,27 @@
+// The one impl that may answer is written for `Bx<u64>`, so the call cannot
+// choose it while `T` is open: the impl settles nothing. The selection waits,
+// typed by the trait's declaration, and the annotation settles `T`, which
+// selects the impl.
+struct Bx<T> {
+    v: List<T>,
+}
+
+fn mk<T>() -> Bx<T> {
+    return Bx { v: [] };
+}
+
+trait Me with () {
+    fn me(&self) -> Self;
+}
+
+impl Me for Bx<u64> {
+    fn me(&self) -> Self {
+        return Bx { v: [7] };
+    }
+}
+
+test {
+    let c: Bx<u64> = mk().me();
+    assert c.v.len() == 1;
+    assert c.v[0] == 7;
+}

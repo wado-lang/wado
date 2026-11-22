@@ -1,0 +1,1156 @@
+//! Wado declarations generated from a schema: the mapping `derive.wado`
+//! follows, read backwards. The code written uses `core:serde`'s derived
+//! `Serialize` and `Deserialize`, and nothing of Jade's.
+
+use { apply_case } from "core:serde";
+use { HashMap, HashSet } from "core:collections";
+use { to_string } from "core:json";
+use { Uri } from "core:uri";
+use { percent_decode, percent_encode } from "core:url";
+use {
+    CodeWriter,
+    EnumMember,
+    EnumSpec,
+    FieldSpec,
+    FlagsSpec,
+    ModuleSpec,
+    NewtypeSpec,
+    StructSpec,
+    VariantSpec,
+    Vis,
+    WadoVariantCase,
+    is_keyword,
+    is_reserved,
+    wado,
+} from "lib:wadopoet";
+use { Node } from "./document.wado";
+use { JsonSchema, SchemaGenerator } from "./derive.wado";
+use { JsonTypes, Schema, SchemaError, SchemaObject, pointer_token } from "./schema.wado";
+use { CompileError, CompileOptions, DEFAULT_BASE, SchemaSet, Validator } from "./validate.wado";
+
+/// Where the root's name comes from when it declares a type: `root` first,
+/// then its `title`, then the name of the file it was read from.
+pub struct GenerateOptions {
+    pub root: Option<String> = null,
+}
+
+/// Why a schema generates no module.
+pub variant GenerateError {
+    /// A document breaks a rule of Draft 2020-12, or a reference names a
+    /// document nobody supplied.
+    Invalid(CompileError),
+    /// A keyword or a name has no Wado declaration.
+    Unsupported(SchemaError),
+}
+
+impl Display for GenerateError {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            Invalid(e) => e.fmt(f),
+            Unsupported(e) => e.fmt(f),
+        }
+    }
+}
+
+impl Error for GenerateError {
+}
+
+/// The module declaring the types `schema` describes, headed by `module`. Each
+/// `$defs` entry becomes a `pub` declaration named by its key, and so does the
+/// root unless it is only a `$ref`. An error names the keyword, or the name,
+/// that has no Wado declaration, by its JSON Pointer.
+pub fn generate(
+    schema: &Schema,
+    module: &ModuleSpec,
+    options: GenerateOptions = GenerateOptions {},
+) -> Result<String, GenerateError> {
+    let base = Uri::from_str(&DEFAULT_BASE).unwrap();
+    let mut set = SchemaSet::new();
+    set.insert(base, *schema);
+    return generate_in(&set, &base, module, options);
+}
+
+/// The module declaring the types the document `set` holds under `uri`
+/// describes, as `generate` writes it, and those of the other documents' that
+/// its references reach. A reference resolves among the documents of `set`,
+/// as `Validator::compile_in` resolves it, and names a document's root or one
+/// of its `$defs`. A document's root is named by its `title`, or else by the
+/// name of the file its URI names.
+pub fn generate_in(
+    set: &SchemaSet,
+    uri: &Uri,
+    module: &ModuleSpec,
+    options: GenerateOptions = GenerateOptions {},
+) -> Result<String, GenerateError>
+    contract set.holds(uri), "`uri` must name a document the set holds"
+{
+    let targets = set.reference_targets(uri).map_err(|e| GenerateError::Invalid(e))?;
+    let mut gen = Gen { set: *set, targets };
+    gen.start(uri, &options).map_err(|e| GenerateError::Unsupported(e))?;
+    let mut w = CodeWriter::new();
+    module.emit(&mut w);
+    for let line of gen.imports.sorted() {
+        w.line(line);
+    }
+    w.blank();
+    w.append(&gen.decls);
+    return Result::Ok(w.to_string());
+}
+
+/// A document's root's name, from the first source that holds one: `root`,
+/// its `title`, the name of the file its URI names.
+fn root_name(root: &SchemaObject, uri: &Uri, root_option: &Option<String>) -> Result<Option<String>, SchemaError> {
+    if let Some(name) = root_option {
+        return Result::Ok(Option::Some(decl_name(name, &"")?));
+    }
+    if let Some(title) = &root.title {
+        return Result::Ok(Option::Some(decl_name(title, &"/title")?));
+    }
+    if `${*uri}` == DEFAULT_BASE {
+        return Result::Ok(null);
+    }
+    let Ok(stem) = percent_decode(file_stem(&uri.to_string())) else {
+        return Result::Ok(null);
+    };
+    return Result::Ok(Option::Some(decl_name(&stem, &"")?));
+}
+
+/// The name of the file `path` ends in, every extension left out:
+/// `a/b/api.schema.json` as `api`.
+internal fn file_stem(path: &String) -> String {
+    let view = path.as_str_slice();
+    let name = view.slice(view.rfind("/").map(|i| i + 1).unwrap_or(0), view.len());
+    return name.slice(0, name.find(".").unwrap_or(name.len())).to_string();
+}
+
+/// What a value of a generated type is written as, for a field's default.
+enum Lit {
+    Bool,
+    Integer,
+    Float,
+    Text,
+    Unit,
+    Optional,
+    Enum,
+    /// Decoded from its JSON text, as no literal writes it.
+    Json,
+}
+
+/// A Wado type, as written where it is used.
+struct Ty {
+    text: String,
+    lit: Lit = Lit::Json,
+    /// An enum's members, as `[Wado name, wire name]`.
+    members: List<[String, String]> = [],
+}
+
+struct Gen {
+    set: SchemaSet,
+    /// `SchemaSet::reference_targets` of the primary document.
+    targets: HashMap<String, String>,
+    /// The document being read.
+    doc: Uri = Uri::from_str(&DEFAULT_BASE).unwrap(),
+    /// The Wado name of each schema declared, by its `uri#pointer`.
+    names: HashMap<String, String> = HashMap::new(),
+    /// The schemas named and not declared yet, as `[uri#pointer, name]`.
+    pending: List<[String, String]> = [],
+    /// The names declared at the module's top level.
+    taken: HashSet<String> = HashSet::new(),
+    imports: List<String> = [],
+    decls: CodeWriter = CodeWriter::new(),
+}
+
+impl Gen {
+    /// Declares the root of the document under `uri` unless it is only a
+    /// `$ref` the `root` option names nothing for, each of its `$defs`, and
+    /// every schema those reach.
+    fn start(&mut self, uri: &Uri, options: &GenerateOptions) -> Result<(), SchemaError> {
+        self.doc = *uri;
+        let root = self.set.get(uri).unwrap().into_object();
+        if assertions(&root) == ["$ref"] && options.root matches { null } {
+            self.type_of(&Schema::Object(root), &"", &"")?;
+        } else {
+            let Some(name) = root_name(&root, uri, &options.root)? else {
+                return fail(&"", "has no name: give the `root` option or a `title`");
+            };
+            self.name(`${*uri}#`, name, &"")?;
+        }
+        for let key of root.defs.keys() {
+            let at = `/$defs/${pointer_token(key)}`;
+            self.name(`${*uri}#${at}`, decl_name(key, &at)?, &at)?;
+        }
+        while !self.pending.is_empty() {
+            let [place, name] = self.pending.remove(0);
+            self.declare_place(&place, name)?;
+        }
+        return Result::Ok(());
+    }
+
+    /// Claims `name` for the schema at `place`, to be declared in turn, unless
+    /// a reference named it first.
+    fn name(&mut self, place: String, name: String, at: &String) -> Result<String, SchemaError> {
+        if let Some(named) = self.names.get(place) {
+            return Result::Ok(named);
+        }
+        let claimed = self.claim(name, at)?;
+        self.names[place] = claimed;
+        self.pending.push([place, claimed]);
+        return Result::Ok(claimed);
+    }
+
+    /// The document holding `place`, and the JSON Pointer to it there.
+    fn split(place: &String) -> [Uri, String] {
+        let hash = place.find("#").unwrap();
+        return [
+            Uri::from_str(place.substr_bytes(0, hash)).unwrap(),
+            place.substr_bytes(hash + 1, place.len()),
+        ];
+    }
+
+    /// The schema at `place`, a document's root or one of its `$defs`.
+    fn schema_at(&self, place: &String) -> Option<Schema> {
+        let [uri, at] = Gen::split(place);
+        let root = self.set.get(&uri)?;
+        if at.is_empty() {
+            return Option::Some(root);
+        }
+        return root.into_object().defs.get(def_key(&at)?);
+    }
+
+    /// Declares the schema at `place` as `name`, its errors placed in its
+    /// document.
+    fn declare_place(&mut self, place: &String, name: String) -> Result<(), SchemaError> {
+        let [uri, at] = Gen::split(place);
+        let s = self.schema_at(place).unwrap();
+        self.doc = uri;
+        return self.declare(name, &s, &at, doc_of(&s.into_object())).map_err(|e| {
+            if e.uri matches { null } && `${uri}` != DEFAULT_BASE {
+                return SchemaError { ..e, uri: Option::Some(uri) };
+            }
+            return e;
+        });
+    }
+
+    /// `name` for a declaration at the top level, which no other may take.
+    fn claim(&mut self, name: String, at: &String) -> Result<String, SchemaError> {
+        if !self.taken.insert(name) {
+            return fail(at, `names \`${name}\`, which another declaration takes`);
+        }
+        return Result::Ok(name);
+    }
+
+    /// The namespace `module` is imported under: its last segment.
+    fn namespace(&mut self, module: String) -> String {
+        let view = module.as_str_slice();
+        let start = view.rfind(":").map(|i| i + 1).unwrap_or(0);
+        let ns = view.slice(start, view.len()).to_string();
+        let line = wado`use ${ns} from "${module}";`;
+        if !self.imports.contains_str(&line) {
+            self.imports.push(line);
+        }
+        return ns;
+    }
+
+    fn value(&mut self) -> Ty {
+        return Ty { text: `${self.namespace("core:value")}::Value` };
+    }
+
+    /// Where the next declaration goes, after a blank line where one came
+    /// before.
+    fn next_decl(&mut self) -> &mut CodeWriter {
+        if !self.decls.is_empty() {
+            self.decls.blank();
+        }
+        return &mut self.decls;
+    }
+
+    /// Declares `name` as the type `s` describes: a struct, enum, variant or
+    /// flags where `s` has that shape, and a newtype over its type otherwise.
+    fn declare(&mut self, name: String, s: &Schema, at: &String, doc: Option<String>) -> Result<(), SchemaError> {
+        if let Object(o) = s && is_composite(o) {
+            return self.compose(name, o, at, doc);
+        }
+        if let Object(o) = s && self.flags_decl(name, o, doc) {
+            return Result::Ok(());
+        }
+        // A struct, enum or variant written in place inside an `Option` takes a
+        // name of its own, as the declaration holds the `Option`.
+        let mut hint = name;
+        if let Object(o) = s && non_null(o) matches { Some(_) } {
+            hint = `${name}Value`;
+        }
+        let ty = self.type_of(s, at, &hint)?;
+        let mut spec = NewtypeSpec::new(name, ty.text, Vis::Pub);
+        if let Some(d) = doc {
+            spec.set_doc(d);
+        }
+        spec.emit(self.next_decl());
+        return Result::Ok(());
+    }
+
+    /// Declares `name` as the struct, enum or variant `o` describes, which
+    /// `is_composite` holds.
+    fn compose(&mut self, name: String, o: &SchemaObject, at: &String, doc: Option<String>) -> Result<(), SchemaError> {
+        if is_struct(o) {
+            return self.struct_decl(name, o, at, doc);
+        }
+        if is_enum(o) {
+            return self.enum_decl(name, o, at, doc);
+        }
+        return self.variant_decl(name, o, at, doc);
+    }
+
+    /// The type `s` describes, at the JSON Pointer `at`. A struct, enum or
+    /// variant written in place is declared under `hint`.
+    fn type_of(&mut self, s: &Schema, at: &String, hint: &String) -> Result<Ty, SchemaError> {
+        if let Bool(admits) = s {
+            if !*admits {
+                return fail(at, "admits no value, which no Wado type holds");
+            }
+            return Result::Ok(self.value());
+        }
+        let o = s.into_object();
+        let keys = assertions(&o);
+        if let Some(leaf) = leaf_of(&o) {
+            return Result::Ok(leaf);
+        }
+        if o.reference matches { Some(_) } {
+            only(&keys, ["$ref"], at)?;
+            return self.resolve(at);
+        }
+        if let Some(ty) = self.wado_format(&o) {
+            only(&keys, ["type"], at)?;
+            return Result::Ok(ty);
+        }
+        if !o.one_of.is_empty() && is_result(&o) {
+            only(&keys, ["oneOf"], at)?;
+            let ok = self.type_of(
+                &o.one_of[0].into_object().properties["Ok"],
+                &`${*at}/oneOf/0/properties/Ok`,
+                &`${*hint}Ok`,
+            )?;
+            let err = self.type_of(
+                &o.one_of[1].into_object().properties["Err"],
+                &`${*at}/oneOf/1/properties/Err`,
+                &`${*hint}Err`,
+            )?;
+            return Result::Ok(Ty { text: `Result<${ok.text}, ${err.text}>` });
+        }
+        if is_composite(&o) {
+            let name = self.claim(*hint, at)?;
+            self.compose(name, &o, at, null)?;
+            return Result::Ok(self.named(name, &o));
+        }
+        if !o.any_of.is_empty() {
+            only(&keys, ["anyOf"], at)?;
+            if non_null(&o) matches { null } {
+                return fail(&`${*at}/anyOf`, "is not a schema and `null`, the one `anyOf` D reads");
+            }
+        }
+        if let Some([inner, within]) = non_null(&o) {
+            return self.optional(&inner, &`${*at}${within}`, hint);
+        }
+        return self.typed(&o, &keys, at, hint);
+    }
+
+    /// The type a schema of one `type` describes.
+    fn typed(&mut self, o: &SchemaObject, keys: &List<String>, at: &String, hint: &String) -> Result<Ty, SchemaError> {
+        if o.type == JsonTypes::none() {
+            only(keys, [], at)?;
+            return Result::Ok(self.value());
+        }
+        for let [t, ty] of &SCALARS {
+            if o.type == *t {
+                only(keys, ["type"], at)?;
+                return Result::Ok(*ty);
+            }
+        }
+        if o.type == JsonTypes::String {
+            only(keys, ["type", "contentEncoding"], at)?;
+            if o.content_encoding == Option::Some("base64url") {
+                return Result::Ok(Ty { text: "ByteList" });
+            }
+            return Result::Ok(self.formatted(&o.format));
+        }
+        if o.type == JsonTypes::Array {
+            return self.array(o, keys, at, hint);
+        }
+        if o.type == JsonTypes::Object {
+            only(keys, ["type", "additionalProperties"], at)?;
+            let values = match &o.additional_properties {
+                Some(v) => self.type_of(v, &`${*at}/additionalProperties`, &`${*hint}Value`)?,
+                null => self.value(),
+            };
+            return Result::Ok(Ty { text: `${self.namespace("core:collections")}::TreeMap<String, ${values.text}>` });
+        }
+        return fail(&`${*at}/type`, "names more than one type besides `null`, which no Wado type holds");
+    }
+
+    fn array(&mut self, o: &SchemaObject, keys: &List<String>, at: &String, hint: &String) -> Result<Ty, SchemaError> {
+        if !o.prefix_items.is_empty() {
+            only(keys, ["type", "prefixItems", "minItems", "maxItems"], at)?;
+            let arity = Option::Some(o.prefix_items.len());
+            if o.min_items != arity || o.max_items != arity {
+                return fail(&`${*at}/prefixItems`, "has no `minItems` and `maxItems` both its length, as a tuple's");
+            }
+            let mut items: List<String> = [];
+            for let [i, item] of o.prefix_items.iter_ref().enumerate() {
+                items.push(self.type_of(item, &`${*at}/prefixItems/${i}`, &`${*hint}${i}`)?.text);
+            }
+            return Result::Ok(Ty { text: `[${items.join(", ")}]` });
+        }
+        only(keys, ["type", "items", "uniqueItems"], at)?;
+        let item = match &o.items {
+            Some(items) => self.type_of(items, &`${*at}/items`, &`${*hint}Item`)?,
+            null => self.value(),
+        };
+        if o.unique_items {
+            return Result::Ok(Ty { text: `${self.namespace("core:collections")}::TreeSet<${item.text}>` });
+        }
+        return Result::Ok(Ty { text: `List<${item.text}>` });
+    }
+
+    /// The type of a string whose `format` is `format`, where that type reads
+    /// every string the format admits and writes only such strings.
+    fn formatted(&mut self, format: &Option<String>) -> Ty {
+        let [module, name] = match format {
+            Some(f) && *f == "uuid" => ["core:uuid", "Uuid"],
+            Some(f) && *f == "uri" => ["core:uri", "Uri"],
+            Some(f) && *f == "uri-reference" => ["core:uri", "UriReference"],
+            // The one exception to the rule above: `Instant` reads and writes
+            // Temporal's grammar, not RFC 3339's.
+            Some(f) && *f == "date-time" => ["core:temporal", "Instant"],
+            _ => {
+                return Ty { text: "String", lit: Lit::Text };
+            },
+        };
+        return Ty { text: `${self.namespace(module)}::${name}` };
+    }
+
+    /// The type a string's `x-wado-format` names, where it names a type of the
+    /// standard library.
+    fn wado_format(&mut self, o: &SchemaObject) -> Option<Ty> {
+        if o.type != JsonTypes::String {
+            return null;
+        }
+        let Some(symbol) = o.extra.get("x-wado-format") else {
+            return null;
+        };
+        let Some(text) = symbol.root().as_str() else {
+            return null;
+        };
+        let Some(hash) = text.find("#") else {
+            return null;
+        };
+        let module = text.slice(0, hash);
+        let name = text.slice(hash + 1, text.len()).to_string();
+        let Some(ns) = module.strip_prefix("core:") else {
+            return null;
+        };
+        if !is_identifier(&ns.to_string()) || !is_identifier(&name) {
+            return null;
+        }
+        return Option::Some(Ty { text: `${self.namespace(module.to_string())}::${name}` });
+    }
+
+    fn optional(&mut self, inner: &Schema, at: &String, hint: &String) -> Result<Ty, SchemaError> {
+        let ty = self.type_of(inner, at, hint)?;
+        return Result::Ok(Ty { text: `Option<${ty.text}>`, lit: Lit::Optional });
+    }
+
+    /// The type declared as `name` from `o`. An enum whose members have no
+    /// names takes no literal; declaring it reports why.
+    fn named(&self, name: String, o: &SchemaObject) -> Ty {
+        if is_enum(o) && let Ok(members) = members(&enum_names(o), &"") {
+            return Ty { text: name, lit: Lit::Enum, members };
+        }
+        return Ty { text: name };
+    }
+
+    /// The declaration the `$ref` at `at` names: a document's root or one of
+    /// its `$defs`, named the first time a reference reaches it.
+    fn resolve(&mut self, at: &String) -> Result<Ty, SchemaError> {
+        let place = self.targets[`${self.doc}#${*at}`];
+        let Some(s) = self.schema_at(&place) else {
+            return fail(&`${*at}/$ref`, "names neither a document's root nor one of its `$defs`, which D declares");
+        };
+        let here = `${*at}/$ref`;
+        let name = match self.names.get(place) {
+            Some(n) => n,
+            null => {
+                let [uri, pointer] = Gen::split(&place);
+                let named = match def_key(&pointer) {
+                    Some(key) => Option::Some(decl_name(&key, &here)?),
+                    null => root_name(&s.into_object(), &uri, &null)?,
+                };
+                let Some(n) = named else {
+                    return fail(&here, "names a document's root, which has no name: give it a `title`");
+                };
+                self.name(place, n, &here)?;
+            },
+        };
+        return Result::Ok(self.named(name, &s.into_object()));
+    }
+
+    fn struct_decl(
+        &mut self,
+        name: String,
+        o: &SchemaObject,
+        at: &String,
+        doc: Option<String>,
+    ) -> Result<(), SchemaError> {
+        only(&assertions(o), ["type", "properties", "required", "additionalProperties"], at)?;
+        if let Some(extra) = &o.additional_properties && !extra matches { Bool(false) } {
+            return fail(&`${*at}/additionalProperties`, "admits other properties, which a struct does not hold");
+        }
+        for let [i, key] of o.required.iter_ref().enumerate() {
+            if !o.properties.contains_key(*key) {
+                return fail(&`${*at}/required/${i}`, "names no property, which no struct field states");
+            }
+        }
+        let mut spec = StructSpec::new(name, Vis::Pub);
+        if let Some(d) = doc {
+            spec.set_doc(d);
+        }
+        let mut fields: List<FieldSpec> = [];
+        let mut pairs: List<[String, String]> = [];
+        let mut seen = HashSet::<String>::new();
+        for let [key, property] of o.properties.entries() {
+            let pat = `${*at}/properties/${pointer_token(key)}`;
+            let field = field_name(key, &pat)?;
+            if !seen.insert(field) {
+                return fail(&pat, `names the field \`${field}\`, which another property takes`);
+            }
+            let ty = self.type_of(property, &pat, &`${name}${decl_name(key, &pat)?}`)?;
+            let p = property.into_object();
+            let mut f = FieldSpec {
+                ..FieldSpec::new_pub(field, ty.text),
+                doc: doc_of(&p),
+            };
+            if !o.required.contains_str(key) {
+                if let Some(d) = &p.default {
+                    self.check_default(&pat, &d.root())?;
+                    f.default = Option::Some(self.literal(&ty, &d.root()));
+                } else {
+                    f.type_str = `Option<${ty.text}>`;
+                    f.default = Option::Some("null");
+                }
+            }
+            fields.push(f);
+            pairs.push([field, *key]);
+        }
+        let [policy, names] = wire_policy(&pairs);
+        if let Some(attr) = policy {
+            spec.add_attr(attr);
+        }
+        for let [i, f] of fields.iter_ref().enumerate() {
+            let mut field = *f;
+            if let Some(a) = &names[i] {
+                field.attrs.push(*a);
+            }
+            spec.add_field_spec(field);
+        }
+        spec.emit(self.next_decl());
+        return Result::Ok(());
+    }
+
+    fn enum_decl(&mut self, name: String, o: &SchemaObject, at: &String, doc: Option<String>) -> Result<(), SchemaError> {
+        only(&assertions(o), ["type", "enum"], at)?;
+        let mut spec = EnumSpec::new(name, Vis::Pub);
+        if let Some(d) = doc {
+            spec.set_doc(d);
+        }
+        let pairs = members(&enum_names(o), &`${*at}/enum`)?;
+        let [policy, names] = wire_policy(&pairs);
+        if let Some(attr) = policy {
+            spec.add_attr(attr);
+        }
+        for let [i, pair] of pairs.iter_ref().enumerate() {
+            let attrs: List<String> = match &names[i] {
+                Some(a) => [*a],
+                null => [],
+            };
+            spec.add_member_spec(EnumMember { name: pair.0, trailing_comment: null, attrs });
+        }
+        spec.emit(self.next_decl());
+        return Result::Ok(());
+    }
+
+    /// Declares `name` as the flags `o` describes, when its members' names all
+    /// come back under one policy, as a flags member takes no name of its own.
+    fn flags_decl(&mut self, name: String, o: &SchemaObject, doc: Option<String>) -> bool {
+        let Some(Object(items)) = o.items else {
+            return false;
+        };
+        if assertions(o) != ["type", "items", "uniqueItems"] || o.type != JsonTypes::Array || !is_enum(&items) {
+            return false;
+        }
+        if assertions(&items) != ["type", "enum"] || doc_of(&items) matches { Some(_) } {
+            return false;
+        }
+        let Ok(pairs) = members(&enum_names(&items), &"") else {
+            return false;
+        };
+        if pairs.len() > FLAGS_MAX {
+            return false;
+        }
+        let [policy, names] = wire_policy(&pairs);
+        if !names.iter_ref().all(|n| n matches { null }) {
+            return false;
+        }
+        let mut spec = FlagsSpec::new(name, Vis::Pub);
+        if let Some(d) = doc {
+            spec.set_doc(d);
+        }
+        if let Some(attr) = policy {
+            spec.add_attr(attr);
+        }
+        for let pair of &pairs {
+            spec.add_member(pair.0);
+        }
+        spec.emit(self.next_decl());
+        return true;
+    }
+
+    fn variant_decl(
+        &mut self,
+        name: String,
+        o: &SchemaObject,
+        at: &String,
+        doc: Option<String>,
+    ) -> Result<(), SchemaError> {
+        only(&assertions(o), ["oneOf"], at)?;
+        let tag = tag_of(&o.one_of);
+        let mut spec = VariantSpec::new(name, Vis::Pub);
+        if let Some(d) = doc {
+            spec.set_doc(d);
+        }
+        if let Some(t) = &tag {
+            spec.add_attr(wado`wire(tag = "${*t}")`);
+        }
+        let mut cases: List<WadoVariantCase> = [];
+        let mut wires: List<String> = [];
+        for let [i, branch] of o.one_of.iter_ref().enumerate() {
+            let bat = `${*at}/oneOf/${i}`;
+            let b = branch.into_object();
+            let Some([wire, payload]) = case_of(&b, &tag) else {
+                return fail(&bat, "is no case of the shapes a variant is written in");
+            };
+            let case = member_name(&wire).ok_or(SchemaError {
+                pointer: bat,
+                message: `names a case \`${wire}\` with no word to name it by`,
+            })?;
+            let payload = match payload {
+                Some([p, within]) => Option::Some(self.type_of(&p, &`${bat}${within}`, &`${name}${case}`)?.text),
+                null => null,
+            };
+            cases.push(WadoVariantCase { name: case, payload, doc: doc_of(&b) });
+            wires.push(wire);
+        }
+        let mut pairs: List<[String, String]> = [];
+        let mut seen = HashSet::<String>::new();
+        for let [i, c] of cases.iter_ref().enumerate() {
+            if !seen.insert(c.name) {
+                return fail(&`${*at}/oneOf/${i}`, `names the case \`${c.name}\`, which another case takes`);
+            }
+            pairs.push([c.name, wires[i]]);
+        }
+        let [policy, names] = wire_policy(&pairs);
+        if let Some(attr) = policy {
+            spec.add_attr(attr);
+        }
+        for let [i, c] of cases.iter_ref().enumerate() {
+            let mut case = *c;
+            if let Some(a) = &names[i] {
+                case.attrs.push(*a);
+            }
+            spec.add_case_spec(case);
+        }
+        spec.emit(self.next_decl());
+        return Result::Ok(());
+    }
+
+    /// Fails unless the schema at `at` admits `node`, its default, `format`
+    /// asserted, as the type a format gives reads no other string. Draft
+    /// 2020-12 lets a default be any value, and a field holding one its type
+    /// cannot hold would fail to compile or trap where it falls back to it.
+    fn check_default(&self, at: &String, node: &Node) -> Result<(), SchemaError> {
+        let tokens: List<String> = at.split("/").map(|t| percent_encode(t)).collect();
+        let probe = Uri::from_str("jade:default").unwrap();
+        let mut set = self.set;
+        set.insert(probe, Schema::Object(SchemaObject { reference: Option::Some(`${self.doc}#${tokens.join("/")}`) }));
+        let validator = Validator::compile_in(&set, &probe, CompileOptions { assert_format: true }).unwrap();
+        if validator.validate(node) matches { Err(_) } {
+            return fail(&`${*at}/default`, "is a value its own schema rejects");
+        }
+        return Result::Ok(());
+    }
+
+    /// `node`, the default of a field of type `ty`, as a Wado expression.
+    fn literal(&mut self, ty: &Ty, node: &Node) -> String {
+        let null_node = node.kind() matches { _::Null };
+        if ty.lit matches { _::Bool } && let Some(b) = node.as_bool() {
+            return `${b}`;
+        }
+        if ty.lit matches { _::Integer } && let Some(n) = node.as_number() && n.is_integer() {
+            return `${n}`;
+        }
+        if ty.lit matches { _::Float } && let Some(n) = node.as_number() {
+            return `${n}`;
+        }
+        if ty.lit matches { _::Text } && let Some(s) = node.as_str() {
+            return wado`"${s.to_string()}"`;
+        }
+        if ty.lit matches { _::Unit } && null_node {
+            return "()";
+        }
+        if ty.lit matches { _::Optional } && null_node {
+            return "null";
+        }
+        if ty.lit matches { _::Enum } && let Some(s) = node.as_str() {
+            let text = s.to_string();
+            for let [member, wire] of &ty.members {
+                if *wire == text {
+                    return `${ty.text}::${*member}`;
+                }
+            }
+        }
+        let json = to_string(&node.to_document()).unwrap();
+        return wado`${self.namespace("core:json")}::from_string::<${ty.text}>("${json}").unwrap()`;
+    }
+}
+
+/// The members a flags holds at most, one bit of a `u32` each.
+global FLAGS_MAX: i32 = 32;
+
+/// The `$defs` key the JSON Pointer `at` names an entry of a document's root
+/// by, or `null` where it points anywhere else.
+fn def_key(at: &String) -> Option<String> {
+    let rest = at.as_str_slice().strip_prefix("/$defs/")?;
+    if rest.contains("/") {
+        return null;
+    }
+    return Option::Some(rest.to_string().replace("~1", "/").replace("~0", "~"));
+}
+
+/// The keywords of `o` that assert, as D reads them.
+fn assertions(o: &SchemaObject) -> List<String> {
+    return bare(o).keywords();
+}
+
+/// `o` without the keywords that assert nothing: Core's identifiers and
+/// locations, and the annotations, `format` included, which D reads only
+/// where it chooses a string's type.
+fn bare(o: &SchemaObject) -> SchemaObject {
+    return SchemaObject {
+        ..*o,
+        dialect: null,
+        id: null,
+        vocabulary: HashMap::new(),
+        anchor: null,
+        dynamic_anchor: null,
+        comment: null,
+        defs: HashMap::new(),
+        title: null,
+        description: null,
+        default: null,
+        examples: [],
+        deprecated: false,
+        read_only: false,
+        write_only: false,
+        format: null,
+        content_media_type: null,
+        content_schema: null,
+        extra: HashMap::new(),
+    };
+}
+
+/// Fails at the first of `keys` that `allowed` does not hold.
+fn only(keys: &List<String>, allowed: List<String>, at: &String) -> Result<(), SchemaError> {
+    for let key of keys {
+        if !allowed.contains_str(key) {
+            return fail(&`${*at}/${pointer_token(key)}`, "has no Wado type D generates");
+        }
+    }
+    return Result::Ok(());
+}
+
+fn fail<T, S: AsStrSlice>(at: &String, message: S) -> Result<T, SchemaError> {
+    return Result::Err(SchemaError { pointer: *at, message: message.to_string() });
+}
+
+/// The doc comment a `description` becomes, after its `title`, as
+/// `derive.wado` reads one back.
+fn doc_of(o: &SchemaObject) -> Option<String> {
+    let Some(d) = o.description else {
+        return null;
+    };
+    return Option::Some(match o.title {
+        Some(t) => `${t}\n\n${d}`,
+        null => d,
+    });
+}
+
+// ── The shapes ──
+
+/// The leaf types whose schema `derive.wado` writes with assertions D reads
+/// no other way, matched as written.
+global LEAVES: List<[String, Ty]> = leaves();
+
+fn leaves() -> List<[String, Ty]> {
+    let mut gen = SchemaGenerator::new();
+    let schemas: List<[Schema, Ty]> = [
+        [
+            i8::json_schema(&mut gen),
+            Ty { text: "i8", lit: Lit::Integer },
+        ],
+        [
+            i16::json_schema(&mut gen),
+            Ty { text: "i16", lit: Lit::Integer },
+        ],
+        [
+            i32::json_schema(&mut gen),
+            Ty { text: "i32", lit: Lit::Integer },
+        ],
+        [
+            u8::json_schema(&mut gen),
+            Ty { text: "u8", lit: Lit::Integer },
+        ],
+        [
+            u16::json_schema(&mut gen),
+            Ty { text: "u16", lit: Lit::Integer },
+        ],
+        [
+            u32::json_schema(&mut gen),
+            Ty { text: "u32", lit: Lit::Integer },
+        ],
+        [
+            i64::json_schema(&mut gen),
+            Ty { text: "i64", lit: Lit::Integer },
+        ],
+        [
+            u64::json_schema(&mut gen),
+            Ty { text: "u64", lit: Lit::Integer },
+        ],
+        [
+            i128::json_schema(&mut gen),
+            Ty { text: "i128" },
+        ],
+        [
+            u128::json_schema(&mut gen),
+            Ty { text: "u128" },
+        ],
+        [
+            char::json_schema(&mut gen),
+            Ty { text: "char" },
+        ],
+    ];
+    let mut out: List<[String, Ty]> = [];
+    for let [s, ty] of schemas {
+        out.push([leaf_text(&s.into_object()), ty]);
+    }
+    return out;
+}
+
+/// What a leaf is matched by: the assertions of `o`, as written.
+fn leaf_text(o: &SchemaObject) -> String {
+    return to_string(&Schema::Object(bare(o))).unwrap();
+}
+
+/// The type of a schema holding `type` alone, by its value. An integer is
+/// unbounded, which no Wado type is, so a document whose integer is beyond
+/// `i64` matches the schema but does not decode.
+global SCALARS: List<[JsonTypes, Ty]> = [
+    [
+        JsonTypes::Null,
+        Ty { text: "()", lit: Lit::Unit },
+    ],
+    [
+        JsonTypes::Boolean,
+        Ty { text: "bool", lit: Lit::Bool },
+    ],
+    [
+        JsonTypes::Integer,
+        Ty { text: "i64", lit: Lit::Integer },
+    ],
+    [
+        JsonTypes::Number,
+        Ty { text: "f64", lit: Lit::Float },
+    ],
+];
+
+fn leaf_of(o: &SchemaObject) -> Option<Ty> {
+    let text = leaf_text(o);
+    for let [leaf, ty] of &LEAVES {
+        if *leaf == text {
+            return Option::Some(*ty);
+        }
+    }
+    return null;
+}
+
+/// What `o` admits besides `null`, where it is that and `null`, and the JSON
+/// Pointer to it within `o`.
+fn non_null(o: &SchemaObject) -> Option<[Schema, String]> {
+    if o.any_of.len() == 2 {
+        for let i of 0..<2 {
+            if is_null(&o.any_of[1 - i]) {
+                return Option::Some([o.any_of[i], `/anyOf/${i}`]);
+            }
+        }
+        return null;
+    }
+    if o.type & JsonTypes::Null != JsonTypes::none() && o.type != JsonTypes::Null {
+        return Option::Some([Schema::Object(SchemaObject { ..*o, type: o.type ^ JsonTypes::Null }), ""]);
+    }
+    return null;
+}
+
+fn is_null(s: &Schema) -> bool {
+    let o = s.into_object();
+    return o.type == JsonTypes::Null && assertions(&o) == ["type"];
+}
+
+/// Whether `o` is a struct, an enum or a variant, which a declaration of its
+/// own holds wherever it is written.
+fn is_composite(o: &SchemaObject) -> bool {
+    return is_struct(o) || is_enum(o) || !o.one_of.is_empty() && !is_result(o);
+}
+
+fn is_struct(o: &SchemaObject) -> bool {
+    return (o.type == JsonTypes::Object || o.type == JsonTypes::none()) && !o.properties.is_empty();
+}
+
+fn is_enum(o: &SchemaObject) -> bool {
+    let Some(values) = &o.enum else {
+        return false;
+    };
+    return (o.type == JsonTypes::String || o.type == JsonTypes::none())
+        && values.iter_ref().all(|v| v.root().as_str() matches { Some(_) });
+}
+
+fn enum_names(o: &SchemaObject) -> List<String> {
+    let mut names: List<String> = [];
+    for let v of o.enum.unwrap() {
+        names.push(v.root().as_str().unwrap().to_string());
+    }
+    return names;
+}
+
+/// An object holding one value under `name`, as `derive.wado` writes a
+/// payload case: its value's schema.
+fn one_property(o: &SchemaObject) -> Option<[String, Schema]> {
+    if assertions(o) != ["type", "properties", "required", "maxProperties"] || o.type != JsonTypes::Object {
+        return null;
+    }
+    if o.properties.len() != 1 || o.max_properties != Option::Some(1) {
+        return null;
+    }
+    let [name, value] = o.properties.entries().next().unwrap();
+    if o.required != [*name] {
+        return null;
+    }
+    return Option::Some([*name, *value]);
+}
+
+fn is_result(o: &SchemaObject) -> bool {
+    if o.one_of.len() != 2 {
+        return false;
+    }
+    let ok = one_property(&o.one_of[0].into_object());
+    let err = one_property(&o.one_of[1].into_object());
+    return ok matches { Some([n, _]) && n == "Ok" } && err matches { Some([n, _]) && n == "Err" };
+}
+
+/// The tag property every branch of `branches` holds a constant under, as
+/// `#[wire(tag)]` writes a case.
+fn tag_of(branches: &List<Schema>) -> Option<String> {
+    let first = branches[0].into_object();
+    if first.properties.len() != 1 || first.required.len() != 1 {
+        return null;
+    }
+    let tag = first.required[0];
+    for let b of branches {
+        let o = b.into_object();
+        let Some(Object(t)) = o.properties.get(tag) else {
+            return null;
+        };
+        if o.properties.len() != 1 || o.required != [tag] || assertions(&t) != ["const"] {
+            return null;
+        }
+    }
+    return Option::Some(tag);
+}
+
+/// A branch's case: its wire name, and its payload's schema if it has one,
+/// with the JSON Pointer to it within the branch.
+fn case_of(b: &SchemaObject, tag: &Option<String>) -> Option<[String, Option<[Schema, String]>]> {
+    if let Some(t) = tag {
+        let Some(Object(c)) = b.properties.get(*t) else {
+            return null;
+        };
+        let Some(name) = constant_string(&c) else {
+            return null;
+        };
+        let keys = assertions(b);
+        if keys == ["type", "properties", "required"] && b.type == JsonTypes::Object {
+            return Option::Some([name, null]);
+        }
+        if keys == ["$ref", "properties", "required"] {
+            let payload = SchemaObject { reference: b.reference };
+            return Option::Some([name, Option::Some([Schema::Object(payload), ""])]);
+        }
+        return null;
+    }
+    if assertions(b) == ["const"] && let Some(name) = constant_string(b) {
+        return Option::Some([name, null]);
+    }
+    let Some([name, value]) = one_property(b) else {
+        return null;
+    };
+    return Option::Some([name, Option::Some([value, `/properties/${pointer_token(&name)}`])]);
+}
+
+fn constant_string(o: &SchemaObject) -> Option<String> {
+    let Some(c) = &o.const else {
+        return null;
+    };
+    return c.root().as_str().map(|s| s.to_string());
+}
+
+// ── Names ──
+
+/// The policies a type's wire names may come back from its Wado names under,
+/// as `name_policy` spells them; the first is none.
+global POLICIES: List<[CaseStyle, String]> = [
+    [CaseStyle::Identity, ""],
+    [CaseStyle::Camel, "camelCase"],
+    [CaseStyle::Snake, "snake_case"],
+    [CaseStyle::Pascal, "PascalCase"],
+    [CaseStyle::ScreamingSnake, "SCREAMING_SNAKE_CASE"],
+    [CaseStyle::Kebab, "kebab-case"],
+    [CaseStyle::ScreamingKebab, "SCREAMING-KEBAB-CASE"],
+];
+
+/// The attributes that make each `[Wado name, wire name]` of `pairs` come
+/// back: the type's `name_policy`, where one other than none brings them all
+/// back, and the `name` of each that comes back under none.
+fn wire_policy(pairs: &List<[String, String]>) -> [Option<String>, List<Option<String>>] {
+    let mut fits = false;
+    let mut policy: Option<String> = null;
+    for let [style, name] of &POLICIES {
+        if !fits && pairs.iter_ref().all(|p| apply_case(*style, p.0) == p.1) {
+            fits = true;
+            if !name.is_empty() {
+                policy = Option::Some(wado`wire(name_policy = "${*name}")`);
+            }
+        }
+    }
+    let mut names: List<Option<String>> = [];
+    for let [wado_name, wire] of pairs {
+        names.push(if fits || *wado_name == *wire { null } else { Option::Some(wado`wire(name = "${*wire}")`) });
+    }
+    return [policy, names];
+}
+
+/// The `[Wado name, wire name]` of each enum member named `names`.
+fn members(names: &List<String>, at: &String) -> Result<List<[String, String]>, SchemaError> {
+    let mut pairs: List<[String, String]> = [];
+    let mut seen = HashSet::<String>::new();
+    for let [i, wire] of names.iter_ref().enumerate() {
+        let mat = `${*at}/${i}`;
+        let Some(member) = member_name(wire) else {
+            return fail(&mat, `names a member \`${*wire}\` with no word to name it by`);
+        };
+        if !seen.insert(member) {
+            return fail(&mat, `names the member \`${member}\`, which another member takes`);
+        }
+        pairs.push([member, *wire]);
+    }
+    return Result::Ok(pairs);
+}
+
+/// A declaration's name for `text`: its words in PascalCase, with a `_` after
+/// a reserved one.
+fn decl_name(text: &String, at: &String) -> Result<String, SchemaError> {
+    let Some(name) = pascal(text) else {
+        return fail(at, `names \`${*text}\`, which has no word to name a declaration by`);
+    };
+    return Result::Ok(if is_reserved(name) { `${name}_` } else { name });
+}
+
+/// A member's or case's name for `text`, which needs only to avoid a keyword,
+/// as it is always written qualified.
+fn member_name(text: &String) -> Option<String> {
+    let name = pascal(text)?;
+    return Option::Some(if is_keyword(name) { `${name}_` } else { name });
+}
+
+fn field_name(text: &String, at: &String) -> Result<String, SchemaError> {
+    let Some(parts) = name_words(text) else {
+        return fail(at, `names \`${*text}\`, which has no word to name a field by`);
+    };
+    let lower: List<String> = parts.iter_ref().map(|w| w.to_ascii_lowercase()).collect();
+    let name = lower.join("_");
+    return Result::Ok(if is_reserved(name) { `${name}_` } else { name });
+}
+
+/// `text`'s words, each with its first letter capitalized, or `null` where
+/// they name nothing.
+fn pascal(text: &String) -> Option<String> {
+    let mut out = String::new();
+    for let w of name_words(text)? {
+        out.push((w.byte_at(0) as char).to_ascii_uppercase());
+        out.push_str(&w.substr_bytes(1, w.len()));
+    }
+    return Option::Some(out);
+}
+
+/// `text`'s words, or `null` where it has none or starts with a digit, as no
+/// identifier does.
+fn name_words(text: &String) -> Option<List<String>> {
+    let parts = words(text);
+    if parts.is_empty() || parts[0].byte_at(0).is_ascii_digit() {
+        return null;
+    }
+    return Option::Some(parts);
+}
+
+/// The words of free text: runs of ASCII letters and digits, split again
+/// where the case changes (`HTTPServer` is `HTTP` and `Server`).
+fn words(text: &String) -> List<String> {
+    let chars: List<char> = text.chars().collect();
+    let mut out: List<String> = [];
+    let mut word = String::new();
+    for let i of 0..<chars.len() {
+        let c = chars[i];
+        if !c.is_ascii_alphanumeric() {
+            if !word.is_empty() {
+                out.push(word);
+                word = String::new();
+            }
+            continue;
+        }
+        if !word.is_empty() && c.is_ascii_uppercase() {
+            let prev = chars[i - 1];
+            let lower_next = i + 1 < chars.len() && chars[i + 1].is_ascii_lowercase();
+            if !prev.is_ascii_uppercase() || lower_next {
+                out.push(word);
+                word = String::new();
+            }
+        }
+        word.push(c);
+    }
+    if !word.is_empty() {
+        out.push(word);
+    }
+    return out;
+}
+
+fn is_identifier<S: AsStrSlice>(name: S) -> bool {
+    let view = name.as_str_slice();
+    if view.is_empty() || view.byte_at(0).is_ascii_digit() {
+        return false;
+    }
+    return view.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
+}

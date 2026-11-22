@@ -116,11 +116,11 @@ fn self_param_offset(callee: &TirFunction) -> u32 {
 /// matches WEP: Inspect (Debug Output) regardless of how the closure
 /// is later dispatched (specialized or canonical).
 fn format_closure_signature(
-    params: &[(String, TypeId)],
+    params: &[TirLocal],
     return_type: TypeId,
     type_table: &TypeTable,
 ) -> String {
-    let param_names: Vec<String> = params.iter().map(|(_, ty)| type_table.name(*ty)).collect();
+    let param_names: Vec<String> = params.iter().map(|p| type_table.name(p.type_id)).collect();
     let ret_name = type_table.name(return_type);
     format!("|{}| -> {}", param_names.join(", "), ret_name)
 }
@@ -246,9 +246,9 @@ fn build_specialized_method_info(info: &LocalMethodName, functor_suffix: &str) -
 #[derive(Debug, Clone)]
 struct CollectedClosure {
     id: u32,
-    params: Vec<(String, TypeId)>,
+    params: Vec<TirLocal>,
     body: TirExpr,
-    /// What the Inspect source reads a binding's mutability from.
+    /// What the Inspect source reads a body binding's mutability from.
     body_locals: Vec<TirLocal>,
     captures: Vec<TirCapture>,
     /// `body.type_id`, retained for closures whose `func_type_id` resolves
@@ -620,17 +620,17 @@ impl ClosureLowerer {
             let qualified_method_name = closure_call_name(&self.module_source, collected.id);
             let self_ref_type = type_table.make_ref(struct_type_id);
 
-            let call_params: Vec<(String, TypeId)> = collected
+            let call_params: Vec<TirLocal> = collected
                 .params
                 .iter()
                 .enumerate()
-                .map(|(i, (name, type_id))| {
-                    let name = if name == WILDCARD {
+                .map(|(i, param)| TirLocal {
+                    name: if param.name == WILDCARD {
                         discarded_param_name(i)
                     } else {
-                        name.clone()
-                    };
-                    (name, *type_id)
+                        param.name.clone()
+                    },
+                    ..param.clone()
                 })
                 .collect();
             let mut params = Vec::with_capacity(1 + call_params.len());
@@ -641,12 +641,12 @@ impl ClosureLowerer {
                 is_mut: false,
                 span: collected.span,
             });
-            for (i, (name, type_id)) in call_params.iter().enumerate() {
+            for (i, param) in call_params.iter().enumerate() {
                 params.push(TirParam {
-                    name: name.clone(),
-                    type_id: *type_id,
+                    name: param.name.clone(),
+                    type_id: param.type_id,
                     local_index: (i + 1) as u32,
-                    is_mut: false,
+                    is_mut: param.is_mut,
                     span: collected.span,
                 });
             }
@@ -708,14 +708,7 @@ impl ClosureLowerer {
                 is_mut: false,
                 span: Span::default(),
             });
-            for (name, ty) in &call_params {
-                locals.push(TirLocal {
-                    name: name.clone(),
-                    type_id: *ty,
-                    is_mut: false,
-                    span: Span::default(),
-                });
-            }
+            locals.extend(call_params.iter().cloned());
 
             let mut body_locals: Vec<(u32, TypeId)> = Vec::new();
             let mut assigned: Vec<(u32, TypeId)> = Vec::new();
@@ -752,7 +745,8 @@ impl ClosureLowerer {
                         let placeholder_idx = locals.len() as u32;
                         locals.push(TirLocal::synth(placeholder_idx, TypeTable::UNIT, false));
                     }
-                    locals[*idx as usize] = TirLocal::synth(*idx, *type_id, false);
+                    let is_mut = collected.body_locals[(*idx - param_count) as usize].is_mut;
+                    locals[*idx as usize] = TirLocal::synth(*idx, *type_id, is_mut);
                 }
             }
 
@@ -846,7 +840,10 @@ impl ClosureLowerer {
                 call_method: call_method_rc,
                 inspect_method: inspect_method_rc,
                 captures: collected.captures.clone(),
-                canonical_user_params: call_params,
+                canonical_user_params: call_params
+                    .into_iter()
+                    .map(|p| (p.name, p.type_id))
+                    .collect(),
                 canonical_return: return_type,
             });
         }
@@ -1319,7 +1316,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
             let func_name = name.clone();
             let func_module = func_module.clone();
 
-            let closure_params: Vec<(String, TypeId)> = sig
+            let closure_params: Vec<TirLocal> = sig
                 .params
                 .iter()
                 .enumerate()
@@ -1341,21 +1338,26 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                     } else {
                         orig_name.clone()
                     };
-                    (name, *ty)
+                    TirLocal {
+                        name,
+                        type_id: *ty,
+                        is_mut: false,
+                        span,
+                    }
                 })
                 .collect();
 
             let call_args: Vec<CallArg> = closure_params
                 .iter()
                 .enumerate()
-                .map(|(i, (name, ty))| {
+                .map(|(i, param)| {
                     CallArg::new(
                         TirExpr::new(
                             TirExprKind::Local {
                                 index: i as u32,
-                                name: name.clone(),
+                                name: param.name.clone(),
                             },
-                            *ty,
+                            param.type_id,
                             span,
                         ),
                         false,
@@ -1379,7 +1381,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                 span,
             );
 
-            let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+            let param_types: Vec<TypeId> = closure_params.iter().map(|p| p.type_id).collect();
             let func_type = self
                 .type_table
                 .make_function(param_types, sig.return_type, Vec::new());

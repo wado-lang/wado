@@ -116,6 +116,28 @@ impl SchemaSet {
         return self.find(uri) matches { Some(_) };
     }
 
+    /// The document held under `uri`.
+    internal fn get(&self, uri: &Uri) -> Option<Schema> {
+        return self.find(uri).map(|k| self.documents[k].1);
+    }
+
+    /// Where each `$ref` that the document under `uri` reaches points, by the
+    /// `uri#pointer` of the subschema holding it: the `uri#pointer` of the
+    /// subschema it names. Resolved as `Validator::compile_in` resolves it.
+    internal fn reference_targets(&self, uri: &Uri) -> Result<HashMap<String, String>, CompileError>
+        contract self.holds(uri), "`uri` must name a document the set holds"
+    {
+        let [mut c, _] = Compiler::rooted(self, uri, CompileOptions {})?;
+        c.resolve_reached()?;
+        let mut targets = HashMap::<String, String>::new();
+        for let r of &c.refs {
+            if let Some([target, _]) = r.found && !r.dynamic {
+                targets[place(&c.nodes[r.node])] = place(&c.nodes[target]);
+            }
+        }
+        return Result::Ok(targets);
+    }
+
     fn find(&self, uri: &Uri) -> Option<i32> {
         return self.documents.iter_ref().position(|d| d.0 == *uri);
     }
@@ -1184,6 +1206,15 @@ impl Compiler {
         };
         return Option::Some([target, fragment]);
     }
+}
+
+/// `n` as `uri#pointer`, its document named by the URI it was supplied under.
+fn place(n: &Compiled) -> String {
+    let uri = match &n.source {
+        Some(u) => `${*u}`,
+        null => DEFAULT_BASE,
+    };
+    return `${uri}#${n.at}`;
 }
 
 fn parse_uri(text: &String, at: String) -> Result<UriReference, SchemaError> {

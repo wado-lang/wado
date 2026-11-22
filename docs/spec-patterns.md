@@ -255,7 +255,7 @@ than a type.
 
 Either way the name must be one the file can see. Only the prelude is in scope
 without a `use`, so a qualifier naming an unimported type is an error even where
-the bare case would match.
+`_::Case` would match.
 
 A qualifier may restate the scrutinee's type arguments. It must then write as
 many as the scrutinee carries, so `Maybe<i32>::Just` qualifies a `Maybe<i32>`

@@ -301,6 +301,14 @@ impl Backend for WebGpuBackend {
         return of_kind(self, kind, Placed::Device(d));
     }
 
+    /// As many slots as one binding holds, laid as `pooled` lays them: four
+    /// bytes or one float to a word.
+    fn pool_slots(&self, kind: ElementKind, slot: &List<i32>) -> i32 {
+        let elements = element_count(slot);
+        let words = if kind matches { _::U8 } { elements.div_ceil(4) } else { elements };
+        return self.max_binding() / words;
+    }
+
     fn written(&mut self, pool: &mut Any<WebGpuBackend>, slot: i32, row: HostWeight) with (GpuQueue, GpuBuffer) {
         self.written_slot(on_device(pool).unwrap(), slot, &row);
     }
@@ -569,8 +577,11 @@ impl Graph for WebGpuBackend {
             return Placed::Device(out);
         }
         let index = self.host(indices);
-        if E::exact_in_f32()
-            && let Some(TakenAxes { first, count, batch }) = taken_axes(&extents, &index.extents, dims) {
+        let exact = E::exact_in_f32();
+        // An element an f32 does not hold is taken by a view alone, which a
+        // merge of the axes taken could copy.
+        if let Some(TakenAxes { first, count, batch }) = taken_axes(&extents, &index.extents, dims)
+            && (exact || count == 1) {
             // The axes taken merge into one, which each index's flat position
             // along them takes.
             let mut starts = List::<i64>::with_capacity(index.data.len() / count);
@@ -590,7 +601,7 @@ impl Graph for WebGpuBackend {
             merged.push(element_count(&extents[first..<first + count].to_list()));
             merged.extend(&extents[first + count..<extents.len()].to_list());
             let view = self.device_view(data);
-            if let Some(out) = self.gathered(&self.reshaped(&view, &merged), &clamped, first) {
+            if let Some(out) = self.gathered(&self.reshaped(&view, &merged), &clamped, first, exact) {
                 assert out.extents == gathered_extents(&index.extents, dims);
                 return Placed::Device(out);
             }

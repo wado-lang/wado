@@ -5306,15 +5306,18 @@ impl<'a> TirUnparser<'a> {
     /// [`unparse_tir_closure_source`].
     fn unparse_closure_form(
         &mut self,
-        params: &[(String, TypeId)],
+        params: &[TirLocal],
         body_locals: &[TirLocal],
         captures: &[TirCapture],
         body: &TirExpr,
     ) {
-        self.delimited("|", "|", params, |s, (name, type_id)| {
-            s.output.push_str(name);
+        self.delimited("|", "|", params, |s, param| {
+            if param.is_mut {
+                s.output.push_str("mut ");
+            }
+            s.output.push_str(&param.name);
             s.output.push_str(": ");
-            let ty = s.type_spelling(*type_id);
+            let ty = s.type_spelling(param.type_id);
             s.output.push_str(&ty);
         });
         if !captures.is_empty() {
@@ -5322,9 +5325,7 @@ impl<'a> TirUnparser<'a> {
             self.delimited("[", "]", captures, |s, cap| s.output.push_str(&cap.name));
         }
         self.output.push(' ');
-        let closure_mut_locals = std::iter::repeat_n(false, params.len())
-            .chain(body_locals.iter().map(|l| l.is_mut))
-            .collect();
+        let closure_mut_locals = params.iter().chain(body_locals).map(|l| l.is_mut).collect();
         let enclosing = std::mem::replace(&mut self.mut_locals, closure_mut_locals);
         let enclosing_slots = std::mem::replace(
             &mut self.through_ref_slots,
@@ -5438,7 +5439,7 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 /// surface syntax — closures capture implicitly — but is shown deliberately, so
 /// only a non-capturing closure round-trips through the parser.
 pub fn unparse_tir_closure_source(
-    params: &[(String, TypeId)],
+    params: &[TirLocal],
     body_locals: &[TirLocal],
     captures: &[TirCapture],
     body: &TirExpr,

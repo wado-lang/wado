@@ -1,0 +1,30 @@
+// Either `Add` may answer `a + a` while `T` is open, so the sum is typed by the
+// trait's `Output` and waits for the line settling `T` to `u64`.
+
+struct Bx<T> { v: T }
+
+impl Add for Bx<u64> {
+    type Output = Bx<u64>;
+    fn add(&self, o: &Self) -> Bx<u64> {
+        return Bx { v: self.v + o.v + 1 };
+    }
+}
+
+impl Add for Bx<i64> {
+    type Output = Bx<i64>;
+    fn add(&self, o: &Self) -> Bx<i64> {
+        return Bx { v: self.v - o.v };
+    }
+}
+
+fn mk<T: Default>() -> Bx<T> {
+    return Bx { v: T::default() };
+}
+
+test {
+    let a = mk();
+    let c = a + a;
+    let _d: Bx<u64> = a;
+    let e: Bx<u64> = c;
+    assert e.v == 1;
+}
