@@ -129,9 +129,6 @@ the rest is direction, not decision.
   that the others do not, measured as how rarely they miss the same defect,
   and aggregate by evidence rather than by vote count.
 - Hide authorship from every judge.
-- Put the strongest model where findings merge, not where work is split, and
-  hand it structured, verified findings, so that its context holds evidence
-  rather than transcripts.
 
 ### Findings
 
@@ -139,9 +136,6 @@ the rest is direction, not decision.
   repository and carry its evidence.
 - Reproduce what is severe. A reproducer written apart from the finding, run
   where the code runs, turns a claim into evidence; the post says which.
-- Give `AGENTS.md` only to the reproduction agent, which builds and runs the
-  project as it says; a reviewer would follow the rest of it literally. Read it
-  from the base revision, since a pull request can rewrite it.
 - Estimate severity before reproduction, to choose what to reproduce, and
   decide it after, from what was demonstrated and what it reaches, read from
   structured fields. A calibrated classifier such as Jev fits the decision,
@@ -170,9 +164,3 @@ the rest is direction, not decision.
 - Measure continuously: the addressed rate weighted by severity, the defects
   that escaped review, and the comments and cost per review. The offline and
   online numbers should move in the same direction.
-- Tie an outcome to a finding by the symbol the language service resolves, with
-  line overlap as supporting evidence. A fix in a caller, or a moved function,
-  touches none of the lines a finding named.
-- Keep part of the offline set out of learning's reach. The outcomes learning
-  feeds on are also what the metrics count, so a set the learning never sees
-  is what tells improvement from fitting.
