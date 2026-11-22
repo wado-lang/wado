@@ -211,9 +211,9 @@ impl TirMutVisitor for EffectRowWriter<'_> {
 
 impl Semantics {
     /// Write the row the effect check solved each effect variable to into every
-    /// type the TIR holds, so no TIR type names a variable from here on, and no
-    /// struct instance's argument carries a row. Answers the bounds that were
-    /// asked of a type with a row unsolved, and that are unmet with it solved.
+    /// type the TIR holds, so no TIR type names a variable from here on.
+    /// Answers the bounds that were asked of a type with a row unsolved, and
+    /// that are unmet with it solved.
     pub fn write_back_effect_rows(&mut self, solved: &EffectRows) -> Vec<TypeError> {
         let Some(state) = &self.state else {
             return Vec::new();
@@ -230,8 +230,6 @@ impl Semantics {
             }
         }
         let rows = state.tysys.type_table.borrow().solved_effect_rows(solved);
-        // Asked while a struct's arguments still carry their rows, which an
-        // impl's target may write.
         let unmet = state.tysys.unmet_deferred_bounds(&rows);
         let mut table = state.tysys.type_table.borrow_mut();
         table.close_effect_rows();

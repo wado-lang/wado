@@ -129,6 +129,9 @@ pub(super) struct Monomorphizer {
     /// The receiver head of the impl method being instantiated; only a call on
     /// that same head inherits its impl type args.
     pub current_impl_receiver: Option<FqTypeName>,
+    /// The row each effect parameter of the impl being instantiated stands for
+    /// at this instance.
+    pub current_effect_rows: crate::tir::EffectRows,
     /// Each type param of the function being instantiated, by the binder a
     /// `T^Trait<U>::method` name spells it as.
     pub current_param_substitution_key: IndexMap<FqTypeName, TypeParamId>,
@@ -205,6 +208,7 @@ impl Monomorphizer {
             pool: Pool::default(),
             current_impl_type_params: Vec::new(),
             current_impl_receiver: None,
+            current_effect_rows: IndexMap::default(),
             current_param_substitution_key: IndexMap::default(),
             pack_splice_bindings: RefCell::new(IndexMap::default()),
             unrolled_local_claims: RefCell::new(IndexSet::default()),
@@ -364,7 +368,7 @@ impl Monomorphizer {
         let args: Vec<String> = key
             .impl_type_args
             .iter()
-            .map(|&t| type_table.mangle_type_arg_rowless(t))
+            .map(|&t| type_table.mangle_type_arg_for_generic(t))
             .collect();
         // The declaration's *rendered* head, which is what every reader of
         // this instantiation spells — a function-local generic struct carries
@@ -426,18 +430,10 @@ impl Monomorphizer {
             .receiver()
             .is_declared_binder_of(impl_type_params.iter().map(|p| p.name.as_str()));
 
-        // A receiver's arguments are a type's own, which no row tells apart; a
-        // blanket's receiver is the argument itself, whose row selects its impl.
         let impl_arg_names: Vec<String> = key
             .impl_type_args
             .iter()
-            .map(|&t| {
-                if is_blanket {
-                    type_table.mangle_type_arg_for_generic(t)
-                } else {
-                    type_table.mangle_type_arg_rowless(t)
-                }
-            })
+            .map(|&t| type_table.mangle_type_arg_for_generic(t))
             .collect();
 
         let receiver = if is_blanket && !impl_arg_names.is_empty() {

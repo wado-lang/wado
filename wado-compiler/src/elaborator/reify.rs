@@ -1512,6 +1512,7 @@ impl<'a> Reify<'a> {
             is_async: func.is_async,
             type_params,
             impl_type_params: vec![],
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
             method_info: None,
@@ -1752,6 +1753,7 @@ impl<'a> Reify<'a> {
         tir_func.is_export = false;
         tir_func.impl_origin = Some(origin);
         tir_func.impl_type_params = impl_type_params;
+        tir_func.impl_effect_params = self.tysys.type_table.borrow().impl_effect_params(origin);
         tir_func.method_info = Some(method_info);
         tir_func
     }
@@ -1793,6 +1795,7 @@ impl<'a> Reify<'a> {
             is_async: false,
             type_params: vec![],
             impl_type_params: vec![],
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
             method_info: None,

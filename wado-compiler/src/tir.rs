@@ -2710,6 +2710,10 @@ pub struct TirFunction {
     /// Type parameters from the impl block (for methods on generic structs)
     /// e.g., for a method in `impl Counter<T>`, this contains T's info
     pub impl_type_params: Vec<TirTypeParam>,
+    /// The effect parameters the impl block's target writes in a row
+    /// (`E` in `impl<effect E> Slot<fn() with E>`). Each row a receiver has
+    /// there is an instance of its own, as each type is for a type parameter.
+    pub impl_effect_params: Vec<String>,
     /// The `impl` block a method was emitted into, which tells apart two blocks'
     /// like-named templates. `None` for anything else, instances included.
     pub impl_origin: Option<DefId>,
@@ -3467,6 +3471,7 @@ impl TirFunction {
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
             method_info: None,
@@ -3524,7 +3529,9 @@ impl TirFunction {
     /// Whether monomorphization instantiates this function rather than
     /// emitting it as written.
     pub fn is_template(&self) -> bool {
-        self.has_real_type_params() || !self.impl_type_params.is_empty()
+        self.has_real_type_params()
+            || !self.impl_type_params.is_empty()
+            || !self.impl_effect_params.is_empty()
     }
 
     /// The identity a call of this function records: its declaration and block,

@@ -851,7 +851,7 @@ fn spelled_target_args(types: &TypeTable, def: DefId) -> Vec<FqTypeName> {
     types
         .impl_target_args(def)
         .iter()
-        .map(|&arg| types.fq_type_name_with_rows(arg))
+        .map(|&arg| types.fq_type_name(arg))
         .collect()
 }
 
@@ -2348,7 +2348,8 @@ fn call_site_effects(
         } else {
             Brought::default()
         };
-        let resolved = resolve_effect_params(sem, effects, &params, false, args, &brought, rows);
+        let resolved =
+            resolve_effect_params(sem, effects, &params, false, None, args, &brought, rows);
         return vec![CalleeEffects {
             params: resolved.params,
             returns: index.fn_returns.get(&def).copied(),
@@ -2379,7 +2380,7 @@ fn call_site_effects(
             let dispatches_through_path = func_ref.method_info.is_none()
                 && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
             let (resolved, resource) =
-                dispatch_effects(sem, index, &func_ref, self_in_args, args, rows);
+                dispatch_effects(sem, index, &func_ref, self_in_args, None, args, rows);
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolved.required,
@@ -2407,6 +2408,7 @@ fn dispatch_effects(
     index: &EffectIndex<'_>,
     func_ref: &FunctionRef,
     self_in_args: bool,
+    receiver: Option<&Expr>,
     args: &[Expr],
     rows: &Rows,
 ) -> (Resolved, OperationDemands) {
@@ -2429,6 +2431,7 @@ fn dispatch_effects(
         &effects,
         &index.method_param_types(func_ref),
         has_receiver && !self_in_args,
+        receiver,
         args,
         &brought,
         rows,
@@ -2608,8 +2611,8 @@ impl EffectIndex<'_> {
             // row an adapter's `F: fn() with E` binds. One the arguments leave
             // open is resolved from the method's bounds below. A trait's
             // default method has only the receiver's impl to read. The
-            // receiver's name spells no rows, so its arguments are read off the
-            // instantiation where there is one.
+            // receiver's name spells no unsolved row, so its arguments are read
+            // off the instantiation where there is one.
             let receiver_args: Vec<FqTypeName> = match func_ref.monomorph_info.as_ref() {
                 Some(info) if !info.impl_type_args.is_empty() => info
                     .impl_type_args
@@ -2737,7 +2740,7 @@ impl EffectIndex<'_> {
     /// what `rows` solved it to: an impl names no variable. One left unsolved
     /// stands for the empty row, as it does once the check is done.
     fn spelled_solved(&self, id: TypeId, rows: &Rows) -> FqTypeName {
-        self.types.fq_type_name_with_rows(id).map_rows(&|row| {
+        self.types.fq_type_name(id).map_rows(&|row| {
             rows.row(row)
                 .into_iter()
                 .filter(|effect| !effect.is_var())
@@ -2864,9 +2867,7 @@ impl EffectIndex<'_> {
             .find_map(|&method| self.receiver_bounds.get(&defs.ast_id(method)))
             .map(|bounds| &**bounds)
             .unwrap_or_default();
-        let target = self
-            .types
-            .fq_type_name_with_rows(self.types.impl_target_whole(block));
+        let target = self.types.fq_type_name(self.types.impl_target_whole(block));
         let spellings = self.spellings(handler, rows);
         // A blanket impl's target is its own parameter, which no spelling of
         // the handler names and which has no arguments to fill.
@@ -2954,6 +2955,7 @@ fn resolve_effect_params(
     callee_effects: &[EffectRef],
     param_types: &[TypeId],
     is_method: bool,
+    receiver: Option<&Expr>,
     args: &[Expr],
     brought: &Brought,
     rows: &Rows,
@@ -3026,6 +3028,17 @@ fn resolve_effect_params(
                 slot.get_or_insert_with(IndexSet::default)
                     .extend(actual.iter().cloned());
             }
+        }
+    }
+    // An impl's effect parameter its target writes meets the receiver's row at
+    // the same place.
+    if let (Some(receiver), Some(&self_type)) = (receiver, param_types.first())
+        && skip == 1
+    {
+        let declared = type_table.peel_refs(self_type);
+        for receiver_type in sem.expression_types(receiver.id()) {
+            let actual = type_table.peel_refs(receiver_type);
+            pair_effects(type_table, declared, actual, rows, &mut concrete);
         }
     }
     // What the type arguments bring, read through the rows solved so far.
@@ -3306,8 +3319,15 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let (resolved, resource) =
-                        dispatch_effects(self.sem, self.index, func_ref, false, &[], &self.rows);
+                    let (resolved, resource) = dispatch_effects(
+                        self.sem,
+                        self.index,
+                        func_ref,
+                        false,
+                        None,
+                        &[],
+                        &self.rows,
+                    );
                     let callee = func_ref
                         .method_info
                         .as_ref()
@@ -3393,6 +3413,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         self.index,
                         &dispatch.function_ref,
                         false,
+                        Some(&method_call.receiver),
                         &method_call.args,
                         &self.rows,
                     );
@@ -3414,6 +3435,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         self.index,
                         &func_ref,
                         self_in_args,
+                        None,
                         &static_call.args,
                         &self.rows,
                     );
@@ -4057,6 +4079,7 @@ impl<'a> PurityWalker<'a> {
         &mut self,
         func_ref: &FunctionRef,
         self_in_args: bool,
+        receiver: Option<&Expr>,
         args: &[Expr],
         callee: &str,
         span: Span,
@@ -4066,6 +4089,7 @@ impl<'a> PurityWalker<'a> {
             self.index,
             func_ref,
             self_in_args,
+            receiver,
             args,
             &Rows::default(),
         );
@@ -4127,6 +4151,7 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                     self.flag_if_effectful(
                         &dispatch.function_ref,
                         false,
+                        Some(&method_call.receiver),
                         &method_call.args,
                         &method_call.method,
                         method_call.span,
@@ -4142,6 +4167,7 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                     self.flag_if_effectful(
                         &func_ref,
                         self_in_args,
+                        None,
                         &static_call.args,
                         &static_call.method,
                         static_call.span,

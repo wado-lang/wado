@@ -1,0 +1,38 @@
+// A struct instance keeps its argument's row, so a generic impl's bound on
+// that argument finds the impl written for the row.
+use { println, Stdout } from "core:cli";
+
+trait Make with () {
+    type Out;
+    fn make(&self) -> Self::Out;
+}
+
+impl Make for fn() -> i32 with Stdout {
+    type Out = i32;
+    fn make(&self) -> i32 {
+        return 7;
+    }
+}
+
+struct W<T: Make> {
+    t: T,
+}
+
+impl<T: Make> W<T> {
+    fn get(&self) -> T::Out {
+        return self.t.make();
+    }
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    let w = W { t: || loud() };
+    println(`${w.get() + 1}`);
+}
+
+__DATA__
+{"stdout": "8\n"}

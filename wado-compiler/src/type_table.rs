@@ -2627,34 +2627,7 @@ impl TypeTable {
         def: StructDef,
         type_args: Vec<TypeId>,
     ) -> TypeId {
-        let type_args = self.struct_instance_args(type_args);
         self.intern(ResolvedType::Struct { def, type_args })
-    }
-
-    /// A struct instance's arguments as interned: rowless once the effect check
-    /// is done. Until then a row there is what a method's `with _` resolves
-    /// from; after, it selects no representation, so instances differing only
-    /// there are one struct, as their names already are.
-    fn struct_instance_args(&mut self, type_args: Vec<TypeId>) -> Vec<TypeId> {
-        if !self.effect_vars_solved {
-            return type_args;
-        }
-        type_args
-            .into_iter()
-            .map(|arg| self.without_rows(arg))
-            .collect()
-    }
-
-    /// `id` with every function type's row emptied: what it is as a type's
-    /// argument, where no row tells two instances apart.
-    pub fn without_rows(&mut self, id: TypeId) -> TypeId {
-        self.subst_rec(
-            id,
-            &Leaves {
-                erase_rows: true,
-                ..Leaves::NONE
-            },
-        )
     }
 
     pub fn make_variant(&mut self, def: DefId) -> TypeId {
@@ -3084,16 +3057,9 @@ impl TypeTable {
         self.intern_map.get(&spelling).copied()
     }
 
-    /// `def` applied to `type_args`, in the kind that carries its arguments,
-    /// a struct's as [`Self::struct_instance_args`] interns them.
-    fn instance_spelling(&mut self, def: DefId, type_args: Vec<TypeId>) -> ResolvedType {
-        let kind = self.defs.kind(def);
-        let type_args = if kind == DefKind::Struct {
-            self.struct_instance_args(type_args)
-        } else {
-            type_args
-        };
-        match kind {
+    /// `def` applied to `type_args`, in the kind that carries its arguments.
+    fn instance_spelling(&self, def: DefId, type_args: Vec<TypeId>) -> ResolvedType {
+        match self.defs.kind(def) {
             DefKind::Resource => ResolvedType::Resource { def, type_args },
             DefKind::Variant => ResolvedType::Variant { def, type_args },
             DefKind::Struct => ResolvedType::Struct {
@@ -4313,7 +4279,7 @@ impl TypeTable {
         };
         let mut answers = candidates.iter().map(|(_, entry)| {
             let slots = self.entry_slots(entry, base_decl, &frame)?;
-            Some(self.substitute_type_params(entry.answer, &slots))
+            Some(self.at_entry(entry, entry.answer, &slots, &frame))
         });
         let first = answers.next()??;
         answers
@@ -4341,6 +4307,26 @@ impl TypeTable {
                 Some(slots)
             }
             None => Some(positional_substitution(self.defs().def_at(decl), type_args)),
+        }
+    }
+
+    /// `type_id`, written over `entry`'s impl, at an instance taking
+    /// `type_args`: its parameters filled from `slots`, and each effect
+    /// parameter its target writes by the row the instance has there.
+    fn at_entry(
+        &mut self,
+        entry: &AssocAnswer,
+        type_id: TypeId,
+        slots: &TypeArgMap,
+        type_args: &[TypeId],
+    ) -> TypeId {
+        let filled = self.substitute_type_params(type_id, slots);
+        match entry.impl_def {
+            Some(def) => {
+                let rows = self.impl_effect_binding(def, type_args);
+                self.substitute_effect_rows(filled, &rows)
+            }
+            None => filled,
         }
     }
 
@@ -4408,10 +4394,10 @@ impl TypeTable {
             let args = entry
                 .written
                 .iter()
-                .map(|&arg| self.substitute_type_params(arg, &slots))
+                .map(|&arg| self.at_entry(&entry, arg, &slots, type_args))
                 .collect();
             let trait_ref = TraitRef::new(trait_decl, args);
-            let resolved = self.substitute_type_params(entry.answer, &slots);
+            let resolved = self.at_entry(&entry, entry.answer, &slots, type_args);
             if self.binding_is_concrete(resolved) {
                 self.register_assoc_type_resolution(concrete_id, trait_ref, assoc_name, resolved);
             }
@@ -4546,7 +4532,10 @@ impl TypeTable {
             Some(&type_args),
         )?;
         let slots = self.entry_slots_mut(&entry, decl, &type_args);
-        Some((owner, self.substitute_type_params(entry.answer, &slots)))
+        Some((
+            owner,
+            self.at_entry(&entry, entry.answer, &slots, &type_args),
+        ))
     }
 
     /// [`Self::resolve_assoc_type_of_instance`] for a caller that knows which
@@ -4597,12 +4586,12 @@ impl TypeTable {
                     entry
                         .written
                         .iter()
-                        .map(|&arg| self.substitute_type_params(arg, &slots))
+                        .map(|&arg| self.at_entry(entry, arg, &slots, &type_args))
                         .collect(),
                 );
                 self.filled_trait_args(&at, concrete_id)
                     .is_some_and(|filled| filled == wanted)
-                    .then(|| self.substitute_type_params(entry.answer, &slots))
+                    .then(|| self.at_entry(entry, entry.answer, &slots, &type_args))
             })
         });
         if reached.is_some() {
@@ -4610,7 +4599,7 @@ impl TypeTable {
         }
         let entry = answers.bare_entry()?.clone();
         let slots = self.entry_slots_mut(&entry, decl, &type_args);
-        Some(self.substitute_type_params(entry.answer, &slots))
+        Some(self.at_entry(&entry, entry.answer, &slots, &type_args))
     }
 
     /// [`Self::substitute_type_params`] with `args` filling `owner`'s
@@ -4740,18 +4729,10 @@ impl TypeTable {
     }
 
     /// `type_id` once the effect check is done: each variable replaced by
-    /// what [`Self::solved_effect_rows`] answered for it, and each struct
-    /// instance's arguments rowless.
+    /// what [`Self::solved_effect_rows`] answered for it.
     pub fn close_type(&mut self, type_id: TypeId, rows: &EffectRows) -> TypeId {
         assert!(self.effect_vars_solved);
-        self.subst_rec(
-            type_id,
-            &Leaves {
-                rows,
-                reintern_instances: true,
-                ..Leaves::NONE
-            },
-        )
+        self.substitute_effect_rows(type_id, rows)
     }
 
     /// A declared type with each effect parameter its rows name replaced by a
@@ -4779,6 +4760,16 @@ impl TypeTable {
             .into_iter()
             .map(|name| (name.clone(), vec![self.mint_effect_var()]))
             .collect()
+    }
+
+    /// The effect parameters impl block `def`'s target writes in its function
+    /// types' rows, which [`Self::impl_effect_binding`] binds.
+    pub fn impl_effect_params(&self, def: DefId) -> Vec<String> {
+        let mut named = IndexSet::default();
+        for &written in self.impl_target_args(def) {
+            self.effect_params_in(written, &mut named);
+        }
+        named.into_iter().collect()
     }
 
     /// What the effect parameters an impl's target writes in its function
@@ -5172,7 +5163,7 @@ impl TypeTable {
                     .iter()
                     .map(|&a| self.subst_rec(a, leaves))
                     .collect();
-                if new_args == type_args && !leaves.reintern_instances {
+                if new_args == type_args {
                     type_id
                 } else {
                     self.make_generic_instance(def, new_args)
@@ -5445,8 +5436,7 @@ impl TypeTable {
             .collect()
     }
 
-    /// Ends the effect check's part: no variable is minted from here on, and
-    /// a struct instance interned after this carries no row in its arguments.
+    /// Ends the effect check's part: no variable is minted from here on.
     pub fn close_effect_rows(&mut self) {
         self.effect_vars_solved = true;
     }
@@ -6397,9 +6387,8 @@ impl TypeTable {
         self.fq_type_name(id).to_mangled()
     }
 
-    /// [`Self::mangle_type_arg_for_generic`] as a type's own argument, where
-    /// a function value's row selects no representation: instances whose
-    /// arguments differ only in rows are one type.
+    /// [`Self::mangle_type_arg_for_generic`] as [`Self::fq_type_name_rowless`]
+    /// spells it.
     pub fn mangle_type_arg_rowless(&self, id: TypeId) -> String {
         self.fq_type_name_rowless(id).to_mangled()
     }
@@ -6613,34 +6602,23 @@ impl TypeTable {
     /// the name stays structured all the way to its consumers.
     #[must_use]
     pub fn fq_type_name(&self, id: TypeId) -> FqTypeName {
-        self.fq_type_name_spelled_in(id, RowSpelling::OutsideArgs)
+        self.fq_type_name_spelled_in(id, RowSpelling::Full)
     }
 
-    /// [`Self::fq_type_name`] with every function type's row spelled, inside
-    /// type arguments too: what the effect check reads a receiver's argument
-    /// rows off.
-    pub fn fq_type_name_with_rows(&self, id: TypeId) -> FqTypeName {
-        self.fq_type_name_spelled_in(id, RowSpelling::Everywhere)
-    }
-
-    /// [`Self::fq_type_name`] with no row spelled: a type's own argument,
-    /// where a row selects no representation.
+    /// [`Self::fq_type_name`] with no effect variable spelled: the name of an
+    /// instance whose rows the effect check has yet to solve, which a variable
+    /// solved to nothing would otherwise tell apart from the instance it is.
     pub fn fq_type_name_rowless(&self, id: TypeId) -> FqTypeName {
-        self.fq_type_name_spelled_in(id, RowSpelling::Nowhere)
+        self.fq_type_name_spelled_in(id, RowSpelling::Solved)
     }
 
-    /// [`Self::fq_type_name`], with function types' rows spelled where `rows`
+    /// [`Self::fq_type_name`], with function types' rows spelled as `rows`
     /// says.
     fn fq_type_name_spelled_in(&self, id: TypeId, rows: RowSpelling) -> FqTypeName {
-        let rowless = rows == RowSpelling::Nowhere;
-        let arg_rows = match rows {
-            RowSpelling::Everywhere => RowSpelling::Everywhere,
-            RowSpelling::OutsideArgs | RowSpelling::Nowhere => RowSpelling::Nowhere,
-        };
         let args_of = |type_args: &[TypeId]| -> Vec<FqTypeName> {
             type_args
                 .iter()
-                .map(|t| self.fq_type_name_spelled_in(*t, arg_rows))
+                .map(|t| self.fq_type_name_spelled_in(*t, rows))
                 .collect()
         };
         // The erased view, unlike [`Self::fq_base_type_name`]: this spelling
@@ -6685,7 +6663,7 @@ impl TypeTable {
             }
             ResolvedType::Tuple(elems) => FqTypeName::tuple(args_of(elems)),
             ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(ARRAY_TYPE_NAME)
-                .with_args(vec![self.fq_type_name_spelled_in(*elem, arg_rows)]),
+                .with_args(vec![self.fq_type_name_spelled_in(*elem, rows)]),
             ResolvedType::Ref(inner) => self
                 .fq_type_name_spelled_in(*inner, rows)
                 .with_reference(RefKind::Shared),
@@ -6721,7 +6699,12 @@ impl TypeTable {
                     .map(|&p| self.fq_type_name_spelled_in(p, rows))
                     .collect(),
                 self.fq_type_name_spelled_in(*return_type, rows),
-                if rowless { Vec::new() } else { effects.clone() },
+                match rows {
+                    RowSpelling::Full => effects.clone(),
+                    RowSpelling::Solved => {
+                        effects.iter().filter(|e| !e.is_var()).cloned().collect()
+                    }
+                },
             ),
             ResolvedType::InferVar(var) => FqTypeName::infer(*var),
             // What the solver reads as failed where a type id carries it.
@@ -7991,18 +7974,15 @@ static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
 static NO_SUBTERMS: IndexMap<TypeId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_RENAMES: IndexMap<TypeParamId, TypeParamId> = IndexMap::with_hasher(FxBuildHasher);
 
-/// Where a type's spelling writes its function types' rows. A function value
-/// is one whatever its row, so an instance whose arguments differ only in
-/// rows is one instance and answers one name; a function type standing alone
-/// keeps its row, which selects an impl written for it.
+/// Which effects a type's spelling writes in its function types' rows. A row
+/// selects an impl, so instances whose arguments differ only there answer
+/// different names.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum RowSpelling {
-    /// Outside type arguments only: the name an instance answers to.
-    OutsideArgs,
-    /// Nowhere: inside a type argument.
-    Nowhere,
-    /// Everywhere: the rows themselves, for the effect check to read.
-    Everywhere,
+    /// Every effect, variables included.
+    Full,
+    /// Every effect but a variable.
+    Solved,
 }
 
 /// Whether two function types' rows can be one: equal, or one still open. An
@@ -8023,11 +8003,6 @@ struct Leaves<'s> {
     family: Option<FamilyAt<'s>>,
     projections: &'s SlotProjections,
     rows: &'s EffectRows,
-    /// Whether every row is emptied, not just the names `rows` holds.
-    erase_rows: bool,
-    /// Whether each instance is interned again even where its arguments are
-    /// unchanged, so it takes the spelling interning gives it now.
-    reintern_instances: bool,
     /// Whole types replaced wherever they stand, before any leaf inside them.
     subterms: &'s IndexMap<TypeId, TypeId>,
     /// Parameters moved to another place, name and pack shape kept, where
@@ -8051,8 +8026,6 @@ impl Leaves<'static> {
         family: None,
         projections: &NO_PROJECTIONS,
         rows: &NO_ROWS,
-        erase_rows: false,
-        reintern_instances: false,
         subterms: &NO_SUBTERMS,
         renames: &NO_RENAMES,
     };
@@ -8065,8 +8038,6 @@ impl Leaves<'_> {
             && self.family.is_none_or(|at| at.args.is_empty())
             && self.projections.is_empty()
             && self.rows.is_empty()
-            && !self.erase_rows
-            && !self.reintern_instances
             && self.subterms.is_empty()
             && self.renames.is_empty()
     }
@@ -8074,9 +8045,6 @@ impl Leaves<'_> {
     /// `effects` with each parameter or variable this substitution names
     /// replaced by its row, each effect once.
     fn row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
-        if self.erase_rows {
-            return Vec::new();
-        }
         let mut out: Vec<EffectRef> = Vec::new();
         for effect in effects {
             let replaced = match effect {

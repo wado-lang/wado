@@ -127,10 +127,9 @@ effect row is not yet known, and the effect check solves it.
 8. [x] A function generic over an effect is taken as a value: the expected
    `fn(...)` type settles its effect parameters as it settles its type
    parameters. `effect_generic_fn_as_value.wado` holds it.
-9. [ ] A struct instance keeps its arguments' rows through the rewrite, and its
+9. [x] A struct instance keeps its arguments' rows through the rewrite, and its
    name and its methods' names spell them. An impl generic over an effect is
    instantiated per row, so its definition and its callers name one instance.
-   Under `impl Make for fn() -> i32 with Stdout`,
-   `impl<T: Make> W<T> { fn get(&self) -> T::Out { … } }` called on
-   `W { t: || loud() }` compiles, and `W<fn() -> i32>` and
-   `W<fn() -> i32 with Stdout>` in one program dispatch to their own impls.
+   `struct_instance_row_selects_bound_impl.wado`,
+   `struct_instances_differ_in_row.wado` and
+   `effect_generic_impl_instance_per_row.wado` hold it.

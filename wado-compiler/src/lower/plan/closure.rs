@@ -771,6 +771,7 @@ impl ClosureLowerer {
                 is_export: false, // Closure method, not a world export
                 type_params: Vec::new(),
                 impl_type_params: Vec::new(),
+                impl_effect_params: Vec::new(),
                 impl_origin: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
@@ -966,6 +967,7 @@ impl ClosureLowerer {
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
@@ -1189,6 +1191,7 @@ impl ClosureLowerer {
             is_export: false,                // Specialized functions are not world exports
             type_params: callee.type_params.clone(),
             impl_type_params: callee.impl_type_params.clone(),
+            impl_effect_params: callee.impl_effect_params.clone(),
             impl_origin: callee.impl_origin,
             monomorph_info: callee.monomorph_info.clone(),
             method_info: specialized_method_info,

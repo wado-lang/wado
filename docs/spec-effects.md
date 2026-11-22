@@ -573,6 +573,25 @@ A loop over `mapped(|x: i32| x + 1)` demands nothing. `mapped(loud)` with
 `Mapped<…, fn mut(i32) -> i32 with Stdout>`, and a loop over it demands
 `Stdout`.
 
+That row is part of the value's type. Two instances whose arguments differ only
+in a row are two types, and a bound on the argument selects the impl written for
+its row. An impl may name an effect parameter in its target. It then stands for
+the receiver's row at that place, and the impl's methods demand what that row
+holds:
+
+<!-- {"fixture":"effect_generic_impl_instance_per_row.wado"} -->
+
+```wado
+impl<effect E> Slot<fn() with (E)> {
+    fn fire(&self) with E {
+        (self.v)();
+    }
+}
+```
+
+`Slot { v: || {} }.fire()` demands nothing, and `fire` on a `Slot` holding a
+closure that prints demands `Stdout`.
+
 A function generic over `E` holds for every row a caller may pick for it, the
 empty one among them. So a value it moves into a slot whose row is `E` may
 perform only `E`, and an `E` nothing at a call determines stands for no effect:
