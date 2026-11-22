@@ -8,46 +8,7 @@ with no runtime to install and no version to keep in sync.
 The `.g4` format is ANTLR4's; for the full grammar language, see ANTLR4's
 [documentation](https://github.com/antlr/antlr4/tree/master/doc). Gale accepts
 every grammar ANTLR4 accepts bar one — and a few it rejects, where the meaning
-is unambiguous (see [Design](#design)).
-
-## Design
-
-Behavioral ANTLR4 compatibility, with a small superset. The goal is not just to
-_accept_ the grammars ANTLR4 accepts, but to _parse like ANTLR4 does_ — same
-precedence, same ambiguity resolution, same parse trees. A `.g4` that the
-upstream `antlr4` tool accepts should parse identically through Gale. Gale also
-accepts a few grammars ANTLR4 _rejects_, but only where the meaning is fixed
-with no remaining choice — e.g. a lexer `mode` inside a combined `grammar`,
-which ANTLR4 restricts to a `lexer grammar` but which is unambiguous since a
-combined grammar already bundles a lexer. [`antlr4-compatibility.md`](./antlr4-compatibility.md#grammars-gale-accepts-and-antlr4-rejects)
-lists them all. Where
-the meaning is not uniquely determined, Gale rejects loudly rather than guessing.
-That costs it one grammar ANTLR4 accepts, `import Foo = Bar;`, carved out under
-claim (a) in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
-
-Self-contained output, no version drift. Gale inlines its entire runtime into
-every generated parser. There is no `gale-runtime` package to keep aligned with
-the generator: each generated file carries the exact runtime it was built with,
-and regenerating upgrades it.
-
-Adaptive LL with a runtime ATN simulator. Most decisions are resolved with
-fast static lookahead. When a decision genuinely needs unbounded,
-full-context lookahead — the ALL(\*) cases that defeat any fixed-`k` LL parser
-— Gale emits a runtime ATN simulator for exactly those decisions and leaves
-the rest of the parser on the fast static path. (See the ALL(\*) example
-below.)
-
-Error-resilient parsing. A generated parser never bails on a syntax error. It
-always returns a tree plus a list of diagnostics, recovering locally and
-recording every edit, so a broken input still yields a usable tree (handy for
-editors, linters, and language servers). A clean parse simply has an empty
-diagnostic list.
-
-Built-in diagnostics and debugging. `gale dump` shows the prediction decision
-for every parser rule (`--atn` shows the simulator's automaton, `--lexer` the
-emit strategy of every lexer rule); the `trace` option makes a generated parser
-log its recursive descent through `core:log`. See
-[The `gale` command](#the-gale-command).
+is unambiguous. [`docs/design.md`](./docs/design.md) holds the design.
 
 ## Tutorial: a four-function calculator
 
@@ -642,15 +603,14 @@ language begins and ends, and neither delegate names its host.
 
 The trade is that an embedded grammar no longer works on its own, since its
 rules sit in a mode nothing enters. The full contract, and what a grammar
-usable both ways would need, are in [`import.md`](./import.md).
+usable both ways would need, are in [`import.md`](./docs/import.md).
 
 ## Compatibility and further reading
 
 Gale targets the full ANTLR4 `.g4` grammar syntax, plus the small superset
-described under [Design](#design).
+described in [the design](./docs/design.md).
 
-- [WEP: Gale](../docs/wep-2026-03-02-gale.md) — design and architecture.
-- [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility
+- [`antlr4-compatibility.md`](./docs/antlr4-compatibility.md) — the compatibility
   contract, the descriptor-based test suite, and how to run it.
 - [WEP: Kiln](../docs/wep-2026-04-12-kiln.md) — the `use ... with { generator }`
   mechanism Gale plugs into.

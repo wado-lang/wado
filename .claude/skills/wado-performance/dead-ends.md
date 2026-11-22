@@ -545,7 +545,7 @@ creates, not the allocations it removes.
 
 The motivating copy is gone as of 2026-08-25: `SllConfig.elements` is a
 `&List<Element>`, which shares a list that is already a root rather than its
-elements, and gale-gen gained 32% (`package-gale/perf.md`).
+elements, and gale-gen gained 32% (`package-gale/docs/perf.md`).
 
 ## Making an expression-position labeled block a break target (2026-08-20)
 
@@ -781,7 +781,7 @@ to move.
 ## Hoisting `HighlightVisitor::classify`'s common path to get it inlined (2026-09-02)
 
 `classify` is one call per token and per trivia, ~5300 on syntax-highlight, and
-`package-gale/perf.md` named it a lever: it walks the override list before the
+`package-gale/docs/perf.md` named it a lever: it walks the override list before the
 `default_ids[kind]` lookup, and SQLite has no overrides at all. Splitting the
 scan into `classify_override` leaves a fast path of two compares and one indexed
 load, which reads like it should fit `-O2`'s 16-instruction budget.
@@ -810,7 +810,7 @@ builder hold `store: CstStore` directly (`finish(&mut self)` fills the derived
 four `array_new` + `array_copy` pairs; confirmed in the WIR.
 
 It is a **regression**: isolated from the scan-guard elision that landed
-alongside it (`package-gale/perf.md`), three alternating pairs on
+alongside it (`package-gale/docs/perf.md`), three alternating pairs on
 `sqlite_parse`, best-of-three — base 1.150 ms/iter, this change alone 1.162
 ms/iter, **slower in all 3 rounds**. Combined with the scan elision it also
 loses to the scan elision alone in all 3 rounds (1.131–1.141 vs 1.120–1.124).

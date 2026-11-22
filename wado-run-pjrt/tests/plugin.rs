@@ -124,7 +124,7 @@ fn an_import_nothing_serves_traps_where_it_is_called() {
 #[test]
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn loams_programs_compute_what_its_cpu_graph_does() {
-    let printed = run("../package-loam/conformance/pjrt_graph.wado");
+    let printed = run("../package-loam/tests/conformance/pjrt_graph.wado");
     assert!(
         !printed.trim().is_empty(),
         "the program prints a line a case"
@@ -144,7 +144,8 @@ fn loams_programs_compute_what_its_cpu_graph_does() {
 #[test]
 #[ignore = "needs a plugin: run `mise run test-pjrt`"]
 fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
-    let conformance = Path::new(env!("CARGO_MANIFEST_DIR")).join("../package-loam/conformance");
+    let conformance =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../package-loam/tests/conformance");
     let written = Command::new(std::env::var_os("WADO").expect("`mise run test-pjrt` sets it"))
         .args(["run", "large/write.wado"])
         .current_dir(&conformance)
@@ -160,7 +161,7 @@ fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
         .args(["--max-memory", "32m"])
         .current_dir(&conformance);
     assert_eq!(
-        printed_by(command, "../package-loam/conformance/large/pjrt.wado"),
+        printed_by(command, "../package-loam/tests/conformance/large/pjrt.wado"),
         "misplaced 0\n"
     );
 }
@@ -171,7 +172,7 @@ fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
 fn a_tensor_of_an_ended_pass_is_refused() {
     let output = output_of(
         Command::new(env!("CARGO_BIN_EXE_wado-run-pjrt")),
-        "../package-loam/conformance/pjrt_stale.wado",
+        "../package-loam/tests/conformance/pjrt_stale.wado",
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "{stderr}");
@@ -191,7 +192,10 @@ fn loams_programs_compile_for_a_tpu() {
             std::env::var_os("WADO_PJRT_TPU_PLUGIN").expect("`mise run test-pjrt` sets it"),
         )
         .env("TPU_SKIP_MDS_QUERY", "1");
-    let printed = printed_by(command, "../package-loam/conformance/pjrt_topology.wado");
+    let printed = printed_by(
+        command,
+        "../package-loam/tests/conformance/pjrt_topology.wado",
+    );
     assert!(
         !printed.trim().is_empty(),
         "the program prints a line a case"

@@ -493,7 +493,7 @@ fn future_and_stream_map_to_wit() {
 #[test]
 fn cm_catalog_matches_committed_wit() {
     let source = include_str!("../../../package-cm-catalog/src/lib.wado");
-    let expected = include_str!("../../../package-cm-catalog/cm-catalog.wit");
+    let expected = include_str!("../../../package-cm-catalog/assets/cm-catalog.wit");
     // The library world `wado wit --lib` emits, without the imports the
     // compiled component makes.
     let text = emit_with_contract(

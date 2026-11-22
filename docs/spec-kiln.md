@@ -78,12 +78,12 @@ also hands the generator a supplementary input, typed as a highlight query:
 <!-- {"source": "package-gale-highlight-wado/src/lib.wado"} -->
 
 ```wado
-use { highlight as highlight_impl } from "../grammar/Wado.g4"
+use { highlight as highlight_impl } from "../assets/grammar/Wado.g4"
     with {
         generator: {
             module: "lib:gale",
             inputs: [
-                { path: "../grammar/Wado.highlights.scm", type: "tree-sitter-highlights" },
+                { path: "../assets/grammar/Wado.highlights.scm", type: "tree-sitter-highlights" },
             ],
             options: {
                 fragment_entries: ["statement"],
@@ -267,7 +267,7 @@ required.
 
 The `dims` map is written as an object:
 
-<!-- {"source": "package-loam/conformance/specialize_test.wado"} -->
+<!-- {"source": "package-loam/tests/conformance/specialize_test.wado"} -->
 
 ```wado
 use { Model, N, Params, X1, X2, compute } from "./specialize.onnxtext"
@@ -822,7 +822,7 @@ and ONNX's text format through the parser Gale builds from a grammar:
 <!-- {"source": "package-loam/src/onnx_text.wado"} -->
 
 ```wado
-use onnx from "../grammar/Onnx.g4"
+use onnx from "../assets/grammar/Onnx.g4"
     with {
         generator: {
             module: "lib:gale",

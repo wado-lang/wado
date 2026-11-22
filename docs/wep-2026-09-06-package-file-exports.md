@@ -3,7 +3,7 @@
 ## Context
 
 A Wado package ships more than its entry module. `package-gale-highlight-wado`
-carries `grammar/Wado.g4` and `grammar/Wado.highlights.scm`; another package
+carries `assets/grammar/Wado.g4` and `assets/grammar/Wado.highlights.scm`; another package
 carries a `.proto`, a JSON Schema, a `.css`, an icon. Inside the package those
 files are ordinary Kiln inputs and `#include_str` arguments. Outside it they do
 not exist:
@@ -38,8 +38,8 @@ whatever the directory contains.
 name = "gale-highlight-wado"
 lib = "src/lib.wado"
 exports = [
-    "grammar/Wado.g4",
-    "grammar/Wado.highlights.scm",
+    "assets/grammar/Wado.g4",
+    "assets/grammar/Wado.highlights.scm",
     "src/highlight.wado",
 ]
 ```
@@ -70,7 +70,7 @@ The path is relative to the package root (the directory holding its
 ```wado
 use { highlight } from "wado-lang:gale-highlight-wado/src/highlight.wado";
 
-use { Parser } from "lib:gale-highlight-wado/grammar/Wado.g4" with {
+use { Parser } from "lib:gale-highlight-wado/assets/grammar/Wado.g4" with {
     generator: { module: "lib:gale" },
 };
 
@@ -236,7 +236,7 @@ names as left.
    package-level diagnostic, a case-only mismatch among them.
 3. Kiln `from` / `inputs`: accept the reference, key the cache and the header on
    the logical form, write outputs into the consumer's tree. Done when
-   `grammar/Wado.g4` can be consumed from a second package with a warm,
+   `assets/grammar/Wado.g4` can be consumed from a second package with a warm,
    machine-independent cache.
 4. Harvest across the dependency edge: walk a dependency's modules, anchor each
    clause's paths on that dependency's package root as `ns:pkg@ver/path`, and
