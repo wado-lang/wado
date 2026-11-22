@@ -904,22 +904,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the innermost enclosing collection takes over the open `var`
     /// a call's arguments left unanswered: the call is a projection's
     /// receiver, or an answer of one of its variables names `var`.
-    fn enclosing_takes_over(&mut self, var: TypeId) -> bool {
+    fn enclosing_takes_over(&self, var: TypeId) -> bool {
         let Some(enclosing) = self.annotate_ctx.pending_literals.last() else {
             return false;
         };
-        if enclosing.awaits_receiver {
-            return true;
-        }
-        let owned = enclosing.own_vars.clone();
-        owned.into_iter().any(|own| {
-            let answer = self.apply_infer_holes(own);
-            self.tysys
-                .type_table
-                .borrow()
-                .infer_vars_in(answer)
-                .contains(&var)
-        })
+        enclosing.awaits_receiver
+            || enclosing
+                .own_vars
+                .iter()
+                .any(|&own| self.holds_class_of(own, var))
     }
 
     /// Resolve the `receiver` of a field access, method call or subscript, then `project`

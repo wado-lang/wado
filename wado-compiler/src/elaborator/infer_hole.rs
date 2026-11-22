@@ -457,25 +457,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         var
     }
 
-    /// Whether a queued associated-type equality answers `var`, wherever its
-    /// target holds it (`Item = List<B>`), once its owner is answered. An
-    /// owner holding `var` itself (`A: Src<This = A>`) answers nothing new.
-    pub(super) fn projection_answers(&self, var: TypeId) -> bool {
+    /// Whether `ty` holds a variable of `var`'s class.
+    pub(super) fn holds_class_of(&self, ty: TypeId, var: TypeId) -> bool {
         let vars = &self.infer_holes.vars;
         let Some(root) = vars.root_of(var) else {
             return false;
         };
-        let holds_var = |ty: TypeId| {
-            let ty = self.apply_infer_holes(ty);
-            let held = self.tysys.type_table.borrow().infer_vars_in(ty);
-            held.into_iter().any(|v| vars.root_of(v) == Some(root))
-        };
+        let ty = self.apply_infer_holes(ty);
+        let held = self.tysys.type_table.borrow().infer_vars_in(ty);
+        held.into_iter().any(|v| vars.root_of(v) == Some(root))
+    }
+
+    /// Whether a queued associated-type equality answers `var`, wherever its
+    /// target holds it (`Item = List<B>`), once its owner is answered. An
+    /// owner holding `var` itself (`A: Src<This = A>`) answers nothing new.
+    pub(super) fn projection_answers(&self, var: TypeId) -> bool {
         self.infer_holes
             .obligations
             .borrow()
             .iter()
             .any(|o| match o {
-                Obligation::Projection(link) => holds_var(link.target) && !holds_var(link.owner),
+                Obligation::Projection(link) => {
+                    self.holds_class_of(link.target, var) && !self.holds_class_of(link.owner, var)
+                }
                 Obligation::Bound { .. }
                 | Obligation::Selection(_)
                 | Obligation::Check(_)
@@ -747,15 +751,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         let answer = self.apply_infer_holes(answer);
-        let class = self.infer_holes.vars.root_of(var);
-        let occurs = self
-            .tysys
-            .type_table
-            .borrow()
-            .infer_vars_in(answer)
-            .into_iter()
-            .any(|v| self.infer_holes.vars.root_of(v) == class);
-        if occurs {
+        if self.holds_class_of(answer, var) {
             return false;
         }
         self.infer_holes.vars.answer_with(var, answer);
