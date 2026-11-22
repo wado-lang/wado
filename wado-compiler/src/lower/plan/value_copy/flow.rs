@@ -26,6 +26,7 @@
 use super::analyze::collect_pattern_bindings;
 use super::funcset::{FuncIndex, FuncKeySet};
 use super::last_use::collect_child_exprs;
+use super::ownership::owned_lets;
 use super::points_to::{Args, Graph, Handle, HoldsHandle, Site, Slot, Target, retains_storage};
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
@@ -538,6 +539,11 @@ struct Body<'p, 'a> {
     function_locations: IndexMap<u32, u32>,
     /// The function location running every function of a shape.
     shape_locations: IndexMap<Shape, u32>,
+    /// The storage each local may share, by its index ([`Self::shared`]).
+    shared_storage: IndexMap<u32, u32>,
+    /// The bindings whose `let` always copies ([`owned_lets`]), so they share
+    /// nothing.
+    owned_lets: IndexSet<u32>,
 }
 
 impl<'p, 'a> Body<'p, 'a> {
@@ -577,6 +583,8 @@ impl<'p, 'a> Body<'p, 'a> {
             writes: Vec::new(),
             function_locations: IndexMap::default(),
             shape_locations: IndexMap::default(),
+            shared_storage: IndexMap::default(),
+            owned_lets: owned_lets(func, package.type_table),
         };
         // Whatever escapes may reach, and be stored in, whatever else escapes,
         // and may be called with it. Each world is a location too, so a store
@@ -1130,7 +1138,9 @@ impl<'p, 'a> Body<'p, 'a> {
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 let loc = self.local(*index);
-                Some(self.naming(loc))
+                let own = self.naming(loc);
+                let shared = self.shared(*index);
+                self.join([Some(own), Some(shared)])
             }
             TirExprKind::GlobalVarGet {
                 module_source,
@@ -1184,6 +1194,26 @@ impl<'p, 'a> Body<'p, 'a> {
         }
     }
 
+    /// The storage `local` may share with what it was bound or assigned from:
+    /// a binding of a place is copied only where the copy pass finds it must
+    /// be, which is decided after this resolver runs.
+    fn shared(&mut self, local: u32) -> u32 {
+        if let Some(&node) = self.shared_storage.get(&local) {
+            return node;
+        }
+        let node = self.g.node();
+        self.shared_storage.insert(local, node);
+        node
+    }
+
+    /// Record that `local` may share the storage `value` is.
+    fn share(&mut self, local: u32, value: &TirExpr) {
+        if let Some(storage) = self.storage_of(value) {
+            let shared = self.shared(local);
+            self.g.copy(storage, shared);
+        }
+    }
+
     /// `return value` hands `value`'s storage out uncopied.
     fn hand_back(&mut self, value: &TirExpr) {
         if let Some(storage) = self.storage_of(value) {
@@ -1216,15 +1246,27 @@ impl<'p, 'a> Body<'p, 'a> {
         if binds.is_empty() {
             return;
         }
-        let referent = if self.package.type_table.is_reference(scrutinee.type_id) {
+        let through_reference = self.package.type_table.is_reference(scrutinee.type_id);
+        let referent = if through_reference {
             self.deref(value)
         } else {
             None
+        };
+        // A binding takes part of the scrutinee's storage, or of what it
+        // refers to.
+        let storage = if through_reference {
+            value
+        } else {
+            self.storage_of(scrutinee)
         };
         for local in binds {
             let node = self.local(local);
             for v in [value, referent, own].into_iter().flatten() {
                 self.g.copy(v, node);
+            }
+            if let Some(storage) = storage {
+                let shared = self.shared(local);
+                self.g.copy(storage, shared);
             }
         }
     }
@@ -1246,10 +1288,14 @@ impl<'p, 'a> Body<'p, 'a> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
-                let v = value.as_ref().and_then(|value| self.eval(value));
+                let Some(value) = value else { return None };
+                let v = self.eval(value);
                 let node = self.local(*local_index);
                 if let Some(v) = v {
                     self.g.copy(v, node);
+                }
+                if !self.owned_lets.contains(local_index) {
+                    self.share(*local_index, value);
                 }
                 None
             }
@@ -1376,6 +1422,9 @@ impl<'p, 'a> Body<'p, 'a> {
             TirExprKind::Assign { target, value } => {
                 let v = self.eval(value);
                 self.assign(target, v);
+                if let TirExprKind::Local { index, .. } = &target.kind {
+                    self.share(*index, value);
+                }
                 None
             }
             TirExprKind::Call { func, args, .. } => {

@@ -111,6 +111,7 @@ pub fn analyze_ownership(
         pending_writes: Vec::new(),
         handed: Vec::new(),
         beyond_handed_writes: 0,
+        opaque_writes: Vec::new(),
         points_to,
         frame: points_to
             .frame(&func.module_source, &func.name)
@@ -137,6 +138,8 @@ pub fn analyze_ownership(
         declared_owned: IndexSet::default(),
         share_sources: IndexMap::default(),
         consumed: IndexMap::default(),
+        taken_unreturned: IndexSet::default(),
+        returned_reads: IndexSet::default(),
         final_reads: Vec::new(),
         mutations: Vec::new(),
         assign_sites: Vec::new(),
@@ -342,6 +345,8 @@ struct AssignSite<'a> {
 struct ShareInputs<'a> {
     /// The storage each mutation's live set can still read, in `mutations` order.
     at_write: Vec<IndexSet<u32>>,
+    /// The storage readable where each of `opaque_writes` runs, in order.
+    at_opaque_write: Vec<IndexSet<u32>>,
     capacity_observed: IndexSet<u32>,
     consumed_reach: IndexMap<u32, IndexSet<u32>>,
     place_move_bases: &'a IndexSet<u32>,
@@ -578,6 +583,11 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|m| readable_storage(paths, &m.live))
                 .collect(),
+            at_opaque_write: self
+                .opaque_writes
+                .iter()
+                .map(|(_, live)| readable_storage(paths, live))
+                .collect(),
             capacity_observed: capacity_observed_locals(body, self.type_table),
             // What each consumed root's storage reaches, computed once per root
             // rather than once per `share_sources` entry rooted there.
@@ -604,23 +614,49 @@ impl<'a> Analyzer<'a> {
         // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind of
         // the place is never itself a conflict. Every other mutation must be
         // unreachable.
+        // A source reached through a reference, or rooted at one the resolver
+        // could not follow (`*base` with `base` a parameter), lies in storage
+        // this body does not own, which any alias of it may write: a `&mut`
+        // parameter, a callee, a global. A write under the same reference root,
+        // or into storage of this frame's own, is placed by its path. One under
+        // another reference root may alias it, and a path past a reference
+        // field ends anywhere, so only its type can rule either out.
+        let behind_root = self.reference_locals.contains(&path.root);
+        let referent = path.through_ref || behind_root;
         let share_safe = self.mutations.iter().zip(&inputs.at_write).all(|(m, r)| {
+            let placed = !path.through_ref
+                && (!behind_root
+                    || m.path.root == path.root
+                    || !self.reference_locals.contains(&m.path.root));
             !r.contains(&local)
-                || write_cannot_reach(m, path)
+                || (placed && write_cannot_reach(m, path))
+                || (referent && !self.lands_in_reach(m.lands, path.root))
                 || m.written
                     .is_some_and(|written| !self.reach.write_reaches(written, *binds))
-        });
+        }) && !(referent
+            && self
+                .opaque_writes
+                .iter()
+                .zip(&inputs.at_opaque_write)
+                .any(|((written, _), readable)| {
+                    readable.contains(&local) && self.root_reaches_written(path.root, written)
+                }));
         let root_given_away = inputs
             .consumed_reach
             .get(&path.root)
             .is_some_and(|reach| reach.contains(&local));
-        let moved_out =
-            self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local);
+        // A referent the binding hands back by `return` stays the caller's: a
+        // binding sharing it is no fresh local, so the return conventions
+        // leave the copy to the caller.
+        let taken = if referent {
+            self.taken_unreturned.contains(&local)
+        } else {
+            self.consumed.contains_key(&local)
+        };
+        let moved_out = taken || inputs.place_move_bases.contains(&local);
         path.root != local
-            // A source reached through a reference is written by whatever owns
-            // its referent, at a root the scan above never sees, as is a root a
-            // `&mut` outlives.
-            && !path.through_ref
+            // A root a `&mut` outlives is written wherever the holder runs it,
+            // which the scan above never sees.
             && !self.written_through_escape.contains(&path.root)
             // A reference to the binding kept out of this body's sight reads its
             // storage after any write the scan above weighs.
@@ -705,6 +741,34 @@ impl<'a> Analyzer<'a> {
                 live: live.clone(),
             });
         }
+    }
+
+    /// Whether a write landing at `lands` may meet storage the value in `root`
+    /// reaches.
+    fn lands_in_reach(&self, lands: Lands<'_>, root: u32) -> bool {
+        let landed: IndexSet<u32> = match lands {
+            Lands::Local(local) => self.points_to.location(self.frame, local).into_iter().collect(),
+            Lands::Place(set) => set.iter().collect(),
+        };
+        self.root_reaches_written(
+            root,
+            &CallWrites {
+                locations: landed,
+                beyond_handed: false,
+            },
+        )
+    }
+
+    /// Whether `written` may meet storage the value in `root` reaches. A root
+    /// the analysis gives no location reaches anything.
+    fn root_reaches_written(&self, root: u32, written: &CallWrites) -> bool {
+        self.points_to.location(self.frame, root).is_none()
+            || self.points_to.reaches_written(
+                self.frame,
+                root,
+                &written.locations,
+                written.beyond_handed,
+            )
     }
 
     fn is_mutated_root(&self, local: u32) -> bool {
@@ -885,6 +949,11 @@ impl<'a> Analyzer<'a> {
             // `ModRef`.
             if self.mutations.len() == recorded {
                 self.beyond_handed_writes += 1;
+                let written = CallWrites {
+                    locations: IndexSet::default(),
+                    beyond_handed: true,
+                };
+                self.opaque_writes.push((Rc::new(written), live.clone()));
             }
         }
     }
@@ -1531,6 +1600,9 @@ struct Analyzer<'a> {
     /// a call's or one to storage no local names, so a check sees whether one
     /// ran while the callee held its argument.
     beyond_handed_writes: usize,
+    /// What each call, or write to storage no local names, may write, with
+    /// the locals live there.
+    opaque_writes: Vec<(Rc<CallWrites>, IndexSet<u32>)>,
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
@@ -1550,6 +1622,11 @@ struct Analyzer<'a> {
     /// Locals read in a value position, each with the locals live where that
     /// happens. A projection base and a reference's referent consume nothing.
     consumed: IndexMap<u32, IndexSet<u32>>,
+    /// The locals of `consumed` taken somewhere other than as the value a
+    /// `return` hands back, which the return conventions copy if they must.
+    taken_unreturned: IndexSet<u32>,
+    /// The reads that are the value a `return` hands back, past its casts.
+    returned_reads: IndexSet<*const TirExpr>,
     /// Those reads no path reads the local again after, with the local.
     final_reads: Vec<(&'a TirExpr, u32)>,
     /// Every write this body makes, with the locals live where it runs.
@@ -1649,6 +1726,9 @@ impl<'a> Analyzer<'a> {
             if takes {
                 let at = self.consumed.entry(index).or_default();
                 at.extend(live.iter().copied());
+                if !self.returned_reads.contains(&std::ptr::from_ref(read)) {
+                    self.taken_unreturned.insert(index);
+                }
             }
             if !live.contains(&index) {
                 self.final_reads.push((read, index));
@@ -2631,6 +2711,29 @@ impl<'a> Analyzer<'a> {
         start
     }
 
+    /// Note what the call begun at `start` may write while `live` is, once
+    /// what it is handed is noted, past the handed values at the positions
+    /// `recorded` names, whose writes are recorded as mutations by path.
+    fn note_call_writes(
+        &mut self,
+        start: CallStart,
+        recorded: impl Fn(usize) -> bool,
+        live: &IndexSet<u32>,
+    ) {
+        let sources: Vec<u32> = self.handed[start.handed..]
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !recorded(*i))
+            .flat_map(|(_, handed)| handed.iter())
+            .collect();
+        let beyond_handed = self.beyond_handed_writes > start.beyond_handed_writes;
+        let written = CallWrites {
+            locations: self.points_to.reach_written(sources, beyond_handed),
+            beyond_handed,
+        };
+        self.opaque_writes.push((Rc::new(written), live.clone()));
+    }
+
     /// Note what `args` hand a call.
     fn hand(&mut self, args: &[&TirExpr]) {
         for arg in args {
@@ -3016,6 +3119,13 @@ impl<'a> Analyzer<'a> {
             TirStmtKind::Return { value } => {
                 live.clear();
                 if let Some(v) = value {
+                    let mut tails = Vec::new();
+                    result_tails(v, &mut tails);
+                    self.returned_reads.extend(
+                        tails
+                            .into_iter()
+                            .map(|tail| std::ptr::from_ref(strip_casts(tail))),
+                    );
                     self.walk_persisting(v, live, record);
                 }
             }
@@ -3335,6 +3445,26 @@ impl<'a> Analyzer<'a> {
                         self.record_call_mutation(func, receiver, receiver, 0, live);
                         self.note_element_site(expr, func, receiver, start, live);
                     }
+                    // `walk_call_arg` records a `&mut place` argument's writes,
+                    // and the branch above a mutated receiver's.
+                    let receiver_recorded = mutated_receiver.is_some();
+                    let ref_receiver = receiver.is_some() && takes_self_by_ref;
+                    self.note_call_writes(
+                        start,
+                        |i| {
+                            if i == 0 && (receiver_recorded || ref_receiver) {
+                                return receiver_recorded;
+                            }
+                            matches!(
+                                exprs[i].kind,
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::MutRef,
+                                    ..
+                                }
+                            )
+                        },
+                        live,
+                    );
                 }
                 // A `&self` / `&mut self` receiver is a place the callee reads
                 // through rather than a value it takes.
@@ -3368,7 +3498,10 @@ impl<'a> Analyzer<'a> {
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
-                self.start_call(true);
+                let start = self.start_call(true);
+                if record {
+                    self.note_call_writes(start, |_| false, live);
+                }
                 self.hold_loans(&args.iter().collect::<Vec<_>>(), live);
                 for arg in args.iter().rev() {
                     self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
@@ -3383,6 +3516,7 @@ impl<'a> Analyzer<'a> {
                     // The closure called hands on what it captured.
                     self.hand(&[&**callee]);
                     self.hand(&exprs);
+                    self.note_call_writes(start, |_| false, live);
                     let retained = self.functor_rows.retained(callee, args.len());
                     self.kept_through(&retained, &exprs, &result, None)
                 } else {
@@ -3448,6 +3582,7 @@ impl<'a> Analyzer<'a> {
                         self.mark_local_mutated(index, false, live);
                         let at = self.consumed.entry(index).or_default();
                         at.extend(live.iter().copied());
+                        self.taken_unreturned.insert(index);
                     }
                 }
             }

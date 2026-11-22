@@ -1,0 +1,70 @@
+// A binding read through a reference shares the referent only while nothing
+// may write it. Each function here writes the referent while the binding is
+// still read: through an aliasing `&mut` parameter, through a callee writing a
+// global the reference points into, through a closure, and through a callee
+// running a closure it is handed, so each copies.
+
+use { println, Stdout } from "core:cli";
+
+struct Rec {
+    name: String,
+}
+
+global mut HELD: Rec = Rec { name: "g" };
+
+#[inline(never)]
+fn through_alias(base: &Rec, other: &mut Rec) -> String {
+    let r = *base;
+    other.name.push_str("!");
+    return r.name;
+}
+
+#[inline(never)]
+fn touch_global() {
+    HELD.name.push_str("!");
+}
+
+#[inline(never)]
+fn through_callee(base: &Rec) -> String {
+    let r = *base;
+    touch_global();
+    return r.name;
+}
+
+#[inline(never)]
+fn through_closure(base: &Rec, mut f: fn mut()) -> String {
+    let r = *base;
+    f();
+    return r.name;
+}
+
+#[inline(never)]
+fn call_it(mut f: fn mut()) {
+    f();
+}
+
+#[inline(never)]
+fn through_handed_closure(base: &Rec, f: fn mut()) -> String {
+    let r = *base;
+    call_it(f);
+    return r.name;
+}
+
+export fn run() with Stdout {
+    let mut a = Rec { name: "a" };
+    let p: &Rec = &a;
+    let x = through_alias(p, &mut a);
+    let y = through_callee(&HELD);
+    let mut c = Rec { name: "c" };
+    let q: &Rec = &c;
+    let z = through_closure(q, || c.name.push_str("!"));
+    let mut d = Rec { name: "d" };
+    let s: &Rec = &d;
+    let w = through_handed_closure(s, || d.name.push_str("!"));
+    println(`${x} ${y} ${z} ${w} ${a.name} ${HELD.name} ${c.name} ${d.name}`);
+}
+
+__DATA__
+{
+    "stdout": "a g c d a! g! c! d!\n"
+}
