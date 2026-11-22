@@ -3368,11 +3368,19 @@ impl WebGpuBackend {
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let rows = pool.shape.rows;
         let mut reads: List<PlacedRead<Untyped>> = [];
-        let [mut gate, mut up] = [operand(0), operand(1)];
+        let [mut gate, mut up] = [
+            operand(0),
+            operand(1),
+        ];
         if let Some(b) = &pool.bias {
-            let gates = DeviceTensor { ..slot_view(b, slot, [1, rows / 2]), strides: [0, 2 * b.strides[1]] };
+            let gates = DeviceTensor {
+                ..slot_view(b, slot, [1, rows / 2]),
+                strides: [0, 2 * b.strides[1]],
+            };
             reads.push(PlacedRead::<Untyped> { view: gates });
-            reads.push(PlacedRead::<Untyped> { view: DeviceTensor { ..gates, offset: gates.offset + b.strides[1] } });
+            reads.push(PlacedRead::<Untyped> {
+                view: DeviceTensor { ..gates, offset: gates.offset + b.strides[1] },
+            });
             gate = gate.binary(BinaryOp::Add, &operand(2));
             up = up.binary(BinaryOp::Add, &operand(3));
         }
@@ -3380,7 +3388,9 @@ impl WebGpuBackend {
         gate = gate.binary(BinaryOp::Minimum, &limit);
         up = up.binary(BinaryOp::Minimum, &limit).binary(BinaryOp::Maximum, &constant(-experts.limit));
         let sigmoid = gate.binary(BinaryOp::Mul, &constant(experts.alpha)).unary(UnaryOp::Sigmoid);
-        let op = gate.binary(BinaryOp::Mul, &sigmoid).binary(BinaryOp::Mul, &up.binary(BinaryOp::Add, &constant(experts.beta)));
+        let op = gate
+            .binary(BinaryOp::Mul, &sigmoid)
+            .binary(BinaryOp::Mul, &up.binary(BinaryOp::Add, &constant(experts.beta)));
         return self.quantized_product_kernel(
             &pool.operands(row, slot),
             experts.quantized.bits,

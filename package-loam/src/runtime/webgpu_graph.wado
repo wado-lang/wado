@@ -93,8 +93,18 @@ use {
     constants,
     kept_any,
 } from "./recorded.wado";
-use { DeviceTensor, ExpertPool, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced, slot_layout } from "./webgpu.wado";
-use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture } from "./experts.wado";
+use {
+    DeviceTensor,
+    ExpertPool,
+    Placed,
+    PlacedRead,
+    WebGpuBackend,
+    permuted,
+    reads_as,
+    sliced,
+    slot_layout,
+} from "./webgpu.wado";
+use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture, runs_by_picks } from "./experts.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
 use { LinearArray } from "core:linear";
 
@@ -863,7 +873,7 @@ impl Graph for WebGpuBackend {
         ffn: &[Projection<WebGpuBackend, E>, Projection<WebGpuBackend, E>],
         experts: &Experts,
     ) -> Placed<f32, [Picked, Hidden]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if self.extents_of(rows)[0] * experts.k < self.extents_of(&routing.gates)[1]
+        if runs_by_picks(self, rows, routing, experts)
             && let Some(mixed) = by_picks(self, rows, routing, held, ffn, experts) {
             return Placed::Device(mixed);
         }
@@ -886,11 +896,18 @@ fn by_picks<E: Float>(
     let slots = g.host(&held.slots).data;
     let x = g.device_view(rows);
     let weights = g.device_view(&routing.weights);
-    let [up, down] = [expert_pool(g, &ffn.0), expert_pool(g, &ffn.1)];
+    let [up, down] = [
+        expert_pool(g, &ffn.0),
+        expert_pool(g, &ffn.1),
+    ];
     let k = experts.k;
     let mut mixed: Option<Placed<f32, [Picked, Hidden]>> = null;
     for let t of 0..<x.extents[0] {
-        let row = DeviceTensor { ..x, offset: x.offset + t * x.strides[0], extents: [1, x.extents[1]] };
+        let row = DeviceTensor {
+            ..x,
+            offset: x.offset + t * x.strides[0],
+            extents: [1, x.extents[1]],
+        };
         let mut total: Option<DeviceTensor> = null;
         for let j of 0..<k {
             let slot = slots[picks[t * k + j] as i32] as i32;
@@ -917,7 +934,10 @@ fn by_picks<E: Float>(
 }
 
 /// `p`'s pools on the device.
-fn expert_pool<E: Float>(g: &mut WebGpuBackend, p: &Projection<WebGpuBackend, E>) -> ExpertPool with (GpuDevice, GpuQueue, GpuBuffer) {
+fn expert_pool<E: Float>(
+    g: &mut WebGpuBackend,
+    p: &Projection<WebGpuBackend, E>,
+) -> ExpertPool with (GpuDevice, GpuQueue, GpuBuffer) {
     let bias = match &p.bias {
         Some(b) => Option::Some(g.device_view(b)),
         null => null,
