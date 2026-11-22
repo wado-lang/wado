@@ -38,7 +38,7 @@ Test outward from the change:
 ## Oracles
 
 Two suites take their expectations from onnxruntime.
-`conformance/operators_test.wado` covers every operator Loam lowers, over
+`tests/conformance/operators_test.wado` covers every operator Loam lowers, over
 static shapes, with the attributes and edge values where a reading can go
 wrong. `semantics_test.wado` covers shape arithmetic over a symbolic length, at
 two lengths. A script beside each, `operators.mjs` or `semantics.mjs`, writes

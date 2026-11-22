@@ -149,7 +149,7 @@ Work no roadmap item holds yet. It is unordered.
 
 ### Operators
 
-`conformance/operators_test.wado` lists the operators Loam lowers. Five
+`tests/conformance/operators_test.wado` lists the operators Loam lowers. Five
 outside ONNX's default domain are among them, onnxruntime's:
 
 - `GroupQueryAttention`, without position ids, interleaved rotation, a
@@ -297,7 +297,7 @@ than JSON, so its probe has to parse one to report an extent.
 
 The conformance suite reaches the graphs ONNX commits, not the per-operator
 cases. `onnx/backend/test/data/node` is generated rather than checked in, so
-what `conformance/` runs against is `pytorch-operator/` and
+what `tests/conformance/` runs against is `pytorch-operator/` and
 `pytorch-converted/`: whole small graphs with their inputs and outputs beside
 them.
 
@@ -345,7 +345,7 @@ first call.
 
 ### Experts held on demand
 
-- [ ] `conformance/held_experts.wado` on an input that is not ill-conditioned
+- [ ] `tests/conformance/held_experts.wado` on an input that is not ill-conditioned
   and that still reaches every product. Its second token moves by 1.7e-4 with
   the order a held pass sums in, so the device tests hold it to 4e-4 rather
   than to `LOAM_TOLERANCE`.

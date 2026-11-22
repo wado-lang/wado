@@ -116,7 +116,7 @@ it as `keep` does.
 A `Cpu` reads only the weights it keeps, as a device does, so a model's
 `Params` and the `compute` that reads them take the same `Cpu`.
 
-`conformance/large/` shows a checkpoint larger than the guest loading. It writes
+`tests/conformance/large/` shows a checkpoint larger than the guest loading. It writes
 80 MiB of weights over two shards, a chain of permutations that move each
 element where no other order of them would. Under `--max-memory 32m` the chain
 loads onto `WebGpuBackend` and `PjrtBackend` and runs with every output in
@@ -335,7 +335,7 @@ its temporaries hold one expert, never all of them.
 
 What `PjrtBackend::analyzing("v5e:1x1")` reports for the two forms, over the
 four experts of `graph_cases.wado`'s `experts_case`, through
-`conformance/pjrt_topology.wado` under `mise run test-pjrt`:
+`tests/conformance/pjrt_topology.wado` under `mise run test-pjrt`:
 
 | Form, over                   | Temporary bytes |
 | ---------------------------- | --------------- |
@@ -451,7 +451,7 @@ A program after a host step must not read a weight the step has since written.
 So `split` computes a value that reads only weights again in each program that
 reads it, rather than passing it across the step.
 
-`conformance/operators_test.wado`'s `QMoeLayers` runs two layers that share
+`tests/conformance/operators_test.wado`'s `QMoeLayers` runs two layers that share
 pools holding 6 of their 8 experts, on `Cpu`. Over two layers onnxruntime sits up
 to 4e-4 from the value computed in f64, so the case holds Loam to that value.
 `held_experts.wado` holds each device's run of it to the same device's run with

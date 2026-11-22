@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
 import {
   BFLOAT16, BOOL, FLOAT, FLOAT16, INT32, INT64, UINT8, f32, graphProto, modelProto, node, tensorProto, valueInfo,
-} from '../tests/onnx_proto.mjs';
+} from '../onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
 

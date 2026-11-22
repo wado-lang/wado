@@ -9,7 +9,7 @@ use { HashMap } from "core:collections";
 use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
 use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
 use gpt2 from "./tiny_gpt2.wado";
-use external from "../tests/models/tiny-gpt2/external/model.onnx"
+use external from "../models/tiny-gpt2/external/model.onnx"
     with {
         type: "onnx",
         generator: {
@@ -20,7 +20,7 @@ use external from "../tests/models/tiny-gpt2/external/model.onnx"
             },
         },
     };
-use in_place from "../tests/models/tiny-gpt2/model.onnx"
+use in_place from "../models/tiny-gpt2/model.onnx"
     with {
         type: "onnx",
         generator: {
@@ -32,12 +32,12 @@ use in_place from "../tests/models/tiny-gpt2/model.onnx"
             },
         },
     };
-use open_step from "../tests/models/tiny-gpt2/with-past/model.onnx"
+use open_step from "../models/tiny-gpt2/with-past/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use batched from "../tests/models/tiny-gpt2/merged/model.onnx"
+use batched from "../models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
@@ -49,7 +49,7 @@ use batched from "../tests/models/tiny-gpt2/merged/model.onnx"
 
 /// The checkpoint the build read.
 fn checkpoint() -> HashMap<String, ByteList> {
-    return one_file("model.safetensors", #include_bytes("../tests/models/tiny-gpt2/model.safetensors"));
+    return one_file("model.safetensors", #include_bytes("../models/tiny-gpt2/model.safetensors"));
 }
 
 /// The logits the graph `build` adds to computes from one data set's inputs
@@ -69,17 +69,17 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
 
 test "a tiny GPT-2 reproduces the logits onnxruntime computes for four tokens" {
     reproduces(
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/output_0.pb"),
     );
 }
 
 test "the same module reproduces them for seven" {
     reproduces(
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/output_0.pb"),
     );
 }
 
@@ -126,7 +126,7 @@ fn reproduces_external(input_ids: ByteList, attention_mask: ByteList, logits: By
     let [mask, mask_extents] = ints_of(attention_mask);
     let [want, want_extents] = tensor_of(logits);
 
-    let data = one_file("model.onnx_data", #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data"));
+    let data = one_file("model.onnx_data", #include_bytes("../models/tiny-gpt2/external/model.onnx_data"));
     let mut cpu = Cpu {};
     let mut model = external::Model::new(external::Params::load(&mut cpu, &data).unwrap());
     let got = external::compute(
@@ -142,22 +142,22 @@ fn reproduces_external(input_ids: ByteList, attention_mask: ByteList, logits: By
 
 test "weights read in place from external data reproduce the logits for four tokens" {
     reproduces_external(
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/output_0.pb"),
     );
 }
 
 test "weights read in place from external data reproduce the logits for seven tokens" {
     reproduces_external(
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/output_0.pb"),
     );
 }
 
 test "a data file shorter than the weights the graph places in it stops the load before any is read" {
-    let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
+    let data = #include_bytes("../models/tiny-gpt2/external/model.onnx_data");
     let cut = data[0..<data.len() - 1].to_list() as ByteList;
     let e = external::Params::load(&mut Cpu {}, &one_file("model.onnx_data", cut)).unwrap_err();
     assert `${e}` == `model.onnx_data is ${data.len() - 1} bytes, and the graph places weights up to ${data.len()}`;
@@ -175,7 +175,7 @@ fn reproduces_in_place(input_ids: ByteList, attention_mask: ByteList, logits: By
     let mut model = in_place::Model::new(
         in_place::Params::load(
             &mut cpu,
-            &one_file("model.onnx", #include_bytes("../tests/models/tiny-gpt2/model.onnx")),
+            &one_file("model.onnx", #include_bytes("../models/tiny-gpt2/model.onnx")),
         ).unwrap(),
     );
     let got = in_place::compute(
@@ -191,22 +191,22 @@ fn reproduces_in_place(input_ids: ByteList, attention_mask: ByteList, logits: By
 
 test "weights read in place from the model file reproduce the logits for four tokens" {
     reproduces_in_place(
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/output_0.pb"),
     );
 }
 
 test "weights read in place from the model file reproduce the logits for seven tokens" {
     reproduces_in_place(
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/output_0.pb"),
     );
 }
 
 test "a file of another length than the model the build read is refused" {
-    let model = #include_bytes("../tests/models/tiny-gpt2/model.onnx");
+    let model = #include_bytes("../models/tiny-gpt2/model.onnx");
     let mut longer = model;
     longer.push(0);
     let e = in_place::Params::load(&mut Cpu {}, &one_file("model.onnx", longer)).unwrap_err();

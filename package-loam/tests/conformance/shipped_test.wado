@@ -4,67 +4,67 @@
 
 use { Cpu, Merged, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
-use basic from "../tests/onnx/pytorch-operator/test_operator_basic/model.onnx"
+use basic from "../onnx/pytorch-operator/test_operator_basic/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use params from "../tests/onnx/pytorch-operator/test_operator_params/model.onnx"
+use params from "../onnx/pytorch-operator/test_operator_params/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use pow from "../tests/onnx/pytorch-operator/test_operator_pow/model.onnx"
+use pow from "../onnx/pytorch-operator/test_operator_pow/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use exp from "../tests/onnx/pytorch-operator/test_operator_exp/model.onnx"
+use exp from "../onnx/pytorch-operator/test_operator_exp/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use sqrt from "../tests/onnx/pytorch-operator/test_operator_sqrt/model.onnx"
+use sqrt from "../onnx/pytorch-operator/test_operator_sqrt/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use addmm from "../tests/onnx/pytorch-operator/test_operator_addmm/model.onnx"
+use addmm from "../onnx/pytorch-operator/test_operator_addmm/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use mm from "../tests/onnx/pytorch-operator/test_operator_mm/model.onnx"
+use mm from "../onnx/pytorch-operator/test_operator_mm/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use linear from "../tests/onnx/pytorch-converted/test_Linear_no_bias/model.onnx"
+use linear from "../onnx/pytorch-converted/test_Linear_no_bias/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use flatten from "../tests/onnx/pytorch-operator/test_operator_flatten/model.onnx"
+use flatten from "../onnx/pytorch-operator/test_operator_flatten/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use pool2d from "../tests/onnx/pytorch-converted/test_MaxPool2d/model.onnx"
+use pool2d from "../onnx/pytorch-converted/test_MaxPool2d/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use pool1d from "../tests/onnx/pytorch-operator/test_operator_maxpool/model.onnx"
+use pool1d from "../onnx/pytorch-operator/test_operator_maxpool/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use conv2d from "../tests/onnx/pytorch-converted/test_Conv2d/model.onnx"
+use conv2d from "../onnx/pytorch-converted/test_Conv2d/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
     };
-use mnist from "../tests/models/mnist-12/model.onnx"
+use mnist from "../models/mnist-12/model.onnx"
     with {
         type: "onnx",
         generator: { module: "lib:loam" },
@@ -74,13 +74,13 @@ use mnist from "../tests/models/mnist-12/model.onnx"
 // `Neg` over `float[1]`.
 test "the generated graph reproduces the output ONNX ships" {
     let [a, a_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_basic/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_basic/test_data_set_0/input_0.pb"),
     );
     let [b, b_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_basic/test_data_set_0/input_1.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_basic/test_data_set_0/input_1.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_basic/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_basic/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -101,10 +101,10 @@ test "the generated graph reproduces the output ONNX ships" {
 // for it and no second, since the weight travels in the model.
 test "a graph with an initializer reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_params/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_params/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_params/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_params/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -123,13 +123,13 @@ test "a graph with an initializer reproduces the output ONNX ships" {
 // `float[1, 2, 3, 4]`.
 test "Pow reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_pow/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_pow/test_data_set_0/input_0.pb"),
     );
     let [y, y_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_pow/test_data_set_0/input_1.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_pow/test_data_set_0/input_1.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_pow/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_pow/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -149,10 +149,10 @@ test "Pow reproduces the output ONNX ships" {
 // operator each over `float[3, 4]`.
 test "Exp reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_exp/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_exp/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_exp/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_exp/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -169,10 +169,10 @@ test "Exp reproduces the output ONNX ships" {
 
 test "Sqrt reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_sqrt/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_sqrt/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_sqrt/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_sqrt/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -191,16 +191,16 @@ test "Sqrt reproduces the output ONNX ships" {
 // broadcasts across the batch axis.
 test "Gemm reproduces the output ONNX ships" {
     let [a, a_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_addmm/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_addmm/test_data_set_0/input_0.pb"),
     );
     let [b, b_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_addmm/test_data_set_0/input_1.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_addmm/test_data_set_0/input_1.pb"),
     );
     let [c, c_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_addmm/test_data_set_0/input_2.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_addmm/test_data_set_0/input_2.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_addmm/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_addmm/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -221,13 +221,13 @@ test "Gemm reproduces the output ONNX ships" {
 // bias, folded into the operator's `Expr`. Its axis is named all the same.
 test "a scalar Constant folds into the Gemm bias" {
     let [a, a_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_mm/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_mm/test_data_set_0/input_0.pb"),
     );
     let [b, b_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_mm/test_data_set_0/input_1.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_mm/test_data_set_0/input_1.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_mm/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_mm/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -248,10 +248,10 @@ test "a scalar Constant folds into the Gemm bias" {
 // ships one input and the weight travels in the model.
 test "MatMul reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-converted/test_Linear_no_bias/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-converted/test_Linear_no_bias/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-converted/test_Linear_no_bias/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-converted/test_Linear_no_bias/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -270,10 +270,10 @@ test "MatMul reproduces the output ONNX ships" {
 // `float[1, 2, 3, 4]`.
 test "Flatten reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_flatten/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_flatten/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_flatten/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_flatten/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -295,10 +295,10 @@ test "Flatten reproduces the output ONNX ships" {
 // with its bias.
 test "MaxPool over two padded axes reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-converted/test_MaxPool2d/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-converted/test_MaxPool2d/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-converted/test_MaxPool2d/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-converted/test_MaxPool2d/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -315,10 +315,10 @@ test "MaxPool over two padded axes reproduces the output ONNX ships" {
 
 test "MaxPool over one axis reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_maxpool/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_maxpool/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-operator/test_operator_maxpool/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-operator/test_operator_maxpool/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -335,10 +335,10 @@ test "MaxPool over one axis reproduces the output ONNX ships" {
 
 test "Conv with a bias reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-converted/test_Conv2d/test_data_set_0/input_0.pb"),
+        #include_bytes("../onnx/pytorch-converted/test_Conv2d/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../tests/onnx/pytorch-converted/test_Conv2d/test_data_set_0/output_0.pb"),
+        #include_bytes("../onnx/pytorch-converted/test_Conv2d/test_data_set_0/output_0.pb"),
     );
 
     let mut cpu = Cpu {};
@@ -356,8 +356,8 @@ test "Conv with a bias reproduces the output ONNX ships" {
 // MNIST-12 from the ONNX Model Zoo, with the weights it carries, against the
 // logits shipped beside it. Every axis takes the name the graph gives it.
 test "MNIST-12 reproduces the logits the Model Zoo ships" {
-    let [x, x_extents] = tensor_of(#include_bytes("../tests/models/mnist-12/test_data_set_0/input_0.pb"));
-    let [want, want_extents] = tensor_of(#include_bytes("../tests/models/mnist-12/test_data_set_0/output_0.pb"));
+    let [x, x_extents] = tensor_of(#include_bytes("../models/mnist-12/test_data_set_0/input_0.pb"));
+    let [want, want_extents] = tensor_of(#include_bytes("../models/mnist-12/test_data_set_0/output_0.pb"));
 
     let mut cpu = Cpu {};
     let mut model = mnist::Model::new(mnist::Params::embedded(&mut cpu));

@@ -14,7 +14,7 @@ nothing. Correctness and speed come first.
 
 The Kiln generator reads an ONNX graph, checks its shapes and names its axes,
 folds what it can at build time, and writes a Wado module whose `compute` calls
-a backend. The backends are in `src/runtime/`. `conformance/` is a package of
+a backend. The backends are in `src/runtime/`. `tests/conformance/` is a package of
 its own that consumes Loam the way a user does, to run the onnxruntime
 oracles.
 
@@ -69,7 +69,7 @@ its README's table.
 
 The procedures are in [docs/tools.md](./docs/tools.md#oracles).
 
-A case in `conformance/operators_test.wado` or `semantics_test.wado` where Loam
+A case in `tests/conformance/operators_test.wado` or `semantics_test.wado` where Loam
 does not match onnxruntime yet is a `#[TODO]` test, so the run lists where the
 two part.
 

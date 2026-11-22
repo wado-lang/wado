@@ -6,7 +6,7 @@
 use { Cpu, Sampling, Tensor } from "lib:loam";
 use { HashMap } from "core:collections";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
-use decoding from "../tests/models/tiny-gpt2/merged/model.onnx"
+use decoding from "../models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
         generator: {
@@ -17,16 +17,16 @@ use decoding from "../tests/models/tiny-gpt2/merged/model.onnx"
             },
         },
     };
-use sharded from "../tests/models/tiny-gpt2/model.onnxtext"
+use sharded from "../models/tiny-gpt2/model.onnxtext"
     with {
         type: "onnxtext",
         generator: {
             module: "lib:loam",
             inputs: [
-                { path: "../tests/models/tiny-gpt2/sharded/model.safetensors.index.json", type: "safetensors-index" },
-                { path: "../tests/models/tiny-gpt2/sharded/model-00001-of-00003.safetensors", type: "safetensors" },
-                { path: "../tests/models/tiny-gpt2/sharded/model-00002-of-00003.safetensors", type: "safetensors" },
-                { path: "../tests/models/tiny-gpt2/sharded/model-00003-of-00003.safetensors", type: "safetensors" },
+                { path: "../models/tiny-gpt2/sharded/model.safetensors.index.json", type: "safetensors-index" },
+                { path: "../models/tiny-gpt2/sharded/model-00001-of-00003.safetensors", type: "safetensors" },
+                { path: "../models/tiny-gpt2/sharded/model-00002-of-00003.safetensors", type: "safetensors" },
+                { path: "../models/tiny-gpt2/sharded/model-00003-of-00003.safetensors", type: "safetensors" },
             ],
             options: {
                 dims: { batch_size: 1 },
@@ -122,9 +122,9 @@ test "requests in slots of a branching decoder each pick the tokens they pick al
 /// The shards, keyed by the file names the index places tensors in.
 fn every_shard() -> HashMap<String, ByteList> {
     let mut shards = HashMap::<String, ByteList>::new();
-    shards["model-00001-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00001-of-00003.safetensors");
-    shards["model-00002-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00002-of-00003.safetensors");
-    shards["model-00003-of-00003.safetensors"] = #include_bytes("../tests/models/tiny-gpt2/sharded/model-00003-of-00003.safetensors");
+    shards["model-00001-of-00003.safetensors"] = #include_bytes("../models/tiny-gpt2/sharded/model-00001-of-00003.safetensors");
+    shards["model-00002-of-00003.safetensors"] = #include_bytes("../models/tiny-gpt2/sharded/model-00002-of-00003.safetensors");
+    shards["model-00003-of-00003.safetensors"] = #include_bytes("../models/tiny-gpt2/sharded/model-00003-of-00003.safetensors");
     return shards;
 }
 
@@ -148,17 +148,17 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
 
 test "a sharded checkpoint reproduces the logits of the single file for four tokens" {
     reproduces(
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_0/output_0.pb"),
     );
 }
 
 test "and for seven" {
     reproduces(
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
-        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../models/tiny-gpt2/test_data_set_1/output_0.pb"),
     );
 }
 

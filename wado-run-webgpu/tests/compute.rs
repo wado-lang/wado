@@ -345,7 +345,7 @@ fn loam_tolerance(line: &str) -> f32 {
 /// output sits from the CPU's, and holds every line within tolerance.
 fn assert_loam_conformance(program: &str) {
     let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../package-loam/conformance")
+        .join("../package-loam/tests/conformance")
         .join(program);
     let output = run(&[program.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -397,7 +397,7 @@ fn loams_webgpu_graph_computes_what_its_cpu_graph_does() {
 #[test]
 fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../package-loam/conformance/webgpu_gpt2.wado");
+        .join("../package-loam/tests/conformance/webgpu_gpt2.wado");
     let output = run(&[program.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -425,7 +425,7 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
 /// memory, loads it from the same source once the limit is lifted.
 #[test]
 fn a_checkpoint_larger_than_the_guest_loads_onto_the_device() {
-    let conformance = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../package-loam/conformance");
+    let conformance = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../package-loam/tests/conformance");
     let written = Command::new(&*WADO)
         .args(["run", "large/write.wado"])
         .current_dir(&conformance)

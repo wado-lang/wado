@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
-import { FLOAT, INT32, INT64, graphProto, modelProto, node, tensorProto, valueInfo } from '../tests/onnx_proto.mjs';
+import { FLOAT, INT32, INT64, graphProto, modelProto, node, tensorProto, valueInfo } from '../onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
 

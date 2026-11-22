@@ -267,7 +267,7 @@ required.
 
 The `dims` map is written as an object:
 
-<!-- {"source": "package-loam/conformance/specialize_test.wado"} -->
+<!-- {"source": "package-loam/tests/conformance/specialize_test.wado"} -->
 
 ```wado
 use { Model, N, Params, X1, X2, compute } from "./specialize.onnxtext"

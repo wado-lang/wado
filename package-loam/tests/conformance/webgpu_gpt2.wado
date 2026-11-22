@@ -4,7 +4,7 @@
 //! for the logits it returns. `wado test` cannot reach a device, so
 //! `wado-run-webgpu`'s tests run it:
 //!
-//!     wado run-webgpu package-loam/conformance/webgpu_gpt2.wado
+//!     wado run-webgpu package-loam/tests/conformance/webgpu_gpt2.wado
 
 use { println, Stdout } from "core:cli";
 use {
@@ -36,7 +36,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println("no WebGPU adapter");
         return;
     };
-    let checkpoint = one_file("model.safetensors", #include_bytes("../tests/models/tiny-gpt2/model.safetensors"));
+    let checkpoint = one_file("model.safetensors", #include_bytes("../models/tiny-gpt2/model.safetensors"));
     let mut cpu = Cpu {};
     let mut on_cpu = gpt2::Model::new(gpt2::Params::load(&mut cpu, &checkpoint).unwrap());
     let mut on_gpu = gpt2::Model::new(gpt2::Params::load(&mut gpu, &checkpoint).unwrap());

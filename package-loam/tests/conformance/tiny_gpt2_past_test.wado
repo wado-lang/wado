@@ -5,20 +5,20 @@
 
 use { Cpu, CpuTensor, Holds, Tensor, capacity_of } from "lib:loam";
 use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
-use prompt from "../tests/models/tiny-gpt2/model.onnxtext"
+use prompt from "../models/tiny-gpt2/model.onnxtext"
     with {
         type: "onnxtext",
         generator: {
             module: "lib:loam",
             inputs: [
-                { path: "../tests/models/tiny-gpt2/model.safetensors", type: "safetensors" },
+                { path: "../models/tiny-gpt2/model.safetensors", type: "safetensors" },
             ],
             options: {
                 dims: { batch_size: 1 },
             },
         },
     };
-use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
+use step from "../models/tiny-gpt2/with-past/model.onnx"
     with {
         type: "onnx",
         generator: {
@@ -28,7 +28,7 @@ use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
             },
         },
     };
-use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
+use merged from "../models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
         generator: {
@@ -87,7 +87,7 @@ fn prefill(
     let [ids, extents] = ints_of(input_ids);
     let weights = prompt::Params::load(
         cpu,
-        &one_file("model.safetensors", #include_bytes("../tests/models/tiny-gpt2/model.safetensors")),
+        &one_file("model.safetensors", #include_bytes("../models/tiny-gpt2/model.safetensors")),
     ).unwrap();
     let o = prompt::compute(
         cpu,
@@ -116,8 +116,8 @@ fn prefill(
 
 test "the prompt returns the logits it did without the cache, and a key and value per layer" {
     let mut cpu = Cpu {};
-    let [logits, c] = prefill(&mut cpu, #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
-    let [want, want_extents] = tensor_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"));
+    let [logits, c] = prefill(&mut cpu, #include_bytes("../models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let [want, want_extents] = tensor_of(#include_bytes("../models/tiny-gpt2/test_data_set_0/output_0.pb"));
     assert logits.extents == want_extents;
     assert_close(&logits.data, &want);
     let presents: List<List<i32>> = [
@@ -139,17 +139,17 @@ test "the prompt returns the logits it did without the cache, and a key and valu
 
 test "each step after the prompt computes one position against the cache, as onnxruntime does" {
     let mut cpu = Cpu {};
-    let [_, prefilled] = prefill(&mut cpu, #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let [_, prefilled] = prefill(&mut cpu, #include_bytes("../models/tiny-gpt2/test_data_set_0/input_0.pb"));
     let mut model = step_model(&mut cpu);
     let mut cache = prefilled;
     let data: List<[ByteList, ByteList]> = [
         [
-            #include_bytes("../tests/models/tiny-gpt2/with-past/test_data_set_0/input_0.pb"),
-            #include_bytes("../tests/models/tiny-gpt2/with-past/test_data_set_0/output_0.pb"),
+            #include_bytes("../models/tiny-gpt2/with-past/test_data_set_0/input_0.pb"),
+            #include_bytes("../models/tiny-gpt2/with-past/test_data_set_0/output_0.pb"),
         ],
         [
-            #include_bytes("../tests/models/tiny-gpt2/with-past/test_data_set_1/input_0.pb"),
-            #include_bytes("../tests/models/tiny-gpt2/with-past/test_data_set_1/output_0.pb"),
+            #include_bytes("../models/tiny-gpt2/with-past/test_data_set_1/input_0.pb"),
+            #include_bytes("../models/tiny-gpt2/with-past/test_data_set_1/output_0.pb"),
         ],
     ];
     for let [i, pair] of data.into_iter().enumerate() {
@@ -169,7 +169,7 @@ test "each step after the prompt computes one position against the cache, as onn
 #[expect_trap]
 test "a mask longer than the prefilled cache's past and the step stops the step" {
     let mut cpu = Cpu {};
-    let [_, cache] = prefill(&mut cpu, #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let [_, cache] = prefill(&mut cpu, #include_bytes("../models/tiny-gpt2/test_data_set_0/input_0.pb"));
     let mut model = step_model(&mut cpu);
     decode(&mut cpu, 11, 5, &cache, &mut model);
 }
@@ -226,16 +226,16 @@ fn merged_model(cpu: &mut Cpu) -> merged::Model<Cpu> {
 test "the prompt and each step after it reproduce onnxruntime's logits through one module" {
     let data: List<[ByteList, ByteList]> = [
         [
-            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_0/input_0.pb"),
-            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_0/output_0.pb"),
+            #include_bytes("../models/tiny-gpt2/merged/test_data_set_0/input_0.pb"),
+            #include_bytes("../models/tiny-gpt2/merged/test_data_set_0/output_0.pb"),
         ],
         [
-            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_1/input_0.pb"),
-            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_1/output_0.pb"),
+            #include_bytes("../models/tiny-gpt2/merged/test_data_set_1/input_0.pb"),
+            #include_bytes("../models/tiny-gpt2/merged/test_data_set_1/output_0.pb"),
         ],
         [
-            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_2/input_0.pb"),
-            #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_2/output_0.pb"),
+            #include_bytes("../models/tiny-gpt2/merged/test_data_set_2/input_0.pb"),
+            #include_bytes("../models/tiny-gpt2/merged/test_data_set_2/output_0.pb"),
         ],
     ];
     let mut cpu = Cpu {};
