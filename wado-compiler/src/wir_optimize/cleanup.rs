@@ -1,7 +1,7 @@
 //! Cleanup and normalization pass for WIR.
 //!
 //! Removes dead locals, nops, redundant `ref.as_non_null`, and dead code after
-//! `Unreachable`. Leaves unnarrowed what an instruction traps on when null, which
+//! an instruction that always diverges. Leaves unnarrowed what an instruction traps on when null, which
 //! turns a non-null read of a nullable slot into a nullable one. Called multiple
 //! times throughout the pipeline as an interpass utility rather than a
 //! standalone optimization.
@@ -126,7 +126,6 @@ impl CleanupVisitor<'_> {
 impl WirMutVisitor for CleanupVisitor<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
         self.walk_body(body);
-        // Remove nops.
         body.retain(|i| !matches!(i, WirInstr::Nop));
         if let Some(pos) = body.iter().position(WirInstr::always_diverges) {
             // Validation takes the end of a block or an `if` as reachable, so
