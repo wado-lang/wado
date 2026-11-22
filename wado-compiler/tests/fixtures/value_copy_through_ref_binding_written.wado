@@ -1,8 +1,9 @@
 // A binding read through a reference shares the referent only while nothing
 // may write it. Each function here writes the referent while the binding is
 // still read: through an aliasing `&mut` parameter, through a callee writing a
-// global the reference points into, through a closure, and through a callee
-// running a closure it is handed, so each copies.
+// global the reference points into, through a closure, through a callee
+// running a closure it is handed, and through a callee writing a reference
+// held in its `&mut` argument, so each copies.
 
 use { println, Stdout } from "core:cli";
 
@@ -50,6 +51,23 @@ fn through_handed_closure(base: &Rec, f: fn mut()) -> String {
     return r.name;
 }
 
+struct Holder {
+    r: &mut Rec,
+}
+
+#[inline(never)]
+fn poke(h: &mut Holder) {
+    h.r.name.push_str("!");
+}
+
+#[inline(never)]
+fn through_held_reference(base: &Rec, other: &mut Rec) -> String {
+    let r = *base;
+    let mut h = Holder { r: other };
+    poke(&mut h);
+    return r.name;
+}
+
 export fn run() with Stdout {
     let mut a = Rec { name: "a" };
     let p: &Rec = &a;
@@ -61,10 +79,13 @@ export fn run() with Stdout {
     let mut d = Rec { name: "d" };
     let s: &Rec = &d;
     let w = through_handed_closure(s, || d.name.push_str("!"));
-    println(`${x} ${y} ${z} ${w} ${a.name} ${HELD.name} ${c.name} ${d.name}`);
+    let mut e = Rec { name: "e" };
+    let t: &Rec = &e;
+    let v = through_held_reference(t, &mut e);
+    println(`${x} ${y} ${z} ${w} ${v} ${a.name} ${HELD.name} ${c.name} ${d.name} ${e.name}`);
 }
 
 __DATA__
 {
-    "stdout": "a g c d a! g! c! d!\n"
+    "stdout": "a g c d e a! g! c! d! e!\n"
 }

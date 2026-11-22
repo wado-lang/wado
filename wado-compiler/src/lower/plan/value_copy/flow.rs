@@ -37,6 +37,7 @@ use crate::tir::{
     GlobalRole, ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
+use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
 use std::collections::VecDeque;
 
@@ -316,7 +317,7 @@ fn minted_by_shape(flat: &FlatPackage, package: &Package<'_>) -> IndexMap<Shape,
         package: &'p Package<'a>,
         out: IndexMap<Shape, IndexSet<u32>>,
     }
-    impl crate::tir_visitor::TirRefVisitor for Mints<'_, '_> {
+    impl TirRefVisitor for Mints<'_, '_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
             let minted = match &expr.kind {
                 TirExprKind::Closure {
@@ -345,11 +346,11 @@ fn minted_by_shape(flat: &FlatPackage, package: &Package<'_>) -> IndexMap<Shape,
     };
     for func in &flat.functions {
         if let Some(body) = &func.borrow().body {
-            crate::tir_visitor::TirRefVisitor::visit_block(&mut mints, body);
+            mints.visit_block(body);
         }
     }
     for global in &flat.globals {
-        crate::tir_visitor::TirRefVisitor::visit_expr(&mut mints, global.init.slot_expr());
+        mints.visit_expr(global.init.slot_expr());
     }
     mints.out
 }
@@ -1003,8 +1004,7 @@ impl<'p, 'a> Body<'p, 'a> {
                     }
                 }
                 let Some(h) = handed[p] else { continue };
-                if self.package.type_table.is_reference(args[p].type_id) && !decl.returns_reference
-                {
+                if decl.reads_out_of(p) {
                     self.g.load(h, result);
                 } else {
                     self.g.copy(h, result);

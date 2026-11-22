@@ -2970,8 +2970,7 @@ pub struct BuiltinDeclaration {
     /// The array parameter whose one element the call reaches, and how.
     pub element_access: Option<(usize, ArrayElementAccess)>,
     /// The declared return type is a reference, so a `part_of_args` result
-    /// names part of what the argument names. A type parameter instantiated
-    /// with a reference returns the value read out of that part instead.
+    /// names part of what the argument names.
     pub returns_reference: bool,
     /// Every call ends in a trap, as a `!` return states.
     pub never_returns: bool,
@@ -2981,6 +2980,16 @@ pub struct BuiltinDeclaration {
 }
 
 impl BuiltinDeclaration {
+    /// Whether a `part_of_args` result from `position` is a value read out of
+    /// what the argument refers to, as `array_get_value(&Array<&X>, i)` reads
+    /// an element. Only a declared reference parameter says so: through a
+    /// type parameter (`black_box<T>(value: T) -> T`) the argument itself
+    /// comes back, a reference or not.
+    #[must_use]
+    pub fn reads_out_of(&self, position: usize) -> bool {
+        self.reference_params.contains(&position) && !self.returns_reference
+    }
+
     /// The declaration `facts` make of a signature shaped as `shape`.
     pub fn new(facts: BuiltinFacts<usize>, shape: DeclarationShape) -> Self {
         let returns = match facts.storage {

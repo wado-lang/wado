@@ -1588,7 +1588,7 @@ impl Builder<'_> {
         if let Some(ReturnConvention::PartOf(params)) = &decl.returns {
             for &p in params {
                 let Some(h) = handed[p] else { continue };
-                if self.type_table.is_reference(args[p].type_id) && !decl.returns_reference {
+                if decl.reads_out_of(p) {
                     self.g.load(h, result);
                 } else {
                     self.g.copy(h, result);
@@ -1835,6 +1835,7 @@ impl Builder<'_> {
                     None => self.opaque_call(&[], &mut args),
                 }
             }
+            TirExprKind::CmRawCall { args, .. } => self.opaque_call(&[], &mut args.iter()),
             TirExprKind::IndirectCall { callee, args } => {
                 let slots = self.fn_slots(callee.type_id);
                 let v = self

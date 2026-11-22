@@ -301,6 +301,9 @@ enum Lands<'a> {
     Local(u32),
     /// What a place, or a handle a call writes through, denotes.
     Place(Locations<'a>),
+    /// What a handle reaches, at any depth: a callee's writes through it that
+    /// no path re-roots may land past the handle's own storage.
+    Reach(Locations<'a>),
 }
 
 /// A materialization that may take its aggregate's storage rather than copy it,
@@ -621,11 +624,13 @@ impl<'a> Analyzer<'a> {
         // parameter, a callee, a global. A write under the same reference root,
         // or into storage of this frame's own, is placed by its path. One under
         // another reference root may alias it, and a path past a reference
-        // field ends anywhere, so only its type can rule either out.
+        // field ends anywhere, so only its type can rule either out. So does a
+        // callee's write landing past the handle it was handed.
         let behind_root = self.reference_locals.contains(&path.root);
         let referent = path.through_ref || behind_root;
         let share_safe = self.mutations.iter().zip(&inputs.at_write).all(|(m, r)| {
             let placed = !path.through_ref
+                && !matches!(m.lands, Lands::Reach(_))
                 && (!behind_root
                     || m.path.root == path.root
                     || !self.reference_locals.contains(&m.path.root));
@@ -637,7 +642,12 @@ impl<'a> Analyzer<'a> {
         }) && !(referent
             && self.opaque_writes.iter().zip(&inputs.at_opaque_write).any(
                 |((written, _), readable)| {
-                    readable.contains(&local) && self.root_reaches_written(path.root, written)
+                    readable.contains(&local)
+                        && self.root_reaches_written(
+                            path.root,
+                            &written.locations,
+                            written.beyond_handed,
+                        )
                 },
             ));
         let root_given_away = inputs
@@ -715,17 +725,18 @@ impl<'a> Analyzer<'a> {
         position: u32,
         live: &IndexSet<u32>,
     ) {
-        let lands = Lands::Place(self.points_to.handed(arg));
+        let handed = self.points_to.handed(arg);
         let writes = self.mod_ref.writes(&func.module_source, &func.name);
         let owner = field_owner(handle.type_id, self.type_table);
         let Names::Place(path) = self.resolver.names(handle) else {
-            self.record_write(handle, lands, false, live);
+            self.record_write(handle, Lands::Reach(handed), false, live);
             return;
         };
         if writes.is_opaque() || !writes.re_rootable_at(position, owner) {
-            self.record_write(handle, lands, false, live);
+            self.record_write(handle, Lands::Reach(handed), false, live);
             return;
         }
+        let lands = Lands::Place(handed);
         for field in writes.fields_of(position, owner) {
             let mut written = path.clone();
             written.selectors.push(Selector::Field {
@@ -744,37 +755,39 @@ impl<'a> Analyzer<'a> {
 
     /// Whether a write landing at `lands` may meet storage `root` reaches.
     fn lands_in_reach(&self, lands: Lands<'_>, root: u32) -> bool {
-        let landed: IndexSet<u32> = match lands {
+        self.root_reaches_written(root, &self.landed(lands), false)
+    }
+
+    /// The locations a write `lands` in.
+    fn landed(&self, lands: Lands<'_>) -> IndexSet<u32> {
+        match lands {
             Lands::Local(local) => self
                 .points_to
                 .location(self.frame, local)
                 .into_iter()
                 .collect(),
             Lands::Place(set) => set.iter().collect(),
-        };
-        self.root_reaches_written(
-            root,
-            &CallWrites {
-                locations: landed,
-                beyond_handed: false,
-            },
-        )
+            Lands::Reach(set) => self.points_to.reach_written(set.iter(), false),
+        }
     }
 
-    /// Whether `written` may meet `root`'s slot, where a `&mut` to it lands, or
+    /// Whether a write to `locations`, or where `beyond_handed` to what the
+    /// globals reach, may meet `root`'s slot, where a `&mut` to it lands, or
     /// storage the value in it reaches. A root the analysis gives no location
     /// reaches anything.
-    fn root_reaches_written(&self, root: u32, written: &CallWrites) -> bool {
+    fn root_reaches_written(
+        &self,
+        root: u32,
+        locations: &IndexSet<u32>,
+        beyond_handed: bool,
+    ) -> bool {
         let Some(slot) = self.points_to.location(self.frame, root) else {
             return true;
         };
-        written.locations.contains(&slot)
-            || self.points_to.reaches_written(
-                self.frame,
-                root,
-                &written.locations,
-                written.beyond_handed,
-            )
+        locations.contains(&slot)
+            || self
+                .points_to
+                .reaches_written(self.frame, root, locations, beyond_handed)
     }
 
     fn is_mutated_root(&self, local: u32) -> bool {
@@ -934,11 +947,11 @@ impl<'a> Analyzer<'a> {
                 // `view.chars().count()` advances the iterator, not `view`.
                 // A reference root's location is its slot, not where its
                 // referent lies.
-                if let Lands::Place(landed) = lands
+                if !matches!(lands, Lands::Local(_))
                     && !path.through_ref
                     && !self.reference_locals.contains(&path.root)
                     && let Some(location) = self.points_to.location(self.frame, path.root)
-                    && !landed.iter().any(|l| l == location)
+                    && !self.landed(lands).contains(&location)
                 {
                     continue;
                 }
@@ -2678,8 +2691,6 @@ impl<'a> Analyzer<'a> {
     /// What a call's evaluation may write from `since` on, the value handed at
     /// `own` aside.
     fn written_since(&self, since: CallStart, own: usize) -> CallWrites {
-        let frame = self.frame;
-        let pt = self.points_to;
         let mut sources: Vec<u32> = Vec::new();
         for (i, handed) in self.handed[since.handed..].iter().enumerate() {
             if since.handed + i != own {
@@ -2687,17 +2698,15 @@ impl<'a> Analyzer<'a> {
             }
         }
         let beyond_handed = self.beyond_handed_writes > since.beyond_handed_writes;
-        let mut written = pt.reach_written(sources, beyond_handed);
+        let mut written = self.points_to.reach_written(sources, beyond_handed);
         for m in &self.mutations[since.mutations..] {
-            match m.lands {
-                Lands::Local(local) => {
-                    written.insert(
-                        pt.location(frame, local)
-                            .expect("the analysis gives every local a body writes a location"),
-                    );
-                }
-                Lands::Place(set) => written.extend(set.iter()),
+            if let Lands::Local(local) = m.lands {
+                assert!(
+                    self.points_to.location(self.frame, local).is_some(),
+                    "the analysis gives every local a body writes a location"
+                );
             }
+            written.extend(self.landed(m.lands));
         }
         CallWrites {
             locations: written,
@@ -3505,10 +3514,12 @@ impl<'a> Analyzer<'a> {
             }
             TirExprKind::CmRawCall { args, .. } => {
                 let start = self.start_call(true);
+                let exprs: Vec<&TirExpr> = args.iter().collect();
                 if record {
+                    self.hand(&exprs);
                     self.note_call_writes(start, |_| false, live);
                 }
-                self.hold_loans(&args.iter().collect::<Vec<_>>(), live);
+                self.hold_loans(&exprs, live);
                 for arg in args.iter().rev() {
                     self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
                 }
