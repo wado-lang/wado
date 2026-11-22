@@ -15,6 +15,7 @@ use {
     FlagsSpec,
     MemberSpec,
     ModuleSpec,
+    NameRegistry,
     NewtypeSpec,
     StructSpec,
     VariantSpec,
@@ -155,7 +156,7 @@ struct Gen {
     /// The schemas named and not declared yet, as `[uri#pointer, name]`.
     pending: List<[String, String]> = [],
     /// The names declared at the module's top level.
-    taken: HashSet<String> = HashSet::new(),
+    taken: NameRegistry = NameRegistry::new(),
     imports: List<String> = [],
     decls: CodeWriter = CodeWriter::new(),
 }
@@ -231,12 +232,13 @@ impl Gen {
         });
     }
 
-    /// `name` for a declaration at the top level, which no other may take.
+    /// `name` for a declaration at the top level, which no other may take, with
+    /// a `_` after a reserved one.
     fn claim(&mut self, name: String, at: &String) -> Result<String, SchemaError> {
-        if !self.taken.insert(name) {
-            return fail(at, `names \`${name}\`, which another declaration takes`);
-        }
-        return Result::Ok(name);
+        return match self.taken.claim(&name, at) {
+            Ok(claimed) => Result::Ok(claimed),
+            Err(_) => fail(at, `names \`${name}\`, which another declaration takes`),
+        };
     }
 
     /// The namespace `module` is imported under: its last segment.
@@ -1066,13 +1068,12 @@ fn members(names: &List<String>, at: &String) -> Result<List<[String, String]>, 
     return Result::Ok(pairs);
 }
 
-/// A declaration's name for `text`: its words in PascalCase, with a `_` after
-/// a reserved one.
+/// A declaration's name for `text`: its words in PascalCase.
 fn decl_name(text: &String, at: &String) -> Result<String, SchemaError> {
     let Some(name) = pascal(text) else {
         return fail(at, `names \`${*text}\`, which has no word to name a declaration by`);
     };
-    return Result::Ok(if is_reserved(name) { `${name}_` } else { name });
+    return Result::Ok(name);
 }
 
 /// A member's or case's name for `text`, which needs only to avoid a keyword,

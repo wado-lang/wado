@@ -162,9 +162,13 @@ run = """
 set -xe -o pipefail
 mkdir -p package-wadopoet/build
 syntax="$(mktemp package-wadopoet/build/syntax.XXXXXX)"
-trap 'rm -f "${syntax}"' EXIT
+out="$(mktemp package-wadopoet/build/vocabulary.XXXXXX)"
+trap 'rm -f "${syntax}" "${out}"' EXIT
 scripts/dev-bin.sh wado syntax --format json -o "${syntax}"
-scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- "${syntax}" > package-wadopoet/src/vocabulary.wado
+# The generator imports the library, which imports the module it rewrites, so
+# that module stays whole until the generator has run.
+scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- "${syntax}" > "${out}"
+mv "${out}" package-wadopoet/src/vocabulary.wado
 """
 
 [tasks.check-minted-names]

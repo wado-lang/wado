@@ -1,0 +1,53 @@
+use { IdGen, NameRegistry } from "./lib.wado";
+
+test "IdGen hands out each id once, from 0" {
+    let mut ids = IdGen::new();
+    assert ids.next() == 0;
+    assert ids.next() == 1;
+    assert ids.next() == 2;
+}
+
+test "a claim takes a free name as it is" {
+    let mut names = NameRegistry::new();
+    assert names.claim("Point", "a.Point") == Ok("Point");
+}
+
+test "a claim of a held name is refused with its owner" {
+    let mut names = NameRegistry::new();
+    names.claim("Point", "a.Point").unwrap();
+    assert names.claim("Point", "b.Point") == Err("a.Point");
+}
+
+test "a claim of a reserved or bound name takes a `_` for each binding it meets" {
+    let mut names = NameRegistry::new();
+    names.bind("build");
+    names.bind("build_");
+    assert names.claim("List", "x") == Ok("List_");
+    assert names.claim("build", "y") == Ok("build__");
+}
+
+test "a renamed claim meeting a held name is refused, whichever came first" {
+    let mut names = NameRegistry::new();
+    names.claim("List_", "a").unwrap();
+    assert names.claim("List", "b") == Err("a");
+    let mut reversed = NameRegistry::new();
+    reversed.claim("List", "b").unwrap();
+    assert reversed.claim("List_", "a") == Err("b");
+}
+
+test "fresh takes the first name past what is reserved, bound or held" {
+    let mut names = NameRegistry::new();
+    names.bind("Slots");
+    assert names.fresh("Slots") == "Slots_";
+    assert names.fresh("Slots") == "Slots__";
+    assert names.fresh("Axis") == "Axis";
+    assert names.fresh("String") == "String_";
+}
+
+test "is_bound reads the language's reservations and the module's bindings" {
+    let mut names = NameRegistry::new();
+    names.bind("compute");
+    assert names.is_bound("compute");
+    assert names.is_bound("fn");
+    assert !names.is_bound("input");
+}

@@ -1,0 +1,73 @@
+//! Minting the names generated source declares.
+
+use { TreeMap, TreeSet } from "core:collections";
+use { is_reserved } from "./vocabulary.wado";
+
+/// A run of ids, each handed out once, for the names a generator suffixes so
+/// two never meet.
+pub struct IdGen {
+    next: i32 = 0,
+}
+
+impl IdGen {
+    pub fn new() -> IdGen {
+        return IdGen {};
+    }
+
+    pub fn next(&mut self) -> i32 {
+        let id = self.next;
+        self.next += 1;
+        return id;
+    }
+}
+
+/// The names one scope of generated source declares, each held by the owner
+/// that claimed it, past those the language reserves and those `bind` adds.
+pub struct NameRegistry {
+    owners: TreeMap<String, String> = TreeMap::new(),
+    bound: TreeSet<String> = TreeSet::new(),
+}
+
+impl NameRegistry {
+    pub fn new() -> NameRegistry {
+        return NameRegistry {};
+    }
+
+    /// Record a name the scope binds itself, such as an import, which a claim
+    /// is renamed past.
+    pub fn bind<S: AsStrSlice>(&mut self, name: S) {
+        self.bound.insert(name.to_string());
+    }
+
+    /// Whether a claim of `name` is renamed: the language reserves it or `bind`
+    /// added it.
+    pub fn is_bound<S: AsStrSlice>(&self, name: S) -> bool {
+        return is_reserved(name) || self.bound.contains_str(name);
+    }
+
+    /// `name` for `owner`, with a `_` after it for each time it is bound, or
+    /// the owner already holding that. A held name is refused rather than
+    /// renamed, so whether two names meet does not hang on which came first.
+    pub fn claim<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, owner: S1) -> Result<String, String> {
+        let mut claimed = name.to_string();
+        while self.is_bound(&claimed) {
+            claimed.push('_');
+        }
+        if let Some(other) = self.owners.get_str(&claimed) {
+            return Err(other);
+        }
+        self.owners[claimed] = owner.to_string();
+        return Ok(claimed);
+    }
+
+    /// The first of `wanted`, `wanted_`, `wanted__`, … that is neither bound nor
+    /// held, held now as its own owner.
+    pub fn fresh<S: AsStrSlice>(&mut self, wanted: S) -> String {
+        let mut name = wanted.to_string();
+        while self.is_bound(&name) || self.owners.contains_key_str(&name) {
+            name.push('_');
+        }
+        self.owners[name] = name;
+        return name;
+    }
+}

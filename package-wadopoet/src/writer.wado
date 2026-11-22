@@ -124,11 +124,10 @@ pub struct CodeWriter {
     cur: Seg,
     indent_level: i32,
     fresh_line: bool,
-    id_counter: i32,
     /// Per open block, whether it is a function body `FnSpec::emit` opened.
     fn_blocks: List<bool> = [],
     hoisted_names: List<[String, String]> = [],
-    hoisted: String = "",
+    hoisted: List<CodeWriter> = [],
 }
 
 impl CodeWriter {
@@ -146,7 +145,6 @@ impl CodeWriter {
             cur: Seg { kind: SegKind::Text, depth: 0 },
             indent_level: 0,
             fresh_line: true,
-            id_counter: 0,
         };
     }
 
@@ -430,27 +428,23 @@ impl CodeWriter {
         self.indent_level -= 1;
     }
 
-    /// Generate a unique ID (replaces manual counter threading).
-    pub fn next_id(&mut self) -> i32 {
-        let id = self.id_counter;
-        self.id_counter += 1;
-        return id;
-    }
-
-    /// The name of a top-level function defined once per distinct `key`: `define`
-    /// renders it from the name, and `write_hoisted` places it.
-    pub fn hoist_fn<S: AsStrSlice, S1: AsStrSlice>(
+    /// The name of a top-level function defined once per distinct `key`:
+    /// `define` writes it, under the name it is handed, into a writer of its
+    /// own, and `write_hoisted` places what it wrote.
+    pub fn hoist_fn<S: AsStrSlice, S1: AsStrSlice, effect E>(
         &mut self,
         key: S,
         prefix: S1,
-        define: fn(&String) -> String,
-    ) -> String {
+        mut define: fn mut(&mut CodeWriter, &String) with E,
+    ) -> String with E {
         if let Some(hit) = self.hoisted_names.iter_ref().find(|kn| kn.0 == key.as_str_slice()) {
             return hit.1;
         }
         let name = `${prefix}${self.hoisted_names.len()}`;
         self.hoisted_names.push([key.to_string(), name]);
-        self.hoisted.push_str(&define(&name));
+        let mut def = CodeWriter::with_capacity(256);
+        define(&mut def, &name);
+        self.hoisted.push(def);
         return name;
     }
 
@@ -462,9 +456,11 @@ impl CodeWriter {
 
     /// Write every definition `hoist_fn` has queued since the last call.
     pub fn write_hoisted(&mut self) {
-        let text = self.hoisted;
-        self.hoisted = "";
-        self.raw(&text);
+        let defs = self.hoisted;
+        self.hoisted = [];
+        for let def of &defs {
+            self.append(def);
+        }
     }
 
     /// Append raw text with no indentation handling.

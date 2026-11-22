@@ -21,7 +21,18 @@ use { constant_patterns, negate_cond, open_chain_arm } from "./gen_util.wado";
 use { gen_visibility_comment } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { literal_const_name } from "./ident.wado";
-use { CodeWriter, FieldSpec, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_range_pat, wado } from "lib:wadopoet";
+use {
+    CodeWriter,
+    FieldSpec,
+    StructSpec,
+    ImplSpec,
+    FnSpec,
+    GlobalSpec,
+    IdGen,
+    Vis,
+    char_range_pat,
+    wado,
+} from "lib:wadopoet";
 use {
     SuperOp,
     gen_super_interface,
@@ -713,7 +724,8 @@ fn gen_lexer_fragment_fn<S: AsStrSlice>(
     sc_name: S,
 ) {
     let rule = find_fragment(all_rules, &frag.key.name).expect("a fragment matcher names no fragment");
-    let e = LexerEmit { all_rules, ci: frag.key.ci, hm };
+    let mut ids = IdGen::new();
+    let e = LexerEmit { all_rules, ci: frag.key.ci, hm, ids: &mut ids };
     emit_lexer_matcher(w, &frag.key.fn_name(), rule, all_rules, hm, sc_name, |w| {
         lexer_matcher_body(w, rule, &frag.plan, &e, ea);
     });
@@ -753,8 +765,9 @@ fn emit_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
     w.blank();
 }
 
-/// What every emit inside one matcher reads and none changes. `hm` says the
-/// grammar has members, so the matcher reads its input through `lx: &Lexer`.
+/// What every emit inside one matcher reads, and the ids its locals are
+/// suffixed with. `hm` says the grammar has members, so the matcher reads its
+/// input through `lx: &Lexer`.
 struct LexerEmit {
     all_rules: &List<LexerRule>,
     ci: bool,
@@ -763,6 +776,7 @@ struct LexerEmit {
     /// walk ends, as ANTLR4 runs a lexer's actions once the token is matched,
     /// so a predicate the replay re-evaluates sees the state the match saw.
     defers_actions: bool = false,
+    ids: &mut IdGen,
 }
 
 /// `rule`'s body under `plan`, returning the end.
@@ -1520,7 +1534,8 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     let Some(plan) = plan else {
         unreachable();
     };
-    let e = LexerEmit { all_rules, ci: resolve_ci(grammar_opts, &rule.options), hm };
+    let mut ids = IdGen::new();
+    let e = LexerEmit { all_rules, ci: resolve_ci(grammar_opts, &rule.options), hm, ids: &mut ids };
     emit_lexer_matcher(w, &fn_name, rule, all_rules, hm, sc_name, |w| lexer_matcher_body(w, rule, plan, &e, ea));
 }
 
@@ -1790,7 +1805,8 @@ fn gen_lexer_apply_replay_body(
     if defers_actions {
         w.line(`let mut ${DEFERRED_ACTIONS}: List<[i32, i32]> = [];`);
     }
-    let e = LexerEmit { all_rules, ci, hm: has_members, defers_actions };
+    let mut ids = IdGen::new();
+    let e = LexerEmit { all_rules, ci, hm: has_members, defers_actions, ids: &mut ids };
     gen_lexer_body(w, &rule.body, &plan, &e, "return", ea, true);
     if defers_actions {
         w.begin(`for let [action, at] of ${DEFERRED_ACTIONS}`);
@@ -2031,7 +2047,7 @@ fn gen_lexer_alts<S: AsStrSlice>(
     // match-only so a losing arm's actions never run, then re-runs just that
     // arm with its actions in place.
     let longest = plan.emit matches { _::MaximalMunch };
-    let id = w.next_id();
+    let id = e.ids.next();
     let p = if replay { "sel" } else { "alts" };
     let saved = `${p}_saved_${id}`;
     let best = `${p}_best_${id}`;
@@ -2313,8 +2329,8 @@ fn gen_lexer_arm_probe<S: AsStrSlice>(
 
 /// The id a probe's locals carry. Only a replay emits a probe, so only a replay
 /// mints one — the match pass keeps the numbering it had.
-fn probe_id(w: &mut CodeWriter, replay: bool) -> i32 {
-    return if replay { w.next_id() } else { 0 };
+fn probe_id(e: &LexerEmit, replay: bool) -> i32 {
+    return if replay { e.ids.next() } else { 0 };
 }
 
 /// How a repeat at `alt.elements[index]` is emitted, and — when the plain
@@ -3475,7 +3491,7 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     ea: bool,
     replay: bool,
 ) {
-    let id = w.next_id();
+    let id = e.ids.next();
     let reach_var = `la_end_${id}`;
     // Which stop won only matters to the replay walk, which re-runs up to it.
     let accept_var: Option<String> = if replay { Option::Some(`accept_${id}`) } else { null };
@@ -3554,7 +3570,7 @@ fn gen_lexer_repeat_stop_peek(
     reach_var: &String,
     ea: bool,
 ) {
-    let tot = `la_tot_${w.next_id()}`;
+    let tot = `la_tot_${e.ids.next()}`;
     w.line(`let mut ${tot}: i32 = -1;`);
     gen_lexer_suffix_peek(w, alt, plan, from, e, &tot, ea);
     w.begin(`if ${tot} >= 0 && ${tot} >= ${*reach_var}`);
@@ -3609,7 +3625,7 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     ea: bool,
     replay: bool,
 ) {
-    let id = w.next_id();
+    let id = e.ids.next();
     w.line(`let la_saved_${id} = pos;`);
     w.line(`let mut la_reach_${id}: i32 = -1;`);
     w.line(`let mut la_win_${id}: i32 = -1;`);
@@ -3674,7 +3690,7 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
     end_var: S,
     ea: bool,
 ) {
-    let id = w.next_id();
+    let id = e.ids.next();
     let save_var = `peek_save_${id}`;
     let label = `peek_${id}`;
     w.line(`let ${save_var} = pos;`);
@@ -3904,11 +3920,12 @@ fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
         return `(char_at(src, pos) matches { ${pattern()} })`;
     }
     let key = cc.ranges.iter_ref().map(|r| `${r.start as u32:x}-${r.end as u32:x}`).collect().join(",");
-    let name = w.hoist_fn(
-        &key,
-        "in_char_set_",
-        |name: &String| `fn ${*name}(c: char) -> bool {\n    return c matches { ${pattern()} };\n}\n\n`,
-    );
+    let name = w.hoist_fn(&key, "in_char_set_", |w, name| {
+        FnSpec::new(*name).add_param("c", "char").set_return_type("bool").emit(w, |w| {
+            w.line(`return c matches { ${pattern()} };`);
+        });
+        w.blank();
+    });
     return `${name}(char_at(src, pos))`;
 }
 
@@ -3921,7 +3938,7 @@ fn gen_lexer_repeat<S: AsStrSlice>(
     ea: bool,
     replay: bool = false,
 ) {
-    let id = w.next_id();
+    let id = e.ids.next();
     let label = if rep.kind matches { _::Optional } { `opt_${id}` } else { `rep_${id}` };
     let break_label = `break ${label}`;
     // An iteration that fails before it moves the cursor leaves nothing to undo.
@@ -3933,7 +3950,7 @@ fn gen_lexer_repeat<S: AsStrSlice>(
         gen_lexer_repeat_iteration(w, rep, inner, e, fail_action, ea, replay, id);
         // The loop's own probe names, minted rather than derived: two iterations
         // in one fn must not share a `rep_probe_`.
-        let loop_id = w.next_id();
+        let loop_id = e.ids.next();
         gen_lexer_repeat_loop(w, rep, inner, e, &label, rewinds, ea, replay, id, loop_id);
     }
     if let _::Optional = rep.kind {
@@ -4058,7 +4075,7 @@ fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
     ea: bool,
     replay: bool,
 ) {
-    let id = w.next_id();
+    let id = e.ids.next();
     let label = `ng_${id}`;
     // The exit try decides which iteration ends the loop, so on the replay path
     // it evaluates the predicates the match evaluated (`probe_ea`); the rest is
@@ -4067,9 +4084,9 @@ fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
     // Each iteration goes through the same bounded form the greedy loop uses, so
     // the replay stops where the match did: an inner carrying an action mutates
     // what the exit try's predicates read, which the match pass never saw.
-    let iter_id = probe_id(w, replay);
+    let iter_id = probe_id(e, replay);
     if let _::Plus = rep.kind {
-        let plus_id = probe_id(w, replay);
+        let plus_id = probe_id(e, replay);
         gen_lexer_repeat_iteration(w, rep, inner, e, fail_action, ea, replay, plus_id);
     }
     // Loop: try matching the rest first (non-greedy), otherwise consume one more
@@ -4106,7 +4123,7 @@ fn gen_lexer_not<S: AsStrSlice>(
     fail_action: S,
     ea: bool,
 ) {
-    let id = w.next_id();
+    let id = e.ids.next();
     let label = `not_${id}`;
     w.line(`if pos >= src.len() { ${fail_action}; }`);
     w.line(`let not_saved_${id} = pos;`);

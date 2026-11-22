@@ -4,7 +4,8 @@
 use { HashMap, HashSet, TreeSet } from "core:collections";
 use { apply_case } from "core:serde";
 use { Extent, solved } from "./extent.wado";
-use { is_bound, module_idents } from "./idents.wado";
+use { module_names } from "./idents.wado";
+use { NameRegistry } from "lib:wadopoet";
 use { Axes, Axis, AxisConflict, Shape } from "./shape.wado";
 use {
     SliceBounds,
@@ -319,7 +320,7 @@ pub fn infer(graph: &Graph) -> Result<Checked, InferError> {
     let axes = scope.axes;
     let mut naming = Naming {
         names: HashMap::new(),
-        taken: module_idents(),
+        taken: module_names(),
         words: HashMap::new(),
     };
     name_axes(graph, &mut scope, &axes, &axes.roots(), &mut naming);
@@ -331,27 +332,17 @@ pub fn infer(graph: &Graph) -> Result<Checked, InferError> {
 /// own among them.
 struct Naming {
     names: HashMap<String, String>,
-    taken: HashSet<String>,
+    taken: NameRegistry,
     words: HashMap<String, String>,
 }
 
 impl Naming {
-    /// `wanted`, or the first name past it that nothing has taken.
-    fn take(&mut self, wanted: String) -> String {
-        let mut name = wanted;
-        while is_bound(&self.taken, &name) {
-            name = `${name}_`;
-        }
-        self.taken.insert(name);
-        return name;
-    }
-
     /// The name the `dim_param` `word` gives a class.
     fn param(&mut self, word: &String) -> String {
         if let Some(name) = self.words.get(*word) {
             return name;
         }
-        let name = self.take(pascal(word));
+        let name = self.taken.fresh(pascal(word));
         self.words[*word] = name;
         return name;
     }
@@ -455,7 +446,7 @@ fn name_root(root: &String, origin: String, axes: &Axes, sources: &mut List<Axis
     }
     let [name, source] = match axes.word(root) {
         Some(w) => [naming.param(&w.word), `dim_param ${w.word} at ${w.tensor}`],
-        null => [naming.take(pascal(&origin)), `minted from ${origin}`],
+        null => [naming.taken.fresh(pascal(&origin)), `minted from ${origin}`],
     };
     naming.names[*root] = name;
     sources.push(AxisName { name, source });

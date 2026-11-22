@@ -6,7 +6,7 @@ use { HashMap, HashSet } from "core:collections";
 use { Graph, Node, QMOE } from "./graph.wado";
 use { Checked, QMOE_DOWN, QMOE_DOWN_ZERO_POINTS, QMOE_UP, QMOE_UP_ZERO_POINTS } from "./infer.wado";
 use { branches_of } from "./lowering.wado";
-use { is_bound, module_idents } from "./idents.wado";
+use { module_names } from "./idents.wado";
 
 /// The operands of a `QMoE` indexed by expert, in the order a pool holds them.
 global EXPERT_OPERANDS: List<i32> = [
@@ -66,9 +66,9 @@ impl ExpertPlan {
             pooled: HashMap::new(),
         };
         let mut layouts: List<String> = [];
-        let mut taken = module_idents();
+        let mut taken = module_names();
         for let axis of *axes {
-            taken.insert(axis);
+            taken.bind(axis);
         }
         for let node of &graph.nodes {
             if node.op != QMOE {
@@ -88,11 +88,7 @@ impl ExpertPlan {
             let at = match layouts.into_iter().position(|l| l == layout) {
                 Some(at) => at,
                 null => {
-                    let mut slots = "ExpertSlots";
-                    while is_bound(&taken, &slots) {
-                        slots = `${slots}_`;
-                    }
-                    taken.insert(slots);
+                    let slots = taken.fresh("ExpertSlots");
                     layouts.push(layout);
                     plan.groups.push(ExpertGroup { layers: [], steps: [], slots });
                     plan.groups.len() - 1;

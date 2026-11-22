@@ -11,11 +11,11 @@ use {
     FnSpec,
     ImplSpec,
     ModuleSpec,
+    NameRegistry,
     StructSpec,
     VariantSpec,
     Vis,
     is_keyword,
-    is_reserved,
 } from "lib:wadopoet";
 use { FIELD_NUMBER_MAX } from "./lib.wado";
 use { EnumDecl, Features, Field, FieldType, MessageDecl, ProtoFile, ScalarType } from "./schema.wado";
@@ -47,11 +47,14 @@ pub fn emit(file: &ProtoFile, module: &ModuleSpec, runtime: String) -> Result<St
     let mut e = Emitter {
         file,
         names: TreeMap::new(),
-        taken: TreeMap::new(),
+        taken: NameRegistry::new(),
         features: TreeMap::new(),
         uses_map: false,
         uses_linear: false,
     };
+    for let imported of [RUNTIME, "TreeMap", "LinearBuffer"] {
+        e.taken.bind(imported);
+    }
     for let decl of &file.messages {
         e.features[decl.path.join(".")] = decl.features;
     }
@@ -443,8 +446,9 @@ struct Emitter {
     file: &ProtoFile,
     /// Keyed by the full protobuf name, package included.
     names: TreeMap<String, Named>,
-    /// Each Wado name handed out, and the protobuf path it went to.
-    taken: TreeMap<String, String>,
+    /// Each Wado name handed out, held by the protobuf path it went to, past
+    /// those the module imports.
+    taken: NameRegistry,
     /// Each message's own `features`, keyed by its dotted path.
     features: TreeMap<String, Features>,
     uses_map: bool,
@@ -467,14 +471,9 @@ impl Emitter {
     }
 
     fn take(&mut self, name: String, owner: String, line: i32) -> Result<String, EmitError> {
-        let name = type_name_of(name);
-        if let Some(other) = self.taken.get_str(&name) {
-            return Result::Err(EmitError::Invalid(
-                `${line}: '${owner}' and '${other}' are both named ${name} once flattened`,
-            ));
-        }
-        self.taken[name] = owner;
-        return Result::Ok(name);
+        return self.taken.claim(&name, &owner).map_err(|other| {
+            return EmitError::Invalid(`${line}: '${owner}' and '${other}' are both named ${name} once flattened`);
+        });
     }
 
     fn plan_enum(&mut self, decl: &EnumDecl) -> Result<EnumPlan, EmitError> {
@@ -835,14 +834,6 @@ fn claim_field_name(
         ));
     }
     return Result::Ok(wado_name);
-}
-
-/// A generated type's name, suffixed where it would shadow what the module imports.
-fn type_name_of(name: String) -> String {
-    if is_reserved(&name) || name == RUNTIME || name == "TreeMap" || name == "LinearBuffer" {
-        return `${name}_`;
-    }
-    return name;
 }
 
 fn field_name_of(name: &String) -> String {

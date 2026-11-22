@@ -7,7 +7,7 @@ use { HashMap, HashSet } from "core:collections";
 use { PlacedExperts } from "./emit_experts.wado";
 use { Extent, Solved, solved } from "./extent.wado";
 use { Graph, Node, is_float } from "./graph.wado";
-use { BACKEND_PARAM, is_bound, module_idents } from "./idents.wado";
+use { BACKEND_PARAM, module_names } from "./idents.wado";
 use { Lowers, Op, Poly } from "./poly.wado";
 use { RowRefusal, SLOTS } from "./rows.wado";
 use { Shape } from "./shape.wado";
@@ -88,17 +88,19 @@ impl Error for EmitError {
 /// axes, then each tensor name sanitized. Two that collide stop the build.
 internal struct Names {
     idents: HashMap<String, String>,
-    reserved: HashSet<String>,
 }
 
 impl Names {
     /// An identifier for each of `tensors`, in the order first seen, past the
-    /// names the module binds and `axes`, which name its marker types.
+    /// names the module binds and `axes`, which name its marker types. A
+    /// tensor's sanitized form is its identifier unless the module binds it;
+    /// those are renamed last, past every other tensor's, so a renaming takes
+    /// none of theirs.
     internal fn of(tensors: List<String>, axes: &List<String>) -> Result<Names, EmitError> {
-        let mut reserved = module_idents();
+        let mut registry = module_names();
         for let axis of *axes {
-            assert !is_bound(&reserved, &axis), "infer names an axis past every name the module declares";
-            reserved.insert(axis);
+            assert !registry.is_bound(&axis), "infer names an axis past every name the module declares";
+            registry.bind(axis);
         }
         let mut sanitized = HashMap::<String, String>::new();
         for let tensor of tensors {
@@ -106,50 +108,25 @@ impl Names {
                 sanitized[tensor] = sanitize(&tensor);
             }
         }
-        let mut claimed = HashSet::<String>::new();
-        for let [_, ident] of sanitized.entries() {
-            claimed.insert(*ident);
-        }
-        let mut names = Names {
-            idents: HashMap::<String, String>::new(),
-            reserved,
-        };
-        let mut taken = HashMap::<String, String>::new();
+        let mut idents = HashMap::<String, String>::new();
         for let [tensor, ident] of sanitized.entries() {
-            names.take(&mut taken, tensor, *ident, &claimed)?;
-        }
-        return Result::Ok(names);
-    }
-
-    /// Mint `tensor`'s identifier from its sanitized form, `ident`. One the
-    /// generated module already binds is renamed past it, past every form some
-    /// tensor sanitizes to, and past every identifier taken before, so the
-    /// renaming takes no other tensor's.
-    fn take(
-        &mut self,
-        taken: &mut HashMap<String, String>,
-        tensor: &String,
-        ident: String,
-        claimed: &HashSet<String>,
-    ) -> Result<(), EmitError> {
-        let mut ident = ident;
-        if is_bound(&self.reserved, &ident) {
-            ident = `${ident}_`;
-            while is_bound(&self.reserved, &ident) || claimed.contains(ident) || taken.contains_key(ident) {
-                ident = `${ident}_`;
+            if registry.is_bound(ident) {
+                continue;
+            }
+            match registry.claim(ident, tensor) {
+                Ok(claimed) => idents[*tensor] = claimed,
+                Err(other) => {
+                    builtin::cold_path();
+                    return Result::Err(EmitError::Collision(NameCollision { tensor: *tensor, other, ident: *ident }));
+                },
             }
         }
-        if let Some(other) = taken.get(ident) {
-            builtin::cold_path();
-            return Result::Err(EmitError::Collision(NameCollision {
-                tensor: *tensor,
-                other,
-                ident,
-            }));
+        for let [tensor, ident] of sanitized.entries() {
+            if registry.is_bound(ident) {
+                idents[*tensor] = registry.fresh(ident);
+            }
         }
-        taken[ident] = *tensor;
-        self.idents[*tensor] = ident;
-        return Result::Ok(());
+        return Result::Ok(Names { idents });
     }
 
     internal fn get(&self, tensor: &String) -> String

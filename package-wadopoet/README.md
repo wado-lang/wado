@@ -96,11 +96,32 @@ and runs nothing first.
 `references()` lists every name the writer still notes or calls. A generator
 that builds tables only for what kept code names asks it after `prune`.
 
-## Reserved Names
+## Minting Names
 
 A name the generator mints from its input must not be reserved. Check it with
 `is_reserved`. An enum case or another qualified name need only avoid
 `is_keyword`.
+
+`NameRegistry` holds the names one scope declares, past the reserved ones and
+those `bind` adds, such as the module's imports. `claim(name, owner)` takes a
+`_` after a bound name and refuses a held one with its owner, so whether two
+names meet does not depend on which came first. `fresh(wanted)` takes the first
+of `wanted`, `wanted_`, … that is free.
+
+```wado
+let mut names = NameRegistry::new();
+names.bind("grog");
+assert names.claim("List", "pkg.List") == Ok("List_");
+assert names.claim("List", "other.List") == Err("pkg.List");
+assert names.fresh("grog") == "grog_";
+```
+
+`IdGen` hands out 0, 1, 2, …, for the locals a generator suffixes so two never
+meet.
+
+`hoist_fn(key, prefix, |w, name| …)` defines a top-level function once per
+distinct `key`. The closure writes it under the name it is handed, and
+`write_hoisted` places what every closure wrote.
 
 ## Escaping with the `wado` Tag
 

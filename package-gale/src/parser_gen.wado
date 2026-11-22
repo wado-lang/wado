@@ -2470,7 +2470,7 @@ fn gen_scan_reserve(w: &mut CodeWriter, duties: &IterationDuties, loop_admits: &
     if duties.reserve_scan.is_empty() {
         return;
     }
-    let gc = ctx.cursor.next_scan_group();
+    let gc = ctx.cursor.next_scan_id();
     open_reserve_decides(w, `rk_${gc}`, "tokens", "pos", loop_admits, ctx);
     gen_reserve_walk(w, &duties.reserve_scan, `rs_${gc}`, `rs_${gc}_ok`, `rsv_${gc}`, ctx);
     gen_scan_rewind_break(w, ctx, "sp", `!rs_${gc}_ok`);
@@ -2514,7 +2514,7 @@ fn gen_scan_op_group<S: AsStrSlice>(
         //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
         // Element failure → break sg_N, falls to fail_stmt.
         // Success → break sg_N_done, skips fail_stmt.
-        let gc = ctx.cursor.next_scan_group();
+        let gc = ctx.cursor.next_scan_id();
         let body = `sg_${gc}`;
         let done = `sg_${gc}_done`;
         let save_var = `sg_${gc}_save`;
@@ -2539,7 +2539,7 @@ fn gen_scan_op_group<S: AsStrSlice>(
         gen_scan_group_decided(w, ge, &branches, ctx, fail_stmt, lenient);
         return;
     }
-    let gc = ctx.cursor.next_scan_group();
+    let gc = ctx.cursor.next_scan_id();
     let gp_var = `gp_${gc}`;
     let best_var = `sg_${gc}_best`;
     let kind_var = `sgk_${gc}`;
@@ -2623,7 +2623,7 @@ fn gen_scan_group_decided<S: AsStrSlice>(
     fail_stmt: S,
     lenient: bool,
 ) {
-    let gc = ctx.cursor.next_scan_group();
+    let gc = ctx.cursor.next_scan_id();
     let gp_var = `gp_${gc}`;
     let done = `sg_${gc}_done`;
     let kind_var = `sgk_${gc}`;
@@ -2766,7 +2766,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
     // Shapes are longest-first. On colliding signatures a failing shape falls
     // through to the next, matching how the parse side scans each shape;
     // otherwise both sides commit to the first match, so no fall-through.
-    let outer = ctx.cursor.next_scan_group();
+    let outer = ctx.cursor.next_scan_id();
     let chain_done = `osl_${outer}_done`;
     let yielding = match &ole.as_repeat {
         Some(re) && scan_enters_while_viable(re) => Option::Some(*re),
@@ -2783,7 +2783,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         w.begin(`if ${gen_scan_lookahead_condition(ctx, sig)}`);
         // A failed shape rewinds: leaving a callee's `-1` in `pos` mis-scans
         // the elements after it and traps their `pos < tokens.len()` guard.
-        let gc = ctx.cursor.next_scan_group();
+        let gc = ctx.cursor.next_scan_id();
         let body = `sol_${gc}`;
         let shape = &ole.bodies[si];
         let elements = &shape.elements;
@@ -2851,7 +2851,7 @@ fn gen_scan_op_elements<S: AsStrSlice>(
         } else {
             flush_proven_run(w, &mut proven_run);
             if gates.is_empty() && let Some(re) = optional_scanning_rest(se, scan_elems, i + 1, end, ctx) {
-                let cont_done = `cont_done_${w.next_id()}`;
+                let cont_done = `cont_done_${ctx.cursor.next_scan_id()}`;
                 w.line(`let mut ${cont_done} = false;`);
                 gen_scan_optional_continuation(w, &re, ctx, &cont_done);
                 w.begin(`if !${cont_done}`);
