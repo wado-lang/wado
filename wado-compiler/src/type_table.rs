@@ -6414,8 +6414,8 @@ impl TypeTable {
 
     /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
     /// [`Self::erase_newtypes_and_flags`]: every `Newtype` collapses to its
-    /// ultimate base and every `Flags` to `u32`, recursively through composite
-    /// types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
+    /// ultimate base, every `Flags` to `u32` and every function row to none,
+    /// recursively through composite types. Lets pre-erasure synthesis (the `StructField::get` bridge helpers) mint a
     /// name that matches the post-erasure call site, whose `field_ty` is
     /// erased.
     pub fn mangle_type_arg_erased(&self, id: TypeId) -> String {
@@ -6451,7 +6451,9 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
             }
-            _ => self.mangle_type_arg_solved(id),
+            _ => self
+                .fq_type_name_spelled_in(id, RowSpelling::Erased)
+                .to_mangled(),
         }
     }
 
@@ -6717,6 +6719,7 @@ impl TypeTable {
                     RowSpelling::Solved => {
                         effects.iter().filter(|e| !e.is_var()).cloned().collect()
                     }
+                    RowSpelling::Erased => Vec::new(),
                 },
             ),
             ResolvedType::InferVar(var) => FqTypeName::infer(*var),
@@ -8020,6 +8023,8 @@ enum RowSpelling {
     Full,
     /// Every effect but a variable.
     Solved,
+    /// No effect: a function type as [`TypeTable::erase_type`] leaves it.
+    Erased,
 }
 
 /// Whether two function types' rows can be one: equal, or one still open. An

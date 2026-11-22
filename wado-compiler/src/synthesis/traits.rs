@@ -1371,7 +1371,7 @@ pub(super) fn generate_read_bridge_helpers(
     ref_struct_type: TypeId,
     span: Span,
 ) -> Vec<TirFunction> {
-    let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
+    let mangled_struct = type_table.borrow().mangle_type_arg_erased(struct_type);
     let mut by_value_type: hashmap::IndexMap<String, Vec<&ReadBridgeMember>> =
         hashmap::IndexMap::default();
     for member in members {
