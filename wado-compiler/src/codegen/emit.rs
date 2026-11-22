@@ -81,11 +81,25 @@ struct WirEmitter<'a> {
     strip_names: bool,
     /// Fine-grained codegen feature flags (from the CLI's `-f <flag>` option).
     codegen_flags: CodegenFlags,
+    /// The module's index of the wide memory, where it defines one: after
+    /// every imported memory, at the `memory64` definition's place.
+    wide_memory_index: Option<u32>,
 }
 
 impl<'a> WirEmitter<'a> {
     fn new(wir: &'a WirPackage, strip_names: bool, codegen_flags: CodegenFlags) -> Self {
+        let imported_memories = wir
+            .imports
+            .iter()
+            .filter(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
+            .count();
+        let wide_memory_index = wir
+            .memories
+            .iter()
+            .position(|m| m.memory64)
+            .map(|defined| u32::try_from(imported_memories + defined).unwrap());
         Self {
+            wide_memory_index,
             wir,
             type_index_map: IndexMap::default(),
             variant_case_types: IndexMap::default(),
@@ -641,20 +655,13 @@ impl<'a> WirEmitter<'a> {
     }
 
     /// The module's index of `memory`. The main memory is the first, imported
-    /// or defined; the wide one is the module's only `memory64` definition.
+    /// or defined.
     fn memory_index(&self, memory: WirMemoryRef) -> u32 {
         match memory {
             WirMemoryRef::Main => 0,
-            WirMemoryRef::Wide => {
-                let imported = self.memory_count() - self.wir.memories.len();
-                let defined = self
-                    .wir
-                    .memories
-                    .iter()
-                    .position(|m| m.memory64)
-                    .expect("a module reaching the wide memory defines it");
-                u32::try_from(imported + defined).unwrap()
-            }
+            WirMemoryRef::Wide => self
+                .wide_memory_index
+                .expect("a module reaching the wide memory defines it"),
         }
     }
 

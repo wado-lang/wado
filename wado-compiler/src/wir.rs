@@ -283,6 +283,13 @@ impl WasmModuleInfo {
         // Globals
         wir.globals.clone_from(&self.globals);
 
+        let mut reached = false;
+        wir.for_each_instr(&mut |instr| reached |= instr.reaches(WirMemoryRef::Wide));
+        assert!(
+            !reached,
+            "a standalone module exports its one memory, so it holds no wide one"
+        );
+
         // Export memory
         wir.exports.push(WirExport {
             name: "memory".to_string(),

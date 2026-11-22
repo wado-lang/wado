@@ -232,7 +232,9 @@ Copies `source[from..<from + count]`, bytes of the wide memory, to
 A fixed-length array of `T` in the wide memory: the module's own memory of
 64-bit addresses, which holds more than the 4 GiB linear memory can. No
 component boundary reaches it, so an array crosses one only through a
-copy into a `LinearArray`.
+copy into a `LinearArray`. `wado serve` keeps each memory of its pooled
+instances within wasmtime's 4 GiB reservation, so there the wide memory
+holds no more than linear memory does.
 
 _Fields are private._
 

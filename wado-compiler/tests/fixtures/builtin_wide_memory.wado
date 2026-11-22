@@ -20,6 +20,9 @@ export fn run() with Stdout {
     println(`moved ${builtin::wide_load::<i64>(16):x} cleared ${builtin::wide_load::<i64>(far)}`);
 
     let p = builtin::realloc(0, 0, 16, 16);
+    builtin::store(p, 0x55 as i64);
+    builtin::wide_store(p as i64, 0x66 as i64);
+    println(`apart ${builtin::load::<i64>(p):x} ${builtin::wide_load::<i64>(p as i64):x}`);
     builtin::store(p, -1 as i64);
     builtin::copy_from_wide(p, 16, 8);
     println(`to linear ${builtin::load::<i64>(p):x}`);
@@ -30,5 +33,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-  "stdout": "far 807060504030201 1.5 byte 2\nmoved 807060504030201 cleared 0\nto linear 807060504030201\nto wide 1122\n"
+  "stdout": "far 807060504030201 1.5 byte 2\nmoved 807060504030201 cleared 0\napart 55 66\nto linear 807060504030201\nto wide 1122\n"
 }

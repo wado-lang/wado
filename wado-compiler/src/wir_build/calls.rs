@@ -638,6 +638,28 @@ impl FunctionTranslator<'_, '_> {
                 memory_load(memory, prim, addr)
             });
         }
+        let copy = {
+            use WirMemoryRef::{Main, Wide};
+            match builtin_name {
+                "memory_copy" => Some([Main, Main]),
+                "wide_memory_copy" => Some([Wide, Wide]),
+                "copy_to_wide" => Some([Wide, Main]),
+                "copy_from_wide" => Some([Main, Wide]),
+                _ => None,
+            }
+        };
+        if let Some([dst_memory, src_memory]) = copy {
+            let dst = self.translate_operand(args[0].expr);
+            let src = self.translate_operand(args[1].expr);
+            let len = self.translate_operand(args[2].expr);
+            return Some(WirInstr::MemoryCopy {
+                dst_memory,
+                src_memory,
+                dst: Box::new(dst),
+                src: Box::new(src),
+                len: Box::new(len),
+            });
+        }
 
         match builtin_name {
             "array_new" => {
@@ -856,27 +878,6 @@ impl FunctionTranslator<'_, '_> {
                     len: Box::new(len),
                 })
             }
-            "memory_copy" | "wide_memory_copy" | "copy_to_wide" | "copy_from_wide" => {
-                use WirMemoryRef::{Main, Wide};
-                let [dst_memory, src_memory] = match builtin_name {
-                    "memory_copy" => [Main, Main],
-                    "wide_memory_copy" => [Wide, Wide],
-                    "copy_to_wide" => [Wide, Main],
-                    "copy_from_wide" => [Main, Wide],
-                    _ => unreachable!(),
-                };
-                let dst = self.translate_operand(args[0].expr);
-                let src = self.translate_operand(args[1].expr);
-                let len = self.translate_operand(args[2].expr);
-                Some(WirInstr::MemoryCopy {
-                    dst_memory,
-                    src_memory,
-                    dst: Box::new(dst),
-                    src: Box::new(src),
-                    len: Box::new(len),
-                })
-            }
-
             "unreachable" => Some(WirInstr::Unreachable),
             "select" => {
                 let cond = self.translate_operand(args[0].expr);

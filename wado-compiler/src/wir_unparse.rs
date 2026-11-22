@@ -1987,11 +1987,7 @@ impl<'a> WirUnparser<'a> {
 
     fn write_binop(&mut self, name: &str, a: &WirInstr, b: &WirInstr) {
         self.write(name);
-        self.write("(");
-        self.unparse_instr_inline(a);
-        self.write(", ");
-        self.unparse_instr_inline(b);
-        self.write(")");
+        self.write_args(&[a, b]);
     }
 
     /// Write `a op b` using infix operator syntax.
@@ -2014,9 +2010,7 @@ impl<'a> WirUnparser<'a> {
 
     fn write_unop(&mut self, name: &str, a: &WirInstr) {
         self.write(name);
-        self.write("(");
-        self.unparse_instr_inline(a);
-        self.write(")");
+        self.write_args(&[a]);
     }
 
     /// `builtin::name`, `wide_` before the name on the wide memory.
@@ -2030,12 +2024,7 @@ impl<'a> WirUnparser<'a> {
 
     fn write_args(&mut self, args: &[&WirInstr]) {
         self.write("(");
-        for (i, arg) in args.iter().enumerate() {
-            if i > 0 {
-                self.write(", ");
-            }
-            self.unparse_instr_inline(arg);
-        }
+        self.comma_sep(args, |s, arg| s.unparse_instr_inline(arg));
         self.write(")");
     }
 
