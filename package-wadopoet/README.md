@@ -12,8 +12,7 @@ body is plain lines.
 
 A spec builds one declaration and emits it into a writer: `StructSpec`,
 `VariantSpec`, `EnumSpec`, `FlagsSpec`, `NewtypeSpec`, `GlobalSpec`, `FnSpec`
-and `ImplSpec`. `FnSpec` and `ImplSpec` open a block with `emit_begin`, which
-the caller fills and closes with `end`. Every spec is built the same way:
+and `ImplSpec`. Every spec is built the same way:
 
 - `new(name, vis)` creates it. `vis` defaults to file-private.
 - `set_doc` sets the doc comment and `add_attr` adds an attribute.
@@ -24,6 +23,11 @@ the caller fills and closes with `end`. Every spec is built the same way:
   comment or attributes.
 
 Every setter returns the spec, so calls chain.
+
+`emit(w)` writes the declaration. `FnSpec` and `ImplSpec` take the body as a
+closure too, `emit(w, |w| …)`, which writes it into the writer it is handed and
+returns nothing. Compute what may fail before the declaration, not inside the
+closure.
 
 ```wado
 use { CodeWriter, FieldSpec, FnSpec, StructSpec, Vis } from "lib:wadopoet";
@@ -36,9 +40,9 @@ s.add_field_spec(FieldSpec { name: "label", type_str: "String", default: Option:
 s.emit(&mut w);
 w.blank();
 
-FnSpec::new("sum").add_param("p", "&Point").set_return_type("i32").emit_begin(&mut w);
-w.line("return p.x + p.y;");
-w.end();
+FnSpec::new("sum").add_param("p", "&Point").set_return_type("i32").emit(&mut w, |w| {
+    w.line("return p.x + p.y;");
+});
 
 let source = w.to_string();
 ```

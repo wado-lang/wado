@@ -268,9 +268,7 @@ impl Prepared {
         for let axis of &self.axes {
             StructSpec::new(*axis, Vis::Pub).emit(&mut w);
             if let Some(extent) = fixed.get(*axis) {
-                ImplSpec::new(*axis).emit_begin(&mut w);
-                w.line(`pub const EXTENT: i32 = ${extent};`);
-                w.end();
+                ImplSpec::new(*axis).emit(&mut w, |w| w.line(`pub const EXTENT: i32 = ${extent};`));
             }
         }
         emit_weights(&mut w, graph, checked, names, &self.kept, placement, &self.experts);
@@ -494,34 +492,36 @@ fn emit_weights(
     w.blank();
     weights.set_doc("The graph's initializers, held on the host as the graph holds them.").emit(w);
     w.blank();
-    ImplSpec::new("Weights").emit_begin(w);
     let mut hosts = HashMap::<String, String>::new();
     for let vi of &graph.initializers {
         hosts[vi.name] = `HostWeight::of(&self.${names.get(&vi.name)})`;
     }
-    FnSpec::new("params", Vis::Pub)
-        .set_doc("These weights as tensors of the graph `backend` builds.")
-        .add_generic(BACKEND_BOUND)
-        .set_receiver("&self")
-        .add_param("backend", `&mut ${BACKEND_PARAM}`)
-        .set_return_type(PARAMS_TYPE)
-        .add_effect("_")
-        .emit_begin(w);
-    let pools = if experts.groups.is_empty() {
-        "[]";
-    } else {
-        w.begin("let pools = HeldExperts::resident(expert_layouts(|at| Result::Ok(ExpertBytes::Held(match at");
-        for let [at, vi] of pooled_initializers(graph, experts) {
-            w.line(`${at} => ${hosts[vi.name]}.stored_bytes(),`);
-        }
-        w.line("_ => unreachable(),");
-        w.end_with("))).unwrap()).pools(backend, &Unread {});");
-        "pools";
-    };
-    emit_held_call(w, graph, experts, &hosts, false, pools);
-    w.line("return weights;");
-    w.end();
-    w.end();
+    ImplSpec::new("Weights").emit(w, |w| {
+        FnSpec::new("params", Vis::Pub)
+            .set_doc("These weights as tensors of the graph `backend` builds.")
+            .add_generic(BACKEND_BOUND)
+            .set_receiver("&self")
+            .add_param("backend", `&mut ${BACKEND_PARAM}`)
+            .set_return_type(PARAMS_TYPE)
+            .add_effect("_")
+            .emit(w, |w| {
+                let pools = if experts.groups.is_empty() {
+                    "[]";
+                } else {
+                    w.begin(
+                        "let pools = HeldExperts::resident(expert_layouts(|at| Result::Ok(ExpertBytes::Held(match at",
+                    );
+                    for let [at, vi] of pooled_initializers(graph, experts) {
+                        w.line(`${at} => ${hosts[vi.name]}.stored_bytes(),`);
+                    }
+                    w.line("_ => unreachable(),");
+                    w.end_with("))).unwrap()).pools(backend, &Unread {});");
+                    "pools";
+                };
+                emit_held_call(w, graph, experts, &hosts, false, pools);
+                w.line("return weights;");
+            });
+    });
     w.blank();
     params.set_doc("The graph's initializers as tensors of the graph `build` adds operations to.").emit(w);
     emit_constructor(w, graph, checked, placement, experts);
@@ -552,15 +552,6 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
     let position = |name: &String| graph.initializers.into_iter().position(|vi| vi.name == *name).unwrap();
     let mut first = held_initializers(graph, experts).len() + kept.len();
     let mut layouts: List<String> = [];
-    w.blank();
-    FnSpec::new("expert_layouts")
-        .set_doc(
-            "Each layout of pools, every layer's expert weights where `placed` finds\nthe initializer at each position.",
-        )
-        .add_param("placed", "fn(i32) -> Result<ExpertBytes, LoadError> with _")
-        .set_return_type("Result<List<ExpertLayout>, LoadError>")
-        .add_effect("_")
-        .emit_begin(w);
     for let group of &experts.groups {
         let mut layers: List<String> = [];
         for let layer of &group.layers {
@@ -587,8 +578,15 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
             )}], experts: ${x} }`,
         );
     }
-    w.line(`return Result::Ok([${layouts.join(", ")}]);`);
-    w.end();
+    w.blank();
+    FnSpec::new("expert_layouts")
+        .set_doc(
+            "Each layout of pools, every layer's expert weights where `placed` finds\nthe initializer at each position.",
+        )
+        .add_param("placed", "fn(i32) -> Result<ExpertBytes, LoadError> with _")
+        .set_return_type("Result<List<ExpertLayout>, LoadError>")
+        .add_effect("_")
+        .emit(w, |w| w.line(`return Result::Ok([${layouts.join(", ")}]);`));
 }
 
 /// A tensor as the backend holds it.
@@ -620,7 +618,6 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
     block.add_generic(BACKEND_BOUND);
-    block.emit_begin(w);
     if loads {
         // Where the weights are, and what `load` checks of its files before
         // reading a weight out of one.
@@ -673,48 +670,51 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
             .add_param("source", `&${SOURCE_PARAM}`)
             .set_return_type(`Result<${PARAMS_TYPE}, LoadError>`)
             .add_effect("_");
-        if pooled {
-            load.emit_begin(w);
-            w.line("return Result::Ok(Params::loaded(backend, source, i64::MAX)?.0);");
-            w.end();
-            w.blank();
-            FnSpec::new("loaded")
-                .set_doc(
-                    `The weights, those the graph does not carry read from ${doc}, and the\nexperts their pools hold within \`budget\` bytes.`,
-                )
-                .add_generic(SOURCE_BOUND)
-                .add_param("backend", `&mut ${BACKEND_PARAM}`)
-                .add_param("source", `&${SOURCE_PARAM}`)
-                .add_param("budget", "i64")
-                .set_return_type(`Result<[${PARAMS_TYPE}, HeldExperts], LoadError>`)
-                .add_effect("_")
-                .emit_begin(w);
-        } else {
-            load.emit_begin(w);
-        }
-        for let line of firsts {
-            w.line(line);
-        }
-        let pools = if pooled {
-            w.begin("let mut experts = HeldExperts::within(expert_layouts(|at| Result::Ok(match at");
-            for let [at, vi] of pooled_initializers(graph, experts) {
-                let bytes = match vi.data {
-                    Some(_) => `ExpertBytes::Held(${EMBEDDED_DATA}(${at}))`,
-                    null => `ExpertBytes::File(${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)})`,
-                };
-                w.line(`${at} => ${bytes},`);
+        let reads = |w: &mut CodeWriter| {
+            for let line of firsts {
+                w.line(line);
             }
-            w.line("_ => unreachable(),");
-            w.end_with("))?, budget)?;");
-            w.line("let pools = experts.pools(backend, source);");
-            "pools";
-        } else {
-            "[]";
+            let pools = if pooled {
+                w.begin("let mut experts = HeldExperts::within(expert_layouts(|at| Result::Ok(match at");
+                for let [at, vi] of pooled_initializers(graph, experts) {
+                    let bytes = match vi.data {
+                        Some(_) => `ExpertBytes::Held(${EMBEDDED_DATA}(${at}))`,
+                        null => `ExpertBytes::File(${expert_place(&expected(&vi, &checked.shapes[vi.name]), placement)})`,
+                    };
+                    w.line(`${at} => ${bytes},`);
+                }
+                w.line("_ => unreachable(),");
+                w.end_with("))?, budget)?;");
+                w.line("let pools = experts.pools(backend, source);");
+                "pools";
+            } else {
+                "[]";
+            };
+            emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), true, pools);
+            w.line(if pooled { "return Result::Ok([weights, experts]);" } else { "return Result::Ok(weights);" });
         };
-        emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), true, pools);
-        w.line(if pooled { "return Result::Ok([weights, experts]);" } else { "return Result::Ok(weights);" });
-        w.end();
-        w.end();
+        block.emit(
+            w,
+            |w| {
+                if !pooled {
+                    load.emit(w, reads);
+                    return;
+                }
+                load.emit(w, |w| w.line("return Result::Ok(Params::loaded(backend, source, i64::MAX)?.0);"));
+                w.blank();
+                FnSpec::new("loaded")
+                    .set_doc(
+                        `The weights, those the graph does not carry read from ${doc}, and the\nexperts their pools hold within \`budget\` bytes.`,
+                    )
+                    .add_generic(SOURCE_BOUND)
+                    .add_param("backend", `&mut ${BACKEND_PARAM}`)
+                    .add_param("source", `&${SOURCE_PARAM}`)
+                    .add_param("budget", "i64")
+                    .set_return_type(`Result<[${PARAMS_TYPE}, HeldExperts], LoadError>`)
+                    .add_effect("_")
+                    .emit(w, reads);
+            },
+        );
         if pooled {
             emit_model_constructor(
                 w,
@@ -731,30 +731,33 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
     }
     let mut embedded = FnSpec::new("embedded", Vis::Pub);
     embedded.add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(PARAMS_TYPE).add_effect("_");
+    let hosts = held_hosts(graph, checked, placement, experts);
     if experts.groups.is_empty() {
-        embedded.set_doc("The weights the graph carries.").emit_begin(w);
-        emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "[]");
-        w.line("return weights;");
-        w.end();
-        w.end();
+        block.emit(w, |w| {
+            embedded.set_doc("The weights the graph carries.").emit(w, |w| {
+                emit_held_call(w, graph, experts, &hosts, false, "[]");
+                w.line("return weights;");
+            });
+        });
         return;
     }
-    embedded.set_doc("The weights the graph carries.\nIts pools hold every expert.").emit_begin(w);
-    w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}));`);
-    w.end();
-    w.blank();
-    FnSpec::new("embedded_within")
-        .set_doc("The weights the graph carries, the experts as many as `experts` holds.")
-        .add_param("backend", `&mut ${BACKEND_PARAM}`)
-        .add_param("experts", "&mut HeldExperts")
-        .set_return_type(PARAMS_TYPE)
-        .add_effect("_")
-        .emit_begin(w);
-    w.line("let pools = experts.pools(backend, &Unread {});");
-    emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "pools");
-    w.line("return weights;");
-    w.end();
-    w.end();
+    block.emit(w, |w| {
+        embedded.set_doc("The weights the graph carries.\nIts pools hold every expert.").emit(w, |w| {
+            w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}));`);
+        });
+        w.blank();
+        FnSpec::new("embedded_within")
+            .set_doc("The weights the graph carries, the experts as many as `experts` holds.")
+            .add_param("backend", `&mut ${BACKEND_PARAM}`)
+            .add_param("experts", "&mut HeldExperts")
+            .set_return_type(PARAMS_TYPE)
+            .add_effect("_")
+            .emit(w, |w| {
+                w.line("let pools = experts.pools(backend, &Unread {});");
+                emit_held_call(w, graph, experts, &hosts, false, "pools");
+                w.line("return weights;");
+            });
+    });
     emit_model_constructor(
         w,
         "embedded",
@@ -789,7 +792,6 @@ fn emit_model_constructor(
     if source == SOURCE_PARAM {
         block.add_generic(SOURCE_BOUND);
     }
-    block.emit_begin(w);
     let mut spec = FnSpec::new(name, Vis::Pub);
     spec.set_doc(
         `A model of ${doc}, its pools holding as many experts as \`budget\` bytes\nhold, and filling a slot with another as a pass picks it.`,
@@ -798,13 +800,15 @@ fn emit_model_constructor(
     for let [ident, ty] of params {
         spec.add_param(ident, ty);
     }
-    spec.add_param("budget", "i64").set_return_type(`Result<${model}, LoadError>`).add_effect("_").emit_begin(w);
-    for let line of lines {
-        w.line(line);
-    }
-    w.line(`return Result::Ok(${MODEL} { weights, programs: Programs::new(), experts, source });`);
-    w.end();
-    w.end();
+    spec.add_param("budget", "i64").set_return_type(`Result<${model}, LoadError>`).add_effect("_");
+    block.emit(w, |w| {
+        spec.emit(w, |w| {
+            for let line of lines {
+                w.line(line);
+            }
+            w.line(`return Result::Ok(${MODEL} { weights, programs: Programs::new(), experts, source });`);
+        });
+    });
 }
 
 /// The `HostWeight` of each initializer `Params` holds as it is: its bytes the
@@ -864,14 +868,14 @@ fn emit_embedded_data(w: &mut CodeWriter, graph: &Graph) {
         .set_doc("The bytes of the weight at each position among the initializers the graph carries.")
         .add_param("at", "i32")
         .set_return_type("ByteList")
-        .emit_begin(w);
-    w.begin("return match at");
-    for let arm of arms {
-        w.line(arm);
-    }
-    w.line("_ => unreachable(),");
-    w.end_with(";");
-    w.end();
+        .emit(w, |w| {
+            w.begin("return match at");
+            for let arm of arms {
+                w.line(arm);
+            }
+            w.line("_ => unreachable(),");
+            w.end_with(";");
+        });
 }
 
 /// The call reading a tensor's stored `primitive` elements out of the source
@@ -1041,14 +1045,14 @@ outputs read back cut to their lengths, run as the program the backend
 compiled for the capacities.${room_note}`,
     );
     w.blank();
-    compute.emit_begin(w);
-    if decoding matches { Some(_) } {
-        w.line(`refuse(unmet(room as i64, "room must not be negative"));`);
-    }
-    for let line of entry_lines(context, &symbols, &lines) {
-        w.line(&line);
-    }
-    w.end();
+    compute.emit(w, |w| {
+        if decoding matches { Some(_) } {
+            w.line(`refuse(unmet(room as i64, "room must not be negative"));`);
+        }
+        for let line of entry_lines(context, &symbols, &lines) {
+            w.line(&line);
+        }
+    });
     emit_recorded(w, names, &taken_args, first_weight, &returned, crossing, !chosen.is_empty(), false);
     emit_least_extents(w, checked, carriers, names, owed, padded, &taken_args, per_row)?;
     emit_held(w, graph, checked, kept, context.experts, first_weight, least);
@@ -1444,7 +1448,6 @@ token's among them, and the cache the ones before it.";
         },
     );
     w.blank();
-    decode.emit_begin(w);
     let [rows_axis, ids_axis] = [checked.shapes[axes.ids].axes[0], checked.shapes[axes.ids].axes[1]];
     let mut body: List<String> = [
         `refuse(unmet(steps as i64 - 1, "decode takes at least one step"));`,
@@ -1462,10 +1465,11 @@ token's among them, and the cache the ones before it.";
     body.push("}");
     body.extend(&apart_checks);
     body.extend(&lines);
-    for let line of entry_lines(context, &symbols, &body) {
-        w.line(&line);
-    }
-    w.end();
+    decode.emit(w, |w| {
+        for let line of entry_lines(context, &symbols, &body) {
+            w.line(&line);
+        }
+    });
     // Both entries run one program, which `decode` emits.
     if !apart {
         emit_decoded(w, context, axes, &taken, chooses)?;
@@ -1563,27 +1567,6 @@ and whether a request is in it. The cache is kept through these calls.",
     w.blank();
     let mut held = ImplSpec::new(`${REQUESTS}<${bk}>`);
     held.add_generic(BACKEND_BOUND);
-    held.emit_begin(w);
-    FnSpec::new("new", Vis::Pub)
-        .set_doc("`slots` empty slots of `capacity` positions, each a capacity of its own.")
-        .add_param("backend", `&mut ${bk}`)
-        .add_param("slots", "i32")
-        .add_param("capacity", "i32")
-        .set_return_type(`${REQUESTS}<${bk}>`)
-        .add_effect("_")
-        .emit_begin(w);
-    w.line(
-        `assert capacity_of(slots) == slots && capacity_of(capacity) == capacity, "a slot count and a capacity are each one capacity_of gives";`,
-    );
-    w.begin(`return ${REQUESTS}`);
-    w.line(`cache: zeroed_fields(backend, &[${empties.join(", ")}]),`);
-    w.line("pasts: List::<i64>::filled(slots, 0),");
-    w.line("tokens: List::<i64>::filled(slots, 0),");
-    w.line("active: List::<bool>::filled(slots, false),");
-    w.line("capacity,");
-    w.end_with(";");
-    w.end();
-    w.blank();
     let mut place = FnSpec::new("place", Vis::Pub);
     place.set_doc(
         "Runs a request's prompt alone through `compute` and puts it in `slot`:
@@ -1599,31 +1582,7 @@ returns.",
         place.add_param_spec(*p);
     }
     place.add_param("sampling", "&Sampling").add_param("model", `&mut ${MODEL_TYPE}`);
-    place.set_return_type("i64").add_effect("_").emit_begin(w);
-    w.line(`assert !self.active[slot], "a request is placed in an empty slot";`);
-    w.line("retain_fields(backend, &self.cache);");
-    w.line(`let passed = compute(backend, ${compute_args.join(", ")}, &${CACHE}::empty(backend, 1), 0, model);`);
-    w.line(`let past = ${mask}.extents[1] as i64;`);
-    w.line(`assert past < self.capacity as i64, "a prompt leaves its slot a position for its steps";`);
-    w.line(`let at = shared::<${bk}>(backend, &scalar::<${bk}, i64>(backend, slot as i64));`);
-    w.line(`self.cache = written_fields(backend, &self.cache, &passed.cache, &[${grown_indices.join(", ")}], &at);`);
-    w.line(`let token = sampling.first_tokens(&passed.${logits}, past)[0];`);
-    w.line("self.pasts[slot] = past;");
-    w.line("self.tokens[slot] = token;");
-    w.line("self.active[slot] = true;");
-    w.line("return token;");
-    w.end();
-    w.blank();
-    FnSpec::new("release", Vis::Pub)
-        .set_doc("Empties `slot`. Its row goes on running, and no one reads it.")
-        .set_receiver("&mut self")
-        .add_param("slot", "i32")
-        .emit_begin(w);
-    w.line("self.pasts[slot] = 0;");
-    w.line("self.tokens[slot] = 0;");
-    w.line("self.active[slot] = false;");
-    w.end();
-    w.blank();
+    place.set_return_type("i64").add_effect("_");
     let mut decode = FnSpec::new("decode", Vis::Pub);
     decode.set_doc(
         "`steps` tokens after each slot's last, by slot, every slot in one call.\nAn empty slot's are of no request.",
@@ -1633,28 +1592,91 @@ returns.",
         decode.add_param_spec(*p);
     }
     decode.add_param("steps", "i32").add_param("sampling", "&Sampling").add_param("model", `&mut ${MODEL_TYPE}`);
-    decode.set_return_type("Tensor<i64, [Slots, Picks]>").add_effect("_").emit_begin(w);
-    w.line("let slots = self.pasts.len();");
-    w.line(`let ids = ${ids_type} { data: self.tokens, extents: [slots, 1] };`);
-    w.line("let mut open: List<i64> = [];");
-    w.begin("for let past of self.pasts");
-    w.line("open.extend(&List::<i64>::filled(to_extent(past + 1), 1));");
-    w.line("open.extend(&List::<i64>::filled(self.capacity - to_extent(past + 1), 0));");
-    w.end();
-    w.line(`let mask = ${mask_type} { data: open, extents: [slots, self.capacity] };`);
-    w.line(
-        `let decoded = ${DECODE_ROWS}(backend, ${decode_args.join(", ")}, &self.cache, &self.pasts, steps, sampling, model);`,
+    decode.set_return_type("Tensor<i64, [Slots, Picks]>").add_effect("_");
+    held.emit(
+        w,
+        |w| {
+            FnSpec::new("new", Vis::Pub)
+                .set_doc("`slots` empty slots of `capacity` positions, each a capacity of its own.")
+                .add_param("backend", `&mut ${bk}`)
+                .add_param("slots", "i32")
+                .add_param("capacity", "i32")
+                .set_return_type(`${REQUESTS}<${bk}>`)
+                .add_effect("_")
+                .emit(
+                    w,
+                    |w| {
+                        w.line(
+                            `assert capacity_of(slots) == slots && capacity_of(capacity) == capacity, "a slot count and a capacity are each one capacity_of gives";`,
+                        );
+                        w.begin(`return ${REQUESTS}`);
+                        w.line(`cache: zeroed_fields(backend, &[${empties.join(", ")}]),`);
+                        w.line("pasts: List::<i64>::filled(slots, 0),");
+                        w.line("tokens: List::<i64>::filled(slots, 0),");
+                        w.line("active: List::<bool>::filled(slots, false),");
+                        w.line("capacity,");
+                        w.end_with(";");
+                    },
+                );
+            w.blank();
+            place.emit(
+                w,
+                |w| {
+                    w.line(`assert !self.active[slot], "a request is placed in an empty slot";`);
+                    w.line("retain_fields(backend, &self.cache);");
+                    w.line(
+                        `let passed = compute(backend, ${compute_args.join(", ")}, &${CACHE}::empty(backend, 1), 0, model);`,
+                    );
+                    w.line(`let past = ${mask}.extents[1] as i64;`);
+                    w.line(`assert past < self.capacity as i64, "a prompt leaves its slot a position for its steps";`);
+                    w.line(`let at = shared::<${bk}>(backend, &scalar::<${bk}, i64>(backend, slot as i64));`);
+                    w.line(`self.cache = written_fields(backend, &self.cache, &passed.cache, &[${grown_indices.join(
+                        ", ",
+                    )}], &at);`);
+                    w.line(`let token = sampling.first_tokens(&passed.${logits}, past)[0];`);
+                    w.line("self.pasts[slot] = past;");
+                    w.line("self.tokens[slot] = token;");
+                    w.line("self.active[slot] = true;");
+                    w.line("return token;");
+                },
+            );
+            w.blank();
+            FnSpec::new("release", Vis::Pub)
+                .set_doc("Empties `slot`. Its row goes on running, and no one reads it.")
+                .set_receiver("&mut self")
+                .add_param("slot", "i32")
+                .emit(w, |w| {
+                    w.line("self.pasts[slot] = 0;");
+                    w.line("self.tokens[slot] = 0;");
+                    w.line("self.active[slot] = false;");
+                });
+            w.blank();
+            decode.emit(
+                w,
+                |w| {
+                    w.line("let slots = self.pasts.len();");
+                    w.line(`let ids = ${ids_type} { data: self.tokens, extents: [slots, 1] };`);
+                    w.line("let mut open: List<i64> = [];");
+                    w.begin("for let past of self.pasts");
+                    w.line("open.extend(&List::<i64>::filled(to_extent(past + 1), 1));");
+                    w.line("open.extend(&List::<i64>::filled(self.capacity - to_extent(past + 1), 0));");
+                    w.end();
+                    w.line(`let mask = ${mask_type} { data: open, extents: [slots, self.capacity] };`);
+                    w.line(
+                        `let decoded = ${DECODE_ROWS}(backend, ${decode_args.join(", ")}, &self.cache, &self.pasts, steps, sampling, model);`,
+                    );
+                    w.line("self.cache = decoded.cache;");
+                    w.begin("for let slot of 0..<slots");
+                    w.begin("if self.active[slot]");
+                    w.line("self.pasts[slot] += steps as i64;");
+                    w.line("self.tokens[slot] = decoded.tokens.data[slot * steps + steps - 1];");
+                    w.end();
+                    w.end();
+                    w.line("return decoded.tokens;");
+                },
+            );
+        },
     );
-    w.line("self.cache = decoded.cache;");
-    w.begin("for let slot of 0..<slots");
-    w.begin("if self.active[slot]");
-    w.line("self.pasts[slot] += steps as i64;");
-    w.line("self.tokens[slot] = decoded.tokens.data[slot * steps + steps - 1];");
-    w.end();
-    w.end();
-    w.line("return decoded.tokens;");
-    w.end();
-    w.end();
 }
 
 /// `decoded`: [`build`] run a step at a time around the sampler, each step's
@@ -1714,40 +1736,24 @@ fn emit_decoded(
     decoded.set_doc(
         "[`build`] a step at a time, each step's token the next's input: the tokens\npicked, by row, and the cache after the last step.",
     );
-    w.blank();
-    decoded.emit_begin(w);
-    let count = carried.len();
-    w.line(`let mut start: List<Any<${bk}>> = [${start.join(", ")}];`);
-    w.line("start.extend(&decoding.carried(backend));");
-    w.begin("let last = backend.repeated(&decoding.steps, &start, |step, state|");
-    w.line(`let held: ${CACHE}<${bk}> = restored_fields(backend, state, ${first_cached});`);
-    if !read.is_empty() {
-        let mut fields: List<String> = [];
-        for let symbol of *read {
-            let ident = names.get(&symbol_key(&symbol));
-            fields.push(
-                if moves_a_step(&symbol, &axes.total, owed)? {
-                    if per_row {
-                        `${ident}: row_binary::<${bk}>(backend, Binary::Add, &lengths.${ident}, &shared::<${bk}>(backend, step))`;
-                    } else {
-                        `${ident}: backend.binary::<i64, []>(Binary::Add, &lengths.${ident}, step)`;
-                    }
+    let mut moved: List<String> = [];
+    for let symbol of *read {
+        let ident = names.get(&symbol_key(&symbol));
+        moved.push(
+            if moves_a_step(&symbol, &axes.total, owed)? {
+                if per_row {
+                    `${ident}: row_binary::<${bk}>(backend, Binary::Add, &lengths.${ident}, &shared::<${bk}>(backend, step))`;
                 } else {
-                    `${ident}: lengths.${ident}`;
-                },
-            );
-        }
-        w.line(`let moved = ${LENGTHS}::<${bk}> { ${fields.join(", ")} };`);
+                    `${ident}: backend.binary::<i64, []>(Binary::Add, &lengths.${ident}, step)`;
+                }
+            } else {
+                `${ident}: lengths.${ident}`;
+            },
+        );
     }
-    w.line(`let passed = build(${build_arguments.join(", ")});`);
+    let count = carried.len();
     let logits = `passed.${names.get(&axes.logits)}`;
-    w.line(`let tokens = typed::<${bk}, i64, [Slots, Picks]>(backend, &state[${count}]);`);
-    w.line(`let finished = typed::<${bk}, bool, [Slots]>(backend, &state[${count + 1}]);`);
     let logits_axes = axis_list(&checked.shapes[axes.logits]);
-    w.line(
-        `let next = stepped::<${bk}, ${checked.primitives[axes.logits]}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
-    );
-    w.line(`let at = row_binary::<${bk}>(backend, Binary::Add, &decoding.position, &shared::<${bk}>(backend, step));`);
     let mut returned: List<String> = [];
     for let [k, a] of carried.into_iter().enumerate() {
         returned.push(if a.tensor == axes.ids {
@@ -1758,14 +1764,35 @@ fn emit_decoded(
             a.erased_from(`&passed.cache.${a.ident}`);
         });
     }
-    w.line(`let mut returned: List<Any<${bk}>> = [${returned.join(", ")}];`);
-    w.line("returned.extend(&next.carried(backend));");
-    w.line("return returned;");
-    w.end_with(");");
-    w.line(
-        `return [typed::<${bk}, i64, [Slots, Picks]>(backend, &last[${count}]), restored_fields(backend, &last, ${first_cached})];`,
+    w.blank();
+    decoded.emit(
+        w,
+        |w| {
+            w.line(`let mut start: List<Any<${bk}>> = [${start.join(", ")}];`);
+            w.line("start.extend(&decoding.carried(backend));");
+            w.begin("let last = backend.repeated(&decoding.steps, &start, |step, state|");
+            w.line(`let held: ${CACHE}<${bk}> = restored_fields(backend, state, ${first_cached});`);
+            if !moved.is_empty() {
+                w.line(`let moved = ${LENGTHS}::<${bk}> { ${moved.join(", ")} };`);
+            }
+            w.line(`let passed = build(${build_arguments.join(", ")});`);
+            w.line(`let tokens = typed::<${bk}, i64, [Slots, Picks]>(backend, &state[${count}]);`);
+            w.line(`let finished = typed::<${bk}, bool, [Slots]>(backend, &state[${count + 1}]);`);
+            w.line(
+                `let next = stepped::<${bk}, ${checked.primitives[axes.logits]}, [${logits_axes}]>(backend, &${logits}, decoding, &tokens, &finished, step);`,
+            );
+            w.line(
+                `let at = row_binary::<${bk}>(backend, Binary::Add, &decoding.position, &shared::<${bk}>(backend, step));`,
+            );
+            w.line(`let mut returned: List<Any<${bk}>> = [${returned.join(", ")}];`);
+            w.line("returned.extend(&next.carried(backend));");
+            w.line("return returned;");
+            w.end_with(");");
+            w.line(
+                `return [typed::<${bk}, i64, [Slots, Picks]>(backend, &last[${count}]), restored_fields(backend, &last, ${first_cached})];`,
+            );
+        },
     );
-    w.end();
     return Result::Ok(());
 }
 
@@ -1825,12 +1852,12 @@ fn emit_least_extents(
             "The extents `recorded` takes where each length an input carries is 1, as\n`compute` pads them to their capacities.",
         )
         .set_return_type("List<List<i32>>")
-        .emit_begin(w);
-    for let line of symbols.bindings().into_iter().chain(lines.into_iter()) {
-        w.line(&line);
-    }
-    w.line(`return [${extents.join(", ")}];`);
-    w.end();
+        .emit(w, |w| {
+            for let line of symbols.bindings().into_iter().chain(lines.into_iter()) {
+                w.line(&line);
+            }
+            w.line(`return [${extents.join(", ")}];`);
+        });
     return Result::Ok(());
 }
 
@@ -1850,36 +1877,38 @@ fn emit_held(
     w.blank();
     let mut block = ImplSpec::new(PARAMS_TYPE);
     block.add_generic(BACKEND_BOUND);
-    block.emit_begin(w);
-    FnSpec::new("held")
-        .set_doc(
-            "The initializers `Params` holds as they are, `load(at)` the `at`th on the
-host, as `backend` keeps them for the pass that reads them, the folded
-literals, and `pools`.",
-        )
-        .add_generic("Er")
-        .add_param("backend", `&mut ${BACKEND_PARAM}`)
-        .add_param("load", "fn(i32) -> Result<HostWeight, Er> with _")
-        .add_param("pools", `List<Any<${BACKEND_PARAM}>>`)
-        .set_return_type(`Result<${PARAMS_TYPE}, Er>`)
-        .add_effect("_")
-        .emit_begin(w);
     let held = held_initializers(graph, experts).len();
     let count = held + kept.len();
-    if kept.is_empty() {
-        w.line(`let mut weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`);
-    } else {
-        w.begin(`let mut weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, |at| match at`);
-        for let [k, tensor] of kept.into_iter().enumerate() {
-            w.line(`${held + k} => Result::Ok(${kept_literal(checked, tensor)}),`);
-        }
-        w.line("_ => load(at),");
-        w.end_with(")?;");
-    }
-    w.line("weights.extend(&pools);");
-    w.line("return Result::Ok(restored_fields(backend, &weights, 0));");
-    w.end();
-    w.end();
+    block.emit(w, |w| {
+        FnSpec::new("held")
+            .set_doc(
+                "The initializers `Params` holds as they are, `load(at)` the `at`th on the
+host, as `backend` keeps them for the pass that reads them, the folded
+literals, and `pools`.",
+            )
+            .add_generic("Er")
+            .add_param("backend", `&mut ${BACKEND_PARAM}`)
+            .add_param("load", "fn(i32) -> Result<HostWeight, Er> with _")
+            .add_param("pools", `List<Any<${BACKEND_PARAM}>>`)
+            .set_return_type(`Result<${PARAMS_TYPE}, Er>`)
+            .add_effect("_")
+            .emit(w, |w| {
+                if kept.is_empty() {
+                    w.line(`let mut weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, load)?;`);
+                } else {
+                    w.begin(
+                        `let mut weights = backend.kept_weights(|recorder| ${least}, ${first}, ${count}, |at| match at`,
+                    );
+                    for let [k, tensor] of kept.into_iter().enumerate() {
+                        w.line(`${held + k} => Result::Ok(${kept_literal(checked, tensor)}),`);
+                    }
+                    w.line("_ => load(at),");
+                    w.end_with(")?;");
+                }
+                w.line("weights.extend(&pools);");
+                w.line("return Result::Ok(restored_fields(backend, &weights, 0));");
+            });
+    });
 }
 
 /// `symbols` with each padded length's capacity standing for it in every
@@ -2050,17 +2079,23 @@ they do not read from `source` as a pass picks them.",
     w.blank();
     let mut held = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}>`);
     held.add_generic(BACKEND_BOUND);
-    held.emit_begin(w);
-    FnSpec::new("new", Vis::Pub)
-        .set_doc("A model of `weights`, whose pools hold every expert.")
-        .add_param("weights", PARAMS_TYPE)
-        .set_return_type(`${MODEL}<${BACKEND_PARAM}>`)
-        .emit_begin(w);
-    w.line(
-        `return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::resident([]), source: Unread {} };`,
+    held.emit(
+        w,
+        |w| {
+            FnSpec::new("new", Vis::Pub)
+                .set_doc("A model of `weights`, whose pools hold every expert.")
+                .add_param("weights", PARAMS_TYPE)
+                .set_return_type(`${MODEL}<${BACKEND_PARAM}>`)
+                .emit(
+                    w,
+                    |w| {
+                        w.line(
+                            `return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::resident([]), source: Unread {} };`,
+                        );
+                    },
+                );
+        },
     );
-    w.end();
-    w.end();
 }
 
 /// `recorded`: [`build`] recorded over parameters, one for each of `taken`,
@@ -2091,66 +2126,66 @@ fn emit_recorded(
     if chooses {
         recorded.add_param("chosen", `&${CHOSEN}`);
     }
-    recorded.set_return_type("Recorded").emit_begin(w);
-    // The weights come last, past however many values the sampler takes.
-    let extents_at = |at: i32| if decoding && at >= first_weight {
-        `extents.len() - ${taken.len() - at}`;
-    } else {
-        `${at}`;
-    };
-    let mut arguments: List<String> = ["recorder"];
-    for let [at, a] of taken.into_iter().enumerate() {
-        if a.crossed matches { _::Input } {
-            w.line(`let ${a.ident} = ${a.parameter(&extents_at(at))};`);
-            arguments.push(`&${a.ident}`);
+    recorded.set_return_type("Recorded").emit(w, |w| {
+        // The weights come last, past however many values the sampler takes.
+        let extents_at = |at: i32| if decoding && at >= first_weight {
+            `extents.len() - ${taken.len() - at}`;
+        } else {
+            `${at}`;
+        };
+        let mut arguments: List<String> = ["recorder"];
+        for let [at, a] of taken.into_iter().enumerate() {
+            if a.crossed matches { _::Input } {
+                w.line(`let ${a.ident} = ${a.parameter(&extents_at(at))};`);
+                arguments.push(`&${a.ident}`);
+            }
         }
-    }
-    if crossing.has_cache() {
-        // The cache follows the inputs.
-        let first_cache = taken.into_iter().filter(|a| a.crossed matches { _::Input }).count();
-        w.line(`let cache: ${CACHE}<Recorder> = recorded_fields(recorder, extents, ${first_cache});`);
-        arguments.push("&cache");
-    }
-    let mut lengths: List<String> = [];
-    for let [at, a] of taken.into_iter().enumerate() {
-        if a.crossed matches { _::Length } {
-            lengths.push(`${a.ident}: ${a.parameter(&extents_at(at))}`);
+        if crossing.has_cache() {
+            // The cache follows the inputs.
+            let first_cache = taken.into_iter().filter(|a| a.crossed matches { _::Input }).count();
+            w.line(`let cache: ${CACHE}<Recorder> = recorded_fields(recorder, extents, ${first_cache});`);
+            arguments.push("&cache");
         }
-    }
-    if !lengths.is_empty() {
-        w.line(`let lengths = ${LENGTHS}::<Recorder> { ${lengths.join(", ")} };`);
-        arguments.push("&lengths");
-    }
-    if decoding {
-        w.line(`let decoding = Decoding::recorded(recorder, extents, ${first_weight}, sampler);`);
-    }
-    if chooses {
-        arguments.push("chosen");
-    }
-    w.line(`let weights: ${PARAMS}<Recorder> = recorded_fields(recorder, extents, ${extents_at(first_weight)});`);
-    arguments.push("&weights");
-    if decoding {
-        arguments.push("&decoding");
-    }
-    w.line(`let passed = ${if decoding { DECODED } else { "build" }}(${arguments.join(", ")});`);
-    let mut results: List<String> = [];
-    if decoding {
-        results.push("passed.0.id");
-        for let [past, _] of crossing.pairs {
-            results.push(`passed.1.${names.get(&past)}.id`);
+        let mut lengths: List<String> = [];
+        for let [at, a] of taken.into_iter().enumerate() {
+            if a.crossed matches { _::Length } {
+                lengths.push(`${a.ident}: ${a.parameter(&extents_at(at))}`);
+            }
         }
-    } else if crossing.several() {
-        for let output of *returned {
-            results.push(`passed.${names.get(&output)}.id`);
+        if !lengths.is_empty() {
+            w.line(`let lengths = ${LENGTHS}::<Recorder> { ${lengths.join(", ")} };`);
+            arguments.push("&lengths");
         }
-        for let [past, _] of crossing.pairs {
-            results.push(`passed.cache.${names.get(&past)}.id`);
+        if decoding {
+            w.line(`let decoding = Decoding::recorded(recorder, extents, ${first_weight}, sampler);`);
         }
-    } else {
-        results.push("passed.id");
-    }
-    w.line(`return recorder.finished([${results.join(", ")}]);`);
-    w.end();
+        if chooses {
+            arguments.push("chosen");
+        }
+        w.line(`let weights: ${PARAMS}<Recorder> = recorded_fields(recorder, extents, ${extents_at(first_weight)});`);
+        arguments.push("&weights");
+        if decoding {
+            arguments.push("&decoding");
+        }
+        w.line(`let passed = ${if decoding { DECODED } else { "build" }}(${arguments.join(", ")});`);
+        let mut results: List<String> = [];
+        if decoding {
+            results.push("passed.0.id");
+            for let [past, _] of crossing.pairs {
+                results.push(`passed.1.${names.get(&past)}.id`);
+            }
+        } else if crossing.several() {
+            for let output of *returned {
+                results.push(`passed.${names.get(&output)}.id`);
+            }
+            for let [past, _] of crossing.pairs {
+                results.push(`passed.cache.${names.get(&past)}.id`);
+            }
+        } else {
+            results.push("passed.id");
+        }
+        w.line(`return recorder.finished([${results.join(", ")}]);`);
+    });
 }
 
 /// Each axis a pass grows, where the present's axis is not the past's.
@@ -2360,15 +2395,7 @@ fn emit_entry(
     }
     let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &returned[0]) };
     entry.add_param("weights", `&${PARAMS_TYPE}`).set_return_type(passed_type).add_effect("_");
-    entry.emit_begin(w);
-    for let [past, _] of crossing.pairs {
-        let ident = names.get(&past);
-        w.line(`let ${ident} = &cache.${ident};`);
-    }
     let checks = input_checks(graph, shapes, names, &crossing.cached);
-    for let line of checks.held {
-        w.line(&line);
-    }
     let mut owed: List<String> = [];
     // A tensor each row's lengths computed holds as many rows as each length.
     if symbols.uses(&SLOTS) {
@@ -2386,31 +2413,47 @@ fn emit_entry(
         );
     }
     owed.extend(&owed_checks(checked, &mut symbols)?);
-    for let lines of [symbols.bindings(), owed, body] as List<List<String>> {
-        for let line of lines {
-            w.line(&line);
-        }
-    }
-    if !several {
-        w.line(`return ${exprs.value(&returned[0])};`);
-    } else {
-        let mut fields: List<String> = returned.into_iter().map(|o| `${names.get(&o)}: ${exprs.value(&o)}`).collect();
-        if has_cache {
-            // Each present under its past's axes, as the next pass reads it.
-            let mut parts: List<String> = [];
-            for let [past, present] of crossing.pairs {
-                let at = exprs.reference(&present);
-                let element = checked.primitives.get(present).unwrap();
-                let axes = `[${axis_list(&shapes.get(present).unwrap())}], [${axis_list(&shapes.get(past).unwrap())}]`;
-                parts.push(
-                    `${names.get(&past)}: backend.reshape::<${element}, ${axes}>(${at}, backend.extents_of(${at}))`,
-                );
+    entry.emit(
+        w,
+        |w| {
+            for let [past, _] of crossing.pairs {
+                let ident = names.get(&past);
+                w.line(`let ${ident} = &cache.${ident};`);
             }
-            fields.push(`cache: ${CACHE} { ${parts.join(", ")} }`);
-        }
-        w.line(`return ${PASSED} { ${fields.join(", ")} };`);
-    }
-    w.end();
+            for let line of checks.held {
+                w.line(&line);
+            }
+            for let lines of [symbols.bindings(), owed, body] as List<List<String>> {
+                for let line of lines {
+                    w.line(&line);
+                }
+            }
+            if !several {
+                w.line(`return ${exprs.value(&returned[0])};`);
+            } else {
+                let mut fields: List<String> = returned
+                    .into_iter()
+                    .map(|o| `${names.get(&o)}: ${exprs.value(&o)}`)
+                    .collect();
+                if has_cache {
+                    // Each present under its past's axes, as the next pass reads it.
+                    let mut parts: List<String> = [];
+                    for let [past, present] of crossing.pairs {
+                        let at = exprs.reference(&present);
+                        let element = checked.primitives.get(present).unwrap();
+                        let axes = `[${axis_list(&shapes.get(present).unwrap())}], [${axis_list(
+                            &shapes.get(past).unwrap(),
+                        )}]`;
+                        parts.push(
+                            `${names.get(&past)}: backend.reshape::<${element}, ${axes}>(${at}, backend.extents_of(${at}))`,
+                        );
+                    }
+                    fields.push(`cache: ${CACHE} { ${parts.join(", ")} }`);
+                }
+                w.line(`return ${PASSED} { ${fields.join(", ")} };`);
+            }
+        },
+    );
     return Result::Ok(read);
 }
 
@@ -2455,11 +2498,8 @@ fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Chec
     w.blank();
     let mut held = ImplSpec::new(`${CACHE}<${BACKEND_PARAM}>`);
     held.add_generic(GRAPH_BOUND);
-    held.emit_begin(w);
-    empty.set_return_type(`${CACHE}<${BACKEND_PARAM}>`).add_effect("_").emit_begin(w);
-    w.line(`return zeroed_fields(backend, &[${empties.join(", ")}]);`);
-    w.end();
-    w.end();
+    empty.set_return_type(`${CACHE}<${BACKEND_PARAM}>`).add_effect("_");
+    held.emit(w, |w| empty.emit(w, |w| w.line(`return zeroed_fields(backend, &[${empties.join(", ")}]);`)));
 }
 
 /// The `i32` length `Cache::empty` gives an open axis of extent `p`, each

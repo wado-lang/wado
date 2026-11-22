@@ -227,9 +227,7 @@ fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
     let mut f = FnSpec::new(kind_set_fn_name(id));
     f.add_param("k", "i32");
     f.set_return_type("bool");
-    f.emit_begin(w);
-    w.line(`return k matches { ${constant_patterns(tokens)} };`);
-    w.end();
+    f.emit(w, |w| w.line(`return k matches { ${constant_patterns(tokens)} };`));
     w.blank();
 }
 

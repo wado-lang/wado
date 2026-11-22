@@ -198,9 +198,7 @@ fn unit_fn(w: &mut CodeWriter, name: String, prunable: bool, body: fn(&mut CodeW
     if prunable {
         f.set_prunable();
     }
-    f.emit_begin(w);
-    body(w);
-    w.end();
+    f.emit(w, body);
     w.blank();
 }
 
@@ -510,11 +508,7 @@ test "a declaration's doc comment and attributes precede it, and its members' th
     f.emit(&mut w);
     n.emit(&mut w);
     g.emit(&mut w);
-    i.emit_begin(&mut w);
-    m.emit_begin(&mut w);
-    w.line("return 0.0;");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| m.emit(w, |w| w.line("return 0.0;")));
     assert w.to_string() == "/// A point.
 ///
 /// In the plane.
@@ -577,13 +571,9 @@ test "what every spec writes above a declaration compiles" {
     g.emit(&mut w);
     let mut i = ImplSpec::new("Perms");
     i.set_doc("Bits.").add_attr("coverage(off)");
-    i.emit_begin(&mut w);
     let mut m = FnSpec::new("read");
     m.set_doc("Readable.").set_return_type("Perms");
-    m.emit_begin(&mut w);
-    w.line("return Perms::Read;");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| m.emit(w, |w| w.line("return Perms::Read;")));
     let run = "HITS += 1; let b: Bag<i32> = [1]; let j: Maybe<i32> = Just(2); print(`${Perms::read() as u32}${b.len()}${HITS}${j matches { Just(2) }}`);";
     assert printed(run, w.to_string()) == "111true";
 }
@@ -592,9 +582,7 @@ test "prune drops a function's doc comment and attributes with it" {
     let mut w = CodeWriter::new();
     let mut f = FnSpec::new("dead");
     f.set_doc("Gone.").add_attr("inline").set_prunable();
-    f.emit_begin(&mut w);
-    w.ret();
-    w.end();
+    f.emit(&mut w, |w| w.ret());
     w.line("global G: i32 = 0;");
     w.prune();
     assert w.to_string() == "global G: i32 = 0;\n";
@@ -654,9 +642,7 @@ test "FnSpec simple" {
     f.set_return_type("i32");
 
     let mut w = CodeWriter::new();
-    f.emit_begin(&mut w);
-    w.line("return a + b;");
-    w.end();
+    f.emit(&mut w, |w| w.line("return a + b;"));
     let expected = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
     assert w.to_string() == expected;
 }
@@ -664,8 +650,8 @@ test "FnSpec simple" {
 /// The line `f` opens its body with, without the brace.
 fn signature_of(f: &FnSpec) -> String {
     let mut w = CodeWriter::new();
-    f.emit_begin(&mut w);
-    w.end();
+    f.emit(&mut w, |_| {
+    });
     return w.to_string().trim_suffix(" {\n}\n").to_string();
 }
 
@@ -695,9 +681,7 @@ test "FnSpec no return type" {
     f.set_receiver("&mut self");
 
     let mut w = CodeWriter::new();
-    f.emit_begin(&mut w);
-    w.line("self.x = 0;");
-    w.end();
+    f.emit(&mut w, |w| w.line("self.x = 0;"));
     let expected = "fn reset(&mut self) {\n    self.x = 0;\n}\n";
     assert w.to_string() == expected;
 }
@@ -786,17 +770,13 @@ test "struct + impl + fn composition" {
     let mut f = FnSpec::new("new");
     f.add_param("input", "&String");
     f.set_return_type("Lexer");
-    f.emit_begin(&mut w);
-    w.line("return Lexer { chars: input.chars().collect(), pos: 0 };");
-    w.end();
+    f.emit(&mut w, |w| w.line("return Lexer { chars: input.chars().collect(), pos: 0 };"));
     w.blank();
 
     let mut f2 = FnSpec::new("at_end");
     f2.set_receiver("&self");
     f2.set_return_type("bool");
-    f2.emit_begin(&mut w);
-    w.line("return self.pos >= self.chars.len();");
-    w.end();
+    f2.emit(&mut w, |w| w.line("return self.pos >= self.chars.len();"));
 
     w.end();
 
@@ -954,13 +934,9 @@ test "byte_string_literal reads back byte for byte" {
 test "ImplSpec basic" {
     let mut w = CodeWriter::new();
     let i = ImplSpec::new("Point");
-    i.emit_begin(&mut w);
     let mut f = FnSpec::new("origin");
     f.set_return_type("Point");
-    f.emit_begin(&mut w);
-    w.line("return Point { x: 0, y: 0 };");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| f.emit(w, |w| w.line("return Point { x: 0, y: 0 };")));
     let expected = "impl Point {\n    fn origin() -> Point {\n        return Point { x: 0, y: 0 };\n    }\n}\n";
     assert w.to_string() == expected;
 }
@@ -968,15 +944,11 @@ test "ImplSpec basic" {
 test "ImplSpec trait impl" {
     let mut w = CodeWriter::new();
     let i = ImplSpec::new_trait("Eq", "Point");
-    i.emit_begin(&mut w);
     let mut f = FnSpec::new("eq");
     f.set_receiver("&self");
     f.add_param("other", "&Self");
     f.set_return_type("bool");
-    f.emit_begin(&mut w);
-    w.line("return self.x == other.x && self.y == other.y;");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| f.emit(w, |w| w.line("return self.x == other.x && self.y == other.y;")));
     let expected = "impl Eq for Point {\n    fn eq(&self, other: &Self) -> bool {\n        return self.x == other.x && self.y == other.y;\n    }\n}\n";
     assert w.to_string() == expected;
 }
@@ -988,13 +960,9 @@ test "a generic struct and its impl compile" {
     s.emit(&mut w);
     let mut i = ImplSpec::new("Holder<T>");
     i.add_generic("T: Default");
-    i.emit_begin(&mut w);
     let mut f = FnSpec::new("fresh", Vis::Pub);
     f.set_return_type("Holder<T>");
-    f.emit_begin(&mut w);
-    w.line("return Holder { value: T::default() };");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| f.emit(w, |w| w.line("return Holder { value: T::default() };")));
     let source = w.to_string();
     assert source.starts_with("pub struct Holder<T: Default> {\n");
     assert source.contains("impl<T: Default> Holder<T> {\n");
@@ -1012,14 +980,10 @@ test "struct + impl trait composition" {
 
     // impl trait for struct
     let i = ImplSpec::new_trait("Summary", "Article");
-    i.emit_begin(&mut w);
     let mut f = FnSpec::new("title");
     f.set_receiver("&self");
     f.set_return_type("String");
-    f.emit_begin(&mut w);
-    w.line("return self.name;");
-    w.end();
-    w.end();
+    i.emit(&mut w, |w| f.emit(w, |w| w.line("return self.name;")));
 
     let items = `trait Summary with () {
     fn title(&self) -> String;

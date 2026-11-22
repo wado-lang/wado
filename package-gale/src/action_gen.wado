@@ -287,9 +287,7 @@ pub fn gen_predicate_fns(w: &mut CodeWriter, ctx: &EmitContext) {
         f.add_param(&PARSER_HANDLE, "&Parser");
         add_parser_super_effect(&mut f, ctx);
         f.set_return_type("bool");
-        f.emit_begin(w);
-        w.line(`return ${entry.1};`);
-        w.end();
+        f.emit(w, |w| w.line(`return ${entry.1};`));
         w.blank();
     }
 }
@@ -468,11 +466,11 @@ pub fn gen_parser_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
     if members.methods.is_empty() {
         return;
     }
-    ImplSpec::new("Parser").emit_begin(w);
-    for let m of &members.methods {
-        w.line(&m.source);
-    }
-    w.end();
+    ImplSpec::new("Parser").emit(w, |w| {
+        for let m of &members.methods {
+            w.line(&m.source);
+        }
+    });
     w.blank();
 }
 

@@ -352,8 +352,7 @@ impl NewtypeSpec {
     }
 }
 
-/// `fn name<…>(…) -> R with …`, opened as a block the caller fills and closes
-/// with `CodeWriter::end`.
+/// `fn name<…>(…) -> R with … { … }`.
 pub struct FnSpec {
     pub name: String,
     vis: Vis,
@@ -436,9 +435,8 @@ impl FnSpec {
         return self;
     }
 
-    /// Writes the head and opens the body. The caller writes the body, then
-    /// closes it with `w.end()`.
-    pub fn emit_begin(&self, w: &mut CodeWriter) {
+    /// Writes the function, its body written by `body`.
+    pub fn emit<effect E>(&self, w: &mut CodeWriter, mut body: fn mut(&mut CodeWriter) with E) with E {
         let mut pre = String::new();
         for let line of head_lines(&self.head.doc, &self.head.attrs) {
             pre.push_str(&line);
@@ -459,6 +457,8 @@ impl FnSpec {
             prunable: self.prunable,
             returns_unit: self.returns_unit(),
         });
+        body(w);
+        w.close_fn();
     }
 
     fn returns_unit(&self) -> bool {
@@ -549,8 +549,7 @@ impl GlobalSpec {
     }
 }
 
-/// `impl<…> Type` or `impl<…> Trait for Type`, opened as a block the caller
-/// fills and closes with `CodeWriter::end`.
+/// `impl<…> Type { … }` or `impl<…> Trait for Type { … }`.
 pub struct ImplSpec {
     type_name: String,
     trait_name: Option<String> = null,
@@ -588,9 +587,8 @@ impl ImplSpec {
         return self;
     }
 
-    /// Writes the head and opens the body. The caller writes the body, then
-    /// closes it with `w.end()`.
-    pub fn emit_begin(&self, w: &mut CodeWriter) {
+    /// Writes the impl, its body written by `body`.
+    pub fn emit<effect E>(&self, w: &mut CodeWriter, mut body: fn mut(&mut CodeWriter) with E) with E {
         self.head.emit(w);
         let head = `impl${generic_list(&self.generics)}`;
         if let Some(t) = &self.trait_name {
@@ -598,6 +596,8 @@ impl ImplSpec {
         } else {
             w.begin(`${head} ${self.type_name}`);
         }
+        body(w);
+        w.end();
     }
 }
 

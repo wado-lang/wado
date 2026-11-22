@@ -47,23 +47,23 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     // `Display` / `Inspect` here, where the grammar's `RULE_NAMES` table is in
     // scope, so `{k}` prints the rule name and `{k:?}` prints
     // `name(id)`. `K_ERROR` renders as `<error>`.
-    ImplSpec::new_trait("Display", "NodeKind").emit_begin(w);
-    FnSpec::new("fmt").set_receiver("&self").add_param("f", "&mut Formatter").emit_begin(w);
-    w.begin("if *self == K_ERROR");
-    w.line("f.write_str(&\"<error>\");");
-    w.else_begin("else");
-    w.line("f.write_str(&RULE_NAMES[*self as i32]);");
-    w.end();
-    w.end();
-    w.end();
+    ImplSpec::new_trait("Display", "NodeKind").emit(w, |w| {
+        FnSpec::new("fmt").set_receiver("&self").add_param("f", "&mut Formatter").emit(w, |w| {
+            w.begin("if *self == K_ERROR");
+            w.line("f.write_str(&\"<error>\");");
+            w.else_begin("else");
+            w.line("f.write_str(&RULE_NAMES[*self as i32]);");
+            w.end();
+        });
+    });
     w.blank();
-    ImplSpec::new_trait("Inspect", "NodeKind").emit_begin(w);
-    FnSpec::new("inspect").set_receiver("&self").add_param("f", "&mut Formatter").emit_begin(w);
-    // Reuse Display for the name, then append the numeric id.
-    w.line("self.fmt(f);");
-    w.line("f.write_str(&`(${*self as i32})`);");
-    w.end();
-    w.end();
+    ImplSpec::new_trait("Inspect", "NodeKind").emit(w, |w| {
+        FnSpec::new("inspect").set_receiver("&self").add_param("f", "&mut Formatter").emit(w, |w| {
+            // Reuse Display for the name, then append the numeric id.
+            w.line("self.fmt(f);");
+            w.line("f.write_str(&`(${*self as i32})`);");
+        });
+    });
     w.blank();
 }
 
@@ -106,22 +106,22 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     cases.emit(w);
     w.blank();
 
-    ImplSpec::new("CstStore").emit_begin(w);
-    FnSpec::new(`${rule.snake_name}_alt`, Vis::Pub)
-        .set_receiver("&self")
-        .add_param("node", "i32")
-        .set_return_type(`Option<${enum_name}>`)
-        .emit_begin(w);
-    w.begin("return match self.alt(node)");
-    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        if let Some(label) = &rule.alternatives[i].label {
-            w.line(`${i} => Option::Some(${enum_name}::${escape_case(label)}),`);
-        }
-    }
-    w.line("_ => null,");
-    w.end_with(";");
-    w.end();
-    w.end();
+    ImplSpec::new("CstStore").emit(w, |w| {
+        FnSpec::new(`${rule.snake_name}_alt`, Vis::Pub)
+            .set_receiver("&self")
+            .add_param("node", "i32")
+            .set_return_type(`Option<${enum_name}>`)
+            .emit(w, |w| {
+                w.begin("return match self.alt(node)");
+                for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+                    if let Some(label) = &rule.alternatives[i].label {
+                        w.line(`${i} => Option::Some(${enum_name}::${escape_case(label)}),`);
+                    }
+                }
+                w.line("_ => null,");
+                w.end_with(";");
+            });
+    });
     w.blank();
 }
 
@@ -129,9 +129,9 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 /// with it and `RULE_NAMES`.
 pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
     gen_token_names_global(w, &grammar.lexer_rules, lit_tokens);
-    FnSpec::new("to_string_tree", Vis::Pub).add_param("result", "&ParseResult").set_return_type("String").emit_begin(w);
-    w.line("return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);");
-    w.end();
+    FnSpec::new("to_string_tree", Vis::Pub).add_param("result", "&ParseResult").set_return_type("String").emit(w, |w| {
+        w.line("return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);");
+    });
     w.blank();
 
     // Sub-tree render: find the first child of the root named `rule` and render
@@ -142,21 +142,21 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
         .add_param("result", "&ParseResult")
         .add_param("rule", "S")
         .set_return_type("String")
-        .emit_begin(w);
-    w.line("let mut _kind: i32 = -1;");
-    w.begin("for let mut i = 0; i < RULE_NAMES.len(); i += 1");
-    w.begin("if rule == RULE_NAMES[i]");
-    w.line("_kind = i;");
-    w.line("break;");
-    w.end();
-    w.end();
-    // Unknown rule name leaves `_kind` at -1, which is `K_ERROR`.
-    w.line("if _kind < 0 { return String::new(); }");
-    w.line("let _sub = result.cst.find_child(0, _kind as NodeKind);");
-    w.begin("if _sub >= 0");
-    w.line("return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);");
-    w.end();
-    w.line("return String::new();");
-    w.end();
+        .emit(w, |w| {
+            w.line("let mut _kind: i32 = -1;");
+            w.begin("for let mut i = 0; i < RULE_NAMES.len(); i += 1");
+            w.begin("if rule == RULE_NAMES[i]");
+            w.line("_kind = i;");
+            w.line("break;");
+            w.end();
+            w.end();
+            // Unknown rule name leaves `_kind` at -1, which is `K_ERROR`.
+            w.line("if _kind < 0 { return String::new(); }");
+            w.line("let _sub = result.cst.find_child(0, _kind as NodeKind);");
+            w.begin("if _sub >= 0");
+            w.line("return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);");
+            w.end();
+            w.line("return String::new();");
+        });
     w.blank();
 }

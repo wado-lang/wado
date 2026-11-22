@@ -125,7 +125,7 @@ pub struct CodeWriter {
     indent_level: i32,
     fresh_line: bool,
     id_counter: i32,
-    /// Per open block, whether it is a function body `FnSpec::emit_begin` opened.
+    /// Per open block, whether it is a function body `FnSpec::emit` opened.
     fn_blocks: List<bool> = [],
     hoisted_names: List<[String, String]> = [],
     hoisted: String = "",
@@ -212,13 +212,11 @@ impl CodeWriter {
     }
 
     /// End a block: decreases indentation and emits "}".
-    pub fn end(&mut self) {
+    pub fn end(&mut self)
+        contract !self.innermost_is_fn_body(), "CodeWriter: a function body is closed by `FnSpec::emit`"
+    {
         self.indent_level -= 1;
-        if self.fn_blocks.pop().unwrap_or(false) {
-            self.flush_text();
-            self.push_seg(Seg { kind: SegKind::Close, depth: self.indent_level });
-            return;
-        }
+        self.fn_blocks.pop();
         self.write_indent();
         self.buf.push_str("}\n");
         self.cur.lines += 1;
@@ -235,7 +233,7 @@ impl CodeWriter {
         return self.buf.is_empty();
     }
 
-    /// Whether the innermost open block is a function body `FnSpec::emit_begin`
+    /// Whether the innermost open block is a function body `FnSpec::emit`
     /// opened.
     fn innermost_is_fn_body(&self) -> bool {
         return self.fn_blocks.last().unwrap_or(false);
@@ -243,7 +241,7 @@ impl CodeWriter {
 
     /// End a block with a trailing suffix, e.g. "," or "\n".
     pub fn end_with<S: AsStrSlice>(&mut self, suffix: S)
-        contract !self.innermost_is_fn_body(), "CodeWriter: a function body closes with `end`"
+        contract !self.innermost_is_fn_body(), "CodeWriter: a function body is closed by `FnSpec::emit`"
     {
         self.indent_level -= 1;
         self.fn_blocks.pop();
@@ -378,6 +376,15 @@ impl CodeWriter {
         self.push_seg(seg);
         self.indent_level += 1;
         self.fn_blocks.push(true);
+    }
+
+    internal fn close_fn(&mut self)
+        contract self.innermost_is_fn_body(), "CodeWriter: a block the function body opened is still open"
+    {
+        self.indent_level -= 1;
+        self.fn_blocks.pop();
+        self.flush_text();
+        self.push_seg(Seg { kind: SegKind::Close, depth: self.indent_level });
     }
 
     /// Add a segment other than text. The caller has ended the text before it

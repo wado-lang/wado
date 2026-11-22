@@ -1034,10 +1034,10 @@ pub fn gen_sll_decide_fn(w: &mut CodeWriter, decision: i32, start: i32, forest: 
     f.add_param("pos", "i32");
     f.add_param("min_prec", "i32");
     f.set_return_type("i32");
-    f.emit_begin(w);
-    gen_sll_node(w, forest, start, 0, analysis);
-    w.line(`return atn_predict_once(&ATN_SIM, ${decision}, atn, tokens, pos, TK_EOF, min_prec);`);
-    w.end();
+    f.emit(w, |w| {
+        gen_sll_node(w, forest, start, 0, analysis);
+        w.line(`return atn_predict_once(&ATN_SIM, ${decision}, atn, tokens, pos, TK_EOF, min_prec);`);
+    });
     w.blank();
 }
 
@@ -1050,10 +1050,10 @@ pub fn gen_sll_shared_fns(w: &mut CodeWriter, forest: &SllForest, analysis: &Gra
                 .add_param("tokens", "&Array<i32>")
                 .add_param("pos", "i32")
                 .set_return_type("i32")
-                .emit_begin(w);
-            gen_sll_branch(w, forest, n, 0, analysis);
-            w.line("return -1;");
-            w.end();
+                .emit(w, |w| {
+                    gen_sll_branch(w, forest, n, 0, analysis);
+                    w.line("return -1;");
+                });
             w.blank();
         }
     }
@@ -1111,18 +1111,18 @@ pub global ATN_VERIFY_END: String = "atn_verify_end";
 pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
     GlobalSpec::new("ATN_MISMATCH", "String", "\"\"").set_mut().emit(w);
     w.blank();
-    FnSpec::new(ATN_VERIFY_BEGIN).set_return_type("String").emit_begin(w);
-    w.line("let outer = ATN_MISMATCH;");
-    w.line("ATN_MISMATCH = \"\";");
-    w.line("return outer;");
-    w.end();
+    FnSpec::new(ATN_VERIFY_BEGIN).set_return_type("String").emit(w, |w| {
+        w.line("let outer = ATN_MISMATCH;");
+        w.line("ATN_MISMATCH = \"\";");
+        w.line("return outer;");
+    });
     w.blank();
-    FnSpec::new(ATN_VERIFY_END).add_param("diagnostics", "&List<Diagnostic>").add_param("outer", "String").emit_begin(w);
-    w.begin("if diagnostics.is_empty() && !ATN_MISMATCH.is_empty()");
-    w.line("panic(`prediction verify: ${ATN_MISMATCH}`);");
-    w.end();
-    w.line("ATN_MISMATCH = outer;");
-    w.end();
+    FnSpec::new(ATN_VERIFY_END).add_param("diagnostics", "&List<Diagnostic>").add_param("outer", "String").emit(w, |w| {
+        w.begin("if diagnostics.is_empty() && !ATN_MISMATCH.is_empty()");
+        w.line("panic(`prediction verify: ${ATN_MISMATCH}`);");
+        w.end();
+        w.line("ATN_MISMATCH = outer;");
+    });
     w.blank();
     FnSpec::new(ATN_VERIFIED)
         .add_param("decision", "i32")
@@ -1133,10 +1133,13 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         .add_param("min_prec", "i32")
         .add_param("alt", "i32")
         .set_return_type("i32")
-        .emit_begin(w);
-    let walk = "atn_predict_walk(&ATN_SIM, decision, &atn.stack, tokens, pos, TK_EOF, min_prec, &ATN_NO_PREDS.met, &ATN_NO_PREDS.own, atn_unasked)";
-    w.line(`return ${ATN_VERIFIED_AGAINST}(decision, picker, pos, ${walk}, alt);`);
-    w.end();
+        .emit(
+            w,
+            |w| {
+                let walk = "atn_predict_walk(&ATN_SIM, decision, &atn.stack, tokens, pos, TK_EOF, min_prec, &ATN_NO_PREDS.met, &ATN_NO_PREDS.own, atn_unasked)";
+                w.line(`return ${ATN_VERIFIED_AGAINST}(decision, picker, pos, ${walk}, alt);`);
+            },
+        );
     w.blank();
     FnSpec::new(ATN_VERIFIED_AGAINST)
         .add_param("decision", "i32")
@@ -1145,13 +1148,13 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         .add_param("verdict", "[i32, bool]")
         .add_param("alt", "i32")
         .set_return_type("i32")
-        .emit_begin(w);
-    w.line("let [simulated, viable] = verdict;");
-    w.begin("if viable");
-    w.line(`${ATN_SHADOW}(decision, picker, pos, alt, simulated);`);
-    w.end();
-    w.line("return alt;");
-    w.end();
+        .emit(w, |w| {
+            w.line("let [simulated, viable] = verdict;");
+            w.begin("if viable");
+            w.line(`${ATN_SHADOW}(decision, picker, pos, alt, simulated);`);
+            w.end();
+            w.line("return alt;");
+        });
     w.blank();
     FnSpec::new(ATN_SHADOW)
         .add_param("decision", "i32")
@@ -1159,18 +1162,23 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         .add_param("pos", "i32")
         .add_param("alt", "i32")
         .add_param("simulated", "i32")
-        .emit_begin(w);
-    w.begin("if alt == simulated || !ATN_MISMATCH.is_empty()");
-    w.line("return;");
-    w.end();
-    w.begin("let by = match picker");
-    for let picker of ATN_PICKERS {
-        w.line(`${atn_picker_code(&picker)} => "${atn_picker_name(picker)}",`);
-    }
-    w.line("_ => unreachable(),");
-    w.end_with(";");
-    w.line("ATN_MISMATCH = `decision ${decision} at token ${pos}: ${by} picks ${alt}, the simulator ${simulated}`;");
-    w.end();
+        .emit(
+            w,
+            |w| {
+                w.begin("if alt == simulated || !ATN_MISMATCH.is_empty()");
+                w.line("return;");
+                w.end();
+                w.begin("let by = match picker");
+                for let picker of ATN_PICKERS {
+                    w.line(`${atn_picker_code(&picker)} => "${atn_picker_name(picker)}",`);
+                }
+                w.line("_ => unreachable(),");
+                w.end_with(";");
+                w.line(
+                    "ATN_MISMATCH = `decision ${decision} at token ${pos}: ${by} picks ${alt}, the simulator ${simulated}`;",
+                );
+            },
+        );
     w.blank();
 }
 

@@ -132,42 +132,42 @@ impl EnumPlan {
         }
         if !self.aliases.is_empty() {
             w.blank();
-            ImplSpec::new(&self.name).emit_begin(w);
-            for let alias of &self.aliases {
-                w.line(`pub const ${alias.0}: ${self.name} = ${self.name}::${alias.1};`);
-            }
-            w.end();
+            ImplSpec::new(&self.name).emit(w, |w| {
+                for let alias of &self.aliases {
+                    w.line(`pub const ${alias.0}: ${self.name} = ${self.name}::${alias.1};`);
+                }
+            });
         }
         w.blank();
-        ImplSpec::new_trait(`${RUNTIME}::Enumeration`, &self.name).emit_begin(w);
-        FnSpec::new("number").set_receiver("&self").set_return_type("i32").emit_begin(w);
-        w.begin("return match self");
-        for let c of &self.cases {
-            w.line(`${self.name}::${c.name} => ${c.number},`);
-        }
-        if let Some(other) = &self.unrecognized {
-            w.line(`${self.name}::${other}(n) => *n,`);
-        }
-        w.end_with(";");
-        w.end();
-        w.blank();
-        FnSpec::new("from_number").add_param("number", "i32").set_return_type(`Option<${self.name}>`).emit_begin(w);
-        w.begin("return match number");
-        for let c of &self.cases {
-            w.line(`${c.number} => Option::Some(${self.name}::${c.name}),`);
-        }
-        if let Some(other) = &self.unrecognized {
-            w.line(`_ => Option::Some(${self.name}::${other}(number)),`);
-        } else {
-            w.line("_ => null,");
-        }
-        w.end_with(";");
-        w.end();
-        w.blank();
-        FnSpec::new("first").set_return_type(&self.name).emit_begin(w);
-        w.line(`return ${self.name}::${self.cases[0].name};`);
-        w.end();
-        w.end();
+        ImplSpec::new_trait(`${RUNTIME}::Enumeration`, &self.name).emit(w, |w| {
+            FnSpec::new("number").set_receiver("&self").set_return_type("i32").emit(w, |w| {
+                w.begin("return match self");
+                for let c of &self.cases {
+                    w.line(`${self.name}::${c.name} => ${c.number},`);
+                }
+                if let Some(other) = &self.unrecognized {
+                    w.line(`${self.name}::${other}(n) => *n,`);
+                }
+                w.end_with(";");
+            });
+            w.blank();
+            FnSpec::new("from_number").add_param("number", "i32").set_return_type(`Option<${self.name}>`).emit(w, |w| {
+                w.begin("return match number");
+                for let c of &self.cases {
+                    w.line(`${c.number} => Option::Some(${self.name}::${c.name}),`);
+                }
+                if let Some(other) = &self.unrecognized {
+                    w.line(`_ => Option::Some(${self.name}::${other}(number)),`);
+                } else {
+                    w.line("_ => null,");
+                }
+                w.end_with(";");
+            });
+            w.blank();
+            FnSpec::new("first").set_return_type(&self.name).emit(w, |w| {
+                w.line(`return ${self.name}::${self.cases[0].name};`);
+            });
+        });
         self.write_order(w);
     }
 
@@ -176,25 +176,21 @@ impl EnumPlan {
     /// is on the wire.
     fn write_order(&self, w: &mut CodeWriter) {
         w.blank();
-        ImplSpec::new_trait("Eq", &self.name).emit_begin(w);
-        FnSpec::new("eq")
-            .set_receiver("&self")
-            .add_param("other", `&${self.name}`)
-            .set_return_type("bool")
-            .emit_begin(w);
-        w.line("return self.number() == other.number();");
-        w.end();
-        w.end();
+        ImplSpec::new_trait("Eq", &self.name).emit(w, |w| {
+            FnSpec::new("eq")
+                .set_receiver("&self")
+                .add_param("other", `&${self.name}`)
+                .set_return_type("bool")
+                .emit(w, |w| w.line("return self.number() == other.number();"));
+        });
         w.blank();
-        ImplSpec::new_trait("Ord", &self.name).emit_begin(w);
-        FnSpec::new("cmp")
-            .set_receiver("&self")
-            .add_param("other", `&${self.name}`)
-            .set_return_type("Ordering")
-            .emit_begin(w);
-        w.line("return self.number().cmp(&other.number());");
-        w.end();
-        w.end();
+        ImplSpec::new_trait("Ord", &self.name).emit(w, |w| {
+            FnSpec::new("cmp")
+                .set_receiver("&self")
+                .add_param("other", `&${self.name}`)
+                .set_return_type("Ordering")
+                .emit(w, |w| w.line("return self.number().cmp(&other.number());"));
+        });
     }
 }
 
@@ -292,30 +288,33 @@ impl MessagePlan {
     /// A function per repeated message field that reads its values out of an
     /// encoded message one at a time.
     fn write_each(&self, w: &mut CodeWriter) {
-        let mut opened = false;
+        let mut repeated: List<[String, Access, String]> = [];
         for let slot of &self.slots {
-            let Field([field, a]) = slot else {
-                continue;
-            };
-            let Some(element) = &a.element else {
-                continue;
-            };
-            w.blank();
-            if !opened {
-                ImplSpec::new(&self.spec.name).emit_begin(w);
-                opened = true;
+            if let Field([field, a]) = slot && let Some(element) = &a.element {
+                repeated.push([*field, *a, *element]);
             }
-            let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
-            FnSpec::new(`${field}_of`, Vis::Pub)
-                .add_param("input", "LinearBuffer")
-                .set_return_type(`${RUNTIME}::Messages<${*element}>`)
-                .emit_begin(w);
-            w.line(`return ${RUNTIME}::each::<${element}>(input, ${a.number}, ${RUNTIME}::WireType::${wire});`);
-            w.end();
         }
-        if opened {
-            w.end();
+        if repeated.is_empty() {
+            return;
         }
+        w.blank();
+        ImplSpec::new(&self.spec.name).emit(w, |w| {
+            for let mut i = 0; i < repeated.len(); i += 1 {
+                let [field, a, element] = repeated[i];
+                if i > 0 {
+                    w.blank();
+                }
+                let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
+                FnSpec::new(`${field}_of`, Vis::Pub)
+                    .add_param("input", "LinearBuffer")
+                    .set_return_type(`${RUNTIME}::Messages<${element}>`)
+                    .emit(w, |w| {
+                        w.line(
+                            `return ${RUNTIME}::each::<${element}>(input, ${a.number}, ${RUNTIME}::WireType::${wire});`,
+                        );
+                    });
+            }
+        });
     }
 
     fn write(&self, w: &mut CodeWriter) {
@@ -327,29 +326,37 @@ impl MessagePlan {
         let name = &self.spec.name;
         self.write_each(w);
         w.blank();
-        ImplSpec::new_trait(`${RUNTIME}::Message`, name).emit_begin(w);
-        FnSpec::new("size")
-            .set_receiver("&self")
-            .add_param("s", `&mut ${RUNTIME}::Sizer`)
-            .set_return_type("i64")
-            .emit_begin(w);
-        w.line(`let mut n = self.${UNKNOWN_FIELDS}.len() as i64;`);
-        self.calls(w, "n += s.");
-        w.line("return n;");
-        w.end();
-        w.blank();
-        FnSpec::new("write").set_receiver("&self").add_param("w", `&mut ${RUNTIME}::Writer`).emit_begin(w);
-        self.calls(w, "w.");
-        w.line(`w.raw(&self.${UNKNOWN_FIELDS});`);
-        w.end();
-        w.blank();
-        FnSpec::new("merge_field")
-            .add_generic(`B: ${RUNTIME}::Input`)
-            .set_receiver("&mut self")
-            .add_param("number", "i32")
-            .add_param("r", `&mut ${RUNTIME}::Reader<B>`)
-            .set_return_type(`Result<bool, ${RUNTIME}::DecodeError>`)
-            .emit_begin(w);
+        ImplSpec::new_trait(`${RUNTIME}::Message`, name).emit(w, |w| {
+            FnSpec::new("size")
+                .set_receiver("&self")
+                .add_param("s", `&mut ${RUNTIME}::Sizer`)
+                .set_return_type("i64")
+                .emit(w, |w| {
+                    w.line(`let mut n = self.${UNKNOWN_FIELDS}.len() as i64;`);
+                    self.calls(w, "n += s.");
+                    w.line("return n;");
+                });
+            w.blank();
+            FnSpec::new("write").set_receiver("&self").add_param("w", `&mut ${RUNTIME}::Writer`).emit(w, |w| {
+                self.calls(w, "w.");
+                w.line(`w.raw(&self.${UNKNOWN_FIELDS});`);
+            });
+            w.blank();
+            FnSpec::new("merge_field")
+                .add_generic(`B: ${RUNTIME}::Input`)
+                .set_receiver("&mut self")
+                .add_param("number", "i32")
+                .add_param("r", `&mut ${RUNTIME}::Reader<B>`)
+                .set_return_type(`Result<bool, ${RUNTIME}::DecodeError>`)
+                .emit(w, |w| self.write_merge_body(w));
+            w.blank();
+            FnSpec::new("unknown_fields").set_receiver("&mut self").set_return_type("&mut ByteList").emit(w, |w| {
+                w.line(`return &mut self.${UNKNOWN_FIELDS};`);
+            });
+        });
+    }
+
+    fn write_merge_body(&self, w: &mut CodeWriter) {
         if !self.slots.is_empty() {
             w.begin("match number");
             for let slot of &self.slots {
@@ -369,12 +376,6 @@ impl MessagePlan {
             w.end();
         }
         w.line("return Result::Ok(false);");
-        w.end();
-        w.blank();
-        FnSpec::new("unknown_fields").set_receiver("&mut self").set_return_type("&mut ByteList").emit_begin(w);
-        w.line(`return &mut self.${UNKNOWN_FIELDS};`);
-        w.end();
-        w.end();
     }
 }
 

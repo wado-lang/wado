@@ -346,69 +346,69 @@ impl Case {
         if self.producer matches { _::Param } {
             f.add_param("t", "Tok");
         }
-        f.emit_begin(w);
-        w.line(`log_stdout("case ${index}");`);
-        let companion = `let s = Tok { id: ${companion_id(index)} };`;
-        if self.companion matches { _::Before } {
-            w.line(&companion);
-        }
-        self.producer.emit(index, self.value, w);
-        if self.companion matches { _::After } {
-            w.line(&companion);
-        }
-        w.line("log_stdout(\"before\");");
-        let statement = self.consumer.statement(self.value);
-        if probe matches { _::InClosure } {
-            w.begin("let f = ||");
-        }
-        match self.context {
-            _::Straight => w.line(&statement),
-            _::If => {
-                w.begin("if flag");
-                w.line(&statement);
-                w.end();
-            },
-            _::Match => {
-                w.begin("match flag");
-                w.begin("true =>");
-                w.line(&statement);
-                w.end_with(",");
-                w.line("false => {},");
-                w.end();
-            },
-            _::LoopOnce => {
-                w.begin("loop");
-                w.line(&statement);
-                w.line("break;");
-                w.end();
-            },
-            _::Labeled => {
-                w.begin("blk:");
-                w.line(&statement);
-                w.end();
-            },
-            _::While => {
-                w.begin("while flag");
-                w.line(&statement);
-                w.line("break;");
-                w.end();
-            },
-            _::IfReturn => {
-                w.begin("if flag");
-                w.line(&statement);
-                w.line("return;");
-                w.end();
-            },
-        }
-        if probe matches { _::InClosure } {
-            w.end_with(";");
-            w.line("f();");
-        }
-        w.line("log_stdout(\"after\");");
-        if probe matches { _::ReadAfter } {
-            w.line(`look_${self.value.helper()}(&t);`);
-        }
-        w.end();
+        f.emit(w, |w| {
+            w.line(`log_stdout("case ${index}");`);
+            let companion = `let s = Tok { id: ${companion_id(index)} };`;
+            if self.companion matches { _::Before } {
+                w.line(&companion);
+            }
+            self.producer.emit(index, self.value, w);
+            if self.companion matches { _::After } {
+                w.line(&companion);
+            }
+            w.line("log_stdout(\"before\");");
+            let statement = self.consumer.statement(self.value);
+            if probe matches { _::InClosure } {
+                w.begin("let f = ||");
+            }
+            match self.context {
+                _::Straight => w.line(&statement),
+                _::If => {
+                    w.begin("if flag");
+                    w.line(&statement);
+                    w.end();
+                },
+                _::Match => {
+                    w.begin("match flag");
+                    w.begin("true =>");
+                    w.line(&statement);
+                    w.end_with(",");
+                    w.line("false => {},");
+                    w.end();
+                },
+                _::LoopOnce => {
+                    w.begin("loop");
+                    w.line(&statement);
+                    w.line("break;");
+                    w.end();
+                },
+                _::Labeled => {
+                    w.begin("blk:");
+                    w.line(&statement);
+                    w.end();
+                },
+                _::While => {
+                    w.begin("while flag");
+                    w.line(&statement);
+                    w.line("break;");
+                    w.end();
+                },
+                _::IfReturn => {
+                    w.begin("if flag");
+                    w.line(&statement);
+                    w.line("return;");
+                    w.end();
+                },
+            }
+            if probe matches { _::InClosure } {
+                w.end_with(";");
+                w.line("f();");
+            }
+            w.line("log_stdout(\"after\");");
+            if probe matches { _::ReadAfter } {
+                w.line(`look_${self.value.helper()}(&t);`);
+            }
+        });
     }
 }
 

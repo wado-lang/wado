@@ -26,23 +26,19 @@ pub fn emit_tokenizer(bpe: &BpePipeline, path: &String, runtime: &String) -> Str
     w.blank();
     StructSpec::new("Tokenizer", Vis::Pub).set_doc("BPE over this file's vocabulary and merges.").emit(&mut w);
     w.blank();
-    ImplSpec::new("Tokenizer").emit_begin(&mut w);
-    FnSpec::new("encode", Vis::Pub)
-        .set_doc("The ids `text` encodes to.")
-        .add_param("text", "&String")
-        .set_return_type("List<i32>")
-        .emit_begin(&mut w);
-    w.line("return TOKENIZER.encode(text);");
-    w.end();
-    w.blank();
-    FnSpec::new("decode", Vis::Pub)
-        .set_doc("The text `ids` decode to.")
-        .add_param("ids", "&List<i32>")
-        .set_return_type("String")
-        .emit_begin(&mut w);
-    w.line("return TOKENIZER.decode(ids);");
-    w.end();
-    w.end();
+    ImplSpec::new("Tokenizer").emit(&mut w, |w| {
+        FnSpec::new("encode", Vis::Pub)
+            .set_doc("The ids `text` encodes to.")
+            .add_param("text", "&String")
+            .set_return_type("List<i32>")
+            .emit(w, |w| w.line("return TOKENIZER.encode(text);"));
+        w.blank();
+        FnSpec::new("decode", Vis::Pub)
+            .set_doc("The text `ids` decode to.")
+            .add_param("ids", "&List<i32>")
+            .set_return_type("String")
+            .emit(w, |w| w.line("return TOKENIZER.decode(ids);"));
+    });
     return w.to_string();
 }
 

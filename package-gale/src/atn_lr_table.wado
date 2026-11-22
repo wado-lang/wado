@@ -91,28 +91,28 @@ pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, anal
         f.add_param_spec(ParamSpec { name: "follow", type_str: "i64", default: Option::Some("0") });
     }
     f.set_return_type("i32");
-    f.emit_begin(w);
-    // A numeric `type(N)` lexes a kind past the table, which a wildcard suffix
-    // may still take.
-    w.begin(`if pos < tokens.len() && tokens[pos] < ${table.kinds}`);
-    w.begin("match tokens[pos]");
-    for let e of &table.enters {
-        w.begin(`${constant_patterns(&analysis.token_names_of(&e.tokens))} =>`);
-        w.line(`if min_prec > ${e.prec} { return ${table.exit}; }`);
-        if follow {
-            w.line(`if !${follow_admits_call("tokens", "pos")} { return ${e.alt}; }`);
+    f.emit(w, |w| {
+        // A numeric `type(N)` lexes a kind past the table, which a wildcard suffix
+        // may still take.
+        w.begin(`if pos < tokens.len() && tokens[pos] < ${table.kinds}`);
+        w.begin("match tokens[pos]");
+        for let e of &table.enters {
+            w.begin(`${constant_patterns(&analysis.token_names_of(&e.tokens))} =>`);
+            w.line(`if min_prec > ${e.prec} { return ${table.exit}; }`);
+            if follow {
+                w.line(`if !${follow_admits_call("tokens", "pos")} { return ${e.alt}; }`);
+            }
+            // Only `e.alt` takes the token, so only a caller can contest it.
+            w.line(`return atn_lr_enter_or_ask(&ATN_SIM, atn, ${decision}, ${e.alt}, tokens, pos, TK_EOF, min_prec);`);
+            w.end_with(",");
         }
-        // Only `e.alt` takes the token, so only a caller can contest it.
-        w.line(`return atn_lr_enter_or_ask(&ATN_SIM, atn, ${decision}, ${e.alt}, tokens, pos, TK_EOF, min_prec);`);
-        w.end_with(",");
-    }
-    if !table.contested.is_empty() {
-        w.line(`${constant_patterns(&analysis.token_names_of(&table.contested))} => {},`);
-    }
-    w.line(`_ => { return ${table.exit}; },`);
-    w.end_with(";");
-    w.end();
-    w.line(`return atn_lr_loop_decision(&ATN_SIM, atn, ${decision}, tokens, pos, TK_EOF, min_prec);`);
-    w.end();
+        if !table.contested.is_empty() {
+            w.line(`${constant_patterns(&analysis.token_names_of(&table.contested))} => {},`);
+        }
+        w.line(`_ => { return ${table.exit}; },`);
+        w.end_with(";");
+        w.end();
+        w.line(`return atn_lr_loop_decision(&ATN_SIM, atn, ${decision}, tokens, pos, TK_EOF, min_prec);`);
+    });
     w.blank();
 }

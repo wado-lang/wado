@@ -480,36 +480,29 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
     s.emit(w);
     w.blank();
 
-    ImplSpec::new("Lexer").emit_begin(w);
-
     let mut f = FnSpec::new("new");
     f.add_generic("S: AsStrSlice");
     f.add_param("input", "S");
     f.set_return_type("Lexer");
-    f.emit_begin(w);
-    w.line("return Lexer { src: input.as_str_slice(), pos: 0 };");
-    w.end();
-    w.blank();
-
     let mut f2 = FnSpec::new("at_end");
     f2.set_receiver("&self");
     f2.set_return_type("bool");
-    f2.emit_begin(w);
-    w.line("return self.pos >= self.src.len();");
-    w.end();
-
-    if surface.commit_latches {
-        gen_lexer_action_methods(w, surface, vis);
-    } else if surface.sink {
-        gen_lexer_emit_fn(w, vis);
-    }
-
-    for let m of &members.methods {
+    ImplSpec::new("Lexer").emit(w, |w| {
+        f.emit(w, |w| w.line("return Lexer { src: input.as_str_slice(), pos: 0 };"));
         w.blank();
-        w.line(&m.source);
-    }
+        f2.emit(w, |w| w.line("return self.pos >= self.src.len();"));
 
-    w.end();  // impl
+        if surface.commit_latches {
+            gen_lexer_action_methods(w, surface, vis);
+        } else if surface.sink {
+            gen_lexer_emit_fn(w, vis);
+        }
+
+        for let m of &members.methods {
+            w.blank();
+            w.line(&m.source);
+        }
+    });
     w.blank();
 }
 
@@ -520,9 +513,7 @@ fn gen_lexer_emit_fn(w: &mut CodeWriter, vis: Vis) {
     let mut fe = FnSpec::new("emit", vis);
     fe.set_receiver("&mut self");
     fe.add_param("s", "String");
-    fe.emit_begin(w);
-    w.line("self.act_output.push_str(&s);");
-    w.end();
+    fe.emit(w, |w| w.line("self.act_output.push_str(&s);"));
 }
 
 fn gen_lexer_action_methods(w: &mut CodeWriter, surface: &LexerSurface, vis: Vis) {
@@ -542,21 +533,21 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, surface: &LexerSurface, vis: Vis
             fr.add_param("mode", "i32");
         }
     }
-    fr.emit_begin(w);
-    w.line("self.act_type = kind;");
-    w.line("self.act_channel = channel;");
-    w.line("self.act_skip = false;");
-    w.line("self.act_more = false;");
-    if surface.mode_commands {
-        w.line("self.act_push_mode = -1;");
-        w.line("self.act_pop_mode = false;");
-        w.line(`self.${LEXER_SET_MODE_FIELD} = -1;`);
-        w.line("self.act_mode_depth = depth;");
-        if surface.current_mode {
-            w.line(`self.${LEXER_MODE_FIELD} = mode;`);
+    fr.emit(w, |w| {
+        w.line("self.act_type = kind;");
+        w.line("self.act_channel = channel;");
+        w.line("self.act_skip = false;");
+        w.line("self.act_more = false;");
+        if surface.mode_commands {
+            w.line("self.act_push_mode = -1;");
+            w.line("self.act_pop_mode = false;");
+            w.line(`self.${LEXER_SET_MODE_FIELD} = -1;`);
+            w.line("self.act_mode_depth = depth;");
+            if surface.current_mode {
+                w.line(`self.${LEXER_MODE_FIELD} = mode;`);
+            }
         }
-    }
-    w.end();
+    });
     w.blank();
 
     lexer_setter(w, "set_type", "t", "act_type", vis);
@@ -589,31 +580,31 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, surface: &LexerSurface)
     let mut fp = FnSpec::new("push_mode", vis);
     fp.set_receiver("&mut self");
     fp.add_param("m", "i32");
-    fp.emit_begin(w);
-    gen_one_mode_command_assert(w);
-    w.line("self.act_push_mode = m;");
-    w.line("self.act_mode_depth += 1;");
-    gen_current_mode_write(w, surface, "m");
-    w.end();
+    fp.emit(w, |w| {
+        gen_one_mode_command_assert(w);
+        w.line("self.act_push_mode = m;");
+        w.line("self.act_mode_depth += 1;");
+        gen_current_mode_write(w, surface, "m");
+    });
     w.blank();
 
     let mut fo = FnSpec::new("pop_mode", vis);
     fo.set_receiver("&mut self");
-    fo.emit_begin(w);
-    gen_one_mode_command_assert(w);
-    w.line("self.act_pop_mode = true;");
-    w.line("self.act_mode_depth -= 1;");
-    gen_current_mode_write(w, surface, "-1");
-    w.end();
+    fo.emit(w, |w| {
+        gen_one_mode_command_assert(w);
+        w.line("self.act_pop_mode = true;");
+        w.line("self.act_mode_depth -= 1;");
+        gen_current_mode_write(w, surface, "-1");
+    });
     w.blank();
 
     let mut fs = FnSpec::new("set_mode", vis);
     fs.set_receiver("&mut self");
     fs.add_param("m", "i32");
-    fs.emit_begin(w);
-    gen_one_mode_command_assert(w);
-    w.line(`self.${LEXER_SET_MODE_FIELD} = m;`);
-    w.end();
+    fs.emit(w, |w| {
+        gen_one_mode_command_assert(w);
+        w.line(`self.${LEXER_SET_MODE_FIELD} = m;`);
+    });
     w.blank();
 
     if surface.current_mode {
@@ -639,13 +630,13 @@ fn gen_current_mode_reader(w: &mut CodeWriter, vis: Vis) {
     let mut f = FnSpec::new(&LEXER_MODE_READER, vis);
     f.set_receiver("&self");
     f.set_return_type("i32");
-    f.emit_begin(w);
-    w.line(`if self.${LEXER_SET_MODE_FIELD} >= 0 { return self.${LEXER_SET_MODE_FIELD}; }`);
-    w.line(
-        `assert self.${LEXER_MODE_FIELD} >= 0, "\$mode after pop_mode reads a mode only the mode stack holds";`,
-    );
-    w.line(`return self.${LEXER_MODE_FIELD};`);
-    w.end();
+    f.emit(w, |w| {
+        w.line(`if self.${LEXER_SET_MODE_FIELD} >= 0 { return self.${LEXER_SET_MODE_FIELD}; }`);
+        w.line(
+            `assert self.${LEXER_MODE_FIELD} >= 0, "\$mode after pop_mode reads a mode only the mode stack holds";`,
+        );
+        w.line(`return self.${LEXER_MODE_FIELD};`);
+    });
 }
 
 fn gen_one_mode_command_assert(w: &mut CodeWriter) {
@@ -658,9 +649,7 @@ fn lexer_reader<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, fiel
     let mut f = FnSpec::new(name, vis);
     f.set_receiver("&self");
     f.set_return_type("i32");
-    f.emit_begin(w);
-    w.line(`return self.${field};`);
-    w.end();
+    f.emit(w, |w| w.line(`return self.${field};`));
 }
 
 fn lexer_setter<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
@@ -673,17 +662,13 @@ fn lexer_setter<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     let mut f = FnSpec::new(name, vis);
     f.set_receiver("&mut self");
     f.add_param(arg, "i32");
-    f.emit_begin(w);
-    w.line(`self.${field} = ${arg};`);
-    w.end();
+    f.emit(w, |w| w.line(`self.${field} = ${arg};`));
 }
 
 fn lexer_flag<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, field: S1, vis: Vis) {
     let mut f = FnSpec::new(name, vis);
     f.set_receiver("&mut self");
-    f.emit_begin(w);
-    w.line(`self.${field} = true;`);
-    w.end();
+    f.emit(w, |w| w.line(`self.${field} = true;`));
 }
 
 fn gen_lexer_match_fns<S: AsStrSlice>(
@@ -728,19 +713,23 @@ fn gen_lexer_fragment_fn<S: AsStrSlice>(
     sc_name: S,
 ) {
     let rule = find_fragment(all_rules, &frag.key.name).expect("a fragment matcher names no fragment");
-    begin_lexer_matcher(w, &frag.key.fn_name(), rule, all_rules, hm, sc_name);
-    end_lexer_matcher(w, rule, &frag.plan, &LexerEmit { all_rules, ci: frag.key.ci, hm }, ea);
+    let e = LexerEmit { all_rules, ci: frag.key.ci, hm };
+    emit_lexer_matcher(w, &frag.key.fn_name(), rule, all_rules, hm, sc_name, |w| {
+        lexer_matcher_body(w, rule, &frag.plan, &e, ea);
+    });
 }
 
-/// Open a matcher `fn_name(src, start) -> i32` over `rule`'s text. Positions are
-/// byte offsets into `src`, so a step consumes one char's UTF-8 bytes.
-fn begin_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
+/// A matcher `fn_name(src, start) -> i32` over `rule`'s text, its body written
+/// by `body`. Positions are byte offsets into `src`, so a step consumes one
+/// char's UTF-8 bytes.
+fn emit_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     fn_name: S,
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
     hm: bool,
     sc_name: S1,
+    mut body: fn mut(&mut CodeWriter),
 ) {
     let mut f = FnSpec::new(fn_name);
     if hm {
@@ -755,10 +744,13 @@ fn begin_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
     if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
     }
-    f.emit_begin(w);
-    if hm {
-        w.line("let src = &lx.src;");
-    }
+    f.emit(w, |w| {
+        if hm {
+            w.line("let src = &lx.src;");
+        }
+        body(w);
+    });
+    w.blank();
 }
 
 /// What every emit inside one matcher reads and none changes. `hm` says the
@@ -773,13 +765,11 @@ struct LexerEmit {
     defers_actions: bool = false,
 }
 
-/// Emit `rule`'s body under `plan` and close the matcher, returning the end.
-fn end_lexer_matcher(w: &mut CodeWriter, rule: &LexerRule, plan: &LexerBodyPlan, e: &LexerEmit, ea: bool) {
+/// `rule`'s body under `plan`, returning the end.
+fn lexer_matcher_body(w: &mut CodeWriter, rule: &LexerRule, plan: &LexerBodyPlan, e: &LexerEmit, ea: bool) {
     w.line("let mut pos = start;");
     gen_lexer_body(w, &rule.body, plan, e, "return -1", ea, false);
     w.line("return pos;");
-    w.end();
-    w.blank();
 }
 
 /// Which matcher covers a lexer rule's text. `has_match_fn` reduces it to
@@ -1517,21 +1507,21 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     sc_name: S,
 ) {
     gen_visibility_comment(w, &rule.visibility);
-    begin_lexer_matcher(w, &lexer_try_fn_name(&rule.name), rule, all_rules, hm, sc_name);
+    let fn_name = lexer_try_fn_name(&rule.name);
     // ATN-class rule: the static single-pass emitter cannot decide it, so
     // delegate to the runtime lexer simulator.
     if let Some(idx) = atn_class.get(rule.name) {
         let longest = !lexer_rule_has_non_greedy(rule, all_rules);
-        w.line(`return latn_match(&LATN_SIM, ${idx}, src, start, ${longest});`);
-        w.end();
-        w.blank();
+        emit_lexer_matcher(w, &fn_name, rule, all_rules, hm, sc_name, |w| {
+            w.line(`return latn_match(&LATN_SIM, ${idx}, src, start, ${longest});`);
+        });
         return;
     }
     let Some(plan) = plan else {
         unreachable();
     };
     let e = LexerEmit { all_rules, ci: resolve_ci(grammar_opts, &rule.options), hm };
-    end_lexer_matcher(w, rule, plan, &e, ea);
+    emit_lexer_matcher(w, &fn_name, rule, all_rules, hm, sc_name, |w| lexer_matcher_body(w, rule, plan, &e, ea));
 }
 
 /// Emit each semantic predicate at position `before` as a guard
@@ -1772,9 +1762,7 @@ fn gen_lexer_apply_fns<S: AsStrSlice>(
         if replay_super {
             f.add_effect(sc_name);
         }
-        f.emit_begin(w);
-        gen_lexer_apply_replay_body(w, rule, &grammar.lexer_rules, &grammar.options, ci, has_members);
-        w.end();
+        f.emit(w, |w| gen_lexer_apply_replay_body(w, rule, &grammar.lexer_rules, &grammar.options, ci, has_members));
         w.blank();
     }
 }
@@ -4673,7 +4661,6 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
     f.add_param("start", "i32");
     f.add_param("end", "i32");
     f.set_return_type("i32");
-    f.emit_begin(w);
     let mut lens: List<i32> = [];
     for let kw of keywords {
         if !lens.contains(&kw.text.len()) {
@@ -4681,15 +4668,20 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         }
     }
     lens.sort();
-    w.begin("match end - start");
-    for let len of &lens {
-        let same_len: List<KeywordInfo> = keywords.iter_ref().filter(|kw| kw.text.len() == *len).map(|kw| *kw).collect();
-        gen_keyword_arm(w, `${*len}`, &same_len, 0);
-    }
-    w.line("_ => {},");
-    w.end();
-    w.line("return -1;");
-    w.end();
+    f.emit(w, |w| {
+        w.begin("match end - start");
+        for let len of &lens {
+            let same_len: List<KeywordInfo> = keywords
+                .iter_ref()
+                .filter(|kw| kw.text.len() == *len)
+                .map(|kw| *kw)
+                .collect();
+            gen_keyword_arm(w, `${*len}`, &same_len, 0);
+        }
+        w.line("_ => {},");
+        w.end();
+        w.line("return -1;");
+    });
     w.blank();
 }
 
@@ -4864,29 +4856,27 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
         }
         f.add_param("start", "i32");
         f.set_return_type("i32");
-        f.emit_begin(w);
-        if hm {
-            w.line("let src = &lx.src;");
-        }
         let len = lit.text.len();
         assert len > 0, "a literal token has text";
-        if lit.text.chars().any(|c| folds_beyond_itself(c, ci)) {
-            w.line("let mut pos = start;");
-            gen_lexer_leaf(w, &LexerElement::Literal(lit.text), "return -1", ci, hm);
-            w.line("return pos;");
-            w.end();
-            w.blank();
-            continue;
-        }
-        let mut mismatches: List<String> = [];
-        let mut offset = 0;
-        for let c of lit.text.chars() {
-            mismatches.extend(&literal_char_mismatches("start", offset, c, ci));
-            offset += c.len_utf8();
-        }
-        w.line(`if start + ${len} > src.len() || ${mismatches.join(" || ")} { return -1; }`);
-        w.line(`return start + ${len};`);
-        w.end();
+        f.emit(w, |w| {
+            if hm {
+                w.line("let src = &lx.src;");
+            }
+            if lit.text.chars().any(|c| folds_beyond_itself(c, ci)) {
+                w.line("let mut pos = start;");
+                gen_lexer_leaf(w, &LexerElement::Literal(lit.text), "return -1", ci, hm);
+                w.line("return pos;");
+                return;
+            }
+            let mut mismatches: List<String> = [];
+            let mut offset = 0;
+            for let c of lit.text.chars() {
+                mismatches.extend(&literal_char_mismatches("start", offset, c, ci));
+                offset += c.len_utf8();
+            }
+            w.line(`if start + ${len} > src.len() || ${mismatches.join(" || ")} { return -1; }`);
+            w.line(`return start + ${len};`);
+        });
         w.blank();
     }
 }
@@ -5715,264 +5705,267 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     if !sc_name.is_empty() {
         f.add_effect(sc_name);
     }
-    f.emit_begin(w);
-    w.line("let mut lexer = Lexer::new(input);");
-    // Struct-of-arrays token storage: the lexer pushes flat i32s, never a
-    // per-token aggregate. `triv_lo` marks where the current token's leading
-    // trivia begins; it advances to the next mark after each emitted token.
-    w.line("let mut ts = TokenStream::new(lexer.src);");
-    w.line("let mut triv_lo = ts.trivia_mark();");
+    f.emit(
+        w,
+        |w| {
+            w.line("let mut lexer = Lexer::new(input);");
+            // Struct-of-arrays token storage: the lexer pushes flat i32s, never a
+            // per-token aggregate. `triv_lo` marks where the current token's leading
+            // trivia begins; it advances to the next mark after each emitted token.
+            w.line("let mut ts = TokenStream::new(lexer.src);");
+            w.line("let mut triv_lo = ts.trivia_mark();");
 
-    if has_more_rules {
-        // Tracks the start position of a pending `more` sequence; -1 means
-        // no pending `more` data. When a non-`more` rule emits, it uses
-        // `more_start` as the token start so the emitted text includes
-        // all previously-`more`'d characters.
-        w.line("let mut more_start: i32 = -1;");
-    }
-
-    if use_modes {
-        w.line("let mut mode_stack: List<i32> = [];");
-        w.line("let mut current_mode: i32 = 0;");
-    }
-
-    w.begin("while !lexer.at_end()");
-    w.line("let start = lexer.pos;");
-    w.line("let mut best_end: i32 = -1;");
-    w.line("let mut best_kind: i32 = TK_ERROR;");
-    w.line("let mut end: i32 = -1;");
-    if has_actions {
-        // Which winning rule's `apply_<rule>_actions` to replay post-tournament
-        // (-1 = none). Set in the winner block alongside `best_end`/`best_kind`.
-        w.line("let mut best_act: i32 = -1;");
-        // Latched by an action's `lx.skip()` (no `best_skip` tournament var
-        // exists — skip is otherwise decided by `best_kind`).
-        w.line("let mut best_act_skip = false;");
-    }
-    w.line("let first_char = char_at(&lexer.src, start);");
-
-    if use_modes {
-        w.line("let mut best_push_mode: i32 = -1;");
-        w.line("let mut best_pop_mode = false;");
-    }
-    if has_set_mode_rules {
-        w.line("let mut best_set_mode: i32 = -1;");
-    }
-    if has_more_rules {
-        w.line("let mut best_more = false;");
-    }
-    if has_channel_rules {
-        w.line("let mut best_channel: i32 = 0;");
-    }
-
-    // Under `use_modes` every winner block assigns `best_push_mode` /
-    // `best_pop_mode`, so the extras are never empty.
-    let needs_extras = use_modes || has_set_mode_rules || has_more_rules || has_channel_rules;
-    if use_modes {
-        for let mut mi = 0; mi < mode_names.len(); mi += 1 {
-            open_chain_arm(w, mi > 0, `current_mode == ${mi}`);
-            let calls = build_mode_try_calls(
-                mi,
-                lexer_rules,
-                lit_tokens,
-                routes,
-                grammar_opts,
-                grammar_ci,
-                act_rule_names,
-                true,
-                has_set_mode_rules,
-                has_more_rules,
-                has_channel_rules,
-            );
-            let groups = build_dispatch_groups(&calls);
-            gen_dispatch_groups(w, &calls, &groups, needs_extras, has_actions, has_members);
-        }
-        w.end();  // mode dispatch
-    } else {
-        let calls = build_mode_try_calls(
-            0,
-            lexer_rules,
-            lit_tokens,
-            routes,
-            grammar_opts,
-            grammar_ci,
-            act_rule_names,
-            false,
-            has_set_mode_rules,
-            has_more_rules,
-            has_channel_rules,
-        );
-        let groups = build_dispatch_groups(&calls);
-        gen_dispatch_groups(w, &calls, &groups, needs_extras, has_actions, has_members);
-    }
-
-    // A zero-length match (`best_end == start`) is legitimate when a rule
-    // matches the empty string and switches mode — antlr/antlr4#688 ("Lexer
-    // cannot match zero-length tokens"). Such a match makes forward progress
-    // only through the mode change, so accept it just when one is pending;
-    // otherwise treating `best_end == start` as a match would spin the `while`
-    // loop forever. With no modes a zero-length match can never progress, so
-    // the strict `<= start` guard is kept.
-    let no_match_guard = if use_modes {
-        // `best_push_mode` / `best_pop_mode` always exist under `use_modes`;
-        // `best_set_mode` only when the grammar has a `mode(X)` rule.
-        let mut stalled = String::from("best_push_mode < 0 && !best_pop_mode");
-        if has_set_mode_rules {
-            stalled.push_str(" && best_set_mode < 0");
-        }
-        `best_end < start || (best_end == start && ${stalled})`;
-    } else {
-        String::from("best_end <= start");
-    };
-    w.begin(`if ${no_match_guard}`);
-    w.line("let error_end = lexer.src.ceil_char_boundary(start + 1);");
-    w.line(
-        "let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);",
-    );
-    w.line("triv_lo = ts.trivia_mark();");
-    w.line("lexer.pos = error_end;");
-    w.else_begin("else");
-    if !keywords.is_empty() {
-        let kinds = keyword_carrier_kinds(lexer_rules, routes, keywords, grammar_opts);
-        assert !kinds.is_empty(), "an admitted keyword's carrier, or the rule subsuming it, is dispatched";
-        let mut gate = if kinds.len() == 1 {
-            `best_kind == ${kinds[0]}`;
-        } else {
-            `best_kind matches { ${constant_patterns(&kinds)} }`;
-        };
-        if use_modes {
-            gate = `current_mode == 0 && ${gate}`;
-        }
-        // The keyword precedes its carrier, so it takes the match whole: none
-        // of the carrier's commands or actions apply.
-        let mut dropped = default_extras(use_modes, has_set_mode_rules, has_more_rules, has_channel_rules);
-        if has_actions {
-            dropped.push_str(" best_act = -1;");
-        }
-        w.begin(`if ${gate}`);
-        w.line("let kw_kind = classify_keyword(&lexer.src, start, best_end);");
-        w.line(`if kw_kind >= 0 { best_kind = kw_kind;${dropped} }`);
-        w.end();
-    }
-
-    // Winner-replay: the chosen rule's `{ ... }` actions run once, here, on the
-    // committed match — never for a losing candidate. Placed after keyword
-    // reclassification so an explicit `set_type` wins, and before the
-    // skip/more/channel commit so its effects (`best_kind`) feed them.
-    if has_actions {
-        gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules, surface);
-    }
-
-    // `more` rules accumulate text into the next emitted token. `tok_start`
-    // is the earliest start position of the current pending `more` chain,
-    // or `start` if no `more` is pending.
-    if has_more_rules {
-        w.line("let tok_start = if more_start >= 0 { more_start } else { start };");
-    } else {
-        w.line("let tok_start = start;");
-    }
-
-    let skip_names: List<String> = lexer_rules
-        .iter_ref()
-        .filter(|rule: &LexerRule| rule.skip)
-        .map(|rule: &LexerRule| `TK_${rule.name}`)
-        .collect();
-    // An action's `lx.skip()` latches `best_act_skip`; OR it into the
-    // command-derived skip decision so either route routes the token to trivia.
-    let act_skip = if has_actions { " || best_act_skip" } else { "" };
-    // Without either, `is_skip` is a compile-time `false`.
-    let has_skip = !skip_names.is_empty() || has_actions;
-    if skip_names.is_empty() {
-        if has_skip {
-            w.line(`let is_skip = false${act_skip};`);
-        }
-    } else {
-        w.write(`let is_skip = best_kind matches { ${constant_patterns(&skip_names)} }${act_skip};\n`);
-    }
-
-    gen_lexer_emit_hook(w, sc_name, has_skip, has_more_rules, has_channel_rules);
-
-    if has_more_rules {
-        // A `more` match suppresses emission and remembers the starting
-        // position so the next non-`more` match covers the full span.
-        w.begin("if best_more");
-        w.line("if more_start < 0 { more_start = start; }");
-        if has_skip {
-            w.else_begin("else if is_skip");
-            w.line("ts.push_trivia(best_kind, tok_start, best_end, 0);");
-            w.line("more_start = -1;");
-        }
-        if has_channel_rules {
-            // Non-default channels are invisible to the parser — route to
-            // trivia with the channel id preserved. ANTLR4 treats any
-            // non-DEFAULT channel the same way at the parser boundary.
-            w.else_begin("else if best_channel != 0");
-            w.line("ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
-            w.line("more_start = -1;");
-        }
-        w.else_begin("else");
-        emit_token_commit(w, "best_kind", "tok_start", "best_end");
-        w.line("more_start = -1;");
-        w.end();
-    } else if has_skip || has_channel_rules {
-        if has_skip {
-            w.begin("if is_skip");
-            w.line("ts.push_trivia(best_kind, tok_start, best_end, 0);");
-        }
-        if has_channel_rules {
-            // Non-default channels are invisible to the parser — route to
-            // trivia with the channel id preserved. ANTLR4 treats any
-            // non-DEFAULT channel the same way at the parser boundary.
-            if has_skip {
-                w.else_begin("else if best_channel != 0");
-            } else {
-                w.begin("if best_channel != 0");
+            if has_more_rules {
+                // Tracks the start position of a pending `more` sequence; -1 means
+                // no pending `more` data. When a non-`more` rule emits, it uses
+                // `more_start` as the token start so the emitted text includes
+                // all previously-`more`'d characters.
+                w.line("let mut more_start: i32 = -1;");
             }
-            w.line("ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
-        }
-        w.else_begin("else");
-        emit_token_commit(w, "best_kind", "tok_start", "best_end");
-        w.end();
-    } else {
-        emit_token_commit(w, "best_kind", "tok_start", "best_end");
-    }
 
-    if use_modes {
-        w.begin("if best_push_mode >= 0");
-        w.line("mode_stack.push(current_mode);");
-        w.line("current_mode = best_push_mode;");
-        w.line("best_push_mode = -1;");
-        w.end();
-        w.begin("if best_pop_mode");
-        w.begin("if mode_stack.is_empty()");
-        w.line("current_mode = 0;");
-        w.else_begin("else");
-        w.line("current_mode = mode_stack[mode_stack.len() - 1];");
-        w.line("mode_stack.pop();");
-        w.end();
-        w.line("best_pop_mode = false;");
-        w.end();
-        if has_set_mode_rules {
-            // `mode(X)` replaces the current mode directly — no stack push.
-            w.begin("if best_set_mode >= 0");
-            w.line("current_mode = best_set_mode;");
-            w.line("best_set_mode = -1;");
-            w.end();
-        }
-    }
+            if use_modes {
+                w.line("let mut mode_stack: List<i32> = [];");
+                w.line("let mut current_mode: i32 = 0;");
+            }
 
-    w.line("lexer.pos = best_end;");
-    w.end();  // else
-    w.end();  // while
-    // EOF sentinel: zero-length, carrying any trailing trivia. No reset
-    // follows (the stream ends here), so this stays inline rather than
-    // using `emit_token_commit`.
-    w.line("ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
-    if surface.sink {
-        w.line("ts.output = lexer.act_output;");
-    }
-    w.line("return ts;");
-    w.end();  // fn
+            w.begin("while !lexer.at_end()");
+            w.line("let start = lexer.pos;");
+            w.line("let mut best_end: i32 = -1;");
+            w.line("let mut best_kind: i32 = TK_ERROR;");
+            w.line("let mut end: i32 = -1;");
+            if has_actions {
+                // Which winning rule's `apply_<rule>_actions` to replay post-tournament
+                // (-1 = none). Set in the winner block alongside `best_end`/`best_kind`.
+                w.line("let mut best_act: i32 = -1;");
+                // Latched by an action's `lx.skip()` (no `best_skip` tournament var
+                // exists — skip is otherwise decided by `best_kind`).
+                w.line("let mut best_act_skip = false;");
+            }
+            w.line("let first_char = char_at(&lexer.src, start);");
+
+            if use_modes {
+                w.line("let mut best_push_mode: i32 = -1;");
+                w.line("let mut best_pop_mode = false;");
+            }
+            if has_set_mode_rules {
+                w.line("let mut best_set_mode: i32 = -1;");
+            }
+            if has_more_rules {
+                w.line("let mut best_more = false;");
+            }
+            if has_channel_rules {
+                w.line("let mut best_channel: i32 = 0;");
+            }
+
+            // Under `use_modes` every winner block assigns `best_push_mode` /
+            // `best_pop_mode`, so the extras are never empty.
+            let needs_extras = use_modes || has_set_mode_rules || has_more_rules || has_channel_rules;
+            if use_modes {
+                for let mut mi = 0; mi < mode_names.len(); mi += 1 {
+                    open_chain_arm(w, mi > 0, `current_mode == ${mi}`);
+                    let calls = build_mode_try_calls(
+                        mi,
+                        lexer_rules,
+                        lit_tokens,
+                        routes,
+                        grammar_opts,
+                        grammar_ci,
+                        act_rule_names,
+                        true,
+                        has_set_mode_rules,
+                        has_more_rules,
+                        has_channel_rules,
+                    );
+                    let groups = build_dispatch_groups(&calls);
+                    gen_dispatch_groups(w, &calls, &groups, needs_extras, has_actions, has_members);
+                }
+                w.end();  // mode dispatch
+            } else {
+                let calls = build_mode_try_calls(
+                    0,
+                    lexer_rules,
+                    lit_tokens,
+                    routes,
+                    grammar_opts,
+                    grammar_ci,
+                    act_rule_names,
+                    false,
+                    has_set_mode_rules,
+                    has_more_rules,
+                    has_channel_rules,
+                );
+                let groups = build_dispatch_groups(&calls);
+                gen_dispatch_groups(w, &calls, &groups, needs_extras, has_actions, has_members);
+            }
+
+            // A zero-length match (`best_end == start`) is legitimate when a rule
+            // matches the empty string and switches mode — antlr/antlr4#688 ("Lexer
+            // cannot match zero-length tokens"). Such a match makes forward progress
+            // only through the mode change, so accept it just when one is pending;
+            // otherwise treating `best_end == start` as a match would spin the `while`
+            // loop forever. With no modes a zero-length match can never progress, so
+            // the strict `<= start` guard is kept.
+            let no_match_guard = if use_modes {
+                // `best_push_mode` / `best_pop_mode` always exist under `use_modes`;
+                // `best_set_mode` only when the grammar has a `mode(X)` rule.
+                let mut stalled = String::from("best_push_mode < 0 && !best_pop_mode");
+                if has_set_mode_rules {
+                    stalled.push_str(" && best_set_mode < 0");
+                }
+                `best_end < start || (best_end == start && ${stalled})`;
+            } else {
+                String::from("best_end <= start");
+            };
+            w.begin(`if ${no_match_guard}`);
+            w.line("let error_end = lexer.src.ceil_char_boundary(start + 1);");
+            w.line(
+                "let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);",
+            );
+            w.line("triv_lo = ts.trivia_mark();");
+            w.line("lexer.pos = error_end;");
+            w.else_begin("else");
+            if !keywords.is_empty() {
+                let kinds = keyword_carrier_kinds(lexer_rules, routes, keywords, grammar_opts);
+                assert !kinds.is_empty(), "an admitted keyword's carrier, or the rule subsuming it, is dispatched";
+                let mut gate = if kinds.len() == 1 {
+                    `best_kind == ${kinds[0]}`;
+                } else {
+                    `best_kind matches { ${constant_patterns(&kinds)} }`;
+                };
+                if use_modes {
+                    gate = `current_mode == 0 && ${gate}`;
+                }
+                // The keyword precedes its carrier, so it takes the match whole: none
+                // of the carrier's commands or actions apply.
+                let mut dropped = default_extras(use_modes, has_set_mode_rules, has_more_rules, has_channel_rules);
+                if has_actions {
+                    dropped.push_str(" best_act = -1;");
+                }
+                w.begin(`if ${gate}`);
+                w.line("let kw_kind = classify_keyword(&lexer.src, start, best_end);");
+                w.line(`if kw_kind >= 0 { best_kind = kw_kind;${dropped} }`);
+                w.end();
+            }
+
+            // Winner-replay: the chosen rule's `{ ... }` actions run once, here, on the
+            // committed match — never for a losing candidate. Placed after keyword
+            // reclassification so an explicit `set_type` wins, and before the
+            // skip/more/channel commit so its effects (`best_kind`) feed them.
+            if has_actions {
+                gen_lexer_action_replay(w, act_rule_names, use_modes, has_set_mode_rules, surface);
+            }
+
+            // `more` rules accumulate text into the next emitted token. `tok_start`
+            // is the earliest start position of the current pending `more` chain,
+            // or `start` if no `more` is pending.
+            if has_more_rules {
+                w.line("let tok_start = if more_start >= 0 { more_start } else { start };");
+            } else {
+                w.line("let tok_start = start;");
+            }
+
+            let skip_names: List<String> = lexer_rules
+                .iter_ref()
+                .filter(|rule: &LexerRule| rule.skip)
+                .map(|rule: &LexerRule| `TK_${rule.name}`)
+                .collect();
+            // An action's `lx.skip()` latches `best_act_skip`; OR it into the
+            // command-derived skip decision so either route routes the token to trivia.
+            let act_skip = if has_actions { " || best_act_skip" } else { "" };
+            // Without either, `is_skip` is a compile-time `false`.
+            let has_skip = !skip_names.is_empty() || has_actions;
+            if skip_names.is_empty() {
+                if has_skip {
+                    w.line(`let is_skip = false${act_skip};`);
+                }
+            } else {
+                w.write(`let is_skip = best_kind matches { ${constant_patterns(&skip_names)} }${act_skip};\n`);
+            }
+
+            gen_lexer_emit_hook(w, sc_name, has_skip, has_more_rules, has_channel_rules);
+
+            if has_more_rules {
+                // A `more` match suppresses emission and remembers the starting
+                // position so the next non-`more` match covers the full span.
+                w.begin("if best_more");
+                w.line("if more_start < 0 { more_start = start; }");
+                if has_skip {
+                    w.else_begin("else if is_skip");
+                    w.line("ts.push_trivia(best_kind, tok_start, best_end, 0);");
+                    w.line("more_start = -1;");
+                }
+                if has_channel_rules {
+                    // Non-default channels are invisible to the parser — route to
+                    // trivia with the channel id preserved. ANTLR4 treats any
+                    // non-DEFAULT channel the same way at the parser boundary.
+                    w.else_begin("else if best_channel != 0");
+                    w.line("ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
+                    w.line("more_start = -1;");
+                }
+                w.else_begin("else");
+                emit_token_commit(w, "best_kind", "tok_start", "best_end");
+                w.line("more_start = -1;");
+                w.end();
+            } else if has_skip || has_channel_rules {
+                if has_skip {
+                    w.begin("if is_skip");
+                    w.line("ts.push_trivia(best_kind, tok_start, best_end, 0);");
+                }
+                if has_channel_rules {
+                    // Non-default channels are invisible to the parser — route to
+                    // trivia with the channel id preserved. ANTLR4 treats any
+                    // non-DEFAULT channel the same way at the parser boundary.
+                    if has_skip {
+                        w.else_begin("else if best_channel != 0");
+                    } else {
+                        w.begin("if best_channel != 0");
+                    }
+                    w.line("ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
+                }
+                w.else_begin("else");
+                emit_token_commit(w, "best_kind", "tok_start", "best_end");
+                w.end();
+            } else {
+                emit_token_commit(w, "best_kind", "tok_start", "best_end");
+            }
+
+            if use_modes {
+                w.begin("if best_push_mode >= 0");
+                w.line("mode_stack.push(current_mode);");
+                w.line("current_mode = best_push_mode;");
+                w.line("best_push_mode = -1;");
+                w.end();
+                w.begin("if best_pop_mode");
+                w.begin("if mode_stack.is_empty()");
+                w.line("current_mode = 0;");
+                w.else_begin("else");
+                w.line("current_mode = mode_stack[mode_stack.len() - 1];");
+                w.line("mode_stack.pop();");
+                w.end();
+                w.line("best_pop_mode = false;");
+                w.end();
+                if has_set_mode_rules {
+                    // `mode(X)` replaces the current mode directly — no stack push.
+                    w.begin("if best_set_mode >= 0");
+                    w.line("current_mode = best_set_mode;");
+                    w.line("best_set_mode = -1;");
+                    w.end();
+                }
+            }
+
+            w.line("lexer.pos = best_end;");
+            w.end();  // else
+            w.end();  // while
+            // EOF sentinel: zero-length, carrying any trailing trivia. No reset
+            // follows (the stream ends here), so this stays inline rather than
+            // using `emit_token_commit`.
+            w.line("ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
+            if surface.sink {
+                w.line("ts.output = lexer.act_output;");
+            }
+            w.line("return ts;");
+        },
+    );
     w.blank();
 }
 
@@ -6057,31 +6050,30 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     let mut f = FnSpec::new("token_kind_name", Vis::Pub);
     f.add_param("kind", "i32");
     f.set_return_type("String");
-    f.emit_begin(w);
-
-    w.line("return match kind {");
-    w.indent();
-    for let rule of lexer_rules {
-        if !rule.is_fragment {
-            let trailer = if rule.is_virtual { "  // virtual" } else { "" };
-            w.line(wado`== TK_${rule.name} => "${rule.name}",${trailer}`);
+    f.emit(w, |w| {
+        w.line("return match kind {");
+        w.indent();
+        for let rule of lexer_rules {
+            if !rule.is_fragment {
+                let trailer = if rule.is_virtual { "  // virtual" } else { "" };
+                w.line(wado`== TK_${rule.name} => "${rule.name}",${trailer}`);
+            }
         }
-    }
-    w.line("== TK_EOF => \"Eof\",");
-    // Mirror the sentinel collapse in `gen_token_constants`: when the
-    // user owns `TK_ERROR`, the rule's own arm covers it.
-    if !rule_name_exists(lexer_rules, "ERROR") {
-        w.line("== TK_ERROR => \"Error\",");
-    }
-    // A literal names itself by its source form, `'+'`, not the `TK_LIT_PLUS`
-    // constant Gale interned it under.
-    for let lit of lit_tokens {
-        w.line(wado`== ${lit.const_name} => "${lit_name(lit.text)}",`);
-    }
-    w.line("_ => \"Unknown\",");
-    w.dedent();
-    w.line("};");
-    w.end();  // fn
+        w.line("== TK_EOF => \"Eof\",");
+        // Mirror the sentinel collapse in `gen_token_constants`: when the
+        // user owns `TK_ERROR`, the rule's own arm covers it.
+        if !rule_name_exists(lexer_rules, "ERROR") {
+            w.line("== TK_ERROR => \"Error\",");
+        }
+        // A literal names itself by its source form, `'+'`, not the `TK_LIT_PLUS`
+        // constant Gale interned it under.
+        for let lit of lit_tokens {
+            w.line(wado`== ${lit.const_name} => "${lit_name(lit.text)}",`);
+        }
+        w.line("_ => \"Unknown\",");
+        w.dedent();
+        w.line("};");
+    });
     w.blank();
 }
 
