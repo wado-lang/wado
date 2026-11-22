@@ -38,6 +38,10 @@ const DOCUMENTS: &[(&str, &str)] = &[
     ("effects", include_str!("../../docs/spec-effects.md")),
     ("modules", include_str!("../../docs/spec-modules.md")),
     ("packages", include_str!("../../docs/spec-packages.md")),
+    (
+        "package-standard",
+        include_str!("../../docs/spec-package-standard.md"),
+    ),
     ("kiln", include_str!("../../docs/spec-kiln.md")),
     ("worlds", include_str!("../../docs/spec-worlds.md")),
     ("components", include_str!("../../docs/spec-components.md")),
