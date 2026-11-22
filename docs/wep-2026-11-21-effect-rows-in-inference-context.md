@@ -110,3 +110,9 @@ Each step keeps every fixture passing and deletes what it replaces.
 - An impl's row binder meets any row whole (`SolverType::AnyRow`), so the
   effects written beside it go unread: `impl<effect E> Tr for fn() with (E, Stdout)`
   meets `fn()`, which performs no `Stdout`.
+- An impl whose target is a function type binds no effect parameter from its
+  receiver: `impl_effect_params` and `impl_effect_binding` read the target's
+  head arguments, and a function type has none. Under
+  `impl<effect E> Held for fn() with E { type Out = fn() with E; … }`, a loud
+  closure's `held()` is typed `fn() -> () with E`, and a selection on it is
+  refused.
