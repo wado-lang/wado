@@ -490,7 +490,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `ty` is a `_` the source wrote for a whole slot, still open.
     pub(super) fn is_bare_written_hole(&self, ty: TypeId) -> bool {
         let applied = self.apply_infer_holes(ty);
-        self.tysys.type_table.borrow().is_infer_var(applied) && !self.written_holes_in(ty).is_empty()
+        self.tysys.type_table.borrow().is_infer_var(applied) && self.holds_written_hole(ty)
+    }
+
+    /// Whether `ty` still holds an open `_` the source wrote, at any depth.
+    pub(super) fn holds_written_hole(&self, ty: TypeId) -> bool {
+        !self.written_holes_in(ty).is_empty()
     }
 
     /// The variables of the `_`s the source wrote that `ty` still holds.

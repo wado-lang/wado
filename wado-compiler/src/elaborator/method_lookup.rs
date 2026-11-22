@@ -28,8 +28,8 @@ use crate::type_table::{TargetBinding, TypeTable};
 
 use super::Elaborator;
 use super::call::{
-    CallSolve, DefaultTypeBinding, SettledAs, bind_nearer,
-    omits_a_default, slot_names, slot_type_bindings,
+    CallSolve, DefaultTypeBinding, SettledAs, bind_nearer, omits_a_default, slot_names,
+    slot_type_bindings,
 };
 use super::coercion::ExpectedReturn;
 use super::infer::{infer_var_answers, unify};

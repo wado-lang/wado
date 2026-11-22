@@ -21,9 +21,7 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{
-    ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer,
-};
+use super::call::{ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer};
 use super::callee::StaticMethodRef;
 use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;

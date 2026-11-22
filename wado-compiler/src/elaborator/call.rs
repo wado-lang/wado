@@ -288,10 +288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `slot_count` slots leave anything for inference: a `_` among
     /// the written args, at any depth, or fewer written than there are slots.
     pub(super) fn turbofish_leaves_slot(&self, type_args: &[TypeId], slot_count: usize) -> bool {
-        type_args.len() < slot_count
-            || type_args
-                .iter()
-                .any(|&arg| !self.written_holes_in(arg).is_empty())
+        type_args.len() < slot_count || type_args.iter().any(|&arg| self.holds_written_hole(arg))
     }
 }
 
@@ -314,11 +311,10 @@ fn absorb_into_pack(
     type_args.insert(pack_pos, tuple);
 }
 
-/// Fill the `_` and unwritten slots of `explicit` from `inferred`, in place.
-/// Every other slot keeps what the source wrote, so an explicit type wins.
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Fill `explicit` from `inferred`: a slot the turbofish left out takes its
-    /// answer, and one holding a `_` meets it.
+    /// Fill the `_` and unwritten slots of `explicit` from `inferred`, in
+    /// place: an unwritten slot takes its answer, and one holding a `_` meets
+    /// it. Every other slot keeps what the source wrote.
     pub(super) fn merge_turbofish_type_args(
         &mut self,
         explicit: &mut Vec<TypeId>,
@@ -326,7 +322,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         for (i, &filled) in inferred.iter().enumerate() {
             match explicit.get(i).copied() {
-                Some(written) if !self.written_holes_in(written).is_empty() => {
+                Some(written) if self.holds_written_hole(written) => {
                     self.equate(written, filled);
                     explicit[i] = self.apply_infer_holes(written);
                 }
@@ -2780,7 +2776,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             type_args =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-        } else if self.turbofish_leaves_slot(&type_args, RealTypeParams::borrowed(&declared).len()) {
+        } else if self.turbofish_leaves_slot(&type_args, RealTypeParams::borrowed(&declared).len())
+        {
             let inferred =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
             self.merge_turbofish_type_args(&mut type_args, &inferred);
@@ -3819,7 +3816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let holes: IndexSet<TypeId> = param_types
             .iter()
             .flat_map(|&ty| self.tysys.type_table.borrow().infer_vars_in(ty))
-            .filter(|&var| !self.written_holes_in(var).is_empty())
+            .filter(|&var| self.holds_written_hole(var))
             .collect();
         let mut infer = InferCtx::new(
             &self.tysys.type_table,
@@ -5574,30 +5571,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let slots = &case.variant.type_param_type_ids;
         // A `_` for a whole slot takes what the expected type has there, as an
         // omitted argument does.
-        let bare: Vec<bool> = case
-            .written
-            .iter()
-            .map(|&t| self.is_bare_written_hole(t))
-            .collect();
         let written: Vec<TypeId> = case
             .written
             .iter()
-            .zip(&bare)
-            .map(|(&t, &bare)| if bare { TypeTable::UNKNOWN } else { t })
+            .map(|&t| {
+                if self.is_bare_written_hole(t) {
+                    TypeTable::UNKNOWN
+                } else {
+                    t
+                }
+            })
             .collect();
         let mut hints = self
             .tysys
             .variant_slot_hints(case.variant, &written, expected_type);
         for (i, &hole) in case.written.iter().enumerate() {
-            if !bare[i] {
+            if written[i] == hole {
                 continue;
             }
-            match hints.get(i).copied() {
-                Some(hint) if hint != TypeTable::UNKNOWN => self.equate(hole, hint),
-                _ => {
-                    hints.resize(hints.len().max(i + 1), TypeTable::UNKNOWN);
-                    hints[i] = hole;
-                }
+            if hints[i] == TypeTable::UNKNOWN {
+                hints[i] = hole;
+            } else {
+                self.equate(hole, hints[i]);
             }
         }
         let inst = self.instantiate(
