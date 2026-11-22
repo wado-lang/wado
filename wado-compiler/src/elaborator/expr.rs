@@ -4073,16 +4073,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Box::<i32> { … }` says what `let b: Box<i32> = …` says, so it
         // resolves as that annotation and takes its place, arity and bound
         // checks included.
-        let expected_type = if struct_lit.type_args.is_empty() {
-            expected_type
-        } else {
+        let turbofish_type = (!struct_lit.type_args.is_empty()).then(|| {
             let (site, written) = struct_lit
                 .name_id
                 .zip(name.as_deref())
                 .expect("only a named literal parses a turbofish");
             self.reject_unresolved_args(&struct_lit.type_args);
-            Some(self.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span))
-        };
+            self.with_writable_holes(|e| {
+                e.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span)
+            })
+        });
+        let expected_type = turbofish_type.or(expected_type);
 
         let named_spread = struct_lit.spreads.first();
         let spread_base_type: Option<TypeId> =
@@ -4105,6 +4106,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected_args = expected_type
             .and_then(instance_args)
             .or_else(|| spread_base_type.and_then(instance_args));
+        let written_args = turbofish_type.and_then(instance_args).unwrap_or_default();
         let resolved_struct_fields: Option<Vec<(String, TypeId)>> =
             self.struct_fields_of_written_decl(struct_decl).map(|info| {
                 let params = info.type_param_type_ids.clone();
@@ -4136,11 +4138,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .struct_fields_of_written_decl(struct_decl)
             .filter(|info| !info.type_param_type_ids.is_empty())
             .cloned()
-            .map(|info| self.instantiate_struct_slots(&info, struct_lit.span));
+            .map(|info| self.instantiate_struct_slots(&info, &written_args, struct_lit.span));
         let site_field_types: Vec<TypeId> = {
             let declared: Vec<TypeId> = struct_field_types.iter().map(|&(_, t)| t).collect();
             match &inst {
-                Some(inst) => self.instantiate_types(&declared, inst),
+                Some(inst) => {
+                    let site = self.instantiate_types(&declared, inst);
+                    self.apply_infer_holes_each(&site)
+                }
                 None => declared,
             }
         };
@@ -4913,15 +4918,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A struct literal's own variables for the declaration's slots.
-    fn instantiate_struct_slots(&mut self, info: &StructFieldInfo, span: Span) -> Instantiated {
+    fn instantiate_struct_slots(
+        &mut self,
+        info: &StructFieldInfo,
+        written: &[TypeId],
+        span: Span,
+    ) -> Instantiated {
         self.instantiate(
             &info.type_param_type_ids,
             &Instantiation {
                 kind: InstanceKind::Struct,
                 name: &info.name,
                 span,
-                // A struct literal has no turbofish; its fields name the slots.
-                type_args: &[],
+                type_args: written,
                 self_binding: None,
                 impl_args: &[],
             },
@@ -4945,6 +4954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("an instantiated struct literal names its declaration");
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();
         let field_types = self.instantiate_types(&decl_field_types, &inst);
+        let field_types = self.apply_infer_holes_each(&field_types);
         let decl_field_names: Vec<&str> = struct_info
             .fields
             .iter()

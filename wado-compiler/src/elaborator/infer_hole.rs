@@ -39,6 +39,12 @@ use crate::tir;
 #[derive(Default)]
 pub(crate) struct InferHoleTable {
     vars: VarStore,
+    /// The variable each `_` the source wrote stands for, by where it is
+    /// written: a site resolved twice reaches the same one.
+    written: IndexMap<Span, TypeId>,
+    /// Whether the type being resolved is one where a written `_` is a
+    /// variable.
+    pub(super) holes_writable: bool,
     /// Hole `TypeId` → what it says if it is never solved.
     diags: IndexMap<TypeId, Blame>,
     /// Where a type mismatch was reported. The mismatch says what was wrong
@@ -439,6 +445,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.infer_holes.vars.mint(hole);
         hole
+    }
+
+    /// The variable the `_` written at `span` stands for.
+    pub(super) fn written_hole(&mut self, span: Span) -> TypeId {
+        if let Some(&var) = self.infer_holes.written.get(&span) {
+            return var;
+        }
+        let var = self.mint_infer_var();
+        self.infer_holes.written.insert(span, var);
+        var
+    }
+
+    /// The variables of the `_`s the source wrote that `ty` still holds.
+    pub(super) fn written_holes_in(&self, ty: TypeId) -> Vec<TypeId> {
+        let ty = self.apply_infer_holes(ty);
+        let tt = self.tysys.type_table.borrow();
+        let held = tt.infer_vars_in(ty);
+        self.infer_holes
+            .written
+            .values()
+            .copied()
+            .filter(|&w| {
+                self.infer_holes.vars.is_unanswered(w)
+                    && held.iter().any(|&h| {
+                        self.infer_holes.vars.root_of(h) == self.infer_holes.vars.root_of(w)
+                    })
+            })
+            .collect()
     }
 
     /// Require of `var`'s answer the trait bounds its slot declared.
@@ -884,6 +918,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Blame each `_` the source wrote whose class no slot blames, at the `_`.
+    fn blame_bare_written_holes(&mut self) {
+        let vars = &self.infer_holes.vars;
+        let blamed: IndexSet<Option<TypeId>> = self
+            .infer_holes
+            .diags
+            .keys()
+            .map(|&hole| vars.root_of(hole))
+            .collect();
+        let bare: Vec<(Span, TypeId)> = self
+            .infer_holes
+            .written
+            .iter()
+            .filter(|&(_, &w)| vars.is_unanswered(w) && !blamed.contains(&vars.root_of(w)))
+            .map(|(&span, &w)| (span, w))
+            .collect();
+        for (span, hole) in bare {
+            self.attach_infer_var_diag(
+                hole,
+                span,
+                "cannot infer the type this `_` stands for; write it in its place".to_string(),
+            );
+        }
+    }
+
     /// End-of-module finalize: raise diagnostics for unsolved holes and
     /// substitute every hole (solved → concrete, unsolved → `error`) into all
     /// recorded facts that can carry one.
@@ -894,6 +953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A check queued after the last answer has not been asked yet.
         self.run_obligations();
         self.settle_pending_selections(Undecided::Report);
+        self.blame_bare_written_holes();
         let mismatches = self.infer_holes.mismatches.take();
         let covered: IndexSet<TypeId> = self
             .infer_holes

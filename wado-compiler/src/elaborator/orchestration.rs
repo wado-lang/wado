@@ -2649,11 +2649,11 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
         self.known = outer;
     }
 
-    /// A turbofish argument, whose top-level `_` marks an inference slot.
+    /// A turbofish argument, where a `_` at any depth is a variable.
     fn visit_turbofish_arg(&mut self, ty: &Type) {
-        if !matches!(ty, Type::Infer(_)) {
-            self.visit_type(ty);
-        }
+        let outer = std::mem::replace(&mut self.allow_infer, true);
+        self.visit_type(ty);
+        self.allow_infer = outer;
     }
 
     fn check_type_name(&mut self, written: &str, span: Span) {
@@ -2728,9 +2728,12 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
             Expr::StaticMethodCall(smc) => {
                 // The target heads a turbofish (`Result::<_, MyErr>`).
                 match &smc.target_type {
+                    // A receiver's `_` stands only for a whole argument.
                     Type::Generic(_) | Type::NamespacedGeneric(_) => {
                         for arg in written_arg_nodes(&smc.target_type) {
-                            self.visit_turbofish_arg(arg);
+                            if !matches!(arg, Type::Infer(_)) {
+                                self.visit_type(arg);
+                            }
                         }
                     }
                     other => self.visit_type(other),

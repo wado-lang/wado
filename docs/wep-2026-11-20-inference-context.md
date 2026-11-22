@@ -44,6 +44,11 @@ A variable is created where the source leaves a type to inference: an omitted
 type argument or a `_` the source writes. It records its origin, the span and
 the sentence it reports if never settled.
 
+A `_` may stand at any depth of any type an expression writes: a turbofish, a
+struct literal's, a `let` annotation, an `as` target. This is Rust's reach. It
+widens what the language accepted before, where only a whole turbofish slot
+took one.
+
 Variables are kept in a union-find. Two variables found equal become one, and
 the root carries both origins. A variable is settled once; settling it again to
 another type is a mismatch at the second cause.
@@ -176,8 +181,13 @@ Each step keeps every fixture passing and deletes what it replaces.
   `fn f<A: Src<Item = B>, B>(a: A, b: B)` takes `B` from `i32`'s `Src::Item`.
   Free, method and static calls solve their slots through one
   `solve_call_type_args`.
-- [ ] A `_` the source writes in an expression's types is a variable. No
-  inference path reads `unknown` for it.
+- [x] A `_` below a call's turbofish slot, and any `_` in a struct literal's
+  turbofish, is a variable (`InferHoleTable::written`, one per `_`). A slot
+  meets it as it meets a written type, and an unsettled one reports as its slot
+  would. A struct literal's turbofish names its slots, as a call's does.
+- [ ] A `_` standing for a whole turbofish slot, or in a static call's receiver,
+  is a variable, so no call path reads `unknown` for it.
+- [ ] A `_` in a `let` annotation and after `as` is a variable.
 - [ ] The context is per body rather than per module.
 
 ## Known gaps
