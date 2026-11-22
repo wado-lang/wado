@@ -58,7 +58,7 @@ jobs:
               exit 1
             fi
           done
-          sha="$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)"
+          sha="$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)"
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [ -n "$COMMENT_ID" ]; then
@@ -82,8 +82,8 @@ jobs:
             gh api "repos/$REPO/contents/.github?ref=$1" --jq '.[] | select(.name == "actions") | .sha'
           }
           wanted="$(run_from "$GITHUB_SHA")"
-          runs="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20" \
-            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')"
+          runs="$(gh run list -R "$REPO" -w ci.yml -b main -e push -s success -L 20 \
+            --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')"
           while read -r run sha; do
             if [ -n "$(gh api "repos/$REPO/actions/runs/$run/artifacts" \
               --jq '.artifacts[] | select(.name == "prebuilt-wado" and (.expired | not)) | .id')" ]; then
