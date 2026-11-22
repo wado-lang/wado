@@ -28,6 +28,14 @@ test "in a struct literal" {
     assert b.v[0] == "x";
 }
 
+type Opt<T> = Option<T>;
+
+test "through a newtype's case" {
+    let xs: List<i32> = [1, 2];
+    let o = Opt::Some::<List<_>>(xs);
+    assert o.unwrap()[1] == 2;
+}
+
 test "beside a written type" {
     let p = pick::<[_, String], _>([1, "s"], true);
     assert p.0 == 1 && p.1 == "s";

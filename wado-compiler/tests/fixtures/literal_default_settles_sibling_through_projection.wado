@@ -1,13 +1,16 @@
 // Within one call, a literal that takes its default settles, through an
 // associated-type bound, the variable another literal of the call waits on:
 // `i32`'s `Src::Item` is `i64`, so the second literal is an `i64`. Free,
-// method and static calls solve their slots alike.
+// method and static calls solve their slots alike, whatever the order of the
+// arguments, and an operation over literals waits as a literal does.
 
 trait Src { type Item; }
 
 impl Src for i32 { type Item = i64; }
 
 fn f<A: Src<Item = B>, B>(a: A, b: B) -> B { return b; }
+
+fn g<A: Src<Item = B>, B>(b: B, a: A) -> B { return b; }
 
 struct K {}
 
@@ -18,6 +21,12 @@ impl K {
 
 test "a free call" {
     let r = f(1, 5_000_000_000);
+    let s: i64 = r;
+    assert s == 5_000_000_000;
+}
+
+test "a free call, the waiting literal first" {
+    let r = g(5_000_000_000 + 0, 1);
     let s: i64 = r;
     assert s == 5_000_000_000;
 }
@@ -33,4 +42,13 @@ test "a static call" {
     let r = K::s(1, 5_000_000_000);
     let s: i64 = r;
     assert s == 5_000_000_000;
+}
+
+test "an operation over literals" {
+    let k = K {};
+    let r = f(1, 5_000_000_000 + 0);
+    let m = k.m(1, -(5_000_000_000));
+    let q = K::s(1, 5_000_000_000 * 2);
+    let s: [i64, i64, i64] = [r, m, q];
+    assert s == [5_000_000_000, -5_000_000_000, 10_000_000_000];
 }

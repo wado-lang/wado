@@ -157,6 +157,21 @@ impl InferHoleTable {
         self.selections[id] = Some(selected);
     }
 
+    /// Whether a queued associated-type equality answers `var` once its owner
+    /// is answered.
+    pub(super) fn projection_answers(&self, var: TypeId) -> bool {
+        let Some(root) = self.vars.root_of(var) else {
+            return false;
+        };
+        self.obligations.borrow().iter().any(|o| match o {
+            Obligation::Projection(link) => self.vars.root_of(link.target) == Some(root),
+            Obligation::Bound { .. }
+            | Obligation::Selection(_)
+            | Obligation::Check(_)
+            | Obligation::Pending(_) => false,
+        })
+    }
+
     /// Take the pending selections out of the queue, in the order they were
     /// owed.
     pub(super) fn take_pending(&self) -> Vec<Waiting> {
@@ -490,7 +505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         unify(&self.tysys.type_table, written, expected, &mut bindings);
         for (var, answer) in bindings {
             if holes.contains(&var) {
-                self.equate(var, answer);
+                self.settle_as_written(var, answer);
             }
         }
     }

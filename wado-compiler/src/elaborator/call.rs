@@ -153,22 +153,26 @@ pub(super) struct CalleeSignature {
     declaring: usize,
     /// `None` when the declaration declares no return type.
     return_type: Option<TypeId>,
+    /// The names and declarations of `slots`, whose bounds' associated-type
+    /// equalities the call links before its arguments resolve.
+    slot_decls: (Vec<ParamRef>, Vec<ast::GenericParam>),
 }
 
 impl CalleeSignature {
-    fn of(decl: &DeclSig) -> Self {
+    fn of(decl: &DeclSig, slot_decls: (Vec<ParamRef>, Vec<ast::GenericParam>)) -> Self {
         Self {
             param_types: decl.param_types.clone(),
             slots: decl.type_param_ids(),
             declaring: 0,
             return_type: decl.return_type,
+            slot_decls,
         }
     }
 
-    fn of_method(sig: &MethodSig) -> Self {
+    fn of_method(sig: &MethodSig, slot_decls: (Vec<ParamRef>, Vec<ast::GenericParam>)) -> Self {
         Self {
             declaring: sig.declaring_type_params().len(),
-            ..Self::of(&sig.decl)
+            ..Self::of(&sig.decl, slot_decls)
         }
     }
 }
@@ -1256,7 +1260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .map(|&t| {
                             let t = self.apply_infer_holes(t);
-                            if self.type_has_infer_hole(t) {
+                            if self.tysys.type_table.borrow().is_infer_var(t) {
                                 TypeTable::UNKNOWN
                             } else {
                                 t
@@ -1895,6 +1899,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             slots: callee_slots,
             declaring,
             return_type: declared_return,
+            slot_decls,
         } = signature.unwrap_or_default();
         // The declaration's own frame, before instantiation replaces its slots
         // with inference variables. Inferred type arguments substitute into
@@ -1934,6 +1939,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         if let Some(inst) = &arg_inst {
             param_types = self.instantiate_types(&param_types, inst);
+            // Linked before the arguments, so a literal at a slot another
+            // slot's equality names reads the projection once the owner is
+            // answered.
+            let (names, owners) = &slot_decls;
+            let self_binding = call_receiver
+                .as_ref()
+                .and_then(ReceiverId::ty)
+                .map(|receiver| SelfBinding::of_static(receiver, None));
+            self.link_deferred_assoc_equalities(owners, names, &inst.vars, self_binding, call.span);
         }
         let ret = match (&arg_inst, declared_return, expected_type) {
             (Some(inst), Some(declared), Some(expected)) => Some(ExpectedReturn {
@@ -3052,6 +3066,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 slots: Vec::new(),
                 declaring: 0,
                 return_type: decl.return_type,
+                slot_decls: Default::default(),
             });
         }
         if let Some(pos) = name.find("::") {
@@ -3076,7 +3091,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let key = receiver.key();
                 let owner = self.static_owner_key(key, suffix);
                 if let Some(sig) = self.unique_qualified_method_sig(&owner, suffix) {
-                    return Some(CalleeSignature::of_method(&sig));
+                    let slot_decls = self.sig_slots(&sig);
+                    return Some(CalleeSignature::of_method(&sig, slot_decls));
                 }
                 if let Some(sig) = self.derived_method_signature(key, suffix) {
                     return Some(sig);
@@ -3087,10 +3103,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // slots and all: a generic builtin takes its type parameter from
             // the expected type, and a literal argument is re-coerced to it.
             if prefix == "builtin"
-                && let Some(def) = self.decl_in_module(&ModuleSource::builtin(), suffix)
-                && let Some(sig) = self.tysys.signatures.function_sig(def)
+                && let Some(sig) = self
+                    .decl_in_module(&ModuleSource::builtin(), suffix)
+                    .and_then(|def| self.function_signature(def))
             {
-                return Some(CalleeSignature::of(&sig.decl));
+                return Some(sig);
             }
 
             // A namespace member's signature lives in that module, which no
@@ -3100,10 +3117,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(ns_source) =
                 callee_site.and_then(|id| self.namespace_alias_source(prefix, id))
             {
-                if let Some(def) = self.decl_in_module(&ns_source, suffix)
-                    && let Some(sig) = self.tysys.signatures.function_sig(def)
+                if let Some(sig) = self
+                    .decl_in_module(&ns_source, suffix)
+                    .and_then(|def| self.function_signature(def))
                 {
-                    return Some(CalleeSignature::of(&sig.decl));
+                    return Some(sig);
                 }
                 // The signature read above declines the `ns::Type::method`
                 // shape, so the receiver resolves through the namespace instead.
@@ -3114,9 +3132,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
                     let owner = self.static_owner_key(&ns_key, method_name);
                     if let Some(sig) = self.lookup_static_method_sig(&owner, method_name) {
+                        let slot_decls = self.sig_slots(&sig);
                         return Some(CalleeSignature {
                             param_types: sig.value_param_types(),
-                            ..CalleeSignature::of_method(&sig)
+                            ..CalleeSignature::of_method(&sig, slot_decls)
                         });
                     }
                     if let Some(sig) = self.derived_method_signature(&ns_key, method_name) {
@@ -3129,8 +3148,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // One read for this module's functions, its imports under either
         // spelling, and a default expression's callee scope.
-        let sig = callee_site.and_then(|site| self.tysys.free_function_sig_at(site))?;
-        Some(CalleeSignature::of(&sig.decl))
+        self.function_signature(self.tysys.free_function_at(callee_site?)?)
+    }
+
+    fn function_signature(&self, def: DefId) -> Option<CalleeSignature> {
+        let sig = self.tysys.signatures.function_sig(def)?;
+        let callee = CalleeRef::declared(self.tysys.resolutions.defs(), def);
+        let owners: Vec<ast::GenericParam> = self
+            .lookup_function_type_params(&callee)
+            .into_iter()
+            .filter(GenericParam::is_real_type_param)
+            .collect();
+        let names = slot_names(&owners, &self.tysys.resolutions);
+        Some(CalleeSignature::of(&sig.decl, (names, owners)))
     }
 
     /// The signature of a derived `eq` / `cmp` on a type that declares no
@@ -3162,11 +3192,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .declared_type_param_ids(def)
             .unwrap_or_default()
             .to_vec();
+        let owners = self
+            .type_lookup()
+            .declared_generic_params(def)
+            .unwrap_or_default()
+            .to_vec();
+        let names = slot_names(&owners, &self.tysys.resolutions);
         Some(CalleeSignature {
             param_types: vec![receiver_ref, receiver_ref],
             declaring: slots.len(),
             slots,
             return_type: Some(return_type),
+            slot_decls: (names, owners),
         })
     }
 

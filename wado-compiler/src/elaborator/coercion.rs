@@ -183,10 +183,11 @@ pub(super) fn is_literal_arithmetic(expr: &Expr) -> bool {
     literal_operands(expr).is_some()
 }
 
-/// Whether a call argument takes its type from its context: a numeric literal or
-/// `null`. Inference defers it, so the other arguments bind the parameter first.
+/// Whether a call argument takes its type from its context: a numeric literal,
+/// an operation over such ([`is_literal_arithmetic`]), or `null`. Inference
+/// defers it, so the other arguments bind the parameter first.
 pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
-    arg.is_some_and(|arg| is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg))
+    arg.is_some_and(|arg| is_literal_arithmetic(arg) || TypeSystem::is_null_literal(arg))
 }
 
 /// The numeric literals, and operations over them ([`is_literal_arithmetic`]), a
@@ -1074,10 +1075,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             by_var.entry(var).or_default().push(expr);
         }
+        // A variable an associated-type equality answers takes a literal only
+        // where its owner's projection leaves it open.
+        by_var.sort_by_key(|&var, _| self.infer_holes.projection_answers(var));
         let hints = self.literal_hints(ret);
         let is_arg = |expr: &Expr| args.iter().any(|arg| arg.id() == expr.id());
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {
+            // Settling an earlier variable can answer this one, through the
+            // projection of an associated-type equality naming it.
+            let var = self.apply_infer_holes(var);
             let default = shared_literal_default(&literals);
             let open = self.tysys.type_table.borrow().is_infer_var(var);
             let hint = hints.get(&var).copied();

@@ -11,7 +11,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::call::bound_targets;
+use super::call::{bound_targets, slot_names};
 use super::coercion::ExpectedReturn;
 use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
@@ -297,6 +297,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.impl_args, of.span);
+        let names = slot_names(own_params, &self.tysys.resolutions);
+        self.link_deferred_assoc_equalities(own_params, &names, &inst.vars, of.self_binding, of.span);
         let param_types = self.instantiate_types(param_types, &inst);
         let ret = ret.map(|ret| ExpectedReturn {
             declared: self.instantiate_type(ret.declared, &inst),
