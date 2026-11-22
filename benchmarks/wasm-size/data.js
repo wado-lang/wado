@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795327327183,
+  "lastUpdate": 1795334050434,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -80900,6 +80900,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 25083,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353566,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ee69701c4b77f19d713d0be3136bf8fe40b65646",
+          "message": "Merge pull request #2720 from wado-lang/loam/gpt-oss-20b-speed\n\nperf(loam): gpt-oss-20b generates 2.4 times as fast on WebGPU, measured against llama.cpp",
+          "timestamp": "2026-11-22T16:37:12+09:00",
+          "tree_id": "24818aa7fb81c50eee5ecb299d05bc9cc82624a6",
+          "url": "https://github.com/wado-lang/wado/commit/ee69701c4b77f19d713d0be3136bf8fe40b65646"
+        },
+        "date": 1795334049621,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
             "unit": "bytes"
           },
           {
