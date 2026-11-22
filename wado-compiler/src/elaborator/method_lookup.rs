@@ -27,11 +27,11 @@ use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
 
 use super::Elaborator;
+use super::call::CallSolve;
 use super::call::{
     DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, omits_a_default,
     slot_names, slot_type_bindings, turbofish_leaves_slot,
 };
-use super::call::CallSolve;
 use super::coercion::ExpectedReturn;
 use super::infer::{infer_var_answers, unify};
 use super::infer_hole::{DeclaredBound, Obligation};

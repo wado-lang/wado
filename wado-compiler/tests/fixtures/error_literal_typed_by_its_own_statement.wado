@@ -1,0 +1,19 @@
+// A literal's type is settled by the statement that holds it: a later
+// statement does not retype it. `5` takes `i32` where `put` ends, so `b` is a
+// `Bx<i32>` by the time `take64` asks for a `Bx<i64>`.
+
+struct Bx<T> { v: Option<T> }
+
+fn none<T>() -> Bx<T> { return Bx { v: null }; }
+
+fn put<T>(b: Bx<T>, x: T) -> Bx<T> { return Bx { v: Some(x) }; }
+
+fn take64(b: Bx<i64>) -> i64 { return b.v.unwrap(); }
+
+test {
+    let b = put(none(), 5);   // `5` is an `i32` here
+    assert take64(b) == 5;    // compile error: expected `Bx<i64>`, found `Bx<i32>`
+}
+
+__DATA__
+{"compile_error": ":15:19: type mismatch: expected 'Bx<i64>', found 'Bx<i32>'"}

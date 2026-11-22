@@ -182,6 +182,34 @@ assert t & ~7 == 0xFFFF_FFF8;
 assert t & (1 << 31) == 0x8000_0000;
 ```
 
+#### Where a literal's context ends
+
+A literal takes its type within the expression it is written in. That is the
+slot it meets, the other arguments of each call its value reaches, and the type
+expected of that call's result. A literal that a generic call's parameter
+leaves open answers last among them, after the bounds of the call's other
+parameters. For `fn f<A: Src<Item = B>, B>(a: A, b: B) -> B` with
+`impl Src for i32 { type Item = i64; }`, `1` settles `A`, whose `Src::Item`
+settles `B` before the second literal is typed:
+
+<!-- {"fixture":"literal_default_settles_sibling_through_projection.wado"} -->
+
+```wado
+    let r = f(1, 5_000_000_000);
+    let s: i64 = r;
+    assert s == 5_000_000_000;
+```
+
+Where nothing in its expression answers it, the literal takes its default
+there. A later statement does not retype it:
+
+<!-- {"fixture":"error_literal_typed_by_its_own_statement.wado"} -->
+
+```wado
+    let b = put(none(), 5);   // `5` is an `i32` here
+    assert take64(b) == 5;    // compile error: expected `Bx<i64>`, found `Bx<i32>`
+```
+
 #### Compile-time range checking
 
 A literal's value must lie in its type's range: `[MIN, MAX]` for a signed type,
