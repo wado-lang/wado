@@ -460,18 +460,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The variables of the `_`s the source wrote that `ty` still holds.
     pub(super) fn written_holes_in(&self, ty: TypeId) -> Vec<TypeId> {
         let ty = self.apply_infer_holes(ty);
-        let tt = self.tysys.type_table.borrow();
-        let held = tt.infer_vars_in(ty);
+        let vars = &self.infer_holes.vars;
+        let held: IndexSet<Option<TypeId>> = self
+            .tysys
+            .type_table
+            .borrow()
+            .infer_vars_in(ty)
+            .into_iter()
+            .map(|h| vars.root_of(h))
+            .collect();
         self.infer_holes
             .written
             .values()
             .copied()
-            .filter(|&w| {
-                self.infer_holes.vars.is_unanswered(w)
-                    && held.iter().any(|&h| {
-                        self.infer_holes.vars.root_of(h) == self.infer_holes.vars.root_of(w)
-                    })
-            })
+            .filter(|&w| vars.is_unanswered(w) && held.contains(&vars.root_of(w)))
             .collect()
     }
 
