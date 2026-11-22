@@ -15,6 +15,10 @@
 //! `ListView<T>`, which a synchronous import's `list<T>` parameter takes and any
 //! `ListArg` converts to: there it lends its own block for the call. See WEP:
 //! Linear Arrays.
+//!
+//! A `WideArray<T>` holds more than linear memory's 4 GiB, in a memory of
+//! 64-bit addresses the module keeps to itself. Its reads are bounds-checked
+//! one by one, which `--no-spectre-mitigation` makes cheaper.
 
 #[synopsis]
 test {

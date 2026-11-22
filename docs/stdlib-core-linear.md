@@ -21,6 +21,10 @@ written before anything reads it. It crosses a component boundary only as a
 `ListArg` converts to: there it lends its own block for the call. See WEP:
 Linear Arrays.
 
+A `WideArray<T>` holds more than linear memory's 4 GiB, in a memory of
+64-bit addresses the module keeps to itself. Its reads are bounds-checked
+one by one, which `--no-spectre-mitigation` makes cheaper.
+
 ## Synopsis
 
 ```wado
@@ -206,6 +210,15 @@ where it ends sooner, as `read_stream_prefix` reads them, but read at
 once: a copy is in flight on every stream that has bytes still to come,
 so the host fills them side by side rather than one after another.
 
+#### `pub fn copy_from_wide(&mut self, at: i32, source: &WideArray<u8>, from: i64, count: i32)`
+
+- `contract 0 <= count`
+- `contract 0 <= at <= self.len() - count`
+- `contract 0 <= from <= source.len() - count as i64`
+
+Copies `source[from..<from + count]`, bytes of the wide memory, to
+`self[at..<at + count]`.
+
 #### `impl IndexValue<i32> for LinearArray<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
@@ -213,6 +226,64 @@ so the host fills them side by side rather than one after another.
 #### `impl IndexAssign<i32> for LinearArray<T>`
 
 ##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
+
+### `pub affine struct WideArray<T: AnyBits>`
+
+A fixed-length array of `T` in the wide memory: the module's own memory of
+64-bit addresses, which holds more than the 4 GiB linear memory can. No
+component boundary reaches it, so an array crosses one only through a
+copy into a `LinearArray`.
+
+_Fields are private._
+
+#### `pub fn filled(len: i64, value: T) -> WideArray<T>`
+
+- `contract 0 <= len <= WIDE_MOST / builtin::size_of::<T>() as i64`
+
+An array of `len` elements, each `value`.
+
+#### `pub fn len(&self) -> i64`
+
+#### `pub fn is_empty(&self) -> bool`
+
+#### `pub fn at(&self, index: i64) -> T`
+
+- `contract 0 <= index < self.len()`
+
+The element at `index`.
+
+#### `pub fn set(&mut self, index: i64, value: T)`
+
+- `contract 0 <= index < self.len()`
+
+Writes `value` at `index`.
+
+#### `pub fn cast<U: AnyBits>(self) -> WideArray<U>`
+
+- `contract self.len() * builtin::size_of::<T>() as i64 % builtin::size_of::<U>() as i64 == 0`
+
+The same bytes as an array of `U`, as `LinearArray::cast` gives them.
+
+#### `pub fn load_at<U: AnyBits>(&self, offset: i64) -> U`
+
+- `contract 0 <= offset <= self.len() - builtin::size_of::<U>() as i64`
+
+The `U` whose bytes begin at `offset`, read little-endian at any
+alignment.
+
+#### `pub fn store_at<U: AnyBits>(&mut self, offset: i64, value: U)`
+
+- `contract 0 <= offset <= self.len() - builtin::size_of::<U>() as i64`
+
+Writes `value` little-endian at `offset`, at any alignment.
+
+#### `pub fn copy_from(&mut self, at: i64, source: &LinearArray<u8>, from: i32, count: i32)`
+
+- `contract 0 <= count`
+- `contract 0 <= at <= self.len() - count as i64`
+- `contract 0 <= from <= source.len() - count`
+
+Copies `source[from..<from + count]` to `self[at..<at + count]`.
 
 ### `pub affine struct LinearBuffer`
 
