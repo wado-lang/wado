@@ -33,6 +33,13 @@ fn packed_signedness(ty: &WirType) -> Option<bool> {
     }
 }
 
+fn imported_memory_count(wir: &WirPackage) -> usize {
+    wir.imports
+        .iter()
+        .filter(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
+        .count()
+}
+
 /// Emit a core Wasm module from a `WirPackage`.
 pub fn emit_core_module(
     wir: &WirPackage,
@@ -88,16 +95,11 @@ struct WirEmitter<'a> {
 
 impl<'a> WirEmitter<'a> {
     fn new(wir: &'a WirPackage, strip_names: bool, codegen_flags: CodegenFlags) -> Self {
-        let imported_memories = wir
-            .imports
-            .iter()
-            .filter(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
-            .count();
         let memory64_index = wir
             .memories
             .iter()
             .position(|m| m.memory64)
-            .map(|defined| u32::try_from(imported_memories + defined).unwrap());
+            .map(|defined| u32::try_from(imported_memory_count(wir) + defined).unwrap());
         Self {
             memory64_index,
             wir,
@@ -128,7 +130,7 @@ impl<'a> WirEmitter<'a> {
 
         // 2. Import section
         let (imports, import_func_count) = self.emit_import_section();
-        if import_func_count > 0 || self.has_memory_import() {
+        if import_func_count > 0 || imported_memory_count(self.wir) > 0 {
             module.section(&imports);
         }
         self.func_index_offset = import_func_count;
@@ -626,20 +628,8 @@ impl<'a> WirEmitter<'a> {
         (imports, func_count)
     }
 
-    fn has_memory_import(&self) -> bool {
-        self.wir
-            .imports
-            .iter()
-            .any(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
-    }
-
     fn memory_count(&self) -> usize {
-        self.wir
-            .imports
-            .iter()
-            .filter(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
-            .count()
-            + self.wir.memories.len()
+        imported_memory_count(self.wir) + self.wir.memories.len()
     }
 
     // === Function Section ===
