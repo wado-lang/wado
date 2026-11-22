@@ -746,7 +746,7 @@ impl RuntimeKnobOpt {
                 long: Some("no-spectre-mitigation"),
                 short: None,
                 value: None,
-                desc: "Drop the Spectre guard on each memory access wasmtime bounds-\nchecks: every access to core:linear's LinearArray64 and to\nthe GC heap. Such a read runs faster, and the guest may read host memory\nunder speculation. For benchmarks and for guests you trust",
+                desc: "Drop the Spectre guard on each memory access wasmtime bounds-\nchecks: every access to the GC heap and to core:linear's\nLinearArray64. Such a read runs faster, and the guest may read\nhost memory under speculation. For benchmarks and for guests\nyou trust",
             },
             Self::ReportFuel => OptSpec {
                 long: Some("report-fuel"),

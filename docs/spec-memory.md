@@ -365,8 +365,7 @@ fn bad(n: i32) {
 
 ## Linear Memory
 
-Beside the GC heap, a program has one linear memory: bytes it reaches by
-address. The `builtin` functions below read and write it, and are as raw as the
+Beside the GC heap, a program has linear memory: bytes it reaches by address. The `builtin` functions below read and write it, and are as raw as the
 Wasm instructions they lower to. An address outside the memory traps. Nothing
 else is checked, so which bytes an address names is the caller's to keep right.
 
@@ -385,26 +384,6 @@ The compiler states it, and a user `impl AnyBits` is a compile error.
 - It holds for nothing else. `bool`, `char` and an `enum` leave patterns out. A
   struct, a variant, a tuple or a reference may hold a GC reference. `i128` and
   `u128` are GC objects, and `()` has no width.
-
-### Memory64
-
-A module may also keep a second memory, of 64-bit addresses, to itself. It
-holds what outgrows the main memory's 4 GiB, and the canonical ABI never sees
-it. It exists only where some access to it survives optimization. Its
-built-ins take `i64` addresses:
-
-| Built-in                                                    | Does                                     |
-| ----------------------------------------------------------- | ---------------------------------------- |
-| `builtin::memory64_load<T: AnyBits>(addr: i64) -> T`        | reads a `T` at `addr`                    |
-| `builtin::memory64_store<T: AnyBits>(addr: i64, value: T)`  | writes `value` at `addr`                 |
-| `builtin::memory64_size() -> i64`                           | its size, in 64 KiB pages                |
-| `builtin::memory64_grow(delta: i64) -> i64`                 | grows it by `delta` pages; the old size  |
-| `builtin::memory64_fill(dst: i64, value: u8, len: i64)`     | sets `len` bytes to `value`              |
-| `builtin::memory64_copy(dst: i64, src: i64, len: i64)`      | copies within it; the ranges may overlap |
-| `builtin::copy_to_memory64(dst: i64, src: i32, len: i32)`   | copies `len` bytes from the main memory  |
-| `builtin::copy_from_memory64(dst: i32, src: i64, len: i32)` | copies `len` bytes to the main memory    |
-
-`core:linear`'s `LinearArray64<T>` is built on them.
 
 ### Loads and Stores
 
@@ -442,3 +421,23 @@ A type argument that is not `AnyBits` is a compile error:
 let b = builtin::load::<bool>(p);
 let c = builtin::load::<char>(p);
 ```
+
+### Memory64
+
+A program also has a second linear memory, of 64-bit addresses, which the
+canonical ABI never reads. It holds what outgrows the first one's 4 GiB, and
+its built-ins take `i64` addresses:
+
+| Built-in                                                    | Does                                     |
+| ----------------------------------------------------------- | ---------------------------------------- |
+| `builtin::memory64_load<T: AnyBits>(addr: i64) -> T`        | reads a `T` at `addr`                    |
+| `builtin::memory64_store<T: AnyBits>(addr: i64, value: T)`  | writes `value` at `addr`                 |
+| `builtin::memory64_size() -> i64`                           | its size, in 64 KiB pages                |
+| `builtin::memory64_grow(delta: i64) -> i64`                 | grows it by `delta` pages; the old size  |
+| `builtin::memory64_fill(dst: i64, value: u8, len: i64)`     | sets `len` bytes to `value`              |
+| `builtin::memory64_copy(dst: i64, src: i64, len: i64)`      | copies within it; the ranges may overlap |
+| `builtin::copy_to_memory64(dst: i64, src: i32, len: i32)`   | copies `len` bytes from the first memory |
+| `builtin::copy_from_memory64(dst: i32, src: i64, len: i32)` | copies `len` bytes to the first memory   |
+
+It starts empty. The two memories are apart: an address names different bytes
+in each.

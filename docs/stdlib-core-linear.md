@@ -22,8 +22,8 @@ written before anything reads it. It crosses a component boundary only as a
 Linear Arrays.
 
 A `LinearArray64<T>` holds more than linear memory's 4 GiB, in a memory of
-64-bit addresses (`memory64`) the module keeps to itself. Its reads are bounds-checked
-one by one, which `--no-spectre-mitigation` makes cheaper.
+64-bit addresses (`memory64`) the module keeps to itself. Its reads are
+bounds-checked one by one, which `--no-spectre-mitigation` makes cheaper.
 
 ## Synopsis
 
