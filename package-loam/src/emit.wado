@@ -509,7 +509,6 @@ fn emit_weights(
     for let vi of &graph.initializers {
         hosts[vi.name] = `HostWeight::of(&self.${names.get(&vi.name)})`;
     }
-<<<<<<< HEAD
     ImplSpec::new("Weights").emit(w, |w| {
         FnSpec::new("params", Vis::Pub)
             .set_doc("These weights as tensors of the graph `backend` builds.")
@@ -529,68 +528,13 @@ fn emit_weights(
                         w.line(`${at} => ${hosts[vi.name]}.stored_bytes(),`);
                     }
                     w.line("_ => unreachable(),");
-                    w.end_with("))).unwrap()).pools(backend, &Unread {});");
+                    w.end_with("))).unwrap(), backend).pools(backend, &Unread {});");
                     "pools";
                 };
                 emit_held_call(w, graph, experts, &hosts, false, pools);
                 w.line("return weights;");
             });
     });
-||||||| e550f0190
-    w.line("/// These weights as tensors of the graph `backend` builds.");
-    FnSpec::new("params", Vis::Pub)
-        .add_generic(BACKEND_BOUND)
-        .set_receiver("&self")
-        .add_param(
-            "backend",
-            `&mut ${BACKEND_PARAM}`,
-        )
-        .set_return_type(PARAMS_TYPE)
-        .add_effect("_")
-        .emit_begin(w);
-    let pools = if experts.groups.is_empty() {
-        "[]";
-    } else {
-        w.begin("let pools = HeldExperts::resident(expert_layouts(|at| Result::Ok(ExpertBytes::Held(match at");
-        for let [at, vi] of pooled_initializers(graph, experts) {
-            w.line(`${at} => ${hosts[vi.name]}.stored_bytes(),`);
-        }
-        w.line("_ => unreachable(),");
-        w.end_with("))).unwrap()).pools(backend, &Unread {});");
-        "pools";
-    };
-    emit_held_call(w, graph, experts, &hosts, false, pools);
-    w.line("return weights;");
-    w.end();
-    w.end();
-=======
-    w.line("/// These weights as tensors of the graph `backend` builds.");
-    FnSpec::new("params", Vis::Pub)
-        .add_generic(BACKEND_BOUND)
-        .set_receiver("&self")
-        .add_param(
-            "backend",
-            `&mut ${BACKEND_PARAM}`,
-        )
-        .set_return_type(PARAMS_TYPE)
-        .add_effect("_")
-        .emit_begin(w);
-    let pools = if experts.groups.is_empty() {
-        "[]";
-    } else {
-        w.begin("let pools = HeldExperts::resident(expert_layouts(|at| Result::Ok(ExpertBytes::Held(match at");
-        for let [at, vi] of pooled_initializers(graph, experts) {
-            w.line(`${at} => ${hosts[vi.name]}.stored_bytes(),`);
-        }
-        w.line("_ => unreachable(),");
-        w.end_with("))).unwrap(), backend).pools(backend, &Unread {});");
-        "pools";
-    };
-    emit_held_call(w, graph, experts, &hosts, false, pools);
-    w.line("return weights;");
-    w.end();
-    w.end();
->>>>>>> origin/main
     w.blank();
     params.set_doc("The graph's initializers as tensors of the graph `build` adds operations to.").emit(w);
     emit_constructor(w, graph, checked, placement, experts);
@@ -745,7 +689,6 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
             for let line of firsts {
                 w.line(line);
             }
-<<<<<<< HEAD
             let pools = if pooled {
                 w.begin("let mut experts = HeldExperts::within(expert_layouts(|at| Result::Ok(match at");
                 for let [at, vi] of pooled_initializers(graph, experts) {
@@ -756,7 +699,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
                     w.line(`${at} => ${bytes},`);
                 }
                 w.line("_ => unreachable(),");
-                w.end_with("))?, budget)?;");
+                w.end_with("))?, budget, backend)?;");
                 w.line("let pools = experts.pools(backend, source);");
                 "pools";
             } else {
@@ -764,21 +707,6 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
             };
             emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), true, pools);
             w.line(if pooled { "return Result::Ok([weights, experts]);" } else { "return Result::Ok(weights);" });
-||||||| e550f0190
-            w.line("_ => unreachable(),");
-            w.end_with("))?, budget)?;");
-            w.line("let pools = experts.pools(backend, source);");
-            "pools";
-        } else {
-            "[]";
-=======
-            w.line("_ => unreachable(),");
-            w.end_with("))?, budget, backend)?;");
-            w.line("let pools = experts.pools(backend, source);");
-            "pools";
-        } else {
-            "[]";
->>>>>>> origin/main
         };
         block.emit(
             w,
@@ -828,10 +756,9 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         });
         return;
     }
-<<<<<<< HEAD
     block.emit(w, |w| {
         embedded.set_doc("The weights the graph carries.\nIts pools hold every expert.").emit(w, |w| {
-            w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}));`);
+            w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}, backend));`);
         });
         w.blank();
         FnSpec::new("embedded_within")
@@ -846,49 +773,6 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
                 w.line("return weights;");
             });
     });
-||||||| e550f0190
-    w.line("/// Its pools hold every expert.");
-    embedded.emit_begin(w);
-    w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}));`);
-    w.end();
-    w.blank();
-    w.line("/// The weights the graph carries, the experts as many as `experts` holds.");
-    FnSpec::new("embedded_within")
-        .add_param("backend", `&mut ${BACKEND_PARAM}`)
-        .add_param(
-            "experts",
-            "&mut HeldExperts",
-        )
-        .set_return_type(PARAMS_TYPE)
-        .add_effect("_")
-        .emit_begin(w);
-    w.line("let pools = experts.pools(backend, &Unread {});");
-    emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "pools");
-    w.line("return weights;");
-    w.end();
-    w.end();
-=======
-    w.line("/// Its pools hold every expert.");
-    embedded.emit_begin(w);
-    w.line(`return Params::embedded_within(backend, &mut HeldExperts::resident(${CARRIED_LAYOUTS}, backend));`);
-    w.end();
-    w.blank();
-    w.line("/// The weights the graph carries, the experts as many as `experts` holds.");
-    FnSpec::new("embedded_within")
-        .add_param("backend", `&mut ${BACKEND_PARAM}`)
-        .add_param(
-            "experts",
-            "&mut HeldExperts",
-        )
-        .set_return_type(PARAMS_TYPE)
-        .add_effect("_")
-        .emit_begin(w);
-    w.line("let pools = experts.pools(backend, &Unread {});");
-    emit_held_call(w, graph, experts, &held_hosts(graph, checked, placement, experts), false, "pools");
-    w.line("return weights;");
-    w.end();
-    w.end();
->>>>>>> origin/main
     emit_model_constructor(
         w,
         "embedded",
@@ -2217,7 +2101,6 @@ they do not read from `source` as a pass picks them.",
     w.blank();
     let mut held = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}>`);
     held.add_generic(BACKEND_BOUND);
-<<<<<<< HEAD
     held.emit(
         w,
         |w| {
@@ -2229,47 +2112,28 @@ they do not read from `source` as a pass picks them.",
                     w,
                     |w| {
                         w.line(
-                            `return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::resident([]), source: Unread {} };`,
+                            `return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::none(), source: Unread {} };`,
                         );
                     },
                 );
         },
-||||||| e550f0190
-    held.emit_begin(w);
-    w.line("/// A model of `weights`, whose pools hold every expert.");
-    w.line(`pub fn new(weights: ${PARAMS_TYPE}) -> ${MODEL}<${BACKEND_PARAM}> {`);
-    w.line(
-        `    return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::resident([]), source: Unread {} };`,
-=======
-    held.emit_begin(w);
-    w.line("/// A model of `weights`, whose pools hold every expert.");
-    w.line(`pub fn new(weights: ${PARAMS_TYPE}) -> ${MODEL}<${BACKEND_PARAM}> {`);
-    w.line(
-        `    return ${MODEL} { weights, programs: Programs::new(), experts: HeldExperts::none(), source: Unread {} };`,
->>>>>>> origin/main
     );
-<<<<<<< HEAD
-||||||| e550f0190
-    w.line("}");
-    w.end();
-=======
-    w.line("}");
-    w.end();
     w.blank();
     let mut any = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}, ${SOURCE_PARAM}>`);
     any.add_generic(BACKEND_BOUND);
     any.add_generic(SOURCE_BOUND);
-    any.emit_begin(w);
-    w.line("/// The experts the pools hold, and what the passes have picked of them.");
-    w.line("pub fn experts(&self) -> &HeldExperts {");
-    w.line("    return &self.experts;");
-    w.line("}");
-    w.blank();
-    w.line("pub fn experts_mut(&mut self) -> &mut HeldExperts {");
-    w.line("    return &mut self.experts;");
-    w.line("}");
-    w.end();
->>>>>>> origin/main
+    any.emit(w, |w| {
+        FnSpec::new("experts", Vis::Pub)
+            .set_doc("The experts the pools hold, and what the passes have picked of them.")
+            .set_receiver("&self")
+            .set_return_type("&HeldExperts")
+            .emit(w, |w| w.line("return &self.experts;"));
+        w.blank();
+        FnSpec::new("experts_mut", Vis::Pub)
+            .set_receiver("&mut self")
+            .set_return_type("&mut HeldExperts")
+            .emit(w, |w| w.line("return &mut self.experts;"));
+    });
 }
 
 /// `recorded`: [`build`] recorded over parameters, one for each of `taken`,
