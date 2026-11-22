@@ -1049,7 +1049,7 @@ fn weight_rows(
 fn kept_plain(g: &mut WebGpuBackend, w: &HostWeight) -> Any<WebGpuBackend> with (GpuDevice, GpuQueue, GpuBuffer) {
     if w.kind matches { _::U8 } {
         let bytes = g.reserved_bytes(w.extents, true);
-        g.write_bytes(&bytes, |i| w.bytes()[i] as u32);
+        g.write_linear(bytes.slot, 0, w.bytes());
         return Any::U8(Placed::Device(bytes));
     }
     if w.kind matches { _::I64 | _::I32 } {

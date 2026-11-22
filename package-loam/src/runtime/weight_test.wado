@@ -39,6 +39,30 @@ test "an element reads as the f32 that holds it" {
     assert w.value(1) == -2.0;
 }
 
+/// Whether `f32_bits` over `start..<end` of `w` gives the bits of `value`.
+fn bits_are_values(w: &HostWeight, start: i32, end: i32) -> bool {
+    let words = w.f32_bits(start, end).cast::<u32>().to_list();
+    let values: List<u32> = (start..<end).map(|i| w.value(i).to_bits()).collect();
+    return words == values;
+}
+
+test "a run of elements reads as the bits of the f32s that hold them, in each element" {
+    let floats = Tensor::<f32, [i32]> {
+        data: [1.5, -0.25, f32::INFINITY],
+        extents: [3],
+    };
+    assert bits_are_values(&HostWeight::of(&floats), 1, 3);
+    let halves = HostWeight::of_bytes::<f16>([3], &b"\x00\x3c\x00\xc0\x01\x00");
+    assert bits_are_values(&halves, 0, 3);
+    let brains = Tensor::<bf16, [i32]> {
+        data: [1.5, -0.25],
+        extents: [2],
+    };
+    assert bits_are_values(&HostWeight::of(&brains), 0, 2);
+    assert bits_are_values(&HostWeight::of_bytes::<u8>([3], &b"\x00\x07\xff"), 1, 3);
+    assert bits_are_values(&HostWeight::of_bytes::<bool>([2], &b"\x00\x02"), 0, 2);
+}
+
 test "a bool stored as any nonzero byte is true to every backend" {
     let w = HostWeight::of_bytes::<bool>([3], &b"\x00\x02\xff");
     assert w.bytes().to_list() == [0, 1, 1] as List<u8>;

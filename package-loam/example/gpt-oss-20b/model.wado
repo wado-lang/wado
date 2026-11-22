@@ -7,7 +7,8 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { to_string } from "core:json";
 use { MonotonicClock } from "wasi:clocks";
-use { Backend, FileSource, HeldExperts, LoadError, Sampling, Tensor } from "lib:loam";
+use { Backend, FileSource, HeldExperts, LoadError, Sampling, Tensor, WeightSource } from "lib:loam";
+use { LinearArray } from "core:linear";
 use { deviation, recorded, reported } from "../checks.wado";
 /// gpt-oss's byte-level BPE, split by o200k's pattern.
 pub use {
@@ -41,13 +42,45 @@ use gptoss from "https://huggingface.co/onnx-community/gpt-oss-20b-ONNX/resolve/
 /// as many experts as `budget` bytes hold.
 pub struct Model<affine Bk: Backend> {
     on: Bk,
-    model: gptoss::Model<Bk, FileSource>,
+    model: gptoss::Model<Bk, TimedSource>,
+}
+
+/// The files of `build/`, timing each read.
+pub struct TimedSource {
+    files: FileSource,
+}
+
+/// The nanoseconds every read of a `TimedSource` took so far.
+global mut READ_NANOSECONDS: u64 = 0;
+
+pub fn read_nanoseconds() -> u64 {
+    return READ_NANOSECONDS;
+}
+
+impl WeightSource for TimedSource {
+    fn read(
+        &self,
+        file: &String,
+        start: i32,
+        end: i32,
+    ) -> Result<LinearArray<u8>, LoadError> with (Preopens, MonotonicClock) {
+        let began = MonotonicClock::now();
+        let read = self.files.read(file, start, end);
+        READ_NANOSECONDS += (MonotonicClock::now() - began) as u64;
+        return read;
+    }
+
+    fn len(&self, file: &String) -> Result<i64, LoadError> with Preopens {
+        return self.files.len(file);
+    }
 }
 
 impl<affine Bk: Backend> Model<Bk> {
-    pub fn load(backend: Bk, budget: i64) -> Result<Model<Bk>, LoadError> with (_, Preopens) {
+    pub fn load(backend: Bk, budget: i64) -> Result<Model<Bk>, LoadError> with (_, Preopens, MonotonicClock) {
         let mut on = backend;
-        let model = gptoss::Model::load(&mut on, FileSource { dir: "build" }, budget)?;
+        let model = gptoss::Model::load(&mut on, TimedSource {
+            files: FileSource { dir: "build" },
+        }, budget)?;
         return Ok(Model { on, model });
     }
 
@@ -62,7 +95,11 @@ impl<affine Bk: Backend> Model<Bk> {
     /// The `steps` tokens greedy decoding picks after `ids` from an empty
     /// cache, and the logits it picks the first from: the prompt in one pass,
     /// then every token after its first in one call.
-    pub fn continued(&mut self, ids: &List<i32>, steps: i32) -> [List<i32>, List<f16>] with (_, Preopens) {
+    pub fn continued(
+        &mut self,
+        ids: &List<i32>,
+        steps: i32,
+    ) -> [List<i32>, List<f16>] with (_, Preopens, MonotonicClock) {
         let greedy = Sampling {};
         let passed = gptoss::compute(
             &mut self.on,
@@ -96,7 +133,7 @@ impl<affine Bk: Backend> Model<Bk> {
     /// The pass over `ids` from an empty cache, then one over the next token
     /// against its cache, each run from the host: a prompt's program and a
     /// step's, without the loop `continued` runs the steps in.
-    pub fn stepped_once(&mut self, ids: &List<i32>) with (_, Preopens) {
+    pub fn stepped_once(&mut self, ids: &List<i32>) with (_, Preopens, MonotonicClock) {
         let passed = gptoss::compute(
             &mut self.on,
             &token_ids(ids.into_iter().map(|id| id as i64).collect()),

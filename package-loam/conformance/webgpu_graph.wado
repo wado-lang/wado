@@ -253,6 +253,13 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     assert gpu.read_backs() == reads_before_slot, "a slot of a pool of bytes is a view";
     assert gpu.download(&slot).data == [1, 2, 3, 255] as List<u8>;
 
+    // Bytes that end within a word are written with the word padded.
+    let odd = gpu.upload(&Tensor::<u8, [Rows]> {
+        data: [1, 2, 3, 4, 5],
+        extents: [5],
+    });
+    assert gpu.download(&odd).data == [1, 2, 3, 4, 5] as List<u8>;
+
     let w = cases::windowed_input();
     println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &cpu.upload(
         &w,

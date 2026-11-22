@@ -1,0 +1,138 @@
+//! Where a step token of gpt-oss-20b goes on a WebGPU device: the reads of the
+//! experts from `build/`, the device's kernels, and the rest, which holds the
+//! experts' writes to the device and the host's waits. It continues the first
+//! prompt `generate.json` records once to compile and fill the pools, then
+//! again timed, by the tokens the second argument gives, its pools holding the
+//! experts the budget the first gives in bytes holds.
+//!
+//!     wado run-webgpu profile.wado -- 3000000000 8
+
+use { eprintln, println, Environment, Stderr, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuQuerySet,
+    GpuSupportedFeatures,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { Backend, ElementKind, HostWeight, KernelTime, WebGpuBackend } from "lib:loam";
+use { LinearArray } from "core:linear";
+use { recorded } from "../checks.wado";
+use { Model, budget_and_steps, read_nanoseconds } from "./model.wado";
+
+global BUDGET: i64 = 3_000_000_000;
+
+global STEPS: i32 = 8;
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuQuerySet, GpuSupportedFeatures, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let [budget, steps] = budget_and_steps(BUDGET, STEPS);
+    let Some([generate, _]) = recorded("generate.json", "build/logits.bin") else {
+        return;
+    };
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    if steps == 0 {
+        writes(&mut gpu);
+        return;
+    }
+    let mut model = Model::load(gpu, budget).unwrap();
+    let ids = &generate[0].ids;
+    model.continued(ids, steps);
+    if !model.backend_mut().profile() {
+        eprintln("no timestamp-query");
+        return;
+    }
+    let read_before = read_nanoseconds();
+    let loaded_before = model.experts().counts().loaded_bytes;
+    let began = MonotonicClock::now();
+    model.continued(ids, steps);
+    let wall = (MonotonicClock::now() - began) as i64;
+    let read = (read_nanoseconds() - read_before) as i64;
+    let loaded = model.experts().counts().loaded_bytes - loaded_before;
+    let times = model.backend_mut().profiled();
+    let device = times.into_iter().map(|t| t.nanoseconds).sum().unwrap_or(0);
+    println(`the prompt of ${ids.len()} and ${steps} tokens, ${loaded} bytes of experts loaded:`);
+    println(`  wall      ${ms(wall):>10.1} ms`);
+    println(`  reads     ${ms(read):>10.1} ms ${share(read, wall):>5.1}%`);
+    println(`  kernels   ${ms(device):>10.1} ms ${share(device, wall):>5.1}%`);
+    println(`  the rest  ${ms(wall - read - device):>10.1} ms ${share(wall - read - device, wall):>5.1}%`);
+    report(&times, device);
+    writes(model.backend_mut());
+}
+
+/// The host time of the writes of a slot of an expert's `gate_up_proj`, and
+/// of its scales.
+fn writes(
+    g: &mut WebGpuBackend,
+) with (Stdout, MonotonicClock, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
+    println("a slot of an expert's `gate_up_proj` written 32 times, then its scales:");
+    timed_writes(g, ElementKind::U8, [5760, 1440], 32);
+    timed_writes(g, ElementKind::F16, [5760, 90], 32);
+}
+
+/// The host time `times` writes of a slot of `kind` and `extents` take.
+fn timed_writes(
+    g: &mut WebGpuBackend,
+    kind: ElementKind,
+    extents: List<i32>,
+    times: i32,
+) with (Stdout, MonotonicClock, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
+    let mut pooled: List<i32> = [2];
+    pooled.extend(&extents);
+    let mut pool = g.pool(kind, pooled);
+    let width = if kind matches { _::U8 } { 1 } else { 2 };
+    let bytes = extents.into_iter().fold(width, |n, e| n * e);
+    let mut rows: List<HostWeight> = [];
+    for let _ of 0..<times {
+        rows.push(HostWeight::stored(kind, extents, LinearArray::<u8>::filled(bytes, 0)));
+    }
+    let began = MonotonicClock::now();
+    while let Some(row) = rows.pop() {
+        Backend::written(g, &mut pool, rows.len() % 2, row);
+    }
+    let spent = (MonotonicClock::now() - began) as i64;
+    let total = bytes as i64 * times as i64;
+    println(`  ${kind:?} ${total} bytes ${ms(spent):>8.1} ms, ${total as f64 / (spent as f64 / 1e9) / 1e9:.2} GB/s`);
+}
+
+/// The device time of each kind of kernel.
+fn report(times: &List<KernelTime>, total: i64) with Stdout {
+    let mut by_kind = TreeMap::<String, [i32, i64]>::new();
+    for let t of times {
+        let [dispatches, nanoseconds] = by_kind.get_or_insert(t.kernel, [0, 0 as i64]);
+        by_kind[t.kernel] = [dispatches + t.dispatches, nanoseconds + t.nanoseconds];
+    }
+    let mut kinds: List<[String, i32, i64]> = [];
+    for let [kernel, [dispatches, nanoseconds]] of by_kind.entries() {
+        kinds.push([*kernel, *dispatches, *nanoseconds]);
+    }
+    kinds.sort_by(|a, b| b.2.cmp(&a.2));
+    for let [kernel, dispatches, nanoseconds] of kinds {
+        println(`  ${kernel:<18} ${dispatches:>7} x ${ms(nanoseconds):>9.1} ms ${share(nanoseconds, total):>5.1}%`);
+    }
+}
+
+fn ms(nanoseconds: i64) -> f64 {
+    return nanoseconds as f64 / 1e6;
+}
+
+fn share(part: i64, whole: i64) -> f64 {
+    return 100.0 * part as f64 / whole as f64;
+}
