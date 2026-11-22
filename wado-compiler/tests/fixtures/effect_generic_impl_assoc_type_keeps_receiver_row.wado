@@ -1,0 +1,45 @@
+// An associated type an impl generic over an effect answers is read at the
+// receiver's row, so each instance's projection selects by its own row.
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+trait Held with () {
+    type Out;
+    fn held(&self) -> Self::Out;
+}
+
+struct Slot<T> {
+    v: T,
+}
+
+impl<effect E> Held for Slot<fn() with (E)> {
+    type Out = fn() with E;
+    fn held(&self) -> fn() with E {
+        return self.v;
+    }
+}
+
+export fn run() with Stdout {
+    let loud = Slot { v: || { println("x"); } };
+    let quiet = Slot { v: || {} };
+    println(loud.held().name());
+    println(quiet.held().name());
+}
+
+__DATA__
+{"stdout": "loud\npure\n"}

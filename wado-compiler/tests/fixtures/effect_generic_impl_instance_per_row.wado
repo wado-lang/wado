@@ -1,0 +1,23 @@
+// An impl generic over an effect is instantiated per row, as one generic over
+// a type is per type: each receiver's row is its own instance.
+use { println, Stdout } from "core:cli";
+
+struct Slot<T> {
+    v: T,
+}
+
+impl<effect E> Slot<fn() with (E)> {
+    fn fire(&self) with E {
+        (self.v)();
+    }
+}
+
+export fn run() with Stdout {
+    let quiet = Slot { v: || {} };
+    let loud = Slot { v: || { println("loud"); } };
+    quiet.fire();
+    loud.fire();
+}
+
+__DATA__
+{"stdout": "loud\n"}

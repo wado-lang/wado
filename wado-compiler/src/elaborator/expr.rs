@@ -12,8 +12,8 @@ use crate::cut_memo::CutWalk;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
-    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext,
-    TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
+    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing,
+    SubstitutionContext, TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -645,8 +645,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "a node written in another module reached a travelled walk"
         );
         let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
+        let reads = self.tysys.type_table.borrow().effect_vars_read();
         let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
+        if self.tysys.type_table.borrow().effect_vars_read() > reads {
+            let closing = RowClosing {
+                span: expr.span(),
+                module: self.home_module(ast_id).source_path(),
+            };
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .close_effect_rows_read_since(reads, &closing);
+        }
         self.record_expression_type(ast_id, type_id);
+        if matches!(
+            expr,
+            Expr::Call(_)
+                | Expr::TaggedTemplate(_)
+                | Expr::MethodCall(_)
+                | Expr::StaticMethodCall(_)
+        ) {
+            self.solve_call_rows(expr);
+        }
         type_id
     }
 

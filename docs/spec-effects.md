@@ -573,6 +573,29 @@ A loop over `mapped(|x: i32| x + 1)` demands nothing. `mapped(loud)` with
 `Mapped<…, fn mut(i32) -> i32 with Stdout>`, and a loop over it demands
 `Stdout`.
 
+That row is part of the value's type. Two instances whose arguments differ only
+in a row are two types, and a bound on the argument selects the impl written for
+its row. An impl may name an effect parameter in its target. It then stands for
+the receiver's row at that place, and the impl's methods demand what that row
+holds:
+
+<!-- {"fixture":"error_effect_generic_impl_receiver_row.wado"} -->
+
+```wado
+impl<effect E> Slot<fn() with (E)> {
+    fn fire(&self) with E {
+        (self.v)();
+    }
+}
+
+fn quiet() {
+    let s = Slot { v: || { println("loud"); } };
+    s.fire();   // ERROR: `E` is `Stdout` here, and `quiet` does not hold it
+}
+```
+
+`Slot { v: || {} }.fire()` demands nothing.
+
 A function generic over `E` holds for every row a caller may pick for it, the
 empty one among them. So a value it moves into a slot whose row is `E` may
 perform only `E`, and an `E` nothing at a call determines stands for no effect:
@@ -584,6 +607,33 @@ fn make<effect E>() -> fn() with E {
     return || { println("leak"); };   // ERROR: `E` may be no effect at all
 }
 ```
+
+For the same reason, a row holding `E` reaches only an impl generic over the
+row at that place, never one written for a row. A body that would select by its
+caller's row states it as a bound on the function's type (`F: Name`), which the
+caller's row then meets:
+
+<!-- {"fixture":"error_closed_row_impl_on_effect_param.wado"} -->
+
+```wado
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+fn pick<effect E>(f: fn() with E) -> String {
+    return f.name();
+}
+```
+
+`pick` is an error: `E` may be `Stdout` as well as nothing.
 
 ### `with _`
 

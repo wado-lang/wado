@@ -837,6 +837,22 @@ The effects travel with the value. Whoever calls it, directly or through a
 value built from it, must hold them (see
 [Generic Effects](./spec-effects.md#generic-effects-effect-polymorphism)).
 
+A binding without a type annotation takes the row of every value moved into
+it. An expression that reads the row, by picking an impl for the binding's type,
+reads it as it stands there and fixes it. A value moved in afterwards may
+perform only what that row holds, where `Name` has an impl for `fn()` and one
+for `fn() with Stdout`:
+
+<!-- {"fixture":"error_effect_row_widened_after_read.wado"} -->
+
+```wado
+export fn run() with Stdout {
+    let mut f = || {};
+    println(f.name());
+    f = || { println("r"); };
+}
+```
+
 A type parameter may be bounded by a closure type. The bound names the type
 once, so the parameter can be reused across positions:
 

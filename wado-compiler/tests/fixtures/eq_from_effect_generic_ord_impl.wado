@@ -1,0 +1,22 @@
+// The `eq` an `Ord` impl generic over an effect gives is instantiated per row,
+// as the written `cmp` is.
+
+use { println, Stdout } from "core:cli";
+
+struct Slot<F> { n: i32, v: F }
+
+impl<effect E> Ord for Slot<fn() with (E)> {
+    fn cmp(&self, other: &Self) -> Ordering { return self.n.cmp(&other.n); }
+}
+
+export fn run() with Stdout {
+    let a = Slot { n: 1, v: || { println("x"); } };
+    let b = Slot { n: 1, v: || { println("y"); } };
+    println(`${a == b}`);
+    let c = Slot { n: 1, v: || {} };
+    let d = Slot { n: 2, v: || {} };
+    println(`${c == d}`);
+}
+
+__DATA__
+{"stdout": "true\nfalse\n"}

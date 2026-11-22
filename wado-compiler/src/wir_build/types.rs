@@ -108,7 +108,7 @@ fn wado_types(package: &NirPackage) -> Vec<(TypeId, String, Shape<'_>)> {
                 ResolvedType::Tuple(elems) => {
                     let names: Vec<String> = elems
                         .iter()
-                        .map(|&e| tt.mangle_type_arg_rowless(e))
+                        .map(|&e| tt.mangle_type_arg_solved(e))
                         .collect();
                     found.insert(
                         type_id,
@@ -116,7 +116,7 @@ fn wado_types(package: &NirPackage) -> Vec<(TypeId, String, Shape<'_>)> {
                     );
                 }
                 ResolvedType::BuiltinArray(elem) => {
-                    let fq = mangle_builtin_array_type(&tt.mangle_type_arg_rowless(*elem));
+                    let fq = mangle_builtin_array_type(&tt.mangle_type_arg_solved(*elem));
                     found.insert(type_id, (fq, Shape::Array(*elem)));
                 }
                 ResolvedType::Variant { def, type_args }
@@ -573,7 +573,7 @@ fn register_fn_closure(
 fn variant_type_key(type_table: &TypeTable, def: DefId, type_args: &[TypeId]) -> String {
     let args: Vec<String> = type_args
         .iter()
-        .map(|&t| type_table.mangle_type_arg_rowless(t))
+        .map(|&t| type_table.mangle_type_arg_solved(t))
         .collect();
     let name = mangle_generic_name(type_table.decl_name(def), &args);
     wir_type_key(type_table.def_module(def), &name)

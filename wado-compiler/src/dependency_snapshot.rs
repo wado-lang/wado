@@ -178,6 +178,7 @@ async fn build(load: &LoadResult, host: &ErasedHost<'_>, key: &Key) -> Option<Se
         None,
         &LivenessScope::Compilation,
         None,
+        &IndexSet::default(),
     );
     // A compile seeded from the snapshot skips its modules in the move check.
     let clean = semantics.is_complete()

@@ -1,0 +1,46 @@
+// Two instances that differ only in an argument's row are two structs, each
+// with its own methods: `get` answers through the impl each row selects.
+use { println, Stdout } from "core:cli";
+
+trait Make with () {
+    type Out;
+    fn make(&self) -> Self::Out;
+}
+
+impl Make for fn() -> i32 with Stdout {
+    type Out = i32;
+    fn make(&self) -> i32 {
+        return 7;
+    }
+}
+
+impl Make for fn() -> i32 {
+    type Out = String;
+    fn make(&self) -> String {
+        return "pure";
+    }
+}
+
+struct W<T: Make> {
+    t: T,
+}
+
+impl<T: Make> W<T> {
+    fn get(&self) -> T::Out {
+        return self.t.make();
+    }
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    let a = W { t: || loud() };
+    let b = W { t: || 1 };
+    println(`${a.get() + 1} ${b.get()}`);
+}
+
+__DATA__
+{"stdout": "8 pure\n"}

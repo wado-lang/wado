@@ -1,0 +1,50 @@
+// A closure literal in a trait default body calls `self.act()` through the
+// trait, so it performs what the trait declares, whichever impl inherits the
+// body, and every impl picks the effectful `Name`.
+
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+trait Act with Stdout {
+    fn act(&self);
+    fn report(&self) -> String {
+        let f = || self.act();
+        return f.name();
+    }
+}
+
+struct Quiet {}
+struct Loud {}
+
+impl Act for Quiet {
+    fn act(&self) {}
+}
+
+impl Act for Loud {
+    fn act(&self) with Stdout {
+        println("act");
+    }
+}
+
+export fn run() with Stdout {
+    println(Quiet {}.report());
+    println(Loud {}.report());
+}
+
+__DATA__
+{"stdout": "loud\nloud\n"}

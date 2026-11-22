@@ -50,10 +50,12 @@ leak.
 
 ### Mechanism
 
-The elaborator cannot work out what a closure body performs: that needs every
-call in it resolved, which is the effect check's work, and the effect check runs
-on the whole program after reify. So the elaborator leaves a variable where an
-effect row is not yet known, and the effect check solves it.
+The elaborator leaves a variable where an effect row is not yet known. It
+solves the variable early where every row the solution reads is solved: a
+closure literal's at the end of its body, and a call's once the call resolves,
+both by the effect check's own walk over what is elaborated so far. The effect
+check then solves the variables on the whole program after reify, and agrees
+with each early solution.
 
 - An effect variable is one more kind of `EffectRef`, minted by the type table.
   A call gives each of its callee's own effect parameters a fresh one in the
@@ -63,11 +65,11 @@ effect row is not yet known, and the effect check solves it.
   receiver's argument. A closure literal's type takes a fresh one for its row.
 - The type check and impl target matching let a row holding an effect
   parameter or a variable meet any row. The trait solver does so for a
-  parameter, and reads a variable as the empty row, so a closure literal
-  selects one impl rather than every impl of its signature. A bound asked of a
-  type holding a variable, or at trait arguments holding one, is asked again
-  once the effect check has solved it, and is unmet if no impl answers the
-  solved row.
+  parameter. It reads a closure literal's variable as what the body performs,
+  solved once the body is elaborated, and a call's as what its arguments carry,
+  solved once the call resolves. So a closure literal selects one impl rather
+  than every impl of its signature, and a bound is answered at once on the
+  solved row. Any other variable reads as the empty row.
 - Where the type check admits a value into a slot and either's row holds a
   variable, it records the move as a flow: the value's row beside the slot's.
   A binding, an argument, a cast, an element, a branch's value are all slots.
@@ -76,8 +78,9 @@ effect row is not yet known, and the effect check solves it.
   reads it. A call's variable is what its parameter resolved to there, read off
   by setting the callee's declared return type beside the call's type. A
   closure's is what its body performs, wherever the literal is written. A flow
-  into a slot whose row holds a variable widens that variable. A flow into a
-  row that holds none is bounded by it: what the value performs beyond it is
+  into a slot whose row holds a variable widens that variable, unless an
+  expression read the variable and so closed it. A flow into a row that holds
+  none, or a closed one, is bounded by it: what the value performs beyond it is
   an error at the move.
 - A solution only grows. The check walks a body again only when a solution
   it read grew after the read, so a body whose solutions arrive before they are
@@ -88,10 +91,11 @@ effect row is not yet known, and the effect check solves it.
   every type the TIR holds is rewritten with each variable replaced by its
   solved row, or by the empty row where nothing solved it. The table keeps each
   id meaning what it was interned as.
-- A struct's own arguments keep their rows until the check, since a method's
-  `with _` resolves from them. The rewrite drops them, and so does every
-  instance interned after it, so two instances that differ only there are one
-  struct.
+- A struct's own arguments keep their rows, as a function instance's do, since
+  a method's `with _` resolves from them and a generic impl's bound reads them.
+  Two instances that differ only there are two structs, each with its own
+  methods. An impl generic over an effect is instantiated per row for the same
+  reason, as one generic over a type is per type.
 
 ## Roadmap
 
@@ -124,17 +128,9 @@ effect row is not yet known, and the effect check solves it.
 8. [x] A function generic over an effect is taken as a value: the expected
    `fn(...)` type settles its effect parameters as it settles its type
    parameters. `effect_generic_fn_as_value.wado` holds it.
-
-## Known gaps
-
-- The elaborator selects an impl for a closure literal's function type before
-  the effect check has solved its row, and takes the row to be empty. Where
-  impls exist for the same signature with and without an effect, a closure
-  performing that effect is dispatched to the pure one, while the effect check
-  reads the one its row names. A bound naming an effect outright
-  (`G: fn() with Stderr`) rejects a closure literal that performs it: only a
-  value annotated with that row meets it.
-- An associated type a bound reaches through a closure literal's impl is
-  resolved from the empty row too. Where only an impl for an effectful
-  signature answers, `T::Out` stays unresolved, and only an annotation on the
-  result (`let x: i32 = go(&h)`) lets the call compile.
+9. [x] A struct instance keeps its arguments' rows through the rewrite, and its
+   name and its methods' names spell them. An impl generic over an effect is
+   instantiated per row, so its definition and its callers name one instance.
+   `struct_instance_row_selects_bound_impl.wado`,
+   `struct_instances_differ_in_row.wado` and
+   `effect_generic_impl_instance_per_row.wado` hold it.

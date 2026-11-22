@@ -242,6 +242,7 @@ fn make_trait_method(
         is_async: false,
         type_params: Vec::new(),
         impl_type_params,
+        impl_effect_params: Vec::new(),
         impl_origin: None,
         monomorph_info: None,
         method_info: Some(method_info),
@@ -1357,11 +1358,12 @@ pub(super) struct ReadBridgeMember {
 /// `$…$S$V(v: &S, index: i32) -> V`, dereferencing a field that holds its
 /// value by handle.
 ///
-/// Keyed by the value type's *erased* mangle. `erase_newtypes_and_flags`
-/// (after monomorphize, before lower) collapses `Newtype`/`Flags` to their
-/// base, and the marker call site mangles through that erasure — so a helper
-/// minted under the pre-erasure name would never be found. Members sharing an
-/// erased type share one helper.
+/// Named by the struct's and the value type's *erased* mangles.
+/// `erase_newtypes_and_flags` (after monomorphize, before lower) collapses
+/// `Newtype`/`Flags` to their base and drops function rows, and the marker
+/// call site mangles through that erasure — so a helper minted under the
+/// pre-erasure name would never be found. Members sharing an erased type share
+/// one helper.
 pub(super) fn generate_read_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     members: &[ReadBridgeMember],
@@ -1370,7 +1372,7 @@ pub(super) fn generate_read_bridge_helpers(
     ref_struct_type: TypeId,
     span: Span,
 ) -> Vec<TirFunction> {
-    let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
+    let mangled_struct = type_table.borrow().mangle_type_arg_erased(struct_type);
     let mut by_value_type: hashmap::IndexMap<String, Vec<&ReadBridgeMember>> =
         hashmap::IndexMap::default();
     for member in members {
@@ -3600,7 +3602,7 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
         let mut func =
             generate_eq_from_cmp_fn(&cmp, ctx.trait_env, &eq_trait_name, &mut tt, ctx.names);
         func.def_id = Some(eq_decl);
-        func.impl_origin = Some(cmp.block);
+        func.place_in_impl(cmp.block, &tt);
         generated.push(Rc::new(RefCell::new(func)));
     }
     let targets = eq_targets(module, &mut tt, |receiver| {

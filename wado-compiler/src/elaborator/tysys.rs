@@ -21,7 +21,6 @@ use crate::type_table::TypeTable;
 
 use super::sem::decls::ModuleDecls;
 use super::trait_env::{NamespaceImports, TraitEnv};
-use super::trait_query::DeferredBound;
 use super::types::{DataDecls, TypeLookup};
 use super::util::bound_param_name;
 use crate::ast::{AstId, GenericParam};
@@ -66,9 +65,6 @@ pub(crate) struct TypeSystem {
     /// (WEP 2026-09-01). A body's own declarations reach it as annotate
     /// resolves them, so it is shared mutable state, as the type table is.
     pub(crate) solver: Option<Rc<RefCell<SolverBridge>>>,
-    /// The bounds asked of a type whose rows the effect check has yet to
-    /// solve, which [`Self::unmet_deferred_bounds`] answers once it has.
-    pub(crate) deferred_bounds: Rc<RefCell<Vec<DeferredBound>>>,
 
     /// Registries the elaborator queries. The Component-Model
     /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`

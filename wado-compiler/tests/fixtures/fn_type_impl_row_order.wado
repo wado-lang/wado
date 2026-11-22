@@ -1,0 +1,33 @@
+// A row is a set: an impl written for one order of effects answers a
+// function type, or a closure literal's solved row, naming them in another.
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with (Stdout, Stderr) {
+    fn name(&self) -> String {
+        return "both";
+    }
+}
+
+fn named<T: Name>(t: T) -> String {
+    return t.name();
+}
+
+export fn run() with (Stdout, Stderr) {
+    println(named(|| { eprintln("e"); println("o"); }));
+    let f = || { eprintln("e"); println("o"); };
+    println(f.name());
+}
+
+__DATA__
+{"stdout": "both\nboth\n"}
