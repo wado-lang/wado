@@ -1,0 +1,51 @@
+use { LinearArray } from "core:linear";
+use { host_of } from "../../src/runtime/recorded.wado";
+use { Element, Tensor } from "../../src/runtime/tensor.wado";
+use { HostWeight } from "../../src/runtime/weight.wado";
+
+fn round_trips<E: Element>(data: List<E>) {
+    let t = Tensor::<E, [i32]> {
+        data,
+        extents: [data.len()],
+    };
+    assert HostWeight::of(&t).decoded() == host_of(&t);
+}
+
+test "a weight decodes to the elements it was stored from, in each element" {
+    round_trips::<f32>([1.5, -0.25, f32::INFINITY]);
+    round_trips::<f16>([1.5, -0.25]);
+    round_trips::<bf16>([1.5, -0.25]);
+    round_trips::<u8>([0, 7, 255]);
+    round_trips::<i64>([-1, i64::MAX]);
+    round_trips::<bool>([true, false, true]);
+}
+
+test "a weight is stored little-endian, a bool a byte" {
+    let t = Tensor::<f32, [i32]> {
+        data: [1.0],
+        extents: [1],
+    };
+    assert HostWeight::of(&t).bytes().to_list() == [0x00, 0x00, 0x80, 0x3f] as List<u8>;
+    let b = Tensor::<bool, [i32]> {
+        data: [true, false],
+        extents: [2],
+    };
+    assert HostWeight::of(&b).bytes().to_list() == [1, 0] as List<u8>;
+}
+
+test "an element reads as the f32 that holds it" {
+    let w = HostWeight::of_bytes::<f16>([2], &b"\x00\x3c\x00\xc0");
+    assert w.value(0) == 1.0;
+    assert w.value(1) == -2.0;
+}
+
+test "a bool stored as any nonzero byte is true to every backend" {
+    let w = HostWeight::of_bytes::<bool>([3], &b"\x00\x02\xff");
+    assert w.bytes().to_list() == [0, 1, 1] as List<u8>;
+    assert w.value(1) == 1.0 && w.value(2) == 1.0;
+}
+
+#[expect_trap]
+test "stored bytes must hold the extents' elements" {
+    HostWeight::stored(f32::kind(), [2], LinearArray::<u8>::filled(4, 0));
+}

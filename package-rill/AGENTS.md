@@ -1,16 +1,21 @@
 # Rill Development Guide
 
 Rill is fine-grained reactivity for Wado: signals, and the declarative UI bound
-to them. The rules below hold for every change; the rest lives in companion
-docs:
+to them. The `wado-package-standard` skill says where each kind of file goes.
+The rules below hold for every change; the rest lives in companion docs:
 
-- [`README.md`](./README.md) — what Rill offers, and how it works.
+- [`README.md`](./README.md) — what Rill offers.
+- [`docs/design.md`](./docs/design.md) — how it works.
 - [`TODO.md`](./TODO.md) — open work.
-- [`static-generation.md`](./static-generation.md) — publishing an app as
-  static files that the browser program hydrates.
-- [WEP: Reactive Signals](../docs/wep-2026-04-04-reactive-signals.md) — the
-  initial design and why signals are a library. It is complete and no longer
-  edited: what Rill decides from here on is written in this directory.
+- [`docs/static-generation.md`](./docs/static-generation.md) — publishing an
+  app as static files that the browser program hydrates.
+
+## Architecture
+
+Signals, memos, effects and scopes form the reactive core; `Track` is the
+effect a computation handles to learn what it read. The view layer builds DOM
+nodes on `wado-lang:web` and binds each to the signals it reads, and `hydrate`
+builds the same bindings on served HTML.
 
 ## Sources
 

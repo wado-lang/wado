@@ -6,7 +6,7 @@ The rules for writing a test are in [`AGENTS.md`](../AGENTS.md#tests).
 
 All are driven by `.g4` in `tests/grammars/` plus the descriptor corpus:
 
-1. g4 parse tests (`src/g4/integration_test.wado`) — real `.g4` files parse into `Grammar` IR.
+1. g4 parse tests (`tests/g4/integration_test.wado`) — real `.g4` files parse into `Grammar` IR.
 2. Driver tests (`tests/driver_*_test.wado`) — invoke the generator at compile time via `use ... with { generator: ... }`, parse input, and assert `to_string_tree()` output (EOF omitted; `normalize_tree()` from `tests/support/tree_compare.wado` lets you write indented expected trees).
 3. ANTLR4 descriptor compatibility (`tests/antlr4-compat/`) — the extracted corpus as a long-lived regression suite; see [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 

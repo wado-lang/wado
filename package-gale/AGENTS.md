@@ -1,17 +1,31 @@
 # Gale Development Guide
 
-Gale is a Wado-native ANTLR4-compatible parser generator. The rules below hold
-for every change; the rest lives in companion docs:
+Gale is a Wado-native ANTLR4-compatible parser generator. The
+`wado-package-standard` skill says where each kind of file goes. The rules
+below hold for every change; the rest lives in companion docs:
 
-- [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility contract, prediction / codegen design, soundness invariants, descriptor pipeline, and triage.
-- [`resilient-parser.md`](./resilient-parser.md) — error-resilient parsing and the flat CST.
-- [`import.md`](./import.md) — grammar composition: how `import S;` resolves and what a delegate contributes.
-- [`testing.md`](./testing.md) — the test layers and the oracle procedures.
-- [`debugging.md`](./debugging.md) — `gale dump`, the `trace` option, and the Rust corpus check.
-- [`perf.md`](./perf.md) — performance notes: budget, levers, and measured perf dead-ends.
-- [`dead-ends.md`](./dead-ends.md) — prediction, predicate and lexer approaches that failed. The static path always has edges; the complete answer is the runtime ATN simulator. Read the area's section before retrying anything in it.
+- [`docs/antlr4-compatibility.md`](./docs/antlr4-compatibility.md) — the compatibility contract, prediction / codegen design, soundness invariants, descriptor pipeline, and triage.
+- [`docs/resilient-parser.md`](./docs/resilient-parser.md) — error-resilient parsing and the flat CST.
+- [`docs/import.md`](./docs/import.md) — grammar composition: how `import S;` resolves and what a delegate contributes.
+- [`docs/testing.md`](./docs/testing.md) — the test layers and the oracle procedures.
+- [`docs/debugging.md`](./docs/debugging.md) — `gale dump`, the `trace` option, and the Rust corpus check.
+- [`docs/perf.md`](./docs/perf.md) — performance notes: budget, levers, and measured perf dead-ends.
+- [`docs/dead-ends.md`](./docs/dead-ends.md) — prediction, predicate and lexer approaches that failed. The static path always has edges; the complete answer is the runtime ATN simulator. Read the area's section before retrying anything in it.
+- [`docs/design.md`](./docs/design.md) — the design.
 - [`TODO.md`](./TODO.md) — open work.
-- [`README.md`](./README.md) and [WEP: Gale](../docs/wep-2026-03-02-gale.md) — overall design context.
+
+## Architecture
+
+```text
+.g4 source ──parse──► Grammar ──lower──► LoweredGrammar ──emit──► Wado source
+```
+
+- The `.g4` front end (`src/g4/`) parses a grammar into `Grammar`, the surface IR in `src/ir.wado`.
+- Analysis answers what the rules derive (`grammar_analysis`), resolves decisions by static lookahead (`prediction`), and builds the ATN for the decisions static lookahead cannot settle (`atn`, and `latn` for the lexer).
+- Lowering (`lower`) commits every analysis decision into `LoweredGrammar`, the GIR in `src/gir.wado`, so emit never reads `Grammar`.
+- Emit is driven by `codegen`: `parser_plan` decides what the parser carries, and `parser_gen`, `lexer_gen`, `cst_gen`, `action_gen` and `highlight_gen` write it. `java2wado` translates Java action bodies.
+- The runtime in `src/runtime/` is inlined into every generated parser (see Inlined Runtime).
+- `src/generator.wado` is the Kiln entry, and `src/main.wado` the `gale` command.
 
 ## Setup
 
@@ -31,29 +45,29 @@ The oracle scripts spawn `java` and `javac`, which `core:process` reaches only u
 
 Gale accepts every well-formed grammar upstream `antlr4` accepts; a real-world
 `.g4` that ANTLR4 accepts but Gale rejects is a Gale bug. The one exception is
-`import Foo = Bar;` (claim (a) in [`antlr4-compatibility.md`](./antlr4-compatibility.md)).
+`import Foo = Bar;` (claim (a) in [`docs/antlr4-compatibility.md`](./docs/antlr4-compatibility.md)).
 
-- A bug in ANTLR4 itself is not reproduced: a test pins the corrected answer and says why, by an upstream report or the jar contradicting itself. See "Bugs in ANTLR4 itself" in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
+- A bug in ANTLR4 itself is not reproduced: a test pins the corrected answer and says why, by an upstream report or the jar contradicting itself. See "Bugs in ANTLR4 itself" in [`docs/antlr4-compatibility.md`](./docs/antlr4-compatibility.md).
 - Compatibility is a capability contract, not byte-for-byte output. Parse trees, tokens, and semantics must match; incidental rendering differences that carry no structure may diverge (e.g. the `<EOF>` marker in `toStringTree()`).
-- Gale is a superset: it may accept grammars ANTLR4 rejects only when the meaning is uniquely determined by Gale's language model — never an invented behavior. When accepting would require guessing, reject loudly. Each such grammar is listed, with the meaning Gale gives it, under "Grammars Gale accepts and ANTLR4 rejects" in [`antlr4-compatibility.md`](./antlr4-compatibility.md); a new one goes there too, confirmed against the jar.
-- TDD every g4 change with a unit test in `src/g4/{lexer,parser}_test.wado`. If an existing test encodes a wrong expectation, fix the test — the spec wins; confirm against the published jar as a black-box oracle.
+- Gale is a superset: it may accept grammars ANTLR4 rejects only when the meaning is uniquely determined by Gale's language model — never an invented behavior. When accepting would require guessing, reject loudly. Each such grammar is listed, with the meaning Gale gives it, under "Grammars Gale accepts and ANTLR4 rejects" in [`docs/antlr4-compatibility.md`](./docs/antlr4-compatibility.md); a new one goes there too, confirmed against the jar.
+- TDD every g4 change with a unit test in `tests/g4/{lexer,parser}_test.wado`. If an existing test encodes a wrong expectation, fix the test — the spec wins; confirm against the published jar as a black-box oracle.
 
 ## License Hygiene
 
 ANTLR4 is BSD-3; copying or paraphrasing its implementation risks making Gale a derivative work. So:
 
 - Do NOT read ANTLR4 implementation source: `vendor/antlr4/tool/**/*.{java,g}` and `vendor/antlr4/runtime/**/*.java` (e.g. `ParserATNSimulator.java`, `LL1Analyzer.java`, the bootstrap `.g` grammars). Algorithmic ideas inferred from that source belong to ANTLR4, not Gale.
-- OK to read: `.g4` files anywhere under `vendor/antlr4/`; `runtime-testsuite/**/*.txt` descriptors; `vendor/antlr4/doc/*.md` (spec-like prose — the canonical `.g4` semantics reference; a curated index is in `antlr4-compatibility.md`).
+- OK to read: `.g4` files anywhere under `vendor/antlr4/`; `runtime-testsuite/**/*.txt` descriptors; `vendor/antlr4/doc/*.md` (spec-like prose — the canonical `.g4` semantics reference; a curated index is in `docs/antlr4-compatibility.md`).
 - OK to run: the published `antlr-4.13.2-complete.jar` as a black-box oracle.
 
 The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/hooks/vendor-license-guard.mts` covers Bash.
 
 ## Codegen
 
-- Backtrack only where it makes the parse faster — parser or lexer. The rule is about speed: a try-fail-retry loop used to settle what prediction cannot usually costs more than predicting. So disambiguate with static k-token lookahead, and route a decision static prediction cannot resolve in depth 5 to the runtime ATN simulator. A backtrack that replaces more expensive work is allowed, such as parsing directly and rewinding on failure instead of scanning ahead and then parsing again. Show it is faster with a benchmark, and keep the tree the same as the jar's. The repeat-exit probe also rewinds, but it decides nothing: it re-parses a failed element under `speculating` to record where the error is, and rolls back all but the message. Mechanics, soundness invariants, and ATN escalation: [`antlr4-compatibility.md`](./antlr4-compatibility.md) (Prediction & codegen design).
+- Backtrack only where it makes the parse faster — parser or lexer. The rule is about speed: a try-fail-retry loop used to settle what prediction cannot usually costs more than predicting. So disambiguate with static k-token lookahead, and route a decision static prediction cannot resolve in depth 5 to the runtime ATN simulator. A backtrack that replaces more expensive work is allowed, such as parsing directly and rewinding on failure instead of scanning ahead and then parsing again. Show it is faster with a benchmark, and keep the tree the same as the jar's. The repeat-exit probe also rewinds, but it decides nothing: it re-parses a failed element under `speculating` to record where the error is, and rolls back all but the message. Mechanics, soundness invariants, and ATN escalation: [`docs/antlr4-compatibility.md`](./docs/antlr4-compatibility.md) (Prediction & codegen design).
 - Keep generated code byte-identical for grammars that do not use a feature (actions, FOLLOW gates, ATN, `trace`) — gate every emit site on the feature.
-- Keep the ATN off any shape the static path is proven to lex or predict as the jar does, a proof rather than inputs where the two agree: an ATN-class rule inlines about a thousand lines of runtime into the generated parser. A change to what routes to the ATN, or to a static prediction trigger, runs the shapes it newly includes and newly excludes through `mise run oracle-gale <grammar.g4> <start_rule> < input` (`--tokens` for the lexer; `scripts/antlr4_oracle.wado`) before it is reported. The script caches the jar under `build/antlr4/`.
-- A lexer emit decision lives in `lexer_rule_routes` and `lexer_rule_plan`, which `gen_lexer` and `gale dump --lexer` both read. A new strategy is a new plan node, never a branch in one consumer. See [`debugging.md`](./debugging.md).
+- Keep the ATN off any shape the static path is proven to lex or predict as the jar does, a proof rather than inputs where the two agree: an ATN-class rule inlines about a thousand lines of runtime into the generated parser. A change to what routes to the ATN, or to a static prediction trigger, runs the shapes it newly includes and newly excludes through `mise run oracle-gale <grammar.g4> <start_rule> < input` (`--tokens` for the lexer; `tools/antlr4_oracle.wado`) before it is reported. The script caches the jar under `build/antlr4/`.
+- A lexer emit decision lives in `lexer_rule_routes` and `lexer_rule_plan`, which `gen_lexer` and `gale dump --lexer` both read. A new strategy is a new plan node, never a branch in one consumer. See [`docs/debugging.md`](./docs/debugging.md).
 
 ## Inlined Runtime
 
@@ -68,8 +82,8 @@ Every byte of these files lands in every generated parser, so:
 ## Tests
 
 ```sh
-wado test package-gale                         # the whole package
-wado test package-gale/src/codegen_test.wado   # one file
+wado test package-gale                           # the whole package
+wado test package-gale/tests/codegen_test.wado   # one file
 ```
 
 `wado test package-gale` is the whole check for Gale work; `mise run test-wado`
@@ -77,6 +91,6 @@ leaves this package out. CI runs it as `test-gale-o2`, which also catches the
 miscompiles a compiler change slips past the e2e fixtures.
 
 - Pass the package directory, never a hand-written glob. The descriptor corpus sits one directory deeper (`tests/antlr4-compat/drivers/<Category>/`), so a flat glob passes on about a third of the suite, and the fixtures it never reaches drift behind the generator.
-- A test of anything that imports `codegen.wado` (`generate`, the dump, the entry points) belongs in `src/codegen_test.wado`, and one of a pass below it (lowering, the lexer emit, the ATN, the Java translator) in `src/lower_test.wado`. Each file a test reaches the generator from compiles that part of it again, so the two files pay for it once each. Nothing enforces this; a slow compile in `wado test` output shows the breach.
+- A test of anything that imports `codegen.wado` (`generate`, the dump, the entry points) belongs in `tests/codegen_test.wado`, and one of a pass below it (lowering, the lexer emit, the ATN, the Java translator) in `tests/lower_test.wado`. Each file a test reaches the generator from compiles that part of it again, so the two files pay for it once each. Nothing enforces this; a slow compile in `wado test` output shows the breach.
 - A codegen test asserts what the generated parser does, with the expected trees taken from the jar. Match the source text only for what running cannot show: that an unused feature emits nothing, or which strategy the emitter picked.
-- A new e2e grammar goes in `tests/grammars/` with a parse test in `src/g4/integration_test.wado` and a driver test importing it through the generator. It opens with a comment saying which shape it pins and why that shape is hard. A grammar taken from elsewhere also carries `// Source:` (its URL) and `// License:`; one written here carries neither.
+- A new e2e grammar goes in `tests/grammars/` with a parse test in `tests/g4/integration_test.wado` and a driver test importing it through the generator. It opens with a comment saying which shape it pins and why that shape is hard. A grammar taken from elsewhere also carries `// Source:` (its URL) and `// License:`; one written here carries neither.

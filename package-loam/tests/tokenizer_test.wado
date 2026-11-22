@@ -1,0 +1,183 @@
+use { BpeTokenizer, PieceSplit, TokenSpelling, byte_chars, byte_token } from "../src/runtime/tokenizer.wado";
+use { merges_bytes, order_bytes, tokens_bytes } from "../src/emit_tokenizer.wado";
+
+/// A tokenizer over `tokens` and `merges`, as a generated module builds one,
+/// splitting text as its spelling's own tokenizers do.
+fn built(
+    tokens: &List<String>,
+    merges: List<[i32, i32, i32]>,
+    specials: List<String>,
+    spelling: TokenSpelling,
+    unknown: i32,
+    prefix: List<i32>,
+) -> BpeTokenizer {
+    let split = if spelling matches { _::Pieces } { PieceSplit::Whole } else { PieceSplit::Gpt2 };
+    return BpeTokenizer::new(
+        &tokens_bytes(tokens),
+        &order_bytes(tokens),
+        &merges_bytes(&merges),
+        specials,
+        spelling,
+        split,
+        false,
+        unknown,
+        prefix,
+    );
+}
+
+/// A byte-level tokenizer splitting text by `split`, over every byte's
+/// character, then `whole`, which take the ids from 256 and no merge makes:
+/// a piece is one of them only where `ignore_merges` takes a piece the
+/// vocabulary spells whole.
+fn splitting(split: PieceSplit, whole: List<String>, ignore_merges: bool) -> BpeTokenizer {
+    let mut tokens: List<String> = byte_chars().into_iter().map(|c| String::from(c)).collect();
+    tokens.extend(&whole);
+    return BpeTokenizer::new(
+        &tokens_bytes(&tokens),
+        &order_bytes(&tokens),
+        &merges_bytes(&[]),
+        [],
+        TokenSpelling::ByteLevel,
+        split,
+        ignore_merges,
+        -1,
+        [],
+    );
+}
+
+test "o200k's pattern splits words, their leading space, digits by three, and line breaks" {
+    let t = splitting(PieceSplit::O200k, ["Hello", "ĠWorld", "123", "45", "ĊĊ", "Ġbar"], true);
+    assert t.encode(&"Hello World") == [256, 257] as List<i32>;
+    assert t.encode(&"12345") == [258, 259] as List<i32>;
+    assert t.encode(&"a\n\nb") == [97, 260, 98] as List<i32>;
+    // The last space of a run goes with the word after it.
+    assert t.encode(&"foo  bar") == [102, 111, 111, 32, 261] as List<i32>;
+}
+
+test "o200k's pattern keeps a contraction with its word, in either case, and GPT-2's splits it off" {
+    let whole: List<String> = ["they're", "THEY'RE", "they", "'re"];
+    let o200k = splitting(PieceSplit::O200k, whole, true);
+    assert o200k.encode(&"they're") == [256] as List<i32>;
+    assert o200k.encode(&"THEY'RE") == [257] as List<i32>;
+    assert splitting(PieceSplit::Gpt2, whole, true).encode(&"they're") == [258, 259] as List<i32>;
+}
+
+test "o200k's pattern ends a lowercase word at a capital, and takes line breaks after punctuation" {
+    let t = splitting(PieceSplit::O200k, ["parse", "HTML", "Ġ{Ċ"], true);
+    assert t.encode(&"parseHTML") == [256, 257] as List<i32>;
+    assert t.encode(&" {\n") == [258] as List<i32>;
+}
+
+test "a piece the vocabulary spells whole is that token only where merges are ignored" {
+    assert splitting(PieceSplit::O200k, ["Hello"], false).encode(&"Hello") == [72, 101, 108, 108, 111] as List<i32>;
+}
+
+/// A byte-level tokenizer over every byte's character, the merge `a b`, and
+/// `specials`, which take the ids after `ab`.
+fn tokenizer(specials: List<String>) -> BpeTokenizer {
+    let mut tokens: List<String> = byte_chars().into_iter().map(|c| String::from(c)).collect();
+    tokens.push("ab");
+    tokens.extend(&specials);
+    return built(&tokens, [
+        [97, 98, 256],
+    ], specials, TokenSpelling::ByteLevel, -1, []);
+}
+
+/// A SentencePiece tokenizer: `<unk>`, `<bos>`, every byte's `<0xXX>` token,
+/// then `▁`, `a`, `b`, `▁a`, `▁ab` and `é`, with `▁ a` merging before `▁a b`.
+/// Every encoding starts with `<bos>`.
+fn pieces() -> BpeTokenizer {
+    let mut tokens: List<String> = ["<unk>", "<bos>"];
+    for let b of 0..<256 {
+        tokens.push(byte_token(b));
+    }
+    tokens.extend(&(["▁", "a", "b", "▁a", "▁ab", "é"] as List<String>));
+    return built(&tokens, [
+        [258, 259, 261],
+        [261, 260, 262],
+    ], ["<bos>"], TokenSpelling::Pieces, 0, [1]);
+}
+
+/// A byte-level tokenizer over every byte's character, then `joined`, which
+/// take the ids from 256, made by `merges` in rank order.
+fn merging(joined: List<String>, merges: List<[i32, i32, i32]>) -> BpeTokenizer {
+    let mut tokens: List<String> = byte_chars().into_iter().map(|c| String::from(c)).collect();
+    tokens.extend(&joined);
+    return built(&tokens, merges, [], TokenSpelling::ByteLevel, -1, []);
+}
+
+test "every place a pair stands merges in its round, left to right" {
+    let t = merging(["aa", "aaaa"], [
+        [97, 97, 256],
+        [256, 256, 257],
+    ]);
+    assert t.encode(&"aaa") == [256, 97] as List<i32>;
+    assert t.encode(&"aaaaa") == [257, 97] as List<i32>;
+}
+
+test "a pair a merge forms merges by its own rank" {
+    let t = merging(["bc", "abc", "ab"], [
+        [98, 99, 256],
+        [97, 256, 257],
+        [97, 98, 258],
+    ]);
+    assert t.encode(&"abc") == [257] as List<i32>;
+    assert t.encode(&"abd") == [258, 100] as List<i32>;
+}
+
+#[expect_trap]
+test "SentencePiece's spelling needs the bytes' tokens or an unknown token" {
+    built(&["a"], [], [], TokenSpelling::Pieces, -1, []);
+}
+
+test "a pair the merges rank merges, and the rest stay bytes" {
+    let t = tokenizer([]);
+    assert t.encode(&"abc") == [256, 99] as List<i32>;
+    assert t.decode(&[256, 99]) == "abc";
+}
+
+test "a special token decodes as its own text, whatever bytes it holds" {
+    let t = tokenizer(["<|im start|>"]);
+    let ids = t.encode(&"a<|im start|>b");
+    assert ids == [97, 257, 98] as List<i32>;
+    assert t.decode(&ids) == "a<|im start|>b";
+}
+
+test "of the special tokens starting at one place, the longest is taken" {
+    let t = tokenizer(["<|im", "<|im_start|>"]);
+    assert t.encode(&"<|im_start|>") == [258] as List<i32>;
+    assert t.encode(&"<|im end") == [257, 32, 101, 110, 100] as List<i32>;
+}
+
+test "SentencePiece's spelling merges spaces as ▁ after the prefix" {
+    let t = pieces();
+    assert t.encode(&" ab b") == [1, 262, 258, 260] as List<i32>;
+    assert t.decode(&[262, 258, 260]) == " ab b";
+}
+
+test "a character the vocabulary lacks falls back to its bytes' tokens" {
+    let t = pieces();
+    assert t.encode(&"é日") == [1, 263, 232, 153, 167] as List<i32>;
+    assert t.decode(&[263, 232, 153, 167]) == "é日";
+}
+
+test "an added token in the prefix decodes as its own text" {
+    assert pieces().decode(&[1, 259]) == "<bos>a";
+}
+
+test "SentencePiece's spelling decodes an added token's ▁ as a space" {
+    let mut tokens: List<String> = ["<unk>"];
+    for let b of 0..<256 {
+        tokens.push(byte_token(b));
+    }
+    tokens.push("▁▁");
+    let t = built(&tokens, [], ["▁▁"], TokenSpelling::Pieces, 0, []);
+    assert t.encode(&"▁▁") == [257] as List<i32>;
+    assert t.decode(&[257]) == "  ";
+}
+
+test "a token the vocabulary repeats encodes as its lowest id" {
+    let tokens: List<String> = ["<unk>", "b", "a", "c", "a"];
+    let t = built(&tokens, [], [], TokenSpelling::Pieces, 0, []);
+    assert t.encode(&"abc") == [2, 1, 3] as List<i32>;
+}

@@ -610,7 +610,6 @@ usable both ways would need, are in [`import.md`](./docs/import.md).
 Gale targets the full ANTLR4 `.g4` grammar syntax, plus the small superset
 described in [the design](./docs/design.md).
 
-- [WEP: Gale](../docs/wep-2026-03-02-gale.md) — design and architecture.
 - [`antlr4-compatibility.md`](./docs/antlr4-compatibility.md) — the compatibility
   contract, the descriptor-based test suite, and how to run it.
 - [WEP: Kiln](../docs/wep-2026-04-12-kiln.md) — the `use ... with { generator }`

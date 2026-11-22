@@ -59,8 +59,8 @@ Where Gale departs from the jar:
   builds over the vocabulary has to agree. The lookahead DFA and the LR loop
   table leave such a kind to the simulator, and a sync set a wildcard
   contributed to admits it. Pinned by "a wildcard takes a kind past the
-  grammar's" in `src/codegen_test.wado` and "a wildcard predicts a kind past
-  the grammar's" in `src/lower_test.wado`. No upstream report names it yet.
+  grammar's" in `tests/codegen_test.wado` and "a wildcard predicts a kind past
+  the grammar's" in `tests/lower_test.wado`. No upstream report names it yet.
 - **A titlecase char under `caseInsensitive`.** The jar maps a range to the
   ranges between its bounds' lowercases and uppercases and leaves out the range
   itself (see [`caseInsensitive`](#caseinsensitive-maps-a-range-by-its-bounds)).
@@ -68,7 +68,7 @@ Where Gale departs from the jar:
   the `ǅ` it names, against `options.md`'s own account of `a` becoming `[aA]`.
   Gale keeps the range as written beside the mapped ones, which changes nothing
   where each bound is its own lowercase or uppercase. Pinned by "caseInsensitive
-  matches a titlecase char as written" in `src/codegen_test.wado`. No upstream
+  matches a titlecase char as written" in `tests/codegen_test.wado`. No upstream
   report names it yet.
 
 ### Grammars Gale accepts and ANTLR4 rejects
@@ -82,7 +82,7 @@ rejects and Gale accepts is a Gale bug, on one side or the other.
   so `mode` there desugars to exactly the lexer the combined → (lexer + parser)
   split would produce. A `parser grammar` has no lexer and still rejects it.
   Pinned by "mode declaration is accepted in a combined grammar (superset)" in
-  `src/g4/parser_test.wado`.
+  `tests/g4/parser_test.wado`.
 - **A left-recursive alternative that can be followed by nothing** — error
   148, as in `e : e x | INT ;` with `x : '*'? ;`, or an empty alternative in a
   suffix group (`e : e ( A | ) | C ;`). Any number of empty iterations derives
@@ -90,7 +90,7 @@ rejects and Gale accepts is a Gale bug, on one side or the other.
   iteration whose suffix would consume nothing is never taken. `1*` under
   `s : e '*' EOF | e '!' EOF ; e : e x | '(' e ')' | INT ;` is `(s (e 1) *)`.
   Pinned by "an LR loop never takes an iteration that consumes nothing" in
-  `src/codegen_test.wado`.
+  `tests/codegen_test.wado`.
 
 ### Rejections Gale shares with ANTLR4
 
@@ -134,13 +134,13 @@ Four more are decided as the text is read, so each carries a span:
   call of the same rule, and all of them collect (`+=`) or none do. `x=a | x=b`
   with two rules is rejected, and so are `x=a | x='y'` and `x=A x+=B`. Labelled
   alternatives (`# One`) each have a context of their own, where `x=a # One | x=b # Two` is accepted. Pinned by "a label rebound as another kind, or to
-  another rule, in one rule is rejected" in `src/g4/parser_test.wado`, and by
+  another rule, in one rule is rejected" in `tests/g4/parser_test.wado`, and by
   `wado_label_cross_rule.g4` and `java_rule_label_text.g4`.
 - **A rule prequel reading a label of labelled alternatives** — the label lives
   in the alternative's context, which `@init` and `@after` do not see. The jar
   accepts the grammar and its Java fails to compile; Gale rejects it as it
   reads it. Pinned by "a prequel reading a label of labelled alternatives is
-  rejected" in `src/g4/parser_test.wado`.
+  rejected" in `tests/g4/parser_test.wado`.
 
 ### ICU is the source of truth for `\p{...}`
 
@@ -155,7 +155,7 @@ The layer above the data is still Gale's, so a disagreement there is still a
 bug: the bare-name resolution order, the two `General_Category` aliases behind
 `cntrl` and `digit`, `EmojiPresentation=`, and the complement. Those are
 pinned
-character-by-character in `src/g4/parser_test.wado`.
+character-by-character in `tests/g4/parser_test.wado`.
 
 ### Three properties Gale deliberately does not answer
 
@@ -319,7 +319,7 @@ Test sources covering Stage A:
 
 1. **Hand-curated grammars** in `tests/grammars/` (JSON, SQLite, CSS3,
    HTML, ANTLR4, Rust, TypeScript, plus LL fixtures). Each is exercised
-   by a parse test in `src/g4/integration_test.wado` plus a driver
+   by a parse test in `tests/g4/integration_test.wado` plus a driver
    test under `tests/`.
 2. **Upstream descriptor corpus** at
    `vendor/antlr4/runtime-testsuite/resources/.../descriptors/`,
@@ -594,11 +594,8 @@ underscore-sensitively. Gale's UAX #44 loose matching is a superset.
 Stage C is the last layer required to call the contract fully met. It
 requires a cross-language translator (Java / Python / TypeScript /
 Rust / … → Wado) for the in-band action source, plus wiring for
-`superClass`, `tokenVocab`, and other host-side hooks. Sketch and
-rationale live in
-[`docs/wep-2026-03-02-gale.md`](../../docs/wep-2026-03-02-gale.md); the
-implementation design and what is left of it are in
-[`action.md`](./action.md) and [`TODO.md`](../TODO.md).
+`superClass`, `tokenVocab`, and other host-side hooks. The design and what is
+left of it are in [`action.md`](./action.md) and [`TODO.md`](../TODO.md).
 
 The goal is that a `.g4` taken as it is from elsewhere runs unchanged. The
 translator gets there one construct at a time, and the real-world corpus sets
@@ -994,7 +991,7 @@ relevant sites.
    stepped over, ends back at a `*` or `+` loop, which may run again or
    stop. Resuming past it would kill every config on the loop's second
    iteration. Fixture `tests/grammars/scan_optional_lookahead_restore.g4`.
-   Both are pinned in `src/codegen_test.wado`: the expansion case by the
+   Both are pinned in `tests/codegen_test.wado`: the expansion case by the
    dump, the second iteration by "a prediction walks a loop through more
    than one iteration".
 7. A scan-side optional rewinds to its entry position when its body
@@ -1575,5 +1572,5 @@ diagnostic environment variables (`WADO_TRACE`,
 - [`AGENTS.md`](../AGENTS.md) — the rules for every change: compatibility principle, license hygiene, codegen, inlined runtime, tests.
 - [`dead-ends.md`](./dead-ends.md) — the prediction, predicate and lexer approaches that failed.
 - [`TODO.md`](../TODO.md) — open compatibility / performance work.
-- [`docs/wep-2026-03-02-gale.md`](../../docs/wep-2026-03-02-gale.md) — Gale's overall design rationale, including the long-term plan for Stage C (action-body translation).
+- [`design.md`](./design.md) — Gale's overall design.
 - `vendor/antlr4/doc/` — the upstream `antlr4` documentation (vendored as a shallow git submodule). Read this for the canonical semantics of any `.g4` construct.

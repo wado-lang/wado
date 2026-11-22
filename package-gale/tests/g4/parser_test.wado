@@ -1,0 +1,2603 @@
+use { GrammarOption, RepeatKind, LexerRule, CharClass, CharRange, merge_grammars } from "../../src/ir.wado";
+use { parse, parse_checked } from "../../src/g4/parser.wado";
+
+test "minimal grammar" {
+    let g = parse("grammar Foo;").unwrap();
+    assert g.name == "Foo";
+    assert g.parser_rules.is_empty();
+    assert g.lexer_rules.is_empty();
+}
+
+// ANTLR4's `NameStartChar` admits `À` upwards, and it types a rule by
+// `Character.isUpperCase` on its first character: the UCD's `Uppercase`.
+test "a rule name outside ASCII parses and is typed by Uppercase" {
+    let upper = parse("grammar Test;\nÀBC : [0-9]+ ;").unwrap();
+    assert upper.lexer_rules.len() == 1;
+    assert upper.lexer_rules[0].name == "ÀBC";
+    assert upper.parser_rules.is_empty();
+
+    // U+2160 is `Nl` with `Other_Uppercase`, so `Uppercase` admits it where `Lu`
+    // alone would not.
+    let other = parse("grammar Test;\nⅠbc : [0-9]+ ;").unwrap();
+    assert other.lexer_rules.len() == 1;
+    assert other.lexer_rules[0].name == "Ⅰbc";
+
+    let lower = parse("grammar Test;\nàbc : 'x' ;").unwrap();
+    assert lower.parser_rules.len() == 1;
+    assert lower.parser_rules[0].name == "àbc";
+    assert lower.lexer_rules.is_empty();
+
+    // U+01C5 is `Lt`, which is titlecase and not `Uppercase`, so ANTLR reads it
+    // as a parser rule.
+    let title = parse("grammar Test;\nǅbc : 'x' ;").unwrap();
+    assert title.parser_rules.len() == 1;
+
+    // A `NameChar` that is not a `NameStartChar` still continues a name.
+    let combining = parse("grammar Test;\nA\u{0300}b : 'x' ;").unwrap();
+    assert combining.lexer_rules[0].name == "A\u{0300}b";
+}
+
+test "grammar with simple parser rule" {
+    let input = "grammar Test;
+json : value EOF ;";
+    let g = parse(input).unwrap();
+    assert g.name == "Test";
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "json";
+    assert g.parser_rules[0].alternatives.len() == 1;
+    assert g.parser_rules[0].alternatives[0].elements.len() == 2;
+}
+
+test "parser rule with alternatives" {
+    let input = "grammar Test;
+value : STRING | NUMBER | 'true' | 'false' ;";
+    let g = parse(input).unwrap();
+    let rule = &g.parser_rules[0];
+    assert rule.alternatives.len() == 4;
+    if let TokenRef(t) = rule.alternatives[0].elements[0] {
+        assert t.name == "STRING";
+    } else {
+        panic("expected TokenRef");
+    }
+    if let Literal(l) = rule.alternatives[2].elements[0] {
+        assert l.text == "true";
+    } else {
+        panic("expected Literal");
+    }
+}
+
+test "parser rule with labels" {
+    let input = "grammar Test;
+value : STRING # Str | NUMBER # Num ;";
+    let g = parse(input).unwrap();
+    let rule = &g.parser_rules[0];
+    assert rule.alternatives.len() == 2;
+    if let Some(label) = rule.alternatives[0].label {
+        assert label == "Str";
+    } else {
+        panic("expected label");
+    }
+    if let Some(label) = rule.alternatives[1].label {
+        assert label == "Num";
+    } else {
+        panic("expected label");
+    }
+}
+
+test "parser rule with repetition" {
+    let input = "grammar Test;
+obj : '{' pair (',' pair)* '}' ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 4;
+    if let Literal(l) = elems[0] {
+        assert l.text == "{";
+    } else {
+        panic("expected Literal");
+    }
+    assert elems[2] matches { Repeat(_) };
+}
+
+test "parser rule with label assignment" {
+    let input = "grammar Test;
+expr : expr op=('+' | '-') term ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Label(lbl) = elems[1] {
+        assert lbl.name == "op";
+    } else {
+        panic("expected Label element");
+    }
+}
+
+test "simple lexer rule" {
+    let input = "grammar Test;
+INT : [0-9]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    let rule = &g.lexer_rules[0];
+    assert rule.name == "INT";
+    assert rule.is_fragment == false;
+    assert rule.skip == false;
+}
+
+test "fragment lexer rule" {
+    let input = "grammar Test;
+fragment DIGIT : [0-9] ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules[0].is_fragment == true;
+    assert g.lexer_rules[0].name == "DIGIT";
+}
+
+test "lexer rule with skip" {
+    let input = "grammar Test;
+WS : [ \\t\\n\\r]+ -> skip ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules[0].skip == true;
+    assert g.lexer_rules[0].name == "WS";
+}
+
+test "lexer rule with char range" {
+    let input = "grammar Test;
+LETTER : 'a' .. 'z' ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    assert body.len() == 1;
+    if let CharRange(pair) = body[0].elements[0] {
+        assert pair.0 == 'a';
+        assert pair.1 == 'z';
+    } else {
+        panic("expected CharRange");
+    }
+}
+
+test "lexer rule with alternatives" {
+    let input = "grammar Test;
+SIGN : '+' | '-' ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    assert body.len() == 2;
+}
+
+test "char class parsing" {
+    let input = "grammar Test;
+HEX : [0-9a-fA-F] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.negated == false;
+        assert cc.ranges.len() == 3;
+        assert cc.ranges[0].start == '0';
+        assert cc.ranges[0].end == '9';
+        assert cc.ranges[1].start == 'a';
+        assert cc.ranges[1].end == 'f';
+        assert cc.ranges[2].start == 'A';
+        assert cc.ranges[2].end == 'F';
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "char class with \\u{...} brace escape (astral code point)" {
+    let input = "grammar Test;
+EMOJI : [\\u{1F600}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 1;
+        assert cc.ranges[0].start == '\u{1F600}';
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "char class with \\uXXXX and \\b \\f escapes" {
+    let input = "grammar Test;
+C : [\\u0041\\b\\f] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 3;
+        assert cc.ranges[0].start == 'A';
+        assert cc.ranges[1].start == '\u0008';
+        assert cc.ranges[2].start == '\u000C';
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "multi-char range endpoint is rejected, not silently truncated" {
+    assert parse("grammar Test;\nR : 'a' .. 'bc' ;") matches { Err(_) }, "multi-char range end should be rejected";
+    assert parse("grammar Test;\nR : 'a' .. '' ;") matches { Err(_) }, "empty range end should be rejected, not panic";
+    // ANTLR4 error(144) names the start endpoint the same way.
+    let start = parse("grammar Test;\nR : 'ab' .. 'c' ;");
+    assert start matches { Err(e) && e.message == "range endpoint must be a single character" && e.span.start == 18 };
+}
+
+test "char class \\uXXXX range endpoint" {
+    let input = "grammar Test;
+R : [\\u0041-\\u005A] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.ranges.len() == 1;
+        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z';
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "unicode property class L" {
+    let input = "grammar Test;
+ID : [\\p{L}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert cc.negated == false;
+        let mut has_upper = false;
+        let mut has_lower = false;
+        for let r of &cc.ranges {
+            if r.start == 'A' && r.end == 'Z' {
+                has_upper = true;
+            }
+            if r.start == 'a' && r.end == 'z' {
+                has_lower = true;
+            }
+        }
+        assert has_upper, "\\p{L} must include A-Z";
+        assert has_lower, "\\p{L} must include a-z";
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "unicode property class Nd" {
+    let input = "grammar Test;
+DIGIT : [\\p{Nd}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        let mut has_digits = false;
+        for let r of &cc.ranges {
+            if r.start == '0' && r.end == '9' {
+                has_digits = true;
+            }
+        }
+        assert has_digits, "\\p{Nd} must include 0-9";
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "unicode property class Zs" {
+    let input = "grammar Test;
+WS : [\\p{Zs}] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        let mut has_space = false;
+        for let r of &cc.ranges {
+            if r.start <= ' ' && ' ' <= r.end {
+                has_space = true;
+            }
+        }
+        assert has_space, "\\p{Zs} must include U+0020 (space)";
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "unicode property mixed with literal ranges" {
+    let input = "grammar Test;
+ID : [\\p{L}0-9_] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        let mut has_letter = false;
+        let mut has_digit = false;
+        let mut has_underscore = false;
+        for let r of &cc.ranges {
+            if r.start == 'A' && r.end == 'Z' {
+                has_letter = true;
+            }
+            if r.start == '0' && r.end == '9' {
+                has_digit = true;
+            }
+            if r.start == '_' && r.end == '_' {
+                has_underscore = true;
+            }
+        }
+        assert has_letter, "should include letters from \\p{L}";
+        assert has_digit, "should include 0-9";
+        assert has_underscore, "should include _";
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+fn class_of<S: AsStrSlice>(input: S) -> CharClass {
+    let g = parse(input.to_string()).unwrap();
+    if let CharClass(cc) = g.lexer_rules[0].body[0].elements[0] {
+        return cc;
+    }
+    panic("expected CharClass");
+}
+
+fn class_admits(cc: &CharClass, c: char) -> bool {
+    return cc.ranges.into_iter().any(|r: CharRange| r.start <= c <= r.end);
+}
+
+test "negated unicode property class \\P{L}" {
+    let cc = class_of("grammar Test;
+NOT_LETTER : [\\P{L}] ;");
+    assert !cc.negated, "\\P is expanded, not folded into the class-level negation";
+    assert !class_admits(&cc, 'A'), "\\P{L} must exclude letters";
+    assert !class_admits(&cc, 'z'), "\\P{L} must exclude letters";
+    // `P` and `L` are letters: only the literal-chars reading of `\P{L}`
+    // admits them.
+    assert !class_admits(&cc, 'P'), "\\P{L} must not be read as the literal chars P { L }";
+    assert !class_admits(&cc, 'L');
+    assert class_admits(&cc, '0'), "\\P{L} must include non-letters";
+    assert class_admits(&cc, ' ');
+}
+
+test "negated unicode property mixes with literal items" {
+    let cc = class_of("grammar Test;
+X : [\\P{Nd}a] ;");
+    assert !class_admits(&cc, '0'), "\\P{Nd} must exclude digits";
+    assert class_admits(&cc, 'a');
+    assert class_admits(&cc, 'Z');
+}
+
+test "unicode property ranges are the real general category" {
+    let cc = class_of("grammar Test;
+L : [\\p{L}] ;");
+    // Letters outside Latin. `\P{L}` is the complement, so a gap here is not a
+    // miss but an admission.
+    assert class_admits(&cc, 'א'), "Hebrew alef is Lo";
+    assert class_admits(&cc, 'ก'), "Thai ko kai is Lo";
+    assert class_admits(&cc, '\u{10400}'), "Deseret capital long I is Lu";
+    assert !class_admits(&cc, '0');
+    assert !class_admits(&cc, ' ');
+}
+
+test "negated unicode property excludes every member of the category" {
+    let cc = class_of("grammar Test;
+X : [\\P{L}] ;");
+    assert !class_admits(&cc, 'א');
+    assert !class_admits(&cc, 'ก');
+    assert !class_admits(&cc, '\u{10400}');
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, ' ');
+}
+
+test "two-letter general categories resolve on their own" {
+    let upper = class_of("grammar Test;
+X : [\\p{Lu}] ;");
+    assert class_admits(&upper, 'A');
+    assert !class_admits(&upper, 'a');
+    let lower = class_of("grammar Test;
+X : [\\p{Ll}] ;");
+    assert class_admits(&lower, 'a');
+    assert !class_admits(&lower, 'A');
+}
+
+test "the surrogate category is empty in a scalar range set" {
+    let cc = class_of("grammar Test;
+X : [\\p{Cs}] ;");
+    assert cc.ranges.is_empty(), "no input character can be a surrogate";
+}
+
+test "a script property resolves to its own code points" {
+    let cc = class_of("grammar Test;
+X : [\\p{Greek}] ;");
+    assert class_admits(&cc, 'α'), "U+03B1 is Script=Greek";
+    assert class_admits(&cc, 'ᾰ'), "U+1FB0 is Script=Greek too — the script spans blocks";
+    assert !class_admits(&cc, 'a');
+    assert !class_admits(&cc, 'а'), "U+0430 is Cyrillic";
+}
+
+test "a script resolves through its four-letter alias" {
+    let cc = class_of("grammar Test;
+X : [\\p{Grek}] ;");
+    assert class_admits(&cc, 'α');
+    assert !class_admits(&cc, 'a');
+}
+
+test "binary properties resolve" {
+    let syntax = class_of("grammar Test;
+X : [\\p{Pattern_Syntax}] ;");
+    assert class_admits(&syntax, '+');
+    assert !class_admits(&syntax, 'a');
+    let ws = class_of("grammar Test;
+X : [\\p{White_Space}] ;");
+    assert class_admits(&ws, '\t');
+    assert class_admits(&ws, '\u{00A0}');
+    assert !class_admits(&ws, 'a');
+}
+
+test "property names ignore case, underscores and hyphens" {
+    let lower = class_of("grammar Test;
+X : [\\p{lu}] ;");
+    assert class_admits(&lower, 'A');
+    assert !class_admits(&lower, 'a');
+    let long = class_of("grammar Test;
+X : [\\p{uppercase-letter}] ;");
+    assert class_admits(&long, 'A');
+    assert !class_admits(&long, 'a');
+    let script = class_of("grammar Test;
+X : [\\p{GREEK}] ;");
+    assert class_admits(&script, 'α');
+}
+
+test "an enumerated property picks its table by name" {
+    let gc = class_of("grammar Test;
+X : [\\p{General_Category=Lu}] ;");
+    assert class_admits(&gc, 'A');
+    assert !class_admits(&gc, 'a');
+    let sc = class_of("grammar Test;
+X : [\\p{Script=Greek}] ;");
+    assert class_admits(&sc, 'ᾰ');
+    assert !class_admits(&sc, 'a');
+}
+
+// `core:icu` has no Block, Decomposition_Type or contributory `Other_*`, so each is
+// refused, not approximated: `\P{...}` of a close-enough set admits real members.
+test "a property Gale deliberately does not answer says so" {
+    let blk = parse("grammar Test;\nX : [\\p{Block=Greek_And_Coptic}] ;");
+    assert blk.unwrap_err().message.contains("ICU ships no Block data");
+    let in_prefixed = parse("grammar Test;\nX : [\\p{InGreek}] ;");
+    assert in_prefixed.unwrap_err().message.contains("ICU ships no Block data");
+    let dt = parse("grammar Test;\nX : [\\p{dt=Font}] ;");
+    assert dt.unwrap_err().message.contains("Decomposition_Type");
+    let contributory = parse("grammar Test;\nX : [\\p{Other_ID_Start}] ;");
+    assert contributory.unwrap_err().message.contains("contributory property");
+    // A property of its own beginning with `In`, which the Block reading would
+    // otherwise swallow.
+    let indic = parse("grammar Test;\nX : [\\p{Indic_Positional_Category=Top}] ;");
+    assert !indic.unwrap_err().message.contains("Block");
+}
+
+test "a script property complements like a category" {
+    let cc = class_of("grammar Test;
+X : [\\P{Greek}] ;");
+    assert !class_admits(&cc, 'α');
+    assert class_admits(&cc, 'a');
+}
+
+test "an enumerated property with an unknown table or value is rejected" {
+    assert parse("grammar Test;\nX : [\\p{Bogus=Lu}] ;") matches { Err(_) };
+    assert parse("grammar Test;\nX : [\\p{Script=Bogus}] ;") matches { Err(_) };
+}
+
+test "unsupported unicode property is rejected, not silently empty" {
+    assert parse("grammar Test;\nX : [\\p{Bogus}] ;") matches { Err(_) }, "an unknown \\p{...} must not expand to a set that matches nothing";
+    assert parse("grammar Test;\nX : [\\P{Bogus}] ;") matches { Err(_) };
+}
+
+test "surrogate char range matches nothing instead of U+FFFD" {
+    let cc = class_of("grammar Test;
+X : [\\uD800-\\uDFFF] ;");
+    assert cc.ranges.is_empty(), "expected no scalar ranges";
+}
+
+test "a char range with a surrogate endpoint keeps only its scalar part" {
+    let cc = class_of("grammar Test;
+X : [\\uD700-\\uDFFF] ;");
+    assert cc.ranges.len() == 1;
+    assert cc.ranges[0].start == '\uD700' && cc.ranges[0].end == '\uD7FF';
+    assert !class_admits(&cc, '\u{FFFD}'), "a surrogate endpoint must not become U+FFFD";
+}
+
+test "a scalar-endpoint range spanning the surrogate block stays one range" {
+    // `char` cannot hold a surrogate, so the split would be cosmetic.
+    let cc = class_of("grammar Test;
+X : [\\u0100-\\uFFFC] ;");
+    assert cc.ranges.len() == 1;
+    assert cc.ranges[0].start == '\u0100' && cc.ranges[0].end == '\uFFFC';
+}
+
+test "surrogate range endpoints in the '..' form match nothing" {
+    let g = parse("grammar Test;
+X : '\\uD800' .. '\\uDBFF' ;").unwrap();
+    if let CharClass(cc) = g.lexer_rules[0].body[0].elements[0] {
+        assert cc.ranges.is_empty(), "expected no scalar ranges";
+    } else {
+        panic("expected a surrogate-only range to collapse to an empty CharClass");
+    }
+}
+
+test "a leading `^` in a char set is a member, not a negation" {
+    // ANTLR4 has no `[^...]`: the jar lexes `^a^` as one `[^a]+` token.
+    let input = "grammar Test;
+SAFE : [^a] ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    if let CharClass(cc) = body[0].elements[0] {
+        assert !cc.negated;
+        assert cc.ranges.len() == 2;
+        assert cc.ranges[0].start == '^' && cc.ranges[0].end == '^';
+        assert cc.ranges[1].start == 'a' && cc.ranges[1].end == 'a';
+    } else {
+        panic("expected CharClass");
+    }
+}
+
+test "not element" {
+    let input = "grammar Test;
+SAFE : ~ '\"' ;";
+    let g = parse(input).unwrap();
+    if let Not(n) = g.lexer_rules[0].body[0].elements[0] {
+        if let Literal(text) = n.element {
+            assert text == "\"";
+        } else {
+            panic("expected Literal inside Not");
+        }
+    } else {
+        panic("expected Not");
+    }
+}
+
+test "any char" {
+    let input = "grammar Test;
+ESC : '\\\\' . ;";
+    let g = parse(input).unwrap();
+    let elems = &g.lexer_rules[0].body[0].elements;
+    assert elems.len() == 2;
+    if let _::AnyChar = elems[1] {
+    } else {
+        panic("expected AnyChar");
+    }
+}
+
+test "spaced dots in a lexer rule are two wildcards, not a range" {
+    // `..` is one token in ANTLR4, so the jar matches `axyb` as one `A` here.
+    let g = parse("lexer grammar L;
+A : 'a' . . 'b' ;
+B : . . 'x' ;").unwrap();
+    let a = &g.lexer_rules[0].body[0].elements;
+    assert a.len() == 4 && a[1] matches { _::AnyChar } && a[2] matches { _::AnyChar };
+    let b = &g.lexer_rules[1].body[0].elements;
+    assert b.len() == 3 && b[0] matches { _::AnyChar } && b[1] matches { _::AnyChar };
+}
+
+test "a token range in a parser rule is rejected" {
+    // ANTLR4 error(181): token ranges not allowed in parser.
+    let res = parse("grammar T;\nr : 'a'..'z' ;");
+    assert res matches { Err(e) && e.message == "got \"..\"" };
+}
+
+test "grammar with import single" {
+    let input = "grammar Test;
+import Common;
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.name == "Test";
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "rule";
+}
+
+test "grammar with import multiple" {
+    let input = "grammar Test;
+import Common, Helpers, Util;
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "aliased grammar import is rejected" {
+    let input = "grammar Test;
+import Foo = Bar, Baz;
+rule : ID ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected `import Foo = Bar;` to be rejected";
+}
+
+test "an import clause naming no grammar is rejected" {
+    let result = parse("grammar Test;\nimport ;\nrule : ID ;");
+    assert result matches { Err(_) }, "expected `import ;` to be rejected";
+}
+
+test "an import clause with a dangling comma is rejected" {
+    let result = parse("grammar Test;\nimport S, ;\nrule : ID ;");
+    assert result matches { Err(_) }, "expected `import S, ;` to be rejected";
+}
+
+test "an import list missing its semicolon is rejected" {
+    let result = parse("grammar Test;\nimport S T;\nrule : ID ;");
+    assert result matches { Err(_) }, "expected `import S T;` to be rejected";
+}
+
+test "grammar with at_header named action" {
+    let input = "grammar Test;
+@header { /* code */ }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with scoped named action" {
+    let input = "grammar Test;
+@parser::header { /* code */ }
+@lexer::members { /* code */ }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with options block" {
+    let input = "grammar Test;
+options { tokenVocab = TestLexer; superClass = Foo; }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "grammar with channels block" {
+    let input = "grammar Test;
+channels { CHAN_A, CHAN_B }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.channels.len() == 2;
+    assert g.channels[0] == "CHAN_A";
+    assert g.channels[1] == "CHAN_B";
+}
+
+test "a channel declared twice is one channel" {
+    // ANTLR4 accepts the repeat; the name still means one channel id.
+    let input = "lexer grammar Test;
+channels { X, X, Y }
+A : 'a' -> channel(Y) ;";
+    let g = parse(input).unwrap();
+    assert g.channels.len() == 2;
+    assert g.lexer_rules[0].channel == 3;
+}
+
+test "lexer rule with undeclared channel name is rejected" {
+    let input = "lexer grammar Test;
+channels { COMMENTS }
+WS : ' ' -> channel(TYPO) ;";
+    assert parse(input) matches { Err(_) }, "undeclared channel name should be rejected";
+}
+
+test "lexer rule with named channel resolves to user channel id" {
+    let input = "lexer grammar Test;
+channels { COMMENTS, DOCS }
+COMMENT : '//' -> channel(COMMENTS) ;
+DOC : '///' -> channel(DOCS) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    for let r of &g.lexer_rules {
+        if r.name == "COMMENT" {
+            assert r.channel == 2;
+        }
+        if r.name == "DOC" {
+            assert r.channel == 3;
+        }
+    }
+}
+
+test "grammar with tokens block declares virtual tokens" {
+    let input = "grammar Test;
+tokens { VIRTUAL_A, VIRTUAL_B }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    let mut found_a = false;
+    let mut found_b = false;
+    for let r of &g.lexer_rules {
+        if r.name == "VIRTUAL_A" {
+            found_a = true;
+            assert r.is_virtual, "VIRTUAL_A must be tagged as virtual";
+            assert r.body.is_empty();
+        }
+        if r.name == "VIRTUAL_B" {
+            found_b = true;
+            assert r.is_virtual, "VIRTUAL_B must be tagged as virtual";
+        }
+    }
+    assert found_a, "VIRTUAL_A must be declared";
+    assert found_b, "VIRTUAL_B must be declared";
+}
+
+test "tokens block does not flag existing lexer rule as virtual" {
+    let input = "lexer grammar Test;
+tokens { ID }
+ID : [a-z]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].name == "ID";
+    assert !g.lexer_rules[0].is_virtual;
+}
+
+test "grammar with prequel any order" {
+    let input = "grammar Test;
+options { tokenVocab = TestLexer; }
+import Foo;
+tokens { VT }
+@parser::header { /* code */ }
+channels { CHAN }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.imports == ["Foo"];
+}
+
+test "import records delegate names in declaration order" {
+    let input = "grammar M;
+import S,T;
+s : a ;";
+    let g = parse(input).unwrap();
+    assert g.imports == ["S", "T"];
+}
+
+test "a grammar without import has no delegates" {
+    let g = parse("grammar M;\ns : ID ;").unwrap();
+    assert g.imports.is_empty();
+}
+
+test "parser rule with arguments" {
+    let input = "grammar Test;
+expr[int _p] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "parser rule with returns" {
+    let input = "grammar Test;
+expr returns [int v] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with throws" {
+    let input = "grammar Test;
+expr throws RecognitionException, IOException : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with locals" {
+    let input = "grammar Test;
+expr locals [int i, int j] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with full prequel" {
+    let input = "grammar Test;
+expr[int _p] returns [int v] throws E1 locals [int i] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "prequel args / returns / locals retained as AttrDecls" {
+    let input = "grammar Test;
+expr[int _p, String name] returns [int v, List<String> ignored] locals [int i] : ID ;";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.args.len() == 2;
+    assert r.args[0].type_text == "int" && r.args[0].name == "_p";
+    assert r.args[1].type_text == "String" && r.args[1].name == "name";
+    assert r.returns_decls.len() == 2;
+    assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "v";
+    assert r.returns_decls[1].type_text == "List<String>" && r.returns_decls[1].name == "ignored";
+    assert r.locals_decls.len() == 1 && r.locals_decls[0].name == "i";
+    assert r.throws.len() == 0;
+}
+
+test "prequel attr decls with initializers" {
+    let input = "grammar Test;
+r returns [int i = 0, String s = \"x\"] locals [int n = f(1, 2)] : ID ;";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.returns_decls.len() == 2;
+    assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "i";
+    assert r.returns_decls[0].init == Option::Some("0");
+    assert r.returns_decls[1].type_text == "String" && r.returns_decls[1].name == "s";
+    assert r.returns_decls[1].init == Option::Some("\"x\"");
+    assert r.locals_decls.len() == 1;
+    assert r.locals_decls[0].type_text == "int" && r.locals_decls[0].name == "n";
+    assert r.locals_decls[0].init == Option::Some("f(1, 2)");
+}
+
+test "prequel attr decl without an initializer has none" {
+    let g = parse("grammar Test;\nr locals [int n, bool b = x >= 1] : ID ;").unwrap();
+    let r = &g.parser_rules[0];
+    assert r.locals_decls[0].init matches { null };
+    assert r.locals_decls[1].name == "b" && r.locals_decls[1].init == Option::Some("x >= 1");
+}
+
+test "action language from string-literal option value" {
+    let g = parse("grammar Test;\noptions { language = 'Wado'; }\nr : ID ;").unwrap();
+    assert g.action_language matches { _::Wado };
+}
+
+test "action language matches Java case-insensitively" {
+    let g = parse("grammar Test;\noptions { language = java; }\nr : ID ;").unwrap();
+    assert g.action_language matches { _::Java };
+}
+
+test "prequel throws list retained" {
+    let input = "grammar Test;
+expr throws E1, pkg.E2 : ID ;";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.throws.len() == 2;
+    assert r.throws[0] == "E1" && r.throws[1] == "pkg.E2";
+}
+
+test "prequel @init / @after bodies retained" {
+    let input = "grammar Test;
+expr @init { int x = 0; } @after { print(x); } : ID ;";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.init_action matches { Some(_) }, "init missing";
+    assert r.after_action matches { Some(_) }, "after missing";
+    if let Some(a) = &r.init_action {
+        assert a.text == " int x = 0; ";
+    }
+}
+
+test "catch / finally clauses retained on the rule" {
+    let input = "grammar Test;
+expr : ID ; catch [E1 e] { h1(e); } catch [E2 e] { h2(e); } finally { done(); }";
+    let g = parse(input).unwrap();
+    let r = &g.parser_rules[0];
+    assert r.catches.len() == 2;
+    assert r.catches[0].decl_text == "E1 e";
+    assert r.catches[0].body.text == " h1(e); ";
+    assert r.finally_action matches { Some(_) }, "finally missing";
+}
+
+test "rule-ref call-site arg action retained" {
+    let input = "grammar Test;
+s : a[$i] ;
+a[int i] : ID ;";
+    let g = parse(input).unwrap();
+    let s = &g.parser_rules[0];
+    if let RuleRef(rr) = &s.alternatives[0].elements[0] {
+        assert rr.arg_action matches { Some(_) }, "arg_action missing";
+        if let Some(a) = &rr.arg_action {
+            assert a.text == "$i";
+        }
+    } else {
+        panic("expected a rule ref");
+    }
+}
+
+test "alternative actions retained in sidecar with positions" {
+    let input = "grammar Test;
+r : A {act1();} B {p()}? C ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.elements.len() == 3;
+    assert alt.actions.len() == 2;
+    assert alt.actions[0].kind matches { _::Action }, "act1 kind";
+    assert alt.actions[0].before_index == 1;
+    assert alt.actions[0].source.text == "act1();";
+    assert alt.actions[1].kind matches { _::Predicate }, "p kind";
+    assert alt.actions[1].before_index == 2;
+}
+
+test "alt-initial predicate is before_index 0" {
+    let input = "grammar Test;
+r : {isOk()}? A | B ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.elements.len() == 1;
+    assert alt.actions.len() == 1;
+    assert alt.actions[0].kind matches { _::Predicate };
+    assert alt.actions[0].before_index == 0;
+}
+
+test "lexer alternative actions retained in sidecar" {
+    let input = "grammar Test;
+TOK : 'a' {more();} 'b' ;";
+    let g = parse(input).unwrap();
+    let alt = &g.lexer_rules[0].body[0];
+    assert alt.elements.len() == 2;
+    assert alt.actions.len() == 1;
+    assert alt.actions[0].before_index == 1;
+    assert alt.actions[0].source.text == "more();";
+}
+
+test "a lexer predicate's option block is skipped, the predicate kept" {
+    // The jar accepts `<fail=...>` here and warns on `<assoc=...>`; neither
+    // changes what the rule matches.
+    let g = parse("lexer grammar L;
+A : 'a' {true}?<fail={\"a<b>\"}> ;
+B : 'b' <assoc=right> 'c' ;").unwrap();
+    let a = &g.lexer_rules[0].body[0];
+    assert a.elements.len() == 1 && a.actions.len() == 1;
+    assert a.actions[0].kind matches { _::Predicate } && a.actions[0].source.text == "true";
+    assert g.lexer_rules[1].body[0].elements.len() == 2;
+}
+
+test "named action bodies retained" {
+    let input = "grammar Test;
+@members { int count = 0; }
+start : 'a' ;";
+    let g = parse(input).unwrap();
+    assert g.named_actions.len() == 1;
+    assert g.named_actions[0].name == "members";
+    assert g.named_actions[0].body.text == " int count = 0; ";
+}
+
+test "action language defaults to Java" {
+    let g = parse("grammar Test;\nr : ID ;").unwrap();
+    assert g.action_language matches { _::Java };
+}
+
+test "action language from options language = Wado" {
+    let g = parse("grammar Test;\noptions { language = Wado; }\nr : ID ;").unwrap();
+    assert g.action_language matches { _::Wado };
+}
+
+test "parser rule with at_init and at_after" {
+    let input = "grammar Test;
+expr @init { x = 0; } @after { print(x); } : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with options block" {
+    let input = "grammar Test;
+expr options { tokenVocab = X; } : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with catch clause" {
+    let input = "grammar Test;
+expr : ID ; catch [Exception e] { handle(e); }";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with finally clause" {
+    let input = "grammar Test;
+expr : ID ; finally { cleanup(); }";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with catch and finally" {
+    let input = "grammar Test;
+expr : ID ; catch [E1 e] { h1(e); } catch [E2 e] { h2(e); } finally { done(); }";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "private rule modifier" {
+    let input = "grammar Test;
+public expr : ID ;
+private nested : ID ;
+protected helper : ID ;
+plain : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 4;
+    assert g.parser_rules[0].name == "expr";
+    if let _::Public = g.parser_rules[0].visibility {
+    } else {
+        panic("expected Public visibility on expr");
+    }
+    assert g.parser_rules[1].name == "nested";
+    if let _::Private = g.parser_rules[1].visibility {
+    } else {
+        panic("expected Private visibility on nested");
+    }
+    assert g.parser_rules[2].name == "helper";
+    if let _::Protected = g.parser_rules[2].visibility {
+    } else {
+        panic("expected Protected visibility on helper");
+    }
+    assert g.parser_rules[3].name == "plain";
+    if let _::Default = g.parser_rules[3].visibility {
+    } else {
+        panic("expected Default visibility on plain");
+    }
+}
+
+test "grammar-level options block stored in ir" {
+    let input = "grammar Test;
+options {
+    caseInsensitive = true;
+    language = Python;
+    superClass = my.pkg.BaseParser;
+}
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.options.len() == 3;
+    assert g.options[0].name == "caseInsensitive";
+    assert_option_ident(&g.options[0], "true");
+    assert g.options[1].name == "language";
+    assert_option_ident(&g.options[1], "Python");
+    assert g.options[2].name == "superClass";
+    assert_option_qualified(&g.options[2], ["my", "pkg", "BaseParser"]);
+}
+
+test "a lexer and a parser split each keep their own base" {
+    let lexer_g = parse("lexer grammar SLexer;
+options { superClass = LBase; language = Wado; }
+GT : { this.ok() }? '>' ;
+").unwrap();
+    let parser_g = parse("parser grammar SParser;
+options { superClass = PBase; language = Wado; }
+shr : GT { this.next_gt() }? GT ;
+").unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.lexer_superclass == "LBase";
+    assert merged.parser_superclass == "PBase";
+}
+
+test "parse wado_prs_super.g4" {
+    let g = parse(#include_str("../grammars/wado_prs_super.g4")).unwrap();
+    assert g.name == "WadoPrsSuper";
+    assert g.parser_superclass == "PsBase";
+    assert g.lexer_superclass.is_empty(), "a combined grammar's superClass is the parser's";
+}
+
+test "grammar options with string literal value" {
+    let input = "grammar Test;
+options { tokenVocab = 'foo.g4'; }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.options.len() == 1;
+    assert g.options[0].name == "tokenVocab";
+    assert_option_str(&g.options[0], "foo.g4");
+}
+
+test "parser rule options block stored in ir" {
+    let input = "grammar Test;
+rule options { foo = bar; } : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].options.len() == 1;
+    assert g.parser_rules[0].options[0].name == "foo";
+    assert_option_ident(&g.parser_rules[0].options[0], "bar");
+}
+
+test "lexer rule options block stored in ir" {
+    let input = "lexer grammar Test;
+ID options { caseInsensitive = false; } : [a-z]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].options.len() == 1;
+    assert g.lexer_rules[0].options[0].name == "caseInsensitive";
+    assert_option_ident(&g.lexer_rules[0].options[0], "false");
+}
+
+test "grammar option with integer literal value" {
+    let input = "grammar Test;
+options { k = 3; }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.options.len() == 1;
+    assert g.options[0].name == "k";
+    assert_option_int(&g.options[0], 3);
+}
+
+test "an integer option value of any length is accepted" {
+    // The jar keeps the digits as text and only warns of an unknown option.
+    let g = parse("grammar Test;\noptions { k = 99999999999999999999; }\nrule : ID ;").unwrap();
+    assert g.options[0].value matches { Int("99999999999999999999") };
+}
+
+test "grammar option with action-block value round-trips the body" {
+    let input = "grammar Test;
+options { language = {some code;} ; }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.options.len() == 1;
+    if let Action(body) = &g.options[0].value {
+        assert body.text == "some code;", "got action body";
+    } else {
+        panic("expected Action option value");
+    }
+}
+
+test "grammar level named actions recorded" {
+    let input = "grammar Test;
+@header { package foo; }
+@members { private int x; }
+@parser::members { /* parser-specific */ }
+rule : ID ;";
+    let g = parse(input).unwrap();
+    assert g.named_actions.len() == 3;
+    assert g.named_actions[0].name == "header";
+    if let Some(_) = g.named_actions[0].scope {
+        panic("@header should have no scope");
+    }
+    assert g.named_actions[1].name == "members";
+    if let Some(_) = g.named_actions[1].scope {
+        panic("@members should have no scope");
+    }
+    assert g.named_actions[2].name == "members";
+    if let Some(scope) = g.named_actions[2].scope {
+        assert scope == "parser";
+    } else {
+        panic("expected scope 'parser'");
+    }
+}
+
+test "lexer rule visibility modifiers" {
+    let input = "lexer grammar Test;
+public ID : [a-z]+ ;
+private HELPER : [A-Z]+ ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    if let _::Public = g.lexer_rules[0].visibility {
+    } else {
+        panic("expected Public visibility on ID");
+    }
+    if let _::Private = g.lexer_rules[1].visibility {
+    } else {
+        panic("expected Private visibility on HELPER");
+    }
+}
+
+test "parser rule with plus_assign list label" {
+    let input = "grammar Test;
+expr : ids += ID (',' ids += ID)* ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Label(lbl) = elems[0] {
+        assert lbl.name == "ids";
+    } else {
+        panic("expected Label element for plus_assign");
+    }
+}
+
+test "parser rule with dot wildcard" {
+    let input = "grammar Test;
+any : . ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Wildcard(_) = elems[0] {
+    } else {
+        panic("expected Wildcard element");
+    }
+}
+
+test "parser rule with not set" {
+    let input = "grammar Test;
+expr : ~ID ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Not(_) = elems[0] {
+    } else {
+        panic("expected Not element");
+    }
+}
+
+test "parser rule with not block" {
+    let input = "grammar Test;
+expr : ~(STRING | NUMBER) ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Not(_) = elems[0] {
+    } else {
+        panic("expected Not element");
+    }
+}
+
+test "parser rule with rule ref args" {
+    let input = "grammar Test;
+expr : sub[1, 2] ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let RuleRef(r) = elems[0] {
+        assert r.name == "sub";
+    } else {
+        panic("expected RuleRef sub");
+    }
+}
+
+test "parser rule with rule ref args and repetition" {
+    let input = "grammar Test;
+expr : sub[1, 2]+ ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Repeat(_) = elems[0] {
+    } else {
+        panic("expected Repeat element");
+    }
+}
+
+test "parser rule with element options" {
+    let input = "grammar Test;
+expr : ID<assoc=right> ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules[0].alternatives[0].elements.len() == 1;
+}
+
+test "parser rule with block options" {
+    let input = "grammar Test;
+expr : ( options { greedy = false; } : ID | NUM ) ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with epsilon alternative" {
+    let input = "grammar Test;
+opt : ID | ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules[0].alternatives.len() == 2;
+    assert g.parser_rules[0].alternatives[1].elements.is_empty();
+}
+
+test "mixed parser and lexer rules" {
+    let input = "grammar JSON;
+json : value EOF ;
+value : STRING | NUMBER ;
+STRING : '\"' SAFE* '\"' ;
+fragment SAFE : [a-z] ;
+WS : [ \\t\\n\\r]+ -> skip ;";
+    let g = parse(input).unwrap();
+    assert g.name == "JSON";
+    assert g.parser_rules.len() == 2;
+    assert g.lexer_rules.len() == 3;
+    assert g.lexer_rules[1].is_fragment == true;
+    assert g.lexer_rules[2].skip == true;
+}
+
+test "lexer command mode switches current mode" {
+    let input = "lexer grammar Test;
+LQUOTE : '\"' -> more, mode(STR) ;
+mode STR;
+STRING : '\"' -> mode(DEFAULT_MODE) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    assert g.lexer_rules[0].name == "LQUOTE";
+    assert g.lexer_rules[0].mode == 0;
+    assert g.lexer_rules[0].set_mode != -1;
+    assert g.mode_names[g.lexer_rules[0].set_mode as i32] == "STR";
+    assert g.lexer_rules[0].more == true;
+    assert g.lexer_rules[1].name == "STRING";
+    assert g.lexer_rules[1].mode == 1;
+    assert g.mode_names[g.lexer_rules[1].mode as i32] == "STR";
+    assert g.lexer_rules[1].set_mode == 0;
+}
+
+test "lexer command channel with integer literal" {
+    let input = "lexer grammar Test;
+COMMENT : '#' ~[\\r\\n]* -> channel(2) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].channel == 2;
+}
+
+test "malformed lexer command is rejected, not panicked" {
+    let input = "lexer grammar Test;
+WS : [ \\t]+ -> channel HIDDEN ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected malformed channel command to be rejected";
+}
+
+test "lexer command type without parens is rejected, not panicked" {
+    let input = "lexer grammar Test;
+A : 'a' -> type ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected malformed type command to be rejected";
+}
+
+test "lexer command channel with HIDDEN or DEFAULT_TOKEN_CHANNEL" {
+    let input = "lexer grammar Test;
+WS : [ \\t]+ -> channel(HIDDEN) ;
+B : 'b' -> channel(DEFAULT_TOKEN_CHANNEL) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    assert g.lexer_rules[0].channel == 1;
+    assert g.lexer_rules[0].skip == false;
+    assert g.lexer_rules[1].channel == 0;
+}
+
+test "lexer command type override" {
+    let input = "lexer grammar SetType;
+DOUBLE : '\"' .*? '\"' -> type(STRING) ;
+SINGLE : '\\'' .*? '\\'' -> type(STRING) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    if let Some(t) = &g.lexer_rules[0].type_override {
+        assert *t == "STRING";
+    } else {
+        panic("expected type_override on DOUBLE");
+    }
+    if let Some(t) = &g.lexer_rules[1].type_override {
+        assert *t == "STRING";
+    } else {
+        panic("expected type_override on SINGLE");
+    }
+}
+
+test "lexer command more sets more flag" {
+    let input = "lexer grammar Test;
+TEXT : . -> more ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    assert g.lexer_rules[0].more == true;
+    assert g.lexer_rules[0].skip == false;
+}
+
+test "lexer command combo with mode and more" {
+    let input = "lexer grammar Test;
+SPECIAL_OPEN : '<?' -> more, pushMode(PROC) ;
+mode PROC;
+INSIDE : 'x' -> more ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    assert g.lexer_rules[0].more == true;
+    assert g.lexer_rules[0].push_mode != -1;
+    assert g.mode_names[g.lexer_rules[0].push_mode as i32] == "PROC";
+    assert g.lexer_rules[1].more == true;
+    assert g.lexer_rules[1].mode == 1;
+}
+
+test "ARG_ACTION supports nested brackets in returns" {
+    let input = "grammar Test;
+expr returns [int[] arr] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "ARG_ACTION supports nested brackets in rule arguments" {
+    let input = "grammar Test;
+expr[int[] xs, String[] names] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "ARG_ACTION supports nested brackets in locals" {
+    let input = "grammar Test;
+expr locals [int[] xs] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "ARG_ACTION supports nested brackets in catch" {
+    let input = "grammar Test;
+expr : ID ; catch [Exception[] es] { handle(es); }";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "ARG_ACTION supports nested brackets in rule ref" {
+    let input = "grammar Test;
+expr : sub[arr[0], xs[1]] ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let RuleRef(r) = elems[0] {
+        assert r.name == "sub";
+    } else {
+        panic("expected RuleRef sub");
+    }
+}
+
+test "action body with brace inside string literal" {
+    let input = "grammar Test;
+@header { String s = \"a } b\"; }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "action body with brace inside char literal" {
+    let input = "grammar Test;
+@header { char c = '}'; }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "action body with brace inside line comment" {
+    let input = "grammar Test;
+@header { // close brace } in comment
+int x = 0; }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "action body with brace inside block comment" {
+    let input = "grammar Test;
+@header { /* close brace } in block */ int x = 0; }
+expr : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "mode declaration is rejected in parser grammar" {
+    let input = "parser grammar Test;
+mode FOO;
+expr : ID ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected mode in parser grammar to be rejected";
+}
+
+test "mode declaration is accepted in a combined grammar (superset)" {
+    let input = "grammar Test;
+doc  : TEXT* EOF ;
+LT   : '<' -> pushMode(INTAG) ;
+TEXT : ~[<]+ ;
+mode INTAG;
+NAME : [a-zA-Z]+ ;
+GT   : '>' -> popMode ;";
+    let g = parse(input).unwrap();
+    assert g.mode_names.contains(&"INTAG"), "INTAG mode should be registered";
+    let name_rule = g.lexer_rules.iter_ref().find(|r: &LexerRule| r.name == "NAME").unwrap();
+    assert g.mode_names[name_rule.mode as i32] == "INTAG", "NAME should live in INTAG mode";
+}
+
+test "tilde applied to rule reference is rejected" {
+    let input = "grammar Test;
+a : ~b ;
+b : 'x' ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected ~ruleref to be rejected";
+}
+
+test "tilde applied to wildcard is rejected" {
+    let input = "grammar Test;
+a : ~. ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected ~. to be rejected";
+}
+
+test "tilde applied to block containing rule ref is rejected" {
+    let input = "grammar Test;
+a : ~( 'x' | b ) ;
+b : 'y' ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected ~(block with rule ref) to be rejected";
+}
+
+// A set is fixed before any input is read, so code inside one has no point at
+// which to run. ANTLR4 rejects every form as a syntax error.
+test "an action or predicate inside a `~` set is rejected" {
+    for let src of [
+        "grammar Test;\na : ~( {true}? A | B ) ;", "grammar Test;\na : ~( {int x = 1;} A | B ) ;",
+        "grammar Test;\na : ~( A {true}? | B ) ;", "grammar Test;\na : ~( A | ( B {int x = 1;} ) ) ;",
+        "lexer grammar Test;\nL : ~( 'a' | ( 'b' {int x = 1;} ) ) ;",
+        "lexer grammar Test;\nL : ~( {true}? 'a' | 'b' ) ;", "lexer grammar Test;\nL : ~( {int x = 1;} 'a' | 'b' ) ;",
+    ] as List<String> {
+        let message = parse(&src).unwrap_err().message;
+        assert message.contains("an action or predicate inside a `~` set");
+    }
+}
+
+test "unknown lexer command is rejected" {
+    let input = "lexer grammar Test;
+FOO : 'x' -> totallymadeup ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected unknown lexer command to be rejected";
+}
+
+test "lexer command type takes a literal token type" {
+    // ANTLR4 lets `type` name a token by number (`LexerExec/TokenType0xFFFF`),
+    // so the argument check must not be identifier-only for it.
+    let input = "lexer grammar Test;
+A : 'a' -> type(65535) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules[0].type_override matches { Some(_) }, "expected a type override";
+}
+
+test "a malformed lexer command argument is rejected" {
+    // A mode is named, never numbered, so `pushMode(42)` is a grammar error
+    // rather than a mode named `42`; and no command takes a string.
+    let cases: List<String> = ["pushMode(42)", "mode(42)", "mode('x')", "type('x')"];
+    for let cmd of &cases {
+        let input = `lexer grammar Test;\nA : 'a' -> ${*cmd} ;`;
+        let result = parse(input);
+        assert result matches { Err(_) };
+    }
+}
+
+test "an empty lexer command list is rejected" {
+    // `-> ;` has no command at all, so the `;` is reported as what was found,
+    // not as an unknown command named `;`.
+    let input = "lexer grammar Test;
+A : 'a' -> ;";
+    let err = if let Err(e) = &parse(input) {
+        *e;
+    } else {
+        panic("expected `-> ;` to be rejected");
+    };
+    assert !err.message.contains("unknown lexer command");
+    // The `;` is what was found; the commands are what was wanted.
+    assert err.message == `got ";"`;
+    assert err.expected.contains(&"pushMode");
+}
+
+test "unknown lexer command in combined grammar is rejected" {
+    let input = "grammar Test;
+r : X ;
+X : 'x' -> bogusCommand ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected unknown lexer command in combined grammar to be rejected";
+}
+
+test "duplicate parser rule names are rejected" {
+    let input = "grammar Test;
+foo : ID ;
+foo : NUM ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected duplicate parser rule to be rejected";
+}
+
+test "duplicate lexer rule names are rejected" {
+    let input = "lexer grammar Test;
+FOO : 'a' ;
+FOO : 'b' ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected duplicate lexer rule to be rejected";
+}
+
+test "duplicate rules across lexer and parser namespaces are allowed" {
+    let input = "grammar Test;
+foo : FOO ;
+FOO : 'x' ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.lexer_rules.len() == 1;
+}
+
+test "unterminated tokens block is rejected" {
+    let input = "grammar Test;
+tokens { FOO, BAR
+";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected unterminated tokens block to be rejected";
+}
+
+test "unterminated channels block is rejected" {
+    let input = "lexer grammar Test;
+channels { FOO, BAR
+";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected unterminated channels block to be rejected";
+}
+
+test "parser rule tilde applied to block" {
+    let input = "grammar Test;
+noise : ~( 'a' | 'b' | 'c' ) ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Not(n) = &elems[0] {
+        if let Group(group) = &n.element {
+            assert group.alternatives.len() == 3;
+        } else {
+            panic("expected Group inside Not");
+        }
+    } else {
+        panic("expected Not element");
+    }
+}
+
+test "lexer rule tilde applied to block" {
+    let input = "lexer grammar Test;
+NON_AB : ~( 'a' | 'b' ) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 1;
+    let rule = &g.lexer_rules[0];
+    let elems = &rule.body[0].elements;
+    assert elems.len() == 1;
+    if let Not(n) = &elems[0] {
+        if let Group(_) = &n.element {
+        } else {
+            panic("expected Group inside LexerElement::Not");
+        }
+    } else {
+        panic("expected LexerElement::Not");
+    }
+}
+
+test "lexer rule tilde applied to rule ref is rejected" {
+    assert parse("lexer grammar Test;\nfragment A : 'a' ;\nB : ~A ;") matches { Err(_) }, "~RuleRef in a lexer rule should be rejected";
+}
+
+test "lexer rule tilde applied to wildcard is rejected" {
+    assert parse("lexer grammar Test;\nB : ~. ;") matches { Err(_) }, "~. (not wildcard) in a lexer rule should be rejected";
+}
+
+test "lexer rule tilde over a set holding a multi-char literal is rejected" {
+    // ANTLR4 error(144): multi-character literals are not allowed in lexer sets.
+    assert parse("lexer grammar Test;\nB : ~('a' | 'bc') ;") matches { Err(_) };
+}
+
+test "a missing structural token names what was wanted" {
+    let cases: List<[String, String]> = [
+        ["lexer T;", "grammar"],
+        ["grammar ;", "identifier"],
+        ["grammar T\nr : A ;", ";"],
+        ["grammar T;\nr A ;", ":"],
+        ["grammar T;\nr : (A ;", ")"],
+    ];
+    for let [src, wanted] of cases {
+        let res = parse(src);
+        assert res matches { Err(e) && e.expected.len() == 1 && e.expected[0] == wanted };
+    }
+}
+
+test "a token the lexer could not form is reported by its problem" {
+    let cases: List<[String, String]> = [
+        ["grammar T;\nr : 'abc ;", "unterminated string literal"],
+        ["grammar T;\nA : [a-z ;", "unterminated character set in a lexer rule"],
+        ["grammar T;\nA : '\\a' ;", "invalid escape sequence \\a in a lexer rule"],
+        ["grammar T;\nr : % ;", "unexpected character \"%\""],
+    ];
+    for let [src, message] of cases {
+        let res = parse(src);
+        assert res matches { Err(e) && e.message == message };
+    }
+}
+
+test "a prequel keyword cannot name a rule" {
+    // ANTLR4 lexes `tokens {` as one keyword, so `tokens :` is a syntax error.
+    let res = parse("grammar T;\ntokens : A ;\nA : 'a' ;");
+    assert res matches { Err(e) && e.message == "expected `{` after `tokens`" };
+}
+
+test "block label single-value" {
+    let input = "grammar Test;
+expr : op = ( '+' | '-' ) ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Label(l) = &elems[0] {
+        assert l.name == "op";
+        assert l.list == false;
+        if let Group(_) = &l.element {
+        } else {
+            panic("expected Group inside Label");
+        }
+    } else {
+        panic("expected Label element");
+    }
+}
+
+test "block label list" {
+    let input = "grammar Test;
+expr : ops += ( '+' | '-' )* ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 1;
+    if let Repeat(r) = &elems[0] {
+        if let Label(l) = &r.element {
+            assert l.name == "ops";
+            assert l.list == true;
+            if let Group(_) = &l.element {
+            } else {
+                panic("expected Group inside Label");
+            }
+        } else {
+            panic("expected Label inside Repeat");
+        }
+    } else {
+        panic("expected Repeat at top level");
+    }
+}
+
+test "arg action with only whitespace" {
+    let input = "grammar Test;
+expr returns [ ] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "empty arg action on rule arguments" {
+    let input = "grammar Test;
+expr [ ] : ID ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+    assert g.parser_rules[0].name == "expr";
+}
+
+test "alt-prefix angle options attach to the alternative" {
+    let input = "grammar Test;
+r : <assoc=right> A '**' B ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.options.len() == 1;
+    assert alt.options[0].name == "assoc";
+    assert_option_ident(&alt.options[0], "right");
+    assert alt.elements.len() == 3;
+}
+
+test "rule-ref angle options attach to the ref" {
+    let input = "grammar Test;
+r : foo<p=3> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let RuleRef(r) = &elems[0] {
+        assert r.name == "foo";
+        assert r.options.len() == 1;
+        assert r.options[0].name == "p";
+        assert_option_int(&r.options[0], 3);
+    } else {
+        panic("expected RuleRef");
+    }
+}
+
+test "token-ref angle options attach to the ref" {
+    let input = "grammar Test;
+r : ID<assoc=right> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let TokenRef(t) = &elems[0] {
+        assert t.name == "ID";
+        assert t.options.len() == 1;
+        assert t.options[0].name == "assoc";
+        assert_option_ident(&t.options[0], "right");
+    } else {
+        panic("expected TokenRef");
+    }
+}
+
+test "a bare angle option names no value and is not kept" {
+    // `ID<Foo>` is ANTLR4's node-type option, which a Wado tree has no use
+    // for; the jar accepts it beside a valued one.
+    let g = parse("grammar Test;
+r : ID<Foo, assoc=right> ;").unwrap();
+    if let TokenRef(t) = &g.parser_rules[0].alternatives[0].elements[0] {
+        assert t.options.len() == 1 && t.options[0].name == "assoc";
+    } else {
+        panic("expected TokenRef");
+    }
+}
+
+test "literal angle options attach to the literal" {
+    let input = "grammar Test;
+r : '+'<p=3> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Literal(l) = &elems[0] {
+        assert l.text == "+";
+        assert l.options.len() == 1;
+        assert l.options[0].name == "p";
+        assert_option_int(&l.options[0], 3);
+    } else {
+        panic("expected Literal");
+    }
+}
+
+test "wildcard angle options attach to the wildcard" {
+    let input = "grammar Test;
+r : .<assoc=right> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Wildcard(w) = &elems[0] {
+        assert w.options.len() == 1;
+        assert w.options[0].name == "assoc";
+        assert_option_ident(&w.options[0], "right");
+    } else {
+        panic("expected Wildcard");
+    }
+}
+
+test "group-level options attach to the group" {
+    let input = "grammar Test;
+r : (options { assoc=right; } : A | B) ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Group(group) = &elems[0] {
+        assert group.alternatives.len() == 2;
+        assert group.options.len() == 1;
+        assert group.options[0].name == "assoc";
+        assert_option_ident(&group.options[0], "right");
+    } else {
+        panic("expected Group");
+    }
+}
+
+test "multi-entry angle block captures every option" {
+    let input = "grammar Test;
+r : A<assoc=right, fail='bad'> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let TokenRef(t) = &elems[0] {
+        assert t.options.len() == 2;
+        assert t.options[0].name == "assoc";
+        assert_option_ident(&t.options[0], "right");
+        assert t.options[1].name == "fail";
+        assert_option_str(&t.options[1], "bad");
+    } else {
+        panic("expected TokenRef");
+    }
+}
+
+test "options under label attach to the inner atom" {
+    let input = "grammar Test;
+r : x=ID<assoc=right> ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Label(lbl) = &elems[0] {
+        assert lbl.name == "x";
+        if let TokenRef(t) = &lbl.element {
+            assert t.name == "ID";
+            assert t.options.len() == 1;
+            assert t.options[0].name == "assoc";
+        } else {
+            panic("expected TokenRef inside Label");
+        }
+    } else {
+        panic("expected Label");
+    }
+}
+
+test "options under repeat attach to the inner atom" {
+    let input = "grammar Test;
+r : ID<p=3>* ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    if let Repeat(rep) = &elems[0] {
+        if let TokenRef(t) = &rep.element {
+            assert t.name == "ID";
+            assert t.options.len() == 1;
+            assert t.options[0].name == "p";
+            assert_option_int(&t.options[0], 3);
+        } else {
+            panic("expected TokenRef inside Repeat");
+        }
+    } else {
+        panic("expected Repeat");
+    }
+}
+
+test "element options on action block attach to the alternative" {
+    let input = "grammar T;
+e : a=e op=('+'|'-') b=e {}<p=3>
+  | INT
+  ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.options.len() == 1;
+    assert alt.options[0].name == "p";
+    assert_option_int(&alt.options[0], 3);
+    assert alt.elements.len() == 3;
+}
+
+test "element options on semantic predicate attach to the alternative" {
+    let input = "grammar T;
+a : a ID {pred}?<fail='custom message'>
+  | ID
+  ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.options.len() == 1;
+    assert alt.options[0].name == "fail";
+    assert_option_str(&alt.options[0], "custom message");
+    assert alt.elements.len() == 2;
+}
+
+test "element options on multiple actions and predicates merge into the alternative" {
+    let input = "grammar T;
+e : a=e op=('+'|'-') b=e  {}<p=3>{pred}?<fail='Message'>
+  | INT
+  ;";
+    let g = parse(input).unwrap();
+    let alt = &g.parser_rules[0].alternatives[0];
+    assert alt.options.len() == 2;
+    assert alt.options[0].name == "p";
+    assert_option_int(&alt.options[0], 3);
+    assert alt.options[1].name == "fail";
+    assert_option_str(&alt.options[1], "Message");
+}
+
+test "parse_checked rejects a rule its header forbids, which parse leaves to composition" {
+    // The jar's error(52) / error(53). A delegate a combined grammar imports is
+    // exempt, so `parse` alone cannot decide it.
+    let parser_g = "parser grammar P;\ns : A ;\nB : 'b' ;";
+    let lexer_g = "lexer grammar L;\nA : 'a' ;\nfoo : A ;";
+    assert parse_checked(parser_g) matches { Err(e) && e.message == "lexer rule B not allowed in parser" };
+    assert parse_checked(lexer_g) matches { Err(e) && e.message == "parser rule foo not allowed in lexer" };
+    assert parse(parser_g) matches { Ok(_) };
+    assert parse(lexer_g) matches { Ok(_) };
+}
+
+test "parse_checked rejects undefined parser rule reference" {
+    let input = "grammar Test;
+root : undef_rule ;
+ID : [a-z]+ ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) }, "expected undefined parser rule reference to be rejected";
+}
+
+test "parse_checked synthesizes a virtual rule for undefined parser-rule token reference" {
+    let input = "grammar Test;
+root : UNDEFINED_TOK ;
+ID : [a-z]+ ;";
+    let grammar = parse_checked(input).unwrap();
+    let mut found = false;
+    for let lr of &grammar.lexer_rules {
+        if lr.name == "UNDEFINED_TOK" {
+            assert lr.is_virtual, "synthesized rule must be virtual";
+            found = true;
+        }
+    }
+    assert found, "synthesized UNDEFINED_TOK should be present in lexer_rules";
+}
+
+test "parse_checked rejects undefined lexer rule reference in lexer grammar" {
+    let input = "lexer grammar Test;
+FOO : BAR ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) }, "expected undefined lexer rule reference to be rejected";
+}
+
+test "parse_checked rejects undefined fragment reference" {
+    let input = "lexer grammar Test;
+ID : LETTER+ ;
+LETTER : [a-z] ;
+// MISSING is not defined as a fragment or lexer rule
+FOO : MISSING ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) }, "expected undefined fragment reference to be rejected";
+}
+
+test "parse_checked accepts virtual tokens declared in tokens block" {
+    let input = "grammar Test;
+tokens { VT }
+root : VT ;
+ID : [a-z]+ ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) }, "expected grammar with tokens-block-declared ref to be accepted";
+}
+
+test "parse_checked accepts EOF token reference" {
+    let input = "grammar Test;
+root : ID EOF ;
+ID : [a-z]+ ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) }, "expected grammar ending in EOF to be accepted";
+}
+
+test "parse_checked accepts EOF reference inside a lexer rule" {
+    let input = "grammar Test;
+root : COMMENT ;
+COMMENT : '/*' .*? ('*/' | EOF) ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) }, "expected EOF inside lexer rule to be accepted";
+}
+
+test "parse_checked accepts parser grammar with only parser-rule refs" {
+    let input = "parser grammar Test;
+root : expr ;
+expr : ID PLUS ID ;";
+    let result = parse_checked(input);
+    assert result matches { Ok(_) }, "expected parser grammar with local parser refs to be accepted";
+}
+
+test "parse_checked rejects undefined parser rule ref in parser grammar" {
+    let input = "parser grammar Test;
+root : missing_rule ;";
+    let result = parse_checked(input);
+    assert result matches { Err(_) }, "expected undefined parser rule in parser grammar to be rejected";
+}
+
+test "bare parse does not run reference checks" {
+    let input = "grammar Test;
+r : undefined ;";
+    let result = parse(input);
+    assert result matches { Ok(_) }, "bare parse must accept syntactically-well-formed grammars with undefined refs";
+}
+
+test "parse rejects <assoc> with non-left/right identifier" {
+    let input = "grammar Test;
+expr : <assoc=middle> expr '**' expr | INT ;
+INT : [0-9]+ ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected <assoc=middle> to be rejected";
+}
+
+test "parse rejects <assoc> with string value" {
+    let input = "grammar Test;
+expr : <assoc='right'> expr '**' expr | INT ;
+INT : [0-9]+ ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected <assoc='right'> (string value) to be rejected";
+}
+
+test "parse rejects <assoc> with integer value" {
+    let input = "grammar Test;
+expr : <assoc=1> expr '**' expr | INT ;
+INT : [0-9]+ ;";
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected <assoc=1> to be rejected";
+}
+
+test "parse accepts <assoc=left>" {
+    let input = "grammar Test;
+expr : <assoc=left> expr '+' expr | INT ;
+INT : [0-9]+ ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parse accepts <assoc=right>" {
+    let input = "grammar Test;
+expr : <assoc=right> expr '**' expr | INT ;
+INT : [0-9]+ ;";
+    let g = parse(input).unwrap();
+    assert g.parser_rules.len() == 1;
+}
+
+test "parser rule with non-greedy optional ?? on rule ref" {
+    let input = "grammar Test;
+a : 'x' b ?? ;
+b : 'y' ;";
+    let g = parse(input).unwrap();
+    let elems = &g.parser_rules[0].alternatives[0].elements;
+    assert elems.len() == 2;
+    if let Repeat(r) = &elems[1] {
+        assert r.kind == RepeatKind::Optional;
+        assert r.non_greedy == true, "expected ?? to mark Optional repeat as non_greedy";
+    } else {
+        panic("expected Repeat at index 1");
+    }
+}
+
+test "lexer rule with non-greedy optional ?? on rule ref" {
+    let input = "lexer grammar L;
+CMT : '//' .*? '\\n' CMT?? ;";
+    let g = parse(input).unwrap();
+    let body = &g.lexer_rules[0].body;
+    let elems = &body[0].elements;
+    let last_idx = elems.len() - 1;
+    if let Repeat(r) = elems[last_idx] {
+        assert r.kind == RepeatKind::Optional;
+        assert r.non_greedy == true, "expected ?? to mark Optional lexer repeat as non_greedy";
+    } else {
+        panic("expected last lexer element to be a Repeat");
+    }
+}
+
+fn assert_option_ident<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
+    if let Ident(v) = &opt.value {
+        assert expected == *v;
+    } else {
+        panic(`option '${opt.name}': expected Ident, got other`);
+    }
+}
+
+fn assert_option_str<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
+    if let Str(v) = &opt.value {
+        assert expected == *v;
+    } else {
+        panic(`option '${opt.name}': expected Str, got other`);
+    }
+}
+
+fn assert_option_int(opt: &GrammarOption, expected: i64) {
+    if let Int(n) = &opt.value {
+        assert *n == `${expected}`;
+    } else {
+        panic(`option '${opt.name}': expected Int, got other`);
+    }
+}
+
+fn assert_option_qualified(opt: &GrammarOption, expected: List<String>) {
+    if let Qualified(parts) = &opt.value {
+        assert parts.len() == expected.len();
+        for let mut i = 0; i < parts.len(); i += 1 {
+            assert parts[i] == expected[i];
+        }
+    } else {
+        panic(`option '${opt.name}': expected Qualified, got other`);
+    }
+}
+
+// Like ANTLR4, only direct left recursion is supported (#1671): hidden or indirect
+// recursion would re-enter a rule without consuming input and never terminate.
+
+test "direct left recursion is accepted" {
+    let g = "grammar D;\nprog : e EOF ;\ne : e '+' e | INT ;\nINT : [0-9]+ ;\nWS : [ \\t]+ -> skip ;";
+    assert parse_checked(g) matches { Ok(_) }, "direct left recursion must be accepted (precedence climbing)";
+}
+
+test "hidden left recursion through a nullable prefix is rejected" {
+    // `e : g e` with `g : A? B?` nullable: `e` re-enters itself at the same
+    // position when `g` matches empty. Mirrors the scan cycle behind #1671.
+    let g = "grammar H;\nprog : e EOF ;\ne : g e | INT ;\ng : A? B? ;\nINT : [0-9]+ ;\nA : 'a' ; B : 'b' ;\nWS : [ \\t]+ -> skip ;";
+    assert parse_checked(g) matches { Err(_) }, "hidden left recursion must be rejected";
+}
+
+test "indirect (mutual) left recursion is rejected" {
+    let g = "grammar I;\nprog : a EOF ;\na : b ';' ;\nb : a '(' | X ;\nX : 'x' ; SEMI : ';' ; LP : '(' ;";
+    assert parse_checked(g) matches { Err(_) }, "indirect left recursion must be rejected";
+}
+
+test "a self-reference behind a nullable leading self-reference is hidden left recursion" {
+    // ANTLR4 error 119. `e` matches empty, so the leading `e` can be empty and
+    // the one after it starts at the same position.
+    let g = "grammar HS;\nprog : e EOF ;\ne : e x e | A? ;\nx : 'x'? ;\nA : 'a' ;";
+    assert parse_checked(g) matches { Err(_) }, "`e x e` re-enters `e` when `e` and `x` match empty";
+    let plain = "grammar HP;\nprog : e EOF ;\ne : e '+' e | A? ;\nA : 'a' ;";
+    assert parse_checked(plain) matches { Ok(_) }, "`'+'` always separates the two `e`s";
+}
+
+test "a left-recursive rule with no other alternative is rejected" {
+    // ANTLR4 error 147: nothing ends the recursion.
+    let g = "grammar NB;\nprog : e EOF ;\ne : e f | A ;\nf : f 'x' | f 'y' ;\nA : 'a' ;";
+    assert parse_checked(g) matches { Err(_) }, "`f` has no alternative that does not start with `f`";
+}
+
+test "a non-left-recursive grammar with nullable rules is accepted" {
+    // `g` is nullable but no rule reaches itself through it, so no cycle.
+    let g = "grammar N;\nprog : e EOF ;\ne : g t ('+' t)* ;\ng : A? ;\nt : INT ;\nINT : [0-9]+ ;\nA : 'a' ;\nWS : [ \\t]+ -> skip ;";
+    assert parse_checked(g) matches { Ok(_) }, "a plain grammar with nullable rules must be accepted";
+}
+
+// A `*` / `+` whose body can match empty never advances, so it is rejected as
+// ANTLR4 does (error 153).
+
+test "a closure over an empty alternative is rejected" {
+    let g = "grammar EP;\nr : ( A B | )+ C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
+    assert parse_checked(g) matches { Err(_) }, "`( A B | )+` matches empty and would loop forever";
+}
+
+test "a star closure over an empty alternative is rejected" {
+    let g = "grammar ES;\nr : ( A B | )* C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
+    assert parse_checked(g) matches { Err(_) }, "`( A B | )*` matches empty and would loop forever";
+}
+
+test "a closure over a rule that derives only the empty string is rejected" {
+    let g = "grammar ER;\nr : x* C ;\nx : ;\nC : 'c' ;";
+    assert parse_checked(g) matches { Err(_) }, "the closure's body is nullable through the rule reference";
+}
+
+test "a closure over a body that must consume is accepted" {
+    let g = "grammar EK;\nr : ( A B? )+ C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
+    assert parse_checked(g) matches { Ok(_) }, "the body always consumes `A`, so the loop advances";
+}
+
+test "an optional over an empty alternative is accepted" {
+    // ANTLR4 reports nothing for `( A B | )?` — an optional is not a closure.
+    let g = "grammar EO;\nr : ( A B | )? C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
+    assert parse_checked(g) matches { Ok(_) }, "`( A B | )?` is a plain optional";
+}
+
+// A `*` / `+` whose body can start with EOF never advances past it either, so
+// it is rejected as ANTLR4 does (error 186), and so is a left-recursive suffix,
+// which loops the same way. EOF later in the body, or under a `?`, is accepted.
+
+test "a closure whose body can start with EOF is rejected" {
+    let direct = "grammar EE;\nr : A ({true}? EOF)* ;\nA : 'a' ;";
+    assert parse_checked(direct) matches { Err(_) };
+    let behind_nullable = "grammar EN;\nr : (A? EOF)+ ;\nA : 'a' ;";
+    assert parse_checked(behind_nullable) matches { Err(_) };
+    let through_rule = "grammar EC;\nr : x* B ;\nx : EOF ;\nB : 'b' ;";
+    assert parse_checked(through_rule) matches { Err(_) };
+    let lr_suffix = "grammar EL;\ns : e ;\ne : e A? EOF | A ;\nA : 'a' ;";
+    assert parse_checked(lr_suffix) matches { Err(_) };
+}
+
+test "EOF past a closure body's start or under an optional is accepted" {
+    let lr_later = "grammar EL2;\ns : e ;\ne : e A EOF | A ;\nA : 'a' ;";
+    assert parse_checked(lr_later) matches { Ok(_) };
+    let later = "grammar EA;\nr : (A EOF)* B ;\nA : 'a' ; B : 'b' ;";
+    assert parse_checked(later) matches { Ok(_) };
+    let optional = "grammar EO2;\nr : (A | EOF)? B ;\nA : 'a' ; B : 'b' ;";
+    assert parse_checked(optional) matches { Ok(_) };
+}
+
+test "a lexer closure over an empty alternative is rejected" {
+    let g = "grammar EL;\nr : A ;\nA : ( 'a'? )+ ;";
+    assert parse_checked(g) matches { Err(_) }, "a lexer closure matching empty loops forever too";
+}
+
+// POSIX properties and `EmojiPresentation=` are derived, not UCD tables. Each character
+// below was measured against the jar where two plausible derivations disagree.
+
+test "POSIX alnum is Alphabetic plus Nd, not L plus N" {
+    let cc = class_of("grammar Test;
+X : [\\p{Alnum}] ;");
+    assert class_admits(&cc, 'A');
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, 'あ');
+    assert class_admits(&cc, '٣'), "U+0663 is Nd";
+    assert class_admits(&cc, 'Ⅳ'), "U+2163 is Nl, which is Alphabetic";
+    assert !class_admits(&cc, '½'), "U+00BD is No — neither Alphabetic nor Nd";
+    assert !class_admits(&cc, '_');
+    assert !class_admits(&cc, ' ');
+}
+
+test "POSIX digit is Nd alone" {
+    let cc = class_of("grammar Test;
+X : [\\p{Digit}] ;");
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, '٣');
+    assert !class_admits(&cc, 'Ⅳ'), "Nl is not a decimal digit";
+    assert !class_admits(&cc, '½');
+    assert !class_admits(&cc, 'A');
+}
+
+test "POSIX xdigit is Nd plus Hex_Digit" {
+    let cc = class_of("grammar Test;
+X : [\\p{XDigit}] ;");
+    assert class_admits(&cc, '0');
+    assert class_admits(&cc, 'F');
+    assert class_admits(&cc, 'f');
+    assert class_admits(&cc, '٣'), "any Nd counts, not just the ASCII hex digits";
+    assert !class_admits(&cc, 'G');
+    assert !class_admits(&cc, 'é');
+}
+
+test "POSIX blank is horizontal whitespace only" {
+    let cc = class_of("grammar Test;
+X : [\\p{Blank}] ;");
+    assert class_admits(&cc, ' ');
+    assert class_admits(&cc, '\t');
+    assert class_admits(&cc, '\u{00A0}'), "NBSP is Zs";
+    assert !class_admits(&cc, '\n');
+    assert !class_admits(&cc, '\r');
+    assert !class_admits(&cc, '\u{000B}'), "VT is vertical";
+    assert !class_admits(&cc, '\u{0085}'), "NEL is vertical";
+    assert !class_admits(&cc, '\u{2028}'), "LINE SEPARATOR is Zl";
+}
+
+test "POSIX cntrl is Cc" {
+    let cc = class_of("grammar Test;
+X : [\\p{Cntrl}] ;");
+    assert class_admits(&cc, '\t');
+    assert class_admits(&cc, '\n');
+    assert class_admits(&cc, '\u{0000}');
+    assert class_admits(&cc, '\u{007F}'), "DEL is Cc";
+    assert class_admits(&cc, '\u{0085}'), "NEL is Cc";
+    assert !class_admits(&cc, ' ');
+    assert !class_admits(&cc, '\u{00A0}');
+}
+
+test "POSIX graph excludes whitespace but keeps format characters" {
+    let cc = class_of("grammar Test;
+X : [\\p{Graph}] ;");
+    assert class_admits(&cc, 'A');
+    assert class_admits(&cc, '!');
+    assert class_admits(&cc, '½');
+    assert class_admits(&cc, '\u{1F600}');
+    assert class_admits(&cc, '\u{200B}'), "ZWSP is Cf, which graph does not exclude";
+    assert class_admits(&cc, '\u{00AD}'), "SOFT HYPHEN is Cf too";
+    assert !class_admits(&cc, ' ');
+    assert !class_admits(&cc, '\t');
+    assert !class_admits(&cc, '\u{00A0}'), "NBSP is White_Space";
+    assert !class_admits(&cc, '\u{2028}');
+}
+
+test "POSIX print is graph plus blank, less the controls" {
+    let cc = class_of("grammar Test;
+X : [\\p{Print}] ;");
+    assert class_admits(&cc, 'A');
+    assert class_admits(&cc, ' '), "space is blank and not a control";
+    assert class_admits(&cc, '\u{00A0}');
+    assert !class_admits(&cc, '\t'), "TAB is blank but also Cc";
+    assert !class_admits(&cc, '\n');
+    assert !class_admits(&cc, '\u{2028}');
+}
+
+test "EmojiPresentation splits Emoji by its default presentation" {
+    let colourful = class_of("grammar Test;
+X : [\\p{EmojiPresentation=EmojiDefault}] ;");
+    assert class_admits(&colourful, '\u{1F600}');
+    assert !class_admits(&colourful, '0'), "the keycap base is Emoji but text by default";
+    assert !class_admits(&colourful, 'A');
+
+    let textual = class_of("grammar Test;
+X : [\\p{EmojiPresentation=TextDefault}] ;");
+    assert class_admits(&textual, '0');
+    assert !class_admits(&textual, '\u{1F600}');
+    assert !class_admits(&textual, 'A'), "A is not Emoji at all";
+
+    let not_emoji = class_of("grammar Test;
+X : [\\p{EmojiPresentation=Text}] ;");
+    assert class_admits(&not_emoji, 'A');
+    assert class_admits(&not_emoji, ' ');
+    assert !class_admits(&not_emoji, '0'), "a keycap base is still Emoji";
+    assert !class_admits(&not_emoji, '\u{1F600}');
+}
+
+// The default-value cases carry the weight: a property whose default is implicit
+// answers those wrongly rather than not at all.
+
+test "Line_Break takes both alias spellings and its default value" {
+    let alphabetic = class_of("grammar Test;
+X : [\\p{Line_Break=Alphabetic}] ;");
+    assert class_admits(&alphabetic, 'A');
+    assert !class_admits(&alphabetic, '0'), "a digit is lb=NU";
+    assert class_of("grammar Test;
+X : [\\p{lb=AL}] ;").ranges == alphabetic.ranges, "the short spelling names the same set";
+
+    let unknown = class_of("grammar Test;
+X : [\\p{lb=XX}] ;");
+    assert class_admits(&unknown, '\u{0378}'), "U+0378 is unassigned, so it takes the @missing default";
+    assert !class_admits(&unknown, 'A');
+    assert !class_admits(&unknown, '\u{3400}'), "an unassigned CJK ideograph is lb=ID, which the file lists";
+}
+
+test "Bidi_Class defaults per block, not globally" {
+    let arabic_letter = class_of("grammar Test;
+X : [\\p{bc=AL}] ;");
+    assert class_admits(&arabic_letter, 'ا'), "U+0627 is listed";
+    assert class_admits(&arabic_letter, '\u{08B5}'), "unassigned inside 0860..08FF, whose own default is AL";
+
+    let right_to_left = class_of("grammar Test;
+X : [\\p{Bidi_Class=Right_To_Left}] ;");
+    assert class_admits(&right_to_left, '\u{0590}'), "unassigned inside 0590..05FF, whose default is R";
+    assert !class_admits(&right_to_left, 'A');
+
+    let left_to_right = class_of("grammar Test;
+X : [\\p{bc=L}] ;");
+    assert class_admits(&left_to_right, 'A');
+    assert class_admits(&left_to_right, '\u{0378}'), "unassigned outside every block default";
+    assert !class_admits(&left_to_right, '\u{0590}');
+}
+
+test "Joining_Type defaults through General_Category" {
+    // ArabicShaping.txt states its default as a rule: unlisted is T for
+    // Mn / Me / Cf, U otherwise.
+    let transparent = class_of("grammar Test;
+X : [\\p{jt=T}] ;");
+    assert class_admits(&transparent, '\u{0300}'), "COMBINING GRAVE ACCENT is Mn and unlisted";
+    assert class_admits(&transparent, '\u{00AD}'), "SOFT HYPHEN is Cf and unlisted";
+    assert !class_admits(&transparent, 'A');
+
+    let non_joining = class_of("grammar Test;
+X : [\\p{Joining_Type=Non_Joining}] ;");
+    assert class_admits(&non_joining, 'A');
+    assert !class_admits(&non_joining, '\u{0300}');
+
+    let dual = class_of("grammar Test;
+X : [\\p{jt=D}] ;");
+    assert class_admits(&dual, 'ب'), "U+0628 joins on both sides";
+    assert !class_admits(&dual, 'ا'), "U+0627 is right-joining";
+}
+
+test "the remaining enumerated properties answer their own values" {
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{gcb=LVT}] ;"), '\u{AC01}'), "U+AC01 is a Hangul LVT syllable";
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{hst=LVT}] ;"), '\u{AC01}');
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{WB=XX}] ;"), '!'), "an exclamation mark is Word_Break=Other, the default value";
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{SB=LO}] ;"), 'a'), "a lowercase letter is Sentence_Break=Lower";
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{nt=De}] ;"), '0');
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{Numeric_Type=None}] ;"), 'A'), "the default value covers everything with no numeric value";
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{ea=W}] ;"), '漢');
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{InSC=Bindu}] ;"), '\u{0901}');
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{vo=U}] ;"), '漢');
+    assert class_admits(&class_of("grammar Test;
+X : [\\p{vo=R}] ;"), 'A');
+}
+
+test "a script with no code points of its own is still a value" {
+    let no_script = class_of("grammar Test;
+X : [\\p{sc=Zzzz}] ;");
+    assert class_admits(&no_script, '\u{0378}'), "an unassigned code point has Script=Unknown";
+    assert !class_admits(&no_script, 'A');
+}
+
+test "an unknown enumerated property or value is still rejected" {
+    let bad: List<String> = ["grammar Test;\nX : [\\p{lb=Bogus}] ;", "grammar Test;\nX : [\\p{Bogus_Property=AL}] ;"];
+    for let g of &bad {
+        assert parse(*g) matches { Err(_) };
+    }
+}
+
+test "a property escape cannot be a bound of a character range" {
+    // ANTLR4 rejects each with error(182). The third form is Rust's set-difference
+    // notation, seen commented out in RustLexer.g4.
+    let bad: List<String> = [
+        "grammar Test;\nX : [\\p{L}-z] ;", "grammar Test;\nX : [a-\\p{L}] ;", "grammar Test;\nX : [\\p{L}-\\p{Nd}] ;",
+        "grammar Test;\nX : [\\p{L}\\p{Nl}-\\p{Pattern_Syntax}] ;",
+    ];
+    for let src of &bad {
+        let result = parse(*src);
+        assert result matches { Err(_) };
+    }
+}
+
+test "a label on a block ANTLR4 calls no set is rejected" {
+    // `error(130): label x assigned to a block which is not a set`. A set is two or
+    // more alternatives, each one terminal, so `(e)` is not a free wrapper.
+    let bad: List<String> = [
+        "grammar Test;\nr : x=(A) ;", "grammar Test;\nr : x+=(A)+ ;", "grammar Test;\nr : x=(A B)+ ;",
+        "grammar Test;\nr : x+=(A*) ;", "grammar Test;\nr : x+=(A B)*? ;", "grammar Test;\nr : x=(A? B)? ;",
+        "grammar Test;\nr : x+=(y+=A) ;", "grammar Test;\nr : x+=(.|A) ;", "grammar Test;\nr : x+=(A|~B) ;",
+        "grammar Test;\nr : x=(.) ;", "grammar Test;\nr : x+=((A|B)) ;", "grammar Test;\nr : x+=(A|s) ;",
+        "grammar Test;\ns : A ;\nr : x+=(A|B { }) ;",
+    ];
+    for let src of &bad {
+        assert parse(*src) matches { Err(_) };
+    }
+}
+
+test "a label on a set, and on an atom, is still accepted" {
+    let good: List<String> = [
+        "grammar Test;\nr : x+=(A|B) ;", "grammar Test;\nr : x=(A|B) ;", "grammar Test;\nr : x+=(A|B)*? ;",
+        "grammar Test;\nr : x+=('a'|'b') ;", "grammar Test;\nr : x+=(A|B|C) ;", "grammar Test;\nr : x=. ;",
+        "grammar Test;\nr : x+=A* ;", "grammar Test;\nr : (x=A B)* ;", "grammar Test;\nr : x+=~A ;",
+    ];
+    for let src of &good {
+        assert parse(*src) matches { Ok(_) };
+    }
+}
+
+test "a label rebound as another kind, or to another rule, in one rule is rejected" {
+    // `error(75): label x type mismatch with previous definition`. A label is
+    // one field of its rule's context.
+    let bad: List<String> = [
+        "grammar Test;\nr : (x=a | x=b) ;\na : A ;\nb : A ;", "grammar Test;\nr : (x=a)* x=b ;\na : A ;\nb : A ;",
+        "grammar Test;\nr : x+=a x+=b ;\na : A ;\nb : A ;", "grammar Test;\nr : x=A x+=B ;",
+        "grammar Test;\nr : x+=A x+=a ;\na : A ;", "grammar Test;\nr : x+=a x=a ;\na : A ;",
+        "grammar Test;\nr : (x=a | x='c') ;\na : A ;", "grammar Test;\nr : x=a | x=b ;\na : A ;\nb : A ;",
+        "grammar Test;\nr : x=a | x='c' ;\na : A ;", "grammar Test;\nr : x=a | x+=a B ;\na : A ;",
+    ];
+    for let src of &bad {
+        let err = parse(*src).unwrap_err();
+        assert err.message == "label x type mismatch with previous definition";
+    }
+    // Labelled alternatives each have a context of their own.
+    let good: List<String> = [
+        "grammar Test;\nr : x=A | x='c' ;", "grammar Test;\nr : x=a | x=a ;\na : A ;",
+        "grammar Test;\nr : x=(A|B) | x=. | x=~A ;", "grammar Test;\nr : x=a ;\nt : x=b ;\na : A ;\nb : A ;",
+        "grammar Test;\nr : x=a # One | x='y' # Two ;\na : A ;",
+        "grammar Test;\nr : x=a # One | x=b # Two | c # Three ;\na : A ;\nb : A ;\nc : A ;",
+    ];
+    for let src of &good {
+        assert parse(*src) matches { Ok(_) };
+    }
+}
+
+// A labelled alternative's labels live in its own context, which a prequel
+// does not see: the jar's Java fails to compile on these.
+test "a prequel reading a label of labelled alternatives is rejected" {
+    let bad: List<String> = [
+        "grammar Test;\nr @after {$x.text} : x=a # One | x=a C # Two ;\na : A ;",
+        "grammar Test;\nr @init {$x} : x=A # One | C # Two ;",
+    ];
+    for let src of &bad {
+        let err = parse(*src).unwrap_err();
+        assert err.message == "a rule prequel reads label x, which a labelled alternative owns";
+    }
+    assert parse("grammar Test;\nr @after {$x.text} : x=a | x=a C ;\na : A ;") matches { Ok(_) };
+}
+
+/// Each case is a grammar and the escape its error must name. Slicing the
+/// source at the reported span catches a report that names a prefix.
+fn assert_escape_errors(cases: &List<[String, String]>) {
+    for let mut i = 0; i < cases.len(); i += 1 {
+        let src = cases[i].0;
+        let esc = cases[i].1;
+        let err = parse(src).unwrap_err();
+        assert err.message == `invalid escape sequence ${esc}`;
+        let at = src.as_str_slice().slice(err.span.start, err.span.end).to_string();
+        assert at == esc;
+    }
+}
+
+test "a char set rejects an escape ANTLR4 does not define" {
+    // The jar rejects `\[`. `\'` and `\"` belong to string literals, and `\p`
+    // without `{` names no property.
+    assert_escape_errors(
+        &[
+            ["grammar Test;\nX : [\\[] ;", "\\["],
+            ["grammar Test;\nX : [\\s] ;", "\\s"],
+            ["grammar Test;\nX : ~[\\[\\r\\n] ;", "\\["],
+            ["grammar Test;\nX : [\\'] ;", "\\'"],
+            ["grammar Test;\nX : [\\\"] ;", "\\\""],
+            ["grammar Test;\nX : [\\p] ;", "\\p"],
+            ["grammar Test;\nX : [a-\\z] ;", "\\z"],
+        ],
+    );
+}
+
+test "a char set rejects a malformed unicode escape" {
+    // Four hex digits, or braces around at least one that names a code point.
+    assert_escape_errors(
+        &[
+            ["grammar Test;\nX : [\\u41] ;", "\\u41"],
+            ["grammar Test;\nX : [\\u{}] ;", "\\u{}"],
+            ["grammar Test;\nX : [\\u{110000}] ;", "\\u{110000}"],
+            ["grammar Test;\nX : [\\u{41] ;", "\\u{41"],
+        ],
+    );
+}
+
+test "the escapes a char set does define still read as themselves" {
+    let cc = class_of("grammar Test;\nX : [\\-\\]\\\\\\n\\u0041\\u{1F600}] ;");
+    for let c of &['-', ']', '\\', '\n', 'A', '\u{1F600}'] {
+        assert class_admits(&cc, *c);
+    }
+}
+
+test "a dash beside a property escape is a literal, not a range" {
+    // A `-` first or last in the set is an ordinary character, so neither of
+    // these is a range and both stay accepted — the same line ANTLR4 draws.
+    let trailing = class_of("grammar Test;
+X : [\\p{Nd}-] ;");
+    assert class_admits(&trailing, '0');
+    assert class_admits(&trailing, '-');
+    let leading = class_of("grammar Test;
+X : [-\\p{Nd}] ;");
+    assert class_admits(&leading, '0');
+    assert class_admits(&leading, '-');
+}
+
+test "a grammar the jar rejects is rejected" {
+    // Each is otherwise valid, and the jar (4.13.2) refuses each.
+    let bad: List<String> = [
+        "grammar G;\ns : A EOF ;\nA : 'a' ;\ncatch [Exception e] { }", "grammar G;\ns : A EOF ;\nA : 'a' ;\nfinally { }",
+        "grammar G;\ntokens { 'x' }\ns : A EOF ;\nA : 'a' ;", "grammar G;\noptions { a b; }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ns returns : A EOF ;\nA : 'a' ;", "grammar G;\ns locals : A EOF ;\nA : 'a' ;",
+        "grammar G;\ns : A[3] EOF ;\nA : 'a' ;", "grammar G;\ns : A EOF ;\nA : [\\p{L] ;",
+        "lexer grammar L;\nA : 'a' -> channel(99999999999) ;",
+    ];
+    for let src of &bad {
+        assert parse(*src) matches { Err(_) }, *src;
+    }
+}
+
+test "a lexer rule takes options and nothing else before its colon" {
+    let bad: List<String> = [
+        "grammar G;\ns : A EOF ;\nA returns [int x] : 'a' ;", "grammar G;\ns : A EOF ;\nA @init{} : 'a' ;",
+        "grammar G;\ns : A EOF ;\nA [int x] : 'a' ;", "grammar G;\nINT locals [int n] : [0-9]+ ;",
+    ];
+    for let src of &bad {
+        assert parse(*src) matches { Err(_) }, *src;
+    }
+    assert parse("grammar G;\ns : A EOF ;\nA options { caseInsensitive = true; } : 'a' ;") matches { Ok(_) };
+}
+
+test "the jar's punctuation in prequel blocks is required" {
+    // `;` after each option, `,` between names and none trailing, `[...]`
+    // after `catch`, `{...}` after `finally`, and `:` after a block's options.
+    let bad: List<String> = [
+        "grammar G;\noptions { a = b }\ns : A EOF ;\nA : 'a' ;", "grammar G;\noptions { a = ; }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ntokens { B C }\ns : A EOF ;\nA : 'a' ;", "grammar G;\ntokens { B = 3 }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ntokens { B, }\ns : A EOF ;\nA : 'a' ;", "grammar G;\nchannels { X Y }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ns : A EOF ;\ncatch { }\nA : 'a' ;", "grammar G;\ns : A EOF ;\nfinally\nA : 'a' ;",
+        "grammar G;\ns : (options { greedy = false; } A) EOF ;\nA : 'a' ;",
+        "grammar G;\ntokens { FOO, 42, BAR }\nr : FOO ;",
+        "lexer grammar L;\nchannels { C ; D }\nWS : ' ' -> channel(C) ;",
+        "lexer grammar L;\nchannels { C = 1, D = 2 }\nWS : ' ' -> channel(C) ;", "grammar G;\nr : A<foo=> ;\nA : 'a' ;",
+    ];
+    for let src of &bad {
+        assert parse(*src) matches { Err(_) }, *src;
+    }
+}
+
+test "an integer option past i32 and a channel at i32::MAX are accepted" {
+    assert parse("grammar G;\noptions { a = 99999999999; }\ns : A EOF ;\nA : 'a' ;") matches { Ok(_) };
+    let g = parse("lexer grammar L;\nA : 'a' -> channel(2147483647) ;").unwrap();
+    assert g.lexer_rules[0].channel == i32::MAX;
+}
+
+test "a `<` in an argument's initializer is a comparison, not a bracket" {
+    // The jar declares `int x = a < b` and `int y`.
+    let g = parse("grammar G;\ns[int x = a < b, int y] : A EOF ;\nA : 'a' ;").unwrap();
+    let args = &g.parser_rules[0].args;
+    assert args.len() == 2;
+    assert args[0].name == "x";
+    assert args[1].name == "y";
+    let generic = parse("grammar G;\ns[Map<K, V> m, int y] : A EOF ;\nA : 'a' ;").unwrap();
+    assert generic.parser_rules[0].args.len() == 2;
+}

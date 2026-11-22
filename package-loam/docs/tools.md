@@ -28,7 +28,7 @@ JSON file holding what its `generator.options` holds.
 
 Test outward from the change:
 
-1. The test beside the file changed, such as `src/runtime/recorded_test.wado`.
+1. The test of the file changed, such as `tests/runtime/recorded_test.wado`.
 2. `cargo test --test compute loam` in `wado-run-webgpu/`, for a change
    `WebGpuBackend` runs. It checks each result against `Cpu`'s.
 3. `mise run test-pjrt`, for a change `PjrtBackend` or the StableHLO writer

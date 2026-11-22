@@ -1,16 +1,22 @@
 # Loam Development Guide
 
-Loam compiles an ONNX graph into Wado source through Kiln. Its design is in
-[design.md](./design.md), which names the documents it builds on. The roadmap
-and the known gaps are in [TODO.md](./TODO.md). `loam gen`, `loam dump`, the
-onnxruntime oracles and the benchmarks are in [tools.md](./tools.md).
-
-[WEP: Loam](../docs/wep-2026-09-20-loam.md) is complete, and nothing edits it
-any more. A design that changes one of its decisions is written in this
-directory and names the WEP's section.
+Loam compiles an ONNX graph into Wado source through Kiln. The
+`wado-package-standard` skill says where each kind of file goes. Its design is
+in [docs/design.md](./docs/design.md), which names the documents it builds on.
+The roadmap and the known gaps are in [TODO.md](./TODO.md). `loam gen`,
+`loam dump`, the onnxruntime oracles and the benchmarks are in
+[docs/tools.md](./docs/tools.md).
 
 The documents here sketch a design and describe what exists; they decide
 nothing. Correctness and speed come first.
+
+## Architecture
+
+The Kiln generator reads an ONNX graph, checks its shapes and names its axes,
+folds what it can at build time, and writes a Wado module whose `compute` calls
+a backend. The backends are in `src/runtime/`. `conformance/` is a package of
+its own that consumes Loam the way a user does, to run the onnxruntime
+oracles.
 
 ## Sources
 
@@ -45,7 +51,8 @@ speed.
 
 Generated code reaches every backend, so a change can break code it never
 touched. Test outward from the change, as
-[tools.md](./tools.md#testing) lists, and run the whole package once, last.
+[docs/tools.md](./docs/tools.md#testing) lists, and run the whole package
+once, last.
 
 CI tests the logic on every device with very small programs, which should
 reach as many operations and paths as they can. A real model such as Gemma 3
@@ -59,6 +66,8 @@ backends against onnxruntime and llama.cpp, and the result replaces the row in
 its README's table.
 
 ## Oracles
+
+The procedures are in [docs/tools.md](./docs/tools.md#oracles).
 
 A case in `conformance/operators_test.wado` or `semantics_test.wado` where Loam
 does not match onnxruntime yet is a `#[TODO]` test, so the run lists where the
