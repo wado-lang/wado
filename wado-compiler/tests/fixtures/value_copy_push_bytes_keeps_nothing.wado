@@ -1,0 +1,36 @@
+// Appending copies bytes, which name no storage, so the source stays the
+// caller's alone and a payload read out of a variant is not copied.
+
+use { println, Stdout } from "core:cli";
+
+variant Tag {
+    Name(String),
+    Code(i32),
+}
+
+#[inline(never)]
+fn emit(out: &mut String, tag: &Tag) {
+    match tag {
+        Name(s) => {
+            let name = *s;
+            out.push_str(&name);
+        },
+        Code(c) => out.push_str(`${c}`),
+    }
+}
+
+export fn run() with Stdout {
+    let mut out = "";
+    emit(&mut out, &Tag::Name("x"));
+    emit(&mut out, &Tag::Code(1));
+    println(out);
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["lower/value_copy/share"]},
+    "wir_contrast": {"O2": [{"let name = *s;": "let mut name = *s; name.push_str(\"!\");"}]},
+    "stdout": "x1\n",
+    "wir_scope": "value_copy_push_bytes_keeps_nothing.wado/emit$sroa[tag.value]\"",
+    "wir_not_expect:O2": ["array_clone"]
+}

@@ -1091,6 +1091,24 @@ impl Resolver<'_> {
         }
     }
 
+    /// [`Self::declare_name`] for a closure parameter, which may take a local
+    /// binding's name unreported: it receives its value as an argument, so it
+    /// names no second thing a reader has to tell apart. Only the outer frames
+    /// exempt it, so a parameter list repeating a name still redeclares it.
+    fn declare_closure_param(&mut self, param: &ast::ClosureParam) {
+        let (own, outer) = self
+            .bindings
+            .split_last_mut()
+            .expect("a closure's parameters are declared in its own frame");
+        if !own.contains_key(&param.name)
+            && outer.iter().any(|frame| frame.contains_key(&param.name))
+        {
+            own.insert(param.name.clone(), param.name_span);
+        } else {
+            self.declare_name(&param.name, param.name_span);
+        }
+    }
+
     /// Whether declaring `name`, which the innermost scope already holds,
     /// redeclares it: always where the pattern being walked bound it, and
     /// otherwise unless the declaring `let` derives it from the binding it
@@ -1574,9 +1592,7 @@ impl AstVisitor<'_> for Resolver<'_> {
                 self.in_frame(|s| {
                     if let ast::Expr::Closure(closure) = expr {
                         for param in &closure.params {
-                            s.visit_attributed(&param.attrs, |s| {
-                                s.declare_name(&param.name, param.name_span);
-                            });
+                            s.visit_attributed(&param.attrs, |s| s.declare_closure_param(param));
                         }
                     }
                     if let ast::Expr::TupleComprehension(c) = expr {

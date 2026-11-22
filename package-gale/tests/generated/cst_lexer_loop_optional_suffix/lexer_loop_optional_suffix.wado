@@ -1049,9 +1049,9 @@ fn try_ID(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        rep_4: {
-            if pos >= src.len() { break rep_4; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'0'..=b'9' }) { break rep_4; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'0'..=b'9' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1071,25 +1071,25 @@ fn frag_SUFFIX(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { return -1; }
     pos += 1;
-    let alts_saved_5 = pos;
-    alts_done_5: {
-        alts_5_0: {
-            pos = alts_saved_5;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_5_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_5_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_0_0; }
             pos += 1;
-            break alts_done_5;
+            break alts_done_0;
         }
-        alts_5_1: {
-            pos = alts_saved_5;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_5_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_5_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_5_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_0_1; }
             pos += 1;
-            break alts_done_5;
+            break alts_done_0;
         }
         return -1;
     }

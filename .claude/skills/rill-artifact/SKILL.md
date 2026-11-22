@@ -7,7 +7,7 @@ description: Publish a Rill app as a Claude artifact, a private page on claude.a
 
 An artifact is a static page with files beside it, which is all a Rill app
 needs once it is built as a static site
-([`package-rill/static-generation.md`](../../../package-rill/static-generation.md)).
+([`package-rill/docs/static-generation.md`](../../../package-rill/docs/static-generation.md)).
 The page is the initial HTML, and `app.js` with the core Wasm modules hydrates
 it. Nothing about the app changes: only the page takes another shape.
 

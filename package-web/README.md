@@ -48,20 +48,5 @@ document, doctype included, and `Element::get_html` an element's children. Both
 follow the HTML standard's serialization. `example/web-ssr` prints a page with
 `wado run` and serves it with `wado serve`.
 
-## Layout
-
-- `idl/dom.webidl.json` — the vendored WebIDL slice, as a webidl2 AST
-  (`mise run update-webidl-snapshot`).
-- `src/dom.wado` — the bindings generated from it
-  (`mise run update-package-web`). Do not edit by hand.
-- `glue/dom.js` — the browser glue generated beside them: one shim per
-  member, over the main module's own signature. An object crosses as itself,
-  so the glue keeps no table. `mise run test-web-glue` runs it on Node against
-  jsdom (`glue/dom.test.mjs`).
-- `src/surface_dom.wado` — `SurfaceDom`, written by hand. Each node lives in
-  its handle, linked to the others by theirs.
-- `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
-  generates must be added here; a test fails until it is.
-
 See [WEP: The Web Interface for Wado](../docs/wep-2026-04-01-web.md) for the
 design, and [TODO.md](./TODO.md) for the work ahead.

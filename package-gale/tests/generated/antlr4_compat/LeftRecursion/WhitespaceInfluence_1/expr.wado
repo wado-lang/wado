@@ -3766,12 +3766,18 @@ pub global TK_SQ_STRING: i32 = 3;
 pub global TK_DQ_STRING: i32 = 4;
 pub global TK_WS: i32 = 5;
 pub global TK_COMMENTS: i32 = 6;
-pub global TK_K_IN: i32 = 7;  // virtual
-pub global TK_K_AND: i32 = 8;  // virtual
-pub global TK_K_OR: i32 = 9;  // virtual
-pub global TK_K_TRUE: i32 = 10;  // virtual
-pub global TK_K_FALSE: i32 = 11;  // virtual
-pub global TK_K_NULL: i32 = 12;  // virtual
+/// Virtual: declared in `tokens { }`, matched by no lexer rule.
+pub global TK_K_IN: i32 = 7;
+/// Virtual: declared in `tokens { }`, matched by no lexer rule.
+pub global TK_K_AND: i32 = 8;
+/// Virtual: declared in `tokens { }`, matched by no lexer rule.
+pub global TK_K_OR: i32 = 9;
+/// Virtual: declared in `tokens { }`, matched by no lexer rule.
+pub global TK_K_TRUE: i32 = 10;
+/// Virtual: declared in `tokens { }`, matched by no lexer rule.
+pub global TK_K_FALSE: i32 = 11;
+/// Virtual: declared in `tokens { }`, matched by no lexer rule.
+pub global TK_K_NULL: i32 = 12;
 pub global TK_EOF: i32 = 13;
 pub global TK_ERROR: i32 = 14;
 pub global TK_LIT_LPAREN: i32 = 15;
@@ -3829,78 +3835,78 @@ fn try_ID(src: &StrSlice, start: i32) -> i32 {
 
 fn try_NUMBER(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let mut la_end_1: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
-        let mut la_tot_2: i32 = -1;
-        let peek_save_3 = pos;
-        let opt_saved_4 = pos;
-        let mut opt_ok_4 = false;
-        opt_4: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_4; }
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        let opt_saved_3 = pos;
+        let mut opt_ok_3 = false;
+        opt_3: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_3; }
             pos += 1;
-            if pos >= src.len() { break opt_4; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_4; }
+            if pos >= src.len() { break opt_3; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_3; }
             pos += 1;
             loop {
-                rep_5: {
-                    if pos >= src.len() { break rep_5; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_5; }
+                rep_4: {
+                    if pos >= src.len() { break rep_4; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_4; }
                     pos += 1;
                     continue;
                 }
                 break;
             }
-            opt_ok_4 = true;
+            opt_ok_3 = true;
         }
-        if !opt_ok_4 { pos = opt_saved_4; }
-        let opt_saved_7 = pos;
-        let mut opt_ok_7 = false;
-        opt_7: {
-            if pos >= src.len() { break opt_7; }
-            if !(unchecked src.byte_at(pos) matches { b'E' | b'e' }) { break opt_7; }
+        if !opt_ok_3 { pos = opt_saved_3; }
+        let opt_saved_6 = pos;
+        let mut opt_ok_6 = false;
+        opt_6: {
+            if pos >= src.len() { break opt_6; }
+            if !(unchecked src.byte_at(pos) matches { b'E' | b'e' }) { break opt_6; }
             pos += 1;
-            opt_8: {
-                if pos >= src.len() { break opt_8; }
-                if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_8; }
+            opt_7: {
+                if pos >= src.len() { break opt_7; }
+                if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_7; }
                 pos += 1;
             }
-            if pos >= src.len() { break opt_7; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_7; }
+            if pos >= src.len() { break opt_6; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_6; }
             pos += 1;
             loop {
-                rep_9: {
-                    if pos >= src.len() { break rep_9; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_9; }
+                rep_8: {
+                    if pos >= src.len() { break rep_8; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_8; }
                     pos += 1;
                     continue;
                 }
                 break;
             }
-            opt_ok_7 = true;
+            opt_ok_6 = true;
         }
-        if !opt_ok_7 { pos = opt_saved_7; }
-        la_tot_2 = pos;
-        pos = peek_save_3;
-        if la_tot_2 >= 0 && la_tot_2 >= la_end_1 {
-            la_end_1 = la_tot_2;
+        if !opt_ok_6 { pos = opt_saved_6; }
+        la_tot_1 = pos;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_1 = pos;
-        la_rep_1: {
-            if pos >= src.len() { break la_rep_1; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break la_rep_1; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
-        pos = la_saved_1;
+        pos = la_saved_0;
         break;
     }
-    if la_end_1 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_1;
+    pos = la_end_0;
     return pos;
 }
 
@@ -3936,56 +3942,56 @@ fn try_DATE(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
-    let opt_saved_11 = pos;
-    let mut opt_ok_11 = false;
-    opt_11: {
-        if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break opt_11; }
+    let opt_saved_0 = pos;
+    let mut opt_ok_0 = false;
+    opt_0: {
+        if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break opt_0; }
         pos += 1;
-        if pos >= src.len() { break opt_11; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_11; }
+        if pos >= src.len() { break opt_0; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_0; }
         pos += 1;
-        if pos >= src.len() { break opt_11; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_11; }
+        if pos >= src.len() { break opt_0; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_0; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b':' { break opt_11; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b':' { break opt_0; }
         pos += 1;
-        if pos >= src.len() { break opt_11; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_11; }
+        if pos >= src.len() { break opt_0; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_0; }
         pos += 1;
-        if pos >= src.len() { break opt_11; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_11; }
+        if pos >= src.len() { break opt_0; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_0; }
         pos += 1;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b':' { break opt_11; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b':' { break opt_0; }
         pos += 1;
-        if pos >= src.len() { break opt_11; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_11; }
+        if pos >= src.len() { break opt_0; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_0; }
         pos += 1;
-        if pos >= src.len() { break opt_11; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_11; }
+        if pos >= src.len() { break opt_0; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_0; }
         pos += 1;
-        let opt_saved_12 = pos;
-        let mut opt_ok_12 = false;
-        opt_12: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_12; }
+        let opt_saved_1 = pos;
+        let mut opt_ok_1 = false;
+        opt_1: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_1; }
             pos += 1;
-            if pos >= src.len() { break opt_12; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_12; }
+            if pos >= src.len() { break opt_1; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break opt_1; }
             pos += 1;
             loop {
-                rep_13: {
-                    if pos >= src.len() { break rep_13; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_13; }
+                rep_2: {
+                    if pos >= src.len() { break rep_2; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_2; }
                     pos += 1;
                     continue;
                 }
                 break;
             }
-            opt_ok_12 = true;
+            opt_ok_1 = true;
         }
-        if !opt_ok_12 { pos = opt_saved_12; }
-        opt_ok_11 = true;
+        if !opt_ok_1 { pos = opt_saved_1; }
+        opt_ok_0 = true;
     }
-    if !opt_ok_11 { pos = opt_saved_11; }
+    if !opt_ok_0 { pos = opt_saved_0; }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     return pos;
@@ -3996,30 +4002,30 @@ fn try_SQ_STRING(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_15 = pos;
-        rep_15: {
-            let alts_saved_16 = pos;
-            alts_done_16: {
-                alts_16_0: {
-                    pos = alts_saved_16;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_16_0; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            alts_done_1: {
+                alts_1_0: {
+                    pos = alts_saved_1;
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_1_0; }
                     pos += 1;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_16_0; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_1_0; }
                     pos += 1;
-                    break alts_done_16;
+                    break alts_done_1;
                 }
-                alts_16_1: {
-                    pos = alts_saved_16;
-                    if pos >= src.len() { break alts_16_1; }
-                    if (unchecked src.byte_at(pos) matches { b'\'' }) { break alts_16_1; }
+                alts_1_1: {
+                    pos = alts_saved_1;
+                    if pos >= src.len() { break alts_1_1; }
+                    if (unchecked src.byte_at(pos) matches { b'\'' }) { break alts_1_1; }
                     pos = src.ceil_char_boundary(pos + 1);
-                    break alts_done_16;
+                    break alts_done_1;
                 }
-                break rep_15;
+                break rep_0;
             }
             continue;
         }
-        pos = rep_saved_15;
+        pos = rep_saved_0;
         break;
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
@@ -4037,9 +4043,9 @@ fn try_WS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0a' | b'\x0d' }) { return -1; }
     pos += 1;
     loop {
-        rep_17: {
-            if pos >= src.len() { break rep_17; }
-            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0a' | b'\x0d' }) { break rep_17; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0a' | b'\x0d' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4050,51 +4056,51 @@ fn try_WS(src: &StrSlice, start: i32) -> i32 {
 
 fn try_COMMENTS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_19 = pos;
-    alts_done_19: {
-        alts_19_0: {
-            pos = alts_saved_19;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_19_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { break alts_19_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { break alts_0_0; }
             pos += 1;
             loop {
-                let ng_saved_20 = pos;
-                let mut ng_exit_20 = false;
-                ng_20: {
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { break ng_20; }
+                let ng_saved_1 = pos;
+                let mut ng_exit_1 = false;
+                ng_1: {
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { break ng_1; }
                     pos += 1;
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_20; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_1; }
                     pos += 1;
-                    ng_exit_20 = true;
+                    ng_exit_1 = true;
                 }
-                if ng_exit_20 {
+                if ng_exit_1 {
                     break;
                 }
-                pos = ng_saved_20;
-                if pos >= src.len() { break alts_19_0; }
+                pos = ng_saved_1;
+                if pos >= src.len() { break alts_0_0; }
                 pos = src.ceil_char_boundary(pos + 1);
             }
-            break alts_done_19;
+            break alts_done_0;
         }
-        alts_19_1: {
-            pos = alts_saved_19;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_19_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_19_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_0_1; }
             pos += 1;
             loop {
-                rep_21: {
-                    if pos >= src.len() { break rep_21; }
-                    if (unchecked src.byte_at(pos) matches { b'\x0a' }) { break rep_21; }
+                rep_2: {
+                    if pos >= src.len() { break rep_2; }
+                    if (unchecked src.byte_at(pos) matches { b'\x0a' }) { break rep_2; }
                     pos = src.ceil_char_boundary(pos + 1);
                     continue;
                 }
                 break;
             }
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_19_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_0_1; }
             pos += 1;
-            break alts_done_19;
+            break alts_done_0;
         }
         return -1;
     }

@@ -1,0 +1,15 @@
+// A closure parameter taking a local's name is exempt from `shadowed_name`, but
+// a parameter list naming it twice still redeclares it.
+fn apply(f: fn(i32, i32) -> i32) -> i32 {
+    return f(1, 2);
+}
+
+test {
+    let a = 0;
+    assert apply(|a, a| a) == 2 + a;
+}
+
+__DATA__
+{
+    "compile_error": ":9:22: analysis error: cannot redeclare 'a' in the same scope (first defined at 9:19)"
+}

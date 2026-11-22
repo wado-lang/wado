@@ -6,7 +6,7 @@ use { HashMap, HashSet } from "core:collections";
 use { Graph, Node, QMOE } from "./graph.wado";
 use { Checked, QMOE_DOWN, QMOE_DOWN_ZERO_POINTS, QMOE_UP, QMOE_UP_ZERO_POINTS } from "./infer.wado";
 use { branches_of } from "./lowering.wado";
-use { is_bound, module_idents } from "./idents.wado";
+use { NameRegistry } from "lib:wadopoet";
 
 /// The operands of a `QMoE` indexed by expert, in the order a pool holds them.
 global EXPERT_OPERANDS: List<i32> = [
@@ -51,11 +51,10 @@ internal struct ExpertPlan {
 }
 
 impl ExpertPlan {
-    /// The pools of `graph`, each slot marker named past every name the module
-    /// binds and `axes`. A `QMoE` is pooled where each expert weight it reads
-    /// is an initializer nothing else reads, whether the graph carries it or a
-    /// checkpoint holds it.
-    internal fn of(graph: &Graph, checked: &Checked, axes: &List<String>) -> ExpertPlan {
+    /// The pools of `graph`, each slot marker minted in `taken`. A `QMoE` is
+    /// pooled where each expert weight it reads is an initializer nothing else
+    /// reads, whether the graph carries it or a checkpoint holds it.
+    internal fn of(graph: &Graph, checked: &Checked, taken: &mut NameRegistry) -> ExpertPlan {
         let elsewhere = read_twice(graph, checked);
         let mut initializers = HashSet::<String>::new();
         for let vi of &graph.initializers {
@@ -67,10 +66,6 @@ impl ExpertPlan {
             pooled: HashSet::new(),
         };
         let mut layouts: List<String> = [];
-        let mut taken = module_idents();
-        for let axis of *axes {
-            taken.insert(axis);
-        }
         for let node of &graph.nodes {
             if node.op != QMOE {
                 continue;
@@ -89,11 +84,7 @@ impl ExpertPlan {
             let at = match layouts.into_iter().position(|l| l == layout) {
                 Some(at) => at,
                 null => {
-                    let mut slots = "ExpertSlots";
-                    while is_bound(&taken, &slots) {
-                        slots = `${slots}_`;
-                    }
-                    taken.insert(slots);
+                    let slots = taken.fresh("ExpertSlots", &layout);
                     layouts.push(layout);
                     plan.groups.push(ExpertGroup { layers: [], steps: [], slots });
                     plan.groups.len() - 1;

@@ -391,6 +391,53 @@ pub fn load<T: AnyBits>(addr: i32) -> T;
 #[side_effect(write, trap)]
 pub fn store<T: AnyBits>(addr: i32, value: T);
 
+/// Loads a `T` from the memory64 memory, as `load` does from linear memory.
+/// The memory64 memory is the module's own, addressed by i64; no other module
+/// and no Canonical ABI call reaches it. The module declares it only where
+/// some access survives optimization.
+#[storage(fresh)]
+#[side_effect(read, trap)]
+pub fn memory64_load<T: AnyBits>(addr: i64) -> T;
+
+/// Stores a `T` to the memory64 memory, as `memory64_load` reads it.
+#[storage(none)]
+#[side_effect(write, trap)]
+pub fn memory64_store<T: AnyBits>(addr: i64, value: T);
+
+/// The memory64 memory's size in pages. Maps to Wasm memory.size.
+#[storage(none)]
+#[side_effect(read)]
+pub fn memory64_size() -> i64;
+
+/// Grows the memory64 memory by `delta` pages, returning the previous page
+/// count, or -1 where it cannot. Maps to Wasm memory.grow.
+#[storage(none)]
+#[side_effect(write)]
+pub fn memory64_grow(delta: i64) -> i64;
+
+/// Fills `len` bytes of the memory64 memory at `dst` with `value`.
+#[storage(none)]
+#[side_effect(write, trap)]
+pub fn memory64_fill(dst: i64, value: u8, len: i64);
+
+/// Copies `len` bytes of the memory64 memory from `src` to `dst`, as
+/// `memory_copy` does.
+#[storage(none)]
+#[side_effect(read, write, trap)]
+pub fn memory64_copy(dst: i64, src: i64, len: i64);
+
+/// Copies `len` bytes of linear memory at `src` to the memory64 memory at
+/// `dst`.
+#[storage(none)]
+#[side_effect(read, write, trap)]
+pub fn copy_to_memory64(dst: i64, src: i32, len: i32);
+
+/// Copies `len` bytes of the memory64 memory at `src` to linear memory at
+/// `dst`.
+#[storage(none)]
+#[side_effect(read, write, trap)]
+pub fn copy_from_memory64(dst: i32, src: i64, len: i32);
+
 /// The bytes a `T` takes in linear memory. Lowers to an `i32.const`.
 #[storage(none)]
 #[side_effect(none)]

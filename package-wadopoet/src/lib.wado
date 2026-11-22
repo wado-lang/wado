@@ -5,29 +5,26 @@
 //! opens with, and the other specs (`StructSpec`, `FnSpec`, …) build
 //! declarations around it, and `wado` escapes a hole for the literal it sits
 //! in. `is_reserved` says which names a minted one must avoid, `is_keyword`
-//! the part of them a qualified name, like an enum case, must avoid.
+//! the part of them a qualified name, like an enum case, must avoid, and
+//! `NameRegistry` mints a scope's names past them.
 
+pub use { CodeWriter, CallStmt, CallForm } from "./writer.wado";
 pub use {
-    CodeWriter,
-    CallStmt,
-    CallForm,
+    Vis,
     FieldSpec,
+    CaseSpec,
+    MemberSpec,
+    ParamSpec,
     StructSpec,
-    WadoVariantCase,
     VariantSpec,
-    EnumMember,
     EnumSpec,
     FlagsSpec,
     NewtypeSpec,
-    ParamSpec,
     FnSpec,
     GlobalSpec,
     ImplSpec,
     ModuleSpec,
-    Vis,
-    CharRangePat,
-    char_range_pat,
-    byte_string_literal,
-    wado,
-} from "./wadopoet.wado";
+} from "./decl.wado";
+pub use { CharRangePat, char_range_pat, byte_string_literal, wado } from "./literal.wado";
 pub use { is_keyword, is_reserved } from "./vocabulary.wado";
+pub use { IdGen, NameClash, NameRegistry } from "./names.wado";

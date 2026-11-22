@@ -4149,19 +4149,19 @@ fn try_MultiLineComment(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_5 = pos;
-        let mut ng_exit_5 = false;
-        ng_5: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { break ng_5; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_0; }
             pos += 1;
-            ng_exit_5 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_5 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_5;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -4175,9 +4175,9 @@ fn try_SingleLineComment(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
     loop {
-        rep_6: {
-            if pos >= src.len() { break rep_6; }
-            if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { break rep_6; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -4193,26 +4193,26 @@ fn try_RegularExpressionLiteral(src: &StrSlice, start: i32) -> i32 with TypeScri
     pos = frag_RegularExpressionFirstChar(src, pos);
     if pos < 0 { return -1; }
     loop {
-        let rep_saved_7 = pos;
-        rep_7: {
+        let rep_saved_0 = pos;
+        rep_0: {
             pos = frag_RegularExpressionChar(src, pos);
-            if pos < 0 { break rep_7; }
+            if pos < 0 { break rep_0; }
             continue;
         }
-        pos = rep_saved_7;
+        pos = rep_saved_0;
         break;
     }
     if !TypeScriptLexerBase::is_regex_possible(LexerView { src, start, pos }) { return -1; }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_8 = pos;
-        rep_8: {
+        let rep_saved_1 = pos;
+        rep_1: {
             pos = frag_IdentifierPart(src, pos);
-            if pos < 0 { break rep_8; }
+            if pos < 0 { break rep_1; }
             continue;
         }
-        pos = rep_saved_8;
+        pos = rep_saved_1;
         break;
     }
     return pos;
@@ -4682,33 +4682,33 @@ fn try_ARROW(src: &StrSlice, start: i32) -> i32 {
 
 fn try_BooleanLiteral(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_9 = pos;
-    alts_done_9: {
-        alts_9_0: {
-            pos = alts_saved_9;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b't' { break alts_9_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b't' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'r' { break alts_9_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'r' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_9_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_9_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_0_0; }
             pos += 1;
-            break alts_done_9;
+            break alts_done_0;
         }
-        alts_9_1: {
-            pos = alts_saved_9;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_9_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break alts_9_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'l' { break alts_9_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'l' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_9_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_9_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_0_1; }
             pos += 1;
-            break alts_done_9;
+            break alts_done_0;
         }
         return -1;
     }
@@ -4717,78 +4717,78 @@ fn try_BooleanLiteral(src: &StrSlice, start: i32) -> i32 {
 
 fn try_DecimalLiteral(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_10 = pos;
-    let mut alts_best_10 = -1;
-    alts_10_0: {
-        pos = alts_saved_10;
+    let alts_saved_0 = pos;
+    let mut alts_best_0 = -1;
+    alts_0_0: {
+        pos = alts_saved_0;
         pos = frag_DecimalIntegerLiteral(src, pos);
-        if pos < 0 { break alts_10_0; }
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break alts_10_0; }
+        if pos < 0 { break alts_0_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break alts_0_0; }
         pos += 1;
-        if pos >= src.len() { break alts_10_0; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break alts_10_0; }
+        if pos >= src.len() { break alts_0_0; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break alts_0_0; }
         pos += 1;
         loop {
-            rep_11: {
-                if pos >= src.len() { break rep_11; }
-                if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_11; }
+            rep_1: {
+                if pos >= src.len() { break rep_1; }
+                if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_1; }
                 pos += 1;
                 continue;
             }
             break;
         }
-        let opt_saved_12 = pos;
-        let mut opt_ok_12 = false;
-        opt_12: {
+        let opt_saved_2 = pos;
+        let mut opt_ok_2 = false;
+        opt_2: {
             pos = frag_ExponentPart(src, pos);
-            if pos < 0 { break opt_12; }
-            opt_ok_12 = true;
+            if pos < 0 { break opt_2; }
+            opt_ok_2 = true;
         }
-        if !opt_ok_12 { pos = opt_saved_12; }
-        if pos > alts_best_10 { alts_best_10 = pos; }
+        if !opt_ok_2 { pos = opt_saved_2; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_10_1: {
-        pos = alts_saved_10;
-        if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break alts_10_1; }
+    alts_0_1: {
+        pos = alts_saved_0;
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break alts_0_1; }
         pos += 1;
-        if pos >= src.len() { break alts_10_1; }
-        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break alts_10_1; }
+        if pos >= src.len() { break alts_0_1; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break alts_0_1; }
         pos += 1;
         loop {
-            rep_13: {
-                if pos >= src.len() { break rep_13; }
-                if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_13; }
+            rep_3: {
+                if pos >= src.len() { break rep_3; }
+                if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_3; }
                 pos += 1;
                 continue;
             }
             break;
         }
-        let opt_saved_14 = pos;
-        let mut opt_ok_14 = false;
-        opt_14: {
+        let opt_saved_4 = pos;
+        let mut opt_ok_4 = false;
+        opt_4: {
             pos = frag_ExponentPart(src, pos);
-            if pos < 0 { break opt_14; }
-            opt_ok_14 = true;
+            if pos < 0 { break opt_4; }
+            opt_ok_4 = true;
         }
-        if !opt_ok_14 { pos = opt_saved_14; }
-        if pos > alts_best_10 { alts_best_10 = pos; }
+        if !opt_ok_4 { pos = opt_saved_4; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    alts_10_2: {
-        pos = alts_saved_10;
+    alts_0_2: {
+        pos = alts_saved_0;
         pos = frag_DecimalIntegerLiteral(src, pos);
-        if pos < 0 { break alts_10_2; }
-        let opt_saved_15 = pos;
-        let mut opt_ok_15 = false;
-        opt_15: {
+        if pos < 0 { break alts_0_2; }
+        let opt_saved_5 = pos;
+        let mut opt_ok_5 = false;
+        opt_5: {
             pos = frag_ExponentPart(src, pos);
-            if pos < 0 { break opt_15; }
-            opt_ok_15 = true;
+            if pos < 0 { break opt_5; }
+            opt_ok_5 = true;
         }
-        if !opt_ok_15 { pos = opt_saved_15; }
-        if pos > alts_best_10 { alts_best_10 = pos; }
+        if !opt_ok_5 { pos = opt_saved_5; }
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
-    if alts_best_10 < 0 { return -1; }
-    pos = alts_best_10;
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 
@@ -4803,9 +4803,9 @@ fn try_HexIntegerLiteral(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { return -1; }
     pos += 1;
     loop {
-        rep_16: {
-            if pos >= src.len() { break rep_16; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break rep_16; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4818,35 +4818,35 @@ fn try_OctalIntegerLiteral(src: &StrSlice, start: i32) -> i32 with TypeScriptLex
     let mut pos = start;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { return -1; }
     pos += 1;
-    let mut la_end_17: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { return -1; }
     pos += 1;
     loop {
-        let mut la_tot_18: i32 = -1;
-        let peek_save_19 = pos;
-        peek_19: {
-            if TypeScriptLexerBase::is_strict_mode(LexerView { src, start, pos }) { break peek_19; }
-            la_tot_18 = pos;
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            if TypeScriptLexerBase::is_strict_mode(LexerView { src, start, pos }) { break peek_2; }
+            la_tot_1 = pos;
         }
-        pos = peek_save_19;
-        if la_tot_18 >= 0 && la_tot_18 >= la_end_17 {
-            la_end_17 = la_tot_18;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_17 = pos;
-        la_rep_17: {
-            if pos >= src.len() { break la_rep_17; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { break la_rep_17; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
-        pos = la_saved_17;
+        pos = la_saved_0;
         break;
     }
-    if la_end_17 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_17;
+    pos = la_end_0;
     return pos;
 }
 
@@ -4861,9 +4861,9 @@ fn try_OctalIntegerLiteral2(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { return -1; }
     pos += 1;
     loop {
-        rep_20: {
-            if pos >= src.len() { break rep_20; }
-            if !(unchecked src.byte_at(pos) matches { b'_' | b'0'..=b'7' }) { break rep_20; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'_' | b'0'..=b'7' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4883,9 +4883,9 @@ fn try_BinaryIntegerLiteral(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0' | b'1' }) { return -1; }
     pos += 1;
     loop {
-        rep_21: {
-            if pos >= src.len() { break rep_21; }
-            if !(unchecked src.byte_at(pos) matches { b'_' | b'0' | b'1' }) { break rep_21; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'_' | b'0' | b'1' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4904,33 +4904,33 @@ fn try_BigHexIntegerLiteral(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { return -1; }
     pos += 1;
-    let mut la_end_22: i32 = -1;
+    let mut la_end_0: i32 = -1;
     loop {
-        let mut la_tot_23: i32 = -1;
-        let peek_save_24 = pos;
-        peek_24: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'n' { break peek_24; }
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'n' { break peek_2; }
             pos += 1;
-            la_tot_23 = pos;
+            la_tot_1 = pos;
         }
-        pos = peek_save_24;
-        if la_tot_23 >= 0 && la_tot_23 >= la_end_22 {
-            la_end_22 = la_tot_23;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_22 = pos;
-        la_rep_22: {
-            if pos >= src.len() { break la_rep_22; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break la_rep_22; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
-        pos = la_saved_22;
+        pos = la_saved_0;
         break;
     }
-    if la_end_22 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_22;
+    pos = la_end_0;
     return pos;
 }
 
@@ -4945,9 +4945,9 @@ fn try_BigOctalIntegerLiteral(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { return -1; }
     pos += 1;
     loop {
-        rep_25: {
-            if pos >= src.len() { break rep_25; }
-            if !(unchecked src.byte_at(pos) matches { b'_' | b'0'..=b'7' }) { break rep_25; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'_' | b'0'..=b'7' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -4969,9 +4969,9 @@ fn try_BigBinaryIntegerLiteral(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0' | b'1' }) { return -1; }
     pos += 1;
     loop {
-        rep_26: {
-            if pos >= src.len() { break rep_26; }
-            if !(unchecked src.byte_at(pos) matches { b'_' | b'0' | b'1' }) { break rep_26; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'_' | b'0' | b'1' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -5153,13 +5153,13 @@ fn try_Identifier(src: &StrSlice, start: i32) -> i32 {
     pos = frag_IdentifierStart(src, pos);
     if pos < 0 { return -1; }
     loop {
-        let rep_saved_27 = pos;
-        rep_27: {
+        let rep_saved_0 = pos;
+        rep_0: {
             pos = frag_IdentifierPart(src, pos);
-            if pos < 0 { break rep_27; }
+            if pos < 0 { break rep_0; }
             continue;
         }
-        pos = rep_saved_27;
+        pos = rep_saved_0;
         break;
     }
     return pos;
@@ -5167,43 +5167,43 @@ fn try_Identifier(src: &StrSlice, start: i32) -> i32 {
 
 fn try_StringLiteral(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_28 = pos;
-    alts_done_28: {
-        alts_28_0: {
-            pos = alts_saved_28;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { break alts_28_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { break alts_0_0; }
             pos += 1;
             loop {
-                let rep_saved_29 = pos;
-                rep_29: {
+                let rep_saved_1 = pos;
+                rep_1: {
                     pos = frag_DoubleStringCharacter(src, pos);
-                    if pos < 0 { break rep_29; }
+                    if pos < 0 { break rep_1; }
                     continue;
                 }
-                pos = rep_saved_29;
+                pos = rep_saved_1;
                 break;
             }
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { break alts_28_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { break alts_0_0; }
             pos += 1;
-            break alts_done_28;
+            break alts_done_0;
         }
-        alts_28_1: {
-            pos = alts_saved_28;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_28_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_0_1; }
             pos += 1;
             loop {
-                let rep_saved_30 = pos;
-                rep_30: {
+                let rep_saved_2 = pos;
+                rep_2: {
                     pos = frag_SingleStringCharacter(src, pos);
-                    if pos < 0 { break rep_30; }
+                    if pos < 0 { break rep_2; }
                     continue;
                 }
-                pos = rep_saved_30;
+                pos = rep_saved_2;
                 break;
             }
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_28_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { break alts_0_1; }
             pos += 1;
-            break alts_done_28;
+            break alts_done_0;
         }
         return -1;
     }
@@ -5223,9 +5223,9 @@ fn try_WhiteSpaces(src: &StrSlice, start: i32) -> i32 {
     if !(char_at(src, pos) matches { '\t' | '\u{b}' | '\u{c}' | ' ' | '\u{a0}' }) { return -1; }
     pos = src.ceil_char_boundary(pos + 1);
     loop {
-        rep_31: {
-            if pos >= src.len() { break rep_31; }
-            if !(char_at(src, pos) matches { '\t' | '\u{b}' | '\u{c}' | ' ' | '\u{a0}' }) { break rep_31; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(char_at(src, pos) matches { '\t' | '\u{b}' | '\u{c}' | ' ' | '\u{a0}' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -5253,21 +5253,21 @@ fn try_HtmlComment(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_33 = pos;
-        let mut ng_exit_33 = false;
-        ng_33: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { break ng_33; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { break ng_33; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_33; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_33 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_33 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_33;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -5295,21 +5295,21 @@ fn try_CDataComment(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_34 = pos;
-        let mut ng_exit_34 = false;
-        ng_34: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_34; }
+        let ng_saved_0 = pos;
+        let mut ng_exit_0 = false;
+        ng_0: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_34; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_34; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
-            ng_exit_34 = true;
+            ng_exit_0 = true;
         }
-        if ng_exit_34 {
+        if ng_exit_0 {
             break;
         }
-        pos = ng_saved_34;
+        pos = ng_saved_0;
         if pos >= src.len() { return -1; }
         pos = src.ceil_char_boundary(pos + 1);
     }
@@ -5358,38 +5358,38 @@ fn try_TemplateStringAtom(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_RegularExpressionFirstChar(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_35 = pos;
-    alts_done_35: {
-        alts_35_0: {
-            pos = alts_saved_35;
-            if pos >= src.len() { break alts_35_0; }
-            if (char_at(src, pos) matches { '*' | '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_35_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if (char_at(src, pos) matches { '*' | '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_0_0; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_35;
+            break alts_done_0;
         }
-        alts_35_1: {
-            pos = alts_saved_35;
+        alts_0_1: {
+            pos = alts_saved_0;
             pos = frag_RegularExpressionBackslashSequence(src, pos);
-            if pos < 0 { break alts_35_1; }
-            break alts_done_35;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
-        alts_35_2: {
-            pos = alts_saved_35;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { break alts_35_2; }
+        alts_0_2: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { break alts_0_2; }
             pos += 1;
             loop {
-                let rep_saved_36 = pos;
-                rep_36: {
+                let rep_saved_1 = pos;
+                rep_1: {
                     pos = frag_RegularExpressionClassChar(src, pos);
-                    if pos < 0 { break rep_36; }
+                    if pos < 0 { break rep_1; }
                     continue;
                 }
-                pos = rep_saved_36;
+                pos = rep_saved_1;
                 break;
             }
-            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break alts_35_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break alts_0_2; }
             pos += 1;
-            break alts_done_35;
+            break alts_done_0;
         }
         return -1;
     }
@@ -5398,38 +5398,38 @@ fn frag_RegularExpressionFirstChar(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_RegularExpressionChar(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_37 = pos;
-    alts_done_37: {
-        alts_37_0: {
-            pos = alts_saved_37;
-            if pos >= src.len() { break alts_37_0; }
-            if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_37_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_0_0; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_37;
+            break alts_done_0;
         }
-        alts_37_1: {
-            pos = alts_saved_37;
+        alts_0_1: {
+            pos = alts_saved_0;
             pos = frag_RegularExpressionBackslashSequence(src, pos);
-            if pos < 0 { break alts_37_1; }
-            break alts_done_37;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
-        alts_37_2: {
-            pos = alts_saved_37;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { break alts_37_2; }
+        alts_0_2: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { break alts_0_2; }
             pos += 1;
             loop {
-                let rep_saved_38 = pos;
-                rep_38: {
+                let rep_saved_1 = pos;
+                rep_1: {
                     pos = frag_RegularExpressionClassChar(src, pos);
-                    if pos < 0 { break rep_38; }
+                    if pos < 0 { break rep_1; }
                     continue;
                 }
-                pos = rep_saved_38;
+                pos = rep_saved_1;
                 break;
             }
-            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break alts_37_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break alts_0_2; }
             pos += 1;
-            break alts_done_37;
+            break alts_done_0;
         }
         return -1;
     }
@@ -5438,46 +5438,46 @@ fn frag_RegularExpressionChar(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_IdentifierPart(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_39 = pos;
-    alts_done_39: {
-        alts_39_0: {
-            pos = alts_saved_39;
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
             pos = frag_IdentifierStart(src, pos);
-            if pos < 0 { break alts_39_0; }
-            break alts_done_39;
+            if pos < 0 { break alts_0_0; }
+            break alts_done_0;
         }
-        alts_39_1: {
-            pos = alts_saved_39;
-            if pos >= src.len() { break alts_39_1; }
-            if !in_char_set_0(char_at(src, pos)) { break alts_39_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_1; }
+            if !in_char_set_0(char_at(src, pos)) { break alts_0_1; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_39;
+            break alts_done_0;
         }
-        alts_39_2: {
-            pos = alts_saved_39;
-            if pos >= src.len() { break alts_39_2; }
-            if !in_char_set_1(char_at(src, pos)) { break alts_39_2; }
+        alts_0_2: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_2; }
+            if !in_char_set_1(char_at(src, pos)) { break alts_0_2; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_39;
+            break alts_done_0;
         }
-        alts_39_3: {
-            pos = alts_saved_39;
-            if pos >= src.len() { break alts_39_3; }
-            if !(char_at(src, pos) matches { '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' }) { break alts_39_3; }
+        alts_0_3: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_3; }
+            if !(char_at(src, pos) matches { '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' }) { break alts_0_3; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_39;
+            break alts_done_0;
         }
-        alts_39_4: {
-            pos = alts_saved_39;
-            if pos + 3 > src.len() || unchecked src.byte_at(pos) != b'\xe2' || unchecked src.byte_at(pos + 1) != b'\x80' || unchecked src.byte_at(pos + 2) != b'\x8c' { break alts_39_4; }
+        alts_0_4: {
+            pos = alts_saved_0;
+            if pos + 3 > src.len() || unchecked src.byte_at(pos) != b'\xe2' || unchecked src.byte_at(pos + 1) != b'\x80' || unchecked src.byte_at(pos + 2) != b'\x8c' { break alts_0_4; }
             pos += 3;
-            break alts_done_39;
+            break alts_done_0;
         }
-        alts_39_5: {
-            pos = alts_saved_39;
-            if pos + 3 > src.len() || unchecked src.byte_at(pos) != b'\xe2' || unchecked src.byte_at(pos + 1) != b'\x80' || unchecked src.byte_at(pos + 2) != b'\x8d' { break alts_39_5; }
+        alts_0_5: {
+            pos = alts_saved_0;
+            if pos + 3 > src.len() || unchecked src.byte_at(pos) != b'\xe2' || unchecked src.byte_at(pos + 1) != b'\x80' || unchecked src.byte_at(pos + 2) != b'\x8d' { break alts_0_5; }
             pos += 3;
-            break alts_done_39;
+            break alts_done_0;
         }
         return -1;
     }
@@ -5486,29 +5486,29 @@ fn frag_IdentifierPart(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_DecimalIntegerLiteral(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_40 = pos;
-    alts_done_40: {
-        alts_40_0: {
-            pos = alts_saved_40;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_40_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_0_0; }
             pos += 1;
-            break alts_done_40;
+            break alts_done_0;
         }
-        alts_40_1: {
-            pos = alts_saved_40;
-            if pos >= src.len() { break alts_40_1; }
-            if !(unchecked src.byte_at(pos) matches { b'1'..=b'9' }) { break alts_40_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_1; }
+            if !(unchecked src.byte_at(pos) matches { b'1'..=b'9' }) { break alts_0_1; }
             pos += 1;
             loop {
-                rep_41: {
-                    if pos >= src.len() { break rep_41; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_41; }
+                rep_1: {
+                    if pos >= src.len() { break rep_1; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_1; }
                     pos += 1;
                     continue;
                 }
                 break;
             }
-            break alts_done_40;
+            break alts_done_0;
         }
         return -1;
     }
@@ -5520,18 +5520,18 @@ fn frag_ExponentPart(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'e' | b'E' }) { return -1; }
     pos += 1;
-    opt_42: {
-        if pos >= src.len() { break opt_42; }
-        if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_42; }
+    opt_0: {
+        if pos >= src.len() { break opt_0; }
+        if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_0; }
         pos += 1;
     }
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { return -1; }
     pos += 1;
     loop {
-        rep_43: {
-            if pos >= src.len() { break rep_43; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_43; }
+        rep_1: {
+            if pos >= src.len() { break rep_1; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_1; }
             pos += 1;
             continue;
         }
@@ -5542,29 +5542,29 @@ fn frag_ExponentPart(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_IdentifierStart(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_45 = pos;
-    alts_done_45: {
-        alts_45_0: {
-            pos = alts_saved_45;
-            if pos >= src.len() { break alts_45_0; }
-            if !in_char_set_2(char_at(src, pos)) { break alts_45_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if !in_char_set_2(char_at(src, pos)) { break alts_0_0; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_45;
+            break alts_done_0;
         }
-        alts_45_1: {
-            pos = alts_saved_45;
-            if pos >= src.len() { break alts_45_1; }
-            if !(unchecked src.byte_at(pos) matches { b'$' | b'_' }) { break alts_45_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_1; }
+            if !(unchecked src.byte_at(pos) matches { b'$' | b'_' }) { break alts_0_1; }
             pos += 1;
-            break alts_done_45;
+            break alts_done_0;
         }
-        alts_45_2: {
-            pos = alts_saved_45;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_45_2; }
+        alts_0_2: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_0_2; }
             pos += 1;
             pos = frag_UnicodeEscapeSequence(src, pos);
-            if pos < 0 { break alts_45_2; }
-            break alts_done_45;
+            if pos < 0 { break alts_0_2; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -5573,28 +5573,28 @@ fn frag_IdentifierStart(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_DoubleStringCharacter(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_46 = pos;
-    alts_done_46: {
-        alts_46_0: {
-            pos = alts_saved_46;
-            if pos >= src.len() { break alts_46_0; }
-            if (unchecked src.byte_at(pos) matches { b'"' | b'\\' | b'\x0d' | b'\x0a' }) { break alts_46_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if (unchecked src.byte_at(pos) matches { b'"' | b'\\' | b'\x0d' | b'\x0a' }) { break alts_0_0; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_46;
+            break alts_done_0;
         }
-        alts_46_1: {
-            pos = alts_saved_46;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_46_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_0_1; }
             pos += 1;
             pos = frag_EscapeSequence(src, pos);
-            if pos < 0 { break alts_46_1; }
-            break alts_done_46;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
-        alts_46_2: {
-            pos = alts_saved_46;
+        alts_0_2: {
+            pos = alts_saved_0;
             pos = frag_LineContinuation(src, pos);
-            if pos < 0 { break alts_46_2; }
-            break alts_done_46;
+            if pos < 0 { break alts_0_2; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -5603,28 +5603,28 @@ fn frag_DoubleStringCharacter(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_SingleStringCharacter(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_47 = pos;
-    alts_done_47: {
-        alts_47_0: {
-            pos = alts_saved_47;
-            if pos >= src.len() { break alts_47_0; }
-            if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' | b'\x0d' | b'\x0a' }) { break alts_47_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' | b'\x0d' | b'\x0a' }) { break alts_0_0; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_47;
+            break alts_done_0;
         }
-        alts_47_1: {
-            pos = alts_saved_47;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_47_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_0_1; }
             pos += 1;
             pos = frag_EscapeSequence(src, pos);
-            if pos < 0 { break alts_47_1; }
-            break alts_done_47;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
-        alts_47_2: {
-            pos = alts_saved_47;
+        alts_0_2: {
+            pos = alts_saved_0;
             pos = frag_LineContinuation(src, pos);
-            if pos < 0 { break alts_47_2; }
-            break alts_done_47;
+            if pos < 0 { break alts_0_2; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -5643,20 +5643,20 @@ fn frag_RegularExpressionBackslashSequence(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_RegularExpressionClassChar(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_48 = pos;
-    alts_done_48: {
-        alts_48_0: {
-            pos = alts_saved_48;
-            if pos >= src.len() { break alts_48_0; }
-            if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | ']' | '\\' }) { break alts_48_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | ']' | '\\' }) { break alts_0_0; }
             pos = src.ceil_char_boundary(pos + 1);
-            break alts_done_48;
+            break alts_done_0;
         }
-        alts_48_1: {
-            pos = alts_saved_48;
+        alts_0_1: {
+            pos = alts_saved_0;
             pos = frag_RegularExpressionBackslashSequence(src, pos);
-            if pos < 0 { break alts_48_1; }
-            break alts_done_48;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -5665,66 +5665,66 @@ fn frag_RegularExpressionClassChar(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_UnicodeEscapeSequence(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_49 = pos;
-    alts_done_49: {
-        alts_49_0: {
-            pos = alts_saved_49;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_49_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() { break alts_49_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_49_0; }
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() { break alts_49_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_49_0; }
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() { break alts_49_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_49_0; }
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() { break alts_49_0; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_49_0; }
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_0_0; }
             pos += 1;
-            break alts_done_49;
+            break alts_done_0;
         }
-        alts_49_1: {
-            pos = alts_saved_49;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_49_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'{' { break alts_49_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'{' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() { break alts_49_1; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_49_1; }
+            if pos >= src.len() { break alts_0_1; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_0_1; }
             pos += 1;
-            let mut la_end_50: i32 = -1;
-            if pos >= src.len() { break alts_49_1; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_49_1; }
+            let mut la_end_1: i32 = -1;
+            if pos >= src.len() { break alts_0_1; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break alts_0_1; }
             pos += 1;
             loop {
-                let mut la_tot_51: i32 = -1;
-                let peek_save_52 = pos;
-                peek_52: {
-                    if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { break peek_52; }
+                let mut la_tot_2: i32 = -1;
+                let peek_save_3 = pos;
+                peek_3: {
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { break peek_3; }
                     pos += 1;
-                    la_tot_51 = pos;
+                    la_tot_2 = pos;
                 }
-                pos = peek_save_52;
-                if la_tot_51 >= 0 && la_tot_51 >= la_end_50 {
-                    la_end_50 = la_tot_51;
+                pos = peek_save_3;
+                if la_tot_2 >= 0 && la_tot_2 >= la_end_1 {
+                    la_end_1 = la_tot_2;
                 }
-                let la_saved_50 = pos;
-                la_rep_50: {
-                    if pos >= src.len() { break la_rep_50; }
-                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break la_rep_50; }
+                let la_saved_1 = pos;
+                la_rep_1: {
+                    if pos >= src.len() { break la_rep_1; }
+                    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break la_rep_1; }
                     pos += 1;
                     continue;
                 }
-                pos = la_saved_50;
+                pos = la_saved_1;
                 break;
             }
-            if la_end_50 < 0 {
-                break alts_49_1;
+            if la_end_1 < 0 {
+                break alts_0_1;
             }
-            pos = la_end_50;
-            break alts_done_49;
+            pos = la_end_1;
+            break alts_done_0;
         }
         return -1;
     }
@@ -5733,37 +5733,37 @@ fn frag_UnicodeEscapeSequence(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_EscapeSequence(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_53 = pos;
-    alts_done_53: {
-        alts_53_0: {
-            pos = alts_saved_53;
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
             pos = frag_CharacterEscapeSequence(src, pos);
-            if pos < 0 { break alts_53_0; }
-            break alts_done_53;
+            if pos < 0 { break alts_0_0; }
+            break alts_done_0;
         }
-        alts_53_1: {
-            pos = alts_saved_53;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_53_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { break alts_0_1; }
             pos += 1;
-            break alts_done_53;
+            break alts_done_0;
         }
-        alts_53_2: {
-            pos = alts_saved_53;
+        alts_0_2: {
+            pos = alts_saved_0;
             pos = frag_HexEscapeSequence(src, pos);
-            if pos < 0 { break alts_53_2; }
-            break alts_done_53;
+            if pos < 0 { break alts_0_2; }
+            break alts_done_0;
         }
-        alts_53_3: {
-            pos = alts_saved_53;
+        alts_0_3: {
+            pos = alts_saved_0;
             pos = frag_UnicodeEscapeSequence(src, pos);
-            if pos < 0 { break alts_53_3; }
-            break alts_done_53;
+            if pos < 0 { break alts_0_3; }
+            break alts_done_0;
         }
-        alts_53_4: {
-            pos = alts_saved_53;
+        alts_0_4: {
+            pos = alts_saved_0;
             pos = frag_ExtendedUnicodeEscapeSequence(src, pos);
-            if pos < 0 { break alts_53_4; }
-            break alts_done_53;
+            if pos < 0 { break alts_0_4; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -5778,9 +5778,9 @@ fn frag_LineContinuation(src: &StrSlice, start: i32) -> i32 {
     if !(char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { return -1; }
     pos = src.ceil_char_boundary(pos + 1);
     loop {
-        rep_54: {
-            if pos >= src.len() { break rep_54; }
-            if !(char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { break rep_54; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -5791,20 +5791,20 @@ fn frag_LineContinuation(src: &StrSlice, start: i32) -> i32 {
 
 fn frag_CharacterEscapeSequence(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_56 = pos;
-    alts_done_56: {
-        alts_56_0: {
-            pos = alts_saved_56;
-            if pos >= src.len() { break alts_56_0; }
-            if !(unchecked src.byte_at(pos) matches { b'"' | b'\'' | b'\\' | b'b' | b'f' | b'n' | b'r' | b't' | b'v' }) { break alts_56_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() { break alts_0_0; }
+            if !(unchecked src.byte_at(pos) matches { b'"' | b'\'' | b'\\' | b'b' | b'f' | b'n' | b'r' | b't' | b'v' }) { break alts_0_0; }
             pos += 1;
-            break alts_done_56;
+            break alts_done_0;
         }
-        alts_56_1: {
-            pos = alts_saved_56;
+        alts_0_1: {
+            pos = alts_saved_0;
             pos = frag_NonEscapeCharacter(src, pos);
-            if pos < 0 { break alts_56_1; }
-            break alts_done_56;
+            if pos < 0 { break alts_0_1; }
+            break alts_done_0;
         }
         return -1;
     }
@@ -5830,36 +5830,36 @@ fn frag_ExtendedUnicodeEscapeSequence(src: &StrSlice, start: i32) -> i32 {
     pos += 1;
     if pos >= src.len() || unchecked src.byte_at(pos) != b'{' { return -1; }
     pos += 1;
-    let mut la_end_57: i32 = -1;
+    let mut la_end_0: i32 = -1;
     if pos >= src.len() { return -1; }
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { return -1; }
     pos += 1;
     loop {
-        let mut la_tot_58: i32 = -1;
-        let peek_save_59 = pos;
-        peek_59: {
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { break peek_59; }
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        peek_2: {
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { break peek_2; }
             pos += 1;
-            la_tot_58 = pos;
+            la_tot_1 = pos;
         }
-        pos = peek_save_59;
-        if la_tot_58 >= 0 && la_tot_58 >= la_end_57 {
-            la_end_57 = la_tot_58;
+        pos = peek_save_2;
+        if la_tot_1 >= 0 && la_tot_1 >= la_end_0 {
+            la_end_0 = la_tot_1;
         }
-        let la_saved_57 = pos;
-        la_rep_57: {
-            if pos >= src.len() { break la_rep_57; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break la_rep_57; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
-        pos = la_saved_57;
+        pos = la_saved_0;
         break;
     }
-    if la_end_57 < 0 {
+    if la_end_0 < 0 {
         return -1;
     }
-    pos = la_end_57;
+    pos = la_end_0;
     return pos;
 }
 

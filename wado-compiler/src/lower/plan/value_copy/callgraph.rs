@@ -9,11 +9,55 @@
 //! callers) reaches the same least fixpoint touching each function only when a
 //! callee it reads actually moves.
 
-use super::funcset::FuncIndex;
+use super::funcset::{FuncIndex, FuncKeyMap};
 use crate::flat_package::FlatPackage;
+use crate::hashmap::IndexMap;
+use crate::lower::plan::closure::ClosurePlan;
+use crate::module_source::ModuleSource;
 use crate::tir::{FunctionRef, TirExpr, TirExprKind};
 use crate::tir_visitor::TirRefVisitor;
 use std::collections::VecDeque;
+
+/// The function a call through a function-valued local runs, where closure
+/// lifting knows it: a copy of a callee specialized for one functor calls that
+/// functor's `$call` through the parameter it took the functor in.
+#[derive(Default)]
+pub struct SpecializedCalls {
+    targets: FuncKeyMap<IndexMap<u32, (ModuleSource, String)>>,
+}
+
+impl SpecializedCalls {
+    #[must_use]
+    pub fn of(closure: &ClosurePlan) -> Self {
+        let mut targets = FuncKeyMap::default();
+        for ((module, name), locals) in &closure.specialized_locals {
+            let by_local = locals
+                .iter()
+                .map(|local| {
+                    let call = closure.functor_infos[local.functor_id as usize]
+                        .call_method
+                        .borrow();
+                    (
+                        local.local_index,
+                        (call.module_source.clone(), call.name.clone()),
+                    )
+                })
+                .collect();
+            targets.insert(module.clone(), name.clone(), by_local);
+        }
+        Self { targets }
+    }
+
+    /// The function a call through each such local in `module`/`name` runs.
+    #[must_use]
+    pub fn in_function(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+    ) -> Option<&IndexMap<u32, (ModuleSource, String)>> {
+        self.targets.get(module, name)
+    }
+}
 
 /// Dense function ids (position in `project.functions`) plus call edges both
 /// ways: the reverse edges drive the worklist, the forward ones the components.
@@ -35,7 +79,7 @@ pub fn body_ids(project: &FlatPackage) -> impl Iterator<Item = u32> + '_ {
 }
 
 impl CallGraph {
-    pub fn build(project: &FlatPackage) -> Self {
+    pub fn build(project: &FlatPackage, specialized: &SpecializedCalls) -> Self {
         let n = project.functions.len();
         let mut index = FuncIndex::default();
         for (i, func) in project.functions.iter().enumerate() {
@@ -52,6 +96,13 @@ impl CallGraph {
                 callees: Vec::new(),
             };
             collector.visit_block(body);
+            collector.callees.extend(
+                specialized
+                    .in_function(&func.module_source, &func.name)
+                    .into_iter()
+                    .flat_map(IndexMap::values)
+                    .filter_map(|(module, name)| index.id(module, name)),
+            );
             collector.callees.sort_unstable();
             collector.callees.dedup();
             for &callee in &collector.callees {

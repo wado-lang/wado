@@ -1,0 +1,186 @@
+use { translate_wado_members } from "../src/wado_members.wado";
+use { is_lexer_members, is_parser_members } from "../src/ir.wado";
+use { NamedAction, ActionSource, GrammarKind } from "../src/ir.wado";
+
+fn member_act(scope: Option<String>) -> NamedAction {
+    return NamedAction { scope, name: "members", body: ActionSource {} };
+}
+
+test "translate_wado_members parses a defaulted field" {
+    let m = translate_wado_members("count: i32 = 0").unwrap();
+    assert m.fields.len() == 1;
+    assert m.fields[0].name == "count";
+    assert m.fields[0].ty == "i32";
+    assert m.fields[0].init == "0";
+    assert m.methods.is_empty();
+}
+
+test "translate_wado_members keeps a name with multi-byte chars whole" {
+    let m = translate_wado_members("é: i32 = 0; fn éa(&self) {}").unwrap();
+    assert m.fields[0].name == "é";
+    assert m.methods[0].name == "éa";
+}
+
+test "translate_wado_members parses several fields and a method" {
+    let src = "depth: i32 = 0; tag: String = \"\";\nfn deeper(&mut self) { self.depth += 1; }";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 2;
+    assert m.fields[0].name == "depth";
+    assert m.fields[1].name == "tag";
+    assert m.fields[1].ty == "String";
+    assert m.methods.len() == 1;
+    assert m.methods[0].source.contains("fn deeper(&mut self)");
+    assert m.methods[0].source.contains("self.depth += 1;");
+}
+
+test "translate_wado_members handles a generic field type" {
+    let m = translate_wado_members("seen: List<i32> = []").unwrap();
+    assert m.fields.len() == 1;
+    assert m.fields[0].ty == "List<i32>";
+    assert m.fields[0].init == "[]";
+}
+
+test "translate_wado_members rejects a field with no initializer" {
+    assert translate_wado_members("count: i32") matches { Err(_) };
+}
+
+test "translate_wado_members refuses an initializer that runs into the next member" {
+    // Read to the next `;` instead, it would swallow the members after it.
+    let field = translate_wado_members("a: List<i32> = []\nb: i32 = 0");
+    assert field matches { Err(e) && e.contains("after field 'a'") };
+    let method = translate_wado_members("a: i32 = 0\n\nfn get(&self) -> i32 { return self.a; }");
+    assert method matches { Err(e) && e.contains("after field 'a'") };
+    let public = translate_wado_members("a: i32 = 0\npub fn get(&self) {}");
+    assert public matches { Err(e) && e.contains("after field 'a'") };
+}
+
+test "translate_wado_members separates members by ',' as a struct does" {
+    let m = translate_wado_members("a: i32 = 0, b: i32 = 1,\nfn get(&self) -> i32 { return self.a; }").unwrap();
+    assert m.fields.len() == 2 && m.fields[0].init == "0" && m.fields[1].init == "1";
+    assert m.methods.len() == 1;
+}
+
+test "translate_wado_members keeps the commas inside an initializer" {
+    let src = "m: TreeMap<String, i32> = TreeMap::<String, i32>::new(),
+f: fn(i32, i32) -> i32 = |a: i32, b: i32| a + b,
+n: i32 = 0";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 3;
+    assert m.fields[0].init == "TreeMap::<String, i32>::new()";
+    assert m.fields[1].init == "|a: i32, b: i32| a + b";
+}
+
+test "translate_wado_members tells a function type from a method, and a comment from an initializer" {
+    let src = "m: TreeMap<String, fn(i32) -> i32> = TreeMap::<String, fn(i32) -> i32>::new(),
+f:
+fn(i32) -> i32 = |x: i32| x,
+g: fn(i32, i32) -> i32 = /* sum */ |a: i32, b: i32| a + b";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 3 && m.methods.is_empty();
+    assert m.fields[0].ty == "TreeMap<String, fn(i32) -> i32>";
+    assert m.fields[1].ty == "fn(i32) -> i32";
+    assert m.fields[2].init == "/* sum */ |a: i32, b: i32| a + b";
+}
+
+test "translate_wado_members ends a field at a separator on a line of its own" {
+    for let src of ["a: i32 = 0\n;\nb: i32 = 1", "a: i32 = 0\n,\nb: i32 = 1"] {
+        let m = translate_wado_members(src).unwrap();
+        assert m.fields.len() == 2 && m.fields[0].init == "0" && m.fields[1].init == "1", src;
+    }
+    assert translate_wado_members("a: i32\n;\nb: i32 = 1") matches { Err(e) && e.contains(
+        "field 'a' needs an initializer",
+    ) };
+    assert translate_wado_members("a: i32 = 0\n").unwrap().fields[0].init == "0";
+}
+
+test "translate_wado_members keeps every closure parameter list whole" {
+    let src = "f: fn() -> fn(i32, i32) -> i32 = || |a: i32, b: i32| a + b,
+g: bool = x || y, h: i32 = 1 | 2, n: i32 = 0";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 4;
+    assert m.fields[0].init == "|| |a: i32, b: i32| a + b";
+    assert m.fields[1].init == "x || y";
+    assert m.fields[2].init == "1 | 2";
+}
+
+test "translate_wado_members reads an initializer spread over lines" {
+    let m = translate_wado_members("xs: List<i32> = [\n    1,\n    2,\n];\nn: i32 = 1\n    + 2").unwrap();
+    assert m.fields.len() == 2;
+    assert m.fields[1].init == "1\n    + 2";
+}
+
+test "translate_wado_members keeps fields after a comparison-operator initializer" {
+    let m = translate_wado_members("ok: bool = 1 < 2; count: i32 = 0").unwrap();
+    assert m.fields.len() == 2;
+    assert m.fields[0].name == "ok";
+    assert m.fields[0].init == "1 < 2";
+    assert m.fields[1].name == "count";
+    assert m.fields[1].init == "0";
+}
+
+test "translate_wado_members captures a method with a struct-literal default arg" {
+    let m = translate_wado_members("fn reset(p: Pos = Pos { x: 0 }) { return p.x; }").unwrap();
+    assert m.fields.is_empty();
+    assert m.methods.len() == 1;
+    assert m.methods[0].source.contains("Pos { x: 0 }");
+    assert m.methods[0].source.contains("return p.x;");
+}
+
+test "is_lexer_members claims explicit lexer scope in any grammar" {
+    let act = member_act(Option::<String>::Some("lexer"));
+    assert is_lexer_members(&act, &GrammarKind::Combined);
+    assert !is_parser_members(&act, &GrammarKind::Combined);
+}
+
+test "bare @members is the parser's in a combined grammar, the lexer's in a lexer grammar" {
+    let act = member_act(null);
+    assert is_parser_members(&act, &GrammarKind::Combined);
+    assert !is_lexer_members(&act, &GrammarKind::Combined);
+    assert is_lexer_members(&act, &GrammarKind::Lexer);
+    assert !is_parser_members(&act, &GrammarKind::Lexer);
+}
+
+test "translate_wado_members reads `pub` members and each method's receiver" {
+    let m = translate_wado_members("pub count: i32 = 0; pub fn get(&self) -> i32 { return self.count; }").unwrap();
+    assert m.fields.len() == 1 && m.fields[0].name == "count";
+    assert m.methods.len() == 1 && m.methods[0].name == "get" && !m.methods[0].mutates;
+    assert m.methods[0].source == "pub fn get(&self) -> i32 { return self.count; }";
+}
+
+test "translate_wado_members steps over comments and strings holding delimiters" {
+    let src = "// a `}` in a comment is not code
+calls: i32 = 0;
+/* \"a;b\" */ tag: String = \"a;\\\"}\";
+fn bump(&mut self) {
+    // }
+    self.calls += 1; /* } */
+}";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 2;
+    assert m.fields[1].name == "tag" && m.fields[1].init == "\"a;\\\"}\"";
+    assert m.methods.len() == 1 && m.methods[0].name == "bump" && m.methods[0].mutates;
+    assert m.methods[0].source.ends_with("/* } */\n}");
+}
+
+test "translate_wado_members keeps a method's doc comment and reads its return type" {
+    let src = "// not a doc
+x: i32 = 0; // trails x
+/// Depth of nesting.
+/// Never negative.
+fn depth(&self) -> i32 { return self.x; }
+fn reset(&mut self) { self.x = 0; }";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.methods[0].source == "/// Depth of nesting.\n/// Never negative.\nfn depth(&self) -> i32 { return self.x; }";
+    assert m.methods[0].returns == "i32" && m.methods[1].returns == "";
+}
+
+test "translate_wado_members names a generic method by what precedes its type parameters" {
+    let m = translate_wado_members("fn pick<T>(&mut self, x: T) -> T { return x; }").unwrap();
+    assert m.methods.len() == 1 && m.methods[0].name == "pick" && m.methods[0].mutates;
+}
+
+test "translate_wado_members keeps a template holding a template whole" {
+    let m = translate_wado_members("label: String = `${ `;` }`; n: i32 = 0").unwrap();
+    assert m.fields.len() == 2;
+    assert m.fields[0].init == "`${ `;` }`";
+}

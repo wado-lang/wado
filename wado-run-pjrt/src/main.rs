@@ -1,5 +1,5 @@
 //! `wado run-pjrt`: compile a Wado program and run it with a PJRT plugin's
-//! device, the only public way to reach a TPU. See `package-loam/devices.md`.
+//! device, the only public way to reach a TPU. See `package-loam/docs/devices.md`.
 
 mod ffi;
 mod host;

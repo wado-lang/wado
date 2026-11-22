@@ -1,11 +1,26 @@
 # Jade Development Guide
 
-Jade is JSON Schema Draft 2020-12 for Wado.
+Jade is JSON Schema Draft 2020-12 for Wado. The `wado-package-standard` skill
+says where each kind of file goes.
 
-- [`README.md`](./README.md) — the design and the user manual.
+- [`README.md`](./README.md) — the user manual.
+- [`docs/design.md`](./docs/design.md) — the design.
 - [`TODO.md`](./TODO.md) — open work.
-- [`research-format.md`](./research-format.md) — what the specifications and
-  implementations say about the date and time formats.
+- [`docs/research-format.md`](./docs/research-format.md) — what the
+  specifications and implementations say about the date and time formats.
+
+## Architecture
+
+Every schema and instance is read into `Document`, a JSON tape. The four layers
+of [the design](./docs/design.md#four-layers) sit on it: `Schema`, one field
+per keyword; `JsonSchema`, a schema derived from a Wado type; `Validator`, a
+schema compiled and held against documents, with `SchemaSet` the documents its
+references reach; and `generate`, Wado declarations written from a schema,
+which the Kiln generator wraps. `assets/meta/` holds Draft 2020-12's
+meta-schemas as json-schema.org serves them, under the specification's license,
+so a reference reaches them without their being supplied. `tests/roundtrip/` is
+a consumer package: it imports schemas through the generator, and a program it
+evaluates can call `schema_for` on the types `generate` writes.
 
 ## Principles
 
@@ -31,28 +46,11 @@ not define, whatever another tool or registry uses. A derived schema takes a
 (`core:temporal#Instant`). It is an annotation, which no validator asserts:
 JSON Schema forbids an `x-` keyword from affecting evaluation.
 
-## Layout
-
-- `src/document.wado` — `Document`, the JSON tape every schema and instance is
-  read into.
-- `src/schema.wado` — `Schema`, one field per keyword, and its reader.
-- `src/derive.wado` — `JsonSchema`, a schema derived from a Wado type.
-- `src/validate.wado` — `Validator`, a schema compiled and held against
-  documents, and `SchemaSet`, the documents its references reach.
-- `src/format.wado` — the formats a validator asserts when compiled to.
-- `src/generate.wado` — `generate`, Wado declarations written from a schema.
-- `src/generator.wado` — the Kiln generator around `generate`.
-- `tests/roundtrip/` — a package that uses Jade as a consumer does: it imports
-  schemas through the generator, and a program it evaluates can call
-  `schema_for` on the types `generate` writes.
-- `meta/` — Draft 2020-12's meta-schemas as json-schema.org serves them, under
-  the specification's license. A reference reaches them without their being
-  supplied.
-- `tools/suite.wado` — writes `tests/generated/` from the Test Suite
-  (`mise run suite-jade`).
-
 ## Running tests
 
 ```sh
 wado test package-jade
 ```
+
+`tests/generated/` is written from the Test Suite by `tools/suite.wado`
+(`mise run suite-jade`).

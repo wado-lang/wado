@@ -1,4 +1,4 @@
-//! `grammar-corpus`: hold `package-gale-highlight-wado/grammar/Wado.g4` to the
+//! `grammar-corpus`: hold `package-gale-highlight-wado/assets/grammar/Wado.g4` to the
 //! compiler's own parser over the stdlib + fixture corpus.
 //!
 //! With no argument it checks the invariants below: the compiler's parser runs

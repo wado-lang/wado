@@ -1046,9 +1046,9 @@ fn try_NUMBER(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
-        rep_2: {
-            if pos >= src.len() { break rep_2; }
-            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_2; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1064,9 +1064,9 @@ fn try_COMMENT(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
     loop {
-        rep_4: {
-            if pos >= src.len() { break rep_4; }
-            if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_4; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_0; }
             pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
@@ -1100,9 +1100,9 @@ fn try_WS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { return -1; }
     pos += 1;
     loop {
-        rep_5: {
-            if pos >= src.len() { break rep_5; }
-            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { break rep_5; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1117,9 +1117,9 @@ fn try_PRAGMA(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' | b'_' }) { return -1; }
     pos += 1;
     loop {
-        rep_7: {
-            if pos >= src.len() { break rep_7; }
-            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' | b'_' }) { break rep_7; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' | b'A'..=b'Z' | b'_' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1134,9 +1134,9 @@ fn try_PRAGMA_WS(src: &StrSlice, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { return -1; }
     pos += 1;
     loop {
-        rep_9: {
-            if pos >= src.len() { break rep_9; }
-            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { break rep_9; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' }) { break rep_0; }
             pos += 1;
             continue;
         }

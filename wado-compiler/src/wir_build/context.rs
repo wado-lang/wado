@@ -937,6 +937,7 @@ impl<'a> WirContext<'a> {
         let memory = WirMemory {
             min: self.package.wasm_asset_reserved_pages() + 1,
             max: None,
+            memory64: false,
         };
         let trait_bound_violations = self.trait_bound_violations;
         let cm_import_violations = self.cm_import_violations;

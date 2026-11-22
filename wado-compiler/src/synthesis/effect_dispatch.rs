@@ -28,10 +28,10 @@ use crate::synthesis::common::{
 };
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, ExitScope, FunctionKind, FunctionRef, GlobalInit,
-    InlineHint, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock,
-    TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal,
-    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId,
-    positional_substitution,
+    GlobalRole, InlineHint, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId,
+    TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal,
+    TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TypeId, positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -524,6 +524,7 @@ fn synthesize_dispatch_global(
         visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
+        role: GlobalRole::HandlerSlot,
     };
     let entry_module = project
         .tir_modules

@@ -223,6 +223,23 @@ test "a reference to neither a root nor a definition is refused" {
     assert refused(schema) == "/$ref: names neither a document's root nor one of its `$defs`, which D declares";
 }
 
+test "a declaration named after a reserved property name takes no suffix inside its name" {
+    let schema = ##"{"title": "Q", "type": "object", "properties": {"list": {"type": "object", "properties": {"n": {"type": "integer"}}}}}"##;
+    let text = generated(schema);
+    assert text.contains("pub struct QList {");
+    assert !text.contains("QList_");
+}
+
+test "a declaration taking a reserved name takes a suffix" {
+    let schema = ##"{"$defs": {"string": {"type": "integer"}}, "$ref": "#/$defs/string"}"##;
+    assert generated(schema).contains("pub type String_ = i64;");
+}
+
+test "a reserved name is refused under the name it is suffixed to" {
+    let schema = ##"{"$defs": {"List_": {"type": "string"}, "list": {"type": "string"}}, "$ref": "#/$defs/List_"}"##;
+    assert refused(schema) == "/$defs/list: names `List_`, which another declaration takes";
+}
+
 test "two names converting to one Wado name are refused at the second" {
     let schema = ##"{"$defs": {"a-b": {"type": "string"}, "aB": {"type": "string"}}, "$ref": "#/$defs/a-b"}"##;
     assert refused(schema) == "/$defs/aB: names `AB`, which another declaration takes";

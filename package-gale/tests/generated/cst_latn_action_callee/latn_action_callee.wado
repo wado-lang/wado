@@ -1498,29 +1498,29 @@ fn apply_NEST_actions(lx: &mut Lexer, start: i32, end: i32) {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            let alts_saved_3 = pos;
-            alts_done_3: {
-                alts_3_0: {
-                    pos = alts_saved_3;
-                    if pos >= src.len() { break alts_3_0; }
-                    if (unchecked src.byte_at(pos) matches { b'>' }) { break alts_3_0; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            alts_done_1: {
+                alts_1_0: {
+                    pos = alts_saved_1;
+                    if pos >= src.len() { break alts_1_0; }
+                    if (unchecked src.byte_at(pos) matches { b'>' }) { break alts_1_0; }
                     pos = src.ceil_char_boundary(pos + 1);
-                    break alts_done_3;
+                    break alts_done_1;
                 }
-                alts_3_1: {
-                    pos = alts_saved_3;
+                alts_1_1: {
+                    pos = alts_saved_1;
                     pos = try_INNER(lx, pos);
-                    if pos < 0 { break alts_3_1; }
-                    break alts_done_3;
+                    if pos < 0 { break alts_1_1; }
+                    break alts_done_1;
                 }
-                break rep_2;
+                break rep_0;
             }
-            if pos > end { break rep_2; }
+            if pos > end { break rep_0; }
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_0;
         break;
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return; }
@@ -1544,13 +1544,13 @@ fn try_INNER(lx: &Lexer, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_4 = pos;
-        rep_4: {
+        let rep_saved_0 = pos;
+        rep_0: {
             pos = try_INNER(lx, pos);
-            if pos < 0 { break rep_4; }
+            if pos < 0 { break rep_0; }
             continue;
         }
-        pos = rep_saved_4;
+        pos = rep_saved_0;
         break;
     }
     if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
@@ -1565,9 +1565,9 @@ fn try_ID(lx: &Lexer, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b'c'..=b'z' }) { return -1; }
     pos += 1;
     loop {
-        rep_5: {
-            if pos >= src.len() { break rep_5; }
-            if !(unchecked src.byte_at(pos) matches { b'c'..=b'z' }) { break rep_5; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'c'..=b'z' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1583,9 +1583,9 @@ fn try_WS(lx: &Lexer, start: i32) -> i32 {
     if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { return -1; }
     pos += 1;
     loop {
-        rep_7: {
-            if pos >= src.len() { break rep_7; }
-            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { break rep_7; }
+        rep_0: {
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1597,23 +1597,23 @@ fn try_WS(lx: &Lexer, start: i32) -> i32 {
 fn frag_ESC(lx: &Lexer, start: i32) -> i32 {
     let src = &lx.src;
     let mut pos = start;
-    let alts_saved_9 = pos;
-    alts_done_9: {
-        alts_9_0: {
-            pos = alts_saved_9;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_9_0; }
+    let alts_saved_0 = pos;
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_0_0; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { break alts_9_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { break alts_0_0; }
             pos += 1;
-            break alts_done_9;
+            break alts_done_0;
         }
-        alts_9_1: {
-            pos = alts_saved_9;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_9_1; }
+        alts_0_1: {
+            pos = alts_saved_0;
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_0_1; }
             pos += 1;
-            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_9_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_0_1; }
             pos += 1;
-            break alts_done_9;
+            break alts_done_0;
         }
         return -1;
     }

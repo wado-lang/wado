@@ -29,5 +29,5 @@ already measured, not how to close it. Closed work belongs in commit history.
 
 ## Static generation
 
-- [ ] No app is published. [`static-generation.md`](./static-generation.md)
+- [ ] No app is published. [`static-generation.md`](./docs/static-generation.md)
   holds the design and its roadmap.

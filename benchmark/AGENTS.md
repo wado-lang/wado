@@ -15,6 +15,10 @@ Two measures live here, and they answer different questions:
   the other two for reference. Fuel leaves out GC and other host work by
   design: the wall clock is what shows them.
 
+Every wall-clock run of Wado passes `--no-spectre-mitigation`, here and in
+`package-loam/benchmark/`, since the native implementations it is compared with
+run unguarded.
+
 Report a change between two measurements with an improvement as `+%` and a
 regression as `-%`, whichever way the raw number moved.
 

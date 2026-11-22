@@ -1,0 +1,59 @@
+// Reading a reference out of a list names what the element names, not the
+// list: `keep_all` keeps the nodes and never the list it reads them from, so
+// `build` hands its result over and a caller passing it on copies nothing.
+
+use { println, Stdout } from "core:cli";
+
+struct Node {
+    v: i32,
+}
+
+struct Graph {
+    held: List<&mut Node>,
+    views: List<&List<&mut Node>>,
+}
+
+impl Graph {
+    #[inline(never)]
+    fn keep_all(&mut self, xs: &List<&mut Node>) {
+        for let mut i = 0; i < xs.len(); i += 1 {
+            self.held.push(xs[i]);
+        }
+    }
+}
+
+#[inline(never)]
+fn build(g: &mut Graph, n: &mut Node) -> List<&mut Node> {
+    let terms: List<&mut Node> = [n];
+    g.keep_all(&terms);
+    let out: List<&mut Node> = [n];
+    return out;
+}
+
+#[inline(never)]
+fn wrap(g: &mut Graph, n: &mut Node) -> List<&mut Node> {
+    return build(g, n);
+}
+
+#[inline(never)]
+fn caller(g: &mut Graph, n: &mut Node) -> List<&mut Node> {
+    let mut xs = wrap(g, n);
+    xs.push(n);
+    return xs;
+}
+
+export fn run() with Stdout {
+    let mut g = Graph { held: [], views: [] };
+    let mut n = Node { v: 7 };
+    let xs = caller(&mut g, &mut n);
+    println(`${xs.len()} ${g.held.len()} ${xs[0].v}`);
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["lower/value_copy/share"]},
+    "wir_contrast": {"O2": [{"self.held.push(xs[i]);": "self.views.push(xs);"}]},
+    "stdout": "2 1 7\n",
+    "wir_scope": "value_copy_index_reads_reference_element.wado/caller$sroa",
+    "wir_not_expect:O2": ["array_clone"]
+}

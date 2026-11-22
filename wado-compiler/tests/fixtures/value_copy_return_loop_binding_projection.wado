@@ -1,0 +1,29 @@
+// A loop over a reference binds each element in place, so a field of one is
+// still the caller's storage: returning it hands back a copy.
+
+use { println, Stdout } from "core:cli";
+
+struct Entry {
+    key: String,
+    value: List<i32>,
+}
+
+#[inline(never)]
+fn find(es: &List<Entry>, key: &String) -> List<i32> {
+    for let e of es {
+        if e.key == *key {
+            return e.value;
+        }
+    }
+    panic("no such key");
+}
+
+export fn run() with Stdout {
+    let es: List<Entry> = [Entry { key: "a", value: [1] }];
+    let mut v = find(&es, &"a");
+    v.push(2);
+    println(`${es[0].value:?} ${v:?}`);
+}
+
+__DATA__
+{"stdout": "[1] [1, 2]\n"}
