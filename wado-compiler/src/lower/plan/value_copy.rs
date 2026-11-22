@@ -183,6 +183,7 @@ pub fn plan(
     builtins: BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
     functors: &[tir::ClosureFunctor],
+    specialized: &callgraph::SpecializedCalls,
     profiler: &dyn SpanEmitter,
 ) -> ValueCopyPlan {
     // Again: closure lifting has added its environment structs since `plan`
@@ -198,13 +199,19 @@ pub fn plan(
     // in `flat.functions`, and shared: every summary below is a monotone
     // backward fixpoint over the same edges.
     let call_graph = in_span(profiler, "lower/value_copy/callgraph", || {
-        callgraph::CallGraph::build(flat)
+        callgraph::CallGraph::build(flat, specialized)
     });
     let closure_captures = in_span(profiler, "lower/value_copy/closure_captures", || {
         reach::ClosureCaptures::collect(flat)
     });
     let retained = in_span(profiler, "lower/value_copy/retention", || {
-        retention::compute_retention(flat, &call_graph, &builtins, &closure_captures)
+        retention::compute_retention(
+            flat,
+            &call_graph,
+            &builtins,
+            &closure_captures,
+            specialized,
+        )
     });
     // Three passes, because the paths gate the conventions
     // ([`hands_out_payload`]) and the conventions place the paths: a seed pass
