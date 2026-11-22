@@ -1260,9 +1260,7 @@ impl FunctionTranslator<'_, '_> {
         arity: usize,
         result_type: tir::TypeId,
     ) -> bool {
-        let Some(value) =
-            place::borrowed_temporary(arg, &self.base.type_table.borrow())
-        else {
+        let Some(value) = place::borrowed_temporary(arg, &self.base.type_table.borrow()) else {
             return false;
         };
         self.args_checked
@@ -3038,11 +3036,11 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Convert the receiver of a call that writes through it. A receiver naming
-    /// storage takes no `$value_copy$T`: the copy would hand the callee a throwaway and
-    /// discard the mutation the call exists to perform (a `String` builder's
-    /// `push_str` would append to the copy). One that is not a place names no
-    /// storage the caller can reach again, so the call must not write through it
-    /// to whatever it was read out of — there it takes the copy every by-value
+    /// storage takes no `$value_copy$T`: the copy would hand the callee a
+    /// throwaway and discard the mutation the call exists to perform (a
+    /// `String` builder's `push_str` would append to the copy). One naming no
+    /// storage the caller can reach again must not write through it to
+    /// whatever it was read out of, so there it takes the copy every by-value
     /// argument takes.
     fn convert_mut_receiver_arg(&self, receiver: &TirExpr) -> ArenaCallArg {
         let value = receiver_value(receiver);
