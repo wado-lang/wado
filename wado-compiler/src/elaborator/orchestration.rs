@@ -2649,24 +2649,12 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
         self.known = outer;
     }
 
-    /// A turbofish argument, where a `_` at any depth is a variable.
+    /// A turbofish argument, on a call or on a path segment, where a `_` at
+    /// any depth is a variable.
     fn visit_turbofish_arg(&mut self, ty: &Type) {
         let outer = std::mem::replace(&mut self.allow_infer, true);
         self.visit_type(ty);
         self.allow_infer = outer;
-    }
-
-    /// A type argument a path writes on one of its segments
-    /// (`Option::<i32>::None`, `Bx::<_>::make`), where a `_` stands only for
-    /// the whole argument.
-    fn visit_path_arg(&mut self, ty: &Type) {
-        if matches!(ty, Type::Infer(_)) {
-            return;
-        }
-        if let Some(span) = first_infer_span(ty) {
-            self.report(TypeError::InferInPathArg { span });
-        }
-        self.visit_turbofish_arg(ty);
     }
 
     fn check_type_name(&mut self, written: &str, span: Span) {
@@ -2717,7 +2705,7 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
             // so the function-value path rejects it where it resolves.
             Expr::Ident(ident) => {
                 for ty in &ident.type_args {
-                    self.visit_path_arg(ty);
+                    self.visit_turbofish_arg(ty);
                 }
             }
             Expr::Call(call) => {
@@ -2743,7 +2731,7 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
                 match &smc.target_type {
                     Type::Generic(_) | Type::NamespacedGeneric(_) => {
                         for arg in written_arg_nodes(&smc.target_type) {
-                            self.visit_path_arg(arg);
+                            self.visit_turbofish_arg(arg);
                         }
                     }
                     other => self.visit_type(other),

@@ -20,6 +20,23 @@ test "a whole slot" {
     assert n == 5_000_000_000 && o matches { Some(null) };
 }
 
+impl<T> Bx<T> {
+    fn make(v: T) -> Bx<T> {
+        return Bx { v };
+    }
+
+    fn empty() -> Bx<Option<T>> {
+        return Bx { v: null };
+    }
+}
+
+test "a path" {
+    let b: Bx<List<i64>> = Bx::<List<_>>::make([5_000_000_000]);
+    let e: Bx<Option<List<i64>>> = Bx::<List<_>>::empty();
+    let n: Option<List<i64>> = Option::<List<_>>::None;
+    assert b.v[0] == 5_000_000_000 && e.v == null && n == null;
+}
+
 test "a struct literal" {
     let b: Bx<i64> = Bx::<_> { v: 5_000_000_000 };
     let c: Bx<List<i64>> = Bx::<List<_>> { v: [5_000_000_000] };

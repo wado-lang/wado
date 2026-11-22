@@ -1244,6 +1244,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type arguments a case path writes: those its prefix carries, which
     /// leave no room for a turbofish, else the turbofish's, read by `resolve`.
+    /// A `_` standing for a whole slot omits it, which the construction then
+    /// infers and reports as its own.
     pub(super) fn case_written(
         &mut self,
         owner: &CaseOwner,
@@ -1252,7 +1254,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Option<Vec<TypeId>> {
         match &owner.carried {
-            None => Some(resolve(self, turbofish)),
+            None => {
+                let args = resolve(self, turbofish);
+                Some(self.omit_bare_written_holes(args))
+            }
             Some(carried) if !owner.newtype_holes.is_empty() => {
                 let carried = carried.clone();
                 let args = resolve(self, turbofish);
@@ -5568,33 +5573,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        self.meet_case_holes(case, expected_type);
         let slots = &case.variant.type_param_type_ids;
-        // A `_` for a whole slot takes what the expected type has there, as an
-        // omitted argument does.
-        let written: Vec<TypeId> = case
-            .written
-            .iter()
-            .map(|&t| {
-                if self.is_bare_written_hole(t) {
-                    TypeTable::UNKNOWN
-                } else {
-                    t
-                }
-            })
-            .collect();
-        let mut hints = self
+        let hints = self
             .tysys
-            .variant_slot_hints(case.variant, &written, expected_type);
-        for (i, &hole) in case.written.iter().enumerate() {
-            if written[i] == hole {
-                continue;
-            }
-            if hints[i] == TypeTable::UNKNOWN {
-                hints[i] = hole;
-            } else {
-                self.equate(hole, hints[i]);
-            }
-        }
+            .variant_slot_hints(case.variant, case.written, expected_type);
         let inst = self.instantiate(
             slots,
             &Instantiation {
@@ -5668,7 +5651,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let written = case
                     .written
                     .get(i)
-                    .is_some_and(|&t| t != TypeTable::UNKNOWN && !self.is_bare_written_hole(t));
+                    .is_some_and(|&t| t != TypeTable::UNKNOWN);
                 let at_site = self.instantiate_type(slot, inst);
                 let at_site = self.apply_infer_holes(at_site);
                 let answer = match from_payload.get(&slot).copied().filter(|_| !written) {
@@ -5696,6 +5679,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .collect()
+    }
+
+    /// Meet each `_` inside a case's written arguments with what the expected
+    /// type has there, before anything under it is typed.
+    fn meet_case_holes(&mut self, case: &CaseSite<'_>, expected: Option<TypeId>) {
+        let Some(from_expected) = self.tysys.expected_variant_args(case.variant, expected) else {
+            return;
+        };
+        for (&written, &want) in case.written.iter().zip(&from_expected) {
+            if self.holds_written_hole(written) {
+                self.equate(written, want);
+            }
+        }
     }
 
     /// [`Self::construct_variant_case`] at the type arguments the site settled.
@@ -5730,12 +5726,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.check_case_site(case, args.len()) {
             return TypeTable::ERROR;
         }
+        self.meet_case_holes(case, expected_type);
         let variant = case.variant;
+        let all_written = case.written.len() == variant.type_params.len()
+            && case.written.iter().all(|&t| t != TypeTable::UNKNOWN);
         let variant_type = if variant.type_params.is_empty() {
             self.tysys
                 .type_table
                 .borrow()
                 .type_id_of_decl(variant.defined_at)
+        } else if all_written {
+            // A `_` inside one is a variable a later use settles.
+            let def = self.tysys.def_at(variant.defined_at);
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, case.written.to_vec())
         } else {
             let inferred = self.tysys.infer_variant_type_args(
                 &self.annotate_ctx,
@@ -6007,7 +6013,7 @@ impl TypeSystem {
 
     /// The declaration and type arguments of `expected`, where it is an
     /// instance of `variant_info`.
-    fn expected_variant_args(
+    pub(super) fn expected_variant_args(
         &self,
         variant_info: &VariantInfo,
         expected: Option<TypeId>,

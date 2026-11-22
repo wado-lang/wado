@@ -1258,8 +1258,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.value_without_turbofish(ident, assoc.ty);
             }
             self.reject_unresolved_args(&ident.type_args);
-            let owner_type =
-                self.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span);
+            let owner_type = self.with_writable_holes(|e| {
+                e.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span)
+            });
             return if owner_type == TypeTable::ERROR {
                 TypeTable::ERROR
             } else {
@@ -1490,7 +1491,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(written) = self.case_written(
                 &owner,
                 [prefix, case_name],
-                (&ident.type_args, Self::resolve_path_args),
+                (&ident.type_args, Self::resolve_turbofish_args),
                 ident.span,
             ) else {
                 return Some(TypeTable::ERROR);
@@ -1533,7 +1534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .case_written(
                 &owner,
                 [prefix, case_name],
-                (&ident.type_args, Self::resolve_path_args),
+                (&ident.type_args, Self::resolve_turbofish_args),
                 ident.span,
             )
             .is_some_and(|written| {

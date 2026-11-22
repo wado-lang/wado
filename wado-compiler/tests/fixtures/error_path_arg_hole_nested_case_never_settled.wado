@@ -1,0 +1,12 @@
+// A `_` inside a case path's type argument is a variable, and one nothing
+// settles is reported where it was written.
+
+export fn run() {
+    let _n = Option::<List<_>>::None;
+}
+
+__DATA__
+{
+    "compile_error": ":5:28: analysis error: cannot infer the type this `_` stands for; write it in its place",
+    "compile_error_count": 1
+}

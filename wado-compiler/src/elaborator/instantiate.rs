@@ -169,7 +169,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A `_` standing for the whole slot leaves it to inference, as
                 // an omitted argument does.
                 let leaves_slot = self.tysys.type_table.borrow().is_infer_var(named);
-                diags.push(leaves_slot.then(|| (of.span, name, owner)));
+                diags.push(leaves_slot.then_some((of.span, name, owner)));
                 continue;
             }
             diags.push(Some((of.span, name, owner)));
