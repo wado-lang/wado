@@ -743,8 +743,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Whether a write landing at `lands` may meet storage the value in `root`
-    /// reaches.
+    /// Whether a write landing at `lands` may meet storage `root` reaches.
     fn lands_in_reach(&self, lands: Lands<'_>, root: u32) -> bool {
         let landed: IndexSet<u32> = match lands {
             Lands::Local(local) => self.points_to.location(self.frame, local).into_iter().collect(),
@@ -759,10 +758,14 @@ impl<'a> Analyzer<'a> {
         )
     }
 
-    /// Whether `written` may meet storage the value in `root` reaches. A root
-    /// the analysis gives no location reaches anything.
+    /// Whether `written` may meet `root`'s slot, where a `&mut` to it lands, or
+    /// storage the value in it reaches. A root the analysis gives no location
+    /// reaches anything.
     fn root_reaches_written(&self, root: u32, written: &CallWrites) -> bool {
-        self.points_to.location(self.frame, root).is_none()
+        let Some(slot) = self.points_to.location(self.frame, root) else {
+            return true;
+        };
+        written.locations.contains(&slot)
             || self.points_to.reaches_written(
                 self.frame,
                 root,
