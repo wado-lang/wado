@@ -840,9 +840,9 @@ impl TypeTable {
     /// function types taking the same parameters and returning the same type,
     /// one each converts to. A return is invariant, so a join there names a
     /// type neither branch converts to. The join is `fn mut` where either is,
-    /// and has a row covering both: their union where both are closed, else a
-    /// fresh variable, which the effect check solves from the rows the caller
-    /// records flowing into it.
+    /// and has a row covering both: their union where both are solved, an
+    /// effect parameter being one effect, else a fresh variable, which the
+    /// effect check solves from the rows the caller records flowing into it.
     pub fn branch_join(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
         if a == b {
             return Some(a);
@@ -873,7 +873,7 @@ impl TypeTable {
         let (a_row, b_row) = (self.read_effect_row(&a_row), self.read_effect_row(&b_row));
         let row = if a_row == b_row {
             a_row
-        } else if is_open_row(&a_row) || is_open_row(&b_row) {
+        } else if a_row.iter().chain(&b_row).any(EffectRef::is_var) {
             vec![self.mint_effect_var()]
         } else {
             let mut union = a_row;
@@ -882,6 +882,7 @@ impl TypeTable {
                     union.push(effect);
                 }
             }
+            canonicalize_row(&mut union);
             union
         };
         Some(self.make_function_with_mut(a_mut || b_mut, a_params, a_return, row))
