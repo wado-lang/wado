@@ -870,6 +870,7 @@ impl TypeTable {
         if a_params != b_params || a_return != b_return {
             return None;
         }
+        let (a_row, b_row) = (self.read_effect_row(&a_row), self.read_effect_row(&b_row));
         let row = if a_row == b_row {
             a_row
         } else if is_open_row(&a_row) || is_open_row(&b_row) {
@@ -3446,9 +3447,11 @@ impl TypeTable {
     /// stays what it was.
     pub fn read_effect_row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
         let mut row = solve_row(effects, &self.early_effect_rows, &mut |var| {
-            if self.early_effect_rows.contains_key(var) {
-                self.read_effect_vars.note(var);
-            }
+            assert!(
+                self.early_effect_rows.contains_key(var),
+                "a row is read once every variable in it is solved: {var} is not"
+            );
+            self.read_effect_vars.note(var);
         });
         canonicalize_row(&mut row);
         row

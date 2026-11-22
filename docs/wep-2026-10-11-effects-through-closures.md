@@ -50,10 +50,12 @@ leak.
 
 ### Mechanism
 
-The elaborator cannot work out what a closure body performs: that needs every
-call in it resolved, which is the effect check's work, and the effect check runs
-on the whole program after reify. So the elaborator leaves a variable where an
-effect row is not yet known, and the effect check solves it.
+The elaborator leaves a variable where an effect row is not yet known. It
+solves the variable early where every row the solution reads is solved: a
+closure literal's at the end of its body, and a call's once the call resolves,
+both by the effect check's own walk over what is elaborated so far. The effect
+check then solves the variables on the whole program after reify, and agrees
+with each early solution.
 
 - An effect variable is one more kind of `EffectRef`, minted by the type table.
   A call gives each of its callee's own effect parameters a fresh one in the
@@ -76,8 +78,9 @@ effect row is not yet known, and the effect check solves it.
   reads it. A call's variable is what its parameter resolved to there, read off
   by setting the callee's declared return type beside the call's type. A
   closure's is what its body performs, wherever the literal is written. A flow
-  into a slot whose row holds a variable widens that variable. A flow into a
-  row that holds none is bounded by it: what the value performs beyond it is
+  into a slot whose row holds a variable widens that variable, unless an
+  expression read the variable and so closed it. A flow into a row that holds
+  none, or a closed one, is bounded by it: what the value performs beyond it is
   an error at the move.
 - A solution only grows. The check walks a body again only when a solution
   it read grew after the read, so a body whose solutions arrive before they are

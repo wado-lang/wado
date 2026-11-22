@@ -3602,7 +3602,7 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
         let mut func =
             generate_eq_from_cmp_fn(&cmp, ctx.trait_env, &eq_trait_name, &mut tt, ctx.names);
         func.def_id = Some(eq_decl);
-        func.impl_origin = Some(cmp.block);
+        func.place_in_impl(cmp.block, &tt);
         generated.push(Rc::new(RefCell::new(func)));
     }
     let targets = eq_targets(module, &mut tt, |receiver| {

@@ -1751,9 +1751,8 @@ impl<'a> Reify<'a> {
         let mut tir_func = self.reify_callable(func, display_name);
         tir_func.name = mangled_name;
         tir_func.is_export = false;
-        tir_func.impl_origin = Some(origin);
+        tir_func.place_in_impl(origin, &self.tysys.type_table.borrow());
         tir_func.impl_type_params = impl_type_params;
-        tir_func.impl_effect_params = self.tysys.type_table.borrow().impl_effect_params(origin);
         tir_func.method_info = Some(method_info);
         tir_func
     }

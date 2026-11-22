@@ -3528,6 +3528,14 @@ impl TirFunction {
         !self.type_params.is_empty()
     }
 
+    /// Emit this function into the `impl` block `block`, taking the effect
+    /// parameters its target writes, so it is instantiated per row as the
+    /// block's written methods are.
+    pub fn place_in_impl(&mut self, block: DefId, tt: &TypeTable) {
+        self.impl_origin = Some(block);
+        self.impl_effect_params = tt.impl_effect_params(block);
+    }
+
     /// Whether monomorphization instantiates this function rather than
     /// emitting it as written.
     pub fn is_template(&self) -> bool {
