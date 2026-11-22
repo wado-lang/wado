@@ -104,7 +104,8 @@ ends before the last of them is `PastEnd`.
 The bytes of each of `ranges`, as [`read_linear_range`] reads one, but
 read at once: the host fills them side by side, which a host reading a
 file stream a piece at a time makes several times faster than one after
-another. The first range that fails is the error.
+another. A range whose file does not open is the error before any is read;
+past that, the first range that fails is.
 
 ### `pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Preopens`
 
