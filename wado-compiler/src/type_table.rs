@@ -3442,8 +3442,7 @@ impl TypeTable {
         &self.early_effect_rows
     }
 
-    /// `effects` with each variable solved so far replaced by its solution,
-    /// noted as read: a question answered from it holds only if the solution
+    /// `effects` with each variable replaced by its solution, noted as read: a question answered from it holds only if the solution
     /// stays what it was.
     pub fn read_effect_row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
         let mut row = solve_row(effects, &self.early_effect_rows, &mut |var| {
@@ -3457,7 +3456,7 @@ impl TypeTable {
         row
     }
 
-    /// `id` with each variable solved so far replaced by its solution, noted
+    /// `id` with each variable replaced by its solution, noted
     /// as read as [`Self::read_effect_row`] notes it.
     pub fn read_effect_rows_in(&mut self, id: TypeId) -> TypeId {
         let mut vars: IndexSet<EffectRef> = IndexSet::default();
