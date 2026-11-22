@@ -13,7 +13,6 @@ use {
     EnumSpec,
     FieldSpec,
     FlagsSpec,
-    MemberSpec,
     ModuleSpec,
     NameRegistry,
     NewtypeSpec,
@@ -525,13 +524,13 @@ impl Gen {
             }
             let ty = self.type_of(property, &pat, &`${name}${decl_name(key, &pat)?}`)?;
             let p = property.into_object();
-            let mut f = FieldSpec { name: field, type_str: ty.text, vis: Vis::Pub, doc: doc_of(&p) };
+            let mut f = FieldSpec { name: field, type: ty.text, vis: Vis::Pub, doc: doc_of(&p) };
             if !o.required.contains_str(key) {
                 if let Some(d) = &p.default {
                     self.check_default(&pat, &d.root())?;
                     f.default = Option::Some(self.literal(&ty, &d.root()));
                 } else {
-                    f.type_str = `Option<${ty.text}>`;
+                    f.type = `Option<${ty.text}>`;
                     f.default = Option::Some("null");
                 }
             }
@@ -547,7 +546,7 @@ impl Gen {
             if let Some(a) = &names[i] {
                 field.attrs.push(*a);
             }
-            spec.add_field_spec(field);
+            spec.add_field(field);
         }
         spec.emit(self.next_decl());
         return Result::Ok(());
@@ -569,7 +568,7 @@ impl Gen {
                 Some(a) => [*a],
                 null => [],
             };
-            spec.add_member_spec(MemberSpec { name: pair.0, attrs });
+            spec.add_member({ name: pair.0, attrs });
         }
         spec.emit(self.next_decl());
         return Result::Ok(());
@@ -605,7 +604,7 @@ impl Gen {
             spec.add_attr(attr);
         }
         for let pair of &pairs {
-            spec.add_member(pair.0);
+            spec.add_member({ name: pair.0 });
         }
         spec.emit(self.next_decl());
         return true;
@@ -663,7 +662,7 @@ impl Gen {
             if let Some(a) = &names[i] {
                 case.attrs.push(*a);
             }
-            spec.add_case_spec(case);
+            spec.add_case(case);
         }
         spec.emit(self.next_decl());
         return Result::Ok(());

@@ -33,8 +33,8 @@ pub fn gen_highlight(
     if grammar.parser_rules.len() > 0 {
         let mut fr = FnSpec::new("highlight_result", Vis::Pub);
         fr.add_generic("S: AsStrSlice");
-        fr.add_param("result", "&ParseResult");
-        fr.add_param("input", "S");
+        fr.add_param({ name: "result", type: "&ParseResult" });
+        fr.add_param({ name: "input", type: "S" });
         fr.set_return_type("String");
         fr.emit(w, |w| {
             w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
@@ -67,7 +67,7 @@ pub fn gen_highlight(
 fn highlight_entry(settings: &GenSettings) -> FnSpec {
     let mut f = FnSpec::new("highlight", Vis::Pub);
     f.add_generic("S: AsStrSlice");
-    f.add_param("input", "S");
+    f.add_param({ name: "input", type: "S" });
     f.set_return_type("String");
     for let base of &settings.base_effects() {
         f.add_effect(base);

@@ -475,20 +475,32 @@ fn emit_weights(
     let mut params = StructSpec::new(PARAMS, Vis::Pub);
     params.add_generic(GRAPH_BOUND);
     for let vi of &graph.initializers {
-        weights.add_field(names.get(&vi.name), tensor_type(checked, &vi.name), Vis::Pub);
+        weights.add_field({
+            name: names.get(&vi.name),
+            type: tensor_type(checked, &vi.name),
+            vis: Vis::Pub,
+        });
     }
     for let vi of held_initializers(graph, experts) {
-        params.add_field(names.get(&vi.name), prepared_type(checked, &vi.name), Vis::Pub);
+        params.add_field({
+            name: names.get(&vi.name),
+            type: prepared_type(checked, &vi.name),
+            vis: Vis::Pub,
+        });
     }
     for let tensor of *kept {
-        params.add_field(names.get(&tensor), prepared_type(checked, &tensor), Vis::Pub);
+        params.add_field({
+            name: names.get(&tensor),
+            type: prepared_type(checked, &tensor),
+            vis: Vis::Pub,
+        });
     }
     for let pool of experts.pools() {
-        params.add_field(
-            names.get(&pool),
-            `${BACKEND_PARAM}::Tensor<${checked.primitives[pool]}, [${experts.pool_axes(checked, &pool)}]>`,
-            Vis::Pub,
-        );
+        params.add_field({
+            name: names.get(&pool),
+            type: `${BACKEND_PARAM}::Tensor<${checked.primitives[pool]}, [${experts.pool_axes(checked, &pool)}]>`,
+            vis: Vis::Pub,
+        });
     }
     w.blank();
     weights.set_doc("The graph's initializers, held on the host as the graph holds them.").emit(w);
@@ -502,7 +514,7 @@ fn emit_weights(
             .set_doc("These weights as tensors of the graph `backend` builds.")
             .add_generic(BACKEND_BOUND)
             .set_receiver("&self")
-            .add_param("backend", `&mut ${BACKEND_PARAM}`)
+            .add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` })
             .set_return_type(PARAMS_TYPE)
             .add_effect("_")
             .emit(w, |w| {
@@ -584,7 +596,7 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
         .set_doc(
             "Each layout of pools, every layer's expert weights where `placed` finds\nthe initializer at each position.",
         )
-        .add_param("placed", "fn(i32) -> Result<ExpertBytes, LoadError> with _")
+        .add_param({ name: "placed", type: "fn(i32) -> Result<ExpertBytes, LoadError> with _" })
         .set_return_type("Result<List<ExpertLayout>, LoadError>")
         .add_effect("_")
         .emit(w, |w| w.line(`return Result::Ok([${layouts.join(", ")}]);`));
@@ -667,8 +679,8 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         load
             .set_doc(`The weights, those the graph does not carry read from ${doc}.${pools_note}`)
             .add_generic(SOURCE_BOUND)
-            .add_param("backend", `&mut ${BACKEND_PARAM}`)
-            .add_param("source", `&${SOURCE_PARAM}`)
+            .add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` })
+            .add_param({ name: "source", type: `&${SOURCE_PARAM}` })
             .set_return_type(`Result<${PARAMS_TYPE}, LoadError>`)
             .add_effect("_");
         let reads = |w: &mut CodeWriter| {
@@ -708,9 +720,9 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
                         `The weights, those the graph does not carry read from ${doc}, and the\nexperts their pools hold within \`budget\` bytes.`,
                     )
                     .add_generic(SOURCE_BOUND)
-                    .add_param("backend", `&mut ${BACKEND_PARAM}`)
-                    .add_param("source", `&${SOURCE_PARAM}`)
-                    .add_param("budget", "i64")
+                    .add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` })
+                    .add_param({ name: "source", type: `&${SOURCE_PARAM}` })
+                    .add_param({ name: "budget", type: "i64" })
                     .set_return_type(`Result<[${PARAMS_TYPE}, HeldExperts], LoadError>`)
                     .add_effect("_")
                     .emit(w, reads);
@@ -731,7 +743,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         return;
     }
     let mut embedded = FnSpec::new("embedded", Vis::Pub);
-    embedded.add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(PARAMS_TYPE).add_effect("_");
+    embedded.add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` }).set_return_type(PARAMS_TYPE).add_effect("_");
     let hosts = held_hosts(graph, checked, placement, experts);
     if experts.groups.is_empty() {
         block.emit(w, |w| {
@@ -749,8 +761,8 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
         w.blank();
         FnSpec::new("embedded_within")
             .set_doc("The weights the graph carries, the experts as many as `experts` holds.")
-            .add_param("backend", `&mut ${BACKEND_PARAM}`)
-            .add_param("experts", "&mut HeldExperts")
+            .add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` })
+            .add_param({ name: "experts", type: "&mut HeldExperts" })
             .set_return_type(PARAMS_TYPE)
             .add_effect("_")
             .emit(w, |w| {
@@ -797,11 +809,11 @@ fn emit_model_constructor(
     spec.set_doc(
         `A model of ${doc}, its pools holding as many experts as \`budget\` bytes\nhold, and filling a slot with another as a pass picks it.`,
     );
-    spec.add_param("backend", `&mut ${BACKEND_PARAM}`);
+    spec.add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` });
     for let [ident, ty] of params {
-        spec.add_param(ident, ty);
+        spec.add_param({ name: ident, type: ty });
     }
-    spec.add_param("budget", "i64").set_return_type(`Result<${model}, LoadError>`).add_effect("_");
+    spec.add_param({ name: "budget", type: "i64" }).set_return_type(`Result<${model}, LoadError>`).add_effect("_");
     block.emit(w, |w| {
         spec.emit(w, |w| {
             for let line of lines {
@@ -867,7 +879,7 @@ fn emit_embedded_data(w: &mut CodeWriter, graph: &Graph) {
     w.blank();
     FnSpec::new(EMBEDDED_DATA)
         .set_doc("The bytes of the weight at each position among the initializers the graph carries.")
-        .add_param("at", "i32")
+        .add_param({ name: "at", type: "i32" })
         .set_return_type("ByteList")
         .emit(w, |w| {
             w.begin("return match at");
@@ -939,7 +951,11 @@ fn emit_build(
         let mut lengths = StructSpec::new(LENGTHS, Vis::Pub);
         lengths.add_generic(HOLDS_BOUND);
         for let symbol of read {
-            lengths.add_field(spelled.ident(&symbol), `${BACKEND_PARAM}::Tensor<i64, ${axes}>`, Vis::Pub);
+            lengths.add_field({
+                name: spelled.ident(&symbol),
+                type: `${BACKEND_PARAM}::Tensor<i64, ${axes}>`,
+                vis: Vis::Pub,
+            });
         }
         let rows = if axes != "[]" { "\nEach holds one length per row, or one every row shares." } else { "" };
         lengths.set_doc(
@@ -951,7 +967,7 @@ fn emit_build(
     if !conditions.is_empty() {
         let mut chosen = StructSpec::new(CHOSEN, Vis::Pub);
         for let c of *conditions {
-            chosen.add_field(names.get(&c), "Option<bool>", Vis::Pub);
+            chosen.add_field({ name: names.get(&c), type: "Option<bool>", vis: Vis::Pub });
         }
         chosen.set_doc(
             "The branch each `If` on an input takes, which the host read off it; or\nnone, where `build` adds both at lengths each branch holds at.",
@@ -983,7 +999,7 @@ fn emit_compute(
     }
     let entry = prepared_entry(context, &mut compute, given, &room)?;
     if room matches { Some(_) } {
-        compute.add_param("room", "i32");
+        compute.add_param({ name: "room", type: "i32" });
     }
     let Entry { lines: mut lines, symbols: mut symbols, taken_args, first_weight, class, chosen, cache_fits } = entry;
     // `recorded` takes the branches where it takes the lengths.
@@ -1029,7 +1045,7 @@ fn emit_compute(
     };
     compute
         .add_generic(SOURCE_BOUND)
-        .add_param("model", `&mut ${MODEL_TYPE}`)
+        .add_param({ name: "model", type: `&mut ${MODEL_TYPE}` })
         .set_return_type(returned_type)
         .add_effect(
             "_",
@@ -1121,7 +1137,7 @@ fn prepared_entry(
     // The cache holds a past at a capacity, so its length is what the graph
     // owes it to be, given the other inputs'.
     symbols.derive_owed(owed);
-    spec.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
+    spec.add_generic(BACKEND_BOUND).add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` });
     let mut lines: List<String> = [];
     let taken: List<ValueInfo> = graph.inputs.into_iter().filter(|vi| !crossing.cached.contains(vi.name)).collect();
     // Every symbolic axis is its symbols' arithmetic over the lengths, but for
@@ -1129,7 +1145,7 @@ fn prepared_entry(
     // may hold no length the arithmetic gives.
     for let vi of &taken {
         let ident = names.get(&vi.name);
-        spec.add_param(ident, `&${tensor_type(checked, &vi.name)}`);
+        spec.add_param({ name: ident, type: `&${tensor_type(checked, &vi.name)}` });
         for let [i, axis] of shapes[vi.name].axes.into_iter().enumerate() {
             let Symbolic(length) = axis.extent else {
                 continue;
@@ -1146,7 +1162,7 @@ fn prepared_entry(
         }
     }
     if has_cache {
-        spec.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
+        spec.add_param({ name: "cache", type: `&${CACHE}<${BACKEND_PARAM}>` });
     }
     // A step past what the graph owes reads past a table, and answers anyway.
     let mut at_end: Option<Symbols> = null;
@@ -1376,9 +1392,9 @@ fn emit_decode(
         past,
     }))?;
     if apart {
-        decode.add_param("pasts", "&List<i64>");
+        decode.add_param({ name: "pasts", type: "&List<i64>" });
     }
-    decode.add_param("steps", "i32").add_param("sampling", "&Sampling");
+    decode.add_param({ name: "steps", type: "i32" }).add_param({ name: "sampling", type: "&Sampling" });
     let mut symbols = entry.symbols;
     let mut lines = entry.lines;
     let ids = names.get(&axes.ids);
@@ -1423,7 +1439,7 @@ fn emit_decode(
     );
     decode
         .add_generic(SOURCE_BOUND)
-        .add_param("model", `&mut ${MODEL_TYPE}`)
+        .add_param({ name: "model", type: `&mut ${MODEL_TYPE}` })
         .set_return_type(
             `${DECODED_TYPE}<${BACKEND_PARAM}>`,
         )
@@ -1432,8 +1448,8 @@ fn emit_decode(
     if !apart {
         let mut decoded_type = StructSpec::new(DECODED_TYPE, Vis::Pub);
         decoded_type.add_generic(HOLDS_BOUND);
-        decoded_type.add_field("tokens", "Tensor<i64, [Slots, Picks]>", Vis::Pub);
-        decoded_type.add_field("cache", `${CACHE}<${BACKEND_PARAM}>`, Vis::Pub);
+        decoded_type.add_field({ name: "tokens", type: "Tensor<i64, [Slots, Picks]>", vis: Vis::Pub });
+        decoded_type.add_field({ name: "cache", type: `${CACHE}<${BACKEND_PARAM}>`, vis: Vis::Pub });
         decoded_type.set_doc("What `decode` picked, by row, and the cache, which holds each of them but the last.");
         w.blank();
         decoded_type.emit(w);
@@ -1532,7 +1548,7 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     let mut decode_args: List<String> = [];
     for let input of taken {
         let ident = names.get(&input);
-        let typed = ParamSpec { name: ident, type_str: `&${tensor_type(checked, &input)}` };
+        let typed = ParamSpec { name: ident, type: `&${tensor_type(checked, &input)}` };
         place_params.push(typed);
         compute_args.push(ident);
         if input == axes.ids {
@@ -1553,11 +1569,11 @@ fn emit_requests(w: &mut CodeWriter, context: &EntryContext, axes: &DecodingAxes
     ];
     let mut requests = StructSpec::new(REQUESTS, Vis::Pub);
     requests.add_generic(HOLDS_BOUND);
-    requests.add_field("cache", `${CACHE}<${bk}>`, Vis::Pub);
-    requests.add_field("pasts", "List<i64>", Vis::Pub);
-    requests.add_field("tokens", "List<i64>", Vis::Pub);
-    requests.add_field("active", "List<bool>", Vis::Pub);
-    requests.add_field("capacity", "i32");
+    requests.add_field({ name: "cache", type: `${CACHE}<${bk}>`, vis: Vis::Pub });
+    requests.add_field({ name: "pasts", type: "List<i64>", vis: Vis::Pub });
+    requests.add_field({ name: "tokens", type: "List<i64>", vis: Vis::Pub });
+    requests.add_field({ name: "active", type: "List<bool>", vis: Vis::Pub });
+    requests.add_field({ name: "capacity", type: "i32" });
     requests.set_doc(
         "The requests decoding side by side, one in each slot: a row of the cache,
 each holding `capacity` positions. A slot holds its past, its last token,
@@ -1577,31 +1593,34 @@ returns.",
     place
         .add_generic(SOURCE_BOUND)
         .set_receiver("&mut self")
-        .add_param("backend", `&mut ${bk}`)
-        .add_param("slot", "i32");
+        .add_param({ name: "backend", type: `&mut ${bk}` })
+        .add_param({ name: "slot", type: "i32" });
     for let p of &place_params {
-        place.add_param_spec(*p);
+        place.add_param(*p);
     }
-    place.add_param("sampling", "&Sampling").add_param("model", `&mut ${MODEL_TYPE}`);
+    place.add_param({ name: "sampling", type: "&Sampling" }).add_param({ name: "model", type: `&mut ${MODEL_TYPE}` });
     place.set_return_type("i64").add_effect("_");
     let mut decode = FnSpec::new("decode", Vis::Pub);
     decode.set_doc(
         "`steps` tokens after each slot's last, by slot, every slot in one call.\nAn empty slot's are of no request.",
     );
-    decode.add_generic(SOURCE_BOUND).set_receiver("&mut self").add_param("backend", `&mut ${bk}`);
+    decode.add_generic(SOURCE_BOUND).set_receiver("&mut self").add_param({ name: "backend", type: `&mut ${bk}` });
     for let p of &decode_params {
-        decode.add_param_spec(*p);
+        decode.add_param(*p);
     }
-    decode.add_param("steps", "i32").add_param("sampling", "&Sampling").add_param("model", `&mut ${MODEL_TYPE}`);
+    decode
+        .add_param({ name: "steps", type: "i32" })
+        .add_param({ name: "sampling", type: "&Sampling" })
+        .add_param({ name: "model", type: `&mut ${MODEL_TYPE}` });
     decode.set_return_type("Tensor<i64, [Slots, Picks]>").add_effect("_");
     held.emit(
         w,
         |w| {
             FnSpec::new("new", Vis::Pub)
                 .set_doc("`slots` empty slots of `capacity` positions, each a capacity of its own.")
-                .add_param("backend", `&mut ${bk}`)
-                .add_param("slots", "i32")
-                .add_param("capacity", "i32")
+                .add_param({ name: "backend", type: `&mut ${bk}` })
+                .add_param({ name: "slots", type: "i32" })
+                .add_param({ name: "capacity", type: "i32" })
                 .set_return_type(`${REQUESTS}<${bk}>`)
                 .add_effect("_")
                 .emit(
@@ -1645,7 +1664,7 @@ returns.",
             FnSpec::new("release", Vis::Pub)
                 .set_doc("Empties `slot`. Its row goes on running, and no one reads it.")
                 .set_receiver("&mut self")
-                .add_param("slot", "i32")
+                .add_param({ name: "slot", type: "i32" })
                 .emit(w, |w| {
                     w.line("self.pasts[slot] = 0;");
                     w.line("self.tokens[slot] = 0;");
@@ -1693,7 +1712,7 @@ fn emit_decoded(
     let EntryContext { checked, names, read, owed, per_row, .. } = *context;
     let bk = BACKEND_PARAM;
     let mut decoded = FnSpec::new(DECODED);
-    decoded.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${bk}`);
+    decoded.add_generic(GRAPH_BOUND).add_param({ name: "backend", type: `&mut ${bk}` });
     // What a step changes, as the first of them takes it and the rest the step
     // before returned it.
     let mut start: List<String> = [];
@@ -1703,7 +1722,7 @@ fn emit_decoded(
     let mut first_cached = 0;
     for let a of *taken {
         if a.crossed matches { _::Input } {
-            decoded.add_param(a.ident, `&${bk}::Tensor<${a.element}, ${a.axes}>`);
+            decoded.add_param({ name: a.ident, type: `&${bk}::Tensor<${a.element}, ${a.axes}>` });
             if a.tensor != axes.ids && a.tensor != axes.mask {
                 build_arguments.push(a.ident);
                 continue;
@@ -1720,19 +1739,19 @@ fn emit_decoded(
         }
         carried.push(a);
     }
-    decoded.add_param("cache", `&${CACHE}<${bk}>`);
+    decoded.add_param({ name: "cache", type: `&${CACHE}<${bk}>` });
     build_arguments.push("&held");
     if !read.is_empty() {
-        decoded.add_param("lengths", `&${LENGTHS}<${bk}>`);
+        decoded.add_param({ name: "lengths", type: `&${LENGTHS}<${bk}>` });
         build_arguments.push("&moved");
     }
     if chooses {
-        decoded.add_param("chosen", `&${CHOSEN}`);
+        decoded.add_param({ name: "chosen", type: `&${CHOSEN}` });
         build_arguments.push("chosen");
     }
-    decoded.add_param("weights", `&${PARAMS_TYPE}`);
+    decoded.add_param({ name: "weights", type: `&${PARAMS_TYPE}` });
     build_arguments.push("weights");
-    decoded.add_param("decoding", `&Decoding<${bk}>`);
+    decoded.add_param({ name: "decoding", type: `&Decoding<${bk}>` });
     decoded.set_return_type(`[${bk}::Tensor<i64, [Slots, Picks]>, ${CACHE}<${bk}>]`).add_effect("_");
     decoded.set_doc(
         "[`build`] a step at a time, each step's token the next's input: the tokens\npicked, by row, and the cache after the last step.",
@@ -1888,9 +1907,9 @@ host, as `backend` keeps them for the pass that reads them, the folded
 literals, and `pools`.",
             )
             .add_generic("Er")
-            .add_param("backend", `&mut ${BACKEND_PARAM}`)
-            .add_param("load", "fn(i32) -> Result<HostWeight, Er> with _")
-            .add_param("pools", `List<Any<${BACKEND_PARAM}>>`)
+            .add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` })
+            .add_param({ name: "load", type: "fn(i32) -> Result<HostWeight, Er> with _" })
+            .add_param({ name: "pools", type: `List<Any<${BACKEND_PARAM}>>` })
             .set_return_type(`Result<${PARAMS_TYPE}, Er>`)
             .add_effect("_")
             .emit(w, |w| {
@@ -2066,10 +2085,10 @@ fn emit_model(w: &mut CodeWriter) {
     let mut model = StructSpec::new(MODEL, Vis::Pub);
     model.add_generic(BACKEND_BOUND);
     model.add_generic(`${SOURCE_BOUND} = Unread`);
-    model.add_field("weights", PARAMS_TYPE);
-    model.add_field("programs", `Programs<${BACKEND_PARAM}>`, Vis::Pub);
-    model.add_field("experts", "HeldExperts");
-    model.add_field("source", SOURCE_PARAM);
+    model.add_field({ name: "weights", type: PARAMS_TYPE });
+    model.add_field({ name: "programs", type: `Programs<${BACKEND_PARAM}>`, vis: Vis::Pub });
+    model.add_field({ name: "experts", type: "HeldExperts" });
+    model.add_field({ name: "source", type: SOURCE_PARAM });
     model.set_doc(
         "The weights as `Bk` holds them, the program `Bk` compiled for each
 shape class `compute` has met, and the experts the pools hold, those
@@ -2085,7 +2104,7 @@ they do not read from `source` as a pass picks them.",
         |w| {
             FnSpec::new("new", Vis::Pub)
                 .set_doc("A model of `weights`, whose pools hold every expert.")
-                .add_param("weights", PARAMS_TYPE)
+                .add_param({ name: "weights", type: PARAMS_TYPE })
                 .set_return_type(`${MODEL}<${BACKEND_PARAM}>`)
                 .emit(
                     w,
@@ -2119,13 +2138,13 @@ fn emit_recorded(
         .set_doc(
             "[`build`] recorded over parameters of `extents`, in the order `compute`\npasses its program the arguments.",
         )
-        .add_param("recorder", "&mut Recorder")
-        .add_param("extents", "&List<List<i32>>");
+        .add_param({ name: "recorder", type: "&mut Recorder" })
+        .add_param({ name: "extents", type: "&List<List<i32>>" });
     if decoding {
-        recorded.add_param("sampler", "&Sampler");
+        recorded.add_param({ name: "sampler", type: "&Sampler" });
     }
     if chooses {
-        recorded.add_param("chosen", `&${CHOSEN}`);
+        recorded.add_param({ name: "chosen", type: `&${CHOSEN}` });
     }
     recorded.set_return_type("Recorded").emit(w, |w| {
         // The weights come last, past however many values the sampler takes.
@@ -2353,7 +2372,7 @@ fn emit_entry(
     let mut exprs = Operands { experts: experts.placements(), pooled: experts.pooled };
     let mut entry = FnSpec::new("build", Vis::Pub);
     entry.set_doc("The graph's pass, each operation added to the graph `backend` builds,\nover inputs it holds.");
-    entry.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
+    entry.add_generic(GRAPH_BOUND).add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` });
     // The pasts cross in one `Cache`, and the presents replace them in it.
     let [has_cache, several, returned] = [
         crossing.has_cache(),
@@ -2365,11 +2384,11 @@ fn emit_entry(
         exprs.values[vi.name] = ident;
         exprs.borrowed.insert(vi.name);
         if !crossing.cached.contains(vi.name) {
-            entry.add_param(ident, `&${prepared_type(checked, &vi.name)}`);
+            entry.add_param({ name: ident, type: `&${prepared_type(checked, &vi.name)}` });
         }
     }
     if has_cache {
-        entry.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
+        entry.add_param({ name: "cache", type: `&${CACHE}<${BACKEND_PARAM}>` });
     }
     for let vi of &graph.initializers {
         exprs.values[vi.name] = `weights.${names.get(&experts.held_in(&vi.name))}`;
@@ -2389,13 +2408,13 @@ fn emit_entry(
         symbols.bind_slots(`backend.extents_of(&lengths.${symbols.ident(&read[0])})[0] as i64`);
     }
     if !read.is_empty() {
-        entry.add_param("lengths", `&${LENGTHS}<${BACKEND_PARAM}>`);
+        entry.add_param({ name: "lengths", type: `&${LENGTHS}<${BACKEND_PARAM}>` });
     }
     if symbols.chooses() {
-        entry.add_param("chosen", `&${CHOSEN}`);
+        entry.add_param({ name: "chosen", type: `&${CHOSEN}` });
     }
     let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &returned[0]) };
-    entry.add_param("weights", `&${PARAMS_TYPE}`).set_return_type(passed_type).add_effect("_");
+    entry.add_param({ name: "weights", type: `&${PARAMS_TYPE}` }).set_return_type(passed_type).add_effect("_");
     let checks = input_checks(graph, shapes, names, &crossing.cached);
     let mut owed: List<String> = [];
     // A tensor each row's lengths computed holds as many rows as each length.
@@ -2467,7 +2486,11 @@ fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Chec
     let mut opened: List<String> = [];
     let mut empties: List<String> = [];
     for let [past, present] of *pairs {
-        cache.add_field(names.get(&past), prepared_type(checked, &past), Vis::Pub);
+        cache.add_field({
+            name: names.get(&past),
+            type: prepared_type(checked, &past),
+            vis: Vis::Pub,
+        });
         let mut extents: List<String> = [];
         for let [i, axis] of checked.shapes[past].axes.into_iter().enumerate() {
             extents.push(match axis.extent {
@@ -2487,9 +2510,9 @@ fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Chec
     empty.set_doc(
         "The state before the first pass: no position along a past's length,\nand zeros of every other state.",
     );
-    empty.add_param("backend", `&mut ${BACKEND_PARAM}`);
+    empty.add_param({ name: "backend", type: `&mut ${BACKEND_PARAM}` });
     for let length of opened {
-        empty.add_param(length, "i32");
+        empty.add_param({ name: length, type: "i32" });
     }
     cache.set_doc(
         "The state the graph hands from one pass to the next, as the backend holds\nit: each past it reads, which the present it computes replaces.",
@@ -2526,10 +2549,14 @@ fn emit_passed(w: &mut CodeWriter, returned: &List<String>, has_cache: bool, che
     let mut passed = StructSpec::new(PASSED, Vis::Pub);
     passed.add_generic(HOLDS_BOUND);
     for let output of *returned {
-        passed.add_field(names.get(&output), prepared_type(checked, &output), Vis::Pub);
+        passed.add_field({
+            name: names.get(&output),
+            type: prepared_type(checked, &output),
+            vis: Vis::Pub,
+        });
     }
     if has_cache {
-        passed.add_field("cache", `${CACHE}<${BACKEND_PARAM}>`, Vis::Pub);
+        passed.add_field({ name: "cache", type: `${CACHE}<${BACKEND_PARAM}>`, vis: Vis::Pub });
     }
     w.blank();
     passed.set_doc("The graph's outputs as the backend holds them, in the order it declares them.").emit(w);
@@ -3123,11 +3150,15 @@ fn emit_outputs(w: &mut CodeWriter, returned: &List<String>, has_cache: bool, ch
         outputs.add_generic(HOLDS_BOUND);
     }
     for let output of *returned {
-        outputs.add_field(names.get(&output), tensor_type(checked, &output), Vis::Pub);
+        outputs.add_field({
+            name: names.get(&output),
+            type: tensor_type(checked, &output),
+            vis: Vis::Pub,
+        });
     }
     if has_cache {
         // The cache stays where the backend holds it, for the next pass.
-        outputs.add_field("cache", `${CACHE}<${BACKEND_PARAM}>`, Vis::Pub);
+        outputs.add_field({ name: "cache", type: `${CACHE}<${BACKEND_PARAM}>`, vis: Vis::Pub });
     }
     w.blank();
     outputs.set_doc("The graph's outputs, in the order it declares them.").emit(w);

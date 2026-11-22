@@ -14,7 +14,7 @@ use { AtnSim, ATN_TR_EPSILON, ATN_TR_PRECEDENCE, atn_decode } from "./runtime/at
 use { atn_state_cont_admits, atn_with_lr_tables } from "./runtime/atn_lr.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { constant_patterns, follow_admits_call } from "./gen_util.wado";
-use { CodeWriter, FnSpec, ParamSpec } from "lib:wadopoet";
+use { CodeWriter, FnSpec } from "lib:wadopoet";
 
 /// The tokens one suffix alone admits, and that suffix.
 struct LrEnter {
@@ -83,12 +83,12 @@ pub fn lr_decide_fn_name(decision: i32) -> String {
 /// none leaves it unknown, which admits every token.
 pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, analysis: &GrammarAnalysis, follow: bool) {
     let mut f = FnSpec::new(lr_decide_fn_name(decision));
-    f.add_param("atn", "&mut AtnPredictor");
-    f.add_param("tokens", "&Array<i32>");
-    f.add_param("pos", "i32");
-    f.add_param("min_prec", "i32");
+    f.add_param({ name: "atn", type: "&mut AtnPredictor" });
+    f.add_param({ name: "tokens", type: "&Array<i32>" });
+    f.add_param({ name: "pos", type: "i32" });
+    f.add_param({ name: "min_prec", type: "i32" });
     if follow {
-        f.add_param_spec(ParamSpec { name: "follow", type_str: "i64", default: Option::Some("0") });
+        f.add_param({ name: "follow", type: "i64", default: Option::Some("0") });
     }
     f.set_return_type("i32");
     f.emit(w, |w| {

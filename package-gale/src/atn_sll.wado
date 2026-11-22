@@ -1029,10 +1029,10 @@ pub fn atn_verified_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsSt
 /// from node `start`.
 pub fn gen_sll_decide_fn(w: &mut CodeWriter, decision: i32, start: i32, forest: &SllForest, analysis: &GrammarAnalysis) {
     let mut f = FnSpec::new(sll_decide_fn_name(decision));
-    f.add_param("atn", "&mut AtnPredictor");
-    f.add_param("tokens", "&Array<i32>");
-    f.add_param("pos", "i32");
-    f.add_param("min_prec", "i32");
+    f.add_param({ name: "atn", type: "&mut AtnPredictor" });
+    f.add_param({ name: "tokens", type: "&Array<i32>" });
+    f.add_param({ name: "pos", type: "i32" });
+    f.add_param({ name: "min_prec", type: "i32" });
     f.set_return_type("i32");
     f.emit(w, |w| {
         gen_sll_node(w, forest, start, 0, analysis);
@@ -1047,8 +1047,8 @@ pub fn gen_sll_shared_fns(w: &mut CodeWriter, forest: &SllForest, analysis: &Gra
     for let n of 0..<forest.nodes.len() {
         if forest.shared(n) {
             FnSpec::new(sll_node_fn_name(n))
-                .add_param("tokens", "&Array<i32>")
-                .add_param("pos", "i32")
+                .add_param({ name: "tokens", type: "&Array<i32>" })
+                .add_param({ name: "pos", type: "i32" })
                 .set_return_type("i32")
                 .emit(w, |w| {
                     gen_sll_branch(w, forest, n, 0, analysis);
@@ -1117,21 +1117,24 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         w.line("return outer;");
     });
     w.blank();
-    FnSpec::new(ATN_VERIFY_END).add_param("diagnostics", "&List<Diagnostic>").add_param("outer", "String").emit(w, |w| {
-        w.begin("if diagnostics.is_empty() && !ATN_MISMATCH.is_empty()");
-        w.line("panic(`prediction verify: ${ATN_MISMATCH}`);");
-        w.end();
-        w.line("ATN_MISMATCH = outer;");
-    });
+    FnSpec::new(ATN_VERIFY_END)
+        .add_param({ name: "diagnostics", type: "&List<Diagnostic>" })
+        .add_param({ name: "outer", type: "String" })
+        .emit(w, |w| {
+            w.begin("if diagnostics.is_empty() && !ATN_MISMATCH.is_empty()");
+            w.line("panic(`prediction verify: ${ATN_MISMATCH}`);");
+            w.end();
+            w.line("ATN_MISMATCH = outer;");
+        });
     w.blank();
     FnSpec::new(ATN_VERIFIED)
-        .add_param("decision", "i32")
-        .add_param("picker", "i32")
-        .add_param("atn", "&mut AtnPredictor")
-        .add_param("tokens", "&Array<i32>")
-        .add_param("pos", "i32")
-        .add_param("min_prec", "i32")
-        .add_param("alt", "i32")
+        .add_param({ name: "decision", type: "i32" })
+        .add_param({ name: "picker", type: "i32" })
+        .add_param({ name: "atn", type: "&mut AtnPredictor" })
+        .add_param({ name: "tokens", type: "&Array<i32>" })
+        .add_param({ name: "pos", type: "i32" })
+        .add_param({ name: "min_prec", type: "i32" })
+        .add_param({ name: "alt", type: "i32" })
         .set_return_type("i32")
         .emit(
             w,
@@ -1142,11 +1145,11 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         );
     w.blank();
     FnSpec::new(ATN_VERIFIED_AGAINST)
-        .add_param("decision", "i32")
-        .add_param("picker", "i32")
-        .add_param("pos", "i32")
-        .add_param("verdict", "[i32, bool]")
-        .add_param("alt", "i32")
+        .add_param({ name: "decision", type: "i32" })
+        .add_param({ name: "picker", type: "i32" })
+        .add_param({ name: "pos", type: "i32" })
+        .add_param({ name: "verdict", type: "[i32, bool]" })
+        .add_param({ name: "alt", type: "i32" })
         .set_return_type("i32")
         .emit(w, |w| {
             w.line("let [simulated, viable] = verdict;");
@@ -1157,11 +1160,11 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
         });
     w.blank();
     FnSpec::new(ATN_SHADOW)
-        .add_param("decision", "i32")
-        .add_param("picker", "i32")
-        .add_param("pos", "i32")
-        .add_param("alt", "i32")
-        .add_param("simulated", "i32")
+        .add_param({ name: "decision", type: "i32" })
+        .add_param({ name: "picker", type: "i32" })
+        .add_param({ name: "pos", type: "i32" })
+        .add_param({ name: "alt", type: "i32" })
+        .add_param({ name: "simulated", type: "i32" })
         .emit(
             w,
             |w| {

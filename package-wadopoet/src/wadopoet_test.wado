@@ -2,10 +2,6 @@ use {
     CodeWriter,
     CallStmt,
     CallForm,
-    FieldSpec,
-    CaseSpec,
-    MemberSpec,
-    ParamSpec,
     StructSpec,
     VariantSpec,
     EnumSpec,
@@ -235,7 +231,7 @@ test "manual indent/dedent" {
 /// A private unit function `name(p: i32)` whose body `body` writes.
 fn unit_fn(w: &mut CodeWriter, name: String, prunable: bool, body: fn(&mut CodeWriter)) {
     let mut f = FnSpec::new(name);
-    f.add_param("p", "i32");
+    f.add_param({ name: "p", type: "i32" });
     if prunable {
         f.set_prunable();
     }
@@ -437,8 +433,8 @@ test "same_code compares what two writers hold" {
 
 test "StructSpec basic" {
     let mut s = StructSpec::new("Point");
-    s.add_field("x", "i32");
-    s.add_field("y", "i32");
+    s.add_field({ name: "x", type: "i32" });
+    s.add_field({ name: "y", type: "i32" });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -448,8 +444,8 @@ test "StructSpec basic" {
 
 test "StructSpec pub with pub fields" {
     let mut s = StructSpec::new("Token", Vis::Pub);
-    s.add_field("kind", "i32", Vis::Pub);
-    s.add_field("text", "String", Vis::Pub);
+    s.add_field({ name: "kind", type: "i32", vis: Vis::Pub });
+    s.add_field({ name: "text", type: "String", vis: Vis::Pub });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -459,9 +455,9 @@ test "StructSpec pub with pub fields" {
 
 test "StructSpec mixed visibility fields" {
     let mut s = StructSpec::new("Config", Vis::Pub);
-    s.add_field("name", "String", Vis::Pub);
-    s.add_field("cache", "i32", Vis::Internal);
-    s.add_field("secret", "i32");
+    s.add_field({ name: "name", type: "String", vis: Vis::Pub });
+    s.add_field({ name: "cache", type: "i32", vis: Vis::Internal });
+    s.add_field({ name: "secret", type: "i32" });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -469,9 +465,9 @@ test "StructSpec mixed visibility fields" {
     assert w.to_string() == expected;
 }
 
-test "StructSpec with FieldSpec" {
+test "StructSpec with a pub field" {
     let mut s = StructSpec::new("Foo");
-    s.add_field_spec(FieldSpec { name: "x", type_str: "f64", vis: Vis::Pub });
+    s.add_field({ name: "x", type: "f64", vis: Vis::Pub });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -481,9 +477,9 @@ test "StructSpec with FieldSpec" {
 
 test "a field's attributes precede it, one a line" {
     let mut s = StructSpec::new("Foo");
-    s.add_field_spec(FieldSpec {
+    s.add_field({
         name: "x",
-        type_str: "i32",
+        type: "i32",
         vis: Vis::Pub,
         default: Option::Some("0"),
         attrs: ["wire(name = \"y\")", "secret"],
@@ -497,7 +493,7 @@ test "a field's attributes precede it, one a line" {
 
 test "an enum member's attributes precede it" {
     let mut e = EnumSpec::new("Corpus");
-    e.add_member_spec(MemberSpec {
+    e.add_member({
         name: "Web",
         attrs: ["wire(name = \"web\")"],
     });
@@ -510,29 +506,29 @@ test "an enum member's attributes precede it" {
 test "a declaration's doc comment and attributes precede it, and its members' theirs" {
     let mut s = StructSpec::new("Point", Vis::Pub);
     s.set_doc("A point.\n\nIn the plane.").add_attr("wire(name_policy = \"camelCase\")");
-    s.add_field_spec(FieldSpec {
+    s.add_field({
         name: "x_pos",
-        type_str: "i32",
+        type: "i32",
         vis: Vis::Pub,
         doc: Option::Some("Across."),
     });
     let mut e = EnumSpec::new("Color");
     e.set_doc("A hue.");
-    e.add_member_spec(MemberSpec {
+    e.add_member({
         name: "Red",
         attrs: ["wire(name = \"red\")"],
         doc: Option::Some("Warm."),
     });
     let mut v = VariantSpec::new("Shape");
     v.add_attr("wire(tag = \"kind\")");
-    v.add_case_spec(CaseSpec {
+    v.add_case({
         name: "Dot",
         attrs: ["wire(name = \"dot\")"],
         doc: Option::Some("No size."),
     });
     let mut f = FlagsSpec::new("Perms", Vis::Pub);
     f.set_doc("Access.").add_attr("wire(name_policy = \"kebab-case\")");
-    f.add_member_spec(MemberSpec { name: "Read", doc: Option::Some("Look.") }).add_member("Write");
+    f.add_member({ name: "Read", doc: Option::Some("Look.") }).add_member({ name: "Write" });
     let mut n = NewtypeSpec::new("Meters", "f64", Vis::Pub);
     n.set_doc("A length.").add_attr("allow(unused)");
     let mut g = GlobalSpec::new("ORIGIN", "i32", "0");
@@ -598,14 +594,14 @@ impl Meters {
 test "what every spec writes above a declaration compiles" {
     let mut w = CodeWriter::new();
     let mut f = FlagsSpec::new("Perms");
-    f.add_member_spec(MemberSpec { name: "Read", doc: Option::Some("Look.") });
+    f.add_member({ name: "Read", doc: Option::Some("Look.") });
     f.emit(&mut w);
     let mut n = NewtypeSpec::new("Bag", "List<T>");
     n.set_doc("Some.").add_generic("T");
     n.emit(&mut w);
     let mut v = VariantSpec::new("Maybe");
-    v.set_doc("Perhaps.").add_generic("T").add_case_with("Just", "T");
-    v.add_case("Nothing");
+    v.set_doc("Perhaps.").add_generic("T").add_case({ name: "Just", payload: Option::Some("T") });
+    v.add_case({ name: "Nothing" });
     v.emit(&mut w);
     let mut g = GlobalSpec::new("HITS", "i32", "0");
     g.set_doc("Counted.").set_mut();
@@ -632,7 +628,7 @@ test "prune drops a function's doc comment and attributes with it" {
 test "a doc comment reaches reflection as written" {
     let mut s = StructSpec::new("Point");
     s.set_doc("Title\n\n  indented\nlast");
-    s.add_field("x", "i32");
+    s.add_field({ name: "x", type: "i32" });
     let mut items = CodeWriter::new();
     s.emit(&mut items);
     assert printed("print(Reflect::<Point>::doc().unwrap());", items.to_string()) == "Title\n\n  indented\nlast";
@@ -640,9 +636,9 @@ test "a doc comment reaches reflection as written" {
 
 test "VariantSpec unit cases" {
     let mut v = VariantSpec::new("TokenKind", Vis::Pub);
-    v.add_case("Number");
-    v.add_case("String");
-    v.add_case("Eof");
+    v.add_case({ name: "Number" });
+    v.add_case({ name: "String" });
+    v.add_case({ name: "Eof" });
 
     let mut w = CodeWriter::new();
     v.emit(&mut w);
@@ -652,8 +648,10 @@ test "VariantSpec unit cases" {
 
 test "VariantSpec with payloads" {
     let mut v = VariantSpec::new("Shape");
-    v.add_case_with("Circle", "f64").add_case_with("Rect", "[f64, f64]");
-    v.add_case("Point");
+    v
+        .add_case({ name: "Circle", payload: Option::Some("f64") })
+        .add_case({ name: "Rect", payload: Option::Some("[f64, f64]") });
+    v.add_case({ name: "Point" });
 
     let mut w = CodeWriter::new();
     v.emit(&mut w);
@@ -664,9 +662,9 @@ test "VariantSpec with payloads" {
 
 test "EnumSpec basic" {
     let mut e = EnumSpec::new("Color", Vis::Pub);
-    e.add_member("Red");
-    e.add_member("Green");
-    e.add_member("Blue");
+    e.add_member({ name: "Red" });
+    e.add_member({ name: "Green" });
+    e.add_member({ name: "Blue" });
 
     let mut w = CodeWriter::new();
     e.emit(&mut w);
@@ -677,8 +675,8 @@ test "EnumSpec basic" {
 
 test "FnSpec simple" {
     let mut f = FnSpec::new("add");
-    f.add_param("a", "i32");
-    f.add_param("b", "i32");
+    f.add_param({ name: "a", type: "i32" });
+    f.add_param({ name: "b", type: "i32" });
     f.set_return_type("i32");
 
     let mut w = CodeWriter::new();
@@ -705,10 +703,10 @@ test "FnSpec with receiver" {
 
 test "FnSpec with default-valued and mut params" {
     let mut f = FnSpec::new("parse_expr");
-    f.add_param_spec(ParamSpec { name: "p", type_str: "Parser", is_mut: true });
-    f.add_param_spec(ParamSpec {
+    f.add_param({ name: "p", type: "Parser", is_mut: true });
+    f.add_param({
         name: "min_prec",
-        type_str: "i32",
+        type: "i32",
         default: Option::Some("0"),
     });
     f.set_return_type("ExprNode");
@@ -729,8 +727,8 @@ test "FnSpec no return type" {
 test "FnSpec signature string" {
     let mut f = FnSpec::new("transform", Vis::Pub);
     f.set_receiver("&self");
-    f.add_param("input", "&String");
-    f.add_param("scale", "f64");
+    f.add_param({ name: "input", type: "&String" });
+    f.add_param({ name: "scale", type: "f64" });
     f.set_return_type("String");
 
     assert signature_of(&f) == "pub fn transform(&self, input: &String, scale: f64) -> String";
@@ -758,8 +756,8 @@ test "FnSpec with a single effect" {
 test "FnSpec generic type parameter" {
     let mut f = FnSpec::new("walk_stmt", Vis::Pub);
     f.add_generic("V: Visitor");
-    f.add_param("v", "&mut V");
-    f.add_param("node", "&StmtNode");
+    f.add_param({ name: "v", type: "&mut V" });
+    f.add_param({ name: "node", type: "&StmtNode" });
 
     assert signature_of(&f) == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)";
 }
@@ -768,8 +766,8 @@ test "FnSpec multiple generics" {
     let mut f = FnSpec::new("zip");
     f.add_generic("A");
     f.add_generic("B");
-    f.add_param("a", "A");
-    f.add_param("b", "B");
+    f.add_param({ name: "a", type: "A" });
+    f.add_param({ name: "b", type: "B" });
     f.set_return_type("[A, B]");
 
     assert signature_of(&f) == "fn zip<A, B>(a: A, b: B) -> [A, B]";
@@ -799,8 +797,8 @@ test "struct + impl + fn composition" {
 
     // struct Lexer { chars: List<char>, pos: i32, }
     let mut s = StructSpec::new("Lexer");
-    s.add_field("chars", "List<char>");
-    s.add_field("pos", "i32");
+    s.add_field({ name: "chars", type: "List<char>" });
+    s.add_field({ name: "pos", type: "i32" });
     s.emit(&mut w);
     w.blank();
 
@@ -808,7 +806,7 @@ test "struct + impl + fn composition" {
     w.begin("impl Lexer");
 
     let mut f = FnSpec::new("new");
-    f.add_param("input", "&String");
+    f.add_param({ name: "input", type: "&String" });
     f.set_return_type("Lexer");
     f.emit(&mut w, |w| w.line("return Lexer { chars: input.chars().collect(), pos: 0 };"));
     w.blank();
@@ -828,9 +826,9 @@ test "variant + global composition" {
     let mut w = CodeWriter::new();
 
     let mut v = VariantSpec::new("TokenKind", Vis::Pub);
-    v.add_case("Number");
-    v.add_case("Eof");
-    v.add_case("Error");
+    v.add_case({ name: "Number" });
+    v.add_case({ name: "Eof" });
+    v.add_case({ name: "Error" });
     v.emit(&mut w);
     w.blank();
 
@@ -844,7 +842,7 @@ test "variant + global composition" {
 
 test "chaining builder methods" {
     let mut s = StructSpec::new("Pair", Vis::Pub);
-    s.add_field("first", "i32", Vis::Pub).add_field("second", "i32", Vis::Pub);
+    s.add_field({ name: "first", type: "i32", vis: Vis::Pub }).add_field({ name: "second", type: "i32", vis: Vis::Pub });
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -986,7 +984,7 @@ test "ImplSpec trait impl" {
     let i = ImplSpec::new_trait("Eq", "Point");
     let mut f = FnSpec::new("eq");
     f.set_receiver("&self");
-    f.add_param("other", "&Self");
+    f.add_param({ name: "other", type: "&Self" });
     f.set_return_type("bool");
     i.emit(&mut w, |w| f.emit(w, |w| w.line("return self.x == other.x && self.y == other.y;")));
     let expected = "impl Eq for Point {\n    fn eq(&self, other: &Self) -> bool {\n        return self.x == other.x && self.y == other.y;\n    }\n}\n";
@@ -996,7 +994,7 @@ test "ImplSpec trait impl" {
 test "a generic struct and its impl compile" {
     let mut w = CodeWriter::new();
     let mut s = StructSpec::new("Holder", Vis::Pub);
-    s.add_generic("T: Default").add_field("value", "T", Vis::Pub);
+    s.add_generic("T: Default").add_field({ name: "value", type: "T", vis: Vis::Pub });
     s.emit(&mut w);
     let mut i = ImplSpec::new("Holder<T>");
     i.add_generic("T: Default");
@@ -1014,7 +1012,7 @@ test "struct + impl trait composition" {
 
     // struct
     let mut s = StructSpec::new("Article", Vis::Pub);
-    s.add_field("name", "String", Vis::Pub);
+    s.add_field({ name: "name", type: "String", vis: Vis::Pub });
     s.emit(&mut w);
     w.blank();
 

@@ -45,7 +45,7 @@ use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_nam
 use { MetPredicate } from "./gate_conditions.wado";
 use { is_nullable } from "./grammar_analysis.wado";
 use { RuleOverlap } from "./rule_overlap.wado";
-use { CallForm, CallStmt, CodeWriter, FnSpec, GlobalSpec, ParamSpec, wado } from "lib:wadopoet";
+use { CallForm, CallStmt, CodeWriter, FnSpec, GlobalSpec, wado } from "lib:wadopoet";
 use { HashMap } from "core:collections";
 use {
     PredictionNode,
@@ -222,10 +222,10 @@ fn add_min_prec_param(f: &mut FnSpec) {
     add_zero_default_param(f, "min_prec", "i32");
 }
 
-fn add_zero_default_param<S: AsStrSlice, S1: AsStrSlice>(f: &mut FnSpec, name: S, type_str: S1) {
-    f.add_param_spec(ParamSpec {
+fn add_zero_default_param<S: AsStrSlice, S1: AsStrSlice>(f: &mut FnSpec, name: S, ty: S1) {
+    f.add_param({
         name: name.to_string(),
-        type_str: type_str.to_string(),
+        type: ty.to_string(),
         default: Option::Some("0"),
     });
 }
@@ -237,9 +237,9 @@ fn parse_fn_spec<S: AsStrSlice>(name: S, ctx: &mut EmitContext, takes_prec: bool
     ctx.cursor.begin_ref_frame();
     let mut f = FnSpec::new(name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&PARSER_HANDLE, "&mut Parser");
+    f.add_param({ name: PARSER_HANDLE, type: "&mut Parser" });
     if takes_prec {
-        f.add_param("min_prec", "i32");
+        f.add_param({ name: "min_prec", type: "i32" });
     }
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
@@ -535,7 +535,7 @@ fn scan_trailing_arg_list(ctx: &EmitContext, to_walker: bool = false) -> List<St
 fn add_scan_params(f: &mut FnSpec, ctx: &EmitContext, walker: bool = false) {
     add_scan_state_params(f, ctx);
     if !walker && ctx.helpers_take_prec() {
-        f.add_param("min_prec", "i32");
+        f.add_param({ name: "min_prec", type: "i32" });
     }
     if ctx.current_rule_reads_follow() {
         add_follow_param(f);
@@ -547,16 +547,16 @@ fn add_scan_params(f: &mut FnSpec, ctx: &EmitContext, walker: bool = false) {
 
 /// The token kinds, the position, and the parser state `scan_state_args` passes.
 fn add_scan_state_params(f: &mut FnSpec, ctx: &EmitContext) {
-    f.add_param("tokens", "&Array<i32>");
-    f.add_param("pos", "i32");
+    f.add_param({ name: "tokens", type: "&Array<i32>" });
+    f.add_param({ name: "pos", type: "i32" });
     if ctx.settings.emit_scan_gate() {
-        f.add_param(&SCAN_GATE_HANDLE, `&mut ${SCAN_GATE_TYPE}`);
+        f.add_param({ name: SCAN_GATE_HANDLE, type: `&mut ${SCAN_GATE_TYPE}` });
     }
     if ctx.plan.needs_atn {
-        f.add_param(&ATN_HANDLE, `&mut ${ATN_PREDICTOR_TYPE}`);
+        f.add_param({ name: ATN_HANDLE, type: `&mut ${ATN_PREDICTOR_TYPE}` });
     }
     if ctx.plan.scan_memo {
-        f.add_param(&SCAN_MEMO_HANDLE, `&mut ${ctx.scan_memo_type()}`);
+        f.add_param({ name: SCAN_MEMO_HANDLE, type: `&mut ${ctx.scan_memo_type()}` });
     }
 }
 
@@ -1160,7 +1160,7 @@ fn gen_lr_cont_fns<S: AsStrSlice>(
     ctx.cursor.begin_ref_frame();
     let mut f = FnSpec::new(`${fn_name}__cont_holds`);
     add_scan_state_params(&mut f, ctx);
-    f.add_param("lr_cont", "i64");
+    f.add_param({ name: "lr_cont", type: "i64" });
     f.set_return_type("bool");
     emit_fn(
         w,
@@ -3072,7 +3072,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&PARSER_HANDLE, "&mut Parser");
+    f.add_param({ name: PARSER_HANDLE, type: "&mut Parser" });
     // `follow` precedes `min_prec` so a non-precedence call site can pass
     // just `_parse_X(p, follow)` and let `min_prec` default — uniform for
     // LR and non-LR targets. Omitted entirely when the grammar has no

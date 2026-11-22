@@ -21,18 +21,7 @@ use { constant_patterns, negate_cond, open_chain_arm } from "./gen_util.wado";
 use { gen_visibility_comment } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { literal_const_name } from "./ident.wado";
-use {
-    CodeWriter,
-    FieldSpec,
-    StructSpec,
-    ImplSpec,
-    FnSpec,
-    GlobalSpec,
-    IdGen,
-    Vis,
-    char_range_pat,
-    wado,
-} from "lib:wadopoet";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, IdGen, Vis, char_range_pat, wado } from "lib:wadopoet";
 use {
     SuperOp,
     gen_super_interface,
@@ -462,38 +451,38 @@ fn members_call(members: &MemberDecls, names: List<String>) -> bool {
 fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSurface) {
     let vis = if surface.base_driven { Vis::Pub } else { Vis::Private };
     let mut s = StructSpec::new("Lexer", vis);
-    s.add_field("src", "StrSlice");
-    s.add_field("pos", "i32");
+    s.add_field({ name: "src", type: "StrSlice" });
+    s.add_field({ name: "pos", type: "i32" });
     for let mf of &members.fields {
-        s.add_field_spec(FieldSpec { name: mf.name, type_str: mf.ty, default: Option::Some(mf.init) });
+        s.add_field({ name: mf.name, type: mf.ty, default: Option::Some(mf.init) });
     }
     if surface.sink {
-        s.add_field_spec(FieldSpec { name: "act_output", type_str: "String", default: Option::Some("\"\"") });
+        s.add_field({ name: "act_output", type: "String", default: Option::Some("\"\"") });
     }
     if surface.commit_latches {
-        s.add_field_spec(FieldSpec { name: "act_type", type_str: "i32", default: Option::Some("-1") });
-        s.add_field_spec(FieldSpec { name: "act_channel", type_str: "i32", default: Option::Some("-1") });
-        s.add_field_spec(FieldSpec { name: "act_skip", type_str: "bool", default: Option::Some("false") });
-        s.add_field_spec(FieldSpec { name: "act_more", type_str: "bool", default: Option::Some("false") });
+        s.add_field({ name: "act_type", type: "i32", default: Option::Some("-1") });
+        s.add_field({ name: "act_channel", type: "i32", default: Option::Some("-1") });
+        s.add_field({ name: "act_skip", type: "bool", default: Option::Some("false") });
+        s.add_field({ name: "act_more", type: "bool", default: Option::Some("false") });
     }
     if surface.mode_commands {
-        s.add_field_spec(FieldSpec { name: "act_push_mode", type_str: "i32", default: Option::Some("-1") });
-        s.add_field_spec(FieldSpec { name: "act_pop_mode", type_str: "bool", default: Option::Some("false") });
-        s.add_field_spec(FieldSpec { name: LEXER_SET_MODE_FIELD, type_str: "i32", default: Option::Some("-1") });
+        s.add_field({ name: "act_push_mode", type: "i32", default: Option::Some("-1") });
+        s.add_field({ name: "act_pop_mode", type: "bool", default: Option::Some("false") });
+        s.add_field({ name: LEXER_SET_MODE_FIELD, type: "i32", default: Option::Some("-1") });
         // ANTLR's `_modeStack.size()`, which a base branches on.
-        s.add_field_spec(FieldSpec { name: "act_mode_depth", type_str: "i32", default: Option::Some("0") });
+        s.add_field({ name: "act_mode_depth", type: "i32", default: Option::Some("0") });
     }
     if surface.current_mode {
         // ANTLR's `_mode`: the mode the token is being matched in, seeded per
         // token. Only a body that reads `$mode` needs it.
-        s.add_field_spec(FieldSpec { name: LEXER_MODE_FIELD, type_str: "i32", default: Option::Some("0") });
+        s.add_field({ name: LEXER_MODE_FIELD, type: "i32", default: Option::Some("0") });
     }
     s.emit(w);
     w.blank();
 
     let mut f = FnSpec::new("new");
     f.add_generic("S: AsStrSlice");
-    f.add_param("input", "S");
+    f.add_param({ name: "input", type: "S" });
     f.set_return_type("Lexer");
     let mut f2 = FnSpec::new("at_end");
     f2.set_receiver("&self");
@@ -523,7 +512,7 @@ fn gen_lexer_emit_fn(w: &mut CodeWriter, vis: Vis) {
     w.blank();
     let mut fe = FnSpec::new("emit", vis);
     fe.set_receiver("&mut self");
-    fe.add_param("s", "String");
+    fe.add_param({ name: "s", type: "String" });
     fe.emit(w, |w| w.line("self.act_output.push_str(&s);"));
 }
 
@@ -536,12 +525,12 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, surface: &LexerSurface, vis: Vis
     // and one that writes neither leaves the outcome unchanged.
     let mut fr = FnSpec::new("reset_actions");
     fr.set_receiver("&mut self");
-    fr.add_param("kind", "i32");
-    fr.add_param("channel", "i32");
+    fr.add_param({ name: "kind", type: "i32" });
+    fr.add_param({ name: "channel", type: "i32" });
     if surface.mode_commands {
-        fr.add_param("depth", "i32");
+        fr.add_param({ name: "depth", type: "i32" });
         if surface.current_mode {
-            fr.add_param("mode", "i32");
+            fr.add_param({ name: "mode", type: "i32" });
         }
     }
     fr.emit(w, |w| {
@@ -590,7 +579,7 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, surface: &LexerSurface, vis: Vis
 fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, surface: &LexerSurface) {
     let mut fp = FnSpec::new("push_mode", vis);
     fp.set_receiver("&mut self");
-    fp.add_param("m", "i32");
+    fp.add_param({ name: "m", type: "i32" });
     fp.emit(w, |w| {
         gen_one_mode_command_assert(w);
         w.line("self.act_push_mode = m;");
@@ -611,7 +600,7 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, surface: &LexerSurface)
 
     let mut fs = FnSpec::new("set_mode", vis);
     fs.set_receiver("&mut self");
-    fs.add_param("m", "i32");
+    fs.add_param({ name: "m", type: "i32" });
     fs.emit(w, |w| {
         gen_one_mode_command_assert(w);
         w.line(`self.${LEXER_SET_MODE_FIELD} = m;`);
@@ -672,7 +661,7 @@ fn lexer_setter<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 ) {
     let mut f = FnSpec::new(name, vis);
     f.set_receiver("&mut self");
-    f.add_param(arg, "i32");
+    f.add_param({ name: arg.to_string(), type: "i32" });
     f.emit(w, |w| w.line(`self.${field} = ${arg};`));
 }
 
@@ -745,11 +734,11 @@ fn emit_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
 ) {
     let mut f = FnSpec::new(fn_name);
     if hm {
-        f.add_param("lx", "&Lexer");
+        f.add_param({ name: "lx", type: "&Lexer" });
     } else {
-        f.add_param("src", "&StrSlice");
+        f.add_param({ name: "src", type: "&StrSlice" });
     }
-    f.add_param("start", "i32");
+    f.add_param({ name: "start", type: "i32" });
     f.set_return_type("i32");
     // A `Foo::op(LexerView { src, .. })` call in the body is what makes the
     // generated function carry `with Foo`.
@@ -1771,9 +1760,9 @@ fn gen_lexer_apply_fns<S: AsStrSlice>(
         // `try_`.
         let replay_super = !sc_name.is_empty() && lexer_rule_replay_calls_super(rule, &grammar.lexer_rules, sc_name);
         let mut f = FnSpec::new(&apply_fn_name(&rule.name));
-        f.add_param("lx", "&mut Lexer");
-        f.add_param("start", "i32");
-        f.add_param("end", "i32");
+        f.add_param({ name: "lx", type: "&mut Lexer" });
+        f.add_param({ name: "start", type: "i32" });
+        f.add_param({ name: "end", type: "i32" });
         if replay_super {
             f.add_effect(sc_name);
         }
@@ -3921,7 +3910,7 @@ fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
     }
     let key = cc.ranges.iter_ref().map(|r| `${r.start as u32:x}-${r.end as u32:x}`).collect().join(",");
     let name = w.hoist_fn(&key, "in_char_set_", |w, name| {
-        FnSpec::new(name).add_param("c", "char").set_return_type("bool").emit(w, |w| {
+        FnSpec::new(name).add_param({ name: "c", type: "char" }).set_return_type("bool").emit(w, |w| {
             w.line(`return c matches { ${pattern()} };`);
         });
         w.blank();
@@ -4674,9 +4663,9 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         return;
     }
     let mut f = FnSpec::new("classify_keyword");
-    f.add_param("src", "&StrSlice");
-    f.add_param("start", "i32");
-    f.add_param("end", "i32");
+    f.add_param({ name: "src", type: "&StrSlice" });
+    f.add_param({ name: "start", type: "i32" });
+    f.add_param({ name: "end", type: "i32" });
     f.set_return_type("i32");
     let mut lens: List<i32> = [];
     for let kw of keywords {
@@ -4867,11 +4856,11 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
         let fn_name = lit_try_fn_name(&lit.const_name);
         let mut f = FnSpec::new(&fn_name);
         if hm {
-            f.add_param("lx", "&Lexer");
+            f.add_param({ name: "lx", type: "&Lexer" });
         } else {
-            f.add_param("src", "&StrSlice");
+            f.add_param({ name: "src", type: "&StrSlice" });
         }
-        f.add_param("start", "i32");
+        f.add_param({ name: "start", type: "i32" });
         f.set_return_type("i32");
         let len = lit.text.len();
         assert len > 0, "a literal token has text";
@@ -5716,7 +5705,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
 
     let mut f = FnSpec::new("tokenize", Vis::Pub);
     f.add_generic("S: AsStrSlice");
-    f.add_param("input", "S");
+    f.add_param({ name: "input", type: "S" });
     f.set_return_type("TokenStream");
     // `tokenize` calls the op-carrying `try_<rule>` fns, so it propagates the effect.
     if !sc_name.is_empty() {
@@ -6065,7 +6054,7 @@ fn vocab_display_name<S: AsStrSlice>(kind_name: S, lexer_rules: &List<LexerRule>
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
     let mut f = FnSpec::new("token_kind_name", Vis::Pub);
-    f.add_param("kind", "i32");
+    f.add_param({ name: "kind", type: "i32" });
     f.set_return_type("String");
     f.emit(w, |w| {
         w.line("return match kind {");

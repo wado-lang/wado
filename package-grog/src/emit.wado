@@ -6,7 +6,6 @@ use { apply_case } from "core:serde";
 use {
     CodeWriter,
     EnumSpec,
-    FieldSpec,
     FnSpec,
     ImplSpec,
     ModuleSpec,
@@ -121,14 +120,14 @@ impl EnumPlan {
         if let Some(other) = &self.unrecognized {
             let mut spec = VariantSpec::new(&self.name, Vis::Pub);
             for let c of &self.cases {
-                spec.add_case(&c.name);
+                spec.add_case({ name: c.name });
             }
-            spec.add_case_with(other, "i32");
+            spec.add_case({ name: *other, payload: Option::Some("i32") });
             spec.emit(w);
         } else {
             let mut spec = EnumSpec::new(&self.name, Vis::Pub);
             for let c of &self.cases {
-                spec.add_member(&c.name);
+                spec.add_member({ name: c.name });
             }
             spec.emit(w);
         }
@@ -153,18 +152,21 @@ impl EnumPlan {
                 w.end_with(";");
             });
             w.blank();
-            FnSpec::new("from_number").add_param("number", "i32").set_return_type(`Option<${self.name}>`).emit(w, |w| {
-                w.begin("return match number");
-                for let c of &self.cases {
-                    w.line(`${c.number} => Option::Some(${self.name}::${c.name}),`);
-                }
-                if let Some(other) = &self.unrecognized {
-                    w.line(`_ => Option::Some(${self.name}::${other}(number)),`);
-                } else {
-                    w.line("_ => null,");
-                }
-                w.end_with(";");
-            });
+            FnSpec::new("from_number")
+                .add_param({ name: "number", type: "i32" })
+                .set_return_type(`Option<${self.name}>`)
+                .emit(w, |w| {
+                    w.begin("return match number");
+                    for let c of &self.cases {
+                        w.line(`${c.number} => Option::Some(${self.name}::${c.name}),`);
+                    }
+                    if let Some(other) = &self.unrecognized {
+                        w.line(`_ => Option::Some(${self.name}::${other}(number)),`);
+                    } else {
+                        w.line("_ => null,");
+                    }
+                    w.end_with(";");
+                });
             w.blank();
             FnSpec::new("first").set_return_type(&self.name).emit(w, |w| {
                 w.line(`return ${self.name}::${self.cases[0].name};`);
@@ -181,7 +183,7 @@ impl EnumPlan {
         ImplSpec::new_trait("Eq", &self.name).emit(w, |w| {
             FnSpec::new("eq")
                 .set_receiver("&self")
-                .add_param("other", `&${self.name}`)
+                .add_param({ name: "other", type: `&${self.name}` })
                 .set_return_type("bool")
                 .emit(w, |w| w.line("return self.number() == other.number();"));
         });
@@ -189,7 +191,7 @@ impl EnumPlan {
         ImplSpec::new_trait("Ord", &self.name).emit(w, |w| {
             FnSpec::new("cmp")
                 .set_receiver("&self")
-                .add_param("other", `&${self.name}`)
+                .add_param({ name: "other", type: `&${self.name}` })
                 .set_return_type("Ordering")
                 .emit(w, |w| w.line("return self.number().cmp(&other.number());"));
         });
@@ -308,7 +310,7 @@ impl MessagePlan {
                 }
                 let wire = if a.put == Call::Groups { "SGroup" } else { "Len" };
                 FnSpec::new(`${field}_of`, Vis::Pub)
-                    .add_param("input", "LinearBuffer")
+                    .add_param({ name: "input", type: "LinearBuffer" })
                     .set_return_type(`${RUNTIME}::Messages<${element}>`)
                     .emit(w, |w| {
                         w.line(
@@ -331,7 +333,7 @@ impl MessagePlan {
         ImplSpec::new_trait(`${RUNTIME}::Message`, name).emit(w, |w| {
             FnSpec::new("size")
                 .set_receiver("&self")
-                .add_param("s", `&mut ${RUNTIME}::Sizer`)
+                .add_param({ name: "s", type: `&mut ${RUNTIME}::Sizer` })
                 .set_return_type("i64")
                 .emit(w, |w| {
                     w.line(`let mut n = self.${UNKNOWN_FIELDS}.len() as i64;`);
@@ -339,16 +341,19 @@ impl MessagePlan {
                     w.line("return n;");
                 });
             w.blank();
-            FnSpec::new("write").set_receiver("&self").add_param("w", `&mut ${RUNTIME}::Writer`).emit(w, |w| {
-                self.calls(w, "w.");
-                w.line(`w.raw(&self.${UNKNOWN_FIELDS});`);
-            });
+            FnSpec::new("write")
+                .set_receiver("&self")
+                .add_param({ name: "w", type: `&mut ${RUNTIME}::Writer` })
+                .emit(w, |w| {
+                    self.calls(w, "w.");
+                    w.line(`w.raw(&self.${UNKNOWN_FIELDS});`);
+                });
             w.blank();
             FnSpec::new("merge_field")
                 .add_generic(`B: ${RUNTIME}::Input`)
                 .set_receiver("&mut self")
-                .add_param("number", "i32")
-                .add_param("r", `&mut ${RUNTIME}::Reader<B>`)
+                .add_param({ name: "number", type: "i32" })
+                .add_param({ name: "r", type: `&mut ${RUNTIME}::Reader<B>` })
                 .set_return_type(`Result<bool, ${RUNTIME}::DecodeError>`)
                 .emit(w, |w| self.write_merge_body(w));
             w.blank();
@@ -565,9 +570,9 @@ impl Emitter {
                     null => {
                         let wado_name = claim_field_name(oneof, &mut field_names, decl, field)?;
                         let sum = self.take(`${name}${pascal(oneof)}`, `${decl.path.join(".")}.${oneof}`, field.line)?;
-                        spec.add_field_spec(FieldSpec {
+                        spec.add_field({
                             name: wado_name,
-                            type_str: `Option<${sum}>`,
+                            type: `Option<${sum}>`,
                             vis: Vis::Pub,
                             default: Option::Some("null"),
                         });
@@ -585,13 +590,13 @@ impl Emitter {
                 continue;
             }
             let wado_name = claim_field_name(&field.name, &mut field_names, decl, field)?;
-            let [type_str, default, wire] = self.plan_field(decl, field)?;
-            spec.add_field_spec(FieldSpec { name: wado_name, type_str, vis: Vis::Pub, default: Option::Some(default) });
+            let [ty, default, wire] = self.plan_field(decl, field)?;
+            spec.add_field({ name: wado_name, type: ty, vis: Vis::Pub, default: Option::Some(default) });
             slots.push(Slot::Field([wado_name, wire]));
         }
-        spec.add_field_spec(FieldSpec {
+        spec.add_field({
             name: UNKNOWN_FIELDS,
-            type_str: "ByteList",
+            type: "ByteList",
             vis: Vis::Pub,
             default: Option::Some("b\"\""),
         });
@@ -599,7 +604,7 @@ impl Emitter {
         for let oneof of oneofs {
             let mut v = VariantSpec::new(&oneof.sum, Vis::Pub);
             for let [_, m] of oneof.members.entries() {
-                v.add_case_with(m.case, m.payload);
+                v.add_case({ name: m.case, payload: Option::Some(m.payload) });
                 slots.push(Slot::Member([oneof.field, oneof.sum, *m]));
             }
             variants.push(v);

@@ -71,7 +71,7 @@ fn render(vocabulary: &Vocabulary) -> String {
     w.line("/// Whether a generated declaration named `name` would collide with the");
     w.line("/// language: a keyword, or a name `core:prelude` puts in every module's scope.");
     let mut reserved = FnSpec::new("is_reserved", Vis::Pub);
-    reserved.add_generic("S: AsStrSlice").add_param("name", "S").set_return_type("bool");
+    reserved.add_generic("S: AsStrSlice").add_param({ name: "name", type: "S" }).set_return_type("bool");
     reserved.emit(&mut w, |w| w.line("return is_keyword(name) || is_prelude_name(name);"));
     w.blank();
     emit_membership(&mut w, "is_prelude_name", Vis::Private, &prelude);
@@ -93,7 +93,7 @@ fn emit_membership(w: &mut CodeWriter, name: String, vis: Vis, words: &List<Stri
     lens.sort();
 
     let mut f = FnSpec::new(name, vis);
-    f.add_generic("S: AsStrSlice").add_param("name", "S").set_return_type("bool");
+    f.add_generic("S: AsStrSlice").add_param({ name: "name", type: "S" }).set_return_type("bool");
     f.emit(w, |w| {
         w.line("let name = name.as_str_slice();");
         w.begin("return match name.len()");

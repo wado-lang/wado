@@ -225,7 +225,7 @@ pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSe
 
 fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
     let mut f = FnSpec::new(kind_set_fn_name(id));
-    f.add_param("k", "i32");
+    f.add_param({ name: "k", type: "i32" });
     f.set_return_type("bool");
     f.emit(w, |w| w.line(`return k matches { ${constant_patterns(tokens)} };`));
     w.blank();

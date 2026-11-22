@@ -342,9 +342,9 @@ impl Case {
 
     fn emit(&self, index: i32, w: &mut CodeWriter, probe: Probe) {
         let mut f = FnSpec::new(`case_${index}`);
-        f.add_param("flag", "bool");
+        f.add_param({ name: "flag", type: "bool" });
         if self.producer matches { _::Param } {
-            f.add_param("t", "Tok");
+            f.add_param({ name: "t", type: "Tok" });
         }
         f.emit(w, |w| {
             w.line(`log_stdout("case ${index}");`);

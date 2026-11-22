@@ -20,10 +20,10 @@ and `ImplSpec`. The specs are built alike:
   `ImplSpec::new_trait` the trait and the type.
 - `set_doc` sets the doc comment and `add_attr` adds an attribute.
 - `add_generic` adds a type parameter, where the declaration takes one.
-- `add_field` and `add_param` add a member by its name and type, `add_case` and
-  `add_member` by its name, and `add_case_with` a case by its name and payload.
-  Each has a `_spec` form taking a `FieldSpec`, `CaseSpec`, `MemberSpec` or
-  `ParamSpec`, for a member with a default, a doc comment or attributes.
+- `add_field`, `add_param`, `add_case` and `add_member` add a member as a
+  `FieldSpec`, `ParamSpec`, `CaseSpec` or `MemberSpec`. The spec's type is the
+  parameter's, so the literal leaves it out: `add_param({ name: "p", type: "i32" })`. Every member has one form, and each optional part, such as a
+  default, a payload, a doc comment or attributes, is a field of its spec.
 
 Every setter returns the spec, so calls chain.
 
@@ -33,17 +33,17 @@ returns nothing. Compute what may fail before the declaration, not inside the
 closure.
 
 ```wado
-use { CodeWriter, FieldSpec, FnSpec, StructSpec, Vis } from "lib:wadopoet";
+use { CodeWriter, FnSpec, StructSpec, Vis } from "lib:wadopoet";
 
 let mut w = CodeWriter::new();
 let mut s = StructSpec::new("Point", Vis::Pub);
 s.set_doc("A point in the plane.");
-s.add_field("x", "i32", Vis::Pub).add_field("y", "i32", Vis::Pub);
-s.add_field_spec(FieldSpec { name: "label", type_str: "String", default: Option::Some("\"\"") });
+s.add_field({ name: "x", type: "i32", vis: Vis::Pub }).add_field({ name: "y", type: "i32", vis: Vis::Pub });
+s.add_field({ name: "label", type: "String", default: Option::Some("\"\"") });
 s.emit(&mut w);
 w.blank();
 
-FnSpec::new("sum").add_param("p", "&Point").set_return_type("i32").emit(&mut w, |w| {
+FnSpec::new("sum").add_param({ name: "p", type: "&Point" }).set_return_type("i32").emit(&mut w, |w| {
     w.line("return p.x + p.y;");
 });
 

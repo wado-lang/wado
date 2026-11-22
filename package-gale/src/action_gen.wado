@@ -30,7 +30,7 @@ use {
 use { HashMap } from "core:collections";
 use { follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { elements_match } from "./ir_shape.wado";
-use { CallForm, CallStmt, CodeWriter, FieldSpec, FnSpec, ImplSpec, ParamSpec, StructSpec } from "lib:wadopoet";
+use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, StructSpec } from "lib:wadopoet";
 use { AmbiguousNode, PredictionNode, build_group_prediction_tree } from "./prediction.wado";
 use {
     RULE_START_TOK_LOCAL,
@@ -73,9 +73,9 @@ pub fn add_arg_params(f: &mut FnSpec, rule: &ParserRule, ctx: &EmitContext) {
     }
     for let a of &rule.args {
         let def = wado_type_default(&a.type_text).expect("add_arg_params: rule_threads_args/wado_type_default disagree");
-        f.add_param_spec(ParamSpec {
+        f.add_param({
             name: arg_param_name(&a.name),
-            type_str: a.type_text.trim().to_string(),
+            type: a.type_text.trim().to_string(),
             default: Option::Some(def),
         });
     }
@@ -284,7 +284,7 @@ pub fn add_parser_super_effect(f: &mut FnSpec, ctx: &EmitContext) {
 pub fn gen_predicate_fns(w: &mut CodeWriter, ctx: &EmitContext) {
     for let entry of ctx.cursor.predicate_fns() {
         let mut f = FnSpec::new(&pred_fn_name(entry.0));
-        f.add_param(&PARSER_HANDLE, "&Parser");
+        f.add_param({ name: PARSER_HANDLE, type: "&Parser" });
         add_parser_super_effect(&mut f, ctx);
         f.set_return_type("bool");
         f.emit(w, |w| w.line(`return ${entry.1};`));
@@ -362,9 +362,9 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
         add_vals_fields(&mut vals, &rule.locals_decls);
         add_capture_fields(&mut vals, ctx.plan.rule_captures(&rule.name));
         for let label of &ctx.plan.rule_captures(&rule.name).labels {
-            vals.add_field_spec(FieldSpec {
+            vals.add_field({
                 name: after_label_field(&label.base),
-                type_str: label_value_type(label.is_token, &label.ref_name, ctx),
+                type: label_value_type(label.is_token, &label.ref_name, ctx),
                 default: Option::Some(unbound_label_value(label.is_token)),
             });
         }
@@ -384,21 +384,21 @@ pub fn after_label_field<S: AsStrSlice>(base: S) -> String {
 /// (`LabelReach::Shared`).
 fn add_capture_fields(vals: &mut StructSpec, captures: &RuleCaptures) {
     for let f of &captures.spans {
-        vals.add_field_spec(FieldSpec {
+        vals.add_field({
             name: rule_span_lo_field(f),
-            type_str: "i32",
+            type: "i32",
             default: Option::Some("0"),
         });
-        vals.add_field_spec(FieldSpec {
+        vals.add_field({
             name: rule_span_hi_field(f),
-            type_str: "i32",
+            type: "i32",
             default: Option::Some("-1"),
         });
     }
     for let f of &captures.nodes {
-        vals.add_field_spec(FieldSpec {
+        vals.add_field({
             name: rule_node_field(f),
-            type_str: "i32",
+            type: "i32",
             default: Option::Some("-1"),
         });
     }
@@ -410,7 +410,7 @@ fn add_vals_fields(vals: &mut StructSpec, decls: &List<AttrDecl>) {
             continue;
         }
         let def = wado_type_default(&d.type_text).expect("add_vals_fields: field_in_vals/wado_type_default disagree");
-        vals.add_field_spec(FieldSpec { name: d.name, type_str: d.type_text, default: Option::Some(def) });
+        vals.add_field({ name: d.name, type: d.type_text, default: Option::Some(def) });
     }
 }
 
@@ -871,9 +871,9 @@ pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut EmitContext) -> S
 /// fields are all defaultable — that is the value-channel eligibility check).
 pub fn add_seeded_vals_param(f: &mut FnSpec, rule: &ParserRule) {
     let vname = vals_struct_name(rule);
-    f.add_param_spec(ParamSpec {
+    f.add_param({
         name: "vals",
-        type_str: vname,
+        type: vname,
         default: Option::Some(`${vname} {}`),
     });
 }

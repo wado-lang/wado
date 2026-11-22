@@ -57,7 +57,7 @@ fn emit_head(w: &mut CodeWriter, doc: &Option<String>, attrs: &List<String>) {
 /// A struct field.
 pub struct FieldSpec {
     pub name: String,
-    pub type_str: String,
+    pub type: String,
     pub vis: Vis = Vis::Private,
     /// Written `name: T = default`, so a struct literal may leave the field out.
     pub default: Option<String> = null,
@@ -84,7 +84,7 @@ pub struct MemberSpec {
 /// A function parameter.
 pub struct ParamSpec {
     pub name: String,
-    pub type_str: String,
+    pub type: String,
     pub is_mut: bool = false,
     /// Written `name: T = default`, so a call may leave the argument out.
     pub default: Option<String> = null,
@@ -122,21 +122,7 @@ impl StructSpec {
         return self;
     }
 
-    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(
-        &mut self,
-        name: S,
-        type_str: S1,
-        vis: Vis = Vis::Private,
-    ) -> &mut StructSpec {
-        self.fields.push(FieldSpec {
-            name: name.to_string(),
-            type_str: type_str.to_string(),
-            vis,
-        });
-        return self;
-    }
-
-    pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec {
+    pub fn add_field(&mut self, field: FieldSpec) -> &mut StructSpec {
         self.fields.push(field);
         return self;
     }
@@ -151,7 +137,7 @@ impl StructSpec {
         w.begin(head);
         for let field of &self.fields {
             emit_head(w, &field.doc, &field.attrs);
-            let decl = `${field.vis.prefix()}${field.name}: ${field.type_str}`;
+            let decl = `${field.vis.prefix()}${field.name}: ${field.type}`;
             match &field.default {
                 Some(d) => w.line(`${decl} = ${*d},`),
                 null => w.line(`${decl},`),
@@ -193,23 +179,7 @@ impl VariantSpec {
         return self;
     }
 
-    /// Adds a case without a payload.
-    pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec {
-        self.cases.push(CaseSpec { name: name.to_string() });
-        return self;
-    }
-
-    /// Adds a case carrying a payload of `payload`, written as it renders
-    /// (`"[f64, f64]"`).
-    pub fn add_case_with<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, payload: S1) -> &mut VariantSpec {
-        self.cases.push(CaseSpec {
-            name: name.to_string(),
-            payload: Option::Some(payload.to_string()),
-        });
-        return self;
-    }
-
-    pub fn add_case_spec(&mut self, case: CaseSpec) -> &mut VariantSpec {
+    pub fn add_case(&mut self, case: CaseSpec) -> &mut VariantSpec {
         self.cases.push(case);
         return self;
     }
@@ -254,12 +224,7 @@ impl EnumSpec {
         return self;
     }
 
-    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut EnumSpec {
-        self.members.push(MemberSpec { name: name.to_string() });
-        return self;
-    }
-
-    pub fn add_member_spec(&mut self, member: MemberSpec) -> &mut EnumSpec {
+    pub fn add_member(&mut self, member: MemberSpec) -> &mut EnumSpec {
         self.members.push(member);
         return self;
     }
@@ -295,12 +260,7 @@ impl FlagsSpec {
         return self;
     }
 
-    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut FlagsSpec {
-        self.members.push(MemberSpec { name: name.to_string() });
-        return self;
-    }
-
-    pub fn add_member_spec(&mut self, member: MemberSpec) -> &mut FlagsSpec {
+    pub fn add_member(&mut self, member: MemberSpec) -> &mut FlagsSpec {
         self.members.push(member);
         return self;
     }
@@ -407,15 +367,7 @@ impl FnSpec {
         return self;
     }
 
-    pub fn add_param<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut FnSpec {
-        self.params.push(ParamSpec {
-            name: name.to_string(),
-            type_str: type_str.to_string(),
-        });
-        return self;
-    }
-
-    pub fn add_param_spec(&mut self, param: ParamSpec) -> &mut FnSpec {
+    pub fn add_param(&mut self, param: ParamSpec) -> &mut FnSpec {
         self.params.push(param);
         return self;
     }
@@ -493,7 +445,7 @@ impl FnSpec {
             } else {
                 "";
             };
-            parts.push(`${binding}${p.name}: ${p.type_str}${default}`);
+            parts.push(`${binding}${p.name}: ${p.type}${default}`);
         }
         sig.push_str(&parts.join(", "));
         sig.push(')');
