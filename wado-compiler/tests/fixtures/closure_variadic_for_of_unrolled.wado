@@ -1,0 +1,19 @@
+// A variadic for-of unrolled inside a closure allocates its fresh locals in
+// the closure's own frame, and each copy of a `mut` binding stays mutable.
+
+fn total<..T: Display>(t: [..T]) -> String {
+    let render = || {
+        let mut out = "";
+        for let v of t {
+            let mut s = `${v}`;
+            s.push_str(",");
+            out.push_str(&s);
+        }
+        return out;
+    };
+    return render();
+}
+
+test "unrolled in a closure" {
+    assert total([1, "a", true]) == "1,a,true,";
+}

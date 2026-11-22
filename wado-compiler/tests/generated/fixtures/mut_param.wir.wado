@@ -1187,11 +1187,11 @@ fn "mut_param.wado/$cm_export__$test_8_a_mut_param_as_a_loop_counter"() {
 
 fn "mut_param.wado/$cm_export__$test_9_a_closure_s_mut_param"() {
     let y: i32;
-    let $v_1: i32;
+    let n_11: i32;
     let $local_2: i32;
-    if @unlikely(local.tee $v_1(local.tee y(black_box(10)) + 1) != 11) {
+    if @unlikely(local.tee n_11(local.tee y(black_box(10)) + 1) != 11) {
         cold_path;
-        "mut_param.wado/$test_9_a_closure_s_mut_param$cold3"(y, $v_1);
+        "mut_param.wado/$test_9_a_closure_s_mut_param$cold3"(y, n_11);
         unreachable;
     }
     if @unlikely(y != 10) {
@@ -1199,13 +1199,13 @@ fn "mut_param.wado/$cm_export__$test_9_a_closure_s_mut_param"() {
         "mut_param.wado/$test_9_a_closure_s_mut_param$cold2"(y);
         unreachable;
     }
-    $v_1 = local.tee y(black_box(4));
+    n_11 = local.tee y(black_box(4));
     $local_2 = 0;
     b106: block {
         l107: loop {
-            break_if b106 $v_1 <= 0;
-            $local_2 = $local_2 + $v_1;
-            $v_1 = $v_1 - 1;
+            break_if b106 n_11 <= 0;
+            $local_2 = $local_2 + n_11;
+            n_11 = n_11 - 1;
             continue l107;
         };
     };

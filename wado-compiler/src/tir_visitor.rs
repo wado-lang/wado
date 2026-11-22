@@ -516,9 +516,7 @@ pub trait TirMutVisitor {
                 address_taken_locals: _,
                 body_locals,
             } => {
-                for (_, type_id) in params {
-                    self.visit_type_id(type_id);
-                }
+                self.walk_locals(params);
                 for capture in captures {
                     self.visit_type_id(&mut capture.type_id);
                 }
