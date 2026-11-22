@@ -2002,26 +2002,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `receiver_type`, behind its references, is the type `spelled`
-    /// names, or a resource extending it.
-    fn receiver_is_spelled(&self, spelled: &ReceiverId, receiver_type: TypeId) -> bool {
+    /// names, or a resource extending it. A `_` the spelling writes meets
+    /// what the receiver has there.
+    fn receiver_is_spelled(&mut self, spelled: &ReceiverId, receiver_type: TypeId) -> bool {
         if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
             return true;
         }
+        let pointee = self.tysys.type_table.borrow().peel_refs(receiver_type);
+        let spelled = &match spelled.ty() {
+            Some(ty) if self.holds_written_hole(ty) => {
+                self.equate(pointee, ty);
+                spelled.at_type(Some(self.apply_infer_holes(ty)))
+            }
+            Some(_) | None => spelled.clone(),
+        };
         let table = self.tysys.type_table.borrow();
-        let pointee = table.peel_refs(receiver_type);
         if let (Some(sub), Some(sup)) = (table.nominal_def(pointee), spelled.key().decl()) {
             // Where the spelling writes the type's arguments, they are the
-            // receiver's too, but for one left to inference (`_`).
+            // receiver's too.
             let args_agree = |ty| match (
                 table.declared_type_args(ty),
                 table.declared_type_args(pointee),
             ) {
                 (Some(written), Some(held)) => {
                     written.len() == held.len()
-                        && written
-                            .iter()
-                            .zip(held.iter())
-                            .all(|(&w, &h)| w == TypeTable::UNKNOWN || w == h)
+                        && written.iter().zip(held.iter()).all(|(&w, &h)| w == h)
                 }
                 (Some(written), None) => written.is_empty(),
                 (None, _) => true,
