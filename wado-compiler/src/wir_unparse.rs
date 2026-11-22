@@ -1778,11 +1778,16 @@ impl<'a> WirUnparser<'a> {
 
             // Memory
             WirInstr::MemorySize { memory } => {
-                self.write_memory_builtin(*memory, "memory_size");
-                self.write("()");
+                self.write(match memory {
+                    WirMemoryRef::Main => "builtin::memory_size()",
+                    WirMemoryRef::Memory64 => "builtin::memory64_size()",
+                });
             }
             WirInstr::MemoryGrow { memory, delta } => {
-                self.write_memory_builtin(*memory, "memory_grow");
+                self.write(match memory {
+                    WirMemoryRef::Main => "builtin::memory_grow",
+                    WirMemoryRef::Memory64 => "builtin::memory64_grow",
+                });
                 self.write_args(&[delta]);
             }
             WirInstr::MemoryFill {
@@ -1791,7 +1796,10 @@ impl<'a> WirUnparser<'a> {
                 value,
                 len,
             } => {
-                self.write_memory_builtin(*memory, "memory_fill");
+                self.write(match memory {
+                    WirMemoryRef::Main => "builtin::memory_fill",
+                    WirMemoryRef::Memory64 => "builtin::memory64_fill",
+                });
                 self.write_args(&[dst, value, len]);
             }
             WirInstr::MemoryCopy {
@@ -1801,12 +1809,12 @@ impl<'a> WirUnparser<'a> {
                 src,
                 len,
             } => {
-                use WirMemoryRef::{Main, Wide};
+                use WirMemoryRef::{Main, Memory64};
                 self.write(match [dst_memory, src_memory] {
                     [Main, Main] => "builtin::memory_copy",
-                    [Wide, Wide] => "builtin::wide_memory_copy",
-                    [Wide, Main] => "builtin::copy_to_wide",
-                    [Main, Wide] => "builtin::copy_from_wide",
+                    [Memory64, Memory64] => "builtin::memory64_copy",
+                    [Memory64, Main] => "builtin::copy_to_memory64",
+                    [Main, Memory64] => "builtin::copy_from_memory64",
                 });
                 self.write_args(&[dst, src, len]);
             }
@@ -2013,11 +2021,11 @@ impl<'a> WirUnparser<'a> {
         self.write_args(&[a]);
     }
 
-    /// `builtin::name`, `wide_` before the name on the wide memory.
+    /// `builtin::name`, `memory64_` before the name on the memory64 memory.
     fn write_memory_builtin(&mut self, memory: WirMemoryRef, name: &str) {
         self.write(match memory {
             WirMemoryRef::Main => "builtin::",
-            WirMemoryRef::Wide => "builtin::wide_",
+            WirMemoryRef::Memory64 => "builtin::memory64_",
         });
         self.write(name);
     }

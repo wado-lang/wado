@@ -21,8 +21,8 @@ written before anything reads it. It crosses a component boundary only as a
 `ListArg` converts to: there it lends its own block for the call. See WEP:
 Linear Arrays.
 
-A `WideArray<T>` holds more than linear memory's 4 GiB, in a memory of
-64-bit addresses the module keeps to itself. Its reads are bounds-checked
+A `LinearArray64<T>` holds more than linear memory's 4 GiB, in a memory of
+64-bit addresses (`memory64`) the module keeps to itself. Its reads are bounds-checked
 one by one, which `--no-spectre-mitigation` makes cheaper.
 
 ## Synopsis
@@ -210,13 +210,13 @@ where it ends sooner, as `read_stream_prefix` reads them, but read at
 once: a copy is in flight on every stream that has bytes still to come,
 so the host fills them side by side rather than one after another.
 
-#### `pub fn copy_from_wide(&mut self, at: i32, source: &WideArray<u8>, from: i64, count: i32)`
+#### `pub fn copy_from_memory64(&mut self, at: i32, source: &LinearArray64<u8>, from: i64, count: i32)`
 
 - `contract 0 <= count`
 - `contract 0 <= at <= self.len() - count`
 - `contract 0 <= from <= source.len() - count as i64`
 
-Copies `source[from..<from + count]`, bytes of the wide memory, to
+Copies `source[from..<from + count]`, bytes of the memory64 memory, to
 `self[at..<at + count]`.
 
 #### `impl IndexValue<i32> for LinearArray<T>`
@@ -227,20 +227,20 @@ Copies `source[from..<from + count]`, bytes of the wide memory, to
 
 ##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
 
-### `pub affine struct WideArray<T: AnyBits>`
+### `pub affine struct LinearArray64<T: AnyBits>`
 
-A fixed-length array of `T` in the wide memory: the module's own memory of
-64-bit addresses, which holds more than the 4 GiB linear memory can. No
+A fixed-length array of `T` in the memory64 memory: the module's own memory
+of 64-bit addresses, which holds more than the 4 GiB linear memory can. No
 component boundary reaches it, so an array crosses one only through a
 copy into a `LinearArray`. `wado serve` keeps each memory of its pooled
-instances within wasmtime's 4 GiB reservation, so there the wide memory
-holds no more than linear memory does.
+instances within wasmtime's 4 GiB reservation, so there it holds no more
+than linear memory does.
 
 _Fields are private._
 
-#### `pub fn filled(len: i64, value: T) -> WideArray<T>`
+#### `pub fn filled(len: i64, value: T) -> LinearArray64<T>`
 
-- `contract 0 <= len <= WIDE_MOST / builtin::size_of::<T>() as i64`
+- `contract 0 <= len <= MEMORY64_MOST / builtin::size_of::<T>() as i64`
 
 An array of `len` elements, each `value`.
 
@@ -260,7 +260,7 @@ The element at `index`.
 
 Writes `value` at `index`.
 
-#### `pub fn cast<U: AnyBits>(self) -> WideArray<U>`
+#### `pub fn cast<U: AnyBits>(self) -> LinearArray64<U>`
 
 - `contract self.len() * builtin::size_of::<T>() as i64 % builtin::size_of::<U>() as i64 == 0`
 

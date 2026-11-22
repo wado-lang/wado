@@ -611,9 +611,9 @@ impl FunctionTranslator<'_, '_> {
                 i32::try_from(width).expect("a primitive is a few bytes wide"),
             ));
         }
-        // `wide_` names an operation of the wide memory.
-        let (memory, operation) = match builtin_name.strip_prefix("wide_") {
-            Some(operation) => (WirMemoryRef::Wide, operation),
+        // `memory64_` names an operation of the memory64 memory.
+        let (memory, operation) = match builtin_name.strip_prefix("memory64_") {
+            Some(operation) => (WirMemoryRef::Memory64, operation),
             None => (WirMemoryRef::Main, builtin_name),
         };
         let access = match operation {
@@ -639,12 +639,12 @@ impl FunctionTranslator<'_, '_> {
             });
         }
         let copy = {
-            use WirMemoryRef::{Main, Wide};
+            use WirMemoryRef::{Main, Memory64};
             match builtin_name {
                 "memory_copy" => Some([Main, Main]),
-                "wide_memory_copy" => Some([Wide, Wide]),
-                "copy_to_wide" => Some([Wide, Main]),
-                "copy_from_wide" => Some([Main, Wide]),
+                "memory64_copy" => Some([Memory64, Memory64]),
+                "copy_to_memory64" => Some([Memory64, Main]),
+                "copy_from_memory64" => Some([Main, Memory64]),
                 _ => None,
             }
         };
@@ -861,13 +861,13 @@ impl FunctionTranslator<'_, '_> {
                 self.operand_const_wide_int(args[0].expr)
                     .expect("a v128 bit pattern must be an i128 / u128 literal"),
             )),
-            "memory_size" | "wide_memory_size" => Some(WirInstr::MemorySize { memory }),
-            "memory_grow" | "wide_memory_grow" => Some(WirInstr::MemoryGrow {
+            "memory_size" | "memory64_size" => Some(WirInstr::MemorySize { memory }),
+            "memory_grow" | "memory64_grow" => Some(WirInstr::MemoryGrow {
                 memory,
                 delta: Box::new(self.translate_operand(args[0].expr)),
             }),
             "heap_base" => Some(WirInstr::I32Const(self.ctx.package.heap_base())),
-            "memory_fill" | "wide_memory_fill" => {
+            "memory_fill" | "memory64_fill" => {
                 let dst = self.translate_operand(args[0].expr);
                 let value = self.translate_operand(args[1].expr);
                 let len = self.translate_operand(args[2].expr);

@@ -1905,7 +1905,7 @@ mod tests {
     #[test]
     fn extend8_over_load8u_becomes_load8s() {
         let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32Load8U {
-            memory: WirMemoryRef::Wide,
+            memory: WirMemoryRef::Memory64,
             offset: 4,
             align: 0,
             addr: Box::new(WirInstr::I64Const(16)),
@@ -1918,7 +1918,7 @@ mod tests {
                 align,
                 ..
             } => {
-                assert_eq!(memory, WirMemoryRef::Wide);
+                assert_eq!(memory, WirMemoryRef::Memory64);
                 assert_eq!(offset, 4);
                 assert_eq!(align, 0);
             }

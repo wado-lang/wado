@@ -284,8 +284,8 @@ impl WasmModuleInfo {
         wir.globals.clone_from(&self.globals);
 
         assert!(
-            !wir.reaches(WirMemoryRef::Wide),
-            "a standalone module exports its one memory, so it holds no wide one"
+            !wir.reaches(WirMemoryRef::Memory64),
+            "a standalone module exports its one memory, so it holds no memory64 one"
         );
 
         // Export memory
@@ -360,15 +360,15 @@ impl WirPackage {
         reached
     }
 
-    /// Defines the wide memory where an instruction reaches it. It runs once
-    /// the optimizer is done, so a module whose every wide access was deleted
-    /// declares no memory it does not use.
-    pub fn declare_wide_memory(&mut self) {
+    /// Defines the memory64 memory where an instruction reaches it. It runs
+    /// once the optimizer is done, so a module whose every access to it was
+    /// deleted declares no memory it does not use.
+    pub fn declare_memory64(&mut self) {
         assert!(
             !self.memories.iter().any(|m| m.memory64),
-            "the wide memory is declared once"
+            "the memory64 memory is declared once"
         );
-        if self.reaches(WirMemoryRef::Wide) {
+        if self.reaches(WirMemoryRef::Memory64) {
             self.memories.push(WirMemory {
                 min: 0,
                 max: None,
@@ -1745,7 +1745,7 @@ pub enum WirInstr {
     },
 
     // === Memory ===
-    // An address and a length are i64 in `WirMemoryRef::Wide` and i32 in
+    // An address and a length are i64 in `WirMemoryRef::Memory64` and i32 in
     // `Main`; a copy between the two takes an i32 length.
     MemorySize {
         memory: WirMemoryRef,
@@ -3441,7 +3441,7 @@ pub struct WirMemory {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WirMemoryRef {
     Main,
-    Wide,
+    Memory64,
 }
 
 /// A global variable.

@@ -81,9 +81,9 @@ struct WirEmitter<'a> {
     strip_names: bool,
     /// Fine-grained codegen feature flags (from the CLI's `-f <flag>` option).
     codegen_flags: CodegenFlags,
-    /// The module's index of the wide memory, where it defines one: after
+    /// The module's index of its memory64 memory, where it defines one: after
     /// every imported memory, at the `memory64` definition's place.
-    wide_memory_index: Option<u32>,
+    memory64_index: Option<u32>,
 }
 
 impl<'a> WirEmitter<'a> {
@@ -93,13 +93,13 @@ impl<'a> WirEmitter<'a> {
             .iter()
             .filter(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
             .count();
-        let wide_memory_index = wir
+        let memory64_index = wir
             .memories
             .iter()
             .position(|m| m.memory64)
             .map(|defined| u32::try_from(imported_memories + defined).unwrap());
         Self {
-            wide_memory_index,
+            memory64_index,
             wir,
             type_index_map: IndexMap::default(),
             variant_case_types: IndexMap::default(),
@@ -659,9 +659,9 @@ impl<'a> WirEmitter<'a> {
     fn memory_index(&self, memory: WirMemoryRef) -> u32 {
         match memory {
             WirMemoryRef::Main => 0,
-            WirMemoryRef::Wide => self
-                .wide_memory_index
-                .expect("a module reaching the wide memory defines it"),
+            WirMemoryRef::Memory64 => self
+                .memory64_index
+                .expect("a module reaching the memory64 memory defines it"),
         }
     }
 

@@ -2056,7 +2056,7 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
   synchronous import's `list<T>` of numbers is a `&ListView<T>`, which a
   `List<T>` converts to by copying and a `&LinearArray<T>` by lending its block;
   `LinearBuffer` reads a `Stream<u8>` into linear memory as far as a parser asks;
-  `WideArray<T>` holds past 4 GiB, in the module's own memory of 64-bit
+  `LinearArray64<T>` holds past 4 GiB, in the module's own memory of 64-bit
   addresses (`memory64`), and copies to and from a `LinearArray<u8>`
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
 - [`core:uri`](./stdlib-core-uri.md) — RFC 3986 URIs and URI references as
