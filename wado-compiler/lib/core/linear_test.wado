@@ -214,7 +214,7 @@ fn trickled(content: List<u8>, step: i32, len: i32) -> List<u8> with Stream {
     return array.to_list();
 }
 
-test "streams read at once take a handler's items, up to the length or the stream's end" {
+test "a stream's prefix takes a handler's items, up to the length or the stream's end" {
     assert trickled(counting(0, 10000), 3000, 7000) == counting(0, 7000);
     assert trickled(counting(0, 5), 3, 9) == counting(0, 5);
 }
