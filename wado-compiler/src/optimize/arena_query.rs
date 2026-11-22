@@ -393,7 +393,7 @@ pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
 
 /// The local an operand reads: a bare skeleton `Local`, or the promoted value
 /// that extracts back to one.
-pub(super) fn operand_local(body: &Body, op: Operand) -> Option<u32> {
+pub(crate) fn operand_local(body: &Body, op: Operand) -> Option<u32> {
     match op {
         Operand::Expr(e) => match &body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some(*index),

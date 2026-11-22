@@ -2204,16 +2204,7 @@ impl<'a> PatternLowerer<'a> {
                 let saved_count = self.local_count;
                 let saved_locals = std::mem::take(&mut self.locals);
                 self.local_count = (params.len() + body_locals.len()) as u32;
-                self.locals = params
-                    .iter()
-                    .map(|(name, ty)| TirLocal {
-                        name: name.clone(),
-                        type_id: *ty,
-                        is_mut: false,
-                        span: Span::default(),
-                    })
-                    .chain(body_locals.iter().cloned())
-                    .collect();
+                self.locals = params.iter().chain(body_locals.iter()).cloned().collect();
 
                 self.lower_expr(body, type_table);
 
