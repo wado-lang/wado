@@ -1,7 +1,8 @@
 // A returned local whose reference something outside the frame keeps is
 // copied at the `return`, however the reference gets there: into a global,
 // through a closure the callee did not see minted, through a closure a call
-// returned, or as the payload of an element a builtin copies across.
+// returned, as the payload of an element a builtin copies across, or by a
+// closure storing one of its captures into another.
 
 use { println, Stdout } from "core:cli";
 
@@ -52,6 +53,17 @@ fn through_payload(sink: &mut List<Option<&List<i32>>>) -> List<i32> {
     return n;
 }
 
+#[inline(never)]
+fn through_capture(sink: &mut List<&List<List<i32>>>) -> List<List<i32>> {
+    let mut out: List<List<i32>> = [];
+    let mut push = |v: i32| {
+        out.push([v]);
+        sink.push(&out);
+    };
+    push(1);
+    return out;
+}
+
 export fn run() with Stdout {
     let mut a = into_global();
     a.push(2);
@@ -64,10 +76,13 @@ export fn run() with Stdout {
     let mut u: List<Option<&List<i32>>> = [];
     let mut d = through_payload(&mut u);
     d.push(2);
-    println(`${KEPT[0].len()} ${s[0].len()} ${t[0].len()} ${u[0].unwrap().len()}`);
+    let mut v: List<&List<List<i32>>> = [];
+    let mut e = through_capture(&mut v);
+    e[0].push(2);
+    println(`${KEPT[0].len()} ${s[0].len()} ${t[0].len()} ${u[0].unwrap().len()} ${v[0][0].len()}`);
 }
 
 __DATA__
 {
-    "stdout": "1 1 1 1\n"
+    "stdout": "1 1 1 1 1\n"
 }

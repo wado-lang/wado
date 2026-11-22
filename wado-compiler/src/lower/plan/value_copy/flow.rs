@@ -453,6 +453,19 @@ fn summarize(package: &Package<'_>, summaries: &[Summary], func: &TirFunction) -
             }
         }
     }
+    // A write is never trivial: one location the parameter reaches holding
+    // another is not a fact of every call, though both lie in one `Deep`.
+    for &(into, from) in &b.writes {
+        let sources: Vec<Iface> = b.g.solved(from).into_iter().map(of).collect();
+        for holder in b.g.solved(into) {
+            if !seen.contains(&holder) || of(holder) == Iface::Escape {
+                continue;
+            }
+            for &source in &sources {
+                holds.insert((Holder::At(of(holder)), source));
+            }
+        }
+    }
     let owner: IndexMap<u32, u32> = b.locals.iter().map(|(&local, &loc)| (loc, local)).collect();
     let mut outlived: IndexSet<u32> = IndexSet::default();
     let mut work: Vec<u32> = escaped.clone();
@@ -519,6 +532,8 @@ struct Body<'p, 'a> {
     this: Option<u32>,
     /// The functions whose summaries the body read.
     read: IndexSet<u32>,
+    /// Each store the body makes, `(into, from)`.
+    writes: Vec<(u32, u32)>,
     /// The function location running each function, for a call through it.
     function_locations: IndexMap<u32, u32>,
     /// The function location running every function of a shape.
@@ -559,6 +574,7 @@ impl<'p, 'a> Body<'p, 'a> {
             label_storage: IndexMap::default(),
             this: None,
             read: IndexSet::default(),
+            writes: Vec::new(),
             function_locations: IndexMap::default(),
             shape_locations: IndexMap::default(),
         };
@@ -615,6 +631,12 @@ impl<'p, 'a> Body<'p, 'a> {
         let node = self.g.node();
         self.g.add(node, loc);
         node
+    }
+
+    /// Store what `from` names into what `into` names, as the body does.
+    fn write(&mut self, into: u32, from: u32) {
+        self.writes.push((into, from));
+        self.g.store(into, from);
     }
 
     fn held_by(&mut self, reference: u32) -> u32 {
@@ -701,7 +723,7 @@ impl<'p, 'a> Body<'p, 'a> {
                 Holder::At(Iface::Escape) => self.g.copy(source, self.escape),
                 Holder::At(at) => {
                     if let Some(into) = node_of(self, at) {
-                        self.g.store(into, source);
+                        self.write(into, source);
                     }
                 }
             }
@@ -932,7 +954,7 @@ impl<'p, 'a> Body<'p, 'a> {
         }
         let held = self.held_by(result);
         self.g.copy(held, result);
-        self.g.store(written, result);
+        self.write(written, result);
     }
 
     fn builtin_call(
@@ -1011,7 +1033,7 @@ impl<'p, 'a> Body<'p, 'a> {
                 }
             };
             for dst in into.into_iter().filter_map(|p| handed[p]) {
-                self.g.store(dst, kept);
+                self.write(dst, kept);
             }
         }
         Some(result)
@@ -1178,7 +1200,7 @@ impl<'p, 'a> Body<'p, 'a> {
         } else {
             let place = self.referenced(target);
             if let Some(v) = value {
-                self.g.store(place, v);
+                self.write(place, v);
             }
         }
     }
