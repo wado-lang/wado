@@ -1,6 +1,6 @@
 # Experts on the CPU
 
-A design sketch for roadmap item 1 of [TODO.md](./TODO.md): gpt-oss-20b at
+A design sketch for roadmap item 1 of [TODO.md](../TODO.md): gpt-oss-20b at
 1/1.5 of llama.cpp's speed on the RTX 4060 Ti. The GPU holds as many experts as
 its budget allows. Today an expert it lacks is written into a pool slot before
 the layer runs. Under this design, the CPU computes that expert where the bytes

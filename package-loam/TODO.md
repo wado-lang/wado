@@ -21,7 +21,7 @@ beside the roadmap and holds no item up.
    tokens on the RTX 4060 Ti at least 1/1.5 times as fast as the fastest of
    llama.cpp's Vulkan arms
    ([measured](./benchmark/README.md#gpt-oss-20b)). Loading the model is not
-   timed. [Experts on the CPU](./cpu-experts.md) sketches the way there.
+   timed. [Experts on the CPU](./docs/cpu-experts.md) sketches the way there.
 
 ## Later
 
