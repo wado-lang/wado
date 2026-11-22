@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795350091709,
+  "lastUpdate": 1795365984942,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81061,6 +81061,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d4992bb09711013b1335cf53aeb4ae97d4dfdaf7"
         },
         "date": 1795350091231,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353496,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b65db2f9a0d7f3c5b5af4050f83cdfb2d1b3eba6",
+          "message": "Merge pull request #2728 from wado-lang/ccr-86473ff4-op4rdq\n\nchore(claude): let sessions merge a pull request without a prompt",
+          "timestamp": "2026-11-23T01:33:01+09:00",
+          "tree_id": "d28c6411a043a31652d83a440de60b64b34cd1ef",
+          "url": "https://github.com/wado-lang/wado/commit/b65db2f9a0d7f3c5b5af4050f83cdfb2d1b3eba6"
+        },
+        "date": 1795365983968,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
