@@ -97,3 +97,10 @@ Each step keeps every fixture passing and deletes what it replaces.
 - [ ] Selection and associated types wait for every row they read.
 - [ ] The effect check solves nothing: `solve_rows` and the write-back are
   deleted.
+
+## Known gaps
+
+- Argument synthesis (`synth_method_call`) types a method call without
+  elaborating it, so the effect variables it mints are never solved. A
+  selection over a synthesized argument reads them as the empty row, and
+  nothing closes them (`closure_row_in_synthesized_argument.wado`).

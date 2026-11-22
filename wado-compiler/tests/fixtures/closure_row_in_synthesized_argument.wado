@@ -1,0 +1,15 @@
+// A closure literal inside an argument the call synthesizes before it resolves
+// keeps the row its body was solved to.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let home: List<i32> = [0, 1, 0];
+    let xs: List<i32> = [0, 1, 2];
+    let mut again: List<i32> = [];
+    again.extend(&xs.into_iter().filter(|id| home[id] != 1).collect());
+    println(`${again.len()}`);
+}
+
+__DATA__
+{"stdout": "2\n"}
