@@ -184,14 +184,22 @@ impl Monomorphizer {
             return recorded.map(<[TypeId]>::to_vec);
         };
         let info = template.method_info.as_ref()?;
-        let args = self
-            .struct_info_for_method(
-                receiver,
-                type_table,
-                &info.method_name,
-                info.trait_name.as_ref(),
-            )
-            .map(|(_, args)| args);
+        let function_position = info
+            .receiver()
+            .is_function()
+            .then(|| type_table.function_position(receiver))
+            .flatten();
+        let args = match function_position {
+            Some(function) => Some(vec![function]),
+            None => self
+                .struct_info_for_method(
+                    receiver,
+                    type_table,
+                    &info.method_name,
+                    info.trait_name.as_ref(),
+                )
+                .map(|(_, args)| args),
+        };
         // A slot only the trait reference binds shows in no receiver argument,
         // so the call recorded every slot.
         match recorded {

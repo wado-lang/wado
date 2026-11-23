@@ -1781,6 +1781,21 @@ impl TraitEnv {
             .any(|param| !param.bounds.is_empty())
     }
 
+    /// Every impl whose target is a function type that implements `trait_`
+    /// with methods. A function type is keyed by its whole spelling, so a
+    /// target with a binder in it (`fn(T)`, `fn() with E`) sits under a key
+    /// no instance spells: only matching it against the instance finds it.
+    pub(crate) fn methodful_function_impls(
+        &self,
+        trait_: DefId,
+    ) -> impl Iterator<Item = DefId> + '_ {
+        self.impl_index
+            .iter()
+            .filter(|(key, _)| matches!(key, ImplTargetKey::Function { .. }))
+            .flat_map(|(_, entries)| entries.iter().copied())
+            .filter(move |&entry| self.methodful_header_matches(entry, trait_))
+    }
+
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         let header = &self.impl_headers[&entry];
         !header.methods.is_empty() && header.trait_def() == Some(trait_)

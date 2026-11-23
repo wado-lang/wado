@@ -104,15 +104,9 @@ Each step keeps every fixture passing and deletes what it replaces.
   elaborating it, so the effect variables it mints are never solved. A
   selection over a synthesized argument reads them as the empty row, and
   nothing closes them (`closure_row_in_synthesized_argument.wado`).
-- The solver spells every effect parameter of the asking frame by one head
-  (`UndeclaredEffect`), so it cannot tell an impl's `E` from its method's own
-  `F`: `impl<T> Tr for Pair<T, T>` meets `Pair<fn() with E, fn() with F>`.
-- An impl's row binder meets any row whole (`SolverType::AnyRow`), so the
-  effects written beside it go unread: `impl<effect E> Tr for fn() with (E, Stdout)`
-  meets `fn()`, which performs no `Stdout`.
-- An impl whose target is a function type binds no effect parameter from its
-  receiver: `impl_effect_params` and `impl_effect_binding` read the target's
-  head arguments, and a function type has none. Under
-  `impl<effect E> Held for fn() with E { type Out = fn() with E; … }`, a loud
-  closure's `held()` is typed `fn() -> () with E`, and a selection on it is
-  refused.
+- An asking frame's effect parameter in a bound (`T: Tr<fn() with E>`) is read
+  as an open row, not as `E`. A request for `Tr<fn() with F>`, where `F` is
+  another of the frame's parameters, is answered by that bound. Reading it as
+  `E` is not enough alone: a call does not substitute its callee's effect
+  parameters into the callee's bounds, and monomorphization carries no effect
+  arguments, so a dispatch through such a bound would find no impl.

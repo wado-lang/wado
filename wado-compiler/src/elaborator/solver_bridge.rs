@@ -54,9 +54,11 @@ enum DeclKey {
     FnShape {
         is_mut: bool,
     },
-    /// One head for every effect a function type names that the program does
-    /// not declare: an effect binder, or a name that reached nothing.
+    /// One head for every effect a function type names that reached nothing.
     UndeclaredEffect,
+    /// An effect parameter of the asking frame, by name: rigid, so it is an
+    /// effect of its own, and one frame never declares two of one name.
+    EffectParam(String),
 }
 
 /// Why the lowering states nothing about a type, most telling first: a type
@@ -291,6 +293,13 @@ impl Lowering {
         {
             lowering.builtin(name);
         }
+        for param in resolutions.effect_params() {
+            let head = TypeDeclId(intern(
+                &mut lowering.decls,
+                DeclKey::EffectParam(param.name().to_string()),
+            ));
+            lowering.effects.insert(param, head);
+        }
         lowering
     }
 
@@ -367,7 +376,7 @@ impl Lowering {
     /// what `table` has it solved to ([`TypeTable::read_effect_row`]). An
     /// effect parameter here is the asking frame's own, rigid: a body generic
     /// over it holds for every row, so it meets only an impl's row binder
-    /// ([`SolverType::AnyRow`]), never a row an impl writes out. A variable
+    /// ([`SolverType::OpenRow`]), never a row an impl writes out. A variable
     /// not solved yet selects nothing here: an impl is chosen as if it
     /// performed nothing.
     fn effect_row(&self, table: &TypeTable, effects: &[EffectRef]) -> SolverType {
@@ -634,7 +643,7 @@ impl Lowering {
                     })
                     .collect();
                 let row = if open {
-                    SolverType::AnyRow
+                    SolverType::OpenRow(as_set(heads))
                 } else {
                     closed_row(heads)
                 };
@@ -849,15 +858,19 @@ pub(super) fn lower_impls<'a>(
 
 /// A row naming the effects `heads`, as a set: one order, each once, so rows
 /// written in different orders are one type.
-fn closed_row(mut heads: Vec<TypeDeclId>) -> SolverType {
-    heads.sort_unstable();
-    heads.dedup();
+fn closed_row(heads: Vec<TypeDeclId>) -> SolverType {
     SolverType::Tuple(
-        heads
+        as_set(heads)
             .into_iter()
             .map(|head| SolverType::Decl(head, Vec::new()))
             .collect(),
     )
+}
+
+fn as_set(mut heads: Vec<TypeDeclId>) -> Vec<TypeDeclId> {
+    heads.sort_unstable();
+    heads.dedup();
+    heads
 }
 
 /// An impl header as the program states it.
@@ -1038,7 +1051,10 @@ fn representative(
             return_type: TypeTable::UNIT,
             effects: Vec::new(),
         }),
-        DeclKey::AnonymousStruct | DeclKey::TemplateShape | DeclKey::UndeclaredEffect => None,
+        DeclKey::AnonymousStruct
+        | DeclKey::TemplateShape
+        | DeclKey::UndeclaredEffect
+        | DeclKey::EffectParam(_) => None,
     }
 }
 
@@ -1196,7 +1212,8 @@ impl SolverBridge {
                 DeclKey::Def(_)
                 | DeclKey::AnonymousStruct
                 | DeclKey::TemplateShape
-                | DeclKey::UndeclaredEffect => false,
+                | DeclKey::UndeclaredEffect
+                | DeclKey::EffectParam(_) => false,
             };
             if copies {
                 self.program.facts.insert((head, copyable), Fact::default());
@@ -1395,7 +1412,10 @@ impl SolverBridge {
             DeclKey::Def(_) => Some(CompilerItem::ReflectNewtype),
             DeclKey::AnonymousStruct => Some(CompilerItem::ReflectStruct),
             DeclKey::TemplateShape => Some(CompilerItem::ReflectTemplate),
-            DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => None,
+            DeclKey::Builtin(_)
+            | DeclKey::FnShape { .. }
+            | DeclKey::UndeclaredEffect
+            | DeclKey::EffectParam(_) => None,
         };
         for (&id, def) in program.impls().iter().filter(|(id, _)| **id >= first) {
             if !matches!(def.origin, ImplOrigin::Derived | ImplOrigin::Marker) {
@@ -1996,7 +2016,8 @@ impl SolverBridge {
                 DeclKey::Def(_)
                 | DeclKey::Builtin(_)
                 | DeclKey::FnShape { .. }
-                | DeclKey::UndeclaredEffect => {
+                | DeclKey::UndeclaredEffect
+                | DeclKey::EffectParam(_) => {
                     let Some(shape) = representative(tysys, table, lowering.tuple, key) else {
                         continue;
                     };
@@ -2353,9 +2374,10 @@ impl SolverBridge {
                             trait_,
                         })
                         .collect(),
-                    DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => {
-                        Vec::new()
-                    }
+                    DeclKey::Builtin(_)
+                    | DeclKey::FnShape { .. }
+                    | DeclKey::UndeclaredEffect
+                    | DeclKey::EffectParam(_) => Vec::new(),
                 }
             })
             .collect();

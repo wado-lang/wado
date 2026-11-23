@@ -1,0 +1,31 @@
+// A newtype over a function type is a declaration of its own: an impl
+// targeting it binds the newtype's arguments, not the function type under it.
+use { println, Stdout } from "core:cli";
+
+type Wrapped<T> = fn(T);
+
+trait Arg with () {
+    fn arg(&self) -> String;
+}
+
+impl<T: Default + Display> Arg for Wrapped<T> {
+    fn arg(&self) -> String {
+        let d: T = T::default();
+        return `${d}`;
+    }
+}
+
+impl<T> Wrapped<T> {
+    fn tag(&self) -> String {
+        return "own";
+    }
+}
+
+export fn run() with Stdout {
+    let w: Wrapped<i32> = |_x: i32| {};
+    println(w.arg());
+    println(w.tag());
+}
+
+__DATA__
+{"stdout": "0\nown\n"}

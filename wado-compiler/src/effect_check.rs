@@ -855,6 +855,15 @@ fn spelled_target_args(types: &TypeTable, def: DefId) -> Vec<FqTypeName> {
         .collect()
 }
 
+/// What [`EffectIndex::close_over_args`] does with an effect parameter of the
+/// impl that its arguments leave open: keep it in what the impl brings, or
+/// drop it for the caller to resolve.
+#[derive(Clone, Copy)]
+enum UnfilledParam {
+    Keep,
+    Drop,
+}
+
 /// The key one `impl Trait for Type` is recorded under. `None` for a trait
 /// reaching no declaration.
 fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKey> {
@@ -2462,7 +2471,9 @@ fn dispatch_effects(
     };
     let effects = index.method_effects(func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
-        index.brought_by_dispatch(func_ref, rows)
+        let receiver_expr = if self_in_args { args.first() } else { receiver };
+        let receiver_types = receiver_expr.map(|r| sem.expr_types(r)).unwrap_or_default();
+        index.brought_by_dispatch(func_ref, &receiver_types, rows)
     } else {
         Brought::default()
     };
@@ -2624,7 +2635,13 @@ impl EffectIndex<'_> {
     /// What a dispatch's type arguments bring to the callee's open effect
     /// parameter: the impl of a trait method's receiver, and each bounded
     /// parameter of the method's impl and of the method itself.
-    fn brought_by_dispatch(&self, func_ref: &FunctionRef, rows: &Rows) -> Brought {
+    /// `receiver_types` is the call's receiver from each walk, where it has one.
+    fn brought_by_dispatch(
+        &self,
+        func_ref: &FunctionRef,
+        receiver_types: &[TypeId],
+        rows: &Rows,
+    ) -> Brought {
         let mut brought = Brought::default();
         let Some(method_info) = func_ref.method_info.as_ref() else {
             return brought;
@@ -2652,42 +2669,64 @@ impl EffectIndex<'_> {
             // open is resolved from the method's bounds below. A trait's
             // default method has only the receiver's impl to read. The
             // receiver's name spells no unsolved row, so its arguments are read
-            // off the instantiation where there is one.
-            let receiver_args: Vec<FqTypeName> = match func_ref.monomorph_info.as_ref() {
-                Some(info) if !info.impl_type_args.is_empty() => info
-                    .impl_type_args
+            // off the instantiation where there is one. A function-type target
+            // reads each walk's receiver, as an argument's rows are read off
+            // every walk.
+            let functions: Vec<Vec<FqTypeName>> = if method_info.receiver().is_function() {
+                receiver_types
                     .iter()
-                    .map(|&arg| self.spelled_solved(arg, rows))
-                    .collect(),
-                _ => method_info.struct_type_args.clone(),
+                    .filter_map(|&r| self.types.function_position(r))
+                    .map(|function| vec![self.spelled_solved(function, rows)])
+                    .collect()
+            } else {
+                Vec::new()
             };
-            if let Some((method, block)) = impl_method {
+            let receiver_arg_lists: Vec<Vec<FqTypeName>> = match func_ref.monomorph_info.as_ref() {
+                Some(info) if !info.impl_type_args.is_empty() => vec![
+                    info.impl_type_args
+                        .iter()
+                        .map(|&arg| self.spelled_solved(arg, rows))
+                        .collect(),
+                ],
+                _ if !functions.is_empty() => functions,
+                _ => vec![method_info.struct_type_args.clone()],
+            };
+            let selected = impl_method.map(|(method, block)| {
                 let declared = self
                     .fn_effects
                     .get(&method)
                     .map(Vec::as_slice)
                     .unwrap_or_default();
-                let target_args = spelled_target_args(self.types, block);
                 let bounds = self
                     .receiver_bounds
                     .get(&method)
                     .map(|b| &**b)
                     .unwrap_or_default();
-                brought.effects.extend(
-                    self.close_over_args(declared, bounds, &target_args, &receiver_args, None)
-                        .into_iter()
-                        .filter(|e| !e.is_param()),
-                );
-            } else {
-                match self.impl_effects.get(&(receiver, key)) {
-                    Some(entry) => brought.effects.extend(self.close_over_args(
-                        &entry.declared,
-                        &entry.bounds,
-                        &entry.target_args,
-                        &receiver_args,
+                (declared, bounds, spelled_target_args(self.types, block))
+            });
+            let impl_entry = self.impl_effects.get(&(receiver, key));
+            for receiver_args in &receiver_arg_lists {
+                if let Some((declared, bounds, target_args)) = &selected {
+                    brought.effects.extend(self.close_over_args(
+                        declared,
+                        bounds,
+                        target_args,
+                        receiver_args,
                         None,
-                    )),
-                    None => brought.open = true,
+                        UnfilledParam::Drop,
+                    ));
+                } else {
+                    match impl_entry {
+                        Some(entry) => brought.effects.extend(self.close_over_args(
+                            &entry.declared,
+                            &entry.bounds,
+                            &entry.target_args,
+                            receiver_args,
+                            None,
+                            UnfilledParam::Keep,
+                        )),
+                        None => brought.open = true,
+                    }
                 }
             }
         }
@@ -2780,12 +2819,7 @@ impl EffectIndex<'_> {
     /// what `rows` solved it to: an impl names no variable. One left unsolved
     /// stands for the empty row, as it does once the check is done.
     fn spelled_solved(&self, id: TypeId, rows: &Rows) -> FqTypeName {
-        self.types.fq_type_name(id).map_rows(&|row| {
-            rows.row(row)
-                .into_iter()
-                .filter(|effect| !effect.is_var())
-                .collect()
-        })
+        rows.spelled(&self.types.fq_type_name(id))
     }
 
     /// Adds what the type argument `arg` of a parameter bounded by `traits`
@@ -2810,6 +2844,7 @@ impl EffectIndex<'_> {
                         &entry.target_args,
                         args,
                         None,
+                        UnfilledParam::Keep,
                     ));
                 }
                 None => match self.blanket_for(*key, arg) {
@@ -2858,6 +2893,7 @@ impl EffectIndex<'_> {
         target_args: &[FqTypeName],
         args: &[FqTypeName],
         receiver: Option<&[TypeArg<'_>]>,
+        unfilled: UnfilledParam,
     ) -> IndexSet<EffectRef> {
         let mut out: IndexSet<EffectRef> = IndexSet::default();
         for effect in declared {
@@ -2887,7 +2923,9 @@ impl EffectIndex<'_> {
             }
             out.extend(brought.effects);
             // One bound left open keeps the parameter, whatever the others fill.
-            if brought.open || !(filled || brought.determined) {
+            if matches!(unfilled, UnfilledParam::Keep)
+                && (brought.open || !(filled || brought.determined))
+            {
                 out.insert(effect.clone());
             }
         }
@@ -2923,6 +2961,7 @@ impl EffectIndex<'_> {
             &spelled_target_args(self.types, block),
             &args,
             Some(&receiver),
+            UnfilledParam::Keep,
         )
     }
 
@@ -3680,6 +3719,17 @@ impl Rows {
                 .borrow_mut()
                 .entry(var.to_string())
                 .or_insert_with(|| self.solved.get(var).map(Vec::len));
+        })
+    }
+
+    /// `name` with each row as [`Self::row`] solves it, a variable still
+    /// unsolved left out.
+    fn spelled(&self, name: &FqTypeName) -> FqTypeName {
+        name.map_rows(&|row| {
+            self.row(row)
+                .into_iter()
+                .filter(|effect| !effect.is_var())
+                .collect()
         })
     }
 

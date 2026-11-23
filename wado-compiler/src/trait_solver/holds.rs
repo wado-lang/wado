@@ -943,7 +943,7 @@ impl Query<'_> {
             },
             SolverType::Param(_)
             | SolverType::Pack(_)
-            | SolverType::AnyRow
+            | SolverType::OpenRow(_)
             | SolverType::Var(_) => ty.clone(),
         }
     }
@@ -1192,7 +1192,7 @@ fn may_be_literal(program: &Program, ty: &SolverType) -> bool {
         | SolverType::Ref { .. }
         | SolverType::Tuple(_)
         | SolverType::Projection { .. }
-        | SolverType::AnyRow => false,
+        | SolverType::OpenRow(_) => false,
     }
 }
 
@@ -1255,7 +1255,7 @@ fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
         | SolverType::Pack(_)
         | SolverType::Ref { .. }
         | SolverType::Projection { .. }
-        | SolverType::AnyRow
+        | SolverType::OpenRow(_)
         | SolverType::Var(_) => None,
     }
 }
@@ -1508,7 +1508,7 @@ fn projection_parts<'t>(
 fn params_past(ty: &SolverType) -> u32 {
     match ty {
         SolverType::Param(index) | SolverType::Pack(index) => index + 1,
-        SolverType::AnyRow | SolverType::Var(_) => 0,
+        SolverType::OpenRow(_) | SolverType::Var(_) => 0,
         SolverType::Decl(_, inner) | SolverType::Tuple(inner) => {
             inner.iter().map(params_past).max().unwrap_or(0)
         }
@@ -1585,7 +1585,7 @@ impl Unifier {
             | SolverType::Ref { .. }
             | SolverType::Tuple(_)
             | SolverType::Projection { .. }
-            | SolverType::AnyRow => ty.clone(),
+            | SolverType::OpenRow(_) => ty.clone(),
         }
     }
 
@@ -1639,7 +1639,9 @@ impl Unifier {
             }
             (SolverType::Var(x), _) => self.bind(*x, &b),
             (_, SolverType::Var(y)) => self.bind(*y, &a),
-            (SolverType::AnyRow, _) | (_, SolverType::AnyRow) => true,
+            (SolverType::OpenRow(written), row) | (row, SolverType::OpenRow(written)) => {
+                SolverType::open_row_meets(written, row)
+            }
             (SolverType::Projection { .. }, _) | (_, SolverType::Projection { .. }) => {
                 if a == b {
                     return true;
@@ -1730,8 +1732,9 @@ fn match_target(
             deferred.push((target.clone(), ty.clone()));
             true
         }
-        // An open row meets any row, on either side.
-        (SolverType::AnyRow, _) | (_, SolverType::AnyRow) => true,
+        (SolverType::OpenRow(written), row) | (row, SolverType::OpenRow(written)) => {
+            SolverType::open_row_meets(written, row)
+        }
         (
             SolverType::Decl(..)
             | SolverType::Ref { .. }
@@ -1827,9 +1830,10 @@ fn has_projection(ty: &SolverType) -> bool {
         SolverType::Projection { .. } => true,
         SolverType::Decl(_, inner) | SolverType::Tuple(inner) => inner.iter().any(has_projection),
         SolverType::Ref { inner, .. } => has_projection(inner),
-        SolverType::Param(_) | SolverType::Pack(_) | SolverType::AnyRow | SolverType::Var(_) => {
-            false
-        }
+        SolverType::Param(_)
+        | SolverType::Pack(_)
+        | SolverType::OpenRow(_)
+        | SolverType::Var(_) => false,
     }
 }
 

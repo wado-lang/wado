@@ -33,7 +33,9 @@ use super::{AbstractSelections, Elaborator};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::method_lookup::{ImplParamSlots, impl_target_args, impl_target_head_args};
+use crate::elaborator::method_lookup::{
+    ImplParamSlots, impl_target_args, impl_target_head_args, impl_target_written_args,
+};
 use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::MethodNames;
 use crate::elaborator::sig;
@@ -969,11 +971,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// and its bound parameters share one set of positions.
     pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
         // Peeled as the frame peels it.
-        let inner = match ty {
-            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
-            other => other,
-        };
-        let Some(args) = impl_target_head_args(inner) else {
+        let Some(args) = impl_target_written_args(ty.referent()) else {
             return Vec::new();
         };
         args.iter().map(|arg| self.resolve_type(arg)).collect()

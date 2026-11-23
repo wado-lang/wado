@@ -241,12 +241,17 @@ pub(super) struct MethodInferenceInput<'a> {
 /// Naming and matching both read it here, so neither pins a position the
 /// other leaves free (WEP 2026-08-12).
 pub(super) fn impl_target_args(impl_ty: &Type) -> Option<&[Type]> {
-    let inner = match impl_ty {
-        Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
-        other => other,
-    };
-    match inner {
+    match impl_ty.referent() {
         Type::Tuple(elems) => Some(elems),
+        other => impl_target_written_args(other),
+    }
+}
+
+/// [`impl_target_args`] minus the tuple target: a head's own arguments, or a
+/// function type, which names no head, as its one position.
+pub(super) fn impl_target_written_args(impl_ty: &Type) -> Option<&[Type]> {
+    match impl_ty {
+        Type::Function(_) => Some(std::slice::from_ref(impl_ty)),
         other => impl_target_head_args(other),
     }
 }
@@ -356,7 +361,9 @@ impl TypeSystem {
     }
 
     /// What a receiver fills the positions [`impl_target_args`] reads, a
-    /// reference read through to its pointee's (WEP 2026-08-12).
+    /// reference read through to its pointee's (WEP 2026-08-12). A block
+    /// targeting a function type reads
+    /// [`TypeTable::function_target_position`] instead.
     pub(crate) fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
         let pointee = self.through_ref(receiver);
         let tt = self.type_table.borrow();
@@ -2663,6 +2670,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Extract type param mappings from the impl header before mutating self.
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
+        let function_position = receiver_type_id.and_then(|r| {
+            self.tysys
+                .type_table
+                .borrow()
+                .function_target_position(impl_ref.0, r)
+        });
+        let receiver_type_args = match &function_position {
+            Some(function) => Some(std::slice::from_ref(function)),
+            None => receiver_type_args,
+        };
         let param_slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let impl_struct_name = self.get_type_name(&header.ty);
         let is_blanket_type_param = matches!(

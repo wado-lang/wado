@@ -1,0 +1,23 @@
+// An inherent block written for a row binder beside an effect reaches only a
+// receiver whose row holds that effect.
+use { println, Stdout } from "core:cli";
+
+struct Slot<T> {
+    v: T,
+}
+
+impl<effect E> Slot<fn() with (E, Stdout)> {
+    fn loud(&self) -> String {
+        return "loud";
+    }
+}
+
+export fn run() with Stdout {
+    let noisy = Slot { v: || { println("x"); } };
+    println(noisy.loud());
+    let quiet = Slot { v: || {} };
+    println(quiet.loud());
+}
+
+__DATA__
+{"compile_error": ":19:13: analysis error: no method 'loud' found on type 'Slot<fn() -> ()>'"}

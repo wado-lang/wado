@@ -1,0 +1,25 @@
+// A receiver whose row is the caller's own effect parameter fills the impl's
+// binder with it, so the method demands that parameter, as calling the
+// receiver would.
+use { println } from "core:cli";
+
+trait Call with _ {
+    fn call(&self);
+}
+
+impl<effect E> Call for fn() with E {
+    fn call(&self) with E {
+        (*self)();
+    }
+}
+
+fn invoke<effect F>(f: fn() with F) {
+    f.call();
+}
+
+export fn run() {
+    invoke(|| { println("x"); });
+}
+
+__DATA__
+{"compile_error": ":17:5: analysis error: missing effects required by 'call'"}

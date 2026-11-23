@@ -33,8 +33,8 @@ use crate::tir::{
     AnonShape, AssocParamId, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE,
     ResolvedType, RowClosing, RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole,
     TemplateShape, TirExpr, TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap,
-    TypeId, TypeParamId, canonicalize_row, is_open_row, positional_substitution,
-    projection_arguments, range_item, slots_from_impl_args, solve_row,
+    TypeId, TypeParamId, canonicalize_row, positional_substitution, projection_arguments,
+    range_item, slots_from_impl_args, solve_row,
 };
 
 /// The effect variables a question read, noted behind a shared reference: a
@@ -5622,6 +5622,21 @@ impl TypeTable {
         current
     }
 
+    /// The function type `receiver` is, read through references and newtypes:
+    /// what fills the one position a function-type impl target writes, which
+    /// is itself. `None` for a receiver of any other shape.
+    pub fn function_position(&self, receiver: TypeId) -> Option<TypeId> {
+        let mut current = receiver;
+        loop {
+            let below = self.representation_head(self.peel_refs(current));
+            if below == current {
+                break;
+            }
+            current = below;
+        }
+        matches!(self.get(current), ResolvedType::Function { .. }).then_some(current)
+    }
+
     /// The type one link down the chain [`Self::representation_head`] walks:
     /// a newtype's base, and `u32` under a `flags`.
     pub fn link_below(&self, id: TypeId) -> Option<TypeId> {
@@ -7204,6 +7219,16 @@ impl TypeTable {
         })
     }
 
+    /// What `receiver` fills impl block `def`'s one position with where the
+    /// block targets a function type: [`Self::function_position`]. `None` for a
+    /// block targeting anything else, even a newtype a function type underlies.
+    pub fn function_target_position(&self, def: DefId, receiver: TypeId) -> Option<TypeId> {
+        let target = self.peel_refs(self.impl_target_whole(def));
+        matches!(self.get(target), ResolvedType::Function { .. })
+            .then(|| self.function_position(receiver))
+            .flatten()
+    }
+
     /// Whether impl block `def` reaches the receiver type `instance`. Reference
     /// targets share one `&` head, so their referents' heads must agree too.
     pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
@@ -7223,9 +7248,12 @@ impl TypeTable {
         }
         let written = &target.args;
         let instance = self.peel_refs(instance);
-        let args = match self.get(instance) {
-            ResolvedType::Struct { type_args, .. } => type_args.clone(),
-            _ => self.declared_type_args(instance).unwrap_or_default(),
+        let args = match self.function_target_position(def, instance) {
+            Some(function) => vec![function],
+            None => match self.get(instance) {
+                ResolvedType::Struct { type_args, .. } => type_args.clone(),
+                _ => self.declared_type_args(instance).unwrap_or_default(),
+            },
         };
         self.impl_target_reaches(written, &args)
     }
@@ -7378,14 +7406,14 @@ impl TypeTable {
     ) -> bool {
         if let Some(slot) = self.type_param_id(written) {
             if let Some(&prior) = binding.slots.get(&slot) {
-                return self.agree(prior, concrete, open, binding);
+                return self.agree(prior, concrete, RowBinders::Neither, open, binding);
             }
             binding.slots.insert(slot, concrete);
             return true;
         }
         if open(concrete) {
             return !self.contains_type_param(written)
-                && self.agree(concrete, written, open, binding);
+                && self.agree(concrete, written, RowBinders::Right, open, binding);
         }
         // An `_` or an unresolvable name: nothing written to match against.
         if matches!(
@@ -7412,9 +7440,9 @@ impl TypeTable {
         if let Some(agrees) = self.bind_spread(written, concrete, open, binding) {
             return agrees;
         }
-        if let Some(agrees) =
-            self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, open, binding))
-        {
+        if let Some(agrees) = self.zip_shapes(written, concrete, RowBinders::Left, |w, c| {
+            self.bind_one(w, c, open, binding)
+        }) {
             return agrees;
         }
         // A head written bare (`impl Slot<Box>`) constrains the head alone.
@@ -7503,7 +7531,9 @@ impl TypeTable {
         let prior = match binding.slots.get(&slot) {
             Some(&prior) => match (self.as_tuple(prior), whole) {
                 (Some(prior), _) => Some(prior),
-                (None, Some(whole)) => return self.agree(prior, whole, open, binding),
+                (None, Some(whole)) => {
+                    return self.agree(prior, whole, RowBinders::Neither, open, binding);
+                }
                 (None, None) => return false,
             },
             None => binding.runs.get(&slot).cloned(),
@@ -7513,7 +7543,7 @@ impl TypeTable {
                 && prior
                     .iter()
                     .zip(run)
-                    .all(|(&p, &r)| self.agree(p, r, open, binding));
+                    .all(|(&p, &r)| self.agree(p, r, RowBinders::Neither, open, binding));
         }
         match whole {
             Some(whole) => {
@@ -7580,6 +7610,7 @@ impl TypeTable {
         &self,
         a: TypeId,
         b: TypeId,
+        binders: RowBinders,
         open: &dyn Fn(TypeId) -> bool,
         binding: &mut TargetBinding,
     ) -> bool {
@@ -7597,16 +7628,21 @@ impl TypeTable {
                 return true;
             }
         }
-        self.zip_shapes(a, b, |x, y| self.agree(x, y, open, binding))
-            .unwrap_or(false)
+        self.zip_shapes(a, b, binders, |x, y| {
+            self.agree(x, y, binders, open, binding)
+        })
+        .unwrap_or(false)
     }
 
     /// Whether `each` holds of every pair of parts `a` and `b` line up, or
-    /// `None` where they share no outer shape to line parts up by.
+    /// `None` where they share no outer shape to line parts up by. Two
+    /// function types' rows are compared here, `binders` telling which side's
+    /// effect parameters are binders.
     fn zip_shapes(
         &self,
         a: TypeId,
         b: TypeId,
+        binders: RowBinders,
         mut each: impl FnMut(TypeId, TypeId) -> bool,
     ) -> Option<bool> {
         let mut all = |xs: &[TypeId], ys: &[TypeId]| {
@@ -7633,7 +7669,11 @@ impl TypeTable {
                 },
             ) => Some(
                 x_mut == y_mut
-                    && rows_agree(x_effects, y_effects)
+                    && rows_agree(
+                        &self.read_effect_row(x_effects),
+                        &self.read_effect_row(y_effects),
+                        binders,
+                    )
                     && all(x_params, y_params)
                     && all(&[*x_ret], &[*y_ret]),
             ),
@@ -7673,8 +7713,10 @@ impl TypeTable {
         if unknown(a.1) || unknown(b.1) {
             return true;
         }
-        self.zip_shapes(a.1, b.1, |x, y| self.unify_apart((a.0, x), (b.0, y), subst))
-            .unwrap_or(a.1 == b.1)
+        self.zip_shapes(a.1, b.1, RowBinders::Both, |x, y| {
+            self.unify_apart((a.0, x), (b.0, y), subst)
+        })
+        .unwrap_or(a.1 == b.1)
     }
 
     /// `term` past every parameter the substitution has bound.
@@ -8034,11 +8076,45 @@ enum RowSpelling {
     Erased,
 }
 
-/// Whether two function types' rows can be one: equal, or one still open. An
-/// effect parameter stands for whatever row meets it, and a variable for the
-/// row the effect check solves it to.
-fn rows_agree(a: &[EffectRef], b: &[EffectRef]) -> bool {
-    a == b || is_open_row(a) || is_open_row(b)
+/// Which of two types matched against each other writes binders. An effect
+/// parameter on that side stands for whatever row meets what is named beside
+/// it; one on the other side is rigid, an effect of its own.
+#[derive(Clone, Copy)]
+enum RowBinders {
+    Left,
+    Right,
+    Both,
+    Neither,
+}
+
+impl RowBinders {
+    fn on(self, left: bool) -> bool {
+        match self {
+            Self::Left => left,
+            Self::Right => !left,
+            Self::Both => true,
+            Self::Neither => false,
+        }
+    }
+}
+
+/// Whether two function types' rows can be one: equal, or an open one holding
+/// what the other names. A binder is open, and so is a variable, which stands
+/// for the row the effect check solves it to, and that only grows.
+fn rows_agree(a: &[EffectRef], b: &[EffectRef], binders: RowBinders) -> bool {
+    let opens = |e: &EffectRef, left: bool| e.is_var() || (e.is_param() && binders.on(left));
+    let is_open = |row: &[EffectRef], left: bool| row.iter().any(|e| opens(e, left));
+    let named_in = |row: &[EffectRef], left: bool, other: &[EffectRef]| {
+        row.iter()
+            .filter(|e| !opens(e, left))
+            .all(|e| other.contains(e))
+    };
+    match (is_open(a, true), is_open(b, false)) {
+        (false, false) => a == b,
+        (true, false) => named_in(a, true, b),
+        (false, true) => named_in(b, false, a),
+        (true, true) => true,
+    }
 }
 
 /// What one substitution replaces, leaf by leaf: a declaration's slots, solved

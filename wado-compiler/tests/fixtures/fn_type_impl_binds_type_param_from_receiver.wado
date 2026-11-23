@@ -1,0 +1,36 @@
+// An impl for a function type binds the type parameters its parameter and
+// return types write from the receiver.
+use { println, Stdout } from "core:cli";
+
+trait Arg with () {
+    type In;
+    fn sample(&self) -> Self::In;
+}
+
+impl<T: Default> Arg for fn(T) {
+    type In = T;
+    fn sample(&self) -> T {
+        return T::default();
+    }
+}
+
+trait Out with () {
+    fn out_name(&self) -> String;
+}
+
+impl<R: Display> Out for fn() -> R {
+    fn out_name(&self) -> String {
+        let f = *self;
+        return `${f()}`;
+    }
+}
+
+export fn run() with Stdout {
+    let takes = |_x: i32| {};
+    println(`${takes.sample() + 1}`);
+    let gives = || "given";
+    println(gives.out_name());
+}
+
+__DATA__
+{"stdout": "1\ngiven\n"}

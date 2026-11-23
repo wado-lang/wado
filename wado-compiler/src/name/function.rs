@@ -311,6 +311,16 @@ impl Receiver {
         )
     }
 
+    /// Whether this receiver is a function type or a reference to one, whose
+    /// one position is the function type.
+    #[must_use]
+    pub fn is_function(&self) -> bool {
+        matches!(
+            self,
+            Receiver::Type(fq) | Receiver::RefTo(_, fq) if matches!(fq.head(), TypeHead::Function { .. })
+        )
+    }
+
     /// Whether this receiver is one of the binders `names` declares — how a
     /// blanket's receiver is recognized. By spelling, since a declaration list
     /// has no owning block to compare.

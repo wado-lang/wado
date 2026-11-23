@@ -1,0 +1,37 @@
+// An impl's effect parameter and its method's own are two rows: a target
+// repeating one type parameter does not meet a function of each.
+use { println, Stdout } from "core:cli";
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Same with () {
+    fn same(&self) -> String;
+}
+
+impl<T> Same for Pair<T, T> {
+    fn same(&self) -> String {
+        return "same";
+    }
+}
+
+struct Slot<T> {
+    v: T,
+}
+
+impl<effect E> Slot<fn() with (E)> {
+    fn with_other<effect F>(&self, g: fn() with F) -> String {
+        let p = Pair { a: self.v, b: g };
+        return p.same();
+    }
+}
+
+export fn run() with Stdout {
+    let s = Slot { v: || { println("x"); } };
+    println(s.with_other(|| {}));
+}
+
+__DATA__
+{"compile_error": ":27:16: analysis error: no method 'same' found on type 'Pair<fn() -> () with E, fn() -> () with F>'"}
