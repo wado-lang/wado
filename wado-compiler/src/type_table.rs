@@ -3447,11 +3447,25 @@ impl TypeTable {
     /// noted as read: a question answered from it holds only if the solution
     /// stays what it was.
     pub fn read_effect_row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
-        let mut row = solve_row(effects, &self.early_effect_rows, &mut |var| {
+        self.effect_row_so_far(effects, &mut |var| {
             if self.early_effect_rows.contains_key(&var) {
                 self.read_effect_vars.note(var);
             }
-        });
+        })
+    }
+
+    /// [`Self::read_effect_row`] for a reader whose answer nothing decides
+    /// on, so it closes no row.
+    pub fn peek_effect_row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
+        self.effect_row_so_far(effects, &mut |_| {})
+    }
+
+    fn effect_row_so_far(
+        &self,
+        effects: &[EffectRef],
+        read: &mut impl FnMut(RowVar),
+    ) -> Vec<EffectRef> {
+        let mut row = solve_row(effects, &self.early_effect_rows, read);
         canonicalize_row(&mut row);
         row
     }

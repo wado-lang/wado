@@ -6249,7 +6249,7 @@ impl<'a> Reify<'a> {
         // rows of its holes, so a variable there would part each closure's
         // shape from every other's.
         let mut table = self.tysys.type_table.borrow_mut();
-        let effects = table.read_effect_row(&cap_info.effects);
+        let effects = table.peek_effect_row(&cap_info.effects);
         let func_type = table.make_function_with_mut(
             cap_info.is_mutating,
             param_types,
