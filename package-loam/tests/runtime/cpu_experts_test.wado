@@ -1,0 +1,68 @@
+//! An expert the host computes from the stored weights matches the one the
+//! decomposition computes, within its activations' i8 steps.
+
+use { LinearArray64 } from "core:linear";
+use { A, C, experts_case, mixing } from "../../src/runtime/graph_cases.wado";
+use { HostProjection, expert_row, host_bytes } from "../../src/runtime/cpu_experts.wado";
+use { Experts, ProjectionShape } from "../../src/runtime/experts.wado";
+use { Quantized } from "../../src/runtime/hlo.wado";
+use { Cpu, Holds, Tensor } from "../../src/runtime/tensor.wado";
+use { HostWeight } from "../../src/runtime/weight.wado";
+
+test "the host computes each expert as the decomposition does" {
+    let cpu = &mut Cpu {};
+    let c = experts_case(1);
+    let held = |t: &HostWeight| host_bytes(t);
+    let up_bytes: List<LinearArray64<u8>> = [
+        held(&HostWeight::of(&c.up.0)),
+        held(&HostWeight::of(&c.up.1)),
+        held(&HostWeight::of(&c.up.2)),
+    ];
+    let down_bytes: List<LinearArray64<u8>> = [
+        held(&HostWeight::of(&c.down.0)),
+        held(&HostWeight::of(&c.down.1)),
+        held(&HostWeight::of(&c.down.2)),
+    ];
+    let up = HostProjection {
+        packed: &up_bytes[0],
+        scales: &up_bytes[1],
+        bias: Option::Some(&up_bytes[2]),
+        zero_points: null,
+        shape: ProjectionShape { rows: c.up.0.extents[1], blocks: 1, blob: c.up.0.extents[2], zero_bytes: 0 },
+    };
+    let down = HostProjection {
+        packed: &down_bytes[0],
+        scales: &down_bytes[1],
+        bias: Option::Some(&down_bytes[2]),
+        zero_points: null,
+        shape: ProjectionShape { rows: c.down.0.extents[1], blocks: 1, blob: c.down.0.extents[2], zero_bytes: 0 },
+    };
+    let experts = Experts {
+        k: 2,
+        normalized: true,
+        alpha: 1.702,
+        beta: 1.0,
+        limit: 7.0,
+        quantized: Quantized { bits: 4, block: 32 },
+        step: 0,
+    };
+    let x = cpu.upload(&c.x);
+    for let e of 0..<4 {
+        let mut logits = List::<f32>::filled(4, -f32::INFINITY);
+        logits[e] = 5.0;
+        let alone = cpu.download(&mixing(cpu, &x, &cpu.upload(&Tensor::<f32, [A, C]> { data: logits, extents: [1, 4] }), &[
+            cpu.upload(&c.up.0),
+            cpu.upload(&c.up.1),
+            cpu.upload(&c.up.2),
+        ], &[
+            cpu.upload(&c.down.0),
+            cpu.upload(&c.down.1),
+            cpu.upload(&c.down.2),
+        ]));
+        let got = expert_row(&up, &down, e, &c.x.data, &experts);
+        let largest = alone.data.into_iter().map(|v| f32::abs(v)).max().unwrap();
+        for let i of 0..<got.len() {
+            assert f32::abs(got[i] - alone.data[i]) <= 0.01 * largest;
+        }
+    }
+}
