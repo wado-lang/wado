@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795423135465,
+  "lastUpdate": 1795424897204,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81501,6 +81501,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a5ee102ec58cc86087d8ec63ee5d03eecb41646c"
         },
         "date": 1795423134114,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b1bdc8c09552e385f03bdf88edd88e4cceecdf3",
+          "message": "Merge pull request #2733 from wado-lang/ccr-5a053762-2x7vni\n\nfix(compiler): an impl for a function type binds its parameters from the receiver",
+          "timestamp": "2026-11-23T17:51:21+09:00",
+          "tree_id": "dda8bdcb010aafc4ffb2c7b38e544be4ac355946",
+          "url": "https://github.com/wado-lang/wado/commit/8b1bdc8c09552e385f03bdf88edd88e4cceecdf3"
+        },
+        "date": 1795424895945,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
