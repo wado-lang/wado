@@ -26,10 +26,10 @@ serialize, where the output buffer doubles from `SERIALIZE_BUFFER_CAPACITY`'s
 from above. Release binaries, three alternating rounds, functions aligned to
 64 bytes, against 128 bytes:
 
-| Starting capacity              | twitter ser | canada ser | catalog ser |
-| ------------------------------ | ----------- | ---------- | ----------- |
-| 2 MiB                          | +10%        | **−3.7%**  | +9%         |
-| The last output's length + 8   | +10.1%      | +4.2%      | +8.3%       |
+| Starting capacity            | twitter ser | canada ser | catalog ser |
+| ---------------------------- | ----------- | ---------- | ----------- |
+| 2 MiB                        | +10%        | **−3.7%**  | +9%         |
+| The last output's length + 8 | +10.1%      | +4.2%      | +8.3%       |
 
 One 2 MiB `array.new_default` costs more than the doublings it replaces. The
 zero-fill is paid on capacity, not on what is written, and the doublings zero
