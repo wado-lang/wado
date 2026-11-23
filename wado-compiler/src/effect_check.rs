@@ -2707,18 +2707,14 @@ impl EffectIndex<'_> {
             let impl_entry = self.impl_effects.get(&(receiver, key));
             for receiver_args in &receiver_arg_lists {
                 if let Some((declared, bounds, target_args)) = &selected {
-                    brought.effects.extend(
-                        // One the receiver leaves open is resolved from the
-                        // method's bounds below.
-                        self.close_over_args(
-                            declared,
-                            bounds,
-                            target_args,
-                            receiver_args,
-                            None,
-                            UnfilledParam::Drop,
-                        ),
-                    );
+                    brought.effects.extend(self.close_over_args(
+                        declared,
+                        bounds,
+                        target_args,
+                        receiver_args,
+                        None,
+                        UnfilledParam::Drop,
+                    ));
                 } else {
                     match impl_entry {
                         Some(entry) => brought.effects.extend(self.close_over_args(
