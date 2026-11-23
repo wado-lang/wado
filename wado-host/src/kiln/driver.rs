@@ -204,6 +204,7 @@ pub async fn execute<H: CompilerHost>(
             .iter()
             .map(|(path, use_type, pin)| ProbeInput {
                 path: path.as_str().to_string(),
+                read_at: invocation.read_path(path).to_string(),
                 use_type: use_type.cloned(),
                 integrity: *pin,
             })
@@ -236,7 +237,7 @@ pub async fn execute<H: CompilerHost>(
         loaded.push(GeneratorInputFile {
             path: path.as_str().to_string(),
             content: host
-                .load_file(path.as_str(), *extent, *pin)
+                .load_file(invocation.read_path(path), *extent, *pin)
                 .await
                 .map_err(|source| load_error(path, source))?,
             use_type: use_type.cloned(),
@@ -458,7 +459,7 @@ pub async fn cache_matches<H: CompilerHost>(
     }
     if !matches_file(
         host,
-        &invocation.from,
+        invocation.read_path(&invocation.from),
         invocation.integrity,
         &metadata.primary.hash,
         metadata.primary.extent,
@@ -489,7 +490,7 @@ pub async fn cache_matches<H: CompilerHost>(
         }
         if !matches_file(
             host,
-            &declared.path,
+            invocation.read_path(&declared.path),
             declared.integrity,
             &recorded.hash,
             recorded.extent,
@@ -620,12 +621,12 @@ fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::i
 /// below still differs and the build misses.
 async fn matches_file<H: CompilerHost>(
     host: &H,
-    path: &InvocationPath,
+    path: &str,
     pin: Option<Integrity>,
     expected_hex: &str,
     extent: Option<u64>,
 ) -> bool {
-    match host.load_file(path.as_str(), extent, pin).await {
+    match host.load_file(path, extent, pin).await {
         Ok(bytes) => hash_matches_bytes(&bytes, expected_hex),
         Err(_) => false,
     }
@@ -1061,11 +1062,17 @@ pub async fn harvest_invocations(
             .or_default()
             .push((key.as_str(), module));
     }
+    // A module's path is anchored on the entry's directory, and so is the
+    // path of a file a dependency exports.
+    let exported = |module: &str, package: &str, file: &str| {
+        let mut found = harvest.exported_file(host, module, package, file)?;
+        found.path = entry_dir.join(&found.path).display().to_string();
+        Ok(found)
+    };
     let mut invocations = Vec::new();
     let mut diagnostics = Vec::new();
     for modules in by_package.into_values() {
-        let (mut collected, mut reported) =
-            collect_inline_invocations(modules, &IndexMap::default(), "");
+        let (mut collected, mut reported) = collect_inline_invocations(modules, &exported, "");
         invocations.append(&mut collected);
         diagnostics.append(&mut reported);
     }
@@ -1674,6 +1681,7 @@ mod tests {
                     use_type: None,
                     integrity: None,
                 }],
+                located: wado_compiler::hashmap::IndexMap::default(),
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,
@@ -2032,6 +2040,7 @@ mod tests {
                     use_type: None,
                     integrity: None,
                 }],
+                located: wado_compiler::hashmap::IndexMap::default(),
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,

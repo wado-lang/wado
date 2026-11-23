@@ -4,6 +4,7 @@
 //! the manifest no longer declares any. See WEP 2026-04-12 §"Use-site syntax".
 
 use crate::ast::AttrValue;
+use crate::hashmap::IndexMap;
 use crate::kiln::cache::{encode_options_canonical, encode_written_options};
 use crate::kiln::inline::default_output_dir;
 use crate::kiln::options_check::CanonicalOptions;
@@ -231,14 +232,18 @@ pub struct Invocation {
     /// Supplementary schema files, resolved relative to the declaring `.wado`
     /// file, preserving declaration order.
     pub inputs: Vec<InvocationInput>,
+    /// Where each file a dependency exports is read: its package reference
+    /// (`ns:pkg@ver/path`), which `from` or an input holds, → its path on this
+    /// machine. Excluded from [`Invocation::identity_tuple`], which must not
+    /// depend on where a dependency's checkout lies.
+    pub located: IndexMap<InvocationPath, String>,
     /// Resolved output directory (default: `build/kiln/<synthesized-id>`).
     pub output_dir: InvocationPath,
     /// Validated, typed options for this invocation. Crosses to the generator
     /// as a typed WIT argument (the host builds a Component-Model value from
     /// it); its canonical byte encoding ([`Self::options_canonical`]) feeds the
-    /// invocation cache key. Empty until the generator's `OptionsDescriptor`
-    /// is known (inline when it is available, otherwise the driver's
-    /// typed-encode pass).
+    /// invocation cache key. Empty until the driver's typed-encode pass knows
+    /// the generator's `OptionsDescriptor`.
     pub options: CanonicalOptions,
     /// Raw `options` `AttrValue` recovered from the inline
     /// `with { generator: { options: { ... } } }` clause. Stashed so the
@@ -284,6 +289,13 @@ impl Invocation {
                 .iter()
                 .map(|input| (&input.path, input.use_type.as_ref(), input.integrity)),
         )
+    }
+
+    /// Where the file the invocation names `path` is read: a file a dependency
+    /// exports where it lies, any other as named.
+    #[must_use]
+    pub fn read_path<'a>(&'a self, path: &'a InvocationPath) -> &'a str {
+        self.located.get(path).map_or(path.as_str(), String::as_str)
     }
 
     /// Canonical byte encoding of [`Self::options`], for the invocation cache
@@ -417,6 +429,7 @@ mod tests {
             from: InvocationPath::normalize("s.proto"),
             integrity: None,
             inputs: vec![],
+            located: IndexMap::default(),
             output_dir: InvocationPath::normalize("build/kiln/a"),
             options: CanonicalOptions::default(),
             raw_options: None,

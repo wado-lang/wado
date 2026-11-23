@@ -25,18 +25,20 @@ Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 ### The `generator` Fields
 
 The literal after `from` is the primary input. It is a `./` or `../` path
-resolved against the declaring file, like a local module import, or the URL of
-a [remote file](#remote-inputs). The `generator` object holds the rest of the
-invocation.
+resolved against the declaring file, like a local module import, the URL of a
+[remote file](#remote-inputs), or a file a dependency exports, named
+`"<specifier>/<path>"` as an import names it
+([Exported Files](./spec-packages.md#exported-files)). The `generator` object
+holds the rest of the invocation.
 
-| Field        | Required | Meaning                                                                                                                                                                                                                                          |
-| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                                                       |
-| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                                                            |
-| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                                                           |
-| `options`    | no       | Record literal whose shape matches the generator's `export struct Options`. See [Options](#options).                                                                                                                                             |
-| `inputs`     | no       | Supplementary inputs the generator cannot discover from the primary alone, such as a sibling lexer grammar: each a `./` / `../` path or a URL, or `{ path, type, integrity }`. A schema that refers to other files lists every one of them here. |
-| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                                                 |
+| Field        | Required | Meaning                                                                                                                                                                                                                                                            |
+| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                                                                         |
+| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                                                                              |
+| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                                                                             |
+| `options`    | no       | Record literal whose shape matches the generator's `export struct Options`. See [Options](#options).                                                                                                                                                               |
+| `inputs`     | no       | Supplementary inputs the generator cannot discover from the primary alone, such as a sibling lexer grammar: each a `./` / `../` path, a URL or an exported file, or `{ path, type, integrity }`. A schema that refers to other files lists every one of them here. |
+| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                                                                   |
 
 Each field has one type, and any other key or type is an error at the use site.
 
@@ -474,7 +476,10 @@ pub affine struct Request<T = NoOptions> {
 
 An input file carries its path from the package root, normalized, the content
 as a byte stream, and the `type` the use site gave it. So `./sub/../sub/v.txt`
-written in `src/main.wado` arrives as `src/sub/v.txt`:
+written in `src/main.wado` arrives as `src/sub/v.txt`. A file a dependency
+exports arrives as the dependency's coordinate and the exported path,
+`acme:schemas@0.2.0/assets/a.idl`, never where the dependency lies on this
+machine, and the cache records it the same way:
 
 ```wit
 record input-file {

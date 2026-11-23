@@ -223,6 +223,7 @@ mod tests {
                     integrity: None,
                 })
                 .collect(),
+            located: crate::hashmap::IndexMap::default(),
             output_dir: InvocationPath::normalize(out),
             options: CanonicalOptions::default(),
             raw_options: None,

@@ -10,8 +10,8 @@ use crate::compiler_host::{
 };
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
-use crate::loader::strip_kiln_scheme;
-use crate::module_path::{canonicalize_entry_point, module_parent_dir};
+use crate::loader::{LoadError, strip_kiln_scheme};
+use crate::module_path::{canonicalize_entry_point, is_package_namespace, module_parent_dir};
 use crate::name::{DeclaredHead, effect_namespace, packaged_module_name};
 use crate::parallel::lock;
 use crate::path::{normalize, relative_path};
@@ -513,7 +513,7 @@ impl ModuleSourceInterner {
         file: &str,
     ) -> Option<Result<ModuleSource, ExportRefusal>> {
         let resolved = self.exported_file(importer, name, file)?;
-        Some(resolved.map(|ExportedFile { lib, path }| self.dependency_module(&lib, &path)))
+        Some(resolved.map(|ExportedFile { lib, path, .. }| self.dependency_module(&lib, &path)))
     }
 
     /// Where the file `file` of the source dependency `name` lies, as
@@ -542,7 +542,61 @@ impl ModuleSourceInterner {
                 spelled_alike: spelled_alike.cloned(),
             }));
         };
-        Some(Ok(ExportedFile { lib, path }))
+        Some(Ok(ExportedFile {
+            lib,
+            entry: file,
+            path,
+        }))
+    }
+
+    /// [`Self::exported_file`], or why `importer` reaches no such file.
+    pub fn locate_exported_file(
+        &self,
+        importer: &ModuleSource,
+        package: &str,
+        file: &str,
+    ) -> Result<ExportedFile, LoadError> {
+        match self.exported_file(importer, package, file) {
+            Some(Ok(exported)) => Ok(exported),
+            Some(Err(refusal)) => Err(LoadError::UnexportedFile {
+                package: package.to_string(),
+                file: file.to_string(),
+                refusal,
+            }),
+            None => Err(self
+                .missing_dependency(importer, package)
+                .expect("a package specifier carries a namespace")),
+        }
+    }
+
+    /// Why `name` reaches no dependency of `importer`'s package: declared but
+    /// unresolvable (say, no `[package].lib`), its manifest invalid, or a
+    /// namespaced name it does not declare. `None` for a name with no
+    /// namespace, which names no dependency at all.
+    #[must_use]
+    pub fn missing_dependency(&self, importer: &ModuleSource, name: &str) -> Option<LoadError> {
+        if let Some(reason) = self.unresolved_dependency(importer, name) {
+            return Some(LoadError::DependencyUnresolved {
+                name: name.to_string(),
+                reason: reason.to_string(),
+            });
+        }
+        let manifest = self.dependency_manifest(importer);
+        if let Some(DependencyManifest {
+            path,
+            error: Some(error),
+        }) = manifest
+        {
+            return Some(LoadError::DependencyUnresolved {
+                name: name.to_string(),
+                reason: format!("{path} is invalid: {error}"),
+            });
+        }
+        let (namespace, _) = name.split_once(':')?;
+        is_package_namespace(namespace).then(|| LoadError::UndeclaredDependency {
+            name: name.to_string(),
+            manifest: manifest.map(|m| m.path.clone()),
+        })
     }
 
     /// Resolve a coordinate imported by `importer` to a *prebuilt component*
@@ -693,11 +747,12 @@ impl WasmAssetKind {
 }
 
 /// A file a source dependency exports: the dependency's entry module, as
-/// [`DependencyIndex::resolved`] names it, and the file's path relative to the
-/// host base.
+/// [`DependencyIndex::resolved`] names it, the `[package].exports` entry naming
+/// the file, and its path relative to the host base.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportedFile {
     pub lib: String,
+    pub entry: String,
     pub path: String,
 }
 

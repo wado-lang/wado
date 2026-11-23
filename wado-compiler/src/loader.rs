@@ -13,17 +13,15 @@ use rustc_hash::FxBuildHasher;
 
 use crate::ast::{AstIdSpace, ImportAttributes, Item, Module, UseDecl};
 use crate::compiler_host::{
-    Code, CompilerHost, DependencyManifest, Diagnostic, DiagnosticSpan, InMemoryCompilerHost,
-    Severity, SourceError,
+    Code, CompilerHost, Diagnostic, DiagnosticSpan, InMemoryCompilerHost, Severity, SourceError,
 };
 use crate::component_model::SourceInterfaceBatch;
 use crate::kiln::InvocationIndex;
 use crate::lexer::{LexError, is_valid_ident, lex};
 use crate::logger::Logger;
 use crate::module_path::{
-    canonicalize_entry_point, decl_file_of, entry_dir_of, is_package_namespace,
-    resolve_import_with_invocations, resolve_local_identity, resolve_module_path,
-    split_exported_file,
+    canonicalize_entry_point, decl_file_of, entry_dir_of, resolve_import_with_invocations,
+    resolve_local_identity, resolve_module_path, split_exported_file,
 };
 use crate::module_source::{
     CmNamespace, ExportRefusal, ModuleSource, ModuleSourceInterner, WasmAssetKind,
@@ -2293,7 +2291,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             });
         }
         let name = exported_file.map_or(import_source, |(package, _)| package);
-        if let Some(missing) = self.missing_dependency(from_module_source, name) {
+        if let Some(missing) = self.interner.missing_dependency(from_module_source, name) {
             return Err(missing);
         }
 
@@ -2301,56 +2299,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
         })
-    }
-
-    /// Why `name` reaches no dependency of `importer`'s package: declared but
-    /// unresolvable (say, no `[package].lib`), its manifest invalid, or a
-    /// namespaced name it does not declare. `None` for a name with no
-    /// namespace, which names no dependency at all.
-    fn missing_dependency(&self, importer: &ModuleSource, name: &str) -> Option<LoadError> {
-        if let Some(reason) = self.interner.unresolved_dependency(importer, name) {
-            return Some(LoadError::DependencyUnresolved {
-                name: name.to_string(),
-                reason: reason.to_string(),
-            });
-        }
-        let manifest = self.interner.dependency_manifest(importer);
-        if let Some(DependencyManifest {
-            path,
-            error: Some(error),
-        }) = manifest
-        {
-            return Some(LoadError::DependencyUnresolved {
-                name: name.to_string(),
-                reason: format!("{path} is invalid: {error}"),
-            });
-        }
-        let (namespace, _) = name.split_once(':')?;
-        is_package_namespace(namespace).then(|| LoadError::UndeclaredDependency {
-            name: name.to_string(),
-            manifest: manifest.map(|m| m.path.clone()),
-        })
-    }
-
-    /// Where the file a `"<package>/<file>"` include names lies, relative to
-    /// the host base, or why `importer` reaches none.
-    fn exported_include(
-        &self,
-        importer: &ModuleSource,
-        package: &str,
-        file: &str,
-    ) -> Result<String, LoadError> {
-        match self.interner.exported_file(importer, package, file) {
-            Some(Ok(exported)) => Ok(exported.path),
-            Some(Err(refusal)) => Err(LoadError::UnexportedFile {
-                package: package.to_string(),
-                file: file.to_string(),
-                refusal,
-            }),
-            None => Err(self
-                .missing_dependency(importer, package)
-                .expect("a package specifier carries a namespace")),
-        }
     }
 
     /// Get source code for a module
@@ -2566,8 +2514,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // filename via `source_path`: an entry point's `Display` is its
         // stable base name for symbol identity, which drops the directory a
         // relative include needs.
-        let mut pairs: IndexMap<[String; 2], (DiagnosticSpan, &ModuleSource)> =
-            IndexMap::default();
+        let mut pairs: IndexMap<[String; 2], (DiagnosticSpan, &ModuleSource)> = IndexMap::default();
         let mut resolve_path: IndexMap<String, String> = IndexMap::default();
         for (module_source, module) in &self.loaded {
             let ms_str = module_source.to_string();
@@ -2595,8 +2542,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         for (pair, (at, module_source)) in pairs {
             let [ref ms_str, ref include_path] = pair;
             let resolved = if let Some((package, file)) = split_exported_file(include_path) {
-                self.exported_include(module_source, package, file)
+                self.interner
+                    .locate_exported_file(module_source, package, file)
                     .map_err(|e| e.at_path(at.clone()))?
+                    .path
             } else if is_cwd_relative(include_path) {
                 // Resolve path relative to the module source's real directory.
                 let module_path = resolve_path

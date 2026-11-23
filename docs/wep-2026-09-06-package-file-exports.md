@@ -221,7 +221,7 @@ without the exception.
 
 ## Roadmap
 
-Items 1, 2 and 7 are done. Items 4 and 6 are done except for the parts each
+Items 1, 2, 3 and 7 are done. Items 4 and 6 are done except for the parts each
 one names as left.
 
 1. `[package].exports` in `wado-manifest`: parse, and validate each entry as a
@@ -237,7 +237,8 @@ one names as left.
 3. Kiln `from` / `inputs`: accept the reference, key the cache and the header on
    the logical form, write outputs into the consumer's tree. Done when
    `assets/grammar/Wado.g4` can be consumed from a second package with a warm,
-   machine-independent cache.
+   machine-independent cache. The logical form is the dependency's coordinate
+   as its `[package]` spells it, `name@ver` where it declares no namespace.
 4. Harvest across the dependency edge: walk a dependency's modules, anchor each
    clause's paths on that dependency's package root as `ns:pkg@ver/path`, and
    key its redirect by the identity the loader gives that module. Done when a

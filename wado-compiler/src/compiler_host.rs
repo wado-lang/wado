@@ -1081,7 +1081,11 @@ pub struct ProbeRequest {
 
 /// One file a probe reads.
 pub struct ProbeInput {
+    /// The file as the generator is told it, as [`GeneratorInputFile::path`].
     pub path: String,
+    /// Where the host opens it: [`Self::path`] itself, except for a file a
+    /// dependency exports, which the generator knows by its package reference.
+    pub read_at: String,
     /// As [`GeneratorInputFile::use_type`], since how far a generator reads a
     /// file depends on what kind of file it is.
     pub use_type: Option<String>,

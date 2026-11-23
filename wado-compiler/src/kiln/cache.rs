@@ -454,6 +454,7 @@ mod tests {
                 use_type: None,
                 integrity: None,
             }],
+            located: crate::hashmap::IndexMap::default(),
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options: CanonicalOptions::default(),
             raw_options: None,
