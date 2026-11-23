@@ -973,17 +973,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
         };
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
-            let mut known: Vec<TypeId> = match &inst {
-                Some(inst) => inst
-                    .vars
-                    .iter()
-                    .map(|&var| self.apply_infer_holes(var))
-                    .collect(),
-                None => type_args.clone(),
-            };
-            // The solve above has seen every written argument, so a pack still
-            // open here is one the call left nothing over for — unless an
-            // argument reached it, which makes it the solve's failure.
+            let inst = inst
+                .as_ref()
+                .expect("a method with slots instantiates them");
+            let mut known: Vec<TypeId> = inst
+                .vars
+                .iter()
+                .map(|&var| self.apply_infer_holes(var))
+                .collect();
+            // Instantiation leaves a pack rigid, so one the arguments did not
+            // reach is one the call left nothing over for.
             let reached = self
                 .tysys
                 .packs_args_reach(&expected_param_types, args.len());
