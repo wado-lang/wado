@@ -234,10 +234,10 @@ and the return type alike. Fixtures:
 
 A type parameter names no effect. A name reaching no `interface` or resource is
 rejected where it is written, even when another module declares an effect of
-that name. So
-`with Stdout` needs `Stdout` in scope like any other name. `#[ambient(E)]` is
-held to the same rule, and so is a bare operation call: `use { E::{op} }` brings
-`op` into scope but not `E`, and the call still requires `E`. Fixtures:
+that name. So `with Stdout` needs `Stdout` in scope like any other name.
+`#[ambient(E)]` is held to the same rule, and so is a bare operation call:
+`use { E::{op} }` brings `op` into scope but not `E`, and the call still
+requires `E`. Fixtures:
 `error_with_unknown_effect.wado`, `error_with_type_param_effect.wado`,
 `error_ambient_unknown_effect.wado`,
 `error_with_bare_operation_import_missing_effect.wado`.
