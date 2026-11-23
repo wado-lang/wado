@@ -14,6 +14,7 @@ use {
     ProjectionShape,
     Routing,
     decomposed_mixture,
+    runs_by_picks,
 } from "./experts.wado";
 use {
     Binary,
@@ -696,7 +697,9 @@ impl Graph for Recorder {
         ffn: &[Projection<Recorder, E>, Projection<Recorder, E>],
         experts: &Experts,
     ) -> Value<f32, [Picked, Hidden]> with _ {
-        if self.decomposes {
+        // A prompt's form fuses as operations: run whole, it would run each
+        // operation alone and hold every intermediate at once.
+        if self.decomposes || !runs_by_picks(self, rows, routing, experts) {
             return decomposed_mixture::<Recorder, E>(self, rows, routing, held, ffn, experts);
         }
         let mut operands: List<i32> = [
