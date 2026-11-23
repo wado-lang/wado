@@ -1105,8 +1105,9 @@ impl RefCarrying<'_> {
             ResolvedType::Struct { .. } => {
                 match self.type_table.struct_field_types(type_id) {
                     Some(fields) => self.any(fields.to_vec(), walk),
-                    // A declaration the plan phase cannot see is read as
-                    // holding one, which only widens the carrier set.
+                    // A type can name a struct instance no lowered code holds,
+                    // whose fields nothing registered. Reading it as holding
+                    // one only widens the carrier set.
                     None => true,
                 }
             }
@@ -1181,9 +1182,11 @@ impl RefCarrying<'_> {
 
 impl SlotTypes for RefCarrying<'_> {
     fn struct_fields(&self, struct_type: TypeId) -> Option<Vec<TypeId>> {
-        self.type_table
+        let fields = self
+            .type_table
             .struct_field_types(field_owner(struct_type, self.type_table))
-            .map(<[TypeId]>::to_vec)
+            .expect("a struct pattern matches a registered struct");
+        Some(fields.to_vec())
     }
 
     fn tuple_elements(&self, tuple: TypeId) -> Option<Vec<TypeId>> {

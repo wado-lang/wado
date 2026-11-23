@@ -332,8 +332,7 @@ pub fn plan(
 }
 
 /// Publish every variant declaration's case templates, and every struct's
-/// field types, to the type table, so [`needs_value_copy`] can classify
-/// variants and WIR can tell an affine type from a `&TypeTable`.
+/// field types, to the type table, which answers for them from then on.
 pub(super) fn register_type_templates(flat: &FlatPackage) {
     let mut type_table = flat.type_table.borrow_mut();
     for variant in &flat.variants {

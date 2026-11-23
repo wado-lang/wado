@@ -170,9 +170,9 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<DefId, Vec<(String, u32, TypeId)>>,
-    /// Struct field types by struct and instance arguments, a declared
-    /// template's (no arguments) in its own terms: what
-    /// [`Self::holds_affine_resource`] reads.
+    /// The field types of every struct the plan phase lowers, by struct and
+    /// instance arguments; a declared template's (no arguments) in its own
+    /// terms.
     struct_field_index: IndexMap<(StructDef, Vec<TypeId>), Vec<TypeId>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
     anon_structs: Vec<AnonEntry>,
