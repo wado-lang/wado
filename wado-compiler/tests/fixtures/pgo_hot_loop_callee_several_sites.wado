@@ -1,7 +1,8 @@
 // A callee that carries a loop spends its time in the loop, so a splice saves
-// one call per run of it, while each site copies the whole body. Where a caller
-// holds several sites of one such callee, a hot site keeps the plain price:
-// `mix` stays a call in `fields`, though all three of its sites ran hot.
+// one call per run of it, while each site copies the whole body. Where a loop
+// holds several sites of one such callee, and their copies together outgrow
+// one hot splice, a hot site keeps the plain price: `mix` stays a call in
+// `fields`, though all three of its sites ran hot.
 use { println, Stdout } from "core:cli";
 
 fn mix(x: i32, n: i32) -> i32 {

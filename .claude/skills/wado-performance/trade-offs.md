@@ -12,45 +12,50 @@ An entry names the price that changed (a constant, a predicate), the A/B for
 every row whose wasm changed, the reason the losing row lost, and who decided
 to keep the change.
 
-## A hot site does not raise the price of a looping callee called from several sites of one loop (2026-11-24)
+## A hot site does not raise the price of a looping callee whose copies in one loop outgrow a hot splice (2026-11-24)
 
 A hot site prices its callee at 5× the plain threshold. `write_escaped_string`
 carries a loop, and the serializers call it once per field, so the profile
 heated all of its sites and the inliner spliced it at 37 of them. The time is
 in the callee's loop, so each splice saves one call per string while copying
 the whole loop. In `try_inline_call_expr`, a hot site now takes the plain price
-when the callee holds a loop (`loopy`), the innermost loop calls it from more
-than one site (`CallerFrame::sole_loop_site`), and no argument is a constant
-(`is_constant_arg`). A constant argument may fold the loop once spliced: without that
-exception, `read_be` lost its splice in `read_float` and cbor_canada de
-measured 10% slower.
+when all of these hold:
 
-Every Wado row ran through `mise run all-wado`, two full runs per arm, in
-alternating order, against the build before it. Two figures are the two runs;
-json_twitter ser kept only the first.
+- The callee's loop runs its body at least as often as the code around it
+  reaches it (`BodyScan::spins`, read from the profile's region counts).
+- The innermost loop calls it from more than one site, and those copies
+  together cost more than one hot splice (`hot_threshold`).
+- No argument is a constant (`is_constant_arg`), which may fold the loop once
+  spliced.
 
-| Row                | Change           |
-| ------------------ | ---------------- |
-| json_twitter / ser | +6.4%            |
-| json_twitter / de  | +2.8%, +3.7%     |
-| cbor_catalog / de  | +2.1%, +4.0%     |
-| json_catalog / ser | **−1.8%**        |
-| cbor_twitter / de  | **−1.8%, −1.9%** |
-| zlib compress      | **−2.0%, −2.6%** |
-| gale_gen           | noise, **−1.0%** |
+The six rows whose wasm changed ran through `mise run all-wado`, three rounds
+per arm, in alternating order, against the build before the rule:
 
-zlib compress lost the splice of `Matcher::insert_run` at its two hot sites in
-`deflate_raw`. That loop runs over one match's length, a few bytes, so the call
-is a real share of its cost. The rule reads the loop's presence, not its trip
-count, and a rule that reads the trip count could keep both sides.
+| Row                                                           | Change    |
+| ------------------------------------------------------------- | --------- |
+| json_twitter / ser                                            | +6.8%     |
+| cbor_catalog / de                                             | +4.1%     |
+| json_catalog / de                                             | +0.6%     |
+| cbor_twitter / de                                             | **−1.1%** |
+| json_twitter / de, json_catalog / ser, cbor_* / ser, gale_gen | noise     |
 
-Two wider rules were set aside. Dropping the hot price for every looping
-callee won json_twitter by the same margin and cost cbor_canada 30%. Requiring
-more than one hot site, counting those a splice carries, lost json_catalog ser
-5.2%.
+cbor_twitter de lost the hot price for `is_null` and `deserialize_bool` at a few
+more sites. Neither has a loop, so the rule did not demote them; the splices
+around them changed which sites stay hot.
 
-Not yet decided: the change awaits the user's keep-or-drop, and this entry
-goes with it if dropped.
+Each clause cost a row when it was missing:
+
+| Without                  | Row that lost                                                                    |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| any of the three clauses | cbor_canada 30% slower                                                           |
+| the constant exception   | cbor_canada de 10%: `read_be` in `read_float`                                    |
+| the size bound           | zlib compress 2–2.6%: `Matcher::insert_run`                                      |
+| `spins`                  | zlib compress 3.2%: `BitWriter::write_bits`, whose loop runs 0.19 times per call |
+
+A trip-count bound in place of the size bound fails: `write_escaped_string`
+spins 6.7 times per call and `insert_run` 20. Requiring more than one hot
+site, counting those a splice carries, lost json_catalog ser 5.2%. The user
+chose to keep the rule.
 
 ## `param_spec`'s clone cap raised from 128 to 4096 (2026-10-28)
 
