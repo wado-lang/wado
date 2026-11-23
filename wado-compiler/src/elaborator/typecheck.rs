@@ -397,8 +397,28 @@ pub(super) fn meetings(
 
 /// Whether `actual` and `expected` part at some position: their heads, or
 /// the heads of a pair of arguments one constructor, or one `fn` type, holds
-/// in both.
+/// in both. A tuple holding a pack, or a variable or error that may stand for
+/// one, places nothing after it, so its elements are not paired by position.
 fn apart_around_holes(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
+    if heads_apart(actual, expected, type_table) {
+        return true;
+    }
+    let may_shift = |id: TypeId| {
+        type_table.as_tuple(id).is_some_and(|elems| {
+            elems.iter().any(|&e| {
+                matches!(
+                    type_table.get(e),
+                    ResolvedType::TypePack { .. }
+                        | ResolvedType::InferVar(_)
+                        | ResolvedType::Unknown
+                        | ResolvedType::Error
+                )
+            })
+        })
+    };
+    if may_shift(actual) || may_shift(expected) {
+        return false;
+    }
     let any_apart = |a_args: &[TypeId], e_args: &[TypeId]| {
         a_args.len() == e_args.len()
             && a_args
@@ -406,9 +426,6 @@ fn apart_around_holes(actual: TypeId, expected: TypeId, type_table: &TypeTable) 
                 .zip(e_args)
                 .any(|(&a, &e)| apart_around_holes(a, e, type_table))
     };
-    if heads_apart(actual, expected, type_table) {
-        return true;
-    }
     if let (
         ResolvedType::Function {
             params: a_params,

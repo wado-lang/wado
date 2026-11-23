@@ -23,9 +23,8 @@ use crate::type_table::TypeTable;
 
 use super::call::{ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer};
 use super::callee::StaticMethodRef;
-use super::coercion::{ExpectedReturn, answers_last};
+use super::coercion::ExpectedReturn;
 use super::expr::IndexAccess;
-use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::pending_selection::{DispatchSite, PendingCall};
@@ -974,22 +973,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
         };
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
-            let mut known = if self.turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
-                let mut infer =
-                    InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
-                let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
-                for (i, (&param_type, &arg)) in
-                    solve_params.iter().zip(solve_args.iter()).enumerate()
-                {
-                    if answers_last(args_ast.get(i)) {
-                        infer.add_deferred(param_type, arg);
-                    } else {
-                        infer.add(param_type, arg);
-                    }
-                }
-                infer.solve()
-            } else {
-                type_args.clone()
+            let mut known: Vec<TypeId> = match &inst {
+                Some(inst) => inst
+                    .vars
+                    .iter()
+                    .map(|&var| self.apply_infer_holes(var))
+                    .collect(),
+                None => type_args.clone(),
             };
             // The solve above has seen every written argument, so a pack still
             // open here is one the call left nothing over for — unless an
@@ -1012,9 +1002,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             bind_nearer(&mut default_type_bindings, own);
         }
+        let default_expected = match &inst {
+            Some(inst) => self.instantiate_types(&expected_param_types, inst),
+            None => expected_param_types.clone(),
+        };
         self.fill_trailing_defaults(
             &mut args,
-            &expected_param_types,
+            &default_expected,
             &defaults,
             Some(callee_module.clone()),
             Some(self_binding),

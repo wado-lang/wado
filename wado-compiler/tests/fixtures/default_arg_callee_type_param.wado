@@ -62,6 +62,12 @@ impl<T: Default> Box2<T> {
         return `${a:?}/${b:?}`;
     }
 
+    // The method's own parameter, which only the call's turbofish or its
+    // expected type answers.
+    fn pick<U: Default>(&self, u: U = U::default()) -> U {
+        return u;
+    }
+
     // A static's own parameter, supplied by its own type default.
     fn tagged<U: Default = NoFields>(u: U = U::default()) -> String {
         return `${u:?}`;
@@ -221,6 +227,16 @@ test "an instance method's default names a type parameter in scope" {
     assert bi.marked::<i32>() == "0";
     assert Plain {}.marked() == "NoFields {}";
     assert Plain {}.marked::<i32>() == "0";
+}
+
+test "an instance method's default reads the call's own type argument" {
+    let bi: Box2<i32> = Box2 { v: 1 };
+    let n: i64 = bi.pick();
+    let xs = bi.pick::<List<i64>>();
+    let ys: List<i64> = bi.pick::<List<_>>();
+    let mut zs = bi.pick::<List<_>>();
+    zs.push(5_000_000_000 as i64);
+    assert n == 0 && xs.len() == 0 && ys.len() == 0 && zs[0] == 5_000_000_000;
 }
 
 // The same two sources, plus the static's own type-parameter default.
