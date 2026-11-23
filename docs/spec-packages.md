@@ -185,6 +185,13 @@ of a key between colons is 1 to 64 characters from `[a-zA-Z0-9_-]`.
 Each value is an inline table that gives the dependency's source: where its code
 comes from. A source is a local path, a git repository, or a registry.
 
+Git is the primary source: any repository on any host serves a package, with no
+registry to publish to and no `namespace` to claim. A path source serves a
+package beside this one, such as another member of a workspace. A registry
+serves a package published under its coordinate. Everything a dependency offers
+reaches a git or path dependency. A registry dependency offers only what its
+component exports ([Source Dependencies](#source-dependencies)).
+
 ### Path Sources
 
 A `path` source names a directory on the local file system, or a single `.wado`
@@ -542,7 +549,7 @@ export fn run() with (Stderr, Environment, Preopens, MonotonicClock) {
 ```
 
 A registry dependency is a component, so a consumer reaches only what the
-component exports ([Registries](#registries)).
+component exports ([Registries](#registries)), and no exported file.
 
 Whatever its source, a dependency's types and traits are foreign to the
 consumer when the orphan rule asks
