@@ -51,9 +51,11 @@ pub enum SolverType {
         /// empty for one that declares no parameters.
         args: Vec<SolverType>,
     },
-    /// A function type's row holding an effect parameter: it stands for
-    /// whatever row meets it.
-    AnyRow,
+    /// A function type's row an impl header writes with an effect binder,
+    /// beside the effects it names outright, sorted: it stands for any row
+    /// holding those ([`Self::open_row_meets`]). The asking frame's own effect
+    /// parameter is rigid instead, an effect no impl names.
+    OpenRow(Vec<TypeDeclId>),
     /// A type inference has yet to settle. Two occurrences of one variable are
     /// one type.
     Var(Var),
@@ -87,13 +89,32 @@ pub struct Pin {
 }
 
 impl SolverType {
+    /// Whether an [`OpenRow`](Self::OpenRow) naming `written` meets `row`: a
+    /// row holding each of them, another binder's, or one not known yet.
+    #[must_use]
+    pub fn open_row_meets(written: &[TypeDeclId], row: &Self) -> bool {
+        match row {
+            Self::Tuple(heads) => written
+                .iter()
+                .all(|&effect| heads.contains(&Self::Decl(effect, Vec::new()))),
+            Self::OpenRow(_) | Self::Var(_) => true,
+            Self::Decl(..)
+            | Self::Param(_)
+            | Self::Pack(_)
+            | Self::Ref { .. }
+            | Self::Projection { .. } => {
+                unreachable!("a row is a tuple of effects, a binder's, or a variable")
+            }
+        }
+    }
+
     /// Whether a [`Param`](Self::Param) or [`Pack`](Self::Pack) in `self`
     /// satisfies `pred`.
     #[must_use]
     pub fn mentions(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
-            Self::AnyRow | Self::Var(_) => false,
+            Self::OpenRow(_) | Self::Var(_) => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
             Self::Ref { inner, .. } => inner.mentions(pred),
             Self::Projection { base, args, .. } => {
@@ -107,7 +128,7 @@ impl SolverType {
     pub fn mentions_var(&self, pred: &dyn Fn(Var) -> bool) -> bool {
         match self {
             Self::Var(var) => pred(*var),
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
+            Self::Param(_) | Self::Pack(_) | Self::OpenRow(_) => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions_var(pred)),
             Self::Ref { inner, .. } => inner.mentions_var(pred),
             Self::Projection { base, args, .. } => {
@@ -133,7 +154,7 @@ impl SolverType {
         }
         Some(match self {
             Self::Var(v) => var(*v)?,
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => self.clone(),
+            Self::Param(_) | Self::Pack(_) | Self::OpenRow(_) => self.clone(),
             Self::Decl(head, inner) => Self::Decl(*head, each(inner, var)?),
             Self::Tuple(inner) => Self::Tuple(each(inner, var)?),
             Self::Ref { is_mut, inner } => Self::Ref {
@@ -196,7 +217,7 @@ impl SolverType {
                     args: ys,
                 },
             ) => a == b && p == q && x.alike(y, renaming) && each(xs, ys, renaming),
-            (Self::Param(_) | Self::Pack(_) | Self::AnyRow, _) => self == other,
+            (Self::Param(_) | Self::Pack(_) | Self::OpenRow(_), _) => self == other,
             (
                 Self::Var(_)
                 | Self::Decl(..)
@@ -215,7 +236,7 @@ impl SolverType {
     pub fn binds(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
-            Self::AnyRow | Self::Var(_) | Self::Projection { .. } => false,
+            Self::OpenRow(_) | Self::Var(_) | Self::Projection { .. } => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.binds(pred)),
             Self::Ref { inner, .. } => inner.binds(pred),
         }
@@ -226,7 +247,8 @@ impl SolverType {
     #[must_use]
     pub fn mentions_decl(&self, pred: &dyn Fn(TypeDeclId) -> bool) -> bool {
         match self {
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow | Self::Var(_) => false,
+            Self::Param(_) | Self::Pack(_) | Self::Var(_) => false,
+            Self::OpenRow(effects) => effects.iter().any(|&effect| pred(effect)),
             Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Ref { inner, .. } => inner.mentions_decl(pred),
@@ -257,7 +279,7 @@ impl SolverType {
             }
             Self::Tuple(inner) => inner.iter().any(|t| t.projects_param(projecting)),
             Self::Ref { inner, .. } => inner.projects_param(projecting),
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow | Self::Var(_) => false,
+            Self::Param(_) | Self::Pack(_) | Self::OpenRow(_) | Self::Var(_) => false,
         }
     }
 
@@ -281,7 +303,7 @@ impl SolverType {
         };
         Some(match self {
             Self::Param(index) | Self::Pack(index) => arg(*index)?,
-            Self::AnyRow | Self::Var(_) => self.clone(),
+            Self::OpenRow(_) | Self::Var(_) => self.clone(),
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
             // A pack spread in a tuple splices its elements in: `[..T]` at
             // `T = [i32, bool]` is `[i32, bool]`, not `[[i32, bool]]`.
@@ -320,7 +342,7 @@ impl SolverType {
             |inner: &[Self]| -> Vec<Self> { inner.iter().map(|t| t.map_vars(var)).collect() };
         match self {
             Self::Var(v) => var(*v),
-            Self::Param(_) | Self::Pack(_) | Self::AnyRow => self.clone(),
+            Self::Param(_) | Self::Pack(_) | Self::OpenRow(_) => self.clone(),
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)),
             Self::Tuple(inner) => Self::Tuple(each(inner)),
             Self::Ref { is_mut, inner } => Self::Ref {
@@ -700,7 +722,7 @@ fn matching<'p, A: Iterator<Item = ImplId>>(
     all: impl FnOnce() -> A,
     by_head: impl Fn(Option<TypeDeclId>) -> Option<&'p Vec<ImplId>>,
 ) -> Matching<'p, A> {
-    if matches!(ty, SolverType::AnyRow) || is_opaque(ty) {
+    if matches!(ty, SolverType::OpenRow(_)) || is_opaque(ty) {
         return Matching::All(all());
     }
     let ids = |head| by_head(head).map_or(&[][..], Vec::as_slice);
@@ -803,7 +825,7 @@ impl Program {
             | SolverType::Tuple(_)
             | SolverType::Ref { .. }
             | SolverType::Projection { .. }
-            | SolverType::AnyRow
+            | SolverType::OpenRow(_)
             | SolverType::Var(_) => true,
         };
         let undeclared = |ty: &SolverType| ty.mentions(&|p| !declared(p));

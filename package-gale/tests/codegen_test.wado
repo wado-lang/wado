@@ -3741,6 +3741,37 @@ WS : ' ' -> skip ;
     assert parses(grammar, "s", ["a b", "b a"]) == "a b => (s (x a b))\nb a => (s (y b a))\n";
 }
 
+test "a predicate no dispatch tests leaves no predicate fn behind" {
+    // The mid-alternative one runs as the body's inline guard, so only the
+    // alt-initial one is called through its fn.
+    let grammar = "grammar T;
+options { language = Wado; }
+s : x EOF ;
+x : {true}? A | B {1 > 0}? A ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert count_occurrences(&gen_source(grammar), "fn pred_") == 1;
+    assert parses(grammar, "s", ["a", "b a"]) == "a => (s (x a))\nb a => (s (x b a))\n";
+}
+
+test "a tournament whose scan checks the gate keeps no predicate fn" {
+    // The scan answers `{true}?` against its own handle, so the tournament
+    // writes the bare scan call and nothing calls `pred_<id>`.
+    let grammar = "grammar T;
+options { language = Wado; }
+s : r EOF ;
+r : {true}? a | a B ;
+a : A+ ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert count_occurrences(&longest_source(grammar), "fn pred_") == 0;
+    assert parses(grammar, "s", ["a a", "a b"], &LONGEST) == "a a => (s (r (a a a)))\na b => (s (r (a a) b))\n";
+}
+
 test "a predicate fn keeps the line break that ends its body's comment" {
     let grammar = "grammar T;
 options { language = Wado; }
@@ -6538,7 +6569,7 @@ use { Environment, Exit } from "core:cli";
 use { Log } from "core:log";
 use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use fs from "core:fs";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Request, Response, Error as KilnError, InputFile } from "core:kiln";
 
 global EXPR: String = "grammar Expr;
@@ -6656,7 +6687,7 @@ fn gale_in<S: AsStrSlice>(dir: S, argv: List<String>) -> Run with (Preopens, Env
 
 /// Serves each input file's content from its stream, by the stream's identity.
 struct Inputs {
-    contents: TreeMap<ResourceId, ByteList> = TreeMap::<ResourceId, ByteList>::new(),
+    contents: HashMap<ResourceId, ByteList> = HashMap::<ResourceId, ByteList>::new(),
 }
 
 impl Inputs {

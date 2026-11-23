@@ -991,3 +991,14 @@ fresh inference variable, never the callee's binder, so a default fills it and
 an unanswered one is reported
 (`generic_call_default_beside_caller_binder.wado`). A binder inference cannot
 settle is reported once, and its slot becomes the error type.
+
+## Known gap: an effect parameter is its name
+
+`EffectRef::Param` carries the name a declaration gave its effect parameter, not
+the declaration. A row substitution (`EffectRows`) is keyed by that name, and so
+is the solver's head for one (`DeclKey::EffectParam`). Two declarations'
+parameters of one spelling are one effect wherever both reach one question.
+`TypeTable::effect_binding` tells a callee's parameter from the caller's of the
+same name by minting a variable for each while it matches them. What it admits
+is one declaration's row read as another's: a rigid `E` met by an unsubstituted
+`fn() with E` written elsewhere is taken for the same effect.

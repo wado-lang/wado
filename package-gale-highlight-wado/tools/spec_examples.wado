@@ -20,7 +20,7 @@ use { collect_paths } from "lib:gale";
 use { args, eprintln, exit, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { from_string } from "core:json";
 use { Value } from "core:value";
 
@@ -81,7 +81,7 @@ pub fn reference_of(block: &FencedCode) -> Result<Option<Citation>, String> {
     if !body.starts_with("{") {
         return Result::Ok(null);
     }
-    let object = from_string::<TreeMap<String, Value>>(body.to_string()).map_err(
+    let object = from_string::<HashMap<String, Value>>(body.to_string()).map_err(
         |e| `the reference is not a JSON object: ${e:?}`,
     )?;
     let mut fixture: Option<String> = null;
@@ -197,14 +197,14 @@ fn named_files(path: &String, text: &String) -> List<String> {
 
 /// The files under `FIXTURE_DIR` a top-level fixture reaches, directly or
 /// through the files it names: the helpers the suite compiles.
-fn reached_helpers(files: &TreeMap<String, String>) -> TreeSet<String> {
+fn reached_helpers(files: &HashMap<String, String>) -> HashSet<String> {
     let mut pending: List<String> = [];
     for let [path, _text] of files.entries() {
         if fs::parent(path) matches { Some(dir) && dir == FIXTURE_DIR } {
             pending.push(*path);
         }
     }
-    let mut reached = TreeSet::<String>::new();
+    let mut reached = HashSet::<String>::new();
     while let Some(path) = pending.pop() {
         let Some(text) = files.get_ref_str(&path) else {
             continue;
@@ -252,8 +252,8 @@ fn expects_rejection(data: &String) -> Result<bool, String> {
 fn check_block(
     block: &FencedCode,
     citation: &Citation,
-    files: &TreeMap<String, String>,
-    reached: &TreeSet<String>,
+    files: &HashMap<String, String>,
+    reached: &HashSet<String>,
 ) -> Option<String> {
     let reference = &citation.reference;
     let path = reference.path();
@@ -289,7 +289,7 @@ fn check_block(
 
 /// Every block of `blocks` that does not comply, with `files` and `reached` as
 /// [`check_block`] reads them.
-pub fn audit(blocks: &List<FencedCode>, files: &TreeMap<String, String>, reached: &TreeSet<String>) -> List<Finding> {
+pub fn audit(blocks: &List<FencedCode>, files: &HashMap<String, String>, reached: &HashSet<String>) -> List<Finding> {
     let mut out: List<Finding> = [];
     for let block of blocks {
         let why = match reference_of(block) {
@@ -307,7 +307,7 @@ pub fn audit(blocks: &List<FencedCode>, files: &TreeMap<String, String>, reached
 // --- the command ---
 
 /// Each file `blocks` names that can be read, by its path.
-fn read_files(blocks: &List<FencedCode>, into: &mut TreeMap<String, String>) with Preopens {
+fn read_files(blocks: &List<FencedCode>, into: &mut HashMap<String, String>) with Preopens {
     for let block of blocks {
         if let Ok(Some(citation)) = reference_of(block) {
             let path = citation.reference.path();
@@ -321,7 +321,7 @@ fn read_files(blocks: &List<FencedCode>, into: &mut TreeMap<String, String>) wit
 }
 
 /// Every `.wado` file under `FIXTURE_DIR`, by its path.
-fn read_fixtures(into: &mut TreeMap<String, String>) -> Result<(), fs::FsError> with Preopens {
+fn read_fixtures(into: &mut HashMap<String, String>) -> Result<(), fs::FsError> with Preopens {
     for let found of fs::walk_dir(&FIXTURE_DIR)? {
         let entry = found?;
         if entry.path.ends_with(".wado") {
@@ -335,7 +335,7 @@ fn read_fixtures(into: &mut TreeMap<String, String>) -> Result<(), fs::FsError> 
 /// A fixture tree read only in part fails the check: a helper reached only from
 /// the unread part would be reported as reached by no fixture.
 fn report(paths: &List<String>) -> i32 with (Stderr, Preopens) {
-    let mut files = TreeMap::<String, String>::new();
+    let mut files = HashMap::<String, String>::new();
     if let Err(e) = read_fixtures(&mut files) {
         eprintln(`error: ${e}`);
         return 1;
@@ -384,13 +384,13 @@ test "a comment holding no JSON object names nothing" {
 
 test "a JSON comment that is not a reference breaks the rule" {
     let malformed = "<!-- {\"fixture\": } -->\n```wado\nx\n```\n";
-    assert why_of(malformed, &TreeMap::new()) matches { Some(_) };
+    assert why_of(malformed, &HashMap::new()) matches { Some(_) };
     let misspelled = "<!-- {\"fixure\": \"a.wado\"} -->\n```wado\nx\n```\n";
-    assert why_of(misspelled, &TreeMap::new()) matches { Some(_) };
+    assert why_of(misspelled, &HashMap::new()) matches { Some(_) };
     let extra = "<!-- {\"fixture\": \"a.wado\", \"note\": \"x\"} -->\n```wado\nx\n```\n";
-    assert why_of(extra, &TreeMap::new()) matches { Some(_) };
+    assert why_of(extra, &HashMap::new()) matches { Some(_) };
     let both = "<!-- {\"fixture\": \"a.wado\", \"source\": \"b.wado\"} -->\n```wado\nx\n```\n";
-    assert why_of(both, &TreeMap::new()) matches { Some(_) };
+    assert why_of(both, &HashMap::new()) matches { Some(_) };
 }
 
 test "a quotation matches under one indentation prefix" {
@@ -441,19 +441,19 @@ test "a trap expectation is a claim the run checks" {
 
 /// One file, keyed as a reference to it is: a fixture under `FIXTURE_DIR`.
 #[allow(dead_code)]
-fn fixture_map(name: String, source: String) -> TreeMap<String, String> {
+fn fixture_map(name: String, source: String) -> HashMap<String, String> {
     return file_map(fs::join(&FIXTURE_DIR, &name), source);
 }
 
 #[allow(dead_code)]
-fn file_map(path: String, text: String) -> TreeMap<String, String> {
-    let mut map = TreeMap::<String, String>::new();
+fn file_map(path: String, text: String) -> HashMap<String, String> {
+    let mut map = HashMap::<String, String>::new();
     map[path] = text;
     return map;
 }
 
 #[allow(dead_code)]
-fn why_of(markdown: String, files: &TreeMap<String, String>) -> Option<String> {
+fn why_of(markdown: String, files: &HashMap<String, String>) -> Option<String> {
     let findings = audit(&wado_blocks(&markdown), files, &reached_helpers(files));
     assert findings.len() <= 1;
     return findings.into_iter().map(|f| f.why).next();
@@ -470,11 +470,11 @@ test "a block quoting its fixture complies" {
 }
 
 test "a block without a reference breaks the rule" {
-    assert why_of("```wado\nx\n```\n", &TreeMap::new()) == Option::Some("names no fixture or source");
+    assert why_of("```wado\nx\n```\n", &HashMap::new()) == Option::Some("names no fixture or source");
 }
 
 test "a missing fixture breaks the rule" {
-    assert why_of(quoting(), &TreeMap::new()) matches { Some(_) };
+    assert why_of(quoting(), &HashMap::new()) matches { Some(_) };
 }
 
 test "a fixture that does not contain the block breaks the rule" {
@@ -503,7 +503,7 @@ test "a source is quoted whole, with no assert asked of it" {
     let files = file_map("lib/a.wado", "fn f() {}\n__DATA__\nraw\n");
     assert why_of(markdown, &files) == null;
     assert why_of(markdown, &file_map("lib/a.wado", "fn f() {}\n")) matches { Some(_) };
-    assert why_of(markdown, &TreeMap::new()) matches { Some(_) };
+    assert why_of(markdown, &HashMap::new()) matches { Some(_) };
 }
 
 test "a source never names a fixture" {
@@ -522,7 +522,7 @@ fn quoting_helper() -> String {
 }
 
 #[allow(dead_code)]
-fn helper_files(importer: String) -> TreeMap<String, String> {
+fn helper_files(importer: String) -> HashMap<String, String> {
     let mut files = fixture_map("sub/h.wado", "pub fn f() {}\n\n__DATA__\nraw\n");
     files[fs::join(&FIXTURE_DIR, "a.wado")] = importer;
     return files;

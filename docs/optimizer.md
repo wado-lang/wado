@@ -432,8 +432,8 @@ Drop a field store the next store to the same field replaces before any read.
 
 ### `run_peephole`
 
-Instruction selection: `select`, rotates, fused sign extension, and redundant
-casts and null checks dropped.
+Instruction selection: `select`, rotates, fused sign extension, a branch a
+constant decides, and redundant casts and null checks dropped.
 
 ### `flatten_seq_assignments`
 
@@ -476,7 +476,8 @@ Merge identical immutable constant globals.
 
 ### `cleanup`
 
-Remove dead locals, no-ops, and dead code after a trap.
+Remove dead locals, no-ops, and dead code after a trap, a branch, or a block
+no path falls out of.
 
 ### `prune_dead_data`
 

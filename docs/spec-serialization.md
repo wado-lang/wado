@@ -122,8 +122,8 @@ The standard library's own impls:
 | `Option<T>`                          | null for `None`; the held value for `Some` |
 | `Result<T, E>`                       | a variant with cases `Ok` and `Err`        |
 | `List<T>`                            | a sequence                                 |
-| `TreeMap<K, V>`                      | a map                                      |
-| `TreeSet<T>`                         | a sequence                                 |
+| `HashMap<K, V>`, `TreeMap<K, V>`     | a map                                      |
+| `HashSet<T>`, `TreeSet<T>`           | a sequence                                 |
 
 A text format spells every map key as a string, so a key there must be a scalar:
 an integer, a float, `bool`, `char` or a string. A non-string key is written as
@@ -168,7 +168,7 @@ test {
 a field default instead.
 
 Deserialization rejects a repeated field or key by default. A set's element is
-its key, so a `TreeSet<T>` read from a sequence that repeats an element is
+its key, so a `HashSet<T>` read from a sequence that repeats an element is
 rejected the same way. A format that overrides `Deserializer::on_duplicate_field`
 may accept one instead. An accepted repeat keeps the last value, and a map key
 or set element as first read.

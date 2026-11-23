@@ -33,7 +33,7 @@ use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { to_bytes_pretty, to_string, from_string } from "core:json";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use {
     changed_paths,
     source_diff,
@@ -249,8 +249,8 @@ ${to_string(&reviewed.findings).unwrap()}
 
 /// The entries an earlier run with these settings left at `path`, by fix. A
 /// rerun only tops each entry up to `RUNS`.
-fn earlier_entries(path: &String) -> TreeMap<i32, Entry> with Preopens {
-    let mut by_fix = TreeMap::<i32, Entry>::new();
+fn earlier_entries(path: &String) -> HashMap<i32, Entry> with Preopens {
+    let mut by_fix = HashMap::<i32, Entry>::new();
     let Ok(text) = fs::read_to_string(path) else {
         return by_fix;
     };

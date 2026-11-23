@@ -12,7 +12,7 @@ use { args, eprintln, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Process } from "core:process";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { to_bytes_pretty } from "core:json";
 use { merged_prs, Merge, Blamed, FixResult, Census } from "./eval.wado";
 use { git, try_git, generated, nul_separated } from "../src/git.wado";
@@ -54,8 +54,8 @@ fn is_test(path: &String) -> bool {
 
 /// Commit to the pull request whose merge brought it in. A commit two merges
 /// share belongs to the earlier one.
-fn commit_prs(merges: &List<Merge>) -> TreeMap<String, i32> with Process {
-    let mut by_commit = TreeMap::<String, i32>::new();
+fn commit_prs(merges: &List<Merge>) -> HashMap<String, i32> with Process {
+    let mut by_commit = HashMap::<String, i32>::new();
     for let m of merges {
         for let c of git(["rev-list", `${m.sha}^1..${m.sha}^2`]).lines() {
             by_commit.try_insert(c.to_string(), m.num);
@@ -126,7 +126,7 @@ fn header_commit(line: StrSlice) -> Option<String> {
     return Some(sha.to_string());
 }
 
-fn census(m: &Merge, commit_pr: &TreeMap<String, i32>, pr_sha: &TreeMap<i32, String>) -> FixResult with Process {
+fn census(m: &Merge, commit_pr: &HashMap<String, i32>, pr_sha: &HashMap<i32, String>) -> FixResult with Process {
     let base = `${m.sha}^1`;
     let all = changes(&base, &m.sha);
     let mut paths: List<String> = [];
@@ -137,7 +137,7 @@ fn census(m: &Merge, commit_pr: &TreeMap<String, i32>, pr_sha: &TreeMap<i32, Str
     // The attributes the fix was made under: a rule since dropped still counts.
     let gen = generated(&base, &paths);
     let mut adds_test = false;
-    let mut blamed = TreeMap::<i32, Blamed>::new();
+    let mut blamed = HashMap::<i32, Blamed>::new();
     let mut old_lines = 0;
     for let c of &all {
         if gen.contains_str(&c.old_path) || gen.contains_str(&c.new_path) {
@@ -201,7 +201,7 @@ export fn run() with (Stderr, Environment, Preopens, Process) {
     let merges = merged_prs();
     eprintln(`PRs: ${merges.len()}`);
     let commit_pr = commit_prs(&merges);
-    let mut pr_sha = TreeMap::<i32, String>::new();
+    let mut pr_sha = HashMap::<i32, String>::new();
     for let m of &merges {
         pr_sha.try_insert(m.num, m.sha);
     }

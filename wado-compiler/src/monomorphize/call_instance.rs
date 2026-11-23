@@ -82,30 +82,31 @@ impl Monomorphizer {
         {
             return None;
         }
-        let impl_type_args = if template.impl_type_params.is_empty() {
-            Vec::new()
-        } else {
-            let args = self.impl_args_at(&template, site.template, &site, type_table)?;
-            // A written target takes one argument per position, and the slots
-            // past them (nested in an argument, projected by a bound) are read
-            // out of those; any other target takes one per scalar parameter.
-            let positions = template
-                .impl_origin
-                .map_or(0, |block| type_table.impl_target_args(block).len());
-            let required = if positions > 0 {
-                positions
+        let impl_type_args =
+            if template.impl_type_params.is_empty() && template.impl_effect_params.is_empty() {
+                Vec::new()
             } else {
-                template
-                    .impl_type_params
-                    .iter()
-                    .filter(|param| !param.is_pack)
-                    .count()
+                let args = self.impl_args_at(&template, site.template, &site, type_table)?;
+                // A written target takes one argument per position, and the slots
+                // past them (nested in an argument, projected by a bound) are read
+                // out of those; any other target takes one per scalar parameter.
+                let positions = template
+                    .impl_origin
+                    .map_or(0, |block| type_table.impl_target_args(block).len());
+                let required = if positions > 0 {
+                    positions
+                } else {
+                    template
+                        .impl_type_params
+                        .iter()
+                        .filter(|param| !param.is_pack)
+                        .count()
+                };
+                if args.len() < required {
+                    return None;
+                }
+                args
             };
-            if args.len() < required {
-                return None;
-            }
-            args
-        };
         let method_type_args = method_args_at(&template, &site, type_table)?;
         Some(InstantiationKey {
             def: None,
@@ -183,14 +184,22 @@ impl Monomorphizer {
             return recorded.map(<[TypeId]>::to_vec);
         };
         let info = template.method_info.as_ref()?;
-        let args = self
-            .struct_info_for_method(
-                receiver,
-                type_table,
-                &info.method_name,
-                info.trait_name.as_ref(),
-            )
-            .map(|(_, args)| args);
+        let function_position = info
+            .receiver()
+            .is_function()
+            .then(|| type_table.function_position(receiver))
+            .flatten();
+        let args = match function_position {
+            Some(function) => Some(vec![function]),
+            None => self
+                .struct_info_for_method(
+                    receiver,
+                    type_table,
+                    &info.method_name,
+                    info.trait_name.as_ref(),
+                )
+                .map(|(_, args)| args),
+        };
         // A slot only the trait reference binds shows in no receiver argument,
         // so the call recorded every slot.
         match recorded {

@@ -105,9 +105,7 @@ test "stage_a_parse: SemPredEvalParser/PredicateDependentOnArg" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/PredicateDependentOnArg" {
     let input = "a b";
-    let expected = "alt 2
-alt 1
-";
+    let expected = "alt 2\nalt 1\n";
     let result = t_PredicateDependentOnArg::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -159,9 +157,7 @@ test "stage_a_parse: SemPredEvalParser/PredsInGlobalFOLLOW" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/PredsInGlobalFOLLOW" {
     let input = "a!";
-    let expected = "eval=true
-parse
-";
+    let expected = "eval=true\nparse\n";
     let result = t_PredsInGlobalFOLLOW::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -199,9 +195,7 @@ test "stage_a_parse: SemPredEvalParser/RewindBeforePredEval" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/RewindBeforePredEval" {
     let input = "y 3 x 4";
-    let expected = "alt 2
-alt 1
-";
+    let expected = "alt 2\nalt 1\n";
     let result = t_RewindBeforePredEval::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -239,10 +233,7 @@ test "stage_a_parse: SemPredEvalParser/Simple" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/Simple" {
     let input = "x y 3";
-    let expected = "alt 2
-alt 2
-alt 3
-";
+    let expected = "alt 2\nalt 2\nalt 3\n";
     let result = t_Simple::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -266,9 +257,7 @@ test "stage_b_oracle: SemPredEvalParser/Simple" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/SimpleValidate2" {
     let input = "3 4 x";
-    let expected = "alt 2
-alt 2
-";
+    let expected = "alt 2\nalt 2\n";
     let result = t_SimpleValidate2::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -295,10 +284,7 @@ test "stage_a_parse: SemPredEvalParser/ToLeft" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/ToLeft" {
     let input = "x x y";
-    let expected = "alt 2
-alt 2
-alt 2
-";
+    let expected = "alt 2\nalt 2\nalt 2\n";
     let result = t_ToLeft::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -336,13 +322,7 @@ test "stage_a_parse: SemPredEvalParser/ToLeftWithVaryingPredicate" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/ToLeftWithVaryingPredicate" {
     let input = "x x y";
-    let expected = "i=1
-alt 2
-i=2
-alt 1
-i=3
-alt 2
-";
+    let expected = "i=1\nalt 2\ni=2\nalt 1\ni=3\nalt 2\n";
     let result = t_ToLeftWithVaryingPredicate::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -366,9 +346,7 @@ test "stage_b_oracle: SemPredEvalParser/ToLeftWithVaryingPredicate" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/TwoUnpredicatedAlts" {
     let input = "x; y";
-    let expected = "alt 1
-alt 1
-";
+    let expected = "alt 1\nalt 1\n";
     let result = t_TwoUnpredicatedAlts::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -381,10 +359,7 @@ alt 1
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/TwoUnpredicatedAltsAndOneOrthogonalAlt" {
     let input = "34; x; y";
-    let expected = "alt 1
-alt 2
-alt 2
-";
+    let expected = "alt 1\nalt 2\nalt 2\n";
     let result = t_TwoUnpredicatedAltsAndOneOrthogonalAlt::parse_s(&input);
     let actual = result.output;
     assert actual == expected;

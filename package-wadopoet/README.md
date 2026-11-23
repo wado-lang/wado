@@ -1,8 +1,8 @@
 # Wadopoet
 
-Wadopoet builds Wado source text for a code generator. Grog and Loam emit through
-it. A package names it under `[dependencies]` and imports it from
-`lib:wadopoet`.
+Wadopoet builds Wado source text for a code generator. Gale, Grog and Loam emit
+through it, and so do the tools that write Jade's and Gale's generated tests. A
+package names it under `[dependencies]` and imports it from `lib:wadopoet`.
 
 ## Building Source
 
@@ -131,9 +131,9 @@ assert names.claim_all(&wants) == Ok(["Point__", "Point_"] as List<String>);
 `IdGen` hands out 0, 1, 2, …, for the locals a generator suffixes so two never
 meet.
 
-`hoist_fn(key, prefix, |w, name| …)` defines a top-level function once per
+`intern_fn(key, prefix, |w, name| …)` defines a top-level function once per
 distinct `key`. The closure writes it under the name it is handed, and
-`write_hoisted` places what every closure wrote.
+`write_interned` places what every closure wrote.
 
 ## Escaping with the `wado` Tag
 
@@ -154,12 +154,17 @@ wado`pos = ${name}(tokens);`  // pos = expr_list(tokens);
 
 The tag tracks what the template's own text has opened: code, a string, a char
 literal, a template, or a comment. A hole's value never changes that state. A
-hole in code is written as it renders, since there it is code itself. A format
+hole in code is written as it renders, since there it is code itself. A hole in
+a comment is written as it renders too, and traps if the comment would end in it
+or right after it: a line break in a line comment, `*/` in a block comment, or a
+`*` or `/` that pairs with the template's text beside it. A format
 specifier applies as usual (`${bits:x}`). Printable non-ASCII stays verbatim.
 
-Two helpers cover literals a hole cannot express:
+Three helpers cover literals a hole cannot express:
 
 - `byte_string_literal(bytes)` writes a `b"..."` literal.
+- `raw_string_literal(text)` writes a `#"..."#` literal, with as many `#`s as
+  the text needs. The text must hold no CR, which a raw string cannot carry.
 - `char_range_pat(range)` writes a char range pattern, or one literal when the
   range holds one char.
 

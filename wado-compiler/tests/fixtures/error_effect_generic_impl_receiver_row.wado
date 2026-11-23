@@ -1,0 +1,25 @@
+// A method of an impl generic over an effect performs the row its receiver has
+// where the target writes the parameter, so a caller must hold it.
+use { println } from "core:cli";
+
+struct Slot<T> {
+    v: T,
+}
+
+impl<effect E> Slot<fn() with (E)> {
+    fn fire(&self) with E {
+        (self.v)();
+    }
+}
+
+fn quiet() {
+    let s = Slot { v: || { println("loud"); } };
+    s.fire();   // ERROR: `E` is `Stdout` here, and `quiet` does not hold it
+}
+
+export fn run() {
+    quiet();
+}
+
+__DATA__
+{"compile_error": ":17:5: analysis error: missing effect 'Stdout' required by 'fire'", "compile_error_count": 1}

@@ -54,9 +54,11 @@ enum DeclKey {
     FnShape {
         is_mut: bool,
     },
-    /// One head for every effect a function type names that the program does
-    /// not declare: an effect binder, or a name that reached nothing.
+    /// One head for every effect a function type names that reached nothing.
     UndeclaredEffect,
+    /// An effect parameter of the asking frame, by name: rigid, so it is an
+    /// effect of its own, and one frame never declares two of one name.
+    EffectParam(String),
 }
 
 /// Why the lowering states nothing about a type, most telling first: a type
@@ -291,6 +293,13 @@ impl Lowering {
         {
             lowering.builtin(name);
         }
+        for param in resolutions.effect_params() {
+            let head = TypeDeclId(intern(
+                &mut lowering.decls,
+                DeclKey::EffectParam(param.name().to_string()),
+            ));
+            lowering.effects.insert(param, head);
+        }
         lowering
     }
 
@@ -363,19 +372,19 @@ impl Lowering {
         SolverType::Decl(head, signature)
     }
 
-    /// A row of named effects as the solver spells it. One holding an effect
-    /// parameter is [`SolverType::AnyRow`]: it stands for whatever row meets
-    /// it. A variable is a row the effect check has yet to solve, so it
-    /// selects nothing here: an impl is chosen as if it performed nothing.
-    fn effect_row(&self, effects: &[EffectRef]) -> SolverType {
-        if effects.iter().any(EffectRef::is_param) {
-            return SolverType::AnyRow;
-        }
-        SolverType::Tuple(
-            effects
-                .iter()
+    /// A row of named effects as the solver spells it, each variable read as
+    /// what `table` has it solved to ([`TypeTable::read_effect_row`]). An
+    /// effect parameter here is the asking frame's own, rigid: a body generic
+    /// over it holds for every row, so it meets only an impl's row binder
+    /// ([`SolverType::OpenRow`]), never a row an impl writes out. A variable
+    /// not solved yet selects nothing here: an impl is chosen as if it
+    /// performed nothing.
+    fn effect_row(&self, table: &TypeTable, effects: &[EffectRef]) -> SolverType {
+        let row = table.read_effect_row(effects);
+        closed_row(
+            row.iter()
                 .filter(|e| !e.is_var())
-                .map(|e| SolverType::Decl(self.effect_head(e), Vec::new()))
+                .map(|e| self.effect_head(e))
                 .collect(),
         )
     }
@@ -421,10 +430,15 @@ impl Lowering {
     /// binder heads of the space it is written in.
     fn named_arg(
         &self,
+        table: &TypeTable,
         name: &FqTypeName,
         param: &dyn Fn(&TypeHead) -> Option<ParamKind>,
     ) -> Result<SolverType, Unsaid> {
-        let args = said(name.args().iter().map(|arg| self.named_arg(arg, param)))?;
+        let args = said(
+            name.args()
+                .iter()
+                .map(|arg| self.named_arg(table, arg, param)),
+        )?;
         let pointee = match name.head() {
             binder @ TypeHead::Binder { .. } => param(binder).ok_or(Unsaid::Open)?.spelled()?,
             TypeHead::Tuple => SolverType::Tuple(args),
@@ -441,8 +455,8 @@ impl Lowering {
                 effects,
             } => self.fn_type(
                 *is_mut,
-                said(signature.iter().map(|ty| self.named_arg(ty, param)))?,
-                self.effect_row(effects),
+                said(signature.iter().map(|ty| self.named_arg(table, ty, param)))?,
+                self.effect_row(table, effects),
             ),
             TypeHead::Projection(_) => {
                 let projected = name.projected().expect("a projection head projects");
@@ -452,7 +466,7 @@ impl Lowering {
                     .and_then(|owning| self.known_trait(owning))
                     .ok_or(Unsaid::Unsayable)?;
                 SolverType::Projection {
-                    base: Box::new(self.named_arg(projected.base, param)?),
+                    base: Box::new(self.named_arg(table, projected.base, param)?),
                     trait_,
                     assoc: self
                         .known_assoc(trait_, projected.assoc)
@@ -481,6 +495,7 @@ impl Lowering {
     /// binders its arguments are written in.
     fn bound_named(
         &self,
+        table: &TypeTable,
         named: &FqTraitName,
         param: &dyn Fn(&TypeHead) -> Option<ParamKind>,
     ) -> Result<ParamBound, Unsaid> {
@@ -488,7 +503,12 @@ impl Lowering {
             .canonical()
             .and_then(|def| self.known_trait(def))
             .ok_or(Unsaid::Unsayable)?;
-        let args = said(named.args().iter().map(|arg| self.named_arg(arg, param)))?;
+        let args = said(
+            named
+                .args()
+                .iter()
+                .map(|arg| self.named_arg(table, arg, param)),
+        )?;
         Ok(ParamBound { trait_, args })
     }
 
@@ -608,17 +628,14 @@ impl Lowering {
                 // A name reaching no effect declaration is the signature's own
                 // effect parameter, `_` among them.
                 let mut open = false;
-                let effects: Vec<SolverType> = f
+                let heads: Vec<TypeDeclId> = f
                     .effects
                     .iter()
                     .filter_map(|effect| match resolutions.get(effect.id) {
-                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => {
-                            Some(SolverType::Decl(
-                                self.known_type(&DeclKey::Def(def))
-                                    .expect("every effect is interned up front"),
-                                Vec::new(),
-                            ))
-                        }
+                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => Some(
+                            self.known_type(&DeclKey::Def(def))
+                                .expect("every effect is interned up front"),
+                        ),
                         _ => {
                             open = true;
                             None
@@ -626,9 +643,9 @@ impl Lowering {
                     })
                     .collect();
                 let row = if open {
-                    SolverType::AnyRow
+                    SolverType::OpenRow(as_set(heads))
                 } else {
-                    SolverType::Tuple(effects)
+                    closed_row(heads)
                 };
                 Ok(self.fn_type(f.is_mut, signature, row))
             }
@@ -768,7 +785,7 @@ impl Lowering {
                         .chain(std::iter::once(return_type))
                         .map(|&a| lower(a)),
                 )?;
-                Ok(self.fn_type(*is_mut, signature, self.effect_row(effects)))
+                Ok(self.fn_type(*is_mut, signature, self.effect_row(table, effects)))
             }
             // `impl Inspect for !` is written in the prelude, so the receiver
             // side names the same shape.
@@ -837,6 +854,23 @@ pub(super) fn lower_impls<'a>(
         sources.push(header);
     }
     sources
+}
+
+/// A row naming the effects `heads`, as a set: one order, each once, so rows
+/// written in different orders are one type.
+fn closed_row(heads: Vec<TypeDeclId>) -> SolverType {
+    SolverType::Tuple(
+        as_set(heads)
+            .into_iter()
+            .map(|head| SolverType::Decl(head, Vec::new()))
+            .collect(),
+    )
+}
+
+fn as_set(mut heads: Vec<TypeDeclId>) -> Vec<TypeDeclId> {
+    heads.sort_unstable();
+    heads.dedup();
+    heads
 }
 
 /// An impl header as the program states it.
@@ -1017,7 +1051,10 @@ fn representative(
             return_type: TypeTable::UNIT,
             effects: Vec::new(),
         }),
-        DeclKey::AnonymousStruct | DeclKey::TemplateShape | DeclKey::UndeclaredEffect => None,
+        DeclKey::AnonymousStruct
+        | DeclKey::TemplateShape
+        | DeclKey::UndeclaredEffect
+        | DeclKey::EffectParam(_) => None,
     }
 }
 
@@ -1175,7 +1212,8 @@ impl SolverBridge {
                 DeclKey::Def(_)
                 | DeclKey::AnonymousStruct
                 | DeclKey::TemplateShape
-                | DeclKey::UndeclaredEffect => false,
+                | DeclKey::UndeclaredEffect
+                | DeclKey::EffectParam(_) => false,
             };
             if copies {
                 self.program.facts.insert((head, copyable), Fact::default());
@@ -1374,7 +1412,10 @@ impl SolverBridge {
             DeclKey::Def(_) => Some(CompilerItem::ReflectNewtype),
             DeclKey::AnonymousStruct => Some(CompilerItem::ReflectStruct),
             DeclKey::TemplateShape => Some(CompilerItem::ReflectTemplate),
-            DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => None,
+            DeclKey::Builtin(_)
+            | DeclKey::FnShape { .. }
+            | DeclKey::UndeclaredEffect
+            | DeclKey::EffectParam(_) => None,
         };
         for (&id, def) in program.impls().iter().filter(|(id, _)| **id >= first) {
             if !matches!(def.origin, ImplOrigin::Derived | ImplOrigin::Marker) {
@@ -1975,7 +2016,8 @@ impl SolverBridge {
                 DeclKey::Def(_)
                 | DeclKey::Builtin(_)
                 | DeclKey::FnShape { .. }
-                | DeclKey::UndeclaredEffect => {
+                | DeclKey::UndeclaredEffect
+                | DeclKey::EffectParam(_) => {
                     let Some(shape) = representative(tysys, table, lowering.tuple, key) else {
                         continue;
                     };
@@ -2106,7 +2148,7 @@ impl SolverBridge {
                 .get(&binder.type_id)
                 .into_iter()
                 .flatten()
-                .map(|declared| self.lowering.bound_named(declared, &named));
+                .map(|declared| self.lowering.bound_named(&table, declared, &named));
             let scoped = binder.bounds.iter().map(|scoped| {
                 let self_type = scoped
                     .self_binding
@@ -2197,9 +2239,9 @@ impl SolverBridge {
         }
         let table = tysys.type_table.borrow();
         let binders = binder_types(ctx);
-        let ParamBound { trait_, args } = self
-            .lowering
-            .bound_named(asked, &place_head(&binders, &table))?;
+        let ParamBound { trait_, args } =
+            self.lowering
+                .bound_named(&table, asked, &place_head(&binders, &table))?;
         Ok(Question {
             env,
             ty,
@@ -2273,57 +2315,6 @@ impl SolverBridge {
         self.answer(tysys, || binder_types(ctx), type_id, &q)
     }
 
-    /// `asked` of `type_id` as [`Self::answer_owing`] would ask it, kept to be
-    /// asked again once the effect check has solved the rows in either.
-    /// `None` where the question cannot be put, which `answer_owing` answers
-    /// at once.
-    pub(super) fn deferred(
-        &self,
-        tysys: &TypeSystem,
-        ctx: &scope::Scope,
-        type_id: TypeId,
-        asked: &FqTraitName,
-    ) -> Option<DeferredQuestion> {
-        let question = self
-            .question(tysys, ctx, type_id, asked, Variables::Refused)
-            .ok()?;
-        Some(DeferredQuestion {
-            question,
-            binders: binder_types(ctx),
-        })
-    }
-
-    /// The answer to `deferred`, asked of `closed` at `asked`, the type and
-    /// the trait it was put for with their rows solved.
-    pub(super) fn answer_deferred(
-        &self,
-        tysys: &TypeSystem,
-        deferred: DeferredQuestion,
-        closed: TypeId,
-        asked: &FqTraitName,
-    ) -> Option<DeferredAnswer> {
-        let DeferredQuestion {
-            mut question,
-            binders,
-        } = deferred;
-        {
-            let table = tysys.type_table.borrow();
-            question.ty = self
-                .lowering
-                .type_id(&table, closed, &place_binder(&binders, &table))
-                .unwrap_or_else(|_| panic!("the type lowered before its rows were solved"));
-            let ParamBound { trait_, args } = self
-                .lowering
-                .bound_named(asked, &place_head(&binders, &table))
-                .unwrap_or_else(|_| panic!("the bound lowered before its rows were solved"));
-            question.trait_ = trait_;
-            question.args = args;
-        }
-        let owed = self.answer(tysys, || binders, closed, &question)?;
-        let tied = self.order_of(&question, tied_blankets);
-        Some(DeferredAnswer { owed, tied })
-    }
-
     /// Whether `q` holds, with the bodies the answer owes. `binders` are the
     /// asking scope's [`binder_types`].
     fn answer(
@@ -2383,9 +2374,10 @@ impl SolverBridge {
                             trait_,
                         })
                         .collect(),
-                    DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => {
-                        Vec::new()
-                    }
+                    DeclKey::Builtin(_)
+                    | DeclKey::FnShape { .. }
+                    | DeclKey::UndeclaredEffect
+                    | DeclKey::EffectParam(_) => Vec::new(),
                 }
             })
             .collect();
@@ -2944,7 +2936,7 @@ impl SolverBridge {
             .iter()
             .map(|arg| {
                 self.lowering
-                    .named_arg(arg, &|_| Some(ParamKind::Type(0)))
+                    .named_arg(table, arg, &|_| Some(ParamKind::Type(0)))
                     .ok()
             })
             .collect::<Option<Vec<_>>>()?;
@@ -3165,20 +3157,6 @@ fn tied_blankets(selection: Selection) -> Vec<usize> {
         | Selection::Duplicated(_) => Vec::new(),
         Selection::Undecided(_) => unreachable!("`rank` decides every candidate"),
     }
-}
-
-/// A deferred bound met: the bodies its answer owes, and the impls the order
-/// ties for it, as [`SolverBridge::tied_through_bound`] answers.
-pub(super) struct DeferredAnswer {
-    pub(super) owed: Vec<OwedBody>,
-    pub(super) tied: Vec<Option<DefId>>,
-}
-
-/// A question whose rows the effect check has yet to solve, with
-/// the binders of the scope that put it.
-pub(super) struct DeferredQuestion {
-    question: Question,
-    binders: Vec<TypeId>,
 }
 
 /// A `type_implements_trait` question as the solver reads it.

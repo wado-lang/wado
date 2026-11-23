@@ -3778,6 +3778,7 @@ fn "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/$C
 
 fn "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/$Closure_3::$call"(self, request) {
     let self_4: ref null "effect_handler_forward_async_op.wado//MockClient";
+    let _tx_future: ref null "core:prelude//$Resource";
     let $drop_spill_9: ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $cm_pair_10: i64;
     let $pattern_temp_1: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
@@ -3786,7 +3787,6 @@ fn "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/$C
     let self_19: ref null "core:prelude/list.wado//List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>";
     let used: i32;
     let $arg_4: ref null "Array<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
-    let $held_7: ref null "core:prelude//$Resource";
     local.tee self_4(self.$capture_0).calls = self_4.calls + 1;
     $sroa_$pattern_temp_0_0_17 = builtin::i32_wrap_i64(local.tee $cm_pair_10("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_18 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_10 >> 32_i64), backing: ref.null eq };
@@ -3803,22 +3803,18 @@ fn "effect_handler_forward_async_op.wado/effect_handler_forward_async_op.wado/$C
         }
         "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_forward_async_op.wado::$const_obj_3).repr, $mv_arg_1.used);
         unreachable;
-        $held_7.value = $sroa_$pattern_temp_0_1_18.value;
-        $held_7.backing = $sroa_$pattern_temp_0_1_18.backing;
-        $sroa_$pattern_temp_0_1_18.value = 0;
-        $sroa_$pattern_temp_0_1_18.backing = ref.null eq;
     }
     self_19.used = used + 1;
     $sroa_$pattern_temp_0_1_18 = local.tee $pattern_temp_1("effect_handler_forward_async_op.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("effect_handler_forward_async_op.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, $sroa_$pattern_temp_0_0_17)).0;
-    $held_7 = $pattern_temp_1.1;
+    _tx_future = $pattern_temp_1.1;
     drop("effect_handler_forward_async_op.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.set-status-code"($sroa_$pattern_temp_0_1_18, 201));
     $drop_spill_9 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: $sroa_$pattern_temp_0_1_18 };
-    if ref.is_null($held_7) == 0 {
-        if ref.is_null($held_7.backing) == 0 {
+    if ref.is_null(_tx_future) == 0 {
+        if ref.is_null(_tx_future.backing) == 0 {
         } else {
-            $sroa_$pattern_temp_0_0_17 = $held_7.value;
-            $held_7.value = 0;
-            $held_7.backing = ref.null eq;
+            $sroa_$pattern_temp_0_0_17 = _tx_future.value;
+            _tx_future.value = 0;
+            _tx_future.backing = ref.null eq;
             "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_17);
         }
     }

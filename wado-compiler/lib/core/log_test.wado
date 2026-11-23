@@ -37,7 +37,7 @@ use {
     warn,
 } from "core:log";
 use { Value } from "core:value";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 fn text_event(level: Level, message: String, fields: Value) -> Event {
     return Event {
@@ -365,7 +365,7 @@ test "a sink over WallClock stamps the line it renders" {
 
 test "text sink appends fields as key=value, unquoted" {
     let mut sink = TextSink { seq: false };
-    let mut fields: TreeMap<String, Value> = TreeMap::new();
+    let mut fields: HashMap<String, Value> = HashMap::new();
     fields["user_id"] = Value::Int(7);
     fields["ip"] = Value::String("127.0.0.1");
     let line = sink.render(&text_event(Level::Info, "hi", Value::Object(fields)));
@@ -387,7 +387,7 @@ test "text sink names the parent span" {
 
 test "json sink writes one object per event" {
     let mut sink = JsonSink {};
-    let mut fields: TreeMap<String, Value> = TreeMap::new();
+    let mut fields: HashMap<String, Value> = HashMap::new();
     fields["user_id"] = Value::Int(7);
     let line = sink.render(&text_event(Level::Info, "user logged in", Value::Object(fields)));
     assert line == "{\"seq\":1,\"level\":\"info\",\"target\":\"app\",\"message\":\"user logged in\",\"fields\":{\"user_id\":7}}";
@@ -631,7 +631,7 @@ test "json sink renders an event it cannot encode as the reason" {
 
 test "text sink renders every kind of field value" {
     let mut sink = TextSink { seq: false };
-    let mut fields: TreeMap<String, Value> = TreeMap::new();
+    let mut fields: HashMap<String, Value> = HashMap::new();
     fields["n"] = Value::Null;
     fields["b"] = Value::Bool(true);
     fields["u"] = Value::UInt(1);

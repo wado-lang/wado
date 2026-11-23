@@ -8,6 +8,7 @@ use crate::ast::{
     inner_attrs_allow, lint, walk_expr, walk_function, walk_item, walk_pattern,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::effect_check::BodyFacts;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;

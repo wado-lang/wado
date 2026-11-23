@@ -1,5 +1,5 @@
 use { DeserializeError, DeserializeErrorKind } from "core:serde";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 use { from_string, from_bytes, set, remove } from "core:jsonc";
 
@@ -73,7 +73,7 @@ test "trailing comma in object" {
 }
 
 test "trailing comma in map" {
-    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`{"a": 1, "b": 2,}`);
+    let r: Result<HashMap<String, i32>, DeserializeError> = from_string(`{"a": 1, "b": 2,}`);
     assert r matches { Ok(m) && m.len() == 2 };
 }
 
@@ -88,7 +88,7 @@ test "empty array with a comma is rejected" {
 }
 
 test "empty object with a comma is rejected" {
-    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string("{,}");
+    let r: Result<HashMap<String, i32>, DeserializeError> = from_string("{,}");
     assert r matches { Err(_) };
 }
 
@@ -98,7 +98,7 @@ test "double comma is rejected" {
 }
 
 test "comma after a key's colon is rejected" {
-    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`{"a":,}`);
+    let r: Result<HashMap<String, i32>, DeserializeError> = from_string(`{"a":,}`);
     assert r matches { Err(_) };
 }
 

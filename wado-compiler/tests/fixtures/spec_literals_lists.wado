@@ -1,11 +1,11 @@
 // List literals, constructors, operations, sorting and collection literal coercion.
 
 use { Value } from "core:value";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 test {
     let arr: List<i32> = [1, 2, 3];
-    let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
+    let map: HashMap<String, i32> = { width: 1920, height: 1080 };
     assert arr.len() == 3 && map["height"] == 1080;
 }
 
@@ -78,8 +78,8 @@ test "implicit conversion" {
 }
 
 test "spread" {
-    let base: TreeMap<String, i32> = { a: 1, b: 2 };
-    let more: TreeMap<String, i32> = { a: 9, d: 4 };
-    let m: TreeMap<String, i32> = { ..base, ..more, c: 3 };   // a: 9, b: 2, c: 3, d: 4
+    let base: HashMap<String, i32> = { a: 1, b: 2 };
+    let more: HashMap<String, i32> = { a: 9, d: 4 };
+    let m: HashMap<String, i32> = { ..base, ..more, c: 3 };   // a: 9, b: 2, c: 3, d: 4
     assert m["a"] == 9 && m["b"] == 2 && m["c"] == 3 && m["d"] == 4;
 }

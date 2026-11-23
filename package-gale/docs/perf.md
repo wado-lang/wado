@@ -651,7 +651,7 @@ Measured findings, `wado run … gen` (`cargo run` host):
   fallback intern is for unresolved IR in unit tests.
 
   Byte-identity rules: FIRST-set order = insertion order of ids (== today's name
-  order, 1:1); kind sets still canonicalise **by name** at `intern_kind_set`
+  order, 1:1); kind sets still canonicalise **by name** at `kind_set_fn`
   (sort names, then map to ids) so emit order/dedup are unchanged; emit writes
   the name, not the number. Measure the win as the `copying` − `null` GC delta.
 

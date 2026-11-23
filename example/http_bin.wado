@@ -35,7 +35,7 @@ use {
     Method,
     Scheme,
 } from "wasi:http";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { decode } from "core:base64";
 use { Serialize } from "core:serde";
 use { Url } from "core:url";
@@ -49,8 +49,8 @@ use { field_list, request_accepts_gzip, worth_gzip } from "./http_gzip.wado";
 struct RequestInfo {
     method: String,
     path: String,
-    args: TreeMap<String, String>,
-    headers: TreeMap<String, String>,
+    args: HashMap<String, String>,
+    headers: HashMap<String, String>,
     origin: String,
     url: Url,
     body: Option<String>,
@@ -63,7 +63,7 @@ struct ErrorResponse {
 impl Serialize for ErrorResponse;
 
 struct HeadersResponse {
-    headers: TreeMap<String, String>,
+    headers: HashMap<String, String>,
 }
 impl Serialize for HeadersResponse;
 
@@ -75,7 +75,7 @@ impl Serialize for IpResponse;
 struct GzipResponse {
     gzipped: bool,
     method: String,
-    headers: TreeMap<String, String>,
+    headers: HashMap<String, String>,
     origin: String,
 }
 impl Serialize for GzipResponse;
@@ -148,8 +148,8 @@ fn method_name(m: Method) -> String {
     };
 }
 
-fn headers_to_map(headers: &Headers) -> TreeMap<String, String> with Fields {
-    let mut map: TreeMap<String, String> = {};
+fn headers_to_map(headers: &Headers) -> HashMap<String, String> with Fields {
+    let mut map: HashMap<String, String> = {};
     for let [name, value] of headers.copy_all() {
         map[name as String] = String::from_utf8_lossy(value);
     }

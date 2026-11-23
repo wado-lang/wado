@@ -17,7 +17,7 @@ use {
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
 use { Value } from "core:value";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Uuid } from "core:uuid";
 
 fn enc<T: Serialize>(v: &T) -> String {
@@ -189,14 +189,14 @@ test "Appendix A: arrays" {
 }
 
 test "Appendix A: maps" {
-    let empty: TreeMap<String, i32> = TreeMap::new();
-    assert enc::<TreeMap<String, i32>>(&empty) == "a0";
+    let empty: HashMap<String, i32> = HashMap::new();
+    assert enc::<HashMap<String, i32>>(&empty) == "a0";
     // {"a": 1, "b": [2, 3]} -> 0xa26161016162820203
-    let mut m: TreeMap<String, List<i32>> = TreeMap::new();
+    let mut m: HashMap<String, List<i32>> = HashMap::new();
     m["a"] = [1];
     m["b"] = [2, 3];
     // a2 | 6161 8101 | 6162 820203
-    assert enc::<TreeMap<String, List<i32>>>(&m) == "a2616181016162820203";
+    assert enc::<HashMap<String, List<i32>>>(&m) == "a2616181016162820203";
 }
 
 test "round-trip: integers across widths" {
@@ -326,7 +326,7 @@ test "round-trip: collections" {
         ["c"],
     ];
     assert roundtrips(&nested);
-    let mut m: TreeMap<String, i32> = TreeMap::new();
+    let mut m: HashMap<String, i32> = HashMap::new();
     m["one"] = 1;
     m["two"] = 2;
     assert roundtrips(&m);
@@ -380,7 +380,7 @@ test "decode: tag 0 date/time text unwraps to a string" {
 
 test "decode: dynamic Value" {
     // {"a": 1, "b": [2, 3]}
-    let mut expected: TreeMap<String, Value> = TreeMap::new();
+    let mut expected: HashMap<String, Value> = HashMap::new();
     expected["a"] = Value::Int(1);
     expected["b"] = Value::List([
         Value::Int(2),
@@ -391,7 +391,7 @@ test "decode: dynamic Value" {
 
 test "decode: a Value spells a scalar key as a text format would, and refuses a compound one" {
     // {1: -7, true: 0}
-    let mut expected: TreeMap<String, Value> = TreeMap::new();
+    let mut expected: HashMap<String, Value> = HashMap::new();
     expected["1"] = Value::Int(-7);
     expected["true"] = Value::Int(0);
     assert dec::<Value>("a20126f500") == Value::Object(expected);
@@ -504,35 +504,35 @@ fn enc_canon<T: Serialize>(v: &T) -> String {
 test "canonical: map keys sorted by encoded bytewise order" {
     // Insertion order b, a, c -> canonical order a, b, c.
     // Bytewise on encoded keys: "a"=6161 < "b"=6162 < "c"=6163.
-    let mut m: TreeMap<String, i32> = TreeMap::new();
+    let mut m: HashMap<String, i32> = HashMap::new();
     m["b"] = 2;
     m["a"] = 1;
     m["c"] = 3;
     // a3 6161 01 6162 02 6163 03
-    assert enc_canon::<TreeMap<String, i32>>(&m) == "a3616101616202616303";
+    assert enc_canon::<HashMap<String, i32>>(&m) == "a3616101616202616303";
 }
 
 test "canonical: shorter encoded keys sort first" {
     // Encoded keys: "b"=6162, "aa"=626161. Bytewise 0x61 < 0x62, so the shorter
     // key "b" sorts before "aa" (a text string's head byte encodes its length,
     // so shorter strings order first — RFC 8949 §4.2.1).
-    let mut m: TreeMap<String, i32> = TreeMap::new();
+    let mut m: HashMap<String, i32> = HashMap::new();
     m["b"] = 1;
     m["aa"] = 2;
     // a2 6162 01 626161 02
-    assert enc_canon::<TreeMap<String, i32>>(&m) == "a261620162616102";
+    assert enc_canon::<HashMap<String, i32>>(&m) == "a261620162616102";
 }
 
 test "canonical: deterministic regardless of insertion order" {
-    let mut m1: TreeMap<String, i32> = TreeMap::new();
+    let mut m1: HashMap<String, i32> = HashMap::new();
     m1["x"] = 1;
     m1["y"] = 2;
     m1["z"] = 3;
-    let mut m2: TreeMap<String, i32> = TreeMap::new();
+    let mut m2: HashMap<String, i32> = HashMap::new();
     m2["z"] = 3;
     m2["y"] = 2;
     m2["x"] = 1;
-    assert enc_canon::<TreeMap<String, i32>>(&m1) == enc_canon::<TreeMap<String, i32>>(&m2);
+    assert enc_canon::<HashMap<String, i32>>(&m1) == enc_canon::<HashMap<String, i32>>(&m2);
 }
 
 test "canonical: struct fields sorted by name" {
@@ -557,11 +557,11 @@ test "canonical: float ladder stops at binary32 (no f16)" {
 }
 
 test "canonical: round-trips through the variation-tolerant decoder" {
-    let mut m: TreeMap<String, List<i32>> = TreeMap::new();
+    let mut m: HashMap<String, List<i32>> = HashMap::new();
     m["beta"] = [2, 3];
     m["alpha"] = [1];
     let bytes = to_bytes_canonical(&m).unwrap();
-    assert from_bytes::<TreeMap<String, List<i32>>, ByteList>(bytes) matches { Ok(back) && back == m };
+    assert from_bytes::<HashMap<String, List<i32>>, ByteList>(bytes) matches { Ok(back) && back == m };
 }
 
 test "reject: indefinite length on a non-string/array/map major type" {
@@ -632,13 +632,13 @@ fn nested_skip(levels: i32) -> ByteList {
 }
 
 test "an integer map key is a native integer" {
-    let mut m = TreeMap::<i32, String>::new();
+    let mut m = HashMap::<i32, String>::new();
     m[1] = "a";
     m[-2] = "b";
     assert enc(&m) == "a2016161216162";
-    let back = dec::<TreeMap<i32, String>>("a2016161216162");
+    let back = dec::<HashMap<i32, String>>("a2016161216162");
     assert back.len() == 2 && back[1] == "a" && back[-2] == "b";
-    assert fails_with::<TreeMap<i32, String>>("a1616161616161", UnexpectedType);
+    assert fails_with::<HashMap<i32, String>>("a1616161616161", UnexpectedType);
 }
 
 test "a lone break is malformed wherever an item is read" {
@@ -907,7 +907,7 @@ test "decode: containers after a self-described prefix" {
 
 test "reject: an item of the wrong major type for a container" {
     assert fails_with::<List<i32>>("01", UnexpectedType);
-    assert fails_with::<TreeMap<String, i32>>("01", UnexpectedType);
+    assert fails_with::<HashMap<String, i32>>("01", UnexpectedType);
     assert fails_with::<Point>("01", UnexpectedType);
     assert fails_with::<Shape>("01", UnexpectedType);
     assert fails_with::<List<i32>>("", Eof);
@@ -915,16 +915,16 @@ test "reject: an item of the wrong major type for a container" {
 }
 
 test "decode: indefinite maps into a map and a struct" {
-    let mut m: TreeMap<String, i32> = TreeMap::new();
+    let mut m: HashMap<String, i32> = HashMap::new();
     m["a"] = 1;
-    assert dec::<TreeMap<String, i32>>("bf 6161 01 ff") == m;
+    assert dec::<HashMap<String, i32>>("bf 6161 01 ff") == m;
     assert dec::<Point>("bf 6178 01 6179 02 ff") == Point { x: 1, y: 2 };
 }
 
 test "reject: truncated or ill-keyed maps" {
     assert fails_with::<List<i32>>("9f 01", Eof);
-    assert fails_with::<TreeMap<String, i32>>("bf 6161 01", Eof);
-    assert fails_with::<TreeMap<String, i32>>("a1 01 01", UnexpectedType);
+    assert fails_with::<HashMap<String, i32>>("bf 6161 01", Eof);
+    assert fails_with::<HashMap<String, i32>>("a1 01 01", UnexpectedType);
     assert fails_with::<Point>("bf 6178 01", Eof);
     assert fails_with::<Point>("a1", Eof);
     assert fails_with::<Point>("a1 78", Eof);

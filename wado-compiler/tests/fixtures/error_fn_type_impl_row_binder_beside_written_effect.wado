@@ -1,0 +1,23 @@
+// A row binder written beside an effect reaches only a row holding that
+// effect: a closure performing nothing does not meet `fn() with (E, Stdout)`.
+use { println, Stdout } from "core:cli";
+
+trait Tr with () {
+    fn t(&self) -> String;
+}
+
+impl<effect E> Tr for fn() with (E, Stdout) {
+    fn t(&self) -> String {
+        return "has stdout";
+    }
+}
+
+export fn run() with Stdout {
+    let loud = || { println("x"); };
+    println(loud.t());
+    let quiet = || {};
+    println(quiet.t());
+}
+
+__DATA__
+{"compile_error": ":19:13: analysis error: no method 't' found on type 'fn() -> ()'"}

@@ -3,7 +3,7 @@
 //! place streams past without being held, so a build reads a model of any size
 //! in the memory its graph takes.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use grog from "lib:grog";
 use { is_build_time } from "./graph.wado";
 use { dtype_name } from "./onnx_proto.wado";
@@ -12,7 +12,7 @@ use { dtype_name } from "./onnx_proto.wado";
 /// occupies in the file by the weight's name, and the file's length.
 pub struct Slim {
     pub model: ByteList,
-    pub ranges: TreeMap<String, [i32, i32]>,
+    pub ranges: HashMap<String, [i32, i32]>,
     pub len: i32,
 }
 
@@ -37,7 +37,7 @@ pub fn leave_weights(content: Stream<u8>) -> Result<Slim, String> with Stream {
 
 fn walk_model(c: &mut Cursor) -> Result<Slim, String> with Stream {
     let mut model: ByteList = [];
-    let mut ranges = TreeMap::<String, [i32, i32]>::new();
+    let mut ranges = HashMap::<String, [i32, i32]>::new();
     while c.more() {
         let tag = c.varint()?;
         if tag == MODEL_GRAPH {
@@ -57,7 +57,7 @@ fn walk_model(c: &mut Cursor) -> Result<Slim, String> with Stream {
 fn walk_graph(
     c: &mut Cursor,
     end: i64,
-    ranges: &mut TreeMap<String, [i32, i32]>,
+    ranges: &mut HashMap<String, [i32, i32]>,
 ) -> Result<ByteList, String> with Stream {
     let mut graph: ByteList = [];
     while c.pos() < end {
@@ -78,7 +78,7 @@ fn walk_graph(
 fn walk_tensor(
     c: &mut Cursor,
     end: i64,
-    ranges: &mut TreeMap<String, [i32, i32]>,
+    ranges: &mut HashMap<String, [i32, i32]>,
 ) -> Result<ByteList, String> with Stream {
     let mut tensor: ByteList = [];
     let mut weight = false;

@@ -92,8 +92,7 @@ use t_PrecedenceFilterConsidersContext from "../../grammars/LeftRecursion/Preced
 // Stage A claim (b): the generated parser must accept the descriptor's
 // [input] without returning an error. No parse-tree shape comparison.
 test "stage_a_parse: LeftRecursion/AmbigLR_1" {
-    let input = "1
-";
+    let input = "1\n";
     let result = t_AmbigLR_1::parse_prog(&input);
     if !result.ok() {
         let d = &result.diagnostics[0];
@@ -107,8 +106,7 @@ test "stage_a_parse: LeftRecursion/AmbigLR_1" {
 // Stage A claim (b): the generated parser must accept the descriptor's
 // [input] without returning an error. No parse-tree shape comparison.
 test "stage_a_parse: LeftRecursion/AmbigLR_2" {
-    let input = "a = 5
-";
+    let input = "a = 5\n";
     let result = t_AmbigLR_1::parse_prog(&input);
     if !result.ok() {
         let d = &result.diagnostics[0];
@@ -122,8 +120,7 @@ test "stage_a_parse: LeftRecursion/AmbigLR_2" {
 // Stage A claim (b): the generated parser must accept the descriptor's
 // [input] without returning an error. No parse-tree shape comparison.
 test "stage_a_parse: LeftRecursion/AmbigLR_3" {
-    let input = "b = 6
-";
+    let input = "b = 6\n";
     let result = t_AmbigLR_1::parse_prog(&input);
     if !result.ok() {
         let d = &result.diagnostics[0];
@@ -137,8 +134,7 @@ test "stage_a_parse: LeftRecursion/AmbigLR_3" {
 // Stage A claim (b): the generated parser must accept the descriptor's
 // [input] without returning an error. No parse-tree shape comparison.
 test "stage_a_parse: LeftRecursion/AmbigLR_4" {
-    let input = "a+b*2
-";
+    let input = "a+b*2\n";
     let result = t_AmbigLR_1::parse_prog(&input);
     if !result.ok() {
         let d = &result.diagnostics[0];
@@ -152,8 +148,7 @@ test "stage_a_parse: LeftRecursion/AmbigLR_4" {
 // Stage A claim (b): the generated parser must accept the descriptor's
 // [input] without returning an error. No parse-tree shape comparison.
 test "stage_a_parse: LeftRecursion/AmbigLR_5" {
-    let input = "(1+2)*3
-";
+    let input = "(1+2)*3\n";
     let result = t_AmbigLR_1::parse_prog(&input);
     if !result.ok() {
         let d = &result.diagnostics[0];
@@ -807,8 +802,7 @@ test "stage_a_parse: LeftRecursion/JavaExpressions_3" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/JavaExpressions_3" {
     let input = "a > b";
-    let expected = "(s (e (e a) > (e b)))
-";
+    let expected = "(s (e (e a) > (e b)))\n";
     let result = t_JavaExpressions_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -835,8 +829,7 @@ test "stage_a_parse: LeftRecursion/JavaExpressions_4" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/JavaExpressions_4" {
     let input = "a >> b";
-    let expected = "(s (e (e a) >> (e b)))
-";
+    let expected = "(s (e (e a) >> (e b)))\n";
     let result = t_JavaExpressions_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -1235,8 +1228,7 @@ test "stage_a_parse: LeftRecursion/MultipleAlternativesWithCommonLabel_1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/MultipleAlternativesWithCommonLabel_1" {
     let input = "4";
-    let expected = "4
-";
+    let expected = "4\n";
     let result = t_MultipleAlternativesWithCommonLabel_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -1263,8 +1255,7 @@ test "stage_a_parse: LeftRecursion/MultipleAlternativesWithCommonLabel_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/MultipleAlternativesWithCommonLabel_2" {
     let input = "1+2";
-    let expected = "3
-";
+    let expected = "3\n";
     let result = t_MultipleAlternativesWithCommonLabel_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -1291,8 +1282,7 @@ test "stage_a_parse: LeftRecursion/MultipleAlternativesWithCommonLabel_3" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/MultipleAlternativesWithCommonLabel_3" {
     let input = "1+2*3";
-    let expected = "7
-";
+    let expected = "7\n";
     let result = t_MultipleAlternativesWithCommonLabel_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -1319,8 +1309,7 @@ test "stage_a_parse: LeftRecursion/MultipleAlternativesWithCommonLabel_4" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/MultipleAlternativesWithCommonLabel_4" {
     let input = "i++*3";
-    let expected = "12
-";
+    let expected = "12\n";
     let result = t_MultipleAlternativesWithCommonLabel_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -1347,8 +1336,7 @@ test "stage_a_parse: LeftRecursion/MultipleAlternativesWithCommonLabel_5" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/MultipleAlternativesWithCommonLabel_5" {
     let input = "(99)+3";
-    let expected = "102
-";
+    let expected = "102\n";
     let result = t_MultipleAlternativesWithCommonLabel_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;

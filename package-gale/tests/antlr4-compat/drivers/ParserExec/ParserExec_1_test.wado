@@ -107,8 +107,7 @@ test "stage_a_parse: ParserExec/APlus" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/APlus" {
     let input = "a b c";
-    let expected = "abc
-";
+    let expected = "abc\n";
     let result = t_APlus::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -146,8 +145,7 @@ test "stage_a_parse: ParserExec/AStar_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/AStar_2" {
     let input = "a b c";
-    let expected = "abc
-";
+    let expected = "abc\n";
     let result = t_AStar_1::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -185,8 +183,7 @@ test "stage_a_parse: ParserExec/AorAPlus" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/AorAPlus" {
     let input = "a b c";
-    let expected = "abc
-";
+    let expected = "abc\n";
     let result = t_AorAPlus::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -224,8 +221,7 @@ test "stage_a_parse: ParserExec/AorAStar_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/AorAStar_2" {
     let input = "a b c";
-    let expected = "abc
-";
+    let expected = "abc\n";
     let result = t_AorAStar_1::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -263,8 +259,7 @@ test "stage_a_parse: ParserExec/AorB" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/AorB" {
     let input = "34";
-    let expected = "alt 2
-";
+    let expected = "alt 2\n";
     let result = t_AorB::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -302,8 +297,7 @@ test "stage_a_parse: ParserExec/AorBPlus" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/AorBPlus" {
     let input = "a 34 c";
-    let expected = "a34c
-";
+    let expected = "a34c\n";
     let result = t_AorBPlus::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -341,8 +335,7 @@ test "stage_a_parse: ParserExec/AorBStar_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/AorBStar_2" {
     let input = "a 34 c";
-    let expected = "a34c
-";
+    let expected = "a34c\n";
     let result = t_AorBStar_1::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -380,8 +373,7 @@ test "stage_a_parse: ParserExec/Basic" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/Basic" {
     let input = "abc 34";
-    let expected = "abc34
-";
+    let expected = "abc34\n";
     let result = t_Basic::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -469,9 +461,7 @@ test "stage_a_parse: ParserExec/IfIfElseGreedyBinding1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/IfIfElseGreedyBinding1" {
     let input = "if y if y x else x";
-    let expected = "if y x else x
-if y if y x else x
-";
+    let expected = "if y x else x\nif y if y x else x\n";
     let result = t_IfIfElseGreedyBinding1::parse_start(&input);
     let actual = result.output;
     assert actual == expected;

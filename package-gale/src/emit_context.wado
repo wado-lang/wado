@@ -9,7 +9,8 @@ use { RuleOverlap, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
-use { TableRegistry, follow_site_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
+use { TableRegistry, follow_site_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
+use { constant_patterns } from "./gen_util.wado";
 use { ParserPlan } from "./parser_plan.wado";
 use {
     DecisionPredicates,
@@ -17,6 +18,7 @@ use {
     alt_has_gate,
     alt_meets_gate,
     alt_scan_gate_conditions,
+    GateCond,
     gate_condition_for,
     predicates_met_entering,
 } from "./gate_conditions.wado";
@@ -29,7 +31,7 @@ use { push_unique } from "./list_util.wado";
 use { alt_is_left_recursive } from "./lr_util.wado";
 use { sets_overlap } from "./token_kinds.wado";
 use { HashMap, HashSet } from "core:collections";
-use { IdGen } from "lib:wadopoet";
+use { CodeWriter, FnSpec, IdGen } from "lib:wadopoet";
 
 /// The parser's ATN predictor (`AtnPredictor`): its field, and the name of the
 /// `&mut` parameter a scan function takes it through.
@@ -97,11 +99,6 @@ pub struct EmitCursor {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32> = [],
-    /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
-    /// fns: `[predicate_fn_id, body]`. The dispatch calls `pred_<id>(p)` instead of
-    /// inlining the condition, so the same fn is callable from every decision
-    /// path (token-led / interchangeable dispatch and the ATN's disabled alternatives).
-    predicate_fns: List<[i32, String]> = [],
 }
 
 impl EmitCursor {
@@ -255,6 +252,11 @@ impl EmitCursor {
         return name;
     }
 
+    /// The text of `cond`, the fn it calls recorded as `note_ref` records one.
+    pub fn take_cond(&mut self, cond: GateCond) -> String {
+        return cond.text_noting(|name| self.note_ref(name));
+    }
+
     pub fn next_scan_id(&mut self) -> i32 {
         return self.scan_ids.next();
     }
@@ -304,11 +306,6 @@ impl EmitCursor {
     pub fn is_predicate_gated(&self, id: i32) -> bool {
         return self.predicate_gated.contains(&id);
     }
-
-    /// The standalone predicate fns registered so far, as `[id, body]`.
-    pub fn predicate_fns(&self) -> &List<[i32, String]> {
-        return &self.predicate_fns;
-    }
 }
 
 /// The context parser emit threads through its walk.
@@ -321,6 +318,9 @@ pub struct EmitContext {
     pub plan: ParserPlan,
     pub decisions: DecisionPredicates,
     pub cursor: EmitCursor,
+    /// The `_kind_set_<id>` helpers the checks so far name, each defined once.
+    kind_set_fns: CodeWriter,
+    kind_set_fns_taken: bool = false,
 }
 
 impl EmitContext {
@@ -335,7 +335,17 @@ impl EmitContext {
         decisions: DecisionPredicates,
     ) -> EmitContext {
         let cursor = EmitCursor::new(analysis.parser_rules().len());
-        return EmitContext { analysis, settings, follow, tables, diagnostics, plan, decisions, cursor };
+        return EmitContext {
+            analysis,
+            settings,
+            follow,
+            tables,
+            diagnostics,
+            plan,
+            decisions,
+            cursor,
+            kind_set_fns: CodeWriter::with_capacity(0),
+        };
     }
 
     /// The rule being emitted.
@@ -442,7 +452,7 @@ impl EmitContext {
     }
 
     /// `gate_conditions::gate_condition_for` at the alternative being emitted.
-    pub fn gate_condition(&self, a: &AltAction, handle: &String = &PARSER_HANDLE) -> Option<String> {
+    pub fn gate_condition(&self, a: &AltAction, handle: &String = &PARSER_HANDLE) -> Option<GateCond> {
         return gate_condition_for(a, &self.settings, &self.analysis, &self.predicate_site(), handle);
     }
 
@@ -519,18 +529,6 @@ impl EmitContext {
     /// Whether a body of the rule being emitted names the binding `base`.
     pub fn names_binding<S: AsStrSlice>(&self, base: S) -> bool {
         return self.plan.names_binding(self.cursor.current_rule_index(), base);
-    }
-
-    /// Register a context-free gated predicate's body for a standalone
-    /// `pred_<id>(p)` fn, one per distinct body.
-    pub fn register_predicate_fn<S: AsStrSlice>(&mut self, action_id: i32, body: S) {
-        let id = self.analysis.predicate_fn_id(action_id);
-        for let e of &self.cursor.predicate_fns {
-            if e.0 == id {
-                return;
-            }
-        }
-        self.cursor.predicate_fns.push([id, body.to_string()]);
     }
 
     /// `scan_<snake>`, the name of a scan function rule `snake` defines, for
@@ -661,12 +659,6 @@ impl EmitContext {
         return `ScanMemo<${if self.settings.emit_scan_gate() { SCAN_GATE_TYPE } else { "()" }}>`;
     }
 
-    /// Intern a token-kind set. The same set (regardless of input order or
-    /// duplicates) maps to a single `id`.
-    pub fn intern_kind_set(&mut self, tokens: &List<i32>) -> i32 {
-        return self.tables.intern_kind_set(self.analysis.canonical_ids(*tokens));
-    }
-
     /// Intern a recovery sync set (a leaf's FIRST-of-rest) given as kind ids.
     /// Returns the `SYNC_<id>` global's id, or `null` for an empty set.
     pub fn sync_set(&mut self, ids: List<i32>) -> Option<i32> {
@@ -728,9 +720,30 @@ impl EmitContext {
         return `!${self.kind_set_fn(tokens)}(${expr})`;
     }
 
-    fn kind_set_fn(&mut self, tokens: &List<i32>) -> String {
-        let id = self.intern_kind_set(tokens);
-        return self.cursor.noted(kind_set_fn_name(id));
+    /// The helper testing membership of `tokens`, one per set whatever the
+    /// order or duplicates of its tokens.
+    fn kind_set_fn(&mut self, tokens: &List<i32>) -> String
+        contract !self.kind_set_fns_taken, "a kind-set helper defined after take_kind_set_fns is never placed"
+    {
+        let canonical = self.analysis.canonical_ids(*tokens);
+        let analysis = &self.analysis;
+        let helper = self.kind_set_fns.intern_fn(`${canonical:?}`, "_kind_set_", |w, name| {
+            let mut f = FnSpec::new(name);
+            f.add_param({ name: "k", type: "i32" });
+            f.set_return_type("bool");
+            f.set_prunable();
+            f.emit(w, |w| w.line(`return k matches { ${constant_patterns(&analysis.token_names_of(&canonical))} };`));
+            w.blank();
+        });
+        return self.cursor.noted(helper);
+    }
+
+    /// The kind-set helpers, for the parser to place before it prunes. No check
+    /// may name a new one after.
+    pub fn take_kind_set_fns(&mut self) -> CodeWriter {
+        self.kind_set_fns_taken = true;
+        self.kind_set_fns.write_interned();
+        return builtin::replace(&mut self.kind_set_fns, CodeWriter::with_capacity(0));
     }
 
     /// Render a guard: enter, or go round again, while the lookahead is in

@@ -851,7 +851,7 @@ fn type_itself_requires_memory(ty: &Type, decls: &CmTypeDecls) -> bool {
         Some(
             CompilerItem::String
                 | CompilerItem::List
-                | CompilerItem::TreeMap
+                | CompilerItem::HashMap
                 | CompilerItem::Stream
         )
     )
@@ -866,7 +866,7 @@ fn return_type_requires_memory(ty: &Type, decls: &CmTypeDecls) -> bool {
             Some(
                 CompilerItem::String
                     | CompilerItem::List
-                    | CompilerItem::TreeMap
+                    | CompilerItem::HashMap
                     | CompilerItem::Option
                     | CompilerItem::Result
                     | CompilerItem::Stream
@@ -3829,7 +3829,7 @@ impl CmInterfaceRegistry {
             Type::Generic(g) => match self.type_decls.item_at(g.id) {
                 // `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
                 // carries that type's `(ptr, count)` pair.
-                Some(CompilerItem::List | CompilerItem::TreeMap) => {
+                Some(CompilerItem::List | CompilerItem::HashMap) => {
                     out.push(CmValType::I32);
                     out.push(CmValType::I32);
                 }
@@ -4733,7 +4733,7 @@ impl CmTypeGen {
                     let idx = self.define_list(sink, elem_cm, &key);
                     ComponentValType::Type(idx)
                 }
-                Some(CompilerItem::TreeMap) => {
+                Some(CompilerItem::HashMap) => {
                     let key_cm = self.ast_type_to_cm(
                         sink,
                         &generic.args[0],
@@ -4952,7 +4952,7 @@ impl KnownTypes<'_> {
                             | CompilerItem::Future
                             | CompilerItem::Option
                             | CompilerItem::List
-                            | CompilerItem::TreeMap
+                            | CompilerItem::HashMap
                     )
                 ) && !generic.args.iter().any(mentions_empty_tuple)
             }
@@ -5002,7 +5002,7 @@ impl KnownTypes<'_> {
                     CompilerItem::Result
                     | CompilerItem::List
                     | CompilerItem::Option
-                    | CompilerItem::TreeMap,
+                    | CompilerItem::HashMap,
                 ) => generic.args.iter().all(|arg| self.return_supported(arg)),
                 _ => false,
             },
@@ -5129,7 +5129,7 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
             HANDLE
         }
         Type::Generic(g) => match decls.item_at(g.id) {
-            Some(CompilerItem::List | CompilerItem::TreeMap) => PTR_LEN,
+            Some(CompilerItem::List | CompilerItem::HashMap) => PTR_LEN,
             Some(CompilerItem::Option) => {
                 layout_option_with_registry(&g.args[0], registry).size_align()
             }

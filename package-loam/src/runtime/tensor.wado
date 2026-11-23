@@ -1025,6 +1025,12 @@ impl Eq for Step {
     }
 }
 
+impl Hash for Step {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.key().hash(h);
+    }
+}
+
 impl Ord for Step {
     fn cmp(&self, other: &Self) -> Ordering {
         return self.key().cmp(&other.key());

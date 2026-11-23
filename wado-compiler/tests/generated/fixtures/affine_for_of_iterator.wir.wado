@@ -33,12 +33,12 @@ struct core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,cor
 
 struct core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32> {  // TypeId(6)
     mut inner: ref null "affine_for_of_iterator.wado//Counter",
-    mut f: ref "canonical//CanonicalClosure_1",
+    mut f: ref "canonical//CanonicalClosure_0",
 }
 
 struct core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool> {  // TypeId(7)
     mut inner: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>",
-    mut pred: ref "canonical//CanonicalClosure_0",
+    mut pred: ref "canonical//CanonicalClosure_1",
 }
 
 struct core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>> {  // TypeId(8)
@@ -59,14 +59,14 @@ struct tuple//[i32, i32] {  // TypeId(13)
     mut 1: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(14)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(14)
 
 struct canonical//CanonicalClosure_0 {  // TypeId(15)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> i32;  // TypeId(16)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(16)
 
 struct canonical//CanonicalClosure_1 {  // TypeId(17)
     env: ref null struct,
@@ -208,9 +208,9 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
         $iter_0_0.token = ref.null none;
     }
     f_33 = struct.new "affine_for_of_iterator.wado//$Closure_0" {};
-    self_28 = struct.new "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>" { inner: struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" {} }, f: struct.new "canonical//CanonicalClosure_1" { env: f_33, func: ref.func "closure/affine_for_of_iterator.wado/$closure_wrapper_0" } };
+    self_28 = struct.new "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>" { inner: struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" {} }, f: struct.new "canonical//CanonicalClosure_0" { env: f_33, func: ref.func "closure/affine_for_of_iterator.wado/$closure_wrapper_0" } };
     pred = struct.new "affine_for_of_iterator.wado//$Closure_1" {};
-    $iter_2 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>" { inner: struct.new "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>" { inner: self_28, pred: struct.new "canonical//CanonicalClosure_0" { env: pred, func: ref.func "closure/affine_for_of_iterator.wado/$closure_wrapper_1" } }, count: 0 };
+    $iter_2 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>" { inner: struct.new "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>" { inner: self_28, pred: struct.new "canonical//CanonicalClosure_1" { env: pred, func: ref.func "closure/affine_for_of_iterator.wado/$closure_wrapper_1" } }, count: 0 };
     b9: block {
         l10: loop {
             if ref.is_null(local.tee $match_19("core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>^core:prelude/traits.wado/Iterator::next"($iter_2))) == 0 {
@@ -734,9 +734,9 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude
     let $load_10: i32;
     let $fused_slot_8: i32;
     let $licm_inner_9: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>";
-    let $licm_pred_10: ref "canonical//CanonicalClosure_0";
+    let $licm_pred_10: ref "canonical//CanonicalClosure_1";
     let $licm_inner_11: ref null "affine_for_of_iterator.wado//Counter";
-    let $licm_f_12: ref "canonical//CanonicalClosure_1";
+    let $licm_f_12: ref "canonical//CanonicalClosure_0";
     let $hfs_n_18: i32;
     let $hfs_call_19: ref null "tuple//[i32, i32]";
     $fused_$inline_core_prelude_traits_wado_IterFilter_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
@@ -752,10 +752,10 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude
                         break_if $inline_core_prelude_traits_wado_IterFilter_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_affine_for_of_iterator_wado_Counter_core_prelude_traits_wado_Iterator__next_sroa_return__1 $hfs_n_18 >= 3;
                         $hfs_n_18 = $hfs_n_18 + 1;
                         $fused_slot_8 = block -> i32 {
-                            call_ref "functype/$canonical_closure_fn_1"($licm_f_12.func, $licm_f_12.env, $hfs_n_18);
+                            call_ref "functype/$canonical_closure_fn_0"($licm_f_12.func, $licm_f_12.env, $hfs_n_18);
                         };
                         if block -> bool {
-                            call_ref "functype/$canonical_closure_fn_0"($licm_pred_10.func, $licm_pred_10.env, $fused_slot_8);
+                            call_ref "functype/$canonical_closure_fn_1"($licm_pred_10.func, $licm_pred_10.env, $fused_slot_8);
                         } {
                             $load_10 = self.count;
                             self.count = $load_10 + 1;

@@ -1,8 +1,9 @@
 #![stdlib("core:collections")]
-//! Maps and sets that iterate in insertion order. `TreeMap<K, V>` and
-//! `TreeSet<T>` find a key by ordering it; `HashMap<K, V>` and `HashSet<T>` by
-//! hashing it under a `HashSeed`. `map[key] = value` overwrites; `try_insert` /
-//! `get_or_insert` insert only when the key is absent.
+//! Maps and sets that iterate in insertion order. `HashMap<K, V>` and
+//! `HashSet<T>` find a key by hashing it under a `HashSeed`; `TreeMap<K, V>` and
+//! `TreeSet<T>` by ordering it, for a key that is `Ord` but not `Hash`.
+//! `map[key] = value` overwrites; `try_insert` / `get_or_insert` insert only
+//! when the key is absent.
 
 pub use {
     MapKeysRefIter,
@@ -17,14 +18,14 @@ pub use { HashSeed, HashMap, HashSet } from "core:collections/hashmap.wado";
 
 #[synopsis]
 test {
-    let mut sizes = { small: 1, medium: 2, large: 3 } as TreeMap<String, i32>;
+    let mut sizes = { small: 1, medium: 2, large: 3 } as HashMap<String, i32>;
     assert sizes.len() == 3;
     assert sizes["medium"] == 2;
     assert sizes.get("small") matches { Some(v) && v == 1 };
     sizes["xlarge"] = 4;
     assert sizes.len() == 4;
 
-    let primes = [7, 2, 5, 2, 3] as TreeSet<i32>;
+    let primes = [7, 2, 5, 2, 3] as HashSet<i32>;
     assert primes.len() == 4;
     assert primes.contains(5);
     assert !primes.contains(4);

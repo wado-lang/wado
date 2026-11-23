@@ -1571,14 +1571,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target: &'a ast::Expr,
     ) -> impl Iterator<Item = AstId> + 'a {
         place_bases(target)
-            .take_while(|expr| {
-                self.sem
-                    .types
-                    .expression_types
-                    .get(&expr.id())
-                    .is_none_or(|ty| self.reference_mutability(*ty).is_none())
-            })
+            .take_while(|expr| !self.is_reference_expr(expr))
             .filter_map(subscript_id)
+    }
+
+    fn is_reference_expr(&self, expr: &ast::Expr) -> bool {
+        self.sem
+            .types
+            .expression_types
+            .get(&expr.id())
+            .is_some_and(|ty| self.reference_mutability(*ty).is_some())
+    }
+
+    /// Whether a write into `target` lands in a temporary: its walk to storage
+    /// meets no reference and ends at a value no variable holds, such as a
+    /// by-value call's result, which the write would be discarded with.
+    fn writes_into_temporary(&self, target: &ast::Expr) -> bool {
+        place_bases(target)
+            .find(|base| {
+                self.is_reference_expr(base)
+                    || !matches!(base, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
+            })
+            .is_some_and(|stop| {
+                !self.is_reference_expr(stop)
+                    && match stop {
+                        // A name holds storage where it resolved to a variable;
+                        // a constant's value is a temporary.
+                        ast::Expr::Ident(id) => self.assign_place_of(id.id).is_none(),
+                        ast::Expr::Unary(u) => u.op != ast::UnaryOp::Deref,
+                        ast::Expr::Error(_) => false,
+                        _ => true,
+                    }
+            })
     }
 
     /// Why a write cannot reach the element this subscript names, if it cannot.
@@ -1870,6 +1894,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Reject &T assigned where non-ref T expected
         self.typecheck(value_type, place.value_type(), value_span);
+        if self.writes_into_temporary(target_ast) {
+            let _ = self.emit(TypeError::CannotMutate {
+                message: "cannot assign into a temporary; the write would be discarded".to_string(),
+                span: target_ast.span(),
+            });
+            return TypeTable::ERROR;
+        }
         // Reify rebuilds `arr.index_assign(idx, value)` from the recorded
         // `index_assign_dispatch` and the AST.
         if let WritePlace::IndexAssign { .. } = place {

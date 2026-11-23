@@ -125,8 +125,8 @@ test "split_top_level_commas keeps a type's arguments in one piece" {
         false,
     );
     assert args == ["m as Pair<i32, i32>", "List::<A, B>::new()", "|p: Pair<A, B>| p", "|| -> Pair<A, B> { x }"];
-    let decls = split_top_level_commas(&"TreeMap<String, i32> m, i32 n = a < b".as_str_slice(), true);
-    assert decls == ["TreeMap<String, i32> m", "i32 n = a < b"];
+    let decls = split_top_level_commas(&"HashMap<String, i32> m, i32 n = a < b".as_str_slice(), true);
+    assert decls == ["HashMap<String, i32> m", "i32 n = a < b"];
 }
 
 test "scanners return byte offsets past multi-byte chars" {

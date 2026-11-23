@@ -11,7 +11,9 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, minted_name, minted_what};
+use crate::name::{
+    FqTypeName, LocalMethodName, Projected, Receiver, RefKind, minted_name, minted_what,
+};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
@@ -1191,14 +1193,14 @@ impl Monomorphizer {
         // Read the shape off the declaration, never off `key`:
         // `InstantiationKey` leaves `method_info` out of its equality and hash,
         // so two keys differing only there share one entry.
-        let one_arg_per_param = generic
-            .method_info
-            .as_ref()
-            .is_some_and(|info| info.receiver.is_declared_type());
-        // A declared target's key is its positions, read structurally: a slot
-        // nested in one (`T` in `Pair<List<T>, i32>`) is no key position. A
-        // block whose trait reference sets a slot is keyed by every slot.
-        if one_arg_per_param
+        let receiver = generic.method_info.as_ref().map(|info| &info.receiver);
+        let one_arg_per_param = receiver.is_some_and(Receiver::is_declared_type);
+        let keyed_by_positions = one_arg_per_param || receiver.is_some_and(Receiver::is_function);
+        // A declared or function target's key is its positions, read
+        // structurally: a slot nested in one (`T` in `Pair<List<T>, i32>`) is
+        // no key position. A block whose trait reference sets a slot is keyed
+        // by every slot.
+        if keyed_by_positions
             && !generic.impl_type_params.is_empty()
             && let Some(block) = generic.impl_origin
             && !type_table.impl_trait_sets_params(block)
@@ -1312,13 +1314,21 @@ impl Monomorphizer {
             }),
             method_info,
         };
-        Some(self.instantiate_with(
+        self.current_effect_rows = match generic.impl_origin {
+            Some(block) if !generic.impl_effect_params.is_empty() => {
+                type_table.impl_effect_binding(block, &key.impl_type_args)
+            }
+            _ => IndexMap::default(),
+        };
+        let instance = self.instantiate_with(
             generic,
             &substitution,
             param_key_by_binder,
             identity,
             type_table,
-        ))
+        );
+        self.current_effect_rows = IndexMap::default();
+        Some(instance)
     }
 
     /// `generic` with `substitution` applied throughout, under the identity the
@@ -1407,6 +1417,7 @@ impl Monomorphizer {
             is_export: generic.is_export, // Inherit from generic
             type_params: vec![],          // Concrete function has no type params
             impl_type_params: vec![],     // Already monomorphized, no impl type params
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: identity.monomorph_info,
             method_info: identity.method_info,

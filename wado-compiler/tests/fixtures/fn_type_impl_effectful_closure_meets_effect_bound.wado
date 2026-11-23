@@ -1,0 +1,22 @@
+// A bound naming an effect outright is met by a closure literal that performs
+// it, as by a value annotated with that row.
+
+use { println, Stdout } from "core:cli";
+
+fn call<G: fn() -> i32 with Stdout>(g: G) -> i32 with Stdout {
+    return g();
+}
+
+fn loud() -> i32 with Stdout {
+    println("loud");
+    return 7;
+}
+
+export fn run() with Stdout {
+    println(`${call(|| loud())}`);
+}
+
+__DATA__
+{
+    "stdout": "loud\n7\n"
+}

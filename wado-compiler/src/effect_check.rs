@@ -7,12 +7,13 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::attribute::AMBIENT;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::{Lints, demanded_imports};
 
-use crate::component_model::Demand;
+use crate::component_model::{CmInterfaceRegistry, Demand};
 use crate::module_source::ModuleSource;
 use crate::name::{
     DeclaredHead, FqTraitName, FqTypeName, TypeHead, is_wasi_fq, mangle_local_method,
@@ -33,7 +34,10 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::ImplParamSlots;
 use crate::elaborator::orchestration::AnnotateState;
-use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
+use crate::elaborator::sem::ModuleSemantics;
+use crate::elaborator::sem::types::{
+    ForOfIteratorInfo, ImplFacts, MethodDispatch, TypeAnnotations,
+};
 use crate::semantics::Semantics;
 use crate::unparse::unparse_expr_source;
 use crate::write_sites::{WriteSite, for_each_write_site};
@@ -58,7 +62,7 @@ impl EffectKind {
 }
 
 /// What the effect checker found at the reported position.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EffectFault {
     /// The caller does not hold what its callee requires.
     Missing(EffectKind),
@@ -77,6 +81,14 @@ pub enum EffectFault {
     /// A function value performs an effect the `fn` type it is moved into
     /// does not declare.
     BeyondExpectedType(EffectKind),
+    /// A function value performs an effect beyond a row an earlier expression
+    /// read, at this line and column, and so closed. `module` names the file
+    /// the expression is in where it is not the one reported.
+    WidensClosedRow {
+        module: Option<String>,
+        line: usize,
+        column: usize,
+    },
 }
 
 /// Error from effect checking
@@ -153,6 +165,18 @@ impl From<EffectError> for Diagnostic {
                     "this function value performs {} '{}', which the function type it is expected to be does not declare",
                     kind.noun(),
                     e.missing_effect,
+                ),
+            ),
+            EffectFault::WidensClosedRow {
+                module,
+                line,
+                column,
+            } => (
+                Code::MissingEffect,
+                format!(
+                    "this function value performs '{}', beyond the row of the slot it moves into, which the expression at {}{line}:{column} read and so closed",
+                    e.missing_effect,
+                    module.map(|m| format!("{m}:")).unwrap_or_default(),
                 ),
             ),
         };
@@ -376,10 +400,10 @@ impl From<PurityError> for Diagnostic {
 struct MemberTables(IndexMap<DefId, Vec<TypeId>>);
 
 impl MemberTables {
-    fn collect(sem: &Semantics, state: &AnnotateState) -> Self {
+    fn collect(modules: &Modules, state: &AnnotateState) -> Self {
         let defs = state.tysys.resolutions.defs();
         let mut tables = Self::default();
-        for (src, module) in &sem.modules {
+        for (src, module) in modules {
             let annotations = state.module_semantics.get(src).map(|m| &m.types);
             for item in &module.items {
                 if let Item::Struct(struct_decl) = item
@@ -502,7 +526,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     let Some(state) = sem.state.as_ref() else {
         return out;
     };
-    let data = OwnedEffectData::build(sem, state, IndexSet::default());
+    let data = OwnedEffectData::of_semantics(sem, state, IndexSet::default());
     run_effect_checks(
         sem,
         &data.index(&sem.types),
@@ -529,7 +553,7 @@ pub fn check_semantics(
     let Some(state) = sem.state.as_ref() else {
         return diags;
     };
-    let data = OwnedEffectData::build(sem, state, provided_import_fqs);
+    let data = OwnedEffectData::of_semantics(sem, state, provided_import_fqs);
     let index = data.index(&sem.types);
     run_effect_checks(
         sem,
@@ -585,6 +609,15 @@ fn run_effect_checks(
     lints: Lints,
     warnings: &mut Vec<UnhandledOperation>,
 ) {
+    // A row solved while the bodies were elaborated is part of the solution
+    // even where no walk below reaches the closure literal that minted it, as
+    // for one in a trait default body.
+    solved.extend(
+        sem.types
+            .early_effect_rows()
+            .iter()
+            .map(|(var, row)| (var.clone(), row.clone())),
+    );
     let mut log = ReachLog::default();
     let log = &mut log;
     for (src, module) in &sem.modules {
@@ -796,6 +829,9 @@ fn reach_summaries(log: &ReachLog) -> IndexMap<AstId, IndexSet<EffectRef>> {
 /// A trait method, by the trait's declaration and the method name.
 type TraitMethodKey = (DefId, String);
 
+/// Every loaded module's syntax, by its source.
+type Modules = IndexMap<ModuleSource, ast::Module>;
+
 /// One trait impl, by the head of the type it targets and the trait it
 /// implements.
 type ImplKey = (FqTypeName, DefId);
@@ -815,8 +851,17 @@ fn spelled_target_args(types: &TypeTable, def: DefId) -> Vec<FqTypeName> {
     types
         .impl_target_args(def)
         .iter()
-        .map(|&arg| types.fq_type_name_with_rows(arg))
+        .map(|&arg| types.fq_type_name(arg))
         .collect()
+}
+
+/// What [`EffectIndex::close_over_args`] does with an effect parameter of the
+/// impl that its arguments leave open: keep it in what the impl brings, or
+/// drop it for the caller to resolve.
+#[derive(Clone, Copy)]
+enum UnfilledParam {
+    Keep,
+    Drop,
 }
 
 /// The key one `impl Trait for Type` is recorded under. `None` for a trait
@@ -894,9 +939,9 @@ fn receiver_bounds(block: &ImplBlock, resolutions: &Resolutions) -> Vec<Receiver
 }
 
 /// Every declared method that takes `self`, wherever methods are declared.
-fn receiver_methods(sem: &Semantics) -> IndexSet<AstId> {
+fn receiver_methods(modules: &Modules) -> IndexSet<AstId> {
     let mut out = IndexSet::default();
-    for module in sem.modules.values() {
+    for module in modules.values() {
         for item in &module.items {
             let methods: &[Function] = match item {
                 Item::Impl(block) => &block.methods,
@@ -997,9 +1042,10 @@ struct Brought {
 }
 
 /// Owns the cross-module effect maps so multiple checks (effects, default
-/// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
-/// from [`Semantics`] + [`AnnotateState`].
-struct OwnedEffectData {
+/// purity) can borrow a single [`EffectIndex`] view over them. Assembled from
+/// the declarations once every module's resolve, and again from
+/// [`Semantics`] + [`AnnotateState`] once the bodies are walked.
+pub(crate) struct OwnedEffectData {
     flows_by_var: IndexMap<String, Vec<usize>>,
     fn_effects: IndexMap<AstId, Vec<EffectRef>>,
     fn_params: IndexMap<AstId, Vec<TypeId>>,
@@ -1049,11 +1095,21 @@ struct OwnedEffectData {
     /// discharge a reconstructed host-leaf import.
     provided_import_fqs: IndexSet<String>,
     resolutions: Rc<Resolutions>,
+    cm_registry: Arc<CmInterfaceRegistry>,
 }
 
 impl OwnedEffectData {
-    fn build(
+    fn of_semantics(
         sem: &Semantics,
+        state: &AnnotateState,
+        provided_import_fqs: IndexSet<String>,
+    ) -> Self {
+        Self::build(&sem.modules, &sem.types, state, provided_import_fqs)
+    }
+
+    pub(crate) fn build(
+        modules: &Modules,
+        types: &TypeTable,
         state: &AnnotateState,
         provided_import_fqs: IndexSet<String>,
     ) -> Self {
@@ -1067,30 +1123,19 @@ impl OwnedEffectData {
             IndexMap::default();
         let mut mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
         for (src, module_sem) in &state.module_semantics {
-            let types = &module_sem.types;
-            for (key, effects) in &types.function_effects {
+            let facts = &module_sem.types;
+            for (key, effects) in &facts.function_effects {
                 fn_effects.insert(*key, effects.clone());
             }
-            for (key, params) in &types.fn_param_types {
+            for (key, params) in &facts.fn_param_types {
                 fn_params.insert(*key, params.clone());
             }
-            fn_returns.extend(types.fn_return_types.iter().map(|(&k, &t)| (k, t)));
-            // A trait's default method is walked once per impl inheriting it.
-            // Its function-typed parameters carry the same rows in each, which
-            // is all a call reads off them.
-            for facts in module_sem.default_method_facts.values() {
-                for (key, params) in &facts.types.fn_param_types {
-                    fn_params.entry(*key).or_insert_with(|| params.clone());
-                }
-                for (&key, &ret) in &facts.types.fn_return_types {
-                    fn_returns.entry(key).or_insert(ret);
-                }
-            }
-            for (key, names) in &types.method_names {
-                if let Some(effects) = types.function_effects.get(key) {
+            fn_returns.extend(facts.fn_return_types.iter().map(|(&k, &t)| (k, t)));
+            for (key, names) in &facts.method_names {
+                if let Some(effects) = facts.function_effects.get(key) {
                     mangled_index.insert((src.clone(), names.mangled.clone()), effects.clone());
                 }
-                if let Some(params) = types.fn_param_types.get(key) {
+                if let Some(params) = facts.fn_param_types.get(key) {
                     mangled_params.insert((src.clone(), names.mangled.clone()), params.clone());
                 }
             }
@@ -1098,8 +1143,7 @@ impl OwnedEffectData {
 
         let resolutions = &*state.tysys.resolutions;
         let defs = resolutions.defs();
-        let resource_decls: Vec<_> = sem
-            .modules
+        let resource_decls: Vec<_> = modules
             .values()
             .flat_map(|module| &module.items)
             .filter_map(|item| match item {
@@ -1127,9 +1171,11 @@ impl OwnedEffectData {
 
         // Effect / resource propagation closure: holding effect `E` admits the
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
-        let members = MemberTables::collect(sem, state);
-        let closure = build_propagation_closure_sem(sem, state, &members, Families::Joined);
-        let mentions = build_propagation_closure_sem(sem, state, &members, Families::Apart);
+        let members = MemberTables::collect(modules, state);
+        let closure =
+            build_propagation_closure_sem(modules, types, state, &members, Families::Joined);
+        let mentions =
+            build_propagation_closure_sem(modules, types, state, &members, Families::Apart);
 
         // An empty entry is meaningful: the method exists and grants nothing.
         // A declaration has no body, so `fn_effects` holds nothing for it.
@@ -1142,7 +1188,7 @@ impl OwnedEffectData {
         // head resolves to; a method's own clause overrides the head.
         let mut head_methods: IndexSet<TraitMethodKey> = IndexSet::default();
         let mut ambient_trait_methods: IndexSet<TraitMethodKey> = IndexSet::default();
-        for (src, module) in &sem.modules {
+        for (src, module) in modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
                     continue;
@@ -1175,14 +1221,14 @@ impl OwnedEffectData {
         let mut fn_bound_traits: IndexMap<AstId, Vec<Vec<DefId>>> = IndexMap::default();
         let mut receiver_bounds_by_method: IndexMap<AstId, Rc<[ReceiverBound]>> =
             IndexMap::default();
-        let receiver_methods = receiver_methods(sem);
+        let receiver_methods = receiver_methods(modules);
         let mut impl_effects: IndexMap<ImplKey, ImplEffects> = IndexMap::default();
         let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
         let mut block_effects: IndexMap<DefId, IndexSet<EffectRef>> = IndexMap::default();
         let mut forwarding_blocks: IndexSet<DefId> = IndexSet::default();
         let mut waiting: IndexSet<EffectRef> = IndexSet::default();
-        let async_call = sem.types.compiler_item_def(CompilerItem::AsyncCall);
-        for (src, module) in &sem.modules {
+        let async_call = types.compiler_item_def(CompilerItem::AsyncCall);
+        for (src, module) in modules {
             let annotations = state.module_semantics.get(src).map(|m| &m.types);
             for item in &module.items {
                 match item {
@@ -1264,7 +1310,7 @@ impl OwnedEffectData {
                             let brought = brought_to_head(key.1);
                             let entry = impl_effects.entry(key).or_insert_with(|| ImplEffects {
                                 declared: Vec::new(),
-                                target_args: spelled_target_args(&sem.types, defs.def_at(block.id)),
+                                target_args: spelled_target_args(types, defs.def_at(block.id)),
                                 bounds: Rc::clone(&bounds),
                             });
                             for effect in brought {
@@ -1292,7 +1338,7 @@ impl OwnedEffectData {
         // effect while a type-only interface (`wasi:cli/types`) resolves to
         // nothing.
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
-        for module in sem.modules.values() {
+        for module in modules.values() {
             for item in &module.items {
                 // A resource's `#[cm]` FQ names the interface declaring it, so
                 // only the interface's effect answers for that FQ.
@@ -1317,7 +1363,7 @@ impl OwnedEffectData {
         }
 
         let mut flows_by_var: IndexMap<String, Vec<usize>> = IndexMap::default();
-        for (at, flow) in sem.types.row_flows().iter().enumerate() {
+        for (at, flow) in types.row_flows().iter().enumerate() {
             for var in flow.from.iter().chain(&flow.into).filter(|e| e.is_var()) {
                 flows_by_var
                     .entry(var.name().to_string())
@@ -1353,6 +1399,7 @@ impl OwnedEffectData {
             effect_by_cm_fq,
             provided_import_fqs,
             resolutions: Rc::clone(&state.tysys.resolutions),
+            cm_registry: Arc::clone(&state.tysys.cm_interface_registry),
         }
     }
 
@@ -1385,6 +1432,7 @@ impl OwnedEffectData {
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
             resolutions: &self.resolutions,
+            cm_registry: &self.cm_registry,
         }
     }
 }
@@ -1447,6 +1495,8 @@ struct EffectIndex<'a> {
     /// CM interface FQs the consumer provides (discharged in reconstruction).
     provided_import_fqs: &'a IndexSet<String>,
     resolutions: &'a Resolutions,
+    /// Which CM interfaces a composed component implements.
+    cm_registry: &'a CmInterfaceRegistry,
 }
 
 /// Per effect `binding` installs a handler for, what that handler performs:
@@ -1527,12 +1577,8 @@ fn binding_granted_effects(
 /// What a direct call of an operation of the interface or resource `owner`
 /// demands of its caller: the owner itself, whether a handler or the host
 /// answers it, unless a composed component implements it.
-fn operation_requirements(
-    sem: &Semantics,
-    index: &EffectIndex,
-    owner: Option<DefId>,
-) -> Vec<EffectRef> {
-    operation_demands(sem, index, owner).all()
+fn operation_requirements(index: &EffectIndex, owner: Option<DefId>) -> Vec<EffectRef> {
+    operation_demands(index, owner).all()
 }
 
 /// [`operation_requirements`], split by why each is demanded.
@@ -1554,17 +1600,13 @@ impl OperationDemands {
     }
 }
 
-fn operation_demands(
-    sem: &Semantics,
-    index: &EffectIndex,
-    owner: Option<DefId>,
-) -> OperationDemands {
+fn operation_demands(index: &EffectIndex, owner: Option<DefId>) -> OperationDemands {
     let mut demands = OperationDemands::default();
     let Some((effect, cm_fq)) = owner.and_then(|def| index.interfaces.get(&def)) else {
         return demands;
     };
+    let registry = index.cm_registry;
     if let Some(fq) = cm_fq
-        && let Some(registry) = sem.cm_interface_registry()
         && registry.is_component_interface(fq)
     {
         // Composition-relative: the imported interface is composed away, so its
@@ -1829,6 +1871,114 @@ struct BodyWalk<'a> {
     allows_unhandled: bool,
 }
 
+/// The facts of the module whose bodies are being walked, for a question the
+/// walk asks before it ends.
+pub(crate) struct WalkInProgress<'a> {
+    pub(crate) types: &'a TypeTable,
+    pub(crate) sem: &'a ModuleSemantics,
+}
+
+impl BodyFacts for WalkInProgress<'_> {
+    fn types(&self) -> &TypeTable {
+        self.types
+    }
+
+    fn expression_types(&self, id: AstId) -> Vec<TypeId> {
+        ModuleSemantics::EXPRESSION_TYPES
+            .all(self.sem, id)
+            .copied()
+            .collect()
+    }
+
+    fn local_types(&self, def: AstId) -> Vec<TypeId> {
+        ModuleSemantics::LOCAL_TYPES
+            .all(self.sem, def)
+            .copied()
+            .collect()
+    }
+
+    fn method_dispatches_at(&self, id: AstId) -> Vec<&MethodDispatch> {
+        ModuleSemantics::METHOD_DISPATCH.all(self.sem, id).collect()
+    }
+
+    fn referenced_symbol(&self, id: AstId) -> Option<AstId> {
+        ModuleSemantics::REFERENCES
+            .all(self.sem, id)
+            .next()
+            .copied()
+    }
+}
+
+/// What the body of `closure`, a literal the walk in `facts` has just
+/// finished, performs: its type's row. `None` where the body reads a row
+/// `solved` does not answer yet.
+pub(crate) fn closure_row(
+    facts: &WalkInProgress<'_>,
+    decls: &OwnedEffectData,
+    module: &ModuleSource,
+    closure: &ast::ClosureExpr,
+    solved: &EffectRows,
+) -> Option<Vec<EffectRef>> {
+    walk_early(facts, decls, module, solved, |walker| {
+        walker.closure_performs(closure)
+    })
+}
+
+/// What each variable the call `expr`, whose arguments the walk in `facts`
+/// has just finished, carries out in its type stands for. Empty where the call
+/// reads a row `solved` does not answer yet, or carries none out.
+pub(crate) fn call_rows(
+    facts: &WalkInProgress<'_>,
+    decls: &OwnedEffectData,
+    module: &ModuleSource,
+    expr: &Expr,
+    solved: &EffectRows,
+) -> EffectRows {
+    walk_early(facts, decls, module, solved, |walker| {
+        // Only the rows are wanted here, not what the call misses.
+        walker.holds_every_effect = true;
+        walker.check_call(expr);
+        walker
+            .rows
+            .solved
+            .iter()
+            .filter(|(var, _)| !solved.contains_key(*var))
+            .map(|(var, row)| (var.clone(), row.clone()))
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// What `walk` answers of a walker over the body the walk in `facts` is part
+/// way through, starting from `solved`. `None` where it read a row `solved`
+/// does not answer yet.
+fn walk_early<R>(
+    facts: &WalkInProgress<'_>,
+    decls: &OwnedEffectData,
+    module: &ModuleSource,
+    solved: &EffectRows,
+    walk: impl FnOnce(&mut SemEffectWalker<'_>) -> R,
+) -> Option<R> {
+    let index = decls.index(facts.types);
+    let mut found = Vec::new();
+    let mut walker = SemEffectWalker {
+        sem: facts,
+        annotations: Some(&facts.sem.types),
+        index: &index,
+        current: IndexSet::default(),
+        holds_every_effect: false,
+        param_types: IndexMap::default(),
+        module: module.source_path(),
+        out: &mut found,
+        closures: ClosureEffects::default(),
+        collecting: None,
+        rows: Rows::starting_from(solved.clone()),
+        reach: BodyReach::default(),
+    };
+    let answer = walk(&mut walker);
+    (walker.rows.read_final() && walker.rows.read_solved()).then_some(answer)
+}
+
 fn walk_body_effects(
     sem: &Semantics,
     module: &ModuleSource,
@@ -1906,20 +2056,21 @@ enum Families {
 /// operation signatures from the `effect_ops` facts; `members` lets resource
 /// detection descend into an operation type's own members.
 fn build_propagation_closure_sem(
-    sem: &Semantics,
+    modules: &Modules,
+    types: &TypeTable,
     state: &AnnotateState,
     members: &MemberTables,
     families: Families,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
     let resolutions = &*state.tysys.resolutions;
     let scan = ResourceScan {
-        tt: &sem.types,
+        tt: types,
         resolutions,
         members,
     };
     let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
 
-    for (src, module) in &sem.modules {
+    for (src, module) in modules {
         let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
             continue;
         };
@@ -2169,7 +2320,7 @@ pub const INDIRECT_CALLEE: &str = "(indirect call)";
 /// parameter types: a function-typed parameter callee leaves no `references`
 /// edge or recorded expression type at the call, so nothing else names it.
 fn indirect_callee_types(
-    sem: &Semantics,
+    sem: &dyn BodyFacts,
     param_types: &IndexMap<String, TypeId>,
     callee: &Expr,
 ) -> Vec<TypeId> {
@@ -2218,7 +2369,7 @@ struct CalleeEffects {
 /// a spelling both answer for. A tag call is a call: annotate records its callee
 /// under the template's own id, so the same lookup answers for it.
 fn call_site_effects(
-    sem: &Semantics,
+    sem: &dyn BodyFacts,
     index: &EffectIndex<'_>,
     annotations: Option<&TypeAnnotations>,
     param_types: &IndexMap<String, TypeId>,
@@ -2246,7 +2397,8 @@ fn call_site_effects(
         } else {
             Brought::default()
         };
-        let resolved = resolve_effect_params(sem, effects, &params, false, args, &brought, rows);
+        let resolved =
+            resolve_effect_params(sem, effects, &params, false, None, args, &brought, rows);
         return vec![CalleeEffects {
             params: resolved.params,
             returns: index.fn_returns.get(&def).copied(),
@@ -2258,7 +2410,7 @@ fn call_site_effects(
     if dispatches.is_empty() {
         // The callee is a function-typed value (a closure or `fn(...)`
         // parameter). Its type carries the effects it performs when invoked.
-        let rows_of = fn_rows(&sem.types, indirect_callee_types(sem, param_types, callee));
+        let rows_of = fn_rows(sem.types(), indirect_callee_types(sem, param_types, callee));
         if rows_of.is_empty() {
             return Vec::new();
         }
@@ -2277,12 +2429,12 @@ fn call_site_effects(
             let dispatches_through_path = func_ref.method_info.is_none()
                 && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
             let (resolved, resource) =
-                dispatch_effects(sem, index, &func_ref, self_in_args, args, rows);
+                dispatch_effects(sem, index, &func_ref, self_in_args, None, args, rows);
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolved.required,
                 dispatched: if dispatches_through_path {
-                    operation_demands(sem, index, owner)
+                    operation_demands(index, owner)
                 } else {
                     OperationDemands::default()
                 },
@@ -2301,10 +2453,11 @@ fn call_site_effects(
 /// call spells the receiver as its first argument, so the arguments align with
 /// the callee's full parameter list.
 fn dispatch_effects(
-    sem: &Semantics,
+    sem: &dyn BodyFacts,
     index: &EffectIndex<'_>,
     func_ref: &FunctionRef,
     self_in_args: bool,
+    receiver: Option<&Expr>,
     args: &[Expr],
     rows: &Rows,
 ) -> (Resolved, OperationDemands) {
@@ -2318,7 +2471,9 @@ fn dispatch_effects(
     };
     let effects = index.method_effects(func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
-        index.brought_by_dispatch(func_ref, rows)
+        let receiver_expr = if self_in_args { args.first() } else { receiver };
+        let receiver_types = receiver_expr.map(|r| sem.expr_types(r)).unwrap_or_default();
+        index.brought_by_dispatch(func_ref, &receiver_types, rows)
     } else {
         Brought::default()
     };
@@ -2327,11 +2482,61 @@ fn dispatch_effects(
         &effects,
         &index.method_param_types(func_ref),
         has_receiver && !self_in_args,
+        receiver,
         args,
         &brought,
         rows,
     );
-    (resolved, index.resource_demands(sem, func_ref))
+    (resolved, index.resource_demands(func_ref))
+}
+
+/// What a body walk reads of the facts the elaborator recorded: the finished
+/// [`Semantics`] after reify, or a walk still in progress.
+pub(crate) trait BodyFacts {
+    fn types(&self) -> &TypeTable;
+    /// The type of the expression at `id`, one per walk that reached it.
+    fn expression_types(&self, id: AstId) -> Vec<TypeId>;
+    /// The type of the binding declared at `def`, one per walk that reached it.
+    fn local_types(&self, def: AstId) -> Vec<TypeId>;
+    fn method_dispatches_at(&self, id: AstId) -> Vec<&MethodDispatch>;
+    fn referenced_symbol(&self, id: AstId) -> Option<AstId>;
+
+    /// Types of `expr`, preferring the type of the binding an identifier
+    /// names, where a parameter or a function-typed local has one and the use
+    /// site does not.
+    fn expr_types(&self, expr: &Expr) -> Vec<TypeId> {
+        if let Expr::Ident(ident) = expr
+            && let Some(def) = self.referenced_symbol(ident.id)
+        {
+            let bound = self.local_types(def);
+            if !bound.is_empty() {
+                return bound;
+            }
+        }
+        self.expression_types(expr.id())
+    }
+}
+
+impl BodyFacts for Semantics {
+    fn types(&self) -> &TypeTable {
+        &self.types
+    }
+
+    fn expression_types(&self, id: AstId) -> Vec<TypeId> {
+        Semantics::expression_types(self, id).collect()
+    }
+
+    fn local_types(&self, def: AstId) -> Vec<TypeId> {
+        Semantics::local_types(self, def).collect()
+    }
+
+    fn method_dispatches_at(&self, id: AstId) -> Vec<&MethodDispatch> {
+        Semantics::method_dispatches_at(self, id).collect()
+    }
+
+    fn referenced_symbol(&self, id: AstId) -> Option<AstId> {
+        Semantics::referenced_symbol(self, id)
+    }
 }
 
 /// The effects each closure literal's body performs, by the literal's node,
@@ -2340,7 +2545,7 @@ type ClosureEffects = IndexMap<AstId, Vec<EffectRef>>;
 
 /// Walks a function body, checking that each call's required effects are held.
 struct SemEffectWalker<'a> {
-    sem: &'a Semantics,
+    sem: &'a dyn BodyFacts,
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     /// Effects available at the current point: the function's declared +
@@ -2410,7 +2615,7 @@ impl EffectIndex<'_> {
     /// the resource declaring it, whatever the receiver extends, since that
     /// resource's handler is the one the call dispatches to. The release is
     /// ambient, as an implicit drop is: whoever holds a handle may release it.
-    fn resource_demands(&self, sem: &Semantics, func_ref: &FunctionRef) -> OperationDemands {
+    fn resource_demands(&self, func_ref: &FunctionRef) -> OperationDemands {
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
             && let Some(declaring) = method_info.receiver().def()
@@ -2422,7 +2627,7 @@ impl EffectIndex<'_> {
                 self.interfaces.contains_key(&declaring),
                 "a resource is an operation owner"
             );
-            return operation_demands(sem, self, Some(declaring));
+            return operation_demands(self, Some(declaring));
         }
         OperationDemands::default()
     }
@@ -2430,7 +2635,13 @@ impl EffectIndex<'_> {
     /// What a dispatch's type arguments bring to the callee's open effect
     /// parameter: the impl of a trait method's receiver, and each bounded
     /// parameter of the method's impl and of the method itself.
-    fn brought_by_dispatch(&self, func_ref: &FunctionRef, rows: &Rows) -> Brought {
+    /// `receiver_types` is the call's receiver from each walk, where it has one.
+    fn brought_by_dispatch(
+        &self,
+        func_ref: &FunctionRef,
+        receiver_types: &[TypeId],
+        rows: &Rows,
+    ) -> Brought {
         let mut brought = Brought::default();
         let Some(method_info) = func_ref.method_info.as_ref() else {
             return brought;
@@ -2457,43 +2668,65 @@ impl EffectIndex<'_> {
             // row an adapter's `F: fn() with E` binds. One the arguments leave
             // open is resolved from the method's bounds below. A trait's
             // default method has only the receiver's impl to read. The
-            // receiver's name spells no rows, so its arguments are read off the
-            // instantiation where there is one.
-            let receiver_args: Vec<FqTypeName> = match func_ref.monomorph_info.as_ref() {
-                Some(info) if !info.impl_type_args.is_empty() => info
-                    .impl_type_args
+            // receiver's name spells no unsolved row, so its arguments are read
+            // off the instantiation where there is one. A function-type target
+            // reads each walk's receiver, as an argument's rows are read off
+            // every walk.
+            let functions: Vec<Vec<FqTypeName>> = if method_info.receiver().is_function() {
+                receiver_types
                     .iter()
-                    .map(|&arg| self.spelled_solved(arg, rows))
-                    .collect(),
-                _ => method_info.struct_type_args.clone(),
+                    .filter_map(|&r| self.types.function_position(r))
+                    .map(|function| vec![self.spelled_solved(function, rows)])
+                    .collect()
+            } else {
+                Vec::new()
             };
-            if let Some((method, block)) = impl_method {
+            let receiver_arg_lists: Vec<Vec<FqTypeName>> = match func_ref.monomorph_info.as_ref() {
+                Some(info) if !info.impl_type_args.is_empty() => vec![
+                    info.impl_type_args
+                        .iter()
+                        .map(|&arg| self.spelled_solved(arg, rows))
+                        .collect(),
+                ],
+                _ if !functions.is_empty() => functions,
+                _ => vec![method_info.struct_type_args.clone()],
+            };
+            let selected = impl_method.map(|(method, block)| {
                 let declared = self
                     .fn_effects
                     .get(&method)
                     .map(Vec::as_slice)
                     .unwrap_or_default();
-                let target_args = spelled_target_args(self.types, block);
                 let bounds = self
                     .receiver_bounds
                     .get(&method)
                     .map(|b| &**b)
                     .unwrap_or_default();
-                brought.effects.extend(
-                    self.close_over_args(declared, bounds, &target_args, &receiver_args, None)
-                        .into_iter()
-                        .filter(|e| !e.is_param()),
-                );
-            } else {
-                match self.impl_effects.get(&(receiver, key)) {
-                    Some(entry) => brought.effects.extend(self.close_over_args(
-                        &entry.declared,
-                        &entry.bounds,
-                        &entry.target_args,
-                        &receiver_args,
+                (declared, bounds, spelled_target_args(self.types, block))
+            });
+            let impl_entry = self.impl_effects.get(&(receiver, key));
+            for receiver_args in &receiver_arg_lists {
+                if let Some((declared, bounds, target_args)) = &selected {
+                    brought.effects.extend(self.close_over_args(
+                        declared,
+                        bounds,
+                        target_args,
+                        receiver_args,
                         None,
-                    )),
-                    None => brought.open = true,
+                        UnfilledParam::Drop,
+                    ));
+                } else {
+                    match impl_entry {
+                        Some(entry) => brought.effects.extend(self.close_over_args(
+                            &entry.declared,
+                            &entry.bounds,
+                            &entry.target_args,
+                            receiver_args,
+                            None,
+                            UnfilledParam::Keep,
+                        )),
+                        None => brought.open = true,
+                    }
                 }
             }
         }
@@ -2586,12 +2819,7 @@ impl EffectIndex<'_> {
     /// what `rows` solved it to: an impl names no variable. One left unsolved
     /// stands for the empty row, as it does once the check is done.
     fn spelled_solved(&self, id: TypeId, rows: &Rows) -> FqTypeName {
-        self.types.fq_type_name_with_rows(id).map_rows(&|row| {
-            rows.row(row)
-                .into_iter()
-                .filter(|effect| !effect.is_var())
-                .collect()
-        })
+        rows.spelled(&self.types.fq_type_name(id))
     }
 
     /// Adds what the type argument `arg` of a parameter bounded by `traits`
@@ -2616,6 +2844,7 @@ impl EffectIndex<'_> {
                         &entry.target_args,
                         args,
                         None,
+                        UnfilledParam::Keep,
                     ));
                 }
                 None => match self.blanket_for(*key, arg) {
@@ -2664,6 +2893,7 @@ impl EffectIndex<'_> {
         target_args: &[FqTypeName],
         args: &[FqTypeName],
         receiver: Option<&[TypeArg<'_>]>,
+        unfilled: UnfilledParam,
     ) -> IndexSet<EffectRef> {
         let mut out: IndexSet<EffectRef> = IndexSet::default();
         for effect in declared {
@@ -2693,7 +2923,9 @@ impl EffectIndex<'_> {
             }
             out.extend(brought.effects);
             // One bound left open keeps the parameter, whatever the others fill.
-            if brought.open || !(filled || brought.determined) {
+            if matches!(unfilled, UnfilledParam::Keep)
+                && (brought.open || !(filled || brought.determined))
+            {
                 out.insert(effect.clone());
             }
         }
@@ -2713,9 +2945,7 @@ impl EffectIndex<'_> {
             .find_map(|&method| self.receiver_bounds.get(&defs.ast_id(method)))
             .map(|bounds| &**bounds)
             .unwrap_or_default();
-        let target = self
-            .types
-            .fq_type_name_with_rows(self.types.impl_target_whole(block));
+        let target = self.types.fq_type_name(self.types.impl_target_whole(block));
         let spellings = self.spellings(handler, rows);
         // A blanket impl's target is its own parameter, which no spelling of
         // the handler names and which has no arguments to fill.
@@ -2731,6 +2961,7 @@ impl EffectIndex<'_> {
             &spelled_target_args(self.types, block),
             &args,
             Some(&receiver),
+            UnfilledParam::Keep,
         )
     }
 
@@ -2799,15 +3030,16 @@ impl EffectIndex<'_> {
 /// Both walks resolve before they read a callee's effects, so an `effect E`
 /// bound to a concrete effect at the call site is seen by each of them.
 fn resolve_effect_params(
-    sem: &Semantics,
+    sem: &dyn BodyFacts,
     callee_effects: &[EffectRef],
     param_types: &[TypeId],
     is_method: bool,
+    receiver: Option<&Expr>,
     args: &[Expr],
     brought: &Brought,
     rows: &Rows,
 ) -> Resolved {
-    let type_table = &sem.types;
+    let type_table = sem.types();
     let skip = usize::from(is_method && !param_types.is_empty());
     // The callee's own effect parameter, and any its parameters' rows name,
     // which a call's type may carry out as a variable to solve.
@@ -2875,6 +3107,17 @@ fn resolve_effect_params(
                 slot.get_or_insert_with(IndexSet::default)
                     .extend(actual.iter().cloned());
             }
+        }
+    }
+    // An impl's effect parameter its target writes meets the receiver's row at
+    // the same place.
+    if let (Some(receiver), Some(&self_type)) = (receiver, param_types.first())
+        && skip == 1
+    {
+        let declared = type_table.peel_refs(self_type);
+        for receiver_type in sem.expression_types(receiver.id()) {
+            let actual = type_table.peel_refs(receiver_type);
+            pair_effects(type_table, declared, actual, rows, &mut concrete);
         }
     }
     // What the type arguments bring, read through the rows solved so far.
@@ -3155,8 +3398,15 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let (resolved, resource) =
-                        dispatch_effects(self.sem, self.index, func_ref, false, &[], &self.rows);
+                    let (resolved, resource) = dispatch_effects(
+                        self.sem,
+                        self.index,
+                        func_ref,
+                        false,
+                        None,
+                        &[],
+                        &self.rows,
+                    );
                     let callee = func_ref
                         .method_info
                         .as_ref()
@@ -3227,6 +3477,14 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
         // A call is checked after its arguments, so a variable a call among
         // them mints is solved before this one reads it.
         ast::walk_expr(self, expr);
+        self.check_call(expr);
+    }
+}
+
+impl SemEffectWalker<'_> {
+    /// Check what `expr` demands where it is a call, its arguments already
+    /// walked, solving the variables its type carries out.
+    fn check_call(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
                 self.check_call_effects(&call.callee, call.id, &call.args, call.span);
@@ -3242,6 +3500,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         self.index,
                         &dispatch.function_ref,
                         false,
+                        Some(&method_call.receiver),
                         &method_call.args,
                         &self.rows,
                     );
@@ -3263,6 +3522,7 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                         self.index,
                         &func_ref,
                         self_in_args,
+                        None,
                         &static_call.args,
                         &self.rows,
                     );
@@ -3308,11 +3568,11 @@ impl SemEffectWalker<'_> {
             return performed.clone();
         }
         // One type per walk that reached the literal, each with its own row.
-        let closure_types: Vec<TypeId> = self.sem.expression_types(closure.id).collect();
+        let closure_types = self.sem.expression_types(closure.id);
         let current = held_in_body(
             self.annotations,
             self.index,
-            &self.sem.types,
+            self.sem.types(),
             IndexSet::default(),
             Body::Expr(&closure.body),
         );
@@ -3344,7 +3604,7 @@ impl SemEffectWalker<'_> {
         self.rows = std::mem::take(&mut body.rows);
         self.reach.closed.append(&mut body.reach.closed);
         self.closures.insert(closure.id, performed.clone());
-        for row in fn_rows(&self.sem.types, closure_types) {
+        for row in fn_rows(self.sem.types(), closure_types) {
             for var in row.iter().filter(|e| e.is_var()) {
                 self.rows.widen(var.name(), &performed);
             }
@@ -3418,7 +3678,7 @@ impl SemEffectWalker<'_> {
         };
         let mut met: IndexMap<String, IndexSet<String>> = IndexMap::default();
         for actual in self.sem.expression_types(call) {
-            pair_rows(&self.sem.types, declared, actual, &mut met);
+            pair_rows(self.sem.types(), declared, actual, &mut met);
         }
         for (param, vars) in met {
             // A parameter nothing at the call determines stands for no effect:
@@ -3462,6 +3722,17 @@ impl Rows {
         })
     }
 
+    /// `name` with each row as [`Self::row`] solves it, a variable still
+    /// unsolved left out.
+    fn spelled(&self, name: &FqTypeName) -> FqTypeName {
+        name.map_rows(&|row| {
+            self.row(row)
+                .into_iter()
+                .filter(|effect| !effect.is_var())
+                .collect()
+        })
+    }
+
     /// Add `effects` to what `var` is solved to. A solution only grows: one
     /// call site may resolve through several dispatches, each adding what it
     /// brings.
@@ -3477,8 +3748,10 @@ impl Rows {
     }
 
     /// Hand each flow's row on to the variables of the slot it moves into,
-    /// until none grows: a variable stands for every value moved into it.
+    /// until none grows: a variable stands for every value moved into it,
+    /// unless an expression read it and so closed it.
     fn propagate_flows(&mut self, index: &EffectIndex<'_>) {
+        let closed = index.types.effect_row_closings();
         loop {
             let mut grew = false;
             for flow in index.flows_of(self) {
@@ -3490,7 +3763,11 @@ impl Rows {
                     .into_iter()
                     .filter(|e| !e.is_var() && !flow.into.contains(e))
                     .collect();
-                for var in flow.into.iter().filter(|e| e.is_var()) {
+                let open = flow
+                    .into
+                    .iter()
+                    .filter(|e| e.is_var() && !closed.contains_key(e.name()));
+                for var in open {
                     grew |= self.widen(var.name(), &carried);
                 }
             }
@@ -3501,16 +3778,22 @@ impl Rows {
     }
 
     /// Report each effect a value performs beyond the row of the slot a flow
-    /// moved it into, where that row names no variable to grow. An effect
-    /// parameter there admits only itself: the function holds for every row
-    /// its caller may pick for it, the empty one among them.
+    /// moved it into, where that row names no variable to grow, or names one
+    /// an expression read and so closed. An effect parameter there admits only
+    /// itself: the function holds for every row its caller may pick for it,
+    /// the empty one among them.
     fn bound_flows(&self, index: &EffectIndex<'_>, out: &mut Vec<EffectError>) {
+        let closed = index.types.effect_row_closings();
         for flow in index.flows_of(self) {
-            if flow.into.iter().any(EffectRef::is_var) {
+            let closing = flow
+                .into
+                .iter()
+                .find_map(|e| e.is_var().then(|| closed.get(e.name())).flatten());
+            if closing.is_none() && flow.into.iter().any(EffectRef::is_var) {
                 continue;
             }
             let admitted =
-                expand_through_closure(&flow.into.iter().cloned().collect(), index.closure);
+                expand_through_closure(&self.row(&flow.into).into_iter().collect(), index.closure);
             for effect in self.row(&flow.from) {
                 assert!(
                     !effect.is_var(),
@@ -3519,15 +3802,31 @@ impl Rows {
                 if admitted.contains(&effect) {
                     continue;
                 }
+                let fault = match closing {
+                    Some(closing) => EffectFault::WidensClosedRow {
+                        module: (closing.module != flow.module).then(|| closing.module.clone()),
+                        line: closing.span.line,
+                        column: closing.span.column,
+                    },
+                    None => EffectFault::BeyondExpectedType(index.kind_of(&effect)),
+                };
                 out.push(EffectError {
                     callee: String::new(),
                     missing_effect: effect.name().to_string(),
-                    fault: EffectFault::BeyondExpectedType(index.kind_of(&effect)),
+                    fault,
                     span: flow.span,
                     module: flow.module.clone(),
                 });
             }
         }
+    }
+
+    /// Whether every variable the walk read has a solution.
+    fn read_solved(&self) -> bool {
+        self.reads
+            .borrow()
+            .keys()
+            .all(|var| self.solved.contains_key(var))
     }
 
     /// Every variable a settled body's walk read is solved: each is minted by a
@@ -3598,7 +3897,7 @@ pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
     let Some(state) = sem.state.as_ref() else {
         return out;
     };
-    let data = OwnedEffectData::build(sem, state, IndexSet::default());
+    let data = OwnedEffectData::of_semantics(sem, state, IndexSet::default());
     run_purity_checks(sem, &data.index(&sem.types), &mut out);
     out
 }
@@ -3615,7 +3914,7 @@ impl<'a> EffectProbe<'a> {
     /// `None` where the elaborator left no state to answer from.
     pub(crate) fn new(sem: &'a Semantics) -> Option<Self> {
         let state = sem.state.as_ref()?;
-        let data = OwnedEffectData::build(sem, state, IndexSet::default());
+        let data = OwnedEffectData::of_semantics(sem, state, IndexSet::default());
         Some(Self { sem, state, data })
     }
 
@@ -3878,6 +4177,7 @@ impl<'a> PurityWalker<'a> {
         &mut self,
         func_ref: &FunctionRef,
         self_in_args: bool,
+        receiver: Option<&Expr>,
         args: &[Expr],
         callee: &str,
         span: Span,
@@ -3887,6 +4187,7 @@ impl<'a> PurityWalker<'a> {
             self.index,
             func_ref,
             self_in_args,
+            receiver,
             args,
             &Rows::default(),
         );
@@ -3900,7 +4201,7 @@ impl<'a> PurityWalker<'a> {
     fn flag_if_operation(&mut self, owner: Option<DefId>, op: &str, span: Span) {
         // An operation declares no effect parameters, so there is nothing for
         // the arguments to resolve.
-        let required = operation_requirements(self.sem, self.index, owner);
+        let required = operation_requirements(self.index, owner);
         if self.unanswered(&required) {
             self.flag(Impurity::Dispatch(op.to_string()), span);
         }
@@ -3948,6 +4249,7 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                     self.flag_if_effectful(
                         &dispatch.function_ref,
                         false,
+                        Some(&method_call.receiver),
                         &method_call.args,
                         &method_call.method,
                         method_call.span,
@@ -3963,6 +4265,7 @@ impl AstVisitor<'_> for PurityWalker<'_> {
                     self.flag_if_effectful(
                         &func_ref,
                         self_in_args,
+                        None,
                         &static_call.args,
                         &static_call.method,
                         static_call.span,

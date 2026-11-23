@@ -1,0 +1,22 @@
+// A function-type impl whose trait reference sets a parameter the target does
+// not is instantiated at the argument the call names.
+use { println, Stdout } from "core:cli";
+
+trait Conv<T> with () {
+    fn conv(&self) -> T;
+}
+
+impl<T: Default> Conv<T> for fn() {
+    fn conv(&self) -> T {
+        return T::default();
+    }
+}
+
+export fn run() with Stdout {
+    let f = || {};
+    let x: i32 = f.conv();
+    println(`${x}`);
+}
+
+__DATA__
+{"stdout": "0\n"}

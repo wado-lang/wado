@@ -1220,7 +1220,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// [`place::names_storage`].
     fn names_storage(&self, value: &TirExpr) -> bool {
-        place::names_storage(value, self.base.type_table.borrow().compiler_items())
+        place::names_storage(value, &self.base.type_table.borrow())
     }
 
     /// What `&mut value` refers to. A value that names no storage, such as a
@@ -1260,9 +1260,7 @@ impl FunctionTranslator<'_, '_> {
         arity: usize,
         result_type: tir::TypeId,
     ) -> bool {
-        let Some(value) =
-            place::borrowed_temporary(arg, self.base.type_table.borrow().compiler_items())
-        else {
+        let Some(value) = place::borrowed_temporary(arg, &self.base.type_table.borrow()) else {
             return false;
         };
         self.args_checked
@@ -2721,7 +2719,7 @@ impl FunctionTranslator<'_, '_> {
                 let items = tt.compiler_items();
                 let name = match tt.get(variant_ty) {
                     tir::ResolvedType::Variant { type_args, .. } if !type_args.is_empty() => {
-                        variant_tag_helper_name(&tt.mangle_type_arg_rowless(variant_ty))
+                        variant_tag_helper_name(&tt.mangle_type_arg_solved(variant_ty))
                     }
                     _ => MethodName::format_local(
                         &tt.fq_type_name(variant_ty),
@@ -3037,18 +3035,16 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// Convert the receiver of a call that writes through it. A place receiver
-    /// takes no `$value_copy$T`: the copy would hand the callee a throwaway and
-    /// discard the mutation the call exists to perform (a `String` builder's
-    /// `push_str` would append to the copy). One that is not a place names no
-    /// storage the caller can reach again, so the call must not write through it
-    /// to whatever it was read out of — there it takes the copy every by-value
+    /// Convert the receiver of a call that writes through it. A receiver naming
+    /// storage takes no `$value_copy$T`: the copy would hand the callee a
+    /// throwaway and discard the mutation the call exists to perform (a
+    /// `String` builder's `push_str` would append to the copy). One naming no
+    /// storage the caller can reach again must not write through it to
+    /// whatever it was read out of, so there it takes the copy every by-value
     /// argument takes.
     fn convert_mut_receiver_arg(&self, receiver: &TirExpr) -> ArenaCallArg {
         let value = receiver_value(receiver);
-        let names_a_place =
-            place::is_source_place(value, self.base.type_table.borrow().compiler_items());
-        if names_a_place || !self.should_wrap_value_copy(value) {
+        if self.names_storage(value) || !self.should_wrap_value_copy(value) {
             return ArenaCallArg {
                 expr: self.convert_operand(receiver),
                 is_mut: true,

@@ -30,8 +30,8 @@ use { ErrorCode } from "wasi:filesystem/types.wado";
 // Only the path functions: the I/O here is on subdirectory descriptors, which
 // `core:fs` does not reach.
 use fs from "core:fs";
-use { CodeWriter } from "lib:wadopoet";
-use { TreeMap } from "core:collections";
+use { CodeWriter, wado } from "lib:wadopoet";
+use { HashMap } from "core:collections";
 use { expand_action_templates } from "../src/g4/action_templates.wado";
 use { to_snake_case } from "../src/ident.wado";
 use { strip_action_bodies } from "../src/g4/action_strip.wado";
@@ -70,7 +70,7 @@ fn generator_attr() -> String {
 /// The shared `// Triage data: …([<axis>_*]).` comment line. `axis` is
 /// `stage_a` / `stage_b` / `stage_b_oracle`.
 fn triage_doc_line<S: AsStrSlice>(axis: S) -> String {
-    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([${axis}_*]).`;
+    return wado`// Triage data: package-gale/tests/antlr4-compat/status.toml ([${axis}_*]).`;
 }
 
 // ===== Descriptor format =====
@@ -566,26 +566,6 @@ fn list_subdirs(dir: &Descriptor) -> List<String> with Descriptor {
 
 // ===== Test file emission =====
 
-
-/// Escape a string so it can sit between Wado `"..."` quotes.
-fn escape_for_wado_str<S: AsStrSlice>(s: S) -> String {
-    let mut out = String::with_capacity(s.len());
-    for let c of s.chars() {
-        match c {
-            '\\' => {
-                out.push_str("\\\\");
-            },
-            '"' => {
-                out.push_str("\\\"");
-            },
-            _ => {
-                out.push(c);
-            },
-        }
-    }
-    return out;
-}
-
 struct DescriptorEntry {
     /// e.g. "Sets/CharSetLiteral"
     key: String,
@@ -605,12 +585,12 @@ fn emit_test_file_for_category<S: AsStrSlice>(category: S, entries: &List<Descri
     w.line(&generator_attr());
     w.line("// Do not edit by hand — re-run the generator to regenerate.");
     w.line("//");
-    w.line(`// Source category: ${category} (ANTLR4 runtime-testsuite).`);
+    w.line(wado`// Source category: ${category} (ANTLR4 runtime-testsuite).`);
     w.line("// Triage data: package-gale/tests/antlr4-compat/status.toml");
     w.blank();
     let imports = claim_a_imports(entries);
     if !imports.is_empty() {
-        w.line(`use { ${join_names(&imports)} } from "../../src/g4/parser.wado";`);
+        w.line(wado`use { ${imports.join(", ")} } from "../../src/g4/parser.wado";`);
         w.blank();
     }
     let mut needs_separator = false;
@@ -623,7 +603,7 @@ fn emit_test_file_for_category<S: AsStrSlice>(category: S, entries: &List<Descri
                 if needs_separator {
                     w.blank();
                 }
-                w.line(`// triage: ${escape_for_wado_str(reason)}`);
+                w.line(wado`// triage: ${reason}`);
                 w.line("#[TODO]");
             },
             _::Pass => {
@@ -633,9 +613,9 @@ fn emit_test_file_for_category<S: AsStrSlice>(category: S, entries: &List<Descri
             },
         }
         needs_separator = true;
-        w.begin(`test "${category}/${e.name}"`);
+        w.begin(wado`test "${category}/${e.name}"`);
         if e.slave_relpaths.is_empty() {
-            w.line(`let input = #include_str("./grammars/${e.g4_relpath}");`);
+            w.line(wado`let input = #include_str("./grammars/${e.g4_relpath}");`);
             w.line("let result = parse(input);");
             w.line("if let Err(err) = &result {");
             w.indent();
@@ -649,9 +629,9 @@ fn emit_test_file_for_category<S: AsStrSlice>(category: S, entries: &List<Descri
             // is what `assemble_grammar` answers — the call the generator makes.
             w.line("let inputs: List<[String, String]> = [");
             w.indent();
-            w.line(`["${e.g4_relpath}", #include_str("./grammars/${e.g4_relpath}")],`);
+            w.line(wado`["${e.g4_relpath}", #include_str("./grammars/${e.g4_relpath}")],`);
             for let slave of &e.slave_relpaths {
-                w.line(`["${*slave}", #include_str("./grammars/${*slave}")],`);
+                w.line(wado`["${*slave}", #include_str("./grammars/${*slave}")],`);
             }
             w.dedent();
             w.line("];");
@@ -744,33 +724,33 @@ fn slave_filename<S: AsStrSlice>(base: S, i: i32) -> String {
 fn emit_test_chunk(spec: &TestChunkSpec, body: fn(&mut CodeWriter, &String)) -> TestChunk {
     let ns = module_namespace(&spec.module);
     let mut w = CodeWriter::new();
-    w.line(`// Source descriptor: ${spec.category}/${spec.name} (ANTLR4 runtime-testsuite).`);
+    w.line(wado`// Source descriptor: ${spec.category}/${spec.name} (ANTLR4 runtime-testsuite).`);
     for let dl of &spec.doc_lines {
         w.line(dl);
     }
     if let Todo(reason) = &spec.triage {
-        w.line(`// triage: ${escape_for_wado_str(reason)}`);
+        w.line(wado`// triage: ${reason}`);
         w.line("#[TODO]");
     }
-    w.begin(`test "${spec.test_label}: ${spec.category}/${spec.name}"`);
+    w.begin(wado`test "${spec.test_label}: ${spec.category}/${spec.name}"`);
     body(&mut w, &ns);
     w.end();
     return TestChunk { module: spec.module, text: w.to_string(), tree_helpers: spec.tree_helpers };
 }
 
 fn emit_module_use(w: &mut CodeWriter, module: &GrammarModule) {
-    w.line(`use ${module_namespace(module)} from "../../grammars/${module.category}/${module.name}.g4"`);
+    w.line(wado`use ${module_namespace(module)} from "../../grammars/${module.category}/${module.name}.g4"`);
     w.line("    with {");
     w.line("        generator: {");
     w.line(`            module: "../../../../src/generator.wado",`);
     if module.slave_count > 0 {
         let mut paths: List<String> = [];
         for let mut i = 0; i < module.slave_count; i += 1 {
-            paths.push(`"../../grammars/${module.category}/${slave_filename(&module.name, i)}"`);
+            paths.push(wado`"../../grammars/${module.category}/${slave_filename(&module.name, i)}"`);
         }
-        w.line(`            inputs: [${join_names(&paths)}],`);
+        w.line(`            inputs: [${paths.join(", ")}],`);
     }
-    w.line(`            output_dir: "../../../generated/antlr4_compat/${module.category}/${module.name}",`);
+    w.line(wado`            output_dir: "../../../generated/antlr4_compat/${module.category}/${module.name}",`);
     w.line("        },");
     w.line("    };");
 }
@@ -800,11 +780,11 @@ fn emit_category_test_file<S: AsStrSlice, S1: AsStrSlice>(attr: S, category: S1,
     w.line(attr);
     w.line("// Do not edit by hand — re-run the generator to regenerate.");
     w.line("//");
-    w.line(`// Source category: ${category} (ANTLR4 runtime-testsuite).`);
+    w.line(wado`// Source category: ${category} (ANTLR4 runtime-testsuite).`);
     w.line("// Triage data: package-gale/tests/antlr4-compat/status.toml");
     if !helpers.is_empty() {
         w.blank();
-        w.line(`use { ${join_names(&helpers)} } from "../../../support/tree_compare.wado";`);
+        w.line(wado`use { ${helpers.join(", ")} } from "../../../support/tree_compare.wado";`);
     }
     for let module of &modules_of(chunks) {
         w.blank();
@@ -821,7 +801,7 @@ fn emit_category_test_file<S: AsStrSlice, S1: AsStrSlice>(attr: S, category: S1,
 /// modules first appear, and split where a group would bring more than
 /// `GRAMMARS_PER_FILE` modules.
 fn group_by_module(chunks: &List<TestChunk>) -> List<List<TestChunk>> {
-    let mut slot_of: TreeMap<String, i32> = TreeMap::new();
+    let mut slot_of: HashMap<String, i32> = HashMap::new();
     let mut by_module: List<List<TestChunk>> = [];
     for let chunk of chunks {
         let slot = slot_of.get_or_insert(chunk.module.name, by_module.len());
@@ -921,17 +901,6 @@ fn actual_expr<S: AsStrSlice>(inner: S, strip: bool) -> String {
     return inner.to_string();
 }
 
-fn join_names(names: &List<String>) -> String {
-    let mut out = String::new();
-    for let mut i = 0; i < names.len(); i += 1 {
-        if i > 0 {
-            out.push_str(", ");
-        }
-        out.push_str(&names[i]);
-    }
-    return out;
-}
-
 fn tree_import_names(strip: bool) -> List<String> {
     if strip {
         return ["normalize_tree", "strip_skip_markers"];
@@ -983,8 +952,8 @@ fn emit_stage_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: As
         triage: *triage,
     };
     return emit_test_chunk(&spec, |w: &mut CodeWriter, ns: &String| {
-        w.line(`let input = "${escape_for_wado_str(input)}";`);
-        w.line(`let expected = "${escape_for_wado_str(expected_tree)}";`);
+        w.line(wado`let input = "${input}";`);
+        w.line(wado`let expected = "${expected_tree}";`);
         w.line(`let result = ${*ns}::${parse_call_for_start(start)}(&input);`);
         w.line(`let actual = ${actual_expr(`${*ns}::to_string_tree(&result)`, strip)};`);
         w.line("let norm = normalize_tree(&expected);");
@@ -1018,7 +987,7 @@ fn emit_stage_sub_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3
     let mut doc_lines: List<String> = [
         triage_doc_line("stage_b"),
         "//",
-        `// Stage B sub-tree: [output] is the labelled child '${sub_rule}' subtree,`,
+        wado`// Stage B sub-tree: [output] is the labelled child '${sub_rule}' subtree,`,
         "// not the start rule's full tree. Navigate via find_first_child_node.",
     ];
     for let line of &strip_doc_lines(strip) {
@@ -1034,10 +1003,10 @@ fn emit_stage_sub_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3
         triage: *triage,
     };
     return emit_test_chunk(&spec, |w: &mut CodeWriter, ns: &String| {
-        w.line(`let input = "${escape_for_wado_str(input)}";`);
-        w.line(`let expected = "${escape_for_wado_str(expected_tree)}";`);
+        w.line(wado`let input = "${input}";`);
+        w.line(wado`let expected = "${expected_tree}";`);
         w.line(`let result = ${*ns}::${parse_call_for_start(start)}(&input);`);
-        w.line(`let actual = ${actual_expr(`${*ns}::to_string_subtree(&result, "${sub_rule}")`, strip)};`);
+        w.line(`let actual = ${actual_expr(wado`${*ns}::to_string_subtree(&result, "${sub_rule}")`, strip)};`);
         w.line("let norm = normalize_tree(&expected);");
         w.line("assert actual == norm;");
     });
@@ -1076,7 +1045,7 @@ fn emit_stage_a_parse_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, 
         triage: *triage,
     };
     return emit_test_chunk(&spec, |w: &mut CodeWriter, ns: &String| {
-        w.line(`let input = "${escape_for_wado_str(input)}";`);
+        w.line(wado`let input = "${input}";`);
         w.line(`let result = ${*ns}::${parse_call_for_start(start)}(&input);`);
         w.line("if !result.ok() {");
         w.indent();
@@ -1159,8 +1128,8 @@ fn emit_stage_c_output_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
     // A no-op for non-tree output (no ` <EOF>)` tail).
     let expected = strip_tail_eof_marker(output);
     return emit_test_chunk(&spec, |w: &mut CodeWriter, ns: &String| {
-        w.line(`let input = "${escape_for_wado_str(input)}";`);
-        w.line(`let expected = "${escape_for_wado_str(&expected)}";`);
+        w.line(wado`let input = "${input}";`);
+        w.line(wado`let expected = "${expected}";`);
         w.line(`let result = ${*ns}::${parse_call_for_start(start)}(&input);`);
         w.line(`let actual = ${actual_expr("result.output", strip)};`);
         w.line("assert actual == expected;");
@@ -1337,7 +1306,7 @@ fn emit_stage_a_err_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3
         triage: *triage,
     };
     return emit_test_chunk(&spec, |w: &mut CodeWriter, ns: &String| {
-        w.line(`let input = "${escape_for_wado_str(input)}";`);
+        w.line(wado`let input = "${input}";`);
         if is_lexer {
             w.line(`let tokens = ${*ns}::tokenize(&input);`);
             w.line("let mut has_err = false;");
@@ -1388,8 +1357,8 @@ fn emit_stage_a_tokens_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
         triage: *triage,
     };
     return emit_test_chunk(&spec, |w: &mut CodeWriter, ns: &String| {
-        w.line(`let input = "${escape_for_wado_str(input)}";`);
-        w.line(`let expected = "${escape_for_wado_str(expected)}";`);
+        w.line(wado`let input = "${input}";`);
+        w.line(wado`let expected = "${expected}";`);
         w.line(`let tokens = ${*ns}::tokenize(&input);`);
         w.line(`let actual = ${*ns}::to_lexer_string(&tokens, ${*ns}::TK_EOF);`);
         w.line("assert actual == expected;");
@@ -1583,10 +1552,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
 
         let txt_files = list_files_with_suffix(&cat_src_dir, ".txt");
         let mut entries: List<DescriptorEntry> = [];
-        let mut output = CategoryOutput { category: *category, chunks: [], module_of: TreeMap::new() };
+        let mut output = CategoryOutput { category: *category, chunks: [], module_of: HashMap::new() };
         // Keyed by the grammar and its slaves, so a descriptor repeating an
         // earlier one's grammar reuses its module.
-        let mut module_of_grammar: TreeMap<String, GrammarModule> = TreeMap::new();
+        let mut module_of_grammar: HashMap<String, GrammarModule> = HashMap::new();
         // Tracks per-category I/O / parse failures separately from triage
         // skips. `entries.is_empty()` alone cannot distinguish "every
         // descriptor was [skip]-triaged" (intentional, we want to drop
@@ -2018,7 +1987,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
 struct CategoryOutput {
     category: String,
     chunks: List<TestChunk>,
-    module_of: TreeMap<String, GrammarModule>,
+    module_of: HashMap<String, GrammarModule>,
 }
 
 /// Run the oracle on every `oracle-pending/<C>/<N>.input` against its
@@ -2330,7 +2299,7 @@ fn emit_stage_b_oracle_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
         category: category.to_string(),
         name: name.to_string(),
         doc_lines: [
-            `// Expected tree: antlr-${oracle_version}-complete.jar on the action-body-stripped grammar.`,
+            wado`// Expected tree: antlr-${oracle_version}-complete.jar on the action-body-stripped grammar.`,
             triage_doc_line("stage_b_oracle"),
         ],
         module: *module,
@@ -2338,8 +2307,8 @@ fn emit_stage_b_oracle_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
         triage: *triage,
     };
     return emit_test_chunk(&spec, |w: &mut CodeWriter, ns: &String| {
-        w.line(`let input = "${escape_for_wado_str(input)}";`);
-        w.line(`let expected = "${escape_for_wado_str(expected_tree)}";`);
+        w.line(wado`let input = "${input}";`);
+        w.line(wado`let expected = "${expected_tree}";`);
         w.line(`let result = ${*ns}::${parse_call_for_start(start)}(&input);`);
         w.line(`let actual = ${*ns}::to_string_tree(&result);`);
         w.line("assert actual == expected;");

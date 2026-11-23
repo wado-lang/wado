@@ -33,7 +33,9 @@ use super::{AbstractSelections, Elaborator};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::method_lookup::{ImplParamSlots, impl_target_args, impl_target_head_args};
+use crate::elaborator::method_lookup::{
+    ImplParamSlots, impl_target_args, impl_target_head_args, impl_target_written_args,
+};
 use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::MethodNames;
 use crate::elaborator::sig;
@@ -969,11 +971,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// and its bound parameters share one set of positions.
     pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
         // Peeled as the frame peels it.
-        let inner = match ty {
-            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
-            other => other,
-        };
-        let Some(args) = impl_target_head_args(inner) else {
+        let Some(args) = impl_target_written_args(ty.referent()) else {
             return Vec::new();
         };
         args.iter().map(|arg| self.resolve_type(arg)).collect()
@@ -1396,6 +1394,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
 
+        let trait_name = block.impl_block_trait_name(impl_block);
+        block.record_impl_block_facts(impl_block, trait_name.clone());
+
         for method in &impl_block.methods {
             let mut frame_scope = block.enter_inherited_type_param_scope();
             frame_scope.annotate_ctx.trait_ctx.clear_binders();
@@ -1421,6 +1422,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_ref()
                 .map(|t| frame_scope.resolve_type(t));
             frame_scope.reject_signature_annotations(&method.params, method.return_type.as_ref());
+            let effects = frame_scope.resolve_effects(&method.effects);
+            let receiver =
+                frame_scope.receiver_name_of_impl(&impl_block.ty, &impl_block.type_params);
+            let method_names = MethodNames {
+                display: MethodName::format_local(
+                    &FqTypeName::binder(&frame_scope.get_type_name(&impl_block.ty)),
+                    None,
+                    &method.name,
+                ),
+                mangled: MethodName::format_local(&receiver, trait_name.as_ref(), &method.name),
+            };
+            let types = &mut frame_scope.sem.types;
+            types.method_names.insert(method.id, method_names);
+            types.function_effects.insert(method.id, effects);
+            types.fn_param_types.insert(method.id, param_types.clone());
+            types
+                .fn_return_types
+                .insert(method.id, return_type.unwrap_or(TypeTable::UNIT));
             let mut type_params = frame.declaring_type_params;
             let declaring_slot_count = type_params.len() as u32;
             let declaring_slot_end = impl_slot_end(&frame.impl_type_params);
@@ -1775,7 +1794,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) {
+    /// Record the struct's field types, a declaration fact the body walk and
+    /// the effect check read before any body is walked.
+    pub(super) fn record_struct_field_types(&mut self, struct_decl: &ast::StructDecl) {
         let owner = self.tysys.def_at(struct_decl.id);
         let mut scope = self.enter_decl_params_scope(owner, &struct_decl.type_params);
         let struct_field_types: Vec<TypeId> = struct_decl
@@ -1783,6 +1804,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .iter()
             .map(|field| scope.resolve_struct_field(field))
             .collect();
+        drop(scope);
+        self.sem
+            .types
+            .struct_field_types
+            .insert(struct_decl.id, struct_field_types);
+    }
+
+    pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) {
+        let owner = self.tysys.def_at(struct_decl.id);
+        let struct_field_types = self.sem.types.struct_field_types[&struct_decl.id].clone();
+        let mut scope = self.enter_decl_params_scope(owner, &struct_decl.type_params);
         scope.resolve_field_defaults(struct_decl, &struct_field_types);
 
         let type_params = scope.project_type_params(&struct_decl.type_params);
@@ -1792,10 +1824,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .types
             .decl_type_params
             .insert(struct_decl.id, type_params);
-        self.sem
-            .types
-            .struct_field_types
-            .insert(struct_decl.id, struct_field_types);
     }
 
     /// The scope a `trait`'s methods resolve in: `Self` as slot 0, bounded by
@@ -2538,19 +2566,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Record the operation signatures of the `interface` or `resource`
-    /// declared at `decl_id`.
-    pub(super) fn record_effect_ops(&mut self, decl_id: ast::AstId) {
-        let operations = self
-            .sem
-            .decls
-            .effect_ops
-            .get(&self.tysys.def_at(decl_id))
-            .cloned()
-            .expect("the decl pass records every interface / resource declaration's operations");
-        self.sem.types.effect_ops.insert(decl_id, operations);
-    }
-
     /// Resolve a global variable declaration for its fact-recording side
     /// effects. Reify (`reify_global`) is the sole producer of the `TirGlobal`,
     /// re-emitting the initializer from the AST + recorded per-`AstId`
@@ -2823,9 +2838,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let type_params = scope.project_type_params(&func.type_params);
 
-        let effects = scope.resolve_effects(&func.effects);
-
-        scope.sem.types.function_effects.insert(func.id, effects);
+        // The decl pass records a signature's effects; an operation's default
+        // body has no signature of its own.
+        if !scope.sem.types.function_effects.contains_key(&func.id) {
+            let effects = scope.resolve_effects(&func.effects);
+            scope.sem.types.function_effects.insert(func.id, effects);
+        }
 
         // Record what `task return` delivers, so reify can set
         // `task_return_type` for resource-store inference.
@@ -2840,9 +2858,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         drop(scope);
 
         self.record_declared_attrs(func, &param_types, return_type);
-        self.sem.types.fn_param_types.insert(func.id, param_types);
-        self.sem.types.fn_return_types.insert(func.id, return_type);
-        self.sem.types.decl_type_params.insert(func.id, type_params);
+        let types = &mut self.sem.types;
+        types.fn_param_types.entry(func.id).or_insert(param_types);
+        types.fn_return_types.entry(func.id).or_insert(return_type);
+        types.decl_type_params.insert(func.id, type_params);
     }
 
     /// Resolve a test declaration's body for its facts, under the name reify
@@ -2930,14 +2949,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Publish the mangled + display
         // names for reify to read straight off `MethodNames` instead of
         // running `format_local` itself against the impl facts.
-        let method_names_key = func.id;
-        scope.sem.types.method_names.insert(
-            method_names_key,
-            MethodNames {
-                display: display_name.clone(),
-                mangled: mangled_name.clone(),
-            },
-        );
+        if recorded_sig.is_none() {
+            scope.sem.types.method_names.insert(
+                func.id,
+                MethodNames {
+                    display: display_name.clone(),
+                    mangled: mangled_name.clone(),
+                },
+            );
+        }
 
         if abstract_selections.is_some() {
             let written = scope
@@ -2975,8 +2995,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // In `func.params` order, receiver included.
         self.record_declared_attrs(func, &param_types, return_type);
-        self.sem.types.fn_param_types.insert(func.id, param_types);
-        self.sem.types.fn_return_types.insert(func.id, return_type);
+        if recorded_sig.is_none() {
+            self.sem.types.fn_param_types.insert(func.id, param_types);
+            self.sem.types.fn_return_types.insert(func.id, return_type);
+        }
         self.sem.types.decl_type_params.insert(func.id, type_params);
 
         // Store type parameters for generic methods (for call site substitution)
@@ -3111,9 +3133,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 .collect()
         };
 
-        let effects = self.resolve_effects(&func.effects);
-
-        self.sem.types.function_effects.insert(func.id, effects);
+        // The decl pass records a declared method's effects; a trait's default
+        // body, walked once per impl, records into that impl's facts here.
+        if recorded_sig.is_none() {
+            let effects = self.resolve_effects(&func.effects);
+            self.sem.types.function_effects.insert(func.id, effects);
+        }
 
         (
             method_resolved_param_types,

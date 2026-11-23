@@ -5,7 +5,7 @@
 use { println, eprintln, exit_error, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { from_env } from "core:args";
 use { Deserialize } from "core:serde";
-use { TreeSet } from "core:collections";
+use { HashSet } from "core:collections";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { format } from "./format.wado";
@@ -123,7 +123,7 @@ fn resolve_paths(paths: &List<String>) -> Result<List<String>, fs::FsError> with
 /// format or report the same file more than once. `seen` drops a path the
 /// first time it recurs.
 fn unique_sorted(items: List<String>) -> List<String> {
-    let mut seen: TreeSet<String> = TreeSet::new();
+    let mut seen: HashSet<String> = HashSet::new();
     let mut out: List<String> = [];
     for let item of items {
         if seen.insert(item) {

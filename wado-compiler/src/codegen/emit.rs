@@ -1723,7 +1723,7 @@ impl<'a> WirEmitter<'a> {
             WirInstr::BlackBox(o) => self.emit_instr(f, o),
             WirInstr::Drop(o) => {
                 self.emit_instr(f, o);
-                if !o.always_diverges() {
+                if o.produces_stack_value() {
                     f.instruction(&Instruction::Drop);
                 }
             }

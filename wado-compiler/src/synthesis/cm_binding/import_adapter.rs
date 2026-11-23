@@ -108,6 +108,7 @@ pub(super) fn make_binding_function(
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_effect_params: Vec::new(),
         impl_origin: None,
         monomorph_info: None,
         method_info: None,
@@ -698,7 +699,7 @@ fn classify_param<'t>(param_type: &'t Type, registry: &CmInterfaceRegistry) -> P
             ParamLowering::Aggregate
         }
         Type::Generic(_)
-            if let Some(CompilerItem::Option | CompilerItem::Result | CompilerItem::TreeMap) =
+            if let Some(CompilerItem::Option | CompilerItem::Result | CompilerItem::HashMap) =
                 item =>
         {
             ParamLowering::Aggregate

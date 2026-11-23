@@ -1,0 +1,39 @@
+// An inherent block whose target repeats one type parameter does not reach a
+// pair of functions over an impl's effect parameter and its method's own.
+use { println, Stdout } from "core:cli";
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Pair<T, T> {
+    fn same(&self) -> String {
+        return "same";
+    }
+}
+
+struct Slot<T> {
+    v: T,
+}
+
+impl<effect E> Slot<fn() with (E)> {
+    fn with_other<effect F>(&self, g: fn() with F) -> String {
+        let p = Pair { a: self.v, b: g };
+        return p.same();
+    }
+
+    fn twice(&self) -> String {
+        let p = Pair { a: self.v, b: self.v };
+        return p.same();
+    }
+}
+
+export fn run() with Stdout {
+    let s = Slot { v: || { println("x"); } };
+    println(s.twice());
+    println(s.with_other(|| {}));
+}
+
+__DATA__
+{"compile_error": ":23:16: analysis error: no method 'same' found on type 'Pair<fn() -> () with E, fn() -> () with F>'"}

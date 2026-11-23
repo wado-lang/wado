@@ -62,7 +62,7 @@ pub enum OptionsType {
     /// `List<T>` — a homogeneous array; a missing field resolves to the empty
     /// list, so a `List` option is optional without an explicit default.
     List(Box<OptionsType>),
-    /// `TreeMap<String, V>` — an object whose keys are the author's own; a
+    /// `HashMap<String, V>` — an object whose keys are the author's own; a
     /// missing field resolves to the empty map, as a `List` does.
     Map(Box<OptionsType>),
     /// Enum with all-no-payload variants, each by its Component Model name:
@@ -96,7 +96,7 @@ impl OptionsType {
             OptionsType::String => "String".to_string(),
             OptionsType::Option(inner) => format!("Option<{}>", inner.describe()),
             OptionsType::List(inner) => format!("List<{}>", inner.describe()),
-            OptionsType::Map(inner) => format!("TreeMap<String, {}>", inner.describe()),
+            OptionsType::Map(inner) => format!("HashMap<String, {}>", inner.describe()),
             OptionsType::Enum { name, .. } => name.clone(),
             OptionsType::Struct { name, .. } => name.clone(),
         }
@@ -281,7 +281,7 @@ fn lower_type(
         return Some(OptionsType::List(Box::new(inner)));
     }
 
-    if let Some((key_id, value_id)) = types.as_tree_map(type_id) {
+    if let Some((key_id, value_id)) = types.as_hash_map(type_id) {
         if !types.is_string(key_id) {
             push_unsupported(
                 diagnostics,
@@ -573,7 +573,7 @@ fn evaluate_literal(
             if let Some(pairs) = coerced_array(expr)
                 && let Some(pairs) = pairs.iter().map(literal_pair).collect::<Option<Vec<_>>>() =>
         {
-            // A repeated key, which only a spelled `TreeMap::from` call
+            // A repeated key, which only a spelled `HashMap::from` call
             // carries, keeps its last value as that call does.
             let mut entries = BTreeMap::new();
             for (key, value) in pairs {
