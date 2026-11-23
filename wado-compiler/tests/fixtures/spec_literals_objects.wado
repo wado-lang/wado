@@ -1,9 +1,9 @@
-// Object literals: `TreeMap` construction, spread and access.
+// Object literals: `HashMap` construction, spread and access.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 test {
-    let mut map = TreeMap::<String, i32>::new();
+    let mut map = HashMap::<String, i32>::new();
     map["x"] = 10;                   // insert or overwrite
     map["y"] = 20;
 
@@ -17,7 +17,7 @@ test {
     assert *keys.next().unwrap() == "x" && *keys.next().unwrap() == "y";
 
     // Functional-update spread: seed from a base map, then override/add keys
-    let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
+    let m2: HashMap<String, i32> = { ..map, "x": 99, "w": 40 };
     assert m2["x"] == 99 && m2["y"] == 20 && m2["w"] == 40;
 }
 
@@ -25,12 +25,12 @@ struct User { name: String }
 
 test "access" {
     let user = User { name: "Alice" };
-    let map: TreeMap<String, i32> = { key: 1 };
+    let map: HashMap<String, i32> = { key: 1 };
 
     // Struct: dot notation
     assert user.name == "Alice";
 
-    // TreeMap: bracket notation or methods
+    // HashMap: bracket notation or methods
     assert map["key"] == 1;                    // panics if key not found
     assert map.get("key") == Option::Some(1);  // returns Option<V>
 }
