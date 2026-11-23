@@ -617,7 +617,7 @@ fn run_effect_checks(
         sem.types
             .early_effect_rows()
             .iter()
-            .map(|(var, row)| (var.clone(), row.clone())),
+            .map(|(var, row)| (*var, row.clone())),
     );
     let mut log = ReachLog::default();
     let log = &mut log;
@@ -1946,7 +1946,7 @@ pub(crate) fn call_rows(
             .solved
             .iter()
             .filter(|(var, _)| !solved.contains_key(*var))
-            .map(|(var, row)| (var.clone(), row.clone()))
+            .map(|(var, row)| (*var, row.clone()))
             .collect()
     })
     .unwrap_or_default()
@@ -3097,7 +3097,7 @@ fn resolve_effect_params(
         let actual: Vec<EffectRef> = rows
             .row(&actual_rows.concat())
             .into_iter()
-            .filter(|e| !e.named_outright_in(&formal))
+            .filter(|e| !e.named_outright_in(formal))
             .collect();
         for formal_effect in formal {
             if let EffectRef::Param(param) = formal_effect

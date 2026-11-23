@@ -336,28 +336,25 @@ fn effect_args_at(
     if template.effect_params.is_empty() {
         return Some(Vec::new());
     }
-    let rows = match &expr.kind {
-        TirExprKind::Call { .. } => {
-            let receiver_slots = usize::from(site.receiver.is_some());
-            let declared: Vec<TypeId> = template
-                .params
-                .iter()
-                .skip(receiver_slots)
-                .map(|param| param.type_id)
-                .collect();
-            let actual: Vec<TypeId> = site.args.iter().map(|arg| arg.expr.type_id).collect();
-            type_table.call_effect_binding(&declared, &actual)
-        }
-        _ => {
-            let params = template.params.iter().map(|param| param.type_id).collect();
-            let declared = type_table.make_function_with_mut(
-                false,
-                params,
-                template.return_type,
-                template.effects.clone(),
-            );
-            type_table.call_effect_binding(&[declared], &[expr.type_id])
-        }
+    let rows = if let TirExprKind::Call { .. } = &expr.kind {
+        let receiver_slots = usize::from(site.receiver.is_some());
+        let declared: Vec<TypeId> = template
+            .params
+            .iter()
+            .skip(receiver_slots)
+            .map(|param| param.type_id)
+            .collect();
+        let actual: Vec<TypeId> = site.args.iter().map(|arg| arg.expr.type_id).collect();
+        type_table.call_effect_binding(&declared, &actual)
+    } else {
+        let params = template.params.iter().map(|param| param.type_id).collect();
+        let declared = type_table.make_function_with_mut(
+            false,
+            params,
+            template.return_type,
+            template.effects.clone(),
+        );
+        type_table.call_effect_binding(&[declared], &[expr.type_id])
     };
     template
         .effect_params
