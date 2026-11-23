@@ -287,8 +287,9 @@ impl Invocation {
         self.located.get(path).map_or(path.as_str(), String::as_str)
     }
 
-    /// A package reference both invocations name that lies in a different
-    /// place for each: two checkouts claiming one coordinate.
+    /// A path both invocations name that lies in a different place for each:
+    /// two checkouts claiming one coordinate, since a local path lies where it
+    /// says.
     #[must_use]
     pub fn located_apart(&self, other: &Self) -> Option<&InvocationPath> {
         self.located
