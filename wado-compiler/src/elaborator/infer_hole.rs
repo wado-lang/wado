@@ -545,6 +545,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved
     }
 
+    /// Blame each `_` `arg` holds with `message`, the sentence for the slot
+    /// `param` it fills. One for the whole slot is replaced by the blamed
+    /// variable.
+    pub(super) fn blame_in_slot(
+        &mut self,
+        arg: &mut TypeId,
+        span: Span,
+        message: &str,
+        param: String,
+    ) {
+        if self.is_bare_written_hole(*arg) {
+            *arg = self.blamed_in_place_of(*arg, span, message.to_string(), param);
+            return;
+        }
+        for hole in self.written_holes_in(*arg) {
+            self.attach_infer_var_diag(hole, span, message.to_string());
+        }
+    }
+
     /// Let the `_`s `ty` holds go unreported: a site that resolves what they
     /// were written in again answers and reports its own.
     pub(super) fn unwrite_holes_in(&mut self, ty: TypeId) {

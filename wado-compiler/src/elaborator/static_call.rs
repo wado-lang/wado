@@ -633,16 +633,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys
                         .impl_answers_trait_args(block, receiver.ty, query.required_args)
                 });
-                // The one block a `_` admits answers it.
-                if let [only] = candidates.as_slice() {
-                    let block = only.supply.as_ref().expect("kept by its trait").impl_def;
-                    let held =
-                        self.tysys
-                            .impl_trait_args_asked(block, receiver.ty, query.required_args);
-                    for (held, &asked) in held.into_iter().zip(query.required_args) {
-                        self.equate(held, asked);
-                    }
-                }
             }
             return (candidates, Vec::new());
         }
@@ -1887,40 +1877,20 @@ impl TypeSystem {
         receiver: Option<TypeId>,
         asked: &[TypeId],
     ) -> bool {
-        if self.type_table.borrow().impl_trait_args(impl_def).len() != asked.len() {
-            return false;
-        }
-        let held = self.impl_trait_args_asked(impl_def, receiver, asked);
-        let table = self.type_table.borrow();
-        held.iter()
-            .zip(asked)
-            .all(|(&held, &want)| table.fits_written(held, want))
-    }
-
-    /// Block `impl_def`'s trait arguments, its parameters bound as
-    /// [`Self::impl_answers_trait_args`] binds them.
-    pub(super) fn impl_trait_args_asked(
-        &self,
-        impl_def: DefId,
-        receiver: Option<TypeId>,
-        asked: &[TypeId],
-    ) -> Vec<TypeId> {
         let mut table = self.type_table.borrow_mut();
         let written = table.impl_trait_args(impl_def).to_vec();
-        assert_eq!(
-            written.len(),
-            asked.len(),
-            "a trait's arguments are asked whole"
-        );
+        if written.len() != asked.len() {
+            return false;
+        }
         let mut slots = TypeArgMap::default();
         match receiver {
             Some(receiver) => table.bind_impl_slots_asked(impl_def, asked, receiver, &mut slots),
             None => table.bind_each_into(&written, asked, &mut slots),
         }
-        written
-            .iter()
-            .map(|&arg| table.substitute_type_params(arg, &slots))
-            .collect()
+        written.iter().zip(asked).all(|(&arg, &want)| {
+            let held = table.substitute_type_params(arg, &slots);
+            table.fits_written(held, want)
+        })
     }
 
     /// `ty`, written in block `impl_def`, with each slot the block's target

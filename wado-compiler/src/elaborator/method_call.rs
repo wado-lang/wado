@@ -1734,21 +1734,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Vec<TypeId> {
         let mut trait_args = self.resolve_turbofish_args(args);
-        let omitted: Vec<usize> = (0..trait_args.len())
-            .filter(|&i| self.is_bare_written_hole(trait_args[i]))
+        let holding: Vec<usize> = (0..trait_args.len())
+            .filter(|&i| self.holds_written_hole(trait_args[i]))
             .collect();
-        if omitted.is_empty() {
+        if holding.is_empty() {
             return trait_args;
         }
         let written: Vec<&ast::GenericParam> = ast::written_params(trait_params).collect();
-        let names: Vec<String> = omitted.iter().map(|&i| written[i].name.clone()).collect();
+        let names: Vec<String> = holding.iter().map(|&i| written[i].name.clone()).collect();
         let message = TypeError::cannot_infer_message(
             &names,
             &format!("trait `{head}`"),
             &format!("`{head}::<...>::{method}()`"),
         );
-        for (&i, name) in omitted.iter().zip(names) {
-            trait_args[i] = self.blamed_in_place_of(trait_args[i], span, message.clone(), name);
+        for (&i, name) in holding.iter().zip(names) {
+            self.blame_in_slot(&mut trait_args[i], span, &message, name);
         }
         trait_args
     }
@@ -1802,13 +1802,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let names: Vec<String> = holding.iter().map(|&i| params[i].name.clone()).collect();
         let message = TypeError::receiver_args_uninferred_message(&names, head, method);
         for (&i, name) in holding.iter().zip(names) {
-            if self.is_bare_written_hole(args[i]) {
-                args[i] = self.blamed_in_place_of(args[i], span, message.clone(), name);
-            } else {
-                for hole in self.written_holes_in(args[i]) {
-                    self.attach_infer_var_diag(hole, span, message.clone());
-                }
-            }
+            self.blame_in_slot(&mut args[i], span, &message, name);
         }
     }
 

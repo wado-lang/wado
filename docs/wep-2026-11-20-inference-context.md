@@ -198,7 +198,8 @@ Each step keeps every fixture passing and deletes what it replaces.
   (`omit_bare_written_holes`), which the construction infers and reports, and
   so is a trait turbofish of nothing but `_`. A function value's `_` is
   settled by the expected `fn` type, as an omitted turbofish is. A `_` in a
-  trait turbofish admits every impl it fits, and the one it admits answers it.
+  trait turbofish admits every impl it fits, and settles as any selection's
+  variable does.
   An associated constant's prefix reads no argument, so its `_`s ask for
   nothing. Wherever it sits, an unsettled `_` reports as its slot would, and
   an expression that reports its own error leaves its `_`s unreported. A check
@@ -207,6 +208,11 @@ Each step keeps every fixture passing and deletes what it replaces.
 - [ ] The context is per body rather than per module.
 
 ## Known gaps
+
+- A trait-qualified call does not read the expected type while its selection
+  is undecided. `let y: List<i32> = Mk::<_, Self = S>::mk()` and
+  `Mk::<_>::mk(&s)` stay unsettled where the unqualified `s.mk()` selects by
+  the annotation.
 
 - `InferCtx` in `infer.rs` infers a single call's type arguments with
   parameters as holes, apart from the context's variables.
