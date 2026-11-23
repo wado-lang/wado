@@ -175,8 +175,6 @@ stdlib_table! {
     "core:coverage/coverage_host.wado" => "core/coverage/coverage_host.wado",
     "core:fuel" => "core/fuel.wado",
     "core:fuel/fuel_host.wado" => "core/fuel/fuel_host.wado",
-    "core:pjrt" => "core/pjrt.wado",
-    "core:pjrt/pjrt_host.wado" => "core/pjrt/pjrt_host.wado",
     "core:process" => "core/process.wado",
     "core:process/process.wado" => "core/process/process.wado",
     "core:process/types.wado" => "core/process/types.wado",
@@ -186,7 +184,7 @@ stdlib_table! {
 /// declarations carry `#[cm]` bindings the CM registry owns. Each facade
 /// (`core:<package>`) is hand-written; its submodules live under
 /// `core:<package>/`.
-pub const WIT_CORE_PACKAGES: &[&str] = &["kiln", "eval", "coverage", "fuel", "pjrt", "process"];
+pub const WIT_CORE_PACKAGES: &[&str] = &["kiln", "eval", "coverage", "fuel", "process"];
 
 /// Whether `name` (a `ModuleSource::Core` name such as `"kiln/types.wado"`)
 /// is a [`WIT_CORE_PACKAGES`] facade or one of its submodules.

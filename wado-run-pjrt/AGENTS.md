@@ -1,9 +1,16 @@
 # wado-run-pjrt
 
 The `wado run-pjrt` subcommand: it compiles a Wado program with `wado` and runs
-the component on a wasmtime host that serves `core:pjrt` from a PJRT plugin.
+the component on a wasmtime host that serves `wado-lang:pjrt` from a PJRT
+plugin. The directory is that package too, since nothing else runs it: its
+interface is `assets/pjrt.wit`, its Wado modules are in `src/` beside the
+host's Rust, and a change to its layout follows the `wado-package-standard`
+skill.
 
 ## Rules
+
+- `src/pjrt/` is generated from `assets/pjrt.wit` by
+  `mise run update-package-pjrt`; the facade `src/pjrt.wado` is hand-written.
 
 - A plugin is loaded at run time, so no build depends on one. It comes from
   `--plugin` or `WADO_PJRT_PLUGIN`; with neither, the host fetches the pinned

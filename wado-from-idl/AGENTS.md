@@ -14,6 +14,10 @@ Generates Wado binding modules from IDL files: the stdlib from WIT, and
   with `mise run update-stdlib-core-wit`. The facades `lib/core/kiln.wado`,
   `lib/core/eval.wado`, `lib/core/fuel.wado` and `lib/core/process.wado` are
   hand-written and must be preserved; `core:coverage` has none, since only `core:rt` calls it.
+- `wado-lang:pjrt` — `wado-run-pjrt/src/pjrt/`, generated from
+  `wado-run-pjrt/assets/pjrt.wit`. Regenerate with
+  `mise run update-package-pjrt`; the facade `wado-run-pjrt/src/pjrt.wado` is
+  hand-written.
 - `wado-lang:web` — `package-web/src/dom.wado` and its browser glue
   `package-web/glue/dom.js`, generated from the WebIDL snapshot
   `package-web/idl/dom.webidl.json`. Regenerate with

@@ -1,4 +1,4 @@
-//! The wasmtime host: WASI P3 plus `core:pjrt`, served by a PJRT plugin.
+//! The wasmtime host: WASI P3 plus `wado-lang:pjrt`, served by a PJRT plugin.
 
 use std::sync::Arc;
 
@@ -12,19 +12,19 @@ pub use crate::plugin::{Buffer, Executable};
 use crate::plugin::{Client, Plugin};
 
 wasmtime::component::bindgen!({
-    inline: "package wado:pjrt-host; world host { import core:pjrt/pjrt-host@0.1.0; }",
-    path: "../wado-compiler/lib/core/pjrt",
+    inline: "package wado:pjrt-host; world host { import wado-lang:pjrt/pjrt-host@0.1.0; }",
+    path: "assets",
     world: "wado:pjrt-host/host",
     require_store_data_send: true,
     imports: { default: trappable },
     with: {
-        "core:pjrt/pjrt-host.buffer": Buffer,
-        "core:pjrt/pjrt-host.executable": Executable,
+        "wado-lang:pjrt/pjrt-host.buffer": Buffer,
+        "wado-lang:pjrt/pjrt-host.executable": Executable,
     },
 });
 
-use self::core::pjrt::pjrt_host::{self, ElementType, HostBuffer, HostExecutable};
-pub use self::core::pjrt::pjrt_host::{Analysis, Cost};
+use self::wado_lang::pjrt::pjrt_host::{self, ElementType, HostBuffer, HostExecutable};
+pub use self::wado_lang::pjrt::pjrt_host::{Analysis, Cost};
 
 struct Host {
     guest: GuestState,
