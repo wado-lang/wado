@@ -31,7 +31,7 @@ use {
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
 use { Backend, ElementKind, HostWeight, KernelTime, WebGpuBackend } from "lib:loam";
-use { LinearArray } from "core:linear";
+use { LinearArray, LinearArray64 } from "core:linear";
 use { recorded } from "../checks.wado";
 use { Model, WEBGPU_BUDGET, budget_and_steps, read_nanoseconds } from "./model.wado";
 
@@ -83,7 +83,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
 }
 
 /// The host time of the writes of the scales of a slot of an expert's
-/// `gate_up_proj`, and of the slot.
+/// `gate_up_proj`, and of the slot, then of the slot's copies out of host
+/// memory.
 fn writes(
     g: &mut WebGpuBackend,
 ) with (Stdout, MonotonicClock, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroup, GpuComputePassEncoder) {
@@ -92,6 +93,26 @@ fn writes(
     println("the scales of a slot of an expert's `gate_up_proj` written 32 times, then the slot:");
     timed_writes(g, ElementKind::F16, [5760, 90], 32);
     timed_writes(g, ElementKind::U8, [5760, 1440], 32);
+    timed_copies(5760 * 1440, 32);
+}
+
+/// The host time `times` copies of `bytes` out of host memory take, into a
+/// slot's bytes, as a write from it starts.
+fn timed_copies(bytes: i32, times: i32) with (Stdout, MonotonicClock) {
+    let held = LinearArray64::<u8>::filled(bytes as i64 * times as i64, 1);
+    let began = MonotonicClock::now();
+    // Printed, so that no copy is left out as unread.
+    let mut kept: i32 = 0;
+    for let i of 0..<times {
+        let mut slot = LinearArray::<u8>::filled(bytes, 0);
+        slot.copy_from_memory64(0, &held, i as i64 * bytes as i64, bytes);
+        kept += slot[i] as i32;
+    }
+    let spent = (MonotonicClock::now() - began) as i64;
+    let total = bytes as i64 * times as i64;
+    println(
+        `  copied out ${total} bytes ${ms(spent):>8.1} ms, ${total as f64 / (spent as f64 / 1e9) / 1e9:.2} GB/s (${kept})`,
+    );
 }
 
 /// The host time `times` writes of a slot of `kind` and `extents` take.

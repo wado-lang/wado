@@ -40,6 +40,7 @@ AVX-512. One expert is 14,014,080 bytes as the `q4f16` export stores it.
 | One guest core, one product of i8 activations alone, DRAM             | 10.84 GB/s of stored bytes, 1.29 ms/expert |
 | One guest core, `cpu_experts.wado`'s whole expert, 15-bit activations | 4.68 GB/s, 3.0 ms/expert                   |
 | Host time of a write to a slot, one layer's `gate_up_proj` at once    | 3.96 GB/s                                  |
+| A slot's copy out of host memory, the write's first step              | 16.5 GB/s                                  |
 | GPU pools of 5 GB, `LayerOrder`: a step's experts held                | 80.8% of 1344, 258 MB loaded a token       |
 | The same, a step filling at most 2 slots a layer                      | 80.4%, 0.8% on the host, 253 MB a token    |
 | The same, a step filling at most 1                                    | 80.0%, 5.2% on the host, 199 MB a token    |
@@ -165,5 +166,13 @@ The recommendation is A first. It needs no host change, and its measurements
 
 - The round trip of one host step on `wado run-webgpu`: a download of the
   picks and the rows, then an upload of the outputs.
-- Where a write's host time goes: the copy out of the `LinearArray64`, the
-  copy across the component boundary, and wgpu's staging.
+- How much of a write's host time each of its three copies takes. A write
+  from host memory copies the bytes three times: out of the `LinearArray64`,
+  across the component boundary into the host's own buffer, and into wgpu's
+  staging. Over the 32 timed tokens, the host's thread was busy 80% of the
+  wall time, and `memmove` took 47.5% of that:
+
+  ```sh
+  perf record -k CLOCK_MONOTONIC -g -F 999 -- wado run-webgpu -O2 \
+      --no-spectre-mitigation --dir . profile.wado -- 5000000000 32
+  ```
