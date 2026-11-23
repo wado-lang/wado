@@ -46,10 +46,11 @@ impl Selector {
 pub struct Place {
     pub root: u32,
     pub selectors: Vec<Selector>,
-    /// The chain read a `&` / `&mut` field, so the root only references what it
-    /// ends at. [`Resolver::names`] must set it as it walks — it resolves
-    /// through a local binding and through a callee's [`ReturnPath`], which a
-    /// second walk over the expression's syntax would follow neither of.
+    /// The chain read a reference part (a field, an element, a payload), so the
+    /// root only references what it ends at. [`Resolver::names`] must set it as
+    /// it walks — it resolves through a local binding and through a callee's
+    /// [`ReturnPath`], which a second walk over the expression's syntax would
+    /// follow neither of.
     pub through_ref: bool,
 }
 
@@ -314,38 +315,31 @@ impl<'a> Resolver<'a> {
                 .get(*index)
                 .cloned()
                 .unwrap_or(Names::Place(Place::local(*index))),
-            // A reference field points to storage its holder does not own — an
-            // iterator's `repr` points to the list it walks — so a fresh aggregate
-            // does not make what it points at fresh.
             TirExprKind::FieldAccess {
                 expr: inner,
                 field_index,
                 ..
-            } => {
-                let names = self.project(
+            } => self.part(
+                self.project(
                     inner,
                     Selector::Field {
                         owner: field_owner(inner.type_id, self.type_table),
                         index: *field_index,
                     },
-                );
-                if !self.type_table.is_reference(expr.type_id) {
-                    return names;
-                }
-                match names {
-                    Names::Place(mut place) => {
-                        place.through_ref = true;
-                        Names::Place(place)
-                    }
-                    Names::Value | Names::Unknown => Names::Unknown,
-                }
-            }
+                ),
+                expr.type_id,
+            ),
             TirExprKind::VariantPayload {
                 expr: inner,
                 case_index,
                 ..
-            } => self.project(inner, Selector::Variant(*case_index)),
-            TirExprKind::Index { expr: inner, .. } => self.project(inner, Selector::Index),
+            } => self.part(
+                self.project(inner, Selector::Variant(*case_index)),
+                expr.type_id,
+            ),
+            TirExprKind::Index { expr: inner, .. } => {
+                self.part(self.project(inner, Selector::Index), expr.type_id)
+            }
             TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
@@ -364,7 +358,10 @@ impl<'a> Resolver<'a> {
             // so which component it lands on is not known here.
             TirExprKind::Call { func, args, .. } if self.builtins.declares(&**func) => {
                 match self.builtins.part_of_params(&**func) {
-                    Some(&[p]) => self.project(arg_at(func, args, p), Selector::Index),
+                    Some(&[p]) => self.part(
+                        self.project(arg_at(func, args, p), Selector::Index),
+                        expr.type_id,
+                    ),
                     // `builtin::select` hands back one of two, naming neither.
                     _ => self.unclassified(expr),
                 }
@@ -413,6 +410,23 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// What a part of type `part_type` names, out of a value `whole` names. A
+    /// reference part points to storage its holder does not own, as an
+    /// iterator's `repr` points to the list it walks, so a fresh holder does
+    /// not make what it points at fresh.
+    fn part(&self, whole: Names, part_type: TypeId) -> Names {
+        if !self.type_table.is_reference(part_type) {
+            return whole;
+        }
+        match whole {
+            Names::Place(mut place) => {
+                place.through_ref = true;
+                Names::Place(place)
+            }
+            Names::Value | Names::Unknown => Names::Unknown,
+        }
+    }
+
     fn project(&self, inner: &TirExpr, selector: Selector) -> Names {
         match self.names(inner) {
             Names::Place(mut place) => {
@@ -424,7 +438,22 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names) {
+    /// Bind a sub-pattern matching a part of what `whole` names, the part of
+    /// type `part_type` where the holder says. Otherwise the binding's own type
+    /// stands in: match ergonomics only ever adds a reference to it, which
+    /// errs toward the part being one.
+    fn bind_part(&mut self, pattern: &TirPattern, whole: &Names, part_type: Option<TypeId>) {
+        let decided = part_type.or_else(|| pattern.declared_local().map(|(_, ty)| ty));
+        let part = match decided {
+            Some(ty) => self.part(whole.clone(), ty),
+            None => whole.clone(),
+        };
+        self.bind_pattern(pattern, &part, part_type);
+    }
+
+    /// Bind `pattern`, matching a value of type `matched` where known, to what
+    /// `base` names.
+    fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names, matched: Option<TypeId>) {
         match pattern {
             TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
                 self.bindings.set(*local_index, base.clone());
@@ -443,25 +472,42 @@ impl<'a> Resolver<'a> {
                                 owner,
                                 index: field.field_index,
                             });
-                            // The pattern carries no type to say whether the
-                            // field is a reference, and a wrong `false` here costs the
-                            // value semantics rather than a copy.
+                            // The resolver holds no field types to say whether
+                            // the field is a reference, and a wrong `false` here
+                            // costs the value semantics rather than a copy.
                             place.through_ref = true;
                             Names::Place(place)
                         }
                         Names::Value => Names::Value,
                         Names::Unknown => Names::Unknown,
                     };
-                    self.bind_pattern(&field.pattern, &nested);
+                    self.bind_part(&field.pattern, &nested, None);
                 }
             }
             // The binding names the value the pattern tested, not a projection of
             // it: deepening by the payload's selector is sound and measures worse.
-            TirPattern::Tuple(sub, _)
-            | TirPattern::Variant { bindings: sub, .. }
-            | TirPattern::Or(sub) => {
-                for pattern in sub {
-                    self.bind_pattern(pattern, base);
+            TirPattern::Tuple(elements, _) => {
+                let element_types = matched.and_then(|ty| {
+                    self.type_table
+                        .tuple_representation(self.type_table.peel_refs(ty))
+                });
+                for (index, element) in elements.iter().enumerate() {
+                    let ty = element_types.as_ref().map(|types| types[index]);
+                    self.bind_part(element, base, ty);
+                }
+            }
+            TirPattern::Variant {
+                bindings,
+                payload_type,
+                ..
+            } => {
+                for binding in bindings {
+                    self.bind_part(binding, base, Some(*payload_type));
+                }
+            }
+            TirPattern::Or(alternatives) => {
+                for pattern in alternatives {
+                    self.bind_pattern(pattern, base, matched);
                 }
             }
             TirPattern::Wildcard
@@ -882,7 +928,8 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 let base = self.resolver.names(value);
-                self.resolver.bind_pattern(pattern, &base);
+                self.resolver
+                    .bind_pattern(pattern, &base, Some(value.type_id));
             }
             _ => {}
         }
@@ -905,7 +952,8 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
             } => {
                 let base = self.resolver.names(scrutinee);
                 for arm in arms {
-                    self.resolver.bind_pattern(&arm.pattern, &base);
+                    self.resolver
+                        .bind_pattern(&arm.pattern, &base, Some(scrutinee.type_id));
                 }
             }
             _ => {}

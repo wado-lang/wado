@@ -1,0 +1,47 @@
+// A reference held in a fresh tuple or variant points to storage the holder
+// does not own, so a write through it reaches the caller's value: a copy taken
+// before the call keeps its own, whichever part the reference was read out of.
+
+struct Pair {
+    a: i32,
+    s: List<i32>,
+}
+
+#[inline("never")]
+fn bump(p: &mut Pair) {
+    p.a += 1;
+    p.s.push(1);
+}
+
+#[inline("never")]
+fn via_tuple(p: &mut Pair) {
+    bump([p, 1].0);
+}
+
+#[inline("never")]
+fn via_variant(p: &mut Pair) {
+    if let Some(q) = Option::Some(p) {
+        bump(q);
+    }
+}
+
+#[inline("never")]
+fn read(p: Pair) -> i32 {
+    return p.a * 10 + p.s.len();
+}
+
+test "a reference read out of a fresh tuple" {
+    let mut x = Pair { a: builtin::black_box(1), s: [] };
+    let s = x;
+    via_tuple(&mut x);
+    assert read(s) == 10;
+    assert read(x) == 21;
+}
+
+test "a reference bound out of a fresh variant" {
+    let mut y = Pair { a: builtin::black_box(1), s: [] };
+    let t = y;
+    via_variant(&mut y);
+    assert read(t) == 10;
+    assert read(y) == 21;
+}
