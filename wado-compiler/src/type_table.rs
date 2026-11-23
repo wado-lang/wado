@@ -31,11 +31,10 @@ use crate::token::{Delimiter, Quote, Span};
 
 use crate::tir::{
     AnonShape, AssocParamId, AssocTypeSig, EffectParam, EffectRef, EffectRows, InferVarId,
-    REFLECT_NEWTYPE_BASE, RowVar,
-    ResolvedType, RowClosing, RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole,
-    TemplateShape, TirExpr, TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap,
-    TypeId, TypeParamId, canonicalize_row, positional_substitution, projection_arguments,
-    range_item, slots_from_impl_args, solve_row,
+    REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing, RowFlow, RowVar, ShapeSubstitution,
+    SlotProjections, StructDef, TemplateHole, TemplateShape, TirExpr, TirExprKind, TirUnaryOp,
+    TraitFrame, TraitRef, TupleSlot, TypeArgMap, TypeId, TypeParamId, canonicalize_row,
+    positional_substitution, projection_arguments, range_item, slots_from_impl_args, solve_row,
 };
 
 /// The effect variables a question read, noted behind a shared reference: a
@@ -3466,9 +3465,9 @@ impl TypeTable {
         });
         let rows: EffectRows = vars
             .into_iter()
-            .map(|var| {
-                let row = self.read_effect_row(std::slice::from_ref(&var));
-                (var.row_var().expect("a variable"), row)
+            .map(|effect| {
+                let row = self.read_effect_row(std::slice::from_ref(&effect));
+                (effect.as_var().expect("a variable"), row)
             })
             .collect();
         self.substitute_effect_rows(id, &rows)
@@ -4111,7 +4110,7 @@ impl TypeTable {
                 return_type,
                 effects,
             } if effects.iter().any(|e| {
-                e.row_var()
+                e.as_var()
                     .is_some_and(|var| self.early_effect_rows.contains_key(&var))
             }) =>
             {
@@ -4789,11 +4788,11 @@ impl TypeTable {
     /// The effect parameters impl block `def`'s target writes in its function
     /// types' rows, which [`Self::impl_effect_binding`] binds.
     pub fn impl_effect_params(&self, def: DefId) -> Vec<EffectParam> {
-        let mut named = IndexSet::default();
+        let mut params = IndexSet::default();
         for &written in self.impl_target_args(def) {
-            self.effect_params_in(written, &mut named);
+            self.effect_params_in(written, &mut params);
         }
-        named.into_iter().collect()
+        params.into_iter().collect()
     }
 
     /// What the effect parameters an impl's target writes in its function
@@ -5449,9 +5448,8 @@ impl TypeTable {
     /// for, as standing for the empty row.
     fn unsolved_vars_in(&self, id: TypeId, rows: &mut EffectRows) {
         if let ResolvedType::Function { effects, .. } = self.types.get(id).unwrap() {
-            for effect in effects.iter().filter(|e| e.is_var()) {
-                rows.entry(effect.row_var().expect("a variable"))
-                    .or_default();
+            for var in effects.iter().filter_map(EffectRef::as_var) {
+                rows.entry(var).or_default();
             }
         }
     }

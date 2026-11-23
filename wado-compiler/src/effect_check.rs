@@ -1365,8 +1365,12 @@ impl OwnedEffectData {
 
         let mut flows_by_var: IndexMap<RowVar, Vec<usize>> = IndexMap::default();
         for (at, flow) in types.row_flows().iter().enumerate() {
-            let vars = flow.from.iter().chain(&flow.into).filter(|e| e.is_var());
-            for var in vars.filter_map(EffectRef::row_var) {
+            for var in flow
+                .from
+                .iter()
+                .chain(&flow.into)
+                .filter_map(EffectRef::as_var)
+            {
                 flows_by_var.entry(var).or_default().push(at);
             }
         }
@@ -3178,11 +3182,9 @@ fn pair_rows(
 ) {
     types.zip_rows(declared, actual, true, &mut |de, ae| {
         for param in de.iter().filter_map(EffectRef::as_param) {
-            met.entry(param.clone()).or_default().extend(
-                ae.iter()
-                    .filter(|e| e.is_var())
-                    .filter_map(EffectRef::row_var),
-            );
+            met.entry(param.clone())
+                .or_default()
+                .extend(ae.iter().filter_map(EffectRef::as_var));
         }
     });
 }
@@ -3600,11 +3602,7 @@ impl SemEffectWalker<'_> {
         self.reach.closed.append(&mut body.reach.closed);
         self.closures.insert(closure.id, performed.clone());
         for row in fn_rows(self.sem.types(), closure_types) {
-            for var in row
-                .iter()
-                .filter(|e| e.is_var())
-                .filter_map(EffectRef::row_var)
-            {
+            for var in row.iter().filter_map(EffectRef::as_var) {
                 self.rows.widen(var, &performed);
             }
         }
@@ -3765,8 +3763,7 @@ impl Rows {
                 let open = flow
                     .into
                     .iter()
-                    .filter(|e| e.is_var())
-                    .filter_map(EffectRef::row_var)
+                    .filter_map(EffectRef::as_var)
                     .filter(|var| !closed.contains_key(var));
                 for var in open {
                     grew |= self.widen(var, &carried);
@@ -3786,11 +3783,7 @@ impl Rows {
     fn bound_flows(&self, index: &EffectIndex<'_>, out: &mut Vec<EffectError>) {
         let closed = index.types.effect_row_closings();
         for flow in index.flows_of(self) {
-            let closing = flow
-                .into
-                .iter()
-                .filter(|e| e.is_var())
-                .find_map(|e| closed.get(&e.row_var()?));
+            let closing = flow.into.iter().find_map(|e| closed.get(&e.as_var()?));
             if closing.is_none() && flow.into.iter().any(EffectRef::is_var) {
                 continue;
             }

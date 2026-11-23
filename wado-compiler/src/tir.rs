@@ -131,6 +131,13 @@ impl EffectRef {
         }
     }
 
+    pub fn as_var(&self) -> Option<RowVar> {
+        match self {
+            EffectRef::Var { id, .. } => Some(RowVar::Var(*id)),
+            EffectRef::Concrete(_) | EffectRef::Undeclared { .. } | EffectRef::Param(_) => None,
+        }
+    }
+
     /// Whether this is a row still to be solved.
     pub fn is_var(&self) -> bool {
         matches!(self, EffectRef::Var { .. })
@@ -2381,8 +2388,7 @@ pub fn solve_row(
         out: &mut Vec<EffectRef>,
     ) {
         for effect in effects {
-            if let EffectRef::Var { id, .. } = effect {
-                let var = RowVar::Var(*id);
+            if let Some(var) = effect.as_var() {
                 read(var);
                 if let Some(solution) = rows.get(&var) {
                     if expanded.insert(var) {
