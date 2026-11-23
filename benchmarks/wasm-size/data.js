@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795406696408,
+  "lastUpdate": 1795410799955,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81369,6 +81369,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d62831d2123c9f36bd39444bfde812d13d7f12f5"
         },
         "date": 1795406695053,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "228fcaf485fba7c12dc7c8fbec8e4f906263170c",
+          "message": "Merge pull request #2734 from wado-lang/gfx/value-copy-opaque-write-lands\n\nfix: refuse an assignment into a temporary",
+          "timestamp": "2026-11-23T13:54:36+09:00",
+          "tree_id": "cebcb797e5c7fa093d1692d69a9142ba7431e6f6",
+          "url": "https://github.com/wado-lang/wado/commit/228fcaf485fba7c12dc7c8fbec8e4f906263170c"
+        },
+        "date": 1795410798734,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
