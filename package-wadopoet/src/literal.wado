@@ -220,7 +220,7 @@ global HEX_DIGITS: String = "0123456789abcdef";
 /// `"#…` the text holds from closing it. A raw string has no escapes, so the
 /// text stands as written, line breaks included.
 pub fn raw_string_literal<S: AsStrSlice>(text: S) -> String
-    contract !text.contains("\r"), "a raw string reads a CR as a line break's or refuses it"
+    contract !text.contains("\r"), "a raw string cannot hold a CR"
 {
     let mut hashes = "#";
     while text.contains(`"${hashes}`) {
