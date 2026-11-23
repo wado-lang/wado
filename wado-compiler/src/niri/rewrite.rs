@@ -5,7 +5,7 @@
 //! lower phase emits for it.
 
 use crate::compiler_item::SeqField;
-use crate::const_eval::{Value, is_signed_int};
+use crate::const_eval::Value;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand,
@@ -19,7 +19,7 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::lattice::is_provably_exhaustive;
-use super::pattern::PatternMatch;
+use super::pattern::{PatternMatch, int_value_as_i128};
 use super::{BodySink, CtfeBuiltin, EditSink, Interpreter, Lattice, PatBindings};
 use crate::token::Span;
 use crate::{compiler_trace, hashmap};
@@ -1060,8 +1060,7 @@ fn rewrite_bool_discriminator<S: EditSink>(
 /// unsigned value past `i64::MAX` has no key, and no table reaches it.
 fn switch_key(value: &Value) -> Option<i64> {
     match value {
-        Value::Int { value, prim } if is_signed_int(*prim) => Some(*value as i64),
-        Value::Int { value, .. } => i64::try_from(*value).ok(),
+        Value::Int { value, prim } => i64::try_from(int_value_as_i128(*value, *prim)?).ok(),
         Value::Char(c) => Some(i64::from(u32::from(*c))),
         Value::Variant {
             case_index,
