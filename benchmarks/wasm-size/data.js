@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795386196427,
+  "lastUpdate": 1795396626335,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81281,6 +81281,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0b28fa4350f12c1591bae386da46e230a6cb84ea"
         },
         "date": 1795386195499,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8675834b8c44e9902d36f890171b5b7e88ac3f6e",
+          "message": "Merge pull request #2731 from wado-lang/ccr-4886d32c-9ndzfw\n\nrefactor(gale): define the kind-set helpers through wadopoet's hoist_fn",
+          "timestamp": "2026-11-23T10:01:49+09:00",
+          "tree_id": "4c9e4268a3d34377e8fb258b5e4dd97ad53384ae",
+          "url": "https://github.com/wado-lang/wado/commit/8675834b8c44e9902d36f890171b5b7e88ac3f6e"
+        },
+        "date": 1795396625472,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
