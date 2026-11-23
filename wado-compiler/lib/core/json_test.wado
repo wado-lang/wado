@@ -1305,11 +1305,13 @@ test "a compound map key is refused both ways" {
     assert key_write_error([1] as List<i32>) == SerializeErrorKind::UnsupportedValue;
     assert key_write_error([1] as TreeSet<i32>) == SerializeErrorKind::UnsupportedValue;
     assert key_write_error(HashMap::<String, i32>::new()) == SerializeErrorKind::UnsupportedValue;
+    assert key_write_error(TreeMap::<String, i32>::new()) == SerializeErrorKind::UnsupportedValue;
     assert key_write_error(PrettyShape::Point) == SerializeErrorKind::UnsupportedValue;
     assert key_write_error(PrettyShape::Circle(1.0)) == SerializeErrorKind::UnsupportedValue;
     assert key_write_error(()) == SerializeErrorKind::UnsupportedValue;
     assert key_read_error::<List<i32>>() == DeserializeErrorKind::UnexpectedType;
     assert key_read_error::<HashMap<String, i32>>() == DeserializeErrorKind::UnexpectedType;
+    assert key_read_error::<TreeMap<String, i32>>() == DeserializeErrorKind::UnexpectedType;
     assert key_read_error::<Pair>() == DeserializeErrorKind::UnexpectedType;
     assert key_read_error::<PrettyColor>() == DeserializeErrorKind::UnexpectedType;
     assert key_read_error::<()>() == DeserializeErrorKind::UnexpectedType;

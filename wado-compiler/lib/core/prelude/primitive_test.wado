@@ -702,6 +702,21 @@ test "cmp answers each Ordering, a float's NaN greatest" {
     let high: u64 = builtin::black_box(u64::MAX);
     assert low.cmp(&high) matches { _::Less } && high.cmp(&low) matches { _::Greater };
     assert low.cmp(&low) matches { _::Equal };
+    let wide: f64 = builtin::black_box(1.0);
+    let wide_nan: f64 = builtin::black_box(f64::NAN);
+    assert wide.cmp(&wide_nan) matches { _::Less } && wide_nan.cmp(&wide) matches { _::Greater };
+    assert wide.cmp(&wide) matches { _::Equal };
+    let a: char = builtin::black_box('a');
+    let z: char = builtin::black_box('z');
+    assert a.cmp(&z) matches { _::Less } && z.cmp(&a) matches { _::Greater };
+    assert a.cmp(&a) matches { _::Equal };
+    let no: bool = builtin::black_box(false);
+    let yes: bool = builtin::black_box(true);
+    assert no.cmp(&yes) matches { _::Less } && yes.cmp(&no) matches { _::Greater };
+    assert yes.cmp(&yes) matches { _::Equal };
+    let half: f16 = builtin::black_box(0.5);
+    let brain: bf16 = builtin::black_box(0.5);
+    assert half.cmp(&half) matches { _::Equal } && brain.cmp(&brain) matches { _::Equal };
 }
 
 test "an f32 inspects as the same value in f64 does" {
