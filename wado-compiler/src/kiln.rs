@@ -23,7 +23,10 @@ pub use cache::{
 };
 pub use harvest::{Harvest, harvest_module_graph, remap_decl_files};
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
-pub use inline::{ExportedFiles, ExportedInput, InvocationIndex, collect_inline_invocations};
+pub use inline::{
+    ExportedFiles, ExportedInput, InvocationIndex, collect_inline_invocations,
+    located_apart_message,
+};
 pub use invocation::{
     DeclSite, GENERATOR_WORLD_FQ, GeneratorModule, GeneratorSpec, Invocation, InvocationInput,
     InvocationPath, SpecParts, parse_spec, spec_key,

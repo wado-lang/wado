@@ -286,6 +286,16 @@ impl Invocation {
         self.located.get(path).map_or(path.as_str(), String::as_str)
     }
 
+    /// A package reference both invocations name that lies in a different
+    /// place for each: two checkouts claiming one coordinate.
+    #[must_use]
+    pub fn located_apart(&self, other: &Self) -> Option<&InvocationPath> {
+        self.located
+            .iter()
+            .find(|&(reference, at)| other.located.get(reference).is_some_and(|o| o != at))
+            .map(|(reference, _)| reference)
+    }
+
     /// Canonical byte encoding of [`Self::options`], for the invocation cache
     /// key. Nothing decodes it.
     #[must_use]

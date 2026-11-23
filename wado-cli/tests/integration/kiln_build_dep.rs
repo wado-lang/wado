@@ -457,6 +457,14 @@ export fn generate(req: Request) -> Result<Response, Error> with Stream {
     )
     .unwrap();
     fs::write(schemas.join("assets/hidden.idl"), "\n").unwrap();
+    // A package nested where the files lie does not rename them.
+    fs::write(
+        schemas.join("assets/wado.toml"),
+        "[package]\nname = \"nested\"\nnamespace = \"acme\"\nversion = \"9.9.9\"\n\
+         lib = \"nested.wado\"\n",
+    )
+    .unwrap();
+    fs::write(schemas.join("assets/nested.wado"), "").unwrap();
 
     let app = root.join("app");
     fs::create_dir_all(app.join("src")).unwrap();
@@ -545,6 +553,18 @@ export fn run() with Stdout {{
     for package in ["gen", "schemas", "app"] {
         fs::rename(moved.join(package), root.join(package)).unwrap();
     }
+
+    // Run from outside the package, the exported file is still found.
+    fs::write(
+        schemas.join("assets/b.idl"),
+        "pub fn b() -> i32 { return 3; }\n",
+    )
+    .unwrap();
+    wado_in(root)
+        .args(["run", "app/src/main.wado"])
+        .assert()
+        .success()
+        .stdout("4\n");
 
     main("assets/hidden.idl")
         .failure()

@@ -51,7 +51,7 @@ impl Harvest {
             .locate_exported_file(&self.sources[module], package, file)
             .map_err(|e| e.to_string())?;
         let coordinate = host
-            .module_dir(&exported.path)
+            .module_dir(&exported.lib)
             .package
             .and_then(|p| p.coordinate)
             .ok_or_else(|| format!("package `{package}` has no `[package]` to name it by"))?;

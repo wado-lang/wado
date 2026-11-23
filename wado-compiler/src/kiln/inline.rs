@@ -18,6 +18,7 @@ use crate::remote::{Integrity, is_remote, pin_of, url_fault};
 use super::cache::{encode_written_options, hex_digest};
 use super::invocation::{
     DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationInput, InvocationPath,
+    SpecParts, parse_spec,
 };
 use super::options_check::{CanonicalOptions, clause_error};
 
@@ -170,6 +171,14 @@ where
                 Ok(invocation) => {
                     let tuple_key = identity_key(&invocation);
                     if let Some(existing) = by_tuple.get_mut(&tuple_key) {
+                        if let Some(reference) = existing.located_apart(&invocation) {
+                            diagnostics.push(use_error(
+                                module_path,
+                                use_decl,
+                                located_apart_message(reference, existing, &invocation),
+                            ));
+                            continue;
+                        }
                         let site = invocation.decl_site().clone();
                         if !existing.decl_sites.contains(&site) {
                             existing.decl_sites.push(site);
@@ -202,6 +211,24 @@ where
     }
 
     (by_tuple.into_iter().map(|(_, v)| v).collect(), diagnostics)
+}
+
+/// The refusal of two clauses naming one package reference that lies in two
+/// places.
+#[must_use]
+pub fn located_apart_message(
+    reference: &InvocationPath,
+    first: &Invocation,
+    second: &Invocation,
+) -> String {
+    format!(
+        "kiln: `{reference}` names two files, `{}` (first in {}) and `{}` (second in {}): \
+         two checkouts claim one package",
+        first.read_path(reference),
+        first.decl_site().module,
+        second.read_path(reference),
+        second.decl_site().module,
+    )
 }
 
 fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
@@ -717,8 +744,15 @@ fn lower_module_specifier(
     // or a `lib:nickname` indirection. Both carry a `<segment>:` prefix; the
     // compiler does not interpret the body here — the host resolves it against
     // `[build-dependencies]`, dispatching on the matched entry's source.
-    if let Some((namespace, _)) = spec.split_once(':')
+    let SpecParts { key, version } = parse_spec(spec);
+    if let Some((namespace, name)) = key.split_once(':')
         && is_package_namespace(namespace)
+        && is_package_namespace(name)
+        && version.is_none_or(|v| {
+            !v.is_empty()
+                && v.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
+        })
     {
         return Some(GeneratorModule::Spec(GeneratorSpec {
             spec: spec.to_string(),
@@ -726,15 +760,13 @@ fn lower_module_specifier(
             registry: None,
         }));
     }
-    // A bare name (no `:`) is not a valid specifier — the same rule that rejects
-    // bare `[dependencies]` keys, applied at the reference site.
     errors.push(use_error(
         module_path,
         use_decl,
         format!(
             "kiln: `generator.module` must be a relative path (\"./generator.wado\") \
              or a `[build-dependencies]` specifier — an open coordinate (\"ns:name@ver\") \
-             or a `lib:` nickname (\"lib:gale\"); a bare name is not allowed, got `{spec}`"
+             or a `lib:` nickname (\"lib:gale\") — got `{spec}`"
         ),
     ));
     None
@@ -919,24 +951,26 @@ mod tests {
     }
 
     #[test]
-    fn bare_name_module_is_rejected() {
-        // A bare name (no `:`) is not a valid specifier — only relative paths and
-        // `[build-dependencies]` specifiers (coordinate / `lib:` nickname).
-        let attrs = attr_with_generator(&[("module", AttrValue::string("gen".to_string()))]);
-        let module = module_with_use("./schema.proto", attrs);
-        let mut mods: IndexMap<String, Module> = IndexMap::default();
-        mods.insert("src/main.wado".to_string(), module);
+    fn a_module_that_is_no_specifier_is_rejected() {
+        // Only relative paths and `[build-dependencies]` specifiers (coordinate
+        // / `lib:` nickname) name a generator.
+        for spec in ["gen", "ns:gen/sub", "lib:gen/sub", "ns:gen@1.0/sub", "ns:gen@"] {
+            let attrs = attr_with_generator(&[("module", AttrValue::string(spec.to_string()))]);
+            let module = module_with_use("./schema.proto", attrs);
+            let mut mods: IndexMap<String, Module> = IndexMap::default();
+            mods.insert("src/main.wado".to_string(), module);
 
-        let errs = expect_errors(collect_inline_invocations(
-            mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &no_exports,
-            "",
-        ));
-        assert!(
-            errs.iter()
-                .any(|d| d.message.contains("bare name is not allowed")),
-            "{errs:?}"
-        );
+            let errs = expect_errors(collect_inline_invocations(
+                mods.iter().map(|(k, v)| (k.as_str(), v)),
+                &no_exports,
+                "",
+            ));
+            assert!(
+                errs.iter()
+                    .any(|d| d.message.contains("must be a relative path")),
+                "{spec}: {errs:?}"
+            );
+        }
     }
 
     #[test]
@@ -1536,7 +1570,7 @@ mod tests {
         assert!(
             diagnostics
                 .iter()
-                .any(|d| d.message.contains("bare name is not allowed")),
+                .any(|d| d.message.contains("must be a relative path")),
             "{diagnostics:#?}"
         );
     }

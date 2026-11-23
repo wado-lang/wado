@@ -2549,8 +2549,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     .map_or(ms_str.as_str(), String::as_str);
                 resolve_include_path_impl(entry_module_source.as_deref(), module_path, include_path)
             } else {
-                // Only a relative path names the file beside the module, which
-                // is also what keeps a remote module off this machine.
+                // Only a relative path names the file beside the module, and
+                // only an exported file one that a dependency offers.
                 return Err(LoadError::InvalidIncludePath {
                     path: include_path.clone(),
                 }
