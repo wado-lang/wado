@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795396626335,
+  "lastUpdate": 1795406696408,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81325,6 +81325,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8675834b8c44e9902d36f890171b5b7e88ac3f6e"
         },
         "date": 1795396625472,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d62831d2123c9f36bd39444bfde812d13d7f12f5",
+          "message": "Merge pull request #2732 from wado-lang/ccr-4886d32c-9ndzfw\n\nrefactor(gale): emit only the predicate fns a written condition calls",
+          "timestamp": "2026-11-23T12:47:12+09:00",
+          "tree_id": "6361228524c2596cdbb39823df907a72b40c4751",
+          "url": "https://github.com/wado-lang/wado/commit/d62831d2123c9f36bd39444bfde812d13d7f12f5"
+        },
+        "date": 1795406695053,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
