@@ -14,7 +14,7 @@ Loam's `WebGpuBackend` writes the experts its pools lack into slots, and on
 gpt-oss-20b those writes take most of a token's time
 ([Measured on gpt-oss-20b](../package-loam/docs/cpu-experts.md#measured-on-gpt-oss-20b)).
 Each write copies the bytes three times: out of the guest's `LinearArray64`
-into a `LinearArray`, into the `Vec` wasmtime lifts `write-buffer`'s
+into a `LinearArray`, into the `Vec` wasmtime lifts `write-buffer-with-copy`'s
 `list<u8>` into, and into wgpu's staging. `memmove` takes about half the host's
 time ([To measure](../package-loam/docs/cpu-experts.md#to-measure)). Writing
 from the file also drops the guest's copy of every shared expert, which takes
