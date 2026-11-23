@@ -124,6 +124,11 @@ impl QuantizedRow {
         }
         return QuantizedRow { values, scales, sums };
     }
+
+    /// The 16 bytes of `values` from `at`.
+    fn at(&self, at: i32) -> i8x16 {
+        return unchecked self.values.load_at::<v128>(at) as i8x16;
+    }
 }
 
 /// Each row of expert `expert`'s weight in `p` times `x`, plus its bias.
@@ -131,7 +136,6 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
     let shape = &p.shape;
     assert shape.blob == BLOB && shape.blocks == x.scales.len(), "the row spans the weight's blocks";
     assert shape.rows % ROWS_AT_ONCE == 0, "a projection's rows come in fours";
-    let zero_points = p.zero_points matches { Some(_) };
     let blocks = shape.blocks as i64;
     let mut out = List::<f32>::filled(shape.rows, 0.0);
     for let mut r = 0; r < shape.rows; r += ROWS_AT_ONCE {
@@ -154,10 +158,8 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
             let x_scale = unchecked x.scales[b];
             let block = row * blocks + b as i64;
             let scaled = |n: i64| -> f32x4 {
-                let zero = if zero_points { zero_point(p, row + n, b) } else { 8 };
-                return block_sum(p, block + n * blocks, high_evens, high_odds, low_evens, low_odds, sums * i32x4::splat(
-                    zero,
-                ), x_scale);
+                let offset = sums * i32x4::splat(zero_point(p, row + n, b));
+                return block_sum(p, block + n * blocks, high_evens, high_odds, low_evens, low_odds, offset, x_scale);
             };
             s0 = s0 + scaled(0);
             s1 = s1 + scaled(1);
@@ -207,13 +209,6 @@ fn block_sum(
     );
     let scale = unchecked p.scales.load_at::<f32>(4 * block) * x_scale;
     return f32x4::convert_i32x4_s(dot - offset) * f32x4::splat(scale);
-}
-
-impl QuantizedRow {
-    /// The 16 bytes of `values` from `at`.
-    fn at(&self, at: i32) -> i8x16 {
-        return unchecked self.values.load_at::<v128>(at) as i8x16;
-    }
 }
 
 /// The zero point of block `b` of the weight's row `row`, packed two to a

@@ -965,12 +965,12 @@ fn by_picks<E: Float>(
         let hidden = x.extents[1];
         for let t of 0..<tokens {
             let mut sum = List::<f32>::filled(hidden, 0.0);
+            let row = host_rows[t * hidden..<(t + 1) * hidden].to_list();
             for let j of 0..<k {
                 let weight = host_weights[t * k + j];
                 if slot_of(t * k + j) >= 0 || !(weight > 0.0) {
                     continue;
                 }
-                let row = host_rows[t * hidden..<(t + 1) * hidden].to_list();
                 let out = expert_row(&host_up, &host_down, picks[t * k + j] as i32, &row, experts);
                 for let i of 0..<hidden {
                     sum[i] += weight * out[i];
