@@ -1,5 +1,5 @@
 use { Url, ParseError, percent_encode, percent_decode, parse_query, format_query } from "core:url";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { to_string, from_string } from "core:json";
 
 // --- Url::from_str basic ---
@@ -432,7 +432,7 @@ test "query_pairs empty query" {
 
 test "with_query_pairs" {
     if let Ok(url) = Url::from_str("http://example.com/path") {
-        let mut params: TreeMap<String, String> = TreeMap::new();
+        let mut params: HashMap<String, String> = HashMap::new();
         params["key"] = "val";
         params["name"] = "Alice";
         let updated = url.with_query_pairs(params);
@@ -815,25 +815,25 @@ test "parse_query duplicate keys last wins" {
 }
 
 test "format_query simple" {
-    let mut params: TreeMap<String, String> = TreeMap::new();
+    let mut params: HashMap<String, String> = HashMap::new();
     params["a"] = "1";
     params["b"] = "2";
     assert format_query(params) == "a=1&b=2";
 }
 
 test "format_query encodes spaces" {
-    let mut params: TreeMap<String, String> = TreeMap::new();
+    let mut params: HashMap<String, String> = HashMap::new();
     params["name"] = "hello world";
     assert format_query(params) == "name=hello+world";
 }
 
 test "format_query empty" {
-    let params: TreeMap<String, String> = TreeMap::new();
+    let params: HashMap<String, String> = HashMap::new();
     assert format_query(params) == "";
 }
 
 test "parse_query format_query roundtrip" {
-    let mut original: TreeMap<String, String> = TreeMap::new();
+    let mut original: HashMap<String, String> = HashMap::new();
     original["key"] = "value";
     original["name"] = "Alice Bob";
     let formatted = format_query(original);
@@ -914,7 +914,7 @@ test "parse_query with non-ASCII value" {
 }
 
 test "format_query with non-ASCII value" {
-    let mut params: TreeMap<String, String> = TreeMap::new();
+    let mut params: HashMap<String, String> = HashMap::new();
     params["city"] = "東京";
     let formatted = format_query(params);
     let parsed = parse_query(formatted);
@@ -1047,7 +1047,7 @@ test "query parts that are empty are skipped" {
     assert url.query_get_all("a") == ["1", "2"];
     assert parse_query("a=1&&b=2").len() == 2;
     assert Url::from_str("http://h/").unwrap().query_get_all("a").is_empty();
-    assert url.with_query_pairs(TreeMap::new()).query matches { null };
+    assert url.with_query_pairs(HashMap::new()).query matches { null };
 }
 
 test "a query component keeps a stray percent and an undecodable escape" {

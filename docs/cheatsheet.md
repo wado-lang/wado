@@ -1310,7 +1310,7 @@ affine trait Eq<Rhs = Self> with () { fn eq(&self, other: &Rhs) -> bool; }
 affine trait Ord: Eq with () { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,
-// Option<T>, TreeMap<K, V>; not Result)
+// Option<T>, HashMap<K, V>; not Result)
 affine trait Default with () { fn default() -> Self; }
 
 // For [] operators. List's and Slice's impls require the index in range, so
@@ -1955,17 +1955,18 @@ server.stop(5_000_000_000)?;   // terminate, then kill after 5 s (a wasi:clocks 
 
 ### core:collections
 
-`TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See
-[`core:collections`](./stdlib-core-collections.md).
+`HashMap<K, V>` and `HashSet<T>`, iterating in insertion order. See
+[`core:collections`](./stdlib-core-collections.md). `TreeMap` and `TreeSet`
+offer the same API for a key that is `Ord` but not `Hash`.
 
-`TreeMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
+`HashMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
 it crosses a component boundary. There `K` must be `bool`, `char`, `String`, or
 an integer. A repeated key on the wire takes the last pair's value.
 
 ```wado
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 
-let mut map = TreeMap::<String, i32>::new();
+let mut map = HashMap::<String, i32>::new();
 map["key"] = 42;              // index assignment
 let v = map["key"];           // index access (panics if absent)
 let opt = map.get("key");     // fallible access -> Option<V>
@@ -1977,8 +1978,8 @@ map.try_insert("k", 1);       // insert if absent -> bool
 map.get_or_insert("k", 1);    // the stored value, or the inserted one
 for let [k, v] of map.entries() { println(`${k}=${v}`); }
 
-let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;
-let set = ["foo", "bar", "baz"] as TreeSet<String>;
+let sizes = { small: 1, large: 3 } as HashMap<String, i32>;
+let set = ["foo", "bar", "baz"] as HashSet<String>;
 set.contains("foo");          // -> bool; set.insert(x) -> bool
 set.contains_str(view);       // String set: test a view, no copy
 ```

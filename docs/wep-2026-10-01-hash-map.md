@@ -171,12 +171,16 @@ wide-arithmetic proposal, or a software fallback without it, so the candidates
 are timed as Wasm rather than taken from their native rankings. SipHash is too
 slow for the role.
 
-### `TreeMap` stays
+### `HashMap` is the default map
 
-`TreeMap` needs no seed, and its worst case is logarithmic. The Component Model
-`map<K, V>` stays `TreeMap`
-([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)). `core:value` objects,
-which hold parsed external input, stay `TreeMap` as well.
+A lookup costs a hash and about one comparison, against about log₂(n)
+comparisons in a `TreeMap`, so `HashMap` is the map the standard library and
+the packages reach for. The Component Model `map<K, V>` is a `HashMap`
+([WEP: CM map type](./wep-2026-08-25-cm-map-type.md)), and so is a
+`core:value` object. Both hold external input, which the seed defends.
+
+`TreeMap` and `TreeSet` stay, for a key that is `Ord` but not `Hash`. They need
+no seed, and their worst case is logarithmic whoever chooses the keys.
 
 ### Literals coerce, as to `TreeMap` and `TreeSet`
 

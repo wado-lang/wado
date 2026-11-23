@@ -159,10 +159,10 @@ pub enum CompilerItem {
     /// the CM lift, value-copy synthesis, and serde codegen so the
     /// compiler always points at the right concrete `List` struct.
     List,
-    /// `TreeMap<K, V>` — the insertion-ordered map struct, and the Wado
+    /// `HashMap<K, V>` — the insertion-ordered hashed map struct, and the Wado
     /// spelling of the Component Model `map<K, V>`.
-    TreeMap,
-    /// `MapEntriesRefIter<K, V>` — what `TreeMap::entries` returns, and
+    HashMap,
+    /// `MapEntriesRefIter<K, V>` — what `HashMap::entries` returns, and
     /// what the `map<K, V>` lower walks.
     MapEntriesIter,
     /// `i128` — the signed 128-bit wide-int struct.
@@ -528,18 +528,18 @@ pub enum CompilerItem {
     ReflectWireNamePolicy,
     /// `Reflect::doc` — the declaration's `///` comment.
     ReflectDoc,
-    /// `TreeMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
+    /// `HashMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
     /// insert behind `map[k] = v`, which the `map<K, V>` lift builds pairs with.
-    TreeMapIndexAssign,
+    HashMapIndexAssign,
     /// `MapEntriesRefIter`'s `Iterator::next`. `Iterator` carries an
     /// associated type, so the trait item records no method name to reach for.
     MapEntriesIterNext,
-    /// `TreeMap::len` — the live pair count, sizing the `map<K, V>` buffer.
-    TreeMapLen,
-    /// `TreeMap::entries` — the pair traversal the `map<K, V>` lower walks.
-    TreeMapEntries,
-    /// `TreeMap::new` — the empty map a `map<K, V>` lift fills.
-    TreeMapNew,
+    /// `HashMap::len` — the live pair count, sizing the `map<K, V>` buffer.
+    HashMapLen,
+    /// `HashMap::entries` — the pair traversal the `map<K, V>` lower walks.
+    HashMapEntries,
+    /// `HashMap::new` — the empty map a `map<K, V>` lift fills.
+    HashMapNew,
     /// `ReflectStruct::members` — the per-field member tuple.
     ReflectStructMembers,
     /// `ReflectStruct::from_fields` — assemble a struct from its field-value tuple.
@@ -831,7 +831,7 @@ impl CompilerItem {
     /// that need to check the full registry.
     pub const ALL: &'static [CompilerItem] = &[
         Self::List,
-        Self::TreeMap,
+        Self::HashMap,
         Self::MapEntriesIter,
         Self::I128,
         Self::U128,
@@ -972,11 +972,11 @@ impl CompilerItem {
         Self::ReflectDeclName,
         Self::ReflectWireNamePolicy,
         Self::ReflectDoc,
-        Self::TreeMapIndexAssign,
+        Self::HashMapIndexAssign,
         Self::MapEntriesIterNext,
-        Self::TreeMapLen,
-        Self::TreeMapEntries,
-        Self::TreeMapNew,
+        Self::HashMapLen,
+        Self::HashMapEntries,
+        Self::HashMapNew,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
         Self::ReflectStructDefaultSlot,
@@ -1124,7 +1124,7 @@ impl CompilerItem {
     pub fn attr_name(self) -> &'static str {
         match self {
             Self::List => "list",
-            Self::TreeMap => "tree_map",
+            Self::HashMap => "hash_map",
             Self::MapEntriesIter => "map_entries_iter",
             Self::I128 => "i128",
             Self::U128 => "u128",
@@ -1265,11 +1265,11 @@ impl CompilerItem {
             Self::ReflectDeclName => "reflect_decl_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::ReflectDoc => "reflect_doc",
-            Self::TreeMapIndexAssign => "tree_map_index_assign",
+            Self::HashMapIndexAssign => "hash_map_index_assign",
             Self::MapEntriesIterNext => "map_entries_iter_next",
-            Self::TreeMapLen => "tree_map_len",
-            Self::TreeMapEntries => "tree_map_entries",
-            Self::TreeMapNew => "tree_map_new",
+            Self::HashMapLen => "hash_map_len",
+            Self::HashMapEntries => "hash_map_entries",
+            Self::HashMapNew => "hash_map_new",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
             Self::ReflectStructDefaultSlot => "reflect_struct_default_slot",
@@ -1618,13 +1618,13 @@ impl CompilerItem {
             // declaring a `&ListView<T>` parameter does.
             Self::ListArg | Self::ListView => false,
             // Loaded only when the user imports `core:collections`.
-            Self::TreeMap
+            Self::HashMap
             | Self::MapEntriesIter
-            | Self::TreeMapIndexAssign
+            | Self::HashMapIndexAssign
             | Self::MapEntriesIterNext
-            | Self::TreeMapLen
-            | Self::TreeMapEntries
-            | Self::TreeMapNew => false,
+            | Self::HashMapLen
+            | Self::HashMapEntries
+            | Self::HashMapNew => false,
             // Loaded only when the user imports `core:serde` (which
             // happens implicitly for kiln-options decoding). The
             // validator skips the check; downstream synthesis ICEs
@@ -1811,7 +1811,7 @@ impl CompilerItem {
             | Self::Bf16FromI128
             | Self::Bf16FromU128 => CompilerItemKind::Function,
             Self::List
-            | Self::TreeMap
+            | Self::HashMap
             | Self::MapEntriesIter
             | Self::I128
             | Self::U128
@@ -1925,11 +1925,11 @@ impl CompilerItem {
             | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::ReflectDoc
-            | Self::TreeMapIndexAssign
+            | Self::HashMapIndexAssign
             | Self::MapEntriesIterNext
-            | Self::TreeMapLen
-            | Self::TreeMapEntries
-            | Self::TreeMapNew
+            | Self::HashMapLen
+            | Self::HashMapEntries
+            | Self::HashMapNew
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaultSlot
@@ -2646,7 +2646,7 @@ impl CompilerItems {
     }
 
     /// [`Self::struct_name`] for an item whose module may not be loaded, such as
-    /// `TreeMap`: `core:collections` is not auto-imported.
+    /// `HashMap`: `core:collections` is not auto-imported.
     pub fn struct_name_opt(&self, item: CompilerItem) -> Option<&str> {
         if let Resolved::Struct { name, .. } = self.get(item)? {
             return Some(name.as_str());

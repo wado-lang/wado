@@ -699,7 +699,7 @@ fn classify_param<'t>(param_type: &'t Type, registry: &CmInterfaceRegistry) -> P
             ParamLowering::Aggregate
         }
         Type::Generic(_)
-            if let Some(CompilerItem::Option | CompilerItem::Result | CompilerItem::TreeMap) =
+            if let Some(CompilerItem::Option | CompilerItem::Result | CompilerItem::HashMap) =
                 item =>
         {
             ParamLowering::Aggregate

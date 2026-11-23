@@ -280,7 +280,7 @@ test "an enum of more members than a flags holds is a set" {
     let schema = `{"title": "T", "type": "array", "uniqueItems": true, "items": {"type": "string", "enum": [${members.join(
         ", ",
     )}]}}`;
-    assert generated(schema).contains("pub type T = collections::TreeSet<TItem>;");
+    assert generated(schema).contains("pub type T = collections::HashSet<TItem>;");
 }
 
 test "a default its own schema rejects is refused, its format asserted" {

@@ -253,9 +253,9 @@ pub fn build_bindings(
     })
     .collect();
 
-    if b.uses_tree_map {
-        let tree_map_use = b.use_item("core:collections", "TreeMap");
-        b.items.insert(0, tree_map_use);
+    if b.uses_hash_map {
+        let hash_map_use = b.use_item("core:collections", "HashMap");
+        b.items.insert(0, hash_map_use);
     }
     if b.uses_list_view {
         let list_view_use = b.use_item("core:linear", "ListView");
@@ -371,7 +371,7 @@ struct Builder {
     items: Vec<Item>,
     errors: Vec<String>,
     source_interfaces: SourceInterfaceBatch,
-    uses_tree_map: bool,
+    uses_hash_map: bool,
     uses_list_view: bool,
     names: InterfaceNames,
     /// Each interface the component exports -> the one the program imports it
@@ -387,7 +387,7 @@ impl Builder {
             items: Vec::new(),
             errors: Vec::new(),
             source_interfaces: SourceInterfaceBatch::default(),
-            uses_tree_map: false,
+            uses_hash_map: false,
             uses_list_view: false,
             names,
             exports,
@@ -847,8 +847,8 @@ impl Builder {
             CmShape::Map(k, v) => {
                 let key = self.map_type(resolve, k, current_fq);
                 let value = self.map_type(resolve, v, current_fq);
-                self.uses_tree_map = true;
-                self.generic("TreeMap", vec![key, value])
+                self.uses_hash_map = true;
+                self.generic("HashMap", vec![key, value])
             }
             CmShape::Tuple(ts) => {
                 let mut elems = Vec::with_capacity(ts.len());

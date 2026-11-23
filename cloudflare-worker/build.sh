@@ -26,6 +26,7 @@ rm -rf "$HERE/gen"
   --no-wasi-shim \
   --map "wasi:cli/*=./shims/cli.js#*" \
   --map "wasi:clocks/*=./shims/clocks.js#*" \
+  --map "wasi:random/*=./shims/random.js#*" \
   --map "wasi:http/*=./shims/http.js#*"
 
 # A Worker takes only static imports, so name each core module the transpile

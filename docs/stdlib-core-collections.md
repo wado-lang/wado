@@ -4,22 +4,23 @@
 
 # core:collections
 
-Maps and sets that iterate in insertion order. `TreeMap<K, V>` and
-`TreeSet<T>` find a key by ordering it; `HashMap<K, V>` and `HashSet<T>` by
-hashing it under a `HashSeed`. `map[key] = value` overwrites; `try_insert` /
-`get_or_insert` insert only when the key is absent.
+Maps and sets that iterate in insertion order. `HashMap<K, V>` and
+`HashSet<T>` find a key by hashing it under a `HashSeed`; `TreeMap<K, V>` and
+`TreeSet<T>` by ordering it, for a key that is `Ord` but not `Hash`.
+`map[key] = value` overwrites; `try_insert` / `get_or_insert` insert only
+when the key is absent.
 
 ## Synopsis
 
 ```wado
-let mut sizes = { small: 1, medium: 2, large: 3 } as TreeMap<String, i32>;
+let mut sizes = { small: 1, medium: 2, large: 3 } as HashMap<String, i32>;
 assert sizes.len() == 3;
 assert sizes["medium"] == 2;
 assert sizes.get("small") matches { Some(v) && v == 1 };
 sizes["xlarge"] = 4;
 assert sizes.len() == 4;
 
-let primes = [7, 2, 5, 2, 3] as TreeSet<i32>;
+let primes = [7, 2, 5, 2, 3] as HashSet<i32>;
 assert primes.len() == 4;
 assert primes.contains(5);
 assert !primes.contains(4);
@@ -116,13 +117,9 @@ _Fields are private._
 
 #### `pub fn new() -> TreeMap<K, V>`
 
-`#[compiler_item("tree_map_new")]`
-
 Creates a new empty TreeMap.
 
 #### `pub fn len(&self) -> i32`
-
-`#[compiler_item("tree_map_len")]`
 
 Returns the number of key-value pairs in the map.
 
@@ -166,8 +163,6 @@ The values, in insertion order.
 
 #### `pub fn entries(&self) -> MapEntriesRefIter<K, V>`
 
-`#[compiler_item("tree_map_entries")]`
-
 The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
@@ -190,6 +185,10 @@ Returns a reference to the value stored under text equal to `key`.
 
 ##### `fn eq(&self, other: &TreeMap<K, V>) -> bool`
 
+#### `impl Hash for TreeMap<K, V>`
+
+##### `fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Ord for TreeMap<K, V>`
 
 ##### `fn cmp(&self, other: &TreeMap<K, V>) -> Ordering`
@@ -197,8 +196,6 @@ Returns a reference to the value stored under text equal to `key`.
 #### `impl IndexAssign<K> for TreeMap<K, V>`
 
 ##### `fn index_assign(&mut self, key: K, value: Self::Output)`
-
-`#[compiler_item("tree_map_index_assign")]`
 
 #### `impl IndexValue<K> for TreeMap<K, V>`
 
@@ -346,6 +343,8 @@ _Fields are private._
 
 #### `pub fn new() -> HashMap<K, V>`
 
+`#[compiler_item("hash_map_new")]`
+
 An empty map hashing under the host's seed.
 
 #### `pub fn with_seed(seed: HashSeed) -> HashMap<K, V>`
@@ -353,6 +352,8 @@ An empty map hashing under the host's seed.
 An empty map hashing with `seed`.
 
 #### `pub fn len(&self) -> i32`
+
+`#[compiler_item("hash_map_len")]`
 
 Returns the number of key-value pairs in the map.
 
@@ -392,6 +393,8 @@ The values, in insertion order.
 
 #### `pub fn entries(&self) -> MapEntriesRefIter<K, V>`
 
+`#[compiler_item("hash_map_entries")]`
+
 The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
@@ -414,6 +417,10 @@ Returns a reference to the value stored under text equal to `key`.
 
 ##### `fn eq(&self, other: &HashMap<K, V>) -> bool`
 
+#### `impl Hash for HashMap<K, V>`
+
+##### `fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Ord for HashMap<K, V>`
 
 ##### `fn cmp(&self, other: &HashMap<K, V>) -> Ordering`
@@ -425,6 +432,8 @@ Returns a reference to the value stored under text equal to `key`.
 #### `impl IndexAssign<K> for HashMap<K, V>`
 
 ##### `fn index_assign(&mut self, key: K, value: Self::Output)`
+
+`#[compiler_item("hash_map_index_assign")]`
 
 #### `impl IndexValue<K> for HashMap<K, V>`
 

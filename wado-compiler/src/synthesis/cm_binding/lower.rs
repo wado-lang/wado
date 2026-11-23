@@ -845,7 +845,7 @@ fn store_ptr_len(addr: TirExpr, base_local: u32, len_local: u32, stmts: &mut Vec
     )));
 }
 
-/// Lower a `TreeMap<K, V>` (GC value) to a CM `map` at `addr`.
+/// Lower a `HashMap<K, V>` (GC value) to a CM `map` at `addr`.
 pub(super) fn synthesize_lower_map_to_memory(
     key_type: &Type,
     value_type: &Type,
@@ -861,7 +861,7 @@ pub(super) fn synthesize_lower_map_to_memory(
     stmts
 }
 
-/// The pair buffer of a `TreeMap<K, V>` as `(stmts, base, len)`, walked through
+/// The pair buffer of a `HashMap<K, V>` as `(stmts, base, len)`, walked through
 /// `entries()` because a removal's tombstone parts position from index.
 pub(super) fn synthesize_lower_map_to_buffer(
     key_type: &Type,
@@ -883,8 +883,8 @@ pub(super) fn synthesize_lower_map_to_buffer(
     let (key_tid, value_tid) = ctx
         .type_table
         .borrow()
-        .as_tree_map(map_type_id)
-        .expect("a `map` lower is handed a `TreeMap<K, V>`");
+        .as_hash_map(map_type_id)
+        .expect("a `map` lower is handed a `HashMap<K, V>`");
 
     let (
         map_head,
@@ -908,10 +908,10 @@ pub(super) fn synthesize_lower_map_to_buffer(
             .compiler_item_def(CompilerItem::MapEntriesIter)
             .expect("the map entries iterator is a registered compiler item");
         let iter = tt.make_generic_instance(iter_def, vec![key_tid, value_tid]);
-        let map_head = tt.compiler_struct_fq_name(CompilerItem::TreeMap);
+        let map_head = tt.compiler_struct_fq_name(CompilerItem::HashMap);
         let iter_head = tt.compiler_struct_fq_name(CompilerItem::MapEntriesIter);
         let items = tt.compiler_items();
-        let map_source = items.require_struct(CompilerItem::TreeMap).0.clone();
+        let map_source = items.require_struct(CompilerItem::HashMap).0.clone();
         let iter_source = items.require_struct(CompilerItem::MapEntriesIter).0.clone();
         let next = LocalMethodName::new(
             iter_head,
@@ -935,8 +935,8 @@ pub(super) fn synthesize_lower_map_to_buffer(
                 next,
                 items.require_template(CompilerItem::MapEntriesIterNext),
             ),
-            method(CompilerItem::TreeMapLen),
-            method(CompilerItem::TreeMapEntries),
+            method(CompilerItem::HashMapLen),
+            method(CompilerItem::HashMapEntries),
             ref_pair,
             opt,
         )
@@ -1410,7 +1410,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             flat_args.push(local_ref(base_local, "$list_base", TypeTable::I32));
             flat_args.push(local_ref(len_local, "$list_len", TypeTable::I32));
         }
-        Type::Generic(g) if item == Some(CompilerItem::TreeMap) => {
+        Type::Generic(g) if item == Some(CompilerItem::HashMap) => {
             let (map_stmts, base_local, len_local) = synthesize_lower_map_to_buffer(
                 &g.args[0], &g.args[1], value, next_local, locals, ctx,
             );
@@ -1968,7 +1968,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
         Type::Generic(g) if item == Some(CompilerItem::List) => {
             synthesize_lower_list_to_memory(&g.args[0], value, addr, next_local, locals, ctx)
         }
-        Type::Generic(g) if item == Some(CompilerItem::TreeMap) => synthesize_lower_map_to_memory(
+        Type::Generic(g) if item == Some(CompilerItem::HashMap) => synthesize_lower_map_to_memory(
             &g.args[0], &g.args[1], value, addr, next_local, locals, ctx,
         ),
         Type::Generic(g) if item == Some(CompilerItem::Result) => {

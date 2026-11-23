@@ -19,8 +19,8 @@ use {
 } from "core:serde";
 use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 
-fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
-    let mut m: TreeMap<String, Value> = TreeMap::new();
+fn obj(entries: List<[String, Value]>) -> HashMap<String, Value> {
+    let mut m: HashMap<String, Value> = HashMap::new();
     for let e of entries {
         m[e.0] = e.1;
     }
@@ -663,7 +663,7 @@ test "from_value round-trips to_value" {
 
 test "from_value reads a map" {
     let v: Value = { a: 1, b: 2 };
-    let r: Result<TreeMap<String, i64>, DeserializeError> = from_value(&v);
+    let r: Result<HashMap<String, i64>, DeserializeError> = from_value(&v);
     assert r matches { Ok(m) && m["b"] == 2 };
 }
 
@@ -761,7 +761,7 @@ test "from_value rejects a type mismatch" {
     assert fails_with::<bool>(&Value::Null, UnexpectedType);
     assert fails_with::<List<i32>>(&Value::String("x"), UnexpectedType);
     assert fails_with::<Endpoint>(&Value::List([]), UnexpectedType);
-    assert fails_with::<TreeMap<String, i64>>(&Value::Int(1), UnexpectedType);
+    assert fails_with::<HashMap<String, i64>>(&Value::Int(1), UnexpectedType);
 }
 
 test "from_value reads a char and bytes" {
@@ -914,7 +914,7 @@ test "merge takes an explicit null from the overlay" {
 // --- map keys ---
 
 test "to_value writes a string-keyed map as an object in key order" {
-    let mut m = TreeMap::<String, i32>::new();
+    let mut m = HashMap::<String, i32>::new();
     m["z"] = 1;
     m["a"] = 2;
     let expected: Value = { z: 1, a: 2 };
@@ -950,26 +950,26 @@ test "to_value spells integer and bool map keys as strings" {
 }
 
 test "a scalar map key round-trips through its object spelling" {
-    let mut wide = TreeMap::<i128, String>::new();
+    let mut wide = HashMap::<i128, String>::new();
     wide[1] = "one";
     wide[-2] = "minus two";
     let v = to_value(&wide).unwrap();
     assert `${v:?}` == "{\"1\": \"one\", \"-2\": \"minus two\"}";
-    let back = from_value::<TreeMap<i128, String>>(&v).unwrap();
+    let back = from_value::<HashMap<i128, String>>(&v).unwrap();
     assert back.len() == 2 && back.get(-2 as i128) == Option::Some("minus two");
-    let mut floats = TreeMap::<f64, i32>::new();
+    let mut floats = HashMap::<f64, i32>::new();
     floats[0.5] = 1;
     assert `${to_value(&floats).unwrap():?}` == "{\"0.5\": 1}";
 }
 
 /// Asserts a one-entry map keyed by `key` spells it `spelling` and reads that
 /// back.
-fn assert_key_round_trips<K: Ord + Serialize + Deserialize + Inspect>(key: K, spelling: String) {
-    let mut m = TreeMap::<K, i32>::new();
+fn assert_key_round_trips<K: Hash + Serialize + Deserialize + Inspect>(key: K, spelling: String) {
+    let mut m = HashMap::<K, i32>::new();
     m[key] = 1;
     let v = to_value(&m).unwrap();
     assert `${v:?}` == `{"${spelling}": 1}`;
-    assert from_value::<TreeMap<K, i32>>(&v) matches { Ok(back) && back.get(key) == Option::Some(1) };
+    assert from_value::<HashMap<K, i32>>(&v) matches { Ok(back) && back.get(key) == Option::Some(1) };
 }
 
 test "every scalar key width round-trips through its spelling" {
@@ -988,7 +988,7 @@ test "every scalar key width round-trips through its spelling" {
     assert_key_round_trips('x', "x");
 }
 
-/// The first key of a map, read as a `K` no `TreeMap` could order.
+/// The first key of a map, read as a `K` no `HashMap` could hash.
 struct FirstKey<K> {
     key: K,
 }
@@ -1004,13 +1004,13 @@ impl<K: Deserialize> Deserialize for FirstKey<K> {
 }
 
 test "a compound map key is refused both ways" {
-    let mut lists = TreeMap::<List<i32>, i32>::new();
+    let mut lists = HashMap::<List<i32>, i32>::new();
     lists[[1]] = 1;
     assert to_value(&lists) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
     let v: Value = { a: 1 };
-    assert fails_with::<TreeMap<List<i32>, i32>>(&v, UnexpectedType);
-    assert fails_with::<TreeMap<i32, i32>>(&v, InvalidValue);
-    assert fails_with::<FirstKey<TreeMap<String, i32>>>(&v, UnexpectedType);
+    assert fails_with::<HashMap<List<i32>, i32>>(&v, UnexpectedType);
+    assert fails_with::<HashMap<i32, i32>>(&v, InvalidValue);
+    assert fails_with::<FirstKey<HashMap<String, i32>>>(&v, UnexpectedType);
     assert fails_with::<FirstKey<ToValuePoint>>(&v, UnexpectedType);
     assert fails_with::<FirstKey<ToValueShape>>(&v, UnexpectedType);
     assert fails_with::<FirstKey<()>>(&v, UnexpectedType);
@@ -1022,10 +1022,10 @@ enum KeyHue {
 }
 
 test "a unit-case map key is refused on writing, as on reading" {
-    let mut hues = TreeMap::<KeyHue, i32>::new();
+    let mut hues = HashMap::<KeyHue, i32>::new();
     hues[KeyHue::Red] = 1;
     assert to_value(&hues) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
-    let mut units = TreeMap::<(), i32>::new();
+    let mut units = HashMap::<(), i32>::new();
     units[()] = 1;
     assert to_value(&units) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
 }

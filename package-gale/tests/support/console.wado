@@ -8,7 +8,7 @@
 use { Stdout, Stderr } from "core:cli";
 use { ErrorCode } from "wasi:cli";
 use { Log, Event, Level } from "core:log";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 /// What a program printed and logged while this console was installed.
 pub affine struct Console {
@@ -17,9 +17,9 @@ pub affine struct Console {
     /// Each event as `<level>: <message>`.
     pub events: List<String> = [],
     /// The readable end of every stream the host created here, by its writable end.
-    readers: TreeMap<ResourceId, ResourceId> = TreeMap::<ResourceId, ResourceId>::new(),
+    readers: HashMap<ResourceId, ResourceId> = HashMap::<ResourceId, ResourceId>::new(),
     /// Where each captured stream's bytes go (`true` for stderr), by its readable end.
-    to_stderr: TreeMap<ResourceId, bool> = TreeMap::<ResourceId, bool>::new(),
+    to_stderr: HashMap<ResourceId, bool> = HashMap::<ResourceId, bool>::new(),
     /// The captured streams, held so that no later stream takes their identity.
     captured: List<Stream<u8>> = [],
     /// The writable end of each future a write handed out, for `end_writes`: a

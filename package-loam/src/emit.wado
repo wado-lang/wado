@@ -2,7 +2,7 @@
 //! adds the operations the graph's operators lower to, and a `compute` that
 //! runs it from inputs on the host.
 
-use { HashMap, HashSet, TreeMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { Deserialize } from "core:serde";
 use { CodeWriter, FnSpec, ImplSpec, ParamSpec, StructSpec, Vis, byte_string_literal, wado } from "lib:wadopoet";
 use { ExpertPlan } from "./emit_experts.wado";
@@ -663,7 +663,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, placem
                 }
                 // A file the build did not read, as external data, must hold
                 // at least what the graph places in it.
-                let mut ends = TreeMap::<String, i32>::new();
+                let mut ends = HashMap::<String, i32>::new();
                 for let [_, range] of in_place.ranges.entries() {
                     if !in_place.lens.contains_key(range.file) {
                         ends[range.file] = i32::max(ends.get(range.file).unwrap_or(0), range.end);

@@ -39,7 +39,7 @@ use {
     read_tag,
 } from "core:serde";
 
-use { TreeMap, MapEntriesRefIter } from "core:collections";
+use { HashMap, MapEntriesRefIter } from "core:collections";
 use { from_bytes, to_bytes } from "core:json";
 use { decode as base64_decode } from "core:base64";
 
@@ -69,7 +69,7 @@ pub variant Value {
     String(String),
     Bytes(ByteList),  // a byte-string *value*
     List(List<Value>),
-    Object(TreeMap<String, Value>),  // string keys only, insertion order preserved
+    Object(HashMap<String, Value>),  // string keys only, insertion order preserved
     Undefined,  // CBOR simple 23; also present in JS/MsgPack data
     Unknown(ByteList),  // raw encoded bytes of an unrepresentable item
 }
@@ -85,7 +85,7 @@ impl From<Array<Value>> for Value {
 
 impl From<Array<[String, Value]>> for Value {
     fn from(entries: Array<[String, Value]>) -> Value {
-        return Value::Object(TreeMap::<String, Value>::from(entries));
+        return Value::Object(HashMap::<String, Value>::from(entries));
     }
 }
 
@@ -300,7 +300,7 @@ impl Visitor for ValueVisitor {
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Value, DeserializeError> {
-        let mut obj: TreeMap<String, Value> = TreeMap::new();
+        let mut obj: HashMap<String, Value> = HashMap::new();
         while let Some(scalar) = map.next_key::<Value>()? {
             let key = object_key(scalar)?;
             let val = map.next_value::<Value>()?;
@@ -377,13 +377,13 @@ pub struct ValueSeqSerializer {
 
 pub struct ValueMapSerializer {
     out: &mut Value,
-    entries: TreeMap<String, Value>,
+    entries: HashMap<String, Value>,
     pending: Option<String>,
 }
 
 pub struct ValueStructSerializer {
     out: &mut Value,
-    entries: TreeMap<String, Value>,
+    entries: HashMap<String, Value>,
 }
 
 pub struct ValueVariantSerializer {
@@ -456,7 +456,7 @@ impl SerializeVariant for ValueVariantSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         let payload = if self.payloads.len() == 1 { self.payloads[0] } else { Value::List(self.payloads) };
-        let mut obj = TreeMap::<String, Value>::new();
+        let mut obj = HashMap::<String, Value>::new();
         obj[self.name] = payload;
         *self.out = Value::Object(obj);
         return Result::Ok(());
@@ -547,7 +547,7 @@ impl Serializer for ValueSerializer {
     fn begin_map(&mut self, len: i32) -> Result<ValueMapSerializer, SerializeError> {
         return Result::Ok(ValueMapSerializer {
             out: self.out,
-            entries: TreeMap::<String, Value>::new(),
+            entries: HashMap::<String, Value>::new(),
             pending: null,
         });
     }
@@ -555,7 +555,7 @@ impl Serializer for ValueSerializer {
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<ValueStructSerializer, SerializeError> {
         return Result::Ok(ValueStructSerializer {
             out: self.out,
-            entries: TreeMap::<String, Value>::new(),
+            entries: HashMap::<String, Value>::new(),
         });
     }
 
@@ -610,7 +610,7 @@ pub fn merge(base: Value, overlay: Value) -> Value {
 
 /// [`merge`] of two objects' fields, in place, copying only what `layer`
 /// puts into `fields`.
-fn merge_fields(fields: &mut TreeMap<String, Value>, layer: &TreeMap<String, Value>) {
+fn merge_fields(fields: &mut HashMap<String, Value>, layer: &HashMap<String, Value>) {
     for let [key, value] of layer.entries() {
         if let Object(sub_layer) = value {
             if fields.contains_key(*key) {
@@ -637,7 +637,7 @@ pub struct ValueSeqAccess {
 
 /// Serves both a map and a struct: a `Value` spells them the same way.
 pub struct ValueObjectAccess {
-    fields: &TreeMap<String, Value>,
+    fields: &HashMap<String, Value>,
     entries: MapEntriesRefIter<String, Value>,
     /// The value of the key just read.
     pending: Option<&Value>,
@@ -712,7 +712,7 @@ fn float_of(value: &Value) -> Result<f64, DeserializeError> {
     };
 }
 
-fn object_access(fields: &TreeMap<String, Value>) -> ValueObjectAccess {
+fn object_access(fields: &HashMap<String, Value>) -> ValueObjectAccess {
     return ValueObjectAccess { fields, entries: fields.entries(), pending: null };
 }
 

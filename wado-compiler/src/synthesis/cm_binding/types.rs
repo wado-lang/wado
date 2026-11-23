@@ -250,10 +250,10 @@ pub fn cm_type_to_type_id(
                     let elem = held(0, type_table);
                     type_table.make_list(elem)
                 }
-                Some(CompilerItem::TreeMap) => {
+                Some(CompilerItem::HashMap) => {
                     let key = bare(0, type_table);
                     let value = bare(1, type_table);
-                    type_table.make_tree_map(key, value)
+                    type_table.make_hash_map(key, value)
                 }
                 Some(CompilerItem::Option) => {
                     let inner = held(0, type_table);
@@ -530,7 +530,7 @@ fn check_cm_boundary_representable_inner(
                 if type_table.is_string(type_id) {
                     return Ok(());
                 }
-                if let Some((key, value)) = type_table.as_tree_map(type_id) {
+                if let Some((key, value)) = type_table.as_hash_map(type_id) {
                     // `map<K, V>`: the key comes from the CM's `keytype`
                     // subset, the value from any representable valtype.
                     if let Some(reason) = map_key_rejection(type_table, key) {
@@ -938,7 +938,7 @@ fn flat_types_from_type_id_inner(
             ..
         } if matches!(
             type_table.compiler_type_item(*def),
-            Some(CompilerItem::List | CompilerItem::TreeMap)
+            Some(CompilerItem::List | CompilerItem::HashMap)
         ) =>
         {
             out.push(cm_abi::CmValType::I32); // ptr
@@ -1163,7 +1163,7 @@ const CM_ITEMS: [CompilerItem; 10] = [
     CompilerItem::ByteList,
     CompilerItem::List,
     CompilerItem::ListView,
-    CompilerItem::TreeMap,
+    CompilerItem::HashMap,
     CompilerItem::Option,
     CompilerItem::Result,
     CompilerItem::Stream,

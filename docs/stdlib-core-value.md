@@ -280,7 +280,7 @@ remaining arms are produced by binary formats such as CBOR.
 
 #### `List(List<Value>)`
 
-#### `Object(TreeMap<String, Value>)`
+#### `Object(HashMap<String, Value>)`
 
 #### `Undefined`
 

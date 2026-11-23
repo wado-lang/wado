@@ -314,7 +314,7 @@ impl<'a> Shape<'a> {
             | WadoType::I128
             | WadoType::U128
             | WadoType::Result { .. }
-            | WadoType::TreeMap(..)
+            | WadoType::HashMap(..)
             | WadoType::Tuple(_)
             | WadoType::Stream(_)
             | WadoType::Future(_) => {

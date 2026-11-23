@@ -546,6 +546,8 @@ pub affine trait Default with () {
 | `String`                                                             | `""`        |
 | `Array<T>`, `List<T>`                                                | `[]`        |
 | `Option<T>`                                                          | `null`      |
+| `HashMap<K, V>` (`K: Hash`)                                          | `{}`        |
+| `HashSet<T>` (`T: Hash`)                                             | `[]`        |
 | `TreeMap<K, V>` (`K: Ord`)                                           | `{}`        |
 | `TreeSet<T>` (`T: Ord`)                                              | `[]`        |
 
@@ -1118,13 +1120,13 @@ one leaves it checked. Either way, the callee must state a contract.
 `Ref` and `RefMut` are sealed marker traits the compiler provides for every
 eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
 
-| Types                                                                         | `Ref` | `RefMut` |
-| ----------------------------------------------------------------------------- | ----- | -------- |
-| `struct`, `List<T>`, `String`, tuples, `TreeMap` / `TreeSet`, `i128` / `u128` | yes   | yes      |
-| `variant`, `fn`, `&T`, `&mut T`                                               | yes   | no       |
-| scalars, `enum`, `flags`                                                      | no    | no       |
-| `resource`                                                                    | no    | no       |
-| `()`, `!`                                                                     | no    | no       |
+| Types                                                              | `Ref` | `RefMut` |
+| ------------------------------------------------------------------ | ----- | -------- |
+| `struct`, `List<T>`, `String`, tuples, maps, sets, `i128` / `u128` | yes   | yes      |
+| `variant`, `fn`, `&T`, `&mut T`                                    | yes   | no       |
+| scalars, `enum`, `flags`                                           | no    | no       |
+| `resource`                                                         | no    | no       |
+| `()`, `!`                                                          | no    | no       |
 
 `Ref` holds for a type whose value `&T` can alias. `RefMut` holds for the `Ref`
 types mutated in place rather than replaced on assignment, which excludes

@@ -17,7 +17,7 @@ use { Preopens } from "core:fs";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { to_bytes_pretty, to_string, from_string } from "core:json";
-use { TreeSet } from "core:collections";
+use { HashSet } from "core:collections";
 use { Baseline, Run } from "./eval.wado";
 use { ask_json, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
@@ -98,7 +98,7 @@ export fn run() with (Stderr, Environment, Preopens, Client, MonotonicClock) {
 }
 
 fn judges_each_once(judged: &List<Confirmation>, count: i32) -> bool {
-    let mut seen = TreeSet::<i32>::new();
+    let mut seen = HashSet::<i32>::new();
     for let c of judged {
         if !(0 <= c.finding < count) || !seen.insert(c.finding) {
             return false;

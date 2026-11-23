@@ -1,7 +1,7 @@
 //! Grog's runtime: the Protocol Buffers wire format, which the code Grog
 //! generates from a `.proto` encodes and decodes through.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { LinearArray, LinearBuffer } from "core:linear";
 
 /// The largest field number a tag carries, from the specification's
@@ -598,10 +598,10 @@ impl Sizer {
 
     /// A `map<K, V>` field: one entry message per key, the key numbered 1 and
     /// the value 2, both always written.
-    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(
+    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Hash, V>(
         &mut self,
         number: i32,
-        map: &TreeMap<K, V>,
+        map: &HashMap<K, V>,
     ) -> i64 {
         let mut n: i64 = 0;
         for let [k, v] of map.entries() {
@@ -610,7 +610,7 @@ impl Sizer {
         return n;
     }
 
-    pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message>(&mut self, number: i32, map: &TreeMap<K, M>) -> i64 {
+    pub fn message_map<KS: Scalar<Value = K>, K: Hash, M: Message>(&mut self, number: i32, map: &HashMap<K, M>) -> i64 {
         let mut n: i64 = 0;
         for let [k, v] of map.entries() {
             let slot = self.reserve();
@@ -734,7 +734,7 @@ impl Writer {
         }
     }
 
-    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(&mut self, number: i32, map: &TreeMap<K, V>) {
+    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Hash, V>(&mut self, number: i32, map: &HashMap<K, V>) {
         for let [k, v] of map.entries() {
             self.len_header(number, entry_len::<KS, VS>(k, v));
             self.scalar::<KS>(1, k);
@@ -742,7 +742,7 @@ impl Writer {
         }
     }
 
-    pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message>(&mut self, number: i32, map: &TreeMap<K, M>) {
+    pub fn message_map<KS: Scalar<Value = K>, K: Hash, M: Message>(&mut self, number: i32, map: &HashMap<K, M>) {
         for let [k, v] of map.entries() {
             self.len_header(number, self.take_size());
             self.scalar::<KS>(1, k);
@@ -1147,25 +1147,25 @@ impl<B: Input> Reader<B> {
 
     /// One entry of a `map<K, V>` field. An entry whose key or value a closed
     /// enum does not hold is kept whole as an unknown field.
-    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(
+    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Hash, V>(
         &mut self,
-        map: &mut TreeMap<K, V>,
+        map: &mut HashMap<K, V>,
     ) -> Result<bool, DecodeError> {
         return self.entry::<KS, K, ScalarEntry<VS>>(map);
     }
 
-    pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message + Default>(
+    pub fn message_map<KS: Scalar<Value = K>, K: Hash, M: Message + Default>(
         &mut self,
-        map: &mut TreeMap<K, M>,
+        map: &mut HashMap<K, M>,
     ) -> Result<bool, DecodeError> {
         return self.entry::<KS, K, MessageEntry<M>>(map);
     }
 
     /// A map entry into `map`: the key numbered 1 and the value numbered 2.
     /// As in any message, the last of a repeated field is the one read.
-    fn entry<KS: Scalar<Value = K>, K: Ord, E: EntryValue>(
+    fn entry<KS: Scalar<Value = K>, K: Hash, E: EntryValue>(
         &mut self,
-        map: &mut TreeMap<K, E::Value>,
+        map: &mut HashMap<K, E::Value>,
     ) -> Result<bool, DecodeError> {
         if self.wire_type != WireType::Len {
             return Result::Ok(false);

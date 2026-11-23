@@ -4,7 +4,7 @@
 //! Supports `http`, `https`, `ws`, and `wss` schemes.
 
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError } from "core:serde";
 
 // The largest port a URL may name (WHATWG URL Standard, "port state").
@@ -291,8 +291,8 @@ fn split_query_part<S: AsStrSlice>(part: S) -> [StrSlice, StrSlice] {
 /// Input should not include the leading "?".
 /// Handles "+" as space and decodes percent-encoding.
 /// Duplicate keys use last-value-wins semantics.
-pub fn parse_query<S: AsStrSlice>(query: S) -> TreeMap<String, String> {
-    let mut result: TreeMap<String, String> = TreeMap::new();
+pub fn parse_query<S: AsStrSlice>(query: S) -> HashMap<String, String> {
+    let mut result: HashMap<String, String> = HashMap::new();
     if query.is_empty() {
         return result;
     }
@@ -309,7 +309,7 @@ pub fn parse_query<S: AsStrSlice>(query: S) -> TreeMap<String, String> {
 /// Formats key-value pairs into a query string (insertion-order preserved).
 /// Output does not include the leading "?".
 /// Keys and values are percent-encoded; spaces become "+".
-pub fn format_query(params: TreeMap<String, String>) -> String {
+pub fn format_query(params: HashMap<String, String>) -> String {
     let mut out = String::with_capacity(64);
     let entries = params.entries().iter_value().collect();
     for let mut i = 0; i < entries.len(); i += 1 {
@@ -541,14 +541,14 @@ impl Url {
         return url;
     }
 
-    /// Returns the query parameters as a `TreeMap`. Percent-encoded values
+    /// Returns the query parameters as a `HashMap`. Percent-encoded values
     /// are decoded; "+" becomes " ". Returns an empty map if there is no
     /// query component.
-    pub fn query_params(&self) -> TreeMap<String, String> {
+    pub fn query_params(&self) -> HashMap<String, String> {
         if let Some(q) = self.query {
             return parse_query(q);
         }
-        return TreeMap::new();
+        return HashMap::new();
     }
 
     /// Serializes the URL back to a string.
@@ -717,11 +717,11 @@ impl Url {
         });
     }
 
-    /// Parses the query string into a TreeMap (insertion-order preserved).
-    pub fn query_pairs(&self) -> TreeMap<String, String> {
+    /// Parses the query string into a HashMap (insertion-order preserved).
+    pub fn query_pairs(&self) -> HashMap<String, String> {
         return match self.query {
             Some(q) => parse_query(q),
-            null => TreeMap::new(),
+            null => HashMap::new(),
         };
     }
 
@@ -749,7 +749,7 @@ impl Url {
     }
 
     /// Returns a new Url with the query string replaced by the given params.
-    pub fn with_query_pairs(&self, params: TreeMap<String, String>) -> Url {
+    pub fn with_query_pairs(&self, params: HashMap<String, String>) -> Url {
         let mut q: Option<String> = null;
         if !params.is_empty() {
             q = Option::Some(format_query(params));

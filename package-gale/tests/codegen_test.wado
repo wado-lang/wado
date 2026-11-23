@@ -6569,7 +6569,7 @@ use { Environment, Exit } from "core:cli";
 use { Log } from "core:log";
 use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use fs from "core:fs";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Request, Response, Error as KilnError, InputFile } from "core:kiln";
 
 global EXPR: String = "grammar Expr;
@@ -6687,7 +6687,7 @@ fn gale_in<S: AsStrSlice>(dir: S, argv: List<String>) -> Run with (Preopens, Env
 
 /// Serves each input file's content from its stream, by the stream's identity.
 struct Inputs {
-    contents: TreeMap<ResourceId, ByteList> = TreeMap::<ResourceId, ByteList>::new(),
+    contents: HashMap<ResourceId, ByteList> = HashMap::<ResourceId, ByteList>::new(),
 }
 
 impl Inputs {
