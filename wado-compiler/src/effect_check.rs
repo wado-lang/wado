@@ -855,6 +855,15 @@ fn spelled_target_args(types: &TypeTable, def: DefId) -> Vec<FqTypeName> {
         .collect()
 }
 
+/// What [`EffectIndex::close_over_args`] does with an effect parameter of the
+/// impl that its arguments leave open: keep it in what the impl brings, or
+/// drop it for the caller to resolve.
+#[derive(Clone, Copy)]
+enum UnfilledParam {
+    Keep,
+    Drop,
+}
+
 /// The key one `impl Trait for Type` is recorded under. `None` for a trait
 /// reaching no declaration.
 fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKey> {
@@ -2699,9 +2708,16 @@ impl EffectIndex<'_> {
             for receiver_args in &receiver_arg_lists {
                 if let Some((declared, bounds, target_args)) = &selected {
                     brought.effects.extend(
-                        self.close_over_args(declared, bounds, target_args, receiver_args, None)
-                            .into_iter()
-                            .filter(|e| !e.is_param()),
+                        // One the receiver leaves open is resolved from the
+                        // method's bounds below.
+                        self.close_over_args(
+                            declared,
+                            bounds,
+                            target_args,
+                            receiver_args,
+                            None,
+                            UnfilledParam::Drop,
+                        ),
                     );
                 } else {
                     match impl_entry {
@@ -2711,6 +2727,7 @@ impl EffectIndex<'_> {
                             &entry.target_args,
                             receiver_args,
                             None,
+                            UnfilledParam::Keep,
                         )),
                         None => brought.open = true,
                     }
@@ -2831,6 +2848,7 @@ impl EffectIndex<'_> {
                         &entry.target_args,
                         args,
                         None,
+                        UnfilledParam::Keep,
                     ));
                 }
                 None => match self.blanket_for(*key, arg) {
@@ -2879,6 +2897,7 @@ impl EffectIndex<'_> {
         target_args: &[FqTypeName],
         args: &[FqTypeName],
         receiver: Option<&[TypeArg<'_>]>,
+        unfilled: UnfilledParam,
     ) -> IndexSet<EffectRef> {
         let mut out: IndexSet<EffectRef> = IndexSet::default();
         for effect in declared {
@@ -2908,7 +2927,9 @@ impl EffectIndex<'_> {
             }
             out.extend(brought.effects);
             // One bound left open keeps the parameter, whatever the others fill.
-            if brought.open || !(filled || brought.determined) {
+            if matches!(unfilled, UnfilledParam::Keep)
+                && (brought.open || !(filled || brought.determined))
+            {
                 out.insert(effect.clone());
             }
         }
@@ -2944,6 +2965,7 @@ impl EffectIndex<'_> {
             &spelled_target_args(self.types, block),
             &args,
             Some(&receiver),
+            UnfilledParam::Keep,
         )
     }
 
