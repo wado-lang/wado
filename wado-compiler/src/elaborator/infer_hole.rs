@@ -452,7 +452,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// of it: an unrolled tuple `for-of` and a default argument elaborate one
     /// `_` many times, each a use of its own.
     pub(super) fn written_hole(&mut self, span: Span) -> TypeId {
-        let var = self.mint_infer_var();
+        let var = self.mint_infer_var_named("_");
         self.infer_holes.written.push((span, var));
         var
     }
@@ -520,6 +520,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.equate(hole, blamed);
         self.unwrite_holes_in(hole);
         blamed
+    }
+
+    /// Run `resolve`, and let the `_`s it wrote go unreported where it answers
+    /// `error`: the error it reported is the whole fault.
+    pub(super) fn unwriting_holes_on_error(
+        &mut self,
+        resolve: impl FnOnce(&mut Self) -> TypeId,
+    ) -> TypeId {
+        let before = self.infer_holes.written.len();
+        let resolved = resolve(self);
+        if resolved == TypeTable::ERROR {
+            self.infer_holes.written.truncate(before);
+        }
+        resolved
     }
 
     /// Let the `_`s `ty` holds go unreported: a site that resolves what they

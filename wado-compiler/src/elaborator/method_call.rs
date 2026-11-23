@@ -2008,10 +2008,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
             return true;
         }
-        let pointee = self.tysys.type_table.borrow().peel_refs(receiver_type);
+        let mut pointee = self.tysys.type_table.borrow().peel_refs(receiver_type);
         let spelled = &match spelled.ty() {
             Some(ty) if self.holds_written_hole(ty) => {
                 self.equate(pointee, ty);
+                pointee = self.apply_infer_holes(pointee);
                 spelled.at_type(Some(self.apply_infer_holes(ty)))
             }
             Some(_) | None => spelled.clone(),
@@ -2420,8 +2421,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
-    /// which is what a `Trait::<T>::method(…)` spelling names.
+    /// which is what a `Trait::<T>::method(…)` spelling names. A call that
+    /// reported its error leaves the `_`s it wrote unreported, since no answer
+    /// to one could make it resolve.
     pub(super) fn resolve_static_method_call_of_trait(
+        &mut self,
+        static_call: &ast::StaticMethodCallExpr,
+        required: (Option<DefId>, &[TypeId]),
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        self.unwriting_holes_on_error(|e| {
+            e.resolve_static_method_call_reporting(static_call, required, ctx, expected_type)
+        })
+    }
+
+    fn resolve_static_method_call_reporting(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
         // The trait a qualified spelling names, and the arguments it writes
@@ -2884,7 +2899,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
-        let mut args: Vec<TypeId> = if receiver_holes.is_empty() {
+        let written_vars: IndexSet<TypeId> = receiver_holes
+            .iter()
+            .copied()
+            .chain(self.vars_holding_written_holes(&method_type_args))
+            .collect();
+        let args: Vec<TypeId> = if written_vars.is_empty() {
             static_call
                 .args
                 .iter()
@@ -2895,12 +2915,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         } else {
-            let inst = Instantiated::of_vars(receiver_holes.clone());
             // The expected type answers a `_` before a literal under it takes
-            // its default. A newtype's inherited static is read at its base,
-            // which the expected type is not.
-            let ret = match (&callee_sig, expected_type) {
-                (Some(sig), Some(expected)) if newtype.is_none() => {
+            // its default. A newtype's inherited static is read at its base.
+            let (_, expected_at_base) =
+                self.at_inherited_base(newtype, declaring_link, &[], expected_type);
+            let ret = match (&callee_sig, expected_at_base) {
+                (Some(sig), Some(expected)) => {
                     let declaring = sig
                         .declaring_impl
                         .map(|id| self.tysys.signatures.impl_sig(id));
@@ -2914,15 +2934,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .return_type;
                     Some(ExpectedReturn { declared, expected })
                 }
-                _ => None,
+                (None, _) | (Some(_), None) => None,
             };
-            let args = self.resolve_args_against_params(
-                &static_call.args,
-                ctx,
-                &param_types,
-                Some(&inst),
-                ret,
-            );
+            let inst = Instantiated::of_vars(written_vars.into_iter().collect());
+            self.resolve_args_against_params(&static_call.args, ctx, &param_types, Some(&inst), ret)
+        };
+        let mut args: Vec<TypeId> = if receiver_holes.is_empty() {
+            args
+        } else {
             let (at_base, expected_at_base) =
                 self.at_inherited_base(newtype, declaring_link, &args, expected_type);
             // A `_` is answered as the bare spelling answers the slot it

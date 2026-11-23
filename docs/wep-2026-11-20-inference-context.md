@@ -191,10 +191,13 @@ Each step keeps every fixture passing and deletes what it replaces.
   literal's turbofish names its slots, as a call's does.
 - [x] A `_` standing for a whole turbofish slot, or anywhere in a path's type
   argument, is a variable. A call's slot meets it, and the solve counts it
-  among its own variables. A static call's receiver and a case path meet the
+  among its own variables. A static call (its receiver and its own slots, a
+  newtype's inherited static read at the base) and a case path meet the
   expected type before their arguments are typed, so a literal under a `_`
   waits for it. A case path's `_` for a whole slot is that slot omitted
-  (`omit_bare_written_holes`), which the construction infers and reports.
+  (`omit_bare_written_holes`), which the construction infers and reports. An
+  associated constant's prefix reads no argument, so its `_`s ask for nothing.
+  A call that reports its own error leaves its `_`s unreported.
 - [ ] A `_` in a `let` annotation and after `as` is a variable.
 - [ ] The context is per body rather than per module.
 

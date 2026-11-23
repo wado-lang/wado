@@ -1258,9 +1258,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.value_without_turbofish(ident, assoc.ty);
             }
             self.reject_unresolved_args(&ident.type_args);
+            // The constant reads no argument, so a `_` among them asks for
+            // nothing, as an omitted one does.
             let owner_type = self.with_writable_holes(|e| {
                 e.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span)
             });
+            self.unwrite_holes_in(owner_type);
             return if owner_type == TypeTable::ERROR {
                 TypeTable::ERROR
             } else {

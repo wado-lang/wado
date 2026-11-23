@@ -28,6 +28,37 @@ impl<T> Bx<T> {
     fn empty() -> Bx<Option<T>> {
         return Bx { v: null };
     }
+
+    fn pair<U>(v: T, u: U) -> [T, U] {
+        return [v, u];
+    }
+
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+type W<T> = Bx<T>;
+
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+test "a method's own slot" {
+    let p: [List<i64>, i64] = Bx::<List<i64>>::pair::<_>([1], 5_000_000_000);
+    assert p.1 == 5_000_000_000;
+}
+
+test "a newtype's inherited static" {
+    let b: W<i64> = W::<_>::make(5_000_000_000);
+    let c: W<List<i64>> = W::<List<_>>::make([5_000_000_000]);
+    assert b.v == 5_000_000_000 && c.v[0] == 5_000_000_000;
+}
+
+test "a qualified call's receiver holding a variable" {
+    let b = Bx::make(none());
+    let g: Option<i32> = Bx::<Option<_>>::get(&b);
+    assert g == null;
 }
 
 test "a path" {

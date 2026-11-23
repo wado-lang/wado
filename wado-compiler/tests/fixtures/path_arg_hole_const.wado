@@ -1,0 +1,14 @@
+// An associated constant reads none of its prefix's arguments, so a `_` among
+// them asks for nothing, as an omitted one does.
+
+struct Bx<T> {
+    v: T,
+}
+
+impl<T> Bx<T> {
+    const K: i32 = 7;
+}
+
+test {
+    assert Bx::<_>::K == 7 && Bx::<List<_>>::K == Bx::K;
+}
