@@ -511,10 +511,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Run `resolve`, and close each `_` it wrote that is still open where it
     /// reported an error: that error is the whole fault, so neither the `_`
     /// nor the slot it fills asks for itself as well.
-    pub(super) fn closing_holes_on_error(
-        &mut self,
-        resolve: impl FnOnce(&mut Self) -> TypeId,
-    ) -> TypeId {
+    pub(super) fn closing_holes_on_error<R>(&mut self, resolve: impl FnOnce(&mut Self) -> R) -> R {
         let holes_before = self.infer_holes.written.len();
         let errors_before = self.logger.offered_error_count();
         let resolved = resolve(self);

@@ -2649,9 +2649,10 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
         self.known = outer;
     }
 
-    /// A turbofish argument, on a call or on a path segment, where a `_` at
-    /// any depth is a variable.
-    fn visit_turbofish_arg(&mut self, ty: &Type) {
+    /// A type an expression writes: a turbofish argument, on a call or on a
+    /// path segment, a `let` annotation or an `as` target, where a `_` at any
+    /// depth is a variable.
+    fn visit_inferable_type(&mut self, ty: &Type) {
         let outer = std::mem::replace(&mut self.allow_infer, true);
         self.visit_type(ty);
         self.allow_infer = outer;
@@ -2682,12 +2683,8 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if let Stmt::Let(let_stmt) = stmt
             && let Some(ty) = &let_stmt.ty
-            && let Some(span) = first_infer_span(ty)
         {
-            self.allow_infer = true;
-            self.visit_type(ty);
-            self.allow_infer = false;
-            self.report(TypeError::InferInLetAnnotation { span });
+            self.visit_inferable_type(ty);
             if let Some(value) = &let_stmt.value {
                 self.visit_expr(value);
             }
@@ -2701,16 +2698,18 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            // Whether a `_` slot is answerable depends on what the path names,
-            // so the function-value path rejects it where it resolves.
             Expr::Ident(ident) => {
                 for ty in &ident.type_args {
-                    self.visit_turbofish_arg(ty);
+                    self.visit_inferable_type(ty);
                 }
+            }
+            Expr::Cast(cast) => {
+                self.visit_expr(&cast.expr);
+                self.visit_inferable_type(&cast.target_type);
             }
             Expr::Call(call) => {
                 for ty in &call.type_args {
-                    self.visit_turbofish_arg(ty);
+                    self.visit_inferable_type(ty);
                 }
                 self.visit_expr(&call.callee);
                 for arg in &call.args {
@@ -2719,7 +2718,7 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
             }
             Expr::MethodCall(mc) => {
                 for ty in &mc.type_args {
-                    self.visit_turbofish_arg(ty);
+                    self.visit_inferable_type(ty);
                 }
                 self.visit_expr(&mc.receiver);
                 for arg in &mc.args {
@@ -2731,7 +2730,7 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
                 match &smc.target_type {
                     Type::Generic(_) | Type::NamespacedGeneric(_) => {
                         for arg in written_arg_nodes(&smc.target_type) {
-                            self.visit_turbofish_arg(arg);
+                            self.visit_inferable_type(arg);
                         }
                     }
                     other => self.visit_type(other),
@@ -2740,7 +2739,7 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
                     self.visit_type(self_type);
                 }
                 for ty in &smc.type_args {
-                    self.visit_turbofish_arg(ty);
+                    self.visit_inferable_type(ty);
                 }
                 for arg in &smc.args {
                     self.visit_expr(arg);
@@ -2748,7 +2747,7 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
             }
             Expr::StructLiteral(sl) => {
                 for ty in &sl.type_args {
-                    self.visit_turbofish_arg(ty);
+                    self.visit_inferable_type(ty);
                 }
                 for field in &sl.fields {
                     self.visit_expr(&field.value);

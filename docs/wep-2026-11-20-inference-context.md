@@ -204,7 +204,9 @@ Each step keeps every fixture passing and deletes what it replaces.
   nothing. Wherever it sits, an unsettled `_` reports as its slot would, and
   an expression that reports its own error leaves its `_`s unreported. A check
   whose types part around a `_` reports the mismatch at once.
-- [ ] A `_` in a `let` annotation and after `as` is a variable.
+- [x] A `_` in a `let` annotation and after `as` is a variable. A cast's is
+  settled by the expected type and the operand at the cast, and reported
+  there where they leave it open, since the cast judges its conversion then.
 - [ ] The context is per body rather than per module.
 
 ## Known gaps

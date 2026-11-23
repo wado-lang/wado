@@ -1,0 +1,15 @@
+// A `_` in a `let` annotation or after `as` that nothing settles is reported
+// where it was written, and one that cannot meet the value leaves the
+// mismatch alone to report.
+
+export fn run() {
+    let _xs: List<_> = [];
+    let _n = 3 as _;
+    let _s: List<_> = "x";
+}
+
+__DATA__
+{
+    "compile_error": ":7:19: analysis error: cannot infer the type this `_` stands for; write it in its place; 8:23: type mismatch: expected 'List<_>', found 'String'; 6:19: cannot infer the type this `_` stands for; write it in its place",
+    "compile_error_count": 1
+}

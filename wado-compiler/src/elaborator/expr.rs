@@ -770,7 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::TaggedTemplate(tagged) => {
                 self.resolve_tagged_template(tagged, ctx, expected_type)
             }
-            Expr::Cast(cast) => self.resolve_cast(cast, ctx),
+            Expr::Cast(cast) => self.resolve_cast(cast, ctx, expected_type),
             Expr::StructLiteral(struct_lit) => {
                 self.resolve_struct_literal(struct_lit, ctx, expected_type)
             }
@@ -3816,6 +3816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         cast: &ast::CastExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
         // A cast names its own result type, so nothing downstream reports an
         // unresolved target: reify's `ann_expression_types` filters the
@@ -3823,7 +3824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.reject_unresolved_annotation(&cast.target_type) {
             return TypeTable::ERROR;
         }
-        let target_type = self.resolve_type(&cast.target_type);
+        let target_type = self.with_writable_holes(|e| e.resolve_type(&cast.target_type));
         if target_type == TypeTable::UNKNOWN {
             let _ = self.emit(TypeError::UnknownType {
                 name: self.get_type_name_full(&cast.target_type),
@@ -3831,7 +3832,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return TypeTable::ERROR;
         }
+        if !self.holds_written_hole(target_type) {
+            return self.resolve_cast_to(cast, ctx, target_type);
+        }
+        // The expected type answers a `_` before the operand reads the target,
+        // and what the cast leaves open is reported here: a cast names its
+        // own type, and judges the conversion to it now.
+        if let Some(expected) = expected_type {
+            self.equate(target_type, expected);
+        }
+        let open_target = self.is_bare_written_hole(target_type);
+        let resolved = if open_target {
+            self.resolve_expr(&cast.expr, ctx, None);
+            TypeTable::ERROR
+        } else {
+            let target_type = self.apply_infer_holes(target_type);
+            self.resolve_cast_to(cast, ctx, target_type)
+        };
+        let open: Vec<TypeId> = self
+            .vars_holding_written_holes(&[target_type])
+            .into_iter()
+            .collect();
+        if !open.is_empty() {
+            self.close_uninferred(&open);
+            return TypeTable::ERROR;
+        }
+        self.apply_infer_holes(resolved)
+    }
 
+    /// [`Self::resolve_cast`] to `target_type`, which holds no `_`.
+    fn resolve_cast_to(
+        &mut self,
+        cast: &ast::CastExpr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> TypeId {
         // `[1, 2, 3] as List<i32>`, `[1, 2, 3] as SeqVec<i32>`
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
             return coerced;
