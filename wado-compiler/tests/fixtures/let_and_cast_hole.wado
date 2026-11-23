@@ -17,14 +17,17 @@ test "a let annotation" {
     let xs: List<_> = [1, 2];
     let b: Bx<_> = Bx { v: "s" };
     let o: Option<_> = none::<i64>();
-    assert xs.len() == 2 && b.v == "s" && o == null;
+    let p: Option<_> = Option::Some(42);
+    assert xs.len() == 2 && b.v == "s" && o == null && p == Option::Some(42);
 }
 
 test "a let annotation settled by a later use" {
     let mut xs: List<_> = [];
     xs.push(5_000_000_000 as i64);
     let ys: List<_> = [];
-    assert xs[0] == 5_000_000_000 && take64(ys) == 0;
+    let mut zs: Array<_> = Array::new(3);
+    zs[0] = 1;
+    assert xs[0] == 5_000_000_000 && take64(ys) == 0 && zs[0] == 1;
 }
 
 test "a destructuring let" {
