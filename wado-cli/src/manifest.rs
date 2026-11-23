@@ -255,10 +255,6 @@ pub const LIB_WORLD_NAME: &str = wado_compiler::wit_emit::LIB_WORLD_NAME;
 /// A library FQ `namespace:name/<segment>@version`, rejecting a package name
 /// that (case-insensitively) equals the reserved [`LIB_WORLD_NAME`].
 fn lib_fq(pkg: &wado_manifest::Package, segment: &str) -> Result<String, CliExit> {
-    let namespace = pkg
-        .namespace
-        .as_deref()
-        .ok_or_else(|| CliExit::error("`--lib` requires `[package].namespace` in wado.toml"))?;
     if pkg.name.eq_ignore_ascii_case(LIB_WORLD_NAME) {
         return Err(CliExit::error(format!(
             "[package].name {name:?} is reserved: a library's world is named \
@@ -268,6 +264,7 @@ fn lib_fq(pkg: &wado_manifest::Package, segment: &str) -> Result<String, CliExit
     }
     Ok(format!(
         "{namespace}:{name}/{segment}@{version}",
+        namespace = pkg.namespace,
         name = pkg.name,
         version = pkg.version,
     ))
@@ -825,7 +822,7 @@ authors = ["Alice"]
         let pkg = project.manifest.package.unwrap();
         assert_eq!(pkg.name, "core");
         assert_eq!(pkg.version, "0.1.0");
-        assert_eq!(pkg.namespace.as_deref(), Some("org"));
+        assert_eq!(pkg.namespace, "org");
         assert_eq!(pkg.license.as_deref(), Some("MIT"));
     }
 

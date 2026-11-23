@@ -9,7 +9,7 @@ use crate::args::{self, CliExit};
 #[derive(Debug)]
 pub struct InitOptions {
     pub name: String,
-    pub namespace: Option<String>,
+    pub namespace: String,
     pub force: bool,
 }
 
@@ -36,7 +36,7 @@ impl Opt {
                 long: Some("namespace"),
                 short: None,
                 value: Some("<ns>"),
-                desc: "Package namespace (optional, required for publishing)",
+                desc: "Package namespace (required)",
             },
             Self::Force => args::OptSpec {
                 long: Some("force"),
@@ -89,6 +89,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<InitOptions, CliExit> {
     }
 
     let name = name.ok_or_else(|| CliExit::error_with_usage("--name is required", &usage))?;
+    let namespace =
+        namespace.ok_or_else(|| CliExit::error_with_usage("--namespace is required", &usage))?;
 
     Ok(InitOptions {
         name,
@@ -106,7 +108,7 @@ pub fn run(opts: InitOptions) -> Result<(), CliExit> {
         ));
     }
 
-    let content = generate_manifest(&opts.name, opts.namespace.as_deref());
+    let content = generate_manifest(&opts.name, &opts.namespace);
 
     fs::write(manifest_path, &content)
         .map_err(|e| CliExit::error(format!("writing wado.toml: {e}")))?;
@@ -114,12 +116,10 @@ pub fn run(opts: InitOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
-fn generate_manifest(name: &str, namespace: Option<&str>) -> String {
+fn generate_manifest(name: &str, namespace: &str) -> String {
     let mut buf = String::new();
     buf.push_str("[package]\n");
-    if let Some(ns) = namespace {
-        writeln!(buf, "namespace = \"{ns}\"").unwrap();
-    }
+    writeln!(buf, "namespace = \"{namespace}\"").unwrap();
     writeln!(buf, "name = \"{name}\"").unwrap();
     writeln!(buf, "version = \"0.1.0\"").unwrap();
     buf.push_str("\n[world]\n");
@@ -132,36 +132,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generate_manifest_minimal() {
-        let result = generate_manifest("my-app", None);
-        assert!(result.contains("name = \"my-app\""));
-        assert!(result.contains("version = \"0.1.0\""));
-        assert!(result.contains("[world]"));
-        assert!(result.contains("\"wasi:cli/command\" = \"src/main.wado\""));
-        assert!(!result.contains("namespace"));
-    }
-
-    #[test]
-    fn generate_manifest_with_namespace() {
-        let result = generate_manifest("my-app", Some("myorg"));
-        assert!(result.contains("namespace = \"myorg\""));
-        assert!(result.contains("name = \"my-app\""));
+    fn generated_manifest_parses() {
+        let result = generate_manifest("my-app", "myorg");
+        let manifest: wado_manifest::Manifest = result.parse().unwrap();
+        assert_eq!(
+            manifest.package.as_ref().unwrap().coordinate(),
+            "myorg:my-app@0.1.0"
+        );
+        assert_eq!(
+            manifest.world_entry("wasi:cli/command"),
+            Some("src/main.wado")
+        );
     }
 
     #[test]
     fn parse_args_requires_name() {
-        let parser = lexopt::Parser::from_args(Vec::<String>::new());
+        let parser = lexopt::Parser::from_args(vec!["--namespace", "myorg"]);
         let err = parse_args(parser).unwrap_err();
         assert_eq!(err.exit_code, 1);
         assert!(err.message.contains("--name is required"));
     }
 
     #[test]
-    fn parse_args_with_name() {
+    fn parse_args_requires_namespace() {
         let parser = lexopt::Parser::from_args(vec!["--name", "my-app"]);
-        let opts = parse_args(parser).unwrap();
-        assert_eq!(opts.name, "my-app");
-        assert!(opts.namespace.is_none());
+        let err = parse_args(parser).unwrap_err();
+        assert_eq!(err.exit_code, 1);
+        assert!(err.message.contains("--namespace is required"));
     }
 
     #[test]
@@ -169,6 +166,6 @@ mod tests {
         let parser = lexopt::Parser::from_args(vec!["--name", "my-app", "--namespace", "myorg"]);
         let opts = parse_args(parser).unwrap();
         assert_eq!(opts.name, "my-app");
-        assert_eq!(opts.namespace.as_deref(), Some("myorg"));
+        assert_eq!(opts.namespace, "myorg");
     }
 }

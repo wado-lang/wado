@@ -48,7 +48,7 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 "#;
     let m: Manifest = toml.parse().unwrap();
     let pkg = m.package.as_ref().unwrap();
-    assert_eq!(pkg.namespace.as_deref(), Some("myorg"));
+    assert_eq!(pkg.namespace, "myorg");
     assert_eq!(pkg.name, "my-app");
     assert_eq!(pkg.version, "0.1.0");
     assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));

@@ -256,7 +256,7 @@ pub struct TestSettings {
 /// The `[package]` section of `wado.toml`.
 #[derive(Debug, Clone)]
 pub struct Package {
-    pub namespace: Option<String>,
+    pub namespace: String,
     pub name: String,
     pub version: String,
     /// Entry-point module exposed when the package is consumed as a
@@ -292,21 +292,17 @@ pub struct Package {
     /// Minimum Wado compiler version required to build (a semver requirement,
     /// e.g. `">=0.5"`).
     pub wado_version: Option<String>,
-    /// Whether the package may be published. `false` opts out even when a
-    /// `namespace` is present. Defaults to `true`.
+    /// Whether the package may be published. Defaults to `true`.
     pub publish: bool,
     /// Unknown `[package]` keys (typos, unsupported). Reported as warnings.
     pub unknown_fields: Vec<String>,
 }
 
 impl Package {
-    /// `namespace:name@version`, or `name@version` with no namespace.
+    /// `namespace:name@version`.
     #[must_use]
     pub fn coordinate(&self) -> String {
-        match &self.namespace {
-            Some(namespace) => format!("{namespace}:{}@{}", self.name, self.version),
-            None => format!("{}@{}", self.name, self.version),
-        }
+        format!("{}:{}@{}", self.namespace, self.name, self.version)
     }
 
     /// Homepage, falling back to the repository URL when unset.
@@ -832,8 +828,12 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         section: "package".to_string(),
         field: "version".to_string(),
     })?;
+    let namespace = raw.namespace.ok_or_else(|| ManifestError::MissingField {
+        section: "package".to_string(),
+        field: "namespace".to_string(),
+    })?;
     Ok(Package {
-        namespace: raw.namespace,
+        namespace,
         name,
         version,
         lib: raw.lib,
@@ -1114,6 +1114,7 @@ mod tests {
     fn parse_minimal() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "my-app"
 version = "0.1.0"
 
@@ -1122,10 +1123,18 @@ version = "0.1.0"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         let pkg = m.package.as_ref().unwrap();
-        assert_eq!(pkg.name, "my-app");
-        assert_eq!(pkg.version, "0.1.0");
+        assert_eq!(pkg.coordinate(), "acme:my-app@0.1.0");
         assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));
-        assert!(pkg.namespace.is_none());
+    }
+
+    #[test]
+    fn a_package_without_a_namespace_is_refused() {
+        let toml = "[package]\nname = \"my-app\"\nversion = \"0.1.0\"\n";
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "missing required field `namespace` in [package]"
+        );
     }
 
     #[test]
@@ -1886,7 +1895,7 @@ lib = "src/lib.wado"
             pkg.repository.as_deref(),
             Some("https://github.com/org/monorepo")
         );
-        assert_eq!(pkg.namespace.as_deref(), Some("org"));
+        assert_eq!(pkg.namespace, "org");
         assert_eq!(pkg.license.as_deref(), Some("MIT"));
         assert_eq!(pkg.authors, vec!["Alice <a@example.com>"]);
         assert_eq!(pkg.name, "core");

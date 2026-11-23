@@ -81,6 +81,7 @@ other mistake in a manifest is an error. `[workspace]` is one: it belongs in a
 
 ```toml
 [package]
+namespace = "acme"
 name = "geo"
 version = "0.2.0"
 descripton = "Plane geometry"   # warning: unknown field "descripton" in [package] (ignored)
@@ -114,7 +115,7 @@ wado-version = ">=0.5"
 | ---------------------- | -------- | -------- | --------------------------------------------------------------------------- |
 | `name`                 | string   | yes      | The package's name                                                          |
 | `version`              | string   | yes      | The package's version, in semantic versioning (`0.2.0`)                     |
-| `namespace`            | string   | no       | The organization or person the package belongs to                           |
+| `namespace`            | string   | yes      | The organization or person the package belongs to                           |
 | `lib`                  | string   | no       | The entry module of the package's library world                             |
 | `exports`              | string[] | no       | Further files other packages may import ([Exported Files](#exported-files)) |
 | `description`          | string   | no       | A short summary                                                             |
@@ -138,9 +139,8 @@ namespace = "acme"   # coordinate: acme:geo
 name = "geo"
 ```
 
-A package with no `namespace` has no coordinate. It cannot be published, which
-suits an application or an internal tool. Other packages can still depend on it
-through a `path` or `git` source and a `lib:` key.
+Every package has a coordinate, published or not. An application or an internal
+tool takes one too, and `publish = false` keeps it out of a registry.
 
 `version` is a full semantic version, so `0.1` is an error. `wado-version` is a
 semantic-versioning requirement, such as `>=0.5`.
@@ -150,6 +150,7 @@ error. `license` and `license-file` exclude each other.
 
 ```toml
 [package]
+namespace = "acme"
 name = "geo"
 version = "0.2.0"
 license = "MIT"
@@ -339,9 +340,8 @@ specifier, or from an inline source on the `use`. An undeclared coordinate or
 alias is an error.
 
 A key under an open namespace is the dependency's own coordinate. `lib` is the
-one place an alias lives. An alias renames a dependency, shortens its name,
-tells two major versions apart, or names a dependency with no public
-coordinate. A `lib:` key names the coordinate it stands for with its `package`
+one place an alias lives. An alias renames a dependency, shortens its name, or
+tells two major versions apart. A `lib:` key names the coordinate it stands for with its `package`
 field ([Registry Sources](#registry-sources)).
 
 ```toml
@@ -588,8 +588,7 @@ Built on its own, the library world is a component. It exports one interface,
 the package's default interface, which carries every `export` item of the entry
 module and no `pub`-only item. Its functions never become world-level exports,
 whatever their signatures name. The interface is named after the package,
-`<namespace>:<name>/<name>@<version>`, so building it needs
-`[package].namespace`. The world itself is named `root`, so no package may take
+`<namespace>:<name>/<name>@<version>`. The world itself is named `root`, so no package may take
 that name, in any letter case. An entry module that exports nothing gives the
 component no interface, and building it is an error.
 
@@ -725,7 +724,6 @@ workspace resolves every member against.
 Publishing puts a package in a registry, under its coordinate. A package is
 publishable when all of these hold:
 
-- `[package]` has a `namespace`, so the package has a coordinate.
 - `[package].publish` is not `false`.
 - `[package]` has a `description`, a `repository` and at least one entry in
   `authors`.
