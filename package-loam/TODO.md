@@ -22,7 +22,8 @@ beside the roadmap and holds no item up.
    llama.cpp's Vulkan arms
    ([measured](./benchmark/README.md#gpt-oss-20b)). Loading the model is not
    timed. [The Experts on WebGPU](./docs/experts-on-webgpu.md) sketches
-   making a pass cheap on the host.
+   making a pass cheap on the host, and [Experts on the CPU](./docs/cpu-experts.md)
+   computing the experts the device lacks.
 
 ## Later
 
