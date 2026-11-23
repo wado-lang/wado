@@ -18,6 +18,7 @@ use {
     alt_has_gate,
     alt_meets_gate,
     alt_scan_gate_conditions,
+    GateCond,
     gate_condition_for,
     predicates_met_entering,
 } from "./gate_conditions.wado";
@@ -98,11 +99,6 @@ pub struct EmitCursor {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32> = [],
-    /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
-    /// fns: `[predicate_fn_id, body]`. The dispatch calls `pred_<id>(p)` instead of
-    /// inlining the condition, so the same fn is callable from every decision
-    /// path (token-led / interchangeable dispatch and the ATN's disabled alternatives).
-    predicate_fns: List<[i32, String]> = [],
 }
 
 impl EmitCursor {
@@ -256,6 +252,11 @@ impl EmitCursor {
         return name;
     }
 
+    /// The text of `cond`, the fn it calls recorded as `note_ref` records one.
+    pub fn take_cond(&mut self, cond: GateCond) -> String {
+        return cond.text_noting(|name| self.note_ref(name));
+    }
+
     pub fn next_scan_id(&mut self) -> i32 {
         return self.scan_ids.next();
     }
@@ -304,11 +305,6 @@ impl EmitCursor {
     /// Whether the dispatch resolves predicate `id`.
     pub fn is_predicate_gated(&self, id: i32) -> bool {
         return self.predicate_gated.contains(&id);
-    }
-
-    /// The standalone predicate fns registered so far, as `[id, body]`.
-    pub fn predicate_fns(&self) -> &List<[i32, String]> {
-        return &self.predicate_fns;
     }
 }
 
@@ -456,7 +452,7 @@ impl EmitContext {
     }
 
     /// `gate_conditions::gate_condition_for` at the alternative being emitted.
-    pub fn gate_condition(&self, a: &AltAction, handle: &String = &PARSER_HANDLE) -> Option<String> {
+    pub fn gate_condition(&self, a: &AltAction, handle: &String = &PARSER_HANDLE) -> Option<GateCond> {
         return gate_condition_for(a, &self.settings, &self.analysis, &self.predicate_site(), handle);
     }
 
@@ -533,18 +529,6 @@ impl EmitContext {
     /// Whether a body of the rule being emitted names the binding `base`.
     pub fn names_binding<S: AsStrSlice>(&self, base: S) -> bool {
         return self.plan.names_binding(self.cursor.current_rule_index(), base);
-    }
-
-    /// Register a context-free gated predicate's body for a standalone
-    /// `pred_<id>(p)` fn, one per distinct body.
-    pub fn register_predicate_fn<S: AsStrSlice>(&mut self, action_id: i32, body: S) {
-        let id = self.analysis.predicate_fn_id(action_id);
-        for let e of &self.cursor.predicate_fns {
-            if e.0 == id {
-                return;
-            }
-        }
-        self.cursor.predicate_fns.push([id, body.to_string()]);
     }
 
     /// `scan_<snake>`, the name of a scan function rule `snake` defines, for
@@ -743,7 +727,7 @@ impl EmitContext {
     {
         let canonical = self.analysis.canonical_ids(*tokens);
         let analysis = &self.analysis;
-        let helper = self.kind_set_fns.hoist_fn(`${canonical:?}`, "_kind_set_", |w, name| {
+        let helper = self.kind_set_fns.intern_fn(`${canonical:?}`, "_kind_set_", |w, name| {
             let mut f = FnSpec::new(name);
             f.add_param({ name: "k", type: "i32" });
             f.set_return_type("bool");
@@ -758,7 +742,7 @@ impl EmitContext {
     /// may name a new one after.
     pub fn take_kind_set_fns(&mut self) -> CodeWriter {
         self.kind_set_fns_taken = true;
-        self.kind_set_fns.write_hoisted();
+        self.kind_set_fns.write_interned();
         return builtin::replace(&mut self.kind_set_fns, CodeWriter::with_capacity(0));
     }
 

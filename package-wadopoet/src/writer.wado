@@ -126,8 +126,8 @@ pub struct CodeWriter {
     fresh_line: bool,
     /// Per open block, whether it is a function body `FnSpec::emit` opened.
     fn_blocks: List<bool> = [],
-    hoisted_names: List<[String, String]> = [],
-    hoisted: List<CodeWriter> = [],
+    interned_names: List<[String, String]> = [],
+    interned_defs: List<CodeWriter> = [],
     pruned: bool = false,
 }
 
@@ -316,7 +316,7 @@ impl CodeWriter {
     /// Splice in what `other` wrote, indented to the current depth.
     pub fn append(&mut self, other: &CodeWriter)
         contract other.depth() == 0
-        contract !other.has_pending_hoisted(), "CodeWriter: an appended writer holds a hoisted definition never written"
+        contract !other.has_pending_interned(), "CodeWriter: an appended writer holds an interned definition never written"
     {
         self.flush_text();
         let text_base = self.buf.len();
@@ -431,48 +431,48 @@ impl CodeWriter {
 
     /// The name of a top-level function defined once per distinct `key`:
     /// `define` writes it, under the name it is handed, into a writer of its
-    /// own, and `write_hoisted` places what it wrote. A function `define`
-    /// hoists in turn joins this writer's queue, ahead of the one it serves.
-    pub fn hoist_fn<S: AsStrSlice, S1: AsStrSlice, effect E>(
+    /// own, and `write_interned` places what it wrote. A function `define`
+    /// interns in turn joins this writer's queue, ahead of the one it serves.
+    pub fn intern_fn<S: AsStrSlice, S1: AsStrSlice, effect E>(
         &mut self,
         key: S,
         prefix: S1,
         mut define: fn mut(&mut CodeWriter, String) with E,
     ) -> String with E
-        contract !self.pruned, "CodeWriter: nothing is hoisted after prune, which may drop what a key names"
+        contract !self.pruned, "CodeWriter: nothing is interned after prune, which may drop what a key names"
     {
-        if let Some(hit) = self.hoisted_names.iter_ref().find(|kn| kn.0 == key.as_str_slice()) {
+        if let Some(hit) = self.interned_names.iter_ref().find(|kn| kn.0 == key.as_str_slice()) {
             return hit.1;
         }
-        let mut n = self.hoisted_names.len();
-        while self.hoisted_names.iter_ref().any(|kn| kn.1 == `${prefix}${n}`) {
+        let mut n = self.interned_names.len();
+        while self.interned_names.iter_ref().any(|kn| kn.1 == `${prefix}${n}`) {
             n += 1;
         }
         let name = `${prefix}${n}`;
-        self.hoisted_names.push([key.to_string(), name]);
+        self.interned_names.push([key.to_string(), name]);
         let mut def = CodeWriter::with_capacity(256);
-        def.hoisted_names = self.hoisted_names;
+        def.interned_names = self.interned_names;
         define(&mut def, name);
-        self.hoisted_names = def.hoisted_names;
-        self.hoisted.extend(&def.hoisted);
-        def.hoisted = [];
-        def.hoisted_names = [];
-        self.hoisted.push(def);
+        self.interned_names = def.interned_names;
+        self.interned_defs.extend(&def.interned_defs);
+        def.interned_defs = [];
+        def.interned_names = [];
+        self.interned_defs.push(def);
         return name;
     }
 
-    /// Whether `hoist_fn` has queued a definition `write_hoisted` has not
+    /// Whether `intern_fn` has queued a definition `write_interned` has not
     /// written yet.
-    fn has_pending_hoisted(&self) -> bool {
-        return !self.hoisted.is_empty();
+    fn has_pending_interned(&self) -> bool {
+        return !self.interned_defs.is_empty();
     }
 
-    /// Write every definition `hoist_fn` has queued since the last call.
-    pub fn write_hoisted(&mut self)
-        contract self.depth() == 0, "CodeWriter: a hoisted function is written at the top level"
+    /// Write every definition `intern_fn` has queued since the last call.
+    pub fn write_interned(&mut self)
+        contract self.depth() == 0, "CodeWriter: an interned function is written at the top level"
     {
-        let defs = self.hoisted;
-        self.hoisted = [];
+        let defs = self.interned_defs;
+        self.interned_defs = [];
         for let def of &defs {
             self.append(def);
         }
@@ -490,7 +490,7 @@ impl CodeWriter {
     /// Return the generated code.
     pub fn to_string(&self) -> String
         contract self.depth() == 0
-        contract !self.has_pending_hoisted(), "CodeWriter: a hoisted definition was never written"
+        contract !self.has_pending_interned(), "CodeWriter: an interned definition was never written"
     {
         if self.segs.is_empty() && self.cur.text_start == 0 {
             return self.buf;
