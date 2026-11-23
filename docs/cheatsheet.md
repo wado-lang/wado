@@ -1955,10 +1955,9 @@ server.stop(5_000_000_000)?;   // terminate, then kill after 5 s (a wasi:clocks 
 
 ### core:collections
 
-`HashMap<K, V>` and `HashSet<T>` find a key by hashing it, and `TreeMap<K, V>`
-and `TreeSet<T>` by ordering it. All four iterate in insertion order and share
-one API. Reach for the hashed ones; a tree is for a key that is `Ord` but not
-`Hash`. See [`core:collections`](./stdlib-core-collections.md).
+`HashMap<K, V>` and `HashSet<T>`, iterating in insertion order. See
+[`core:collections`](./stdlib-core-collections.md). `TreeMap` and `TreeSet`
+offer the same API for a key that is `Ord` but not `Hash`.
 
 `HashMap<K, V>` is also the Wado spelling of the Component Model `map<K, V>`, so
 it crosses a component boundary. There `K` must be `bool`, `char`, `String`, or
