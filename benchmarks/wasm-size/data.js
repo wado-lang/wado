@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795448790358,
+  "lastUpdate": 1795449620403,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81677,6 +81677,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dc9edde5b55bb044a458a5a8818081e4b1dc271f"
         },
         "date": 1795448788978,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f1ed234bf721d8fb73d7b2c4265be311bb0e4be8",
+          "message": "Merge pull request #2740 from wado-lang/ccr-5b902256-qd9vgw\n\nfeat: include and generate from files a dependency exports",
+          "timestamp": "2026-11-24T00:46:45+09:00",
+          "tree_id": "cd985531dec421fe8f9057b506406aa90eef1943",
+          "url": "https://github.com/wado-lang/wado/commit/f1ed234bf721d8fb73d7b2c4265be311bb0e4be8"
+        },
+        "date": 1795449619559,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
