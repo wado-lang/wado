@@ -4,9 +4,7 @@
 
 use { HashMap } from "core:collections";
 use {
-    ExpertSlots,
     Experts,
-    Flat,
     Held,
     Hidden,
     Picked,
@@ -103,13 +101,41 @@ pub struct ProjectionNode {
 }
 
 impl ProjectionNode {
-    fn of<affine G: Graph, E: Float>(p: &Projection<G, E>) -> ProjectionNode {
+    pub fn of<affine G: Graph, E: Float>(p: &Projection<G, E>) -> ProjectionNode {
         return ProjectionNode {
             shape: p.shape,
             biased: p.bias matches { Some(_) },
             zero_points: p.zero_points matches { Some(_) },
         };
     }
+
+    /// Where its weights are from `first` on, in a `QMoE`'s order: the packed
+    /// weight, the scales, then the bias and the zero points where it has
+    /// them.
+    pub fn places(&self, first: i32) -> ProjectionPlaces {
+        let mut next = first + 2;
+        let mut bias: Option<i32> = null;
+        if self.biased {
+            bias = Option::Some(next);
+            next += 1;
+        }
+        let mut zero_points: Option<i32> = null;
+        if self.zero_points {
+            zero_points = Option::Some(next);
+            next += 1;
+        }
+        return ProjectionPlaces { packed: first, scales: first + 1, bias, zero_points, end: next };
+    }
+}
+
+/// Where a projection's weights are among a list of them, and the place past
+/// the last.
+pub struct ProjectionPlaces {
+    pub packed: i32,
+    pub scales: i32,
+    pub bias: Option<i32>,
+    pub zero_points: Option<i32>,
+    pub end: i32,
 }
 
 /// One operation of a recorded graph, with the attributes `Graph`'s method
@@ -1895,36 +1921,34 @@ impl<affine G: Graph> Run<G> {
             order: self.at(g, node, 5),
             count: self.at(g, node, 6),
         };
-        let mut next = MIXTURE_PROJECTIONS;
-        let first = self.projection_at::<E>(g, node, &mut next, &m.projections[0]);
-        let second = self.projection_at::<E>(g, node, &mut next, &m.projections[1]);
+        let up = m.projections[0].places(MIXTURE_PROJECTIONS);
+        let first = self.projection_at::<E>(g, node, &up, &m.projections[0]);
+        let second = self.projection_at::<E>(g, node, &m.projections[1].places(up.end), &m.projections[1]);
         let mixed = g.expert_mixture::<E>(&self.at(g, node, 0), &routing, &held, &[first, second], &m.experts);
         return g.relabeled::<f32, [Picked, Hidden], Untyped>(&mixed);
     }
 
-    /// The projection `p` of an expert mixture node, its operands from `next`
-    /// on, which then steps past them.
+    /// The projection `p` of an expert mixture node, its operands at `at`.
     fn projection_at<E: Erasable + Float>(
         &self,
         g: &G,
         node: &RecordedNode,
-        next: &mut i32,
+        at: &ProjectionPlaces,
         p: &ProjectionNode,
     ) -> Projection<G, E> {
-        let packed: G::Tensor<u8, [ExpertSlots, Flat]> = self.at(g, node, *next);
-        let scales: G::Tensor<E, [ExpertSlots, Flat]> = self.at(g, node, *next + 1);
-        *next += 2;
-        let mut bias: Option<G::Tensor<E, [ExpertSlots, Flat]>> = null;
-        if p.biased {
-            bias = Option::Some(self.at(g, node, *next));
-            *next += 1;
-        }
-        let mut zero_points: Option<G::Tensor<u8, [ExpertSlots, Flat]>> = null;
-        if p.zero_points {
-            zero_points = Option::Some(self.at(g, node, *next));
-            *next += 1;
-        }
-        return Projection { packed, scales, bias, zero_points, shape: p.shape };
+        return Projection {
+            packed: self.at(g, node, at.packed),
+            scales: self.at(g, node, at.scales),
+            bias: match at.bias {
+                Some(b) => Option::Some(self.at(g, node, b)),
+                null => null,
+            },
+            zero_points: match at.zero_points {
+                Some(z) => Option::Some(self.at(g, node, z)),
+                null => null,
+            },
+            shape: p.shape,
+        };
     }
 
     /// A quantized node's zero points, its last operand where it has them.

@@ -11,18 +11,18 @@ remains, on the RTX 4060 Ti machine:
 
 | What                                         | Figure                          |
 | -------------------------------------------- | ------------------------------- |
-| A token                                      | 157 ms, 6.39 tokens/s           |
-| The host thread busy                         | 75% of it, about 117 ms a token |
-| The device's kernels, each timed alone       | about 33 ms a pass              |
+| Throughput                                   | 6.39 tokens/s                   |
+| The host thread busy                         | 75% of a token                  |
+| The device's kernels, each timed alone       | about 21% of a token            |
 | Dispatches                                   | about 2,600 a pass, 108 a layer |
 | Of a layer's, the experts' and their routing | about 90                        |
 | Weights copied out of the pools              | about 1.2 GB a token            |
 
-The host's time splits into Loam's own code (30 ms a token), wgpu (28 ms), the
-driver (16 ms), the Component Model's lifts and lowers of the `wasi:webgpu`
-calls (14 ms), and allocation, the kernel and the collector (29 ms). Each
-dispatch costs the host about 45 us, so the dispatch count sets the time.
-Submitting every 64 dispatches rather than 16 changed nothing.
+Of the host's time, Loam's own code takes 26%, wgpu 24%, the driver 14%, the
+Component Model's lifts and lowers of the `wasi:webgpu` calls 12%, and
+allocation, the kernel and the collector 25%. Every dispatch costs the host
+about the same, so the dispatch count sets the time. Submitting every 64
+dispatches rather than 16 changed nothing.
 
 ```sh
 (cd package-loam/example/gpt-oss-20b && wado run-webgpu --no-spectre-mitigation --dir . profile.wado -- 5000000000 8)
@@ -90,10 +90,10 @@ describes.
 A layer's experts then take 2 dispatches a pick, 8 for gpt-oss-20b's 4, and
 nothing is copied out of a pool. The same step with the expert writes left out:
 
-| Experts                       | Throughput     | A token |
-| ----------------------------- | -------------- | ------- |
-| Decomposed                    | 6.39 tokens/s  | 157 ms  |
-| Two products a pick, in place | 24.28 tokens/s | 41.2 ms |
+| Experts                       | Throughput     |
+| ----------------------------- | -------------- |
+| Decomposed                    | 6.39 tokens/s  |
+| Two products a pick, in place | 24.28 tokens/s |
 
 ```sh
 (cd package-loam/benchmark && mise run gpt-oss-20b)

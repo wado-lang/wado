@@ -422,12 +422,19 @@ pub fn replayed(
         let next_use = |key: i32| -> i64 {
             return upcoming.get([shape.steps[first + key / shape.experts], key % shape.experts]).unwrap_or(i64::MAX);
         };
-        let most_filled = if f.tokens > 1 { shape.experts } else { step_fills };
-        for let placed of shared.slots.placed(layer - first, &f.experts, next_use, most_filled) {
+        let most = most_filled(f.tokens, f.experts.len(), shape.experts, step_fills);
+        for let placed of shared.slots.placed(layer - first, &f.experts, next_use, most) {
             counts.counted(placed, shape.slot_bytes);
         }
     }
     return Result::Ok([prompts, steps]);
+}
+
+/// The most of its misses a step of `tokens` picking `picked` of `experts`
+/// writes into slots: `step_fills` for one token whose mixture runs by picks,
+/// the only kind that reads a slot of -1, as `runs_by_picks` decides.
+fn most_filled(tokens: i32, picked: i32, experts: i32, step_fills: i32) -> i32 {
+    return if tokens == 1 && picked < experts { step_fills } else { experts };
 }
 
 /// Every layout's pools a model reads, and what the shared ones hold.
@@ -589,11 +596,10 @@ impl HeldExperts {
         let slot_bytes = layout.slot_bytes();
         let first = shared.run.first;
         let on_host = g.experts_on_host(&layout.quantized);
-        // Only a mixture that runs by picks reads a slot of -1, as `runs_by_picks` decides.
-        let by_picks = picks.extents[0] == 1 && picks.extents[1] < experts;
-        let most_filled = if on_host matches { Some(_) } && by_picks { self.step_fills } else { experts };
+        let step_fills = if on_host matches { Some(_) } { self.step_fills } else { experts };
+        let most = most_filled(picks.extents[0], picked.len(), experts, step_fills);
         let mut pools: List<Any<G>> = layout.weights[first].into_iter().map(|p| weights[p]).collect();
-        let placed = shared.slots.placed(layer - first, &picked, |_| unreachable(), most_filled);
+        let placed = shared.slots.placed(layer - first, &picked, |_| unreachable(), most);
         let mut loading: List<i32> = [];
         let mut into: List<i32> = [];
         for let [i, [slot, filled]] of placed.into_iter().enumerate() {

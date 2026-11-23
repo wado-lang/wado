@@ -81,6 +81,8 @@ use {
 use {
     Any,
     Operation,
+    ProjectionNode,
+    ProjectionPlaces,
     QuantizedNode,
     Recorded,
     RecordedNode,
@@ -104,7 +106,17 @@ use {
     sliced,
     slot_layout,
 } from "./webgpu.wado";
-use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture, runs_by_picks } from "./experts.wado";
+use {
+    Experts,
+    Held,
+    Hidden,
+    Picked,
+    Projection,
+    ProjectionShape,
+    Routing,
+    decomposed_mixture,
+    runs_by_picks,
+} from "./experts.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
 use { ExpertsOnHost, HostProjection, computes_on_host, expert_row } from "./cpu_experts.wado";
 use { LinearArray } from "core:linear";
@@ -952,8 +964,10 @@ fn by_picks<E: Float>(
     }
     if on_host {
         g.flush();
-        let host_up = host_projection(&g.experts_on_host, &up, experts.step, 0);
-        let host_down = host_projection(&g.experts_on_host, &down, experts.step, places(&up));
+        let up_at = ProjectionNode::of(&ffn.0).places(0);
+        let down_at = ProjectionNode::of(&ffn.1).places(up_at.end);
+        let host_up = host_projection(&g.experts_on_host, &up_at, up.shape, experts.step);
+        let host_down = host_projection(&g.experts_on_host, &down_at, down.shape, experts.step);
         let hidden = x.extents[1];
         for let t of 0..<tokens {
             let mut sum = List::<f32>::filled(hidden, 0.0);
@@ -989,33 +1003,24 @@ fn by_picks<E: Float>(
     return Option::Some(g.device_view(&mixed.unwrap()));
 }
 
-/// `pool`'s projection of every expert of the layer whose host step is `step`,
-/// as `host` holds it from place `first` on: the packed weight, the scales,
-/// then the bias and the zero points where it has them, as a `QMoE` orders
-/// its operands.
-fn host_projection(host: &ExpertsOnHost, pool: &ExpertPool, step: i32, first: i32) -> HostProjection {
-    let scales = host.of(step, first + 1);
+/// A projection of every expert of the layer whose host step is `step`, as
+/// `host` holds it at `at` among the layer's weights.
+fn host_projection(host: &ExpertsOnHost, at: &ProjectionPlaces, shape: ProjectionShape, step: i32) -> HostProjection {
+    let scales = host.of(step, at.scales);
     return HostProjection {
-        packed: host.of(step, first).bytes(),
+        packed: host.of(step, at.packed).bytes(),
         scales: scales.bytes(),
-        bias: match &pool.bias {
-            Some(_) => Option::Some(host.of(step, first + 2).bytes()),
+        bias: match at.bias {
+            Some(b) => Option::Some(host.of(step, b).bytes()),
             null => null,
         },
-        zero_points: match &pool.zero_points {
-            Some(_) => Option::Some(host.of(step, first + places(pool) - 1).bytes()),
+        zero_points: match at.zero_points {
+            Some(z) => Option::Some(host.of(step, z).bytes()),
             null => null,
         },
         kind: scales.kind,
-        shape: pool.shape,
+        shape,
     };
-}
-
-/// The places of `pool`'s weights among its layer's.
-fn places(pool: &ExpertPool) -> i32 {
-    let biased = pool.bias matches { Some(_) };
-    let zero_points = pool.zero_points matches { Some(_) };
-    return 2 + biased as i32 + zero_points as i32;
 }
 
 /// `p`'s pools on the device.

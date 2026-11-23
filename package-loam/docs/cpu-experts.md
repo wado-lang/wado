@@ -35,18 +35,18 @@ The sources are documents and papers, never code.
 On the RTX 4060 Ti machine, a Ryzen 7 5700X with 8 cores, 32 MiB of L3 and no
 AVX-512. One expert is 14,014,080 bytes as the `q4f16` export stores it.
 
-| What                                                                  | Figure                                     |
-| --------------------------------------------------------------------- | ------------------------------------------ |
-| One guest core, one product of i8 activations alone, DRAM             | 10.84 GB/s of stored bytes, 1.29 ms/expert |
-| One guest core, `cpu_experts.wado`'s whole expert, 15-bit activations | 4.68 GB/s, 3.0 ms/expert                   |
-| Host time of a write to a slot, one layer's `gate_up_proj` at once    | 3.96 GB/s                                  |
-| A slot's copy out of host memory, the write's first step              | 16.5 GB/s                                  |
-| GPU pools of 5 GB, `LayerOrder`: a step's experts held                | 80.8% of 1344, 258 MB loaded a token       |
-| The same, a step filling at most 2 slots a layer                      | 80.4%, 0.8% on the host, 253 MB a token    |
-| The same, a step filling at most 1                                    | 80.0%, 5.2% on the host, 199 MB a token    |
-| The same, a step filling none                                         | 69.0%, 31.0% on the host                   |
-| GPU pools of 5 GB, `Farthest` (the bound)                             | 87.1%                                      |
-| GPU pools of 6.3 GB, as llama.cpp's best arm, `Recent`                | 84.7%                                      |
+| What                                                                  | Figure                                  |
+| --------------------------------------------------------------------- | --------------------------------------- |
+| One guest core, one product of i8 activations alone, DRAM             | 10.84 GB/s of stored bytes              |
+| One guest core, `cpu_experts.wado`'s whole expert, 15-bit activations | 4.68 GB/s                               |
+| Host time of a write to a slot, one layer's `gate_up_proj` at once    | 3.96 GB/s                               |
+| A slot's copy out of host memory, the write's first step              | 16.5 GB/s                               |
+| GPU pools of 5 GB, `LayerOrder`: a step's experts held                | 80.8% of 1344, 258 MB loaded a token    |
+| The same, a step filling at most 2 slots a layer                      | 80.4%, 0.8% on the host, 253 MB a token |
+| The same, a step filling at most 1                                    | 80.0%, 5.2% on the host, 199 MB a token |
+| The same, a step filling none                                         | 69.0%, 31.0% on the host                |
+| GPU pools of 5 GB, `Farthest` (the bound)                             | 87.1%                                   |
+| GPU pools of 6.3 GB, as llama.cpp's best arm, `Recent`                | 84.7%                                   |
 
 ```sh
 (cd package-loam && wado run -O2 --no-spectre-mitigation tools/cpu_expert_speed.wado)
@@ -86,11 +86,11 @@ host computes 0.7% of them, and the writes take most of a token's time: the
 
 ## The budget
 
-The target, 1/1.5 of llama.cpp's 40.38 tokens/s, is 37.1 ms a token. At 5 GB
-the GPU lacks 19.2% of 96 picks, 18.4 experts, and one core computes them in
-24 ms. The GPU's own work overlaps that, so a token takes the longer of the
-two plus one round trip per layer. One core fits only if the GPU's part and 24
-round trips together take under about 13 ms.
+The target is 1/1.5 of llama.cpp's 40.38 tokens/s, which is 26.9 tokens/s. At
+5 GB the GPU lacks 19.2% of 96 picks, 18.4 experts. One core computes them in
+65% of a token's budget at that target. The GPU's own work overlaps that, so a
+token takes the longer of the two plus one round trip per layer. One core fits
+only if the GPU's part and 24 round trips together take under the other 35%.
 
 ## Constraints
 
