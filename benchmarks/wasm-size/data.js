@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795438918228,
+  "lastUpdate": 1795448790358,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81633,6 +81633,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aa1d2890a60dafa99a677bec7ff6698fb97da2c2"
         },
         "date": 1795438916922,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dc9edde5b55bb044a458a5a8818081e4b1dc271f",
+          "message": "Merge pull request #2738 from wado-lang/gfx/inference-context-holes\n\nfeat(elaborator): a written `_` is an inference variable wherever a type is written",
+          "timestamp": "2026-11-24T00:25:02+09:00",
+          "tree_id": "01388780abf9118185872c5f3f556a2b09be7499",
+          "url": "https://github.com/wado-lang/wado/commit/dc9edde5b55bb044a458a5a8818081e4b1dc271f"
+        },
+        "date": 1795448788978,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
