@@ -33,7 +33,9 @@ use super::{AbstractSelections, Elaborator};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::method_lookup::{ImplParamSlots, impl_target_args, impl_target_head_args};
+use crate::elaborator::method_lookup::{
+    ImplParamSlots, impl_target_args, impl_target_head_args, impl_target_written_args,
+};
 use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::MethodNames;
 use crate::elaborator::sig;
@@ -966,17 +968,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
     /// The type arguments a head writes, resolved in the current frame — the
     /// reading the impl frame binds through, so a block's recorded arguments
-    /// and its bound parameters share one set of positions. A function type
-    /// names no head, so its one position is itself.
+    /// and its bound parameters share one set of positions.
     pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
         // Peeled as the frame peels it.
-        let inner = ty.referent();
-        let args = match inner {
-            Type::Function(_) => std::slice::from_ref(inner),
-            other => match impl_target_head_args(other) {
-                Some(args) => args,
-                None => return Vec::new(),
-            },
+        let Some(args) = impl_target_written_args(ty.referent()) else {
+            return Vec::new();
         };
         args.iter().map(|arg| self.resolve_type(arg)).collect()
     }

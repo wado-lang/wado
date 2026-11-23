@@ -241,10 +241,17 @@ pub(super) struct MethodInferenceInput<'a> {
 /// Naming and matching both read it here, so neither pins a position the
 /// other leaves free (WEP 2026-08-12).
 pub(super) fn impl_target_args(impl_ty: &Type) -> Option<&[Type]> {
-    let inner = impl_ty.referent();
-    match inner {
+    match impl_ty.referent() {
         Type::Tuple(elems) => Some(elems),
-        Type::Function(_) => Some(std::slice::from_ref(inner)),
+        other => impl_target_written_args(other),
+    }
+}
+
+/// [`impl_target_args`] minus the tuple target: a head's own arguments, or a
+/// function type, which names no head, as its one position.
+pub(super) fn impl_target_written_args(impl_ty: &Type) -> Option<&[Type]> {
+    match impl_ty {
+        Type::Function(_) => Some(std::slice::from_ref(impl_ty)),
         other => impl_target_head_args(other),
     }
 }

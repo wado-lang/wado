@@ -11,7 +11,9 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, minted_name, minted_what};
+use crate::name::{
+    FqTypeName, LocalMethodName, Projected, Receiver, RefKind, minted_name, minted_what,
+};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
@@ -1191,18 +1193,13 @@ impl Monomorphizer {
         // Read the shape off the declaration, never off `key`:
         // `InstantiationKey` leaves `method_info` out of its equality and hash,
         // so two keys differing only there share one entry.
-        let one_arg_per_param = generic
-            .method_info
-            .as_ref()
-            .is_some_and(|info| info.receiver.is_declared_type());
-        let keyed_by_positions = one_arg_per_param
-            || generic
-                .method_info
-                .as_ref()
-                .is_some_and(|info| info.receiver.is_function());
-        // A declared target's key is its positions, read structurally: a slot
-        // nested in one (`T` in `Pair<List<T>, i32>`) is no key position. A
-        // block whose trait reference sets a slot is keyed by every slot.
+        let receiver = generic.method_info.as_ref().map(|info| &info.receiver);
+        let one_arg_per_param = receiver.is_some_and(Receiver::is_declared_type);
+        let keyed_by_positions = one_arg_per_param || receiver.is_some_and(Receiver::is_function);
+        // A declared or function target's key is its positions, read
+        // structurally: a slot nested in one (`T` in `Pair<List<T>, i32>`) is
+        // no key position. A block whose trait reference sets a slot is keyed
+        // by every slot.
         if keyed_by_positions
             && !generic.impl_type_params.is_empty()
             && let Some(block) = generic.impl_origin
