@@ -93,15 +93,22 @@ fn hole_quote(ctx: Ctx) -> Option<u8> {
     };
 }
 
-/// Whether a hole rendered as `text` in `ctx` leaves a comment open: a line
-/// comment ends at a line break, a block comment at `*/`. Outside a comment
-/// every text does.
-fn stays_in_comment(ctx: Ctx, text: StrSlice) -> bool {
-    return match ctx {
-        Ctx::LineComment => !text.contains("\n") && !text.contains("\r"),
-        Ctx::BlockComment | Ctx::BlockCommentStar => !text.contains("*/"),
-        _ => true,
-    };
+fn is_comment(ctx: Ctx) -> bool {
+    return ctx matches { Ctx::LineComment | Ctx::BlockComment | Ctx::BlockCommentStar };
+}
+
+/// Whether a hole rendered as `text` leaves the comment state `ctx` as it found
+/// it, never closing the comment on the way. Ending elsewhere would let the
+/// text after the hole close it: a trailing `*` pairs with a `/` that follows.
+fn keeps_comment(ctx: Ctx, text: StrSlice) -> bool {
+    let mut cur = ctx;
+    for let c of text.chars() {
+        cur = step(cur, c);
+        if !is_comment(cur) {
+            return false;
+        }
+    }
+    return cur == ctx;
 }
 
 /// Whether `b` may not stand as itself inside a Wado literal delimited by
@@ -179,8 +186,9 @@ pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
         h.fmt(&t, &mut Formatter::new(&mut out));
         if let Some(quote) = hole_quote(ctx) {
             escape_in_place(&mut out, at, quote);
+        } else if is_comment(ctx) {
+            assert keeps_comment(ctx, unchecked out.slice(at, out.len())), "a comment has no escapes, so a `wado` hole in one cannot hold what ends it";
         }
-        assert stays_in_comment(ctx, unchecked out.slice(at, out.len())), "a comment has no escapes, so a `wado` hole in one cannot hold what ends it";
     }
     out.push_str(&ReflectTemplate::<T>::tail(&t));
     return out;
@@ -211,7 +219,9 @@ global HEX_DIGITS: String = "0123456789abcdef";
 /// `text` as a raw string literal, `#"..."#`, with as many `#`s as keep any
 /// `"#…` the text holds from closing it. A raw string has no escapes, so the
 /// text stands as written, line breaks included.
-pub fn raw_string_literal<S: AsStrSlice>(text: S) -> String {
+pub fn raw_string_literal<S: AsStrSlice>(text: S) -> String
+    contract !text.contains("\r"), "a raw string reads a CR as a line break's or refuses it"
+{
     let mut hashes = "#";
     while text.contains(`"${hashes}`) {
         hashes.push('#');

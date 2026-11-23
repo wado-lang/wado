@@ -930,13 +930,33 @@ test "wado refuses a block comment's closer in a block comment's hole" {
     wado`/* ${reason} */`;
 }
 
+#[expect_trap]
+test "wado refuses a hole that closes a block comment with the star before it" {
+    let tail = "/ evil(); /*";
+    wado`/* note *${tail} */`;
+}
+
+#[expect_trap]
+test "wado refuses a hole that ends in a star the text after it would close" {
+    let reason = "a*";
+    wado`/* ${reason}/ */`;
+}
+
 test "wado keeps a comment's hole as written where it cannot end the comment" {
     let reason = "don't \"quote\" */";
     assert wado`// ${reason}` == "// don't \"quote\" */";
+    let cr = "a\rb";
+    assert wado`// ${cr}` == "// a\rb";
+}
+
+#[expect_trap]
+test "raw_string_literal refuses a carriage return, which a raw string cannot hold" {
+    let text = "a\rb";
+    raw_string_literal(&text);
 }
 
 test "raw_string_literal reads back as its text, whatever it holds" {
-    let values: List<String> = ["", "plain", "a\"b", "\"#", "\"##x\"#", "line\nbreak \\n ${x}"];
+    let values: List<String> = ["", "plain", "a\"b", "\"#", "\"##x\"#", "line\nbreak \\n ${x}", "ends in \""];
     let mut run = String::new();
     let mut expected = String::new();
     for let v of values {
