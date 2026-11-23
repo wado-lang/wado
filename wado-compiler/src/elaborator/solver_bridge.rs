@@ -54,9 +54,11 @@ enum DeclKey {
     FnShape {
         is_mut: bool,
     },
-    /// One head for every effect a function type names that the program does
-    /// not declare: an effect binder, or a name that reached nothing.
+    /// One head for every effect a function type names that reached nothing.
     UndeclaredEffect,
+    /// An effect parameter of the asking frame, by name: rigid, so it is an
+    /// effect of its own, and one frame never declares two of one name.
+    EffectParam(String),
 }
 
 /// Why the lowering states nothing about a type, most telling first: a type
@@ -290,6 +292,13 @@ impl Lowering {
             .chain(PrimitiveType::all_primitive_names())
         {
             lowering.builtin(name);
+        }
+        for param in resolutions.effect_params() {
+            let head = TypeDeclId(intern(
+                &mut lowering.decls,
+                DeclKey::EffectParam(param.name().to_string()),
+            ));
+            lowering.effects.insert(param, head);
         }
         lowering
     }
@@ -1042,7 +1051,10 @@ fn representative(
             return_type: TypeTable::UNIT,
             effects: Vec::new(),
         }),
-        DeclKey::AnonymousStruct | DeclKey::TemplateShape | DeclKey::UndeclaredEffect => None,
+        DeclKey::AnonymousStruct
+        | DeclKey::TemplateShape
+        | DeclKey::UndeclaredEffect
+        | DeclKey::EffectParam(_) => None,
     }
 }
 
@@ -1200,7 +1212,8 @@ impl SolverBridge {
                 DeclKey::Def(_)
                 | DeclKey::AnonymousStruct
                 | DeclKey::TemplateShape
-                | DeclKey::UndeclaredEffect => false,
+                | DeclKey::UndeclaredEffect
+                | DeclKey::EffectParam(_) => false,
             };
             if copies {
                 self.program.facts.insert((head, copyable), Fact::default());
@@ -1399,7 +1412,10 @@ impl SolverBridge {
             DeclKey::Def(_) => Some(CompilerItem::ReflectNewtype),
             DeclKey::AnonymousStruct => Some(CompilerItem::ReflectStruct),
             DeclKey::TemplateShape => Some(CompilerItem::ReflectTemplate),
-            DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => None,
+            DeclKey::Builtin(_)
+            | DeclKey::FnShape { .. }
+            | DeclKey::UndeclaredEffect
+            | DeclKey::EffectParam(_) => None,
         };
         for (&id, def) in program.impls().iter().filter(|(id, _)| **id >= first) {
             if !matches!(def.origin, ImplOrigin::Derived | ImplOrigin::Marker) {
@@ -2000,7 +2016,8 @@ impl SolverBridge {
                 DeclKey::Def(_)
                 | DeclKey::Builtin(_)
                 | DeclKey::FnShape { .. }
-                | DeclKey::UndeclaredEffect => {
+                | DeclKey::UndeclaredEffect
+                | DeclKey::EffectParam(_) => {
                     let Some(shape) = representative(tysys, table, lowering.tuple, key) else {
                         continue;
                     };
@@ -2357,9 +2374,10 @@ impl SolverBridge {
                             trait_,
                         })
                         .collect(),
-                    DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => {
-                        Vec::new()
-                    }
+                    DeclKey::Builtin(_)
+                    | DeclKey::FnShape { .. }
+                    | DeclKey::UndeclaredEffect
+                    | DeclKey::EffectParam(_) => Vec::new(),
                 }
             })
             .collect();

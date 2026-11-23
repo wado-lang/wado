@@ -104,6 +104,3 @@ Each step keeps every fixture passing and deletes what it replaces.
   elaborating it, so the effect variables it mints are never solved. A
   selection over a synthesized argument reads them as the empty row, and
   nothing closes them (`closure_row_in_synthesized_argument.wado`).
-- The solver spells every effect parameter of the asking frame by one head
-  (`UndeclaredEffect`), so it cannot tell an impl's `E` from its method's own
-  `F`: `impl<T> Tr for Pair<T, T>` meets `Pair<fn() with E, fn() with F>`.

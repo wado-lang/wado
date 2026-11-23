@@ -107,8 +107,9 @@ pub struct Resolutions {
     shadowings: Vec<Shadowing>,
     /// Every same-scope redeclaration, collected for the same reason.
     redeclarations: Vec<Redeclaration>,
-    /// The binders declared `effect`, the only ones that stand for an effect.
-    effect_binders: hashmap::IndexSet<AstId>,
+    /// The binders declared `effect`, the only ones that stand for an effect,
+    /// each with its name.
+    effect_binders: IndexMap<AstId, String>,
     /// The binders written `<F: fn(...)>`, each the signature it names.
     fn_bound_binders: IndexMap<AstId, ast::FunctionType>,
     /// Each item-level binder's declaring item: a method's `U` and its impl's
@@ -321,7 +322,7 @@ impl Resolutions {
         let mut used_imports = IndexMap::default();
         let mut shadowings = Vec::new();
         let mut redeclarations = Vec::new();
-        let mut effect_binders = hashmap::IndexSet::default();
+        let mut effect_binders = IndexMap::default();
         let mut fn_bound_binders = IndexMap::default();
         let mut binder_owners = IndexMap::default();
         let mut packs = hashmap::IndexSet::default();
@@ -527,7 +528,7 @@ impl Resolutions {
         match self.get(site) {
             Resolution::Binder(binder) => {
                 self.effect_binders
-                    .contains(&binder)
+                    .contains_key(&binder)
                     .then(|| EffectRef::Param {
                         name: name.to_string(),
                     })
@@ -535,6 +536,14 @@ impl Resolutions {
             Resolution::Def(def) => self.effect_decl(def),
             Resolution::Projection(_) | Resolution::Unresolved => None,
         }
+    }
+
+    /// Every effect parameter the program declares, as [`Self::effect_at`]
+    /// spells it.
+    pub fn effect_params(&self) -> impl Iterator<Item = EffectRef> + '_ {
+        self.effect_binders
+            .values()
+            .map(|name| EffectRef::Param { name: name.clone() })
     }
 
     /// The effect a `with`-clause name written in `module` refers to. Elaboration
@@ -790,7 +799,7 @@ struct Resolver<'a> {
     /// Binders in scope, innermost last. A name found here is the enclosing
     /// item's parameter and no module scope is consulted for it.
     binders: Vec<IndexMap<String, AstId>>,
-    effect_binders: &'a mut hashmap::IndexSet<AstId>,
+    effect_binders: &'a mut IndexMap<AstId, String>,
     fn_bound_binders: &'a mut IndexMap<AstId, ast::FunctionType>,
     binder_owners: &'a mut IndexMap<AstId, DefId>,
     packs: &'a mut hashmap::IndexSet<(DefId, String)>,
@@ -1002,7 +1011,7 @@ impl Resolver<'_> {
             written.entry(p.name.as_str()).or_insert(p.name_span);
             scope.insert(p.name.clone(), p.id);
             if p.is_effect {
-                self.effect_binders.insert(p.id);
+                self.effect_binders.insert(p.id, p.name.clone());
             }
             if let Some(sig) = p.bounds.iter().find_map(|b| b.fn_signature.as_ref())
                 && !p.is_pack
