@@ -16,9 +16,9 @@ use crate::name::{
 };
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
-    ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole,
+    RowVar, ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock,
+    TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeArgMap, TypeId, TypeParamId, deref_to_layers, hold_hole,
     impl_args_in_slot_order, impl_slot_end, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
@@ -1320,6 +1320,18 @@ impl Monomorphizer {
             }
             _ => IndexMap::default(),
         };
+        assert_eq!(
+            generic.effect_params.len(),
+            key.effect_args.len(),
+            "an instance binds each of its template's own effect parameters"
+        );
+        self.current_effect_rows.extend(
+            generic
+                .effect_params
+                .iter()
+                .zip(&key.effect_args)
+                .map(|(param, row)| (RowVar::Param(param.binder), row.clone())),
+        );
         let instance = self.instantiate_with(
             generic,
             &substitution,
@@ -1417,6 +1429,7 @@ impl Monomorphizer {
             is_export: generic.is_export, // Inherit from generic
             type_params: vec![],          // Concrete function has no type params
             impl_type_params: vec![],     // Already monomorphized, no impl type params
+            effect_params: Vec::new(),
             impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: identity.monomorph_info,
@@ -2668,6 +2681,7 @@ impl Monomorphizer {
         substitution: &TypeArgMap,
         type_table: &mut TypeTable,
     ) -> LocalMethodName {
+        let info = self.trait_rows_at_instance(info);
         if !info.is_type_param_receiver {
             return info;
         }
@@ -2684,6 +2698,21 @@ impl Monomorphizer {
             .map(|arg| Self::trait_arg_at_instance(arg, &bound, type_table))
             .collect();
         info.with_trait_type_args(&args)
+    }
+
+    /// `info` with each effect parameter its trait's arguments name replaced by
+    /// the row the instance binds it to: `Tr<fn() with G>` under `G = Stdout`
+    /// names `Tr<fn() with Stdout>`.
+    fn trait_rows_at_instance(&self, info: LocalMethodName) -> LocalMethodName {
+        let Some(trait_name) = info.trait_name.as_ref() else {
+            return info;
+        };
+        if self.current_effect_rows.is_empty() {
+            return info;
+        }
+        let at_instance =
+            trait_name.map_rows(&|row| TypeTable::substitute_row(row, &self.current_effect_rows));
+        info.with_trait_type_args(at_instance.args())
     }
 
     /// One trait argument re-spelled at the instance, at every position a type

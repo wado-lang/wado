@@ -186,6 +186,7 @@ fn generate_copy_function(
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        effect_params: Vec::new(),
         impl_effect_params: Vec::new(),
         impl_origin: None,
         monomorph_info: None,

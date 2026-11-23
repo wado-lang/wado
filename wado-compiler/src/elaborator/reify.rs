@@ -3,7 +3,7 @@
 //! TIR-shaping decision is already recorded on `ModuleSemantics`, so this walker
 //! only reads them — never re-running inference, resolution, or dispatch.
 
-use super::sig::AssocConstSig;
+use super::sig::{AssocConstSig, own_effect_params};
 use std::rc::Rc;
 
 use crate::ast::{
@@ -1512,6 +1512,7 @@ impl<'a> Reify<'a> {
             is_export: func.is_export,
             is_async: func.is_async,
             type_params,
+            effect_params: own_effect_params(&func.type_params),
             impl_type_params: vec![],
             impl_effect_params: Vec::new(),
             impl_origin: None,
@@ -1794,6 +1795,7 @@ impl<'a> Reify<'a> {
             is_export: false,
             is_async: false,
             type_params: vec![],
+            effect_params: Vec::new(),
             impl_type_params: vec![],
             impl_effect_params: Vec::new(),
             impl_origin: None,
@@ -6247,7 +6249,7 @@ impl<'a> Reify<'a> {
             cap_info.is_mutating,
             param_types,
             cap_info.return_type,
-            Vec::new(),
+            cap_info.effects.clone(),
         );
         let address_taken_locals = closure_ctx.address_taken_locals;
 

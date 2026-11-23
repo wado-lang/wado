@@ -337,19 +337,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        // WEP 2026-05-26: the only signal reify needs
-        // for the closure's capture analysis.
-        self.record_closure_captures(
-            closure.id,
-            ClosureCaptureInfo {
-                mut_captures,
-                captures: recorded_captures,
-                is_mutating: any_mutating_capture,
-                declared_return,
-                return_type,
-            },
-        );
-
         // Project the closure's `fn(...)` / `fn mut(...)` type so the
         // caller's typecheck context (`expression_types[closure.id]`, etc.)
         // sees it. Reify rebuilds an equivalent type from its own facts.
@@ -368,9 +355,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             table.solve_effect_var(var.as_var().expect("a variable"), performed, site);
         }
         let row = vec![var];
-        let func_type =
-            table.make_function_with_mut(any_mutating_capture, param_types, return_type, row);
+        let func_type = table.make_function_with_mut(
+            any_mutating_capture,
+            param_types,
+            return_type,
+            row.clone(),
+        );
         drop(table);
+
+        // WEP 2026-05-26: the only signal reify needs
+        // for the closure's capture analysis.
+        self.record_closure_captures(
+            closure.id,
+            ClosureCaptureInfo {
+                mut_captures,
+                captures: recorded_captures,
+                is_mutating: any_mutating_capture,
+                declared_return,
+                return_type,
+                effects: row,
+            },
+        );
 
         ctx.source_bindings.extend(closure_ctx.source_bindings);
         func_type

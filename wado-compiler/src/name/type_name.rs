@@ -70,6 +70,19 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
     }
 }
 
+/// A function instance's `name` with the row each of its own effect parameters
+/// stands for, one `with(…)` apiece, so two rows are two instances.
+pub fn mangle_effect_args(name: String, effect_args: &[Vec<tir::EffectRef>]) -> String {
+    let mut out = name;
+    for row in effect_args {
+        let effects: Vec<String> = row.iter().map(mangle_effect_ref).collect();
+        out.push_str("with(");
+        out.push_str(&effects.join(","));
+        out.push(')');
+    }
+    out
+}
+
 /// Mangle a tuple as `[T1,T2,…]`, e.g. `["i32","String"]` → `"[i32,String]"`.
 pub fn mangle_tuple_type(elems: &[String]) -> String {
     format!("[{}]", elems.join(","))

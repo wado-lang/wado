@@ -2778,6 +2778,10 @@ pub struct TirFunction {
     pub is_async: bool,
     /// Generic type parameters (empty for non-generic functions)
     pub type_params: Vec<TirTypeParam>,
+    /// The function's own effect parameters, `_` among them. Each row a call
+    /// binds them to is an instance of its own, as each type is for a type
+    /// parameter: a dispatch in the body may read the row.
+    pub effect_params: Vec<EffectParam>,
     /// Type parameters from the impl block (for methods on generic structs)
     /// e.g., for a method in `impl Counter<T>`, this contains T's info
     pub impl_type_params: Vec<TirTypeParam>,
@@ -3559,6 +3563,7 @@ impl TirFunction {
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
+            effect_params: Vec::new(),
             impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
@@ -3626,6 +3631,7 @@ impl TirFunction {
     /// emitting it as written.
     pub fn is_template(&self) -> bool {
         self.has_real_type_params()
+            || !self.effect_params.is_empty()
             || !self.impl_type_params.is_empty()
             || !self.impl_effect_params.is_empty()
     }
@@ -4237,6 +4243,9 @@ pub struct InstantiationKey {
     pub impl_type_args: Vec<TypeId>,
     /// Method-level type arguments (from the method's own generics)
     pub method_type_args: Vec<TypeId>,
+    /// The row each of the function's own effect parameters stands for, in
+    /// the order [`TirFunction::effect_params`] declares them.
+    pub effect_args: Vec<Vec<EffectRef>>,
     /// Method info for method instantiations (None for struct/enum instantiations)
     /// Not included in equality/hash - used only for name formatting
     pub method_info: Option<LocalMethodName>,
@@ -4253,6 +4262,7 @@ impl PartialEq for InstantiationKey {
             && self.module_source == other.module_source
             && self.impl_type_args == other.impl_type_args
             && self.method_type_args == other.method_type_args
+            && self.effect_args == other.effect_args
     }
 }
 
@@ -4266,6 +4276,7 @@ impl std::hash::Hash for InstantiationKey {
         self.module_source.hash(state);
         self.impl_type_args.hash(state);
         self.method_type_args.hash(state);
+        self.effect_args.hash(state);
     }
 }
 

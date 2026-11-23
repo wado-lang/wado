@@ -1025,6 +1025,9 @@ pub(crate) struct ClosureCaptureInfo {
     pub(crate) declared_return: Option<TypeId>,
     /// The closure's return type, as its `fn` type states it.
     pub(crate) return_type: TypeId,
+    /// The closure's row: a variable, which the effect check writes its
+    /// solution back over.
+    pub(crate) effects: Vec<EffectRef>,
 }
 
 /// One power-assert capture slot — a sub-expression of the assert
