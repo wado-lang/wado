@@ -170,10 +170,10 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<DefId, Vec<(String, u32, TypeId)>>,
-    /// Struct field types by declaration and instance arguments, a template's
-    /// (no arguments) in its own terms: what [`Self::holds_affine_resource`]
-    /// reads.
-    struct_field_index: IndexMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
+    /// The field types of every struct the plan phase lowers, by struct and
+    /// instance arguments; a declared template's (no arguments) in its own
+    /// terms.
+    struct_field_index: IndexMap<(StructDef, Vec<TypeId>), Vec<TypeId>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
     anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
@@ -2687,10 +2687,26 @@ impl TypeTable {
         )
     }
 
-    /// Register the field types of a struct declaration instantiated with
-    /// `args` (none for the template) for [`Self::holds_affine_resource`].
-    pub fn register_struct_fields(&mut self, def: DefId, args: Vec<TypeId>, fields: Vec<TypeId>) {
+    /// Register the field types of struct `def` instantiated with `args` (none
+    /// for a declared template).
+    pub fn register_struct_fields(
+        &mut self,
+        def: StructDef,
+        args: Vec<TypeId>,
+        fields: Vec<TypeId>,
+    ) {
         self.struct_field_index.insert((def, args), fields);
+    }
+
+    /// The field types of struct `ty`, where they were registered.
+    #[must_use]
+    pub fn struct_field_types(&self, ty: TypeId) -> Option<&[TypeId]> {
+        let ResolvedType::Struct { def, type_args } = self.get(ty) else {
+            unreachable!("a struct type")
+        };
+        self.struct_field_index
+            .get(&(*def, type_args.clone()))
+            .map(Vec::as_slice)
     }
 
     /// Whether a value of `ty` is, or holds at any depth, an affine resource:
@@ -2811,13 +2827,14 @@ impl TypeTable {
     /// struct's fields, a variant's payloads. `None` where nothing registered
     /// them.
     fn declared_members(&self, def: DefId, type_args: &[TypeId]) -> Option<DeclaredMembers> {
-        if let Some(fields) = self.struct_field_index.get(&(def, type_args.to_vec())) {
+        let decl = StructDef::Decl(def);
+        if let Some(fields) = self.struct_field_index.get(&(decl, type_args.to_vec())) {
             return Some(DeclaredMembers {
                 types: fields.clone(),
                 of_template: false,
             });
         }
-        let types = match self.struct_field_index.get(&(def, Vec::new())) {
+        let types = match self.struct_field_index.get(&(decl, Vec::new())) {
             Some(fields) => fields.clone(),
             None => self
                 .variant_case_index
