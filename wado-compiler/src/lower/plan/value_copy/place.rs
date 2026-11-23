@@ -314,9 +314,6 @@ impl<'a> Resolver<'a> {
                 .get(*index)
                 .cloned()
                 .unwrap_or(Names::Place(Place::local(*index))),
-            // A reference field points to storage its holder does not own — an
-            // iterator's `repr` points to the list it walks — so a fresh aggregate
-            // does not make what it points at fresh.
             TirExprKind::FieldAccess {
                 expr: inner,
                 field_index,
@@ -329,23 +326,19 @@ impl<'a> Resolver<'a> {
                         index: *field_index,
                     },
                 );
-                if !self.type_table.is_reference(expr.type_id) {
-                    return names;
-                }
-                match names {
-                    Names::Place(mut place) => {
-                        place.through_ref = true;
-                        Names::Place(place)
-                    }
-                    Names::Value | Names::Unknown => Names::Unknown,
-                }
+                self.part(names, expr.type_id)
             }
             TirExprKind::VariantPayload {
                 expr: inner,
                 case_index,
                 ..
-            } => self.project(inner, Selector::Variant(*case_index)),
-            TirExprKind::Index { expr: inner, .. } => self.project(inner, Selector::Index),
+            } => self.part(
+                self.project(inner, Selector::Variant(*case_index)),
+                expr.type_id,
+            ),
+            TirExprKind::Index { expr: inner, .. } => {
+                self.part(self.project(inner, Selector::Index), expr.type_id)
+            }
             TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
@@ -413,6 +406,23 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// What a part of type `part_type` names, out of a value `whole` names. A
+    /// reference part points to storage its holder does not own, as an
+    /// iterator's `repr` points to the list it walks, so a fresh holder does
+    /// not make what it points at fresh.
+    fn part(&self, whole: Names, part_type: TypeId) -> Names {
+        if !self.type_table.is_reference(part_type) {
+            return whole;
+        }
+        match whole {
+            Names::Place(mut place) => {
+                place.through_ref = true;
+                Names::Place(place)
+            }
+            Names::Value | Names::Unknown => Names::Unknown,
+        }
+    }
+
     fn project(&self, inner: &TirExpr, selector: Selector) -> Names {
         match self.names(inner) {
             Names::Place(mut place) => {
@@ -421,6 +431,17 @@ impl<'a> Resolver<'a> {
             }
             Names::Value => Names::Value,
             Names::Unknown => Names::Unknown,
+        }
+    }
+
+    /// Bind a sub-pattern matching a part of what `whole` names.
+    fn bind_part(&mut self, pattern: &TirPattern, whole: &Names) {
+        match pattern.declared_local() {
+            Some((_, part_type)) => {
+                let part = self.part(whole.clone(), part_type);
+                self.bind_pattern(pattern, &part);
+            }
+            None => self.bind_pattern(pattern, whole),
         }
     }
 
@@ -452,15 +473,18 @@ impl<'a> Resolver<'a> {
                         Names::Value => Names::Value,
                         Names::Unknown => Names::Unknown,
                     };
-                    self.bind_pattern(&field.pattern, &nested);
+                    self.bind_part(&field.pattern, &nested);
                 }
             }
             // The binding names the value the pattern tested, not a projection of
             // it: deepening by the payload's selector is sound and measures worse.
-            TirPattern::Tuple(sub, _)
-            | TirPattern::Variant { bindings: sub, .. }
-            | TirPattern::Or(sub) => {
+            TirPattern::Tuple(sub, _) | TirPattern::Variant { bindings: sub, .. } => {
                 for pattern in sub {
+                    self.bind_part(pattern, base);
+                }
+            }
+            TirPattern::Or(alternatives) => {
+                for pattern in alternatives {
                     self.bind_pattern(pattern, base);
                 }
             }
