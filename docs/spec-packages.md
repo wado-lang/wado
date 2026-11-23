@@ -50,10 +50,10 @@ lib = "src/lib.wado"
 # gale is used in two roles: the Kiln generator that turns the bundled grammar
 # into a parser at build time, and the `gale-highlight` runtime lib (`run_cli`).
 [build-dependencies]
-"lib:gale" = { path = "../package-gale" }
+"wado-lang:gale" = { path = "../package-gale" }
 
 [dependencies]
-"lib:gale" = { path = "../package-gale" }
+"wado-lang:gale" = { path = "../package-gale" }
 
 [test]
 # `build/` holds Kiln intermediates; not source (see package-gale's note).
@@ -536,13 +536,13 @@ A `path` or `git` dependency is Wado source. It is compiled into the consuming
 program, and its `pub` items cross as Wado declarations. A `pub` signature may
 therefore take a closure, a generic or a trait, which no component interface can
 carry. `map_sides` above is one. So is the `run_cli` that
-`package-gale-highlight-wado` imports from its `lib:gale` path dependency:
+`package-gale-highlight-wado` imports from its `wado-lang:gale` path dependency:
 
 <!-- {"source": "package-gale-highlight-wado/src/main.wado"} -->
 
 ```wado
 use { highlight } from "./lib.wado";
-use { run_cli } from "lib:gale";
+use { run_cli } from "wado-lang:gale";
 ```
 
 <!-- {"source": "package-gale-highlight-wado/src/main.wado"} -->

@@ -14,16 +14,16 @@ generator.
 
 ```toml
 [build-dependencies]
-"lib:grog" = { package = "wado-lang:grog", version = "^0.0.39" }
+"wado-lang:grog" = { version = "^0.0.39" }
 
 [dependencies]
-"lib:grog" = { package = "wado-lang:grog", version = "^0.0.39" }
+"wado-lang:grog" = { version = "^0.0.39" }
 ```
 
 ```wado
 use fs from "core:fs";
-use grog from "lib:grog";
-use onnx from "./onnx.proto" with { generator: { module: "lib:grog" } };
+use grog from "wado-lang:grog";
+use onnx from "./onnx.proto" with { generator: { module: "wado-lang:grog" } };
 
 let model = grog::decode::<onnx::ModelProto, ByteList>(fs::read("model.onnx")?)?;
 let bytes = grog::encode(&model);
@@ -121,7 +121,7 @@ byte of it lies in the GC heap:
 use { println } from "core:cli";
 use fs from "core:fs";
 use { LinearBuffer } from "core:linear";
-use scip from "./scip.proto" with { generator: { module: "lib:grog" } };
+use scip from "./scip.proto" with { generator: { module: "wado-lang:grog" } };
 
 let bytes = fs::read_linear("index.scip")?;
 for let doc of scip::Index::documents_of(LinearBuffer::of(bytes)) {

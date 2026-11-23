@@ -7,12 +7,12 @@ which this directory also holds.
 
 ```toml
 [dependencies]
-"lib:pjrt" = { path = "../wado-run-pjrt" }
+"wado-lang:pjrt" = { path = "../wado-run-pjrt" }
 ```
 
 ```wado
 use { println, Stdout } from "core:cli";
-use { PjrtHost } from "lib:pjrt";
+use { PjrtHost } from "wado-lang:pjrt";
 
 export fn run() with (Stdout, PjrtHost) {
     println(PjrtHost::platform().unwrap());   // "cpu" on XLA's CPU plugin

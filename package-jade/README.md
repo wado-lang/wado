@@ -2,7 +2,7 @@
 
 Jade reads, derives and validates JSON Schema Draft 2020-12, and generates Wado
 types from a schema. A package names it under `[dependencies]` and imports it
-from `lib:jade`. The name stands for JSON Assertion and Definition Engine.
+from `wado-lang:jade`. The name stands for JSON Assertion and Definition Engine.
 [`docs/design.md`](./docs/design.md) holds the design: its four layers, and
 what a derived schema promises.
 
@@ -38,7 +38,7 @@ precision, and two compare by their mathematical value. An exponent of more than
 writes it in.
 
 ```wado
-use { schema_for } from "lib:jade";
+use { schema_for } from "wado-lang:jade";
 use { to_string } from "core:json";
 
 struct Point { x: i32, y: i32 = 0 }
@@ -151,7 +151,7 @@ into the schema.
 
 ```wado
 use { println } from "core:cli";
-use { Document, Schema, Validator } from "lib:jade";
+use { Document, Schema, Validator } from "wado-lang:jade";
 
 let validator = Validator::compile(&Schema::parse(#"{"type": "integer", "minimum": 0}"#).unwrap()).unwrap();
 let doc = Document::parse("-1").unwrap();
@@ -176,7 +176,7 @@ forever; the specification leaves such a schema undefined, and `validate`
 reports the reference that closes the cycle as failing.
 
 `multipleOf` divides the decimals as written, so `0.3` is a multiple of `0.1`.
-`pattern` and `patternProperties` use `lib:re`, which reads ECMA-262 patterns in
+`pattern` and `patternProperties` use `wado-lang:re`, which reads ECMA-262 patterns in
 Unicode mode and rejects at `compile` what it cannot match in linear time, such
 as a backreference or a lookbehind.
 
@@ -216,12 +216,12 @@ HTTP request. `SchemaSet::load` fetches the same documents without compiling.
 ## Generating Types
 
 `generate` writes the Wado declarations a schema describes, as one module,
-through `lib:wadopoet`. The code uses `core:serde`'s derived `Serialize` and
+through `wado-lang:wadopoet`. The code uses `core:serde`'s derived `Serialize` and
 `Deserialize`, and nothing of Jade's.
 
 ```wado
-use { Schema, generate } from "lib:jade";
-use { ModuleSpec } from "lib:wadopoet";
+use { Schema, generate } from "wado-lang:jade";
+use { ModuleSpec } from "wado-lang:wadopoet";
 
 let schema = Schema::parse(#"{"title": "Point", "type": "object", "properties": {"x": {"type": "number"}}, "required": ["x"]}"#).unwrap();
 let source = generate(&schema, &ModuleSpec::new("my-script", ["point.schema.json"])).unwrap();
@@ -241,7 +241,7 @@ time.
 use { Order } from "./order.schema.json"
     with {
         generator: {
-            module: "lib:jade",
+            module: "wado-lang:jade",
             inputs: ["./address.schema.json"],
         },
     };
@@ -337,7 +337,7 @@ words in PascalCase, keeping each word's case after its first letter, so
 
 A type whose wire names all come back from their Wado names under one
 `name_policy` takes that policy; otherwise each name that does not come back
-takes `#[wire(name = …)]`. A reserved name (`lib:wadopoet`'s `is_reserved`)
+takes `#[wire(name = …)]`. A reserved name (`wado-lang:wadopoet`'s `is_reserved`)
 takes a `_` suffix, so the property `in` becomes the field `in_`. A name that
 leaves no word, that starts with a digit, or that converts to the same Wado name
 as another in its scope is an error.

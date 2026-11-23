@@ -31,7 +31,7 @@ A program imports a tokenizer as it imports a graph, through Loam's generator:
 ```wado
 use { Tokenizer } from "./tokenizer.json" with {
     type: "hf-tokenizer",
-    generator: { module: "lib:loam" },
+    generator: { module: "wado-lang:loam" },
 };
 
 let ids = Tokenizer::encode(&text);

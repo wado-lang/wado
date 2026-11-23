@@ -7,7 +7,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { to_string } from "core:json";
 use { MonotonicClock } from "wasi:clocks";
-use { Backend, FileSource, HeldExperts, LoadError, Sampling, Tensor, WeightSource } from "lib:loam";
+use { Backend, FileSource, HeldExperts, LoadError, Sampling, Tensor, WeightSource } from "wado-lang:loam";
 use { LinearArray } from "core:linear";
 use { deviation, recorded, reported } from "../checks.wado";
 /// gpt-oss's byte-level BPE, split by o200k's pattern.
@@ -17,7 +17,7 @@ pub use {
     with {
         type: "hf-tokenizer",
         integrity: "sha256:0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 /// The graph alone: its weights are external data in the seven
 /// `model_q4f16.onnx_data` files beside it.
@@ -26,7 +26,7 @@ use gptoss from "https://huggingface.co/onnx-community/gpt-oss-20b-ONNX/resolve/
         type: "onnx",
         integrity: "sha256:5834cda2698332a02b1451a2935d10e7484b871bfa30c3a8b62cb72cc74e6a83",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 // 55 MB of weights sit in the graph itself; read them in place.
                 embed: false,

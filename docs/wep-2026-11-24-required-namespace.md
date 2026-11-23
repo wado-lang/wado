@@ -80,5 +80,5 @@ A `lib:` key that only shortened a sibling's coordinate (`"lib:gale"` for
        and a single file under one is refused.
 4. [x] A second directory claiming a package already held is refused at the
        `use` that reaches it.
-5. [ ] This repository's manifests and `use`s name sibling packages by
+5. [x] This repository's manifests and `use`s name sibling packages by
        coordinate.
