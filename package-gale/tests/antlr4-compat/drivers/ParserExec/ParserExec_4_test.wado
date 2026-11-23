@@ -149,8 +149,7 @@ test "stage_b: ParserExec/PredictionMode_LL" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/PredictionMode_SLL" {
     let input = "X Y";
-    let expected = "XY
-";
+    let expected = "XY\n";
     let result = t_PredictionMode_SLL::parse_r(&input);
     let actual = result.output;
     assert actual == expected;
@@ -177,8 +176,7 @@ test "stage_a_parse: ParserExec/ReferenceToATN_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/ReferenceToATN_2" {
     let input = "a 34 c";
-    let expected = "a34c
-";
+    let expected = "a34c\n";
     let result = t_ReferenceToATN_1::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -254,8 +252,7 @@ test "stage_a_parse: ParserExec/TokenOffset" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/TokenOffset" {
     let input = "12 34 56 66";
-    let expected = "12345666
-";
+    let expected = "12345666\n";
     let result = t_TokenOffset::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -293,9 +290,7 @@ test "stage_a_parse: ParserExec/Wildcard" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/Wildcard" {
     let input = "x=10; abc;;;; y=99;";
-    let expected = "x=10;
-y=99;
-";
+    let expected = "x=10;\ny=99;\n";
     let result = t_Wildcard::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -333,8 +328,7 @@ test "stage_a_parse: ParserExec/uStartingCharDoesNotCauseIllegalUnicodeEscape" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/uStartingCharDoesNotCauseIllegalUnicodeEscape" {
     let input = "u";
-    let expected = "u
-";
+    let expected = "u\n";
     let result = t_uStartingCharDoesNotCauseIllegalUnicodeEscape::parse_u(&input);
     let actual = result.output;
     assert actual == expected;

@@ -107,8 +107,7 @@ test "stage_b_sub: ParseTrees/ExtraToken" {
 // token) so the compare is over the recovery decision, not the marker.
 test "stage_c_output: ParseTrees/ExtraTokensAndAltLabels" {
     let input = "${ ? a ?}";
-    let expected = "(s ${ (v ? a) ? })
-";
+    let expected = "(s ${ (v ? a) ? })\n";
     let result = t_ExtraTokensAndAltLabels::parse_s(&input);
     let actual = strip_skip_markers(&result.output);
     assert actual == expected;
@@ -227,9 +226,7 @@ test "stage_a_parse: ParseTrees/TokenAndRuleContextString" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParseTrees/TokenAndRuleContextString" {
     let input = "x";
-    let expected = "[a, s]
-(a x)
-";
+    let expected = "[a, s]\n(a x)\n";
     let result = t_TokenAndRuleContextString::parse_s(&input);
     let actual = result.output;
     assert actual == expected;

@@ -142,8 +142,7 @@ test "stage_a_parse: CompositeParsers/CombinedImportsCombined" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: CompositeParsers/CombinedImportsCombined" {
     let input = "x 34 9";
-    let expected = "S.x
-";
+    let expected = "S.x\n";
     let result = t_CombinedImportsCombined::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -170,9 +169,7 @@ test "stage_a_parse: CompositeParsers/DelegatesSeeSameTokenType" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: CompositeParsers/DelegatesSeeSameTokenType" {
     let input = "aa";
-    let expected = "S.x
-T.y
-";
+    let expected = "S.x\nT.y\n";
     let result = t_DelegatesSeeSameTokenType::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -199,8 +196,7 @@ test "stage_a_parse: CompositeParsers/DelegatorAccessesDelegateMembers" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: CompositeParsers/DelegatorAccessesDelegateMembers" {
     let input = "b";
-    let expected = "foo
-";
+    let expected = "foo\n";
     let result = t_DelegatorAccessesDelegateMembers::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -227,8 +223,7 @@ test "stage_a_parse: CompositeParsers/DelegatorInvokesDelegateRule" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: CompositeParsers/DelegatorInvokesDelegateRule" {
     let input = "b";
-    let expected = "S.a
-";
+    let expected = "S.a\n";
     let result = t_DelegatorInvokesDelegateRule::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -255,8 +250,7 @@ test "stage_a_parse: CompositeParsers/DelegatorInvokesDelegateRuleWithArgs" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: CompositeParsers/DelegatorInvokesDelegateRuleWithArgs" {
     let input = "b";
-    let expected = "S.a1000
-";
+    let expected = "S.a1000\n";
     let result = t_DelegatorInvokesDelegateRuleWithArgs::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -310,8 +304,7 @@ test "stage_a_parse: CompositeParsers/DelegatorInvokesFirstVersionOfDelegateRule
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: CompositeParsers/DelegatorInvokesFirstVersionOfDelegateRule" {
     let input = "b";
-    let expected = "S.a
-";
+    let expected = "S.a\n";
     let result = t_DelegatorInvokesFirstVersionOfDelegateRule::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -365,9 +358,7 @@ test "stage_a_parse: CompositeParsers/DelegatorRuleOverridesDelegates" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: CompositeParsers/DelegatorRuleOverridesDelegates" {
     let input = "c";
-    let expected = "M.b
-S.a
-";
+    let expected = "M.b\nS.a\n";
     let result = t_DelegatorRuleOverridesDelegates::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
