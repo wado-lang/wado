@@ -1011,9 +1011,10 @@ fn by_picks<E: Float>(
 /// `pool`'s projection of every expert of the layer whose host step is `step`,
 /// as the host holds it.
 fn host_projection(g: &WebGpuBackend, pool: &ExpertPool, step: i32) -> HostProjection {
+    let scales = host_experts(g, &pool.scales, step);
     return HostProjection {
         packed: host_experts(g, &pool.packed, step).bytes(),
-        scales: host_experts(g, &pool.scales, step).bytes(),
+        scales: scales.bytes(),
         bias: match &pool.bias {
             Some(b) => Option::Some(host_experts(g, b, step).bytes()),
             null => null,
@@ -1022,7 +1023,7 @@ fn host_projection(g: &WebGpuBackend, pool: &ExpertPool, step: i32) -> HostProje
             Some(z) => Option::Some(host_experts(g, z, step).bytes()),
             null => null,
         },
-        kind: host_experts(g, &pool.scales, step).kind,
+        kind: scales.kind,
         shape: pool.shape,
     };
 }

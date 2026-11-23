@@ -83,8 +83,9 @@ bias where its pool holds them:
 The sum runs in pick order, as the decomposition's loop does, so the products
 differ from it only by what
 [Results Are Held to a Tolerance, Not to the Bit](../../docs/wep-2026-09-20-loam.md#results-are-held-to-a-tolerance-not-to-the-bit)
-allows. A pick whose expert the pools lack runs on the host, as
-[Experts on the CPU](./cpu-experts.md) describes.
+allows. A pick whose expert the pools lack, and that its step does not write
+into a slot, runs on the host, as [Experts on the CPU](./cpu-experts.md)
+describes.
 
 A layer's experts then take 2 dispatches a pick, 8 for gpt-oss-20b's 4, and
 nothing is copied out of a pool. The same step with the expert writes left out:
@@ -99,9 +100,9 @@ nothing is copied out of a pool. The same step with the expert writes left out:
 ```
 
 Both rows left the call to `written` in `HeldExperts::fetched` out by hand.
-With the experts the device lacks written in, the step ran at 1.59 tokens/s;
-[Experts on the CPU](./cpu-experts.md#measured-on-gpt-oss-20b) measures it
-with them computed on the host.
+With the experts the device lacks written in from the files, the step ran at
+1.59 tokens/s; [Experts on the CPU](./cpu-experts.md#measured-on-gpt-oss-20b)
+measures it with them written from host memory or computed on the host.
 
 ### A gather read in place
 
