@@ -508,21 +508,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// A variable blamed as [`Self::mint_infer_hole`] blames, joined with
-    /// `hole`, a `_` written for a whole slot, which the blame now reports.
-    pub(super) fn blamed_in_place_of(
-        &mut self,
-        hole: TypeId,
-        span: Span,
-        message: String,
-        param_name: String,
-    ) -> TypeId {
-        let blamed = self.mint_infer_hole(span, message, param_name, Vec::new());
-        self.equate(hole, blamed);
-        self.unwrite_holes_in(hole);
-        blamed
-    }
-
     /// Run `resolve`, and close each `_` it wrote that is still open where it
     /// reported an error: that error is the whole fault, so neither the `_`
     /// nor the slot it fills asks for itself as well.
@@ -546,8 +531,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Blame each `_` `arg` holds with `message`, the sentence for the slot
-    /// `param` it fills. One for the whole slot is replaced by the blamed
-    /// variable.
+    /// `param` it fills. One for the whole slot is replaced by a variable
+    /// blamed as [`Self::mint_infer_hole`] blames, joined with it.
     pub(super) fn blame_in_slot(
         &mut self,
         arg: &mut TypeId,
@@ -556,7 +541,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param: String,
     ) {
         if self.is_bare_written_hole(*arg) {
-            *arg = self.blamed_in_place_of(*arg, span, message.to_string(), param);
+            let blamed = self.mint_infer_hole(span, message.to_string(), param, Vec::new());
+            self.equate(*arg, blamed);
+            self.unwrite_holes_in(*arg);
+            *arg = blamed;
             return;
         }
         for hole in self.written_holes_in(*arg) {
