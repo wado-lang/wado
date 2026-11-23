@@ -52,7 +52,7 @@ its presence:
 | implicit presence                         | `T = zero`                              |
 | explicit presence, a message field        | `Option<T> = null`                      |
 | `repeated T`                              | `List<T> = []`                          |
-| `map<K, V>`                               | `TreeMap<K, V> = TreeMap::new()`        |
+| `map<K, V>`                               | `HashMap<K, V> = HashMap::new()`        |
 | a `oneof`                                 | `Option<V> = null`, `V` a `variant`     |
 
 - Presence follows the file's rules. In proto3 a field without a label is
@@ -90,7 +90,7 @@ unset enum field reads as the first value.
 A field named by a keyword gets a trailing `_`. A nested message or enum is
 emitted at the top level, named by joining its path, and two declarations that
 collide stop the build naming both. A declaration named like a prelude type,
-the runtime import or `TreeMap` takes a trailing `_` too, as does a field named
+the runtime import or `HashMap` takes a trailing `_` too, as does a field named
 `unknown_fields`. A `reserved` range produces nothing.
 
 ## Decoding

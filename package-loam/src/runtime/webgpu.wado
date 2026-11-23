@@ -39,7 +39,7 @@ use {
     operand,
     row_extents,
 } from "./tensor.wado";
-use { HashMap, HashSet, TreeMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { LinearArray } from "core:linear";
 use { HostWeight } from "./weight.wado";
 use {
@@ -243,7 +243,7 @@ affine struct Profiler {
     /// What each pair of `queries` written times, in order.
     timed: List<Timed>,
     /// The nanoseconds and the count of each `Timed` read back so far.
-    spent: TreeMap<Timed, [i64, i32]>,
+    spent: HashMap<Timed, [i64, i32]>,
 }
 
 /// One kind of dispatch a profile tells apart: a shader on a grid.
@@ -502,7 +502,7 @@ pub affine struct WebGpuBackend {
     /// Each compiled shader's place in `pipelines`, by what it is made of. A
     /// `Shader` has no `Hash` while its derivation is a roadmap item of WEP:
     /// HashMap.
-    compiled: TreeMap<Shader, i32>,
+    compiled: HashMap<Shader, i32>,
     /// The place in `buffers` of each buffer that outlives a pass, by its
     /// negative slot: one `keep` wrote, which lives as long as the backend, or
     /// one a launch owns, or carves parameters from, which lives while the
@@ -724,7 +724,7 @@ impl WebGpuBackend {
             device,
             queue,
             pipelines: [],
-            compiled: TreeMap::new(),
+            compiled: HashMap::new(),
             held: HashMap::new(),
             held_slots: 0,
             buffers: Places::new(),
@@ -845,7 +845,7 @@ impl WebGpuBackend {
             mapped_at_creation: null,
             label: null,
         });
-        self.profiler = Option::Some(Profiler { queries, resolved, readable, timed: [], spent: TreeMap::new() });
+        self.profiler = Option::Some(Profiler { queries, resolved, readable, timed: [], spent: HashMap::new() });
         return true;
     }
 

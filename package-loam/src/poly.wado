@@ -72,6 +72,13 @@ impl Eq for Symbol {
     }
 }
 
+impl Hash for Symbol {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.name.hash(h);
+        self.is_derived().hash(h);
+    }
+}
+
 impl Ord for Symbol {
     fn cmp(&self, other: &Symbol) -> Ordering {
         let by_name = self.name.cmp(&other.name);

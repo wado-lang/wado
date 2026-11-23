@@ -382,7 +382,7 @@ impl Gen {
                 Some(v) => self.type_of(v, &`${*at}/additionalProperties`, &`${*hint}Value`)?,
                 null => self.value(),
             };
-            return Result::Ok(Ty { text: `${self.namespace("core:collections")}::TreeMap<String, ${values.text}>` });
+            return Result::Ok(Ty { text: `${self.namespace("core:collections")}::HashMap<String, ${values.text}>` });
         }
         return fail(&`${*at}/type`, "names more than one type besides `null`, which no Wado type holds");
     }
@@ -406,7 +406,7 @@ impl Gen {
             null => self.value(),
         };
         if o.unique_items {
-            return Result::Ok(Ty { text: `${self.namespace("core:collections")}::TreeSet<${item.text}>` });
+            return Result::Ok(Ty { text: `${self.namespace("core:collections")}::HashSet<${item.text}>` });
         }
         return Result::Ok(Ty { text: `List<${item.text}>` });
     }

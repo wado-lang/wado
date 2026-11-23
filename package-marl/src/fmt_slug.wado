@@ -1,7 +1,7 @@
 //! GFM-compatible heading slugs (github-slugger rules) with per-document
 //! deduplication. See `docs/wep-2026-07-05-marl.md`.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 internal fn slugify<S: AsStrSlice>(text: S) -> String {
     let mut out = String::with_capacity(text.len());
@@ -24,12 +24,12 @@ fn is_slug_char(c: char) -> bool {
 }
 
 internal struct Slugger {
-    counts: TreeMap<String, i32>,
+    counts: HashMap<String, i32>,
 }
 
 impl Slugger {
     internal fn new() -> Slugger {
-        return Slugger { counts: TreeMap::<String, i32>::new() };
+        return Slugger { counts: HashMap::<String, i32>::new() };
     }
 
     internal fn slug<S: AsStrSlice>(&mut self, base: S) -> String {

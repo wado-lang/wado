@@ -1,7 +1,7 @@
 //! An axis's length as stage 0 knows it, and the one question stage 0 asks of
 //! two of them.
 
-use { HashSet, TreeMap } from "core:collections";
+use { HashSet, HashMap } from "core:collections";
 use { Condition, Poly } from "./poly.wado";
 
 /// A length the graph states, or one only the run knows.
@@ -21,7 +21,7 @@ impl Extent {
     /// The length a `dim_param` names: the polynomial it spells where it is
     /// arithmetic over names (`spelled_poly`), else one symbol of its own.
     pub fn param(text: &String) -> Extent {
-        if let Some(p) = spelled_poly(text, &TreeMap::<String, i32>::new()) && let Some(e) = Extent::of(p) {
+        if let Some(p) = spelled_poly(text, &HashMap::<String, i32>::new()) && let Some(e) = Extent::of(p) {
             return e;
         }
         return Extent::symbol(text);
@@ -139,7 +139,7 @@ pub fn solved(extents: &List<Extent>, read: &HashSet<String>) -> List<Solved> {
 /// its value. `None` for any other text, a lone name included, and where no
 /// polynomial holds the value. An operator is a word of its own, so a hyphen
 /// inside a name stays the name's.
-pub fn spelled_poly(text: &String, fixed: &TreeMap<String, i32>) -> Option<Poly> {
+pub fn spelled_poly(text: &String, fixed: &HashMap<String, i32>) -> Option<Poly> {
     let words: List<String> = text.split_whitespace().map(|w| w.to_string()).collect();
     if words.len() < 3 || words.len() % 2 == 0 {
         return null;
@@ -165,7 +165,7 @@ pub fn spelled_poly(text: &String, fixed: &TreeMap<String, i32>) -> Option<Poly>
 }
 
 /// One operand of `spelled_poly`: an integer, or a name.
-fn operand(word: &String, fixed: &TreeMap<String, i32>) -> Option<Poly> {
+fn operand(word: &String, fixed: &HashMap<String, i32>) -> Option<Poly> {
     if word.chars().all(|c| c.is_ascii_digit()) {
         return match i64::from_str(word) {
             Ok(n) => Option::Some(Poly::constant(n)),

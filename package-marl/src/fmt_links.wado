@@ -2,16 +2,16 @@
 //! resolved shortcut/collapsed/reference links are looked up against, and
 //! destination/title parsing shared between definitions and inline links.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { LinkReferenceDef } from "./fmt_ast.wado";
 use { StrCursor } from "./str_cursor.wado";
 
 internal struct RefTable {
-    internal defs: TreeMap<String, LinkReferenceDef>,
+    internal defs: HashMap<String, LinkReferenceDef>,
 }
 
 internal fn new_ref_table() -> RefTable {
-    return RefTable { defs: TreeMap::<String, LinkReferenceDef>::new() };
+    return RefTable { defs: HashMap::<String, LinkReferenceDef>::new() };
 }
 
 /// Registers a definition. `def.label` is the label as written (raw, not

@@ -1,7 +1,7 @@
 //! A `ProtoFile` as Wado: a struct per message, an enum per enum, and the
 //! `Message` and `Enumeration` impls through which Grog's runtime encodes them.
 
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { apply_case } from "core:serde";
 use {
     CodeWriter,
@@ -44,13 +44,13 @@ global UNKNOWN_FIELDS: String = "unknown_fields";
 pub fn emit(file: &ProtoFile, module: &ModuleSpec, runtime: String) -> Result<String, EmitError> {
     let mut e = Emitter {
         file,
-        names: TreeMap::new(),
+        names: HashMap::new(),
         taken: NameRegistry::new(),
-        features: TreeMap::new(),
+        features: HashMap::new(),
         uses_map: false,
         uses_linear: false,
     };
-    for let imported of [RUNTIME, "TreeMap", "LinearBuffer"] {
+    for let imported of [RUNTIME, "HashMap", "LinearBuffer"] {
         e.taken.bind(imported);
     }
     for let decl of &file.messages {
@@ -72,7 +72,7 @@ pub fn emit(file: &ProtoFile, module: &ModuleSpec, runtime: String) -> Result<St
     module.emit(&mut w);
     w.blank();
     if e.uses_map {
-        w.line("use { TreeMap } from \"core:collections\";");
+        w.line("use { HashMap } from \"core:collections\";");
     }
     if e.uses_linear {
         w.line("use { LinearBuffer } from \"core:linear\";");
@@ -443,18 +443,18 @@ variant Resolved {
 struct OneofPlan {
     field: String,
     sum: String,
-    members: TreeMap<String, Member>,
+    members: HashMap<String, Member>,
 }
 
 struct Emitter {
     file: &ProtoFile,
     /// Keyed by the full protobuf name, package included.
-    names: TreeMap<String, Named>,
+    names: HashMap<String, Named>,
     /// Each Wado name handed out, held by the protobuf path it went to, past
     /// those the module imports.
     taken: NameRegistry,
     /// Each message's own `features`, keyed by its dotted path.
-    features: TreeMap<String, Features>,
+    features: HashMap<String, Features>,
     uses_map: bool,
     /// Whether a field is read one value at a time, through a `LinearBuffer`.
     uses_linear: bool,
@@ -487,8 +487,8 @@ impl Emitter {
         let prefix = `${apply_case(CaseStyle::ScreamingSnake, &decl.path[decl.path.len() - 1])}_`;
         let mut cases: List<PlannedCase> = [];
         let mut aliases: List<[String, String]> = [];
-        let mut named_by = TreeMap::<String, String>::new();
-        let mut case_of = TreeMap::<i32, String>::new();
+        let mut named_by = HashMap::<String, String>::new();
+        let mut case_of = HashMap::<i32, String>::new();
         if decl.values.is_empty() {
             return Result::Err(EmitError::Invalid(`${decl.line}: ${decl.path.join(".")} declares no value`));
         }
@@ -545,12 +545,12 @@ impl Emitter {
         let name = self.names[self.full_name(&decl.path)].name;
         let mut spec = StructSpec::new(&name, Vis::Pub);
         let mut slots: List<Slot> = [];
-        let mut field_names = TreeSet::<String>::new();
+        let mut field_names = HashSet::<String>::new();
         field_names.insert(UNKNOWN_FIELDS);
         // Each oneof in the order its first member appears, and where each sits by its protobuf name.
         let mut oneofs: List<OneofPlan> = [];
-        let mut oneof_at = TreeMap::<String, i32>::new();
-        let mut numbered = TreeMap::<i32, String>::new();
+        let mut oneof_at = HashMap::<String, i32>::new();
+        let mut numbered = HashMap::<i32, String>::new();
         for let field of &decl.fields {
             let n = field.number;
             if !is_assignable_field_number(n) {
@@ -577,7 +577,7 @@ impl Emitter {
                             default: Option::Some("null"),
                         });
                         oneof_at[*oneof] = oneofs.len();
-                        oneofs.push(OneofPlan { field: wado_name, sum, members: TreeMap::new() });
+                        oneofs.push(OneofPlan { field: wado_name, sum, members: HashMap::new() });
                         oneofs.len() - 1;
                     },
                 };
@@ -682,8 +682,8 @@ impl Emitter {
             // An entry's value is length-prefixed whatever the message's encoding.
             Message([wado, _]) => [wado, Call::MessageMap, `::<${k.runtime}, ${k.wado}, ${wado}>`],
         };
-        let map = `TreeMap<${k.wado}, ${wado}>`;
-        return Result::Ok([map, "TreeMap::new()", access(field.number, put, Take::Into(put), types)]);
+        let map = `HashMap<${k.wado}, ${wado}>`;
+        return Result::Ok([map, "HashMap::new()", access(field.number, put, Take::Into(put), types)]);
     }
 
     /// A `oneof` member: its case, and how its value sits on the wire.
@@ -829,7 +829,7 @@ fn access(number: i32, put: Call, take: Take, types: String) -> Access {
 /// share one.
 fn claim_field_name(
     name: &String,
-    taken: &mut TreeSet<String>,
+    taken: &mut HashSet<String>,
     decl: &MessageDecl,
     field: &Field,
 ) -> Result<String, EmitError> {

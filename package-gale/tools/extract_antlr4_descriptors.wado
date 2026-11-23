@@ -31,7 +31,7 @@ use { ErrorCode } from "wasi:filesystem/types.wado";
 // `core:fs` does not reach.
 use fs from "core:fs";
 use { CodeWriter } from "lib:wadopoet";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { expand_action_templates } from "../src/g4/action_templates.wado";
 use { to_snake_case } from "../src/ident.wado";
 use { strip_action_bodies } from "../src/g4/action_strip.wado";
@@ -821,7 +821,7 @@ fn emit_category_test_file<S: AsStrSlice, S1: AsStrSlice>(attr: S, category: S1,
 /// modules first appear, and split where a group would bring more than
 /// `GRAMMARS_PER_FILE` modules.
 fn group_by_module(chunks: &List<TestChunk>) -> List<List<TestChunk>> {
-    let mut slot_of: TreeMap<String, i32> = TreeMap::new();
+    let mut slot_of: HashMap<String, i32> = HashMap::new();
     let mut by_module: List<List<TestChunk>> = [];
     for let chunk of chunks {
         let slot = slot_of.get_or_insert(chunk.module.name, by_module.len());
@@ -1583,10 +1583,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
 
         let txt_files = list_files_with_suffix(&cat_src_dir, ".txt");
         let mut entries: List<DescriptorEntry> = [];
-        let mut output = CategoryOutput { category: *category, chunks: [], module_of: TreeMap::new() };
+        let mut output = CategoryOutput { category: *category, chunks: [], module_of: HashMap::new() };
         // Keyed by the grammar and its slaves, so a descriptor repeating an
         // earlier one's grammar reuses its module.
-        let mut module_of_grammar: TreeMap<String, GrammarModule> = TreeMap::new();
+        let mut module_of_grammar: HashMap<String, GrammarModule> = HashMap::new();
         // Tracks per-category I/O / parse failures separately from triage
         // skips. `entries.is_empty()` alone cannot distinguish "every
         // descriptor was [skip]-triaged" (intentional, we want to drop
@@ -2018,7 +2018,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit, Process, Syst
 struct CategoryOutput {
     category: String,
     chunks: List<TestChunk>,
-    module_of: TreeMap<String, GrammarModule>,
+    module_of: HashMap<String, GrammarModule>,
 }
 
 /// Run the oracle on every `oracle-pending/<C>/<N>.input` against its

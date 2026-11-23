@@ -1,7 +1,7 @@
 //! Stage 0's pass over a graph: discharge each operator's extent conditions in
 //! order, solving which axes are one as it goes, then name each axis.
 
-use { HashMap, HashSet, TreeSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { apply_case } from "core:serde";
 use { Extent, solved } from "./extent.wado";
 use { module_names } from "./idents.wado";
@@ -776,7 +776,7 @@ fn checked_branch(node: &Node, attr: String, scope: &Checked) -> Result<[Graph, 
 fn distinct(owed: List<Condition>) -> List<Condition> {
     let mut kept: List<Condition> = [];
     // A `Poly` has no `Hash` while its derivation is a roadmap item of WEP: HashMap.
-    let mut seen = TreeSet::<Poly>::new();
+    let mut seen = HashSet::<Poly>::new();
     for let c of owed {
         if seen.insert(c.slack) {
             kept.push(c);

@@ -1,6 +1,6 @@
 //! Fixing a graph's symbolic extents and choosing its outputs before stage 0.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Graph, ValueInfo } from "../src/graph.wado";
 use { infer } from "../src/infer.wado";
 use { read } from "../src/onnx_text.wado";
@@ -30,21 +30,21 @@ fn relu() -> Graph {
 
 test "a bound dimension becomes static on every tensor declaring it, keeping its name" {
     let mut graph = relu();
-    bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
+    bind_dims(&mut graph, &({ N: 2 } as HashMap<String, i32>)).unwrap();
     assert dims_of(&graph, "X") == "Rank::Dims([Dim::Bound([\"N\", 2]), Dim::Static(4)])";
     assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Bound([\"N\", 2]), Dim::Static(4)])";
 }
 
 test "a dimension the graph never declares stops the build" {
     let mut graph = relu();
-    let e = bind_dims(&mut graph, &({ M: 2 } as TreeMap<String, i32>)).unwrap_err();
+    let e = bind_dims(&mut graph, &({ M: 2 } as HashMap<String, i32>)).unwrap_err();
     assert e.option == "dims";
     assert `${e}` == "dims: the graph declares no dimension M";
 }
 
 test "a negative extent stops the build" {
     let mut graph = relu();
-    assert `${bind_dims(&mut graph, &({ N: -1 } as TreeMap<String, i32>)).unwrap_err()}` == "dims: N is -1, and an extent is not negative";
+    assert `${bind_dims(&mut graph, &({ N: -1 } as HashMap<String, i32>)).unwrap_err()}` == "dims: N is -1, and an extent is not negative";
 }
 
 fn two_heads() -> Graph {
@@ -95,25 +95,25 @@ test "an output the graph does not declare stops the build" {
 
 test "a bound dimension fixes the arithmetic a dim_param spells over it" {
     let mut graph = read("g (float[N, 4] X) => (float[\"N + 1\", 4] Y) { Y = Relu(X) }").unwrap();
-    bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
+    bind_dims(&mut graph, &({ N: 2 } as HashMap<String, i32>)).unwrap();
     assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Bound([\"N + 1\", 3]), Dim::Static(4)])";
 }
 
 test "binding one name of a dim_param's arithmetic but not another stops the build" {
     let mut graph = read("g (float[N, M] X) => (float[\"N + M\", 4] Y) { Y = Relu(X) }").unwrap();
-    let e = bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap_err();
+    let e = bind_dims(&mut graph, &({ N: 2 } as HashMap<String, i32>)).unwrap_err();
     assert `${e}` == "dims: N fixes part of the dimension \"N + M\", which also reads M";
 }
 
 test "arithmetic a bound dimension makes negative stops the build" {
     let mut graph = read("g (float[N, 4] X) => (float[\"N - 3\", 4] Y) { Y = Relu(X) }").unwrap();
-    let e = bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap_err();
+    let e = bind_dims(&mut graph, &({ N: 2 } as HashMap<String, i32>)).unwrap_err();
     assert `${e}` == "dims: N makes the dimension \"N - 3\" -1, and an extent is not negative";
 }
 
 test "arithmetic a bound dimension takes past i64 stops the build" {
     let mut graph = read("g (float[N, 4] X) => (float[\"N * N * N\", 4] Y) { Y = Relu(X) }").unwrap();
-    let e = bind_dims(&mut graph, &({ N: i32::MAX } as TreeMap<String, i32>)).unwrap_err();
+    let e = bind_dims(&mut graph, &({ N: i32::MAX } as HashMap<String, i32>)).unwrap_err();
     assert `${e}` == "dims: N makes the dimension \"N * N * N\" more than i64 holds";
 }
 
@@ -135,7 +135,7 @@ fn head() -> Graph {
 
 /// `graph` with `last` applied and checked, then each node as its operator
 /// over its operands.
-fn cut(graph: &mut Graph, last: TreeMap<String, i32>) -> Result<String, OptionConflict> {
+fn cut(graph: &mut Graph, last: HashMap<String, i32>) -> Result<String, OptionConflict> {
     let mut checked = infer(graph).unwrap();
     for let [output, axis] of last.entries() {
         keep_last(graph, &checked, output, *axis)?;
@@ -271,7 +271,7 @@ test "an output the cut cannot take stops the build" {
 
 /// `graph` with `arg_max` applied and checked, then each node as `cut` lists
 /// it and the output's element and axes.
-fn ranked(graph: &mut Graph, arg_max: TreeMap<String, i32>) -> Result<String, OptionConflict> {
+fn ranked(graph: &mut Graph, arg_max: HashMap<String, i32>) -> Result<String, OptionConflict> {
     for let [output, axis] of arg_max.entries() {
         take_arg_max(graph, &infer(graph).unwrap(), output, *axis)?;
     }

@@ -1,7 +1,7 @@
 //! Reading a graph out of a serialized ONNX `ModelProto`. The schema is
 //! `onnx.proto` as ONNX ships it, and Grog generates its types.
 
-use { HashMap, TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use grog from "lib:grog";
 use onnx from "./onnx.proto"
     with {
@@ -239,7 +239,7 @@ fn leave_in_place(t: &onnx::TensorProto, name: &String, in_place: &mut Option<In
     }
     let range = WeightRange { file: location, start: offset as i32, end: (offset + length) as i32 };
     let Some(held) = in_place else {
-        let mut ranges = TreeMap::<String, WeightRange>::new();
+        let mut ranges = HashMap::<String, WeightRange>::new();
         ranges[*name] = range;
         *in_place = Option::Some(InPlace { ranges });
         return Result::Ok(());

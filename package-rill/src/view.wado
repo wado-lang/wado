@@ -2,7 +2,7 @@
 //! so a write to a signal touches the nodes that show it and no others.
 
 use { Track, flush, observe, on_cleanup, scope, untracked } from "./signals.wado";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Dom, Element, Event, EventTarget, Node } from "wado-lang:web";
 
 /// An element as it is to be built. Each method returns the view with one more
@@ -81,15 +81,15 @@ struct Build {
     claiming: bool,
     served: List<Node>,
     passed: i32,
-    attributes: TreeMap<String, Option<String>>,
-    served_attributes: TreeMap<String, String>,
+    attributes: HashMap<String, Option<String>>,
+    served_attributes: HashMap<String, String>,
 }
 
 impl Build {
     fn new(node: Element, report: Option<fn mut(String)>, claiming: bool) -> Build with Dom {
         assert !claiming || report matches { Some(_) }, "a build claims only while it hydrates";
         let mut served: List<Node> = [];
-        let mut served_attributes = TreeMap::<String, String>::new();
+        let mut served_attributes = HashMap::<String, String>::new();
         if claiming {
             let mut child = node.first_child();
             while let Some(current) = child {
@@ -100,7 +100,7 @@ impl Build {
                 served_attributes[name] = node.get_attribute(name).unwrap();
             }
         }
-        return Build { node, report, claiming, served, passed: 0, attributes: TreeMap::new(), served_attributes };
+        return Build { node, report, claiming, served, passed: 0, attributes: HashMap::new(), served_attributes };
     }
 
     fn hydrating(&self) -> bool {
