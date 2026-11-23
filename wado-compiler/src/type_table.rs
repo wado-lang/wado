@@ -7219,6 +7219,16 @@ impl TypeTable {
         })
     }
 
+    /// What `receiver` fills impl block `def`'s one position with where the
+    /// block targets a function type: [`Self::function_position`]. `None` for a
+    /// block targeting anything else, even a newtype a function type underlies.
+    pub fn function_target_position(&self, def: DefId, receiver: TypeId) -> Option<TypeId> {
+        let target = self.peel_refs(self.impl_target_whole(def));
+        matches!(self.get(target), ResolvedType::Function { .. })
+            .then(|| self.function_position(receiver))
+            .flatten()
+    }
+
     /// Whether impl block `def` reaches the receiver type `instance`. Reference
     /// targets share one `&` head, so their referents' heads must agree too.
     pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
@@ -7238,14 +7248,12 @@ impl TypeTable {
         }
         let written = &target.args;
         let instance = self.peel_refs(instance);
-        let function_target = matches!(
-            self.get(self.peel_refs(target.whole)),
-            ResolvedType::Function { .. }
-        );
-        let args = match self.get(instance) {
-            ResolvedType::Function { .. } if function_target => vec![instance],
-            ResolvedType::Struct { type_args, .. } => type_args.clone(),
-            _ => self.declared_type_args(instance).unwrap_or_default(),
+        let args = match self.function_target_position(def, instance) {
+            Some(function) => vec![function],
+            None => match self.get(instance) {
+                ResolvedType::Struct { type_args, .. } => type_args.clone(),
+                _ => self.declared_type_args(instance).unwrap_or_default(),
+            },
         };
         self.impl_target_reaches(written, &args)
     }

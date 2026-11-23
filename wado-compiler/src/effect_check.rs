@@ -2682,22 +2682,24 @@ impl EffectIndex<'_> {
                 _ if !functions.is_empty() => functions,
                 _ => vec![method_info.struct_type_args.clone()],
             };
+            let selected = impl_method.map(|(method, block)| {
+                let declared = self
+                    .fn_effects
+                    .get(&method)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default();
+                let bounds = self
+                    .receiver_bounds
+                    .get(&method)
+                    .map(|b| &**b)
+                    .unwrap_or_default();
+                (declared, bounds, spelled_target_args(self.types, block))
+            });
             let impl_entry = self.impl_effects.get(&(receiver, key));
             for receiver_args in &receiver_arg_lists {
-                if let Some((method, block)) = impl_method {
-                    let declared = self
-                        .fn_effects
-                        .get(&method)
-                        .map(Vec::as_slice)
-                        .unwrap_or_default();
-                    let target_args = spelled_target_args(self.types, block);
-                    let bounds = self
-                        .receiver_bounds
-                        .get(&method)
-                        .map(|b| &**b)
-                        .unwrap_or_default();
+                if let Some((declared, bounds, target_args)) = &selected {
                     brought.effects.extend(
-                        self.close_over_args(declared, bounds, &target_args, receiver_args, None)
+                        self.close_over_args(declared, bounds, target_args, receiver_args, None)
                             .into_iter()
                             .filter(|e| !e.is_param()),
                     );
