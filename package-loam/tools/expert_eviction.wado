@@ -3,7 +3,9 @@
 //! The routing reads none of what the pools hold, so one run's fetches answer
 //! for every order and budget, so long as every layer fetched in it: a run
 //! whose budget held a layer's experts whole recorded nothing of that layer.
-//! `Farthest` knows the future, so it bounds what any order can reach.
+//! `Farthest` knows the future, so it bounds what any order can reach. A step
+//! of one token fills at most as many slots a layer as each of `STEP_FILLS`
+//! says, and leaves the rest to the host.
 //!
 //!     wado run tools/expert_eviction.wado -- fetches.json 2000000000 4000000000
 
@@ -19,6 +21,8 @@ global ORDERS: List<[String, Eviction]> = [
     ["LayerOrder", Eviction::LayerOrder],
     ["Farthest", Eviction::Farthest],
 ];
+
+global STEP_FILLS: List<i32> = [0, 1, 2, 4];
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let given = args();
@@ -40,8 +44,12 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
             exit(1);
         },
     };
-    println("| Budget, bytes | Order | Prompt experts held | Step experts held | Bytes a step token loads |");
-    println("| ------------- | ----- | ------------------- | ----------------- | ------------------------ |");
+    println(
+        "| Budget, bytes | Order | Step fills | Prompt experts held | Step experts held | On the host | Bytes a step token loads |",
+    );
+    println(
+        "| ------------- | ----- | ---------- | ------------------- | ----------------- | ----------- | ------------------------ |",
+    );
     let step_tokens = step_tokens(&record);
     for let budget of given[1..<given.len()] {
         let Ok(bytes) = i64::from_str(budget) else {
@@ -49,14 +57,16 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
             exit(2);
         };
         for let [name, eviction] of ORDERS {
-            match replayed(&record.shapes, &record.fetches, bytes, eviction) {
-                Ok([prompts, steps]) => println(
-                    `| ${bytes} | ${name} | ${share(&prompts)} | ${share(&steps)} | ${steps.loaded_bytes / i64::max(
-                        step_tokens,
-                        1,
-                    )} |`,
-                ),
-                Err(e) => println(`| ${bytes} | ${name} | ${e} | | |`),
+            for let fills of STEP_FILLS {
+                match replayed(&record.shapes, &record.fetches, bytes, eviction, fills) {
+                    Ok([prompts, steps]) => println(
+                        `| ${bytes} | ${name} | ${fills} | ${share(&prompts, prompts.held)} | ${share(
+                            &steps,
+                            steps.held,
+                        )} | ${share(&steps, steps.hosted)} | ${steps.loaded_bytes / i64::max(step_tokens, 1)} |`,
+                    ),
+                    Err(e) => println(`| ${bytes} | ${name} | ${fills} | ${e} | | | |`),
+                }
             }
         }
     }
@@ -73,9 +83,10 @@ fn step_tokens(record: &Fetches) -> i64 {
     return singles.into_iter().filter(|f| f.step == step).count() as i64;
 }
 
-fn share(counts: &ExpertCounts) -> String {
+/// `part` of the experts `counts` says were picked.
+fn share(counts: &ExpertCounts, part: i64) -> String {
     if counts.picked == 0 {
         return "none picked";
     }
-    return `${counts.held as f64 * 100.0 / counts.picked as f64:.1}% of ${counts.picked}`;
+    return `${part as f64 * 100.0 / counts.picked as f64:.1}% of ${counts.picked}`;
 }

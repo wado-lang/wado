@@ -39,8 +39,7 @@ use crate::name::{
 use crate::package::Package;
 use crate::synthesis::SynthesisError;
 use crate::tir::{
-    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirTest,
-    TypeId,
+    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirTest, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -1055,11 +1054,18 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
             } else {
                 op.return_type
             };
-            // A closure crosses as an extern handle; the elaborator checked its shape.
-            let values = op
-                .params
-                .iter()
-                .filter(|p| !matches!(tt.get(p.type_id), ResolvedType::Function { .. }));
+            // A closure crosses as an extern handle; the elaborator checked its
+            // shape. A synchronous operation's own `&ListView<T>` parameter
+            // crosses as the `list<T>` it lends, so only its `T` is checked.
+            let values = op.params.iter().filter_map(|p| {
+                if matches!(tt.get(p.type_id), ResolvedType::Function { .. }) {
+                    return None;
+                }
+                let lent = (!op.is_async)
+                    .then(|| tt.list_view_ref_element(p.type_id))
+                    .flatten();
+                Some((lent.unwrap_or(p.type_id), p.span))
+            });
             signature_representable(
                 values,
                 (result, op.span),
@@ -1082,7 +1088,7 @@ fn validate_boundary_representable(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Result<(), SynthesisError> {
     signature_representable(
-        user_func.params.iter(),
+        user_func.params.iter().map(|p| (p.type_id, p.span)),
         (user_func.return_type, user_func.span),
         Boundary::Export,
         tt,
@@ -1096,15 +1102,15 @@ fn validate_boundary_representable(
 /// Reject a param or return type with no Component Model value representation
 /// in any world: an empty record, a `()` param, or a 128-bit, `v128` or half
 /// scalar. The error carries the span of the parameter, or the result's.
-fn signature_representable<'a>(
-    params: impl Iterator<Item = &'a TirParam>,
+fn signature_representable(
+    params: impl Iterator<Item = (TypeId, Span)>,
     result: (TypeId, Span),
     boundary: Boundary,
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Result<(), (String, Span)> {
     params
-        .map(|p| (p.type_id, Slot::Value, p.span))
+        .map(|(tid, span)| (tid, Slot::Value, span))
         .chain(std::iter::once((result.0, Slot::Optional, result.1)))
         .try_for_each(|(tid, slot, span)| {
             types::check_cm_boundary_representable(

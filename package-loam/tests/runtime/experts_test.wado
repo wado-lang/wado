@@ -133,8 +133,8 @@ test "a layout's layers split into as few runs as keep each pool within what the
 
 /// Rounds of three layers within `budget` bytes, 5 slots at 10, each layer
 /// picking experts 0 and 1 at every one-token step: the counts `eviction`
-/// gives.
-fn cycled(eviction: Eviction, budget: i64 = 10) -> ExpertCounts {
+/// gives, each step filling at most `step_fills` slots.
+fn cycled(eviction: Eviction, budget: i64 = 10, step_fills: i32 = 2) -> ExpertCounts {
     let mut fetches: List<Fetch> = [];
     for let _ of 0..<10 {
         for let layer of 0..<3 {
@@ -145,11 +145,19 @@ fn cycled(eviction: Eviction, budget: i64 = 10) -> ExpertCounts {
             });
         }
     }
-    let [prompts, steps] = replayed(&[shape(3, 0)], &fetches, budget, eviction).unwrap();
+    let [prompts, steps] = replayed(&[shape(3, 0)], &fetches, budget, eviction, step_fills).unwrap();
     assert prompts.picked == 0;
     assert steps.picked == 60;
-    assert steps.loaded_bytes == 2 * (steps.picked - steps.held);
+    assert steps.loaded_bytes == 2 * (steps.picked - steps.held - steps.hosted);
     return steps;
+}
+
+test "a step filling no slot leaves the experts the pools lack to the host" {
+    let none = cycled(Eviction::LayerOrder, 10, 0);
+    assert none.held == 0 && none.hosted == 60;
+    let one = cycled(Eviction::LayerOrder, 10, 1);
+    assert 0 < one.hosted < 60;
+    assert one.held + one.hosted < 60;
 }
 
 test "layers taken in turn hold more under the layer that runs last from here than under the slot used longest ago" {
@@ -166,8 +174,8 @@ test "a replay counts the picks of layers holding their own experts as held" {
 test "experts fetched into pools of fewer slots compute what pools of every slot do, in a loop or a branch too" {
     let mut cpu = Cpu {};
     for let stacking of STACKINGS {
-        let resident = stacked_runs(&mut cpu, 8, stacking, STACKED_RUNS);
-        let fetched = stacked_runs(&mut cpu, 5, stacking, STACKED_RUNS);
+        let [resident, _] = stacked_runs(&mut cpu, 8, stacking, STACKED_RUNS);
+        let [fetched, _] = stacked_runs(&mut cpu, 5, stacking, STACKED_RUNS);
         for let [r, f] of resident.into_iter().zip(fetched.into_iter()) {
             let [want, got] = [
                 cpu.download(&typed::<Cpu, f32, [A, B]>(&cpu, &r)),

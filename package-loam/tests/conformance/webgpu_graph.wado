@@ -329,8 +329,10 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`pool of halves ${apart(&mut gpu, &pooled_halves, &CpuTensor::Value(cpu_halves))}`);
     println(`pool of bytes ${apart(&mut gpu, &pooled_bytes, &CpuTensor::Value(cpu_bytes))}`);
     for let stacking of cases::STACKINGS {
-        let resident = cases::stacked_runs(cpu, 8, stacking, cases::STACKED_RUNS);
-        for let [k, ran] of cases::stacked_runs(&mut gpu, 5, stacking, cases::STACKED_RUNS).into_iter().enumerate() {
+        let [resident, _] = cases::stacked_runs(cpu, 8, stacking, cases::STACKED_RUNS);
+        let [runs, counts] = cases::stacked_runs(&mut gpu, 5, stacking, cases::STACKED_RUNS);
+        assert counts.hosted > 0, "a step of one token computes on the host the experts the pools lack";
+        for let [k, ran] of runs.into_iter().enumerate() {
             let fetched = typed::<WebGpuBackend, f32, Untyped>(&gpu, &ran);
             println(
                 `experts fetched ${stacking}, run ${k} ${apart(&mut gpu, &fetched, &typed::<Cpu, f32, Untyped>(
@@ -385,10 +387,15 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`quantized layer ${i} ${apart(&mut gpu, &output, &expected)}`);
     }
 
-    for let tokens of [1, 3] as List<i32> {
+    for let tokens of [0, 1, 3] as List<i32> {
         let c = cases::experts_case(tokens);
         let mixing = cases::compiled_from(&mut gpu, |r| cases::mixing_pass(r, tokens), &[], &[]);
-        let mixed = gpu.executed(&mixing, &cases::mixing_arguments(&mut gpu, tokens), &[]);
+        let arguments = cases::mixing_arguments(&mut gpu, tokens);
+        let mixing_from = gpu.dispatches();
+        let mixed = gpu.executed(&mixing, &arguments, &[]);
+        if tokens == 1 {
+            assert gpu.dispatches() - mixing_from == 22, "the routing's 18, then two products a pick";
+        }
         let output = typed::<WebGpuBackend, f32, [cases::A, cases::B]>(&gpu, &mixed[0]);
         let expected = cases::mixing(
             cpu,

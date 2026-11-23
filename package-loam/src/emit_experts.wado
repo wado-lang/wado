@@ -4,7 +4,15 @@
 
 use { HashMap, HashSet } from "core:collections";
 use { Graph, Node, QMOE } from "./graph.wado";
-use { Checked, QMOE_DOWN, QMOE_DOWN_ZERO_POINTS, QMOE_UP, QMOE_UP_ZERO_POINTS } from "./infer.wado";
+use {
+    Checked,
+    QMOE_DOWN,
+    QMOE_DOWN_ZERO_POINTS,
+    QMOE_UP,
+    QMOE_UP_ZERO_POINTS,
+    Quantization,
+    quantization,
+} from "./infer.wado";
 use { branches_of } from "./lowering.wado";
 use { NameRegistry } from "lib:wadopoet";
 
@@ -15,12 +23,13 @@ global EXPERT_OPERANDS: List<i32> = [
 ];
 
 /// The layers of one layout: each layer's expert weights in pool order, the
-/// host step that fetches each layer's experts, and the marker naming the
-/// pools' slots.
+/// host step that fetches each layer's experts, the marker naming the pools'
+/// slots, and how the layers quantize their weights.
 internal struct ExpertGroup {
     internal layers: List<List<String>>,
     internal steps: List<i32>,
     internal slots: String,
+    internal quantized: Quantization,
 }
 
 impl ExpertGroup {
@@ -80,13 +89,17 @@ impl ExpertPlan {
             if !weights.into_iter().all(|w| initializers.contains(w) && !elsewhere.contains(w)) {
                 continue;
             }
-            let layout = layout_of(node, checked);
+            // Inference refused a `QMoE` whose quantization it cannot read.
+            let Ok(quantized) = quantization(node) else {
+                unreachable();
+            };
+            let layout = `${layout_of(node, checked)} ${quantized.bits}/${quantized.block}`;
             let at = match layouts.into_iter().position(|l| l == layout) {
                 Some(at) => at,
                 null => {
                     let slots = taken.fresh("ExpertSlots", &layout);
                     layouts.push(layout);
-                    plan.groups.push(ExpertGroup { layers: [], steps: [], slots });
+                    plan.groups.push(ExpertGroup { layers: [], steps: [], slots, quantized });
                     plan.groups.len() - 1;
                 },
             };

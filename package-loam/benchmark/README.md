@@ -175,7 +175,9 @@ CPU, as its `--n-cpu-moe` does, and the rest on the device; with none on the
 CPU, the device runs out of memory. Its release reads ggml-org's MXFP4 GGUF,
 the precision OpenAI released the experts in. Loam reads the `q4f16` export
 `example/gpt-oss-20b/fetch.sh` downloads, holds 5 GB of its experts on the
-device, and writes the rest there as a token picks them.
+device and all of them in host memory. The prompt writes the rest to the
+device as it picks them. A generated token writes at most 2 of them a layer,
+and computes the others on one host core.
 
 | Arm                  | Program                                                        |
 | -------------------- | -------------------------------------------------------------- |
@@ -185,9 +187,9 @@ device, and writes the rest there as a token picks them.
 The two read other weights, and pick other tokens from the first on. Loam picks
 the first 8 that `example/gpt-oss-20b/generate.json` records.
 
-| Implementation                         |     Throughput |      ms/iter | vs best |
-| -------------------------------------- | -------------: | -----------: | ------- |
-| llama.cpp Vulkan, 10 layers on the CPU | 40.38 tokens/s |   792.421 ms | 1.00x   |
-| llama.cpp Vulkan, 14 layers on the CPU | 33.31 tokens/s |   960.788 ms | 1.21x   |
-| llama.cpp Vulkan, 24 layers on the CPU | 22.02 tokens/s |  1453.414 ms | 1.83x   |
-| **Loam** `WebGpuBackend`               |  1.57 tokens/s | 20359.268 ms | 25.72x  |
+| Implementation                         |     Throughput |     ms/iter | vs best |
+| -------------------------------------- | -------------: | ----------: | ------- |
+| llama.cpp Vulkan, 10 layers on the CPU | 40.38 tokens/s |  792.421 ms | 1.00x   |
+| llama.cpp Vulkan, 14 layers on the CPU | 33.31 tokens/s |  960.788 ms | 1.21x   |
+| llama.cpp Vulkan, 24 layers on the CPU | 22.02 tokens/s | 1453.414 ms | 1.83x   |
+| **Loam** `WebGpuBackend`               |  8.87 tokens/s | 3607.657 ms | 4.55x   |

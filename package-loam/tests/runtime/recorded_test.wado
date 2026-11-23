@@ -306,6 +306,19 @@ test "a recorded mixture of experts computes the CPU's, by its picks and by its 
     }
 }
 
+test "a mixture of experts records a step's experts as one composite, and a prompt's or any decomposed as none" {
+    for let [recorder, tokens, composites] of [
+        [Recorder::new(), 1, 1],
+        [Recorder::new(), 3, 0],
+        [Recorder::decomposing(), 1, 0],
+    ] {
+        let mut r = recorder;
+        let recorded = mixing_pass(&mut r, tokens);
+        let mixtures = recorded.nodes.into_iter().filter(|n| n.op matches { ExpertMixture(_) }).count();
+        assert mixtures == composites;
+    }
+}
+
 test "a recorded quantized product and gather compute the CPU's, as composites and decomposed" {
     let case = quantized_case();
     let cpu = &mut Cpu {};

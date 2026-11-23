@@ -2,7 +2,7 @@
 //! with a cache and an `If`, and `decode`. `pjrt_graph.wado` runs them on a
 //! device, and `pjrt_topology.wado` compiles them for one it does not have.
 
-use { PjrtHost } from "core:pjrt";
+use { PjrtHost } from "lib:pjrt";
 use {
     Any,
     Backend,
@@ -101,8 +101,9 @@ pub fn programs(device: &mut PjrtBackend, mut note: fn mut(String, f32) with _) 
     note("pool of halves", apart(device, &pools.0, &CpuTensor::Value(pooled_halves)));
     note("pool of bytes", apart(device, &pools.1, &CpuTensor::Value(pooled_bytes)));
     for let stacking of cases::STACKINGS {
-        let resident = cases::stacked_runs(cpu, 8, stacking, cases::STACKED_RUNS);
-        for let [k, fetched] of cases::stacked_runs(device, 5, stacking, cases::STACKED_RUNS).into_iter().enumerate() {
+        let [resident, _] = cases::stacked_runs(cpu, 8, stacking, cases::STACKED_RUNS);
+        let [runs, _] = cases::stacked_runs(device, 5, stacking, cases::STACKED_RUNS);
+        for let [k, fetched] of runs.into_iter().enumerate() {
             note(
                 `experts fetched ${stacking}, run ${k}`,
                 apart(device, &fetched, &typed::<Cpu, f32, Untyped>(cpu, &resident[k])),

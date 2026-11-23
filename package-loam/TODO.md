@@ -21,7 +21,9 @@ beside the roadmap and holds no item up.
    tokens on the RTX 4060 Ti at least 1/1.5 times as fast as the fastest of
    llama.cpp's Vulkan arms
    ([measured](./benchmark/README.md#gpt-oss-20b)). Loading the model is not
-   timed.
+   timed. [The Experts on WebGPU](./docs/experts-on-webgpu.md) sketches
+   making a pass cheap on the host, and [Experts on the CPU](./docs/cpu-experts.md)
+   computing the experts the device lacks.
 
 ## Later
 
@@ -32,7 +34,7 @@ Work no roadmap item holds yet. It is unordered.
   a data file's first 2 GiB loads on every device.
 
 - [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
-  shape class and compiled for each device: StableHLO through `core:pjrt` for
+  shape class and compiled for each device: StableHLO through `lib:pjrt` for
   a TPU, Loam's own compiler for WebGPU. See
   [Loam on TPU and WebGPU](./docs/devices.md), whose plan lists the steps, a TPU
   run and many requests at once among them. Finished when every step of that

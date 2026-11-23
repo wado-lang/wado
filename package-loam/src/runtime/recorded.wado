@@ -4,6 +4,17 @@
 
 use { HashMap } from "core:collections";
 use {
+    Experts,
+    Held,
+    Hidden,
+    Picked,
+    Projection,
+    ProjectionShape,
+    Routing,
+    decomposed_mixture,
+    runs_by_picks,
+} from "./experts.wado";
+use {
     Binary,
     Comparison,
     Convolution,
@@ -72,6 +83,61 @@ pub struct QuantizedNode {
     pub zero_points: bool,
 }
 
+/// The operands an expert mixture node reads before its projections'.
+global MIXTURE_PROJECTIONS: i32 = 7;
+
+/// What an expert mixture takes beside its operands: the experts' attributes,
+/// and its two projections'.
+pub struct ExpertMixtureNode {
+    pub experts: Experts,
+    pub projections: List<ProjectionNode>,
+}
+
+/// A projection's shape, and whether it has a bias and zero points.
+pub struct ProjectionNode {
+    pub shape: ProjectionShape,
+    pub biased: bool,
+    pub zero_points: bool,
+}
+
+impl ProjectionNode {
+    pub fn of<affine G: Graph, E: Float>(p: &Projection<G, E>) -> ProjectionNode {
+        return ProjectionNode {
+            shape: p.shape,
+            biased: p.bias matches { Some(_) },
+            zero_points: p.zero_points matches { Some(_) },
+        };
+    }
+
+    /// Where its weights are from `first` on, in a `QMoE`'s order: the packed
+    /// weight, the scales, then the bias and the zero points where it has
+    /// them.
+    pub fn places(&self, first: i32) -> ProjectionPlaces {
+        let mut next = first + 2;
+        let mut bias: Option<i32> = null;
+        if self.biased {
+            bias = Option::Some(next);
+            next += 1;
+        }
+        let mut zero_points: Option<i32> = null;
+        if self.zero_points {
+            zero_points = Option::Some(next);
+            next += 1;
+        }
+        return ProjectionPlaces { packed: first, scales: first + 1, bias, zero_points, end: next };
+    }
+}
+
+/// Where a projection's weights are among a list of them, and the place past
+/// the last.
+pub struct ProjectionPlaces {
+    pub packed: i32,
+    pub scales: i32,
+    pub bias: Option<i32>,
+    pub zero_points: Option<i32>,
+    pub end: i32,
+}
+
 /// One operation of a recorded graph, with the attributes `Graph`'s method
 /// takes beside its operands.
 pub variant Operation {
@@ -121,6 +187,11 @@ pub variant Operation {
     /// `Graph::quantized_gather` over its table, indices, scales and zero
     /// points.
     QuantizedGather(QuantizedNode),
+    /// `Graph::expert_mixture` over the rows, the routing's gates, picks and
+    /// weights, the held experts' slots, order and count, then each
+    /// projection's weight, scales, bias and zero points, the last two where
+    /// it has them.
+    ExpertMixture(ExpertMixtureNode),
     /// The `k`th value the host gives back at step `step`, `[step, k]`,
     /// having read the operands. A program holds none: [`split`] cuts a
     /// recording at each step.
@@ -642,6 +713,42 @@ impl Graph for Recorder {
         extents.push(self.extents(packed.id)[1] * (8 / quantized.bits));
         let [node, read] = quantized_read([packed.id, indices.id, scales.id], zero_points, quantized);
         return self.value(Operation::QuantizedGather(node), read, E::kind(), extents);
+    }
+
+    fn expert_mixture<E: Float>(
+        &mut self,
+        rows: &Value<f32, [Picked, Hidden]>,
+        routing: &Routing<Recorder>,
+        held: &Held<Recorder>,
+        ffn: &[Projection<Recorder, E>, Projection<Recorder, E>],
+        experts: &Experts,
+    ) -> Value<f32, [Picked, Hidden]> with _ {
+        // A prompt's form fuses as operations: run whole, it would run each
+        // operation alone and hold every intermediate at once.
+        if self.decomposes || !runs_by_picks(self, rows, routing, experts) {
+            return decomposed_mixture::<Recorder, E>(self, rows, routing, held, ffn, experts);
+        }
+        let mut operands: List<i32> = [
+            rows.id, routing.gates.id, routing.picks.id, routing.weights.id, held.slots.id, held.order.id, held.count.id,
+        ];
+        for let p of [ffn.0, ffn.1] {
+            operands.push(p.packed.id);
+            operands.push(p.scales.id);
+            if let Some(b) = &p.bias {
+                operands.push(b.id);
+            }
+            if let Some(z) = &p.zero_points {
+                operands.push(z.id);
+            }
+        }
+        let node = ExpertMixtureNode {
+            experts: *experts,
+            projections: [
+                ProjectionNode::of(&ffn.0),
+                ProjectionNode::of(&ffn.1),
+            ],
+        };
+        return self.value(Operation::ExpertMixture(node), operands, ElementKind::F32, self.extents(rows.id));
     }
 }
 
@@ -1668,12 +1775,13 @@ impl<affine G: Graph> Run<G> {
                 Bool(v) => Any::Bool(g.upload(&Tensor::<bool, Untyped> { data: *v, extents: node.extents })),
             };
         }
-        let over = if node.op matches { _::Convert | Compare(_) | ArgMax(_) } {
-            kind_of(self.operand(node, 0));
-        } else {
-            node.kind;
+        let over = match &node.op {
+            _::Convert | Compare(_) | ArgMax(_) => kind_of(self.operand(node, 0)),
+            // The first projection's scales, in the element its pools hold.
+            ExpertMixture(_) => kind_of(self.operand(node, MIXTURE_PROJECTIONS + 1)),
+            _ => node.kind,
         };
-        if node.op matches { Unary(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) } {
+        if node.op matches { Unary(_) | DotGeneral(_) | Convolution(_) | ReduceWindow(_) | ArgMax(_) | Attention(_) | QuantizedProduct(_) | QuantizedGather(_) | ExpertMixture(_) } {
             return match over {
                 _::F32 => self.computed_in::<f32>(g, id, node),
                 _::F16 => self.computed_in::<f16>(g, id, node),
@@ -1791,7 +1899,55 @@ impl<affine G: Graph> Run<G> {
                     &q.quantized,
                 ),
             ),
+            ExpertMixture(m) => Any::F32(self.mixed::<E>(g, node, m)),
             _ => unreachable(),
+        };
+    }
+
+    /// An expert mixture node's result, by `g`'s `expert_mixture`.
+    fn mixed<E: Erasable + Float>(
+        &self,
+        g: &mut G,
+        node: &RecordedNode,
+        m: &ExpertMixtureNode,
+    ) -> G::Tensor<f32, Untyped> with _ {
+        let routing = Routing::<G> {
+            gates: self.at(g, node, 1),
+            picks: self.at(g, node, 2),
+            weights: self.at(g, node, 3),
+        };
+        let held = Held::<G> {
+            slots: self.at(g, node, 4),
+            order: self.at(g, node, 5),
+            count: self.at(g, node, 6),
+        };
+        let up = m.projections[0].places(MIXTURE_PROJECTIONS);
+        let first = self.projection_at::<E>(g, node, &up, &m.projections[0]);
+        let second = self.projection_at::<E>(g, node, &m.projections[1].places(up.end), &m.projections[1]);
+        let mixed = g.expert_mixture::<E>(&self.at(g, node, 0), &routing, &held, &[first, second], &m.experts);
+        return g.relabeled::<f32, [Picked, Hidden], Untyped>(&mixed);
+    }
+
+    /// The projection `p` of an expert mixture node, its operands at `at`.
+    fn projection_at<E: Erasable + Float>(
+        &self,
+        g: &G,
+        node: &RecordedNode,
+        at: &ProjectionPlaces,
+        p: &ProjectionNode,
+    ) -> Projection<G, E> {
+        return Projection {
+            packed: self.at(g, node, at.packed),
+            scales: self.at(g, node, at.scales),
+            bias: match at.bias {
+                Some(b) => Option::Some(self.at(g, node, b)),
+                null => null,
+            },
+            zero_points: match at.zero_points {
+                Some(z) => Option::Some(self.at(g, node, z)),
+                null => null,
+            },
+            shape: p.shape,
         };
     }
 

@@ -4,7 +4,9 @@
 tokenizer. The graph holds 55 MB of weights, and seven data files hold the
 other 12 GB. A backend keeps every weight but the experts. Its pools hold as
 many experts as a budget allows, and a pass fills a slot from the data files
-when a token routes to an expert the pools lack.
+when a token routes to an expert the pools lack. A WebGPU device's backend
+holds every expert in host memory instead, fills slots from there, and
+computes on the host what a generated token's step leaves unfilled.
 
     package-loam/example/gpt-oss-20b/fetch.sh
     cd package-loam/example/gpt-oss-20b

@@ -1,0 +1,15 @@
+// A `#[cm]` operation lends a list only to the callee; a view it returns would
+// outlive the call.
+use { ListView } from "core:linear";
+
+interface Source {
+    #[cm("wasi:demo/source@0.1.0#get")]
+    fn get() -> &ListView<u8>;
+}
+
+export fn run() with Source {
+    let _ = Source::get();
+}
+
+__DATA__
+{"compile_error": "import function `get`: a reference crosses a Component Model import only as a borrowed resource handle, and `&ListView<u8>` refers to no resource"}

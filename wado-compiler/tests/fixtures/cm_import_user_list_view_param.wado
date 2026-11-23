@@ -1,0 +1,19 @@
+// A `#[cm]` operation a user module declares takes a synchronous import's
+// `list<T>` as a `&ListView<T>`, as the stdlib's bindings do: it crosses as
+// the list, not as a reference.
+use { LinearArray, ListView } from "core:linear";
+
+interface Sink {
+    #[cm("wasi:demo/sink@0.1.0#put")]
+    fn put(bytes: &ListView<u8>) -> u32;
+}
+
+export fn run() with Sink {
+    let bytes = LinearArray::<u8>::filled(4, 1);
+    let _ = Sink::put(&bytes);
+    let list: List<u8> = [1, 2];
+    let _ = Sink::put(list);
+}
+
+__DATA__
+{"compile_only": true}

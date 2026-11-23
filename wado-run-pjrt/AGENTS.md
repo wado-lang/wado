@@ -1,7 +1,10 @@
 # wado-run-pjrt
 
 The `wado run-pjrt` subcommand: it compiles a Wado program with `wado` and runs
-the component on a wasmtime host that serves `core:pjrt` from a PJRT plugin.
+the component on a wasmtime host that serves `wado-lang:pjrt` from a PJRT
+plugin. The directory is that package too, since nothing else runs it: its
+interface is `assets/pjrt.wit`, and its Wado modules are in `src/` beside the
+host's Rust.
 
 ## Rules
 

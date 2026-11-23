@@ -81,6 +81,8 @@ use {
 use {
     Any,
     Operation,
+    ProjectionNode,
+    ProjectionPlaces,
     QuantizedNode,
     Recorded,
     RecordedNode,
@@ -93,8 +95,30 @@ use {
     constants,
     kept_any,
 } from "./recorded.wado";
-use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, permuted, reads_as, sliced, slot_layout } from "./webgpu.wado";
+use {
+    DeviceTensor,
+    ExpertPool,
+    Placed,
+    PlacedRead,
+    WebGpuBackend,
+    permuted,
+    reads_as,
+    sliced,
+    slot_layout,
+} from "./webgpu.wado";
+use {
+    Experts,
+    Held,
+    Hidden,
+    Picked,
+    Projection,
+    ProjectionShape,
+    Routing,
+    decomposed_mixture,
+    runs_by_picks,
+} from "./experts.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
+use { ExpertsOnHost, HostProjection, computes_on_host, expert_row } from "./cpu_experts.wado";
 use { LinearArray } from "core:linear";
 
 /// A pass recorded once per shape class and planned into kernels, which each
@@ -308,6 +332,18 @@ impl Backend for WebGpuBackend {
 
     fn written(&mut self, pool: &mut Any<WebGpuBackend>, slot: i32, row: HostWeight) with (GpuQueue, GpuBuffer) {
         self.written_slot(on_device(pool).unwrap(), slot, &row);
+    }
+
+    fn experts_on_host(&mut self, quantized: &Quantized, pool: &Any<WebGpuBackend>) -> Option<&mut ExpertsOnHost> {
+        if !computes_on_host(quantized) {
+            return null;
+        }
+        let buffer = on_device(pool).unwrap().slot;
+        if !self.experts_on_host_at.contains_key(buffer) {
+            self.experts_on_host_at[buffer] = self.experts_on_host.len();
+            self.experts_on_host.push(ExpertsOnHost::new());
+        }
+        return Option::Some(&mut self.experts_on_host[self.experts_on_host_at[buffer]]);
     }
 }
 
@@ -851,6 +887,169 @@ impl Graph for WebGpuBackend {
             quantized,
         );
     }
+
+    /// The backend's kernels for a step's form, two for each pick, and the
+    /// decomposition for a prompt's and where they do not bind.
+    fn expert_mixture<E: Float>(
+        &mut self,
+        rows: &Placed<f32, [Picked, Hidden]>,
+        routing: &Routing<WebGpuBackend>,
+        held: &Held<WebGpuBackend>,
+        ffn: &[Projection<WebGpuBackend, E>, Projection<WebGpuBackend, E>],
+        experts: &Experts,
+    ) -> Placed<f32, [Picked, Hidden]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        if runs_by_picks(self, rows, routing, experts)
+            && let Some(mixed) = by_picks(self, rows, routing, held, ffn, experts) {
+            return Placed::Device(mixed);
+        }
+        return decomposed_mixture::<WebGpuBackend, E>(self, rows, routing, held, ffn, experts);
+    }
+}
+
+/// Each token's row through its picks, each pick's two products read where
+/// its pool holds the expert, the second summing the picks in order: the
+/// decomposition's `by_picks`. `None` where a product does not bind.
+fn by_picks<E: Float>(
+    g: &mut WebGpuBackend,
+    rows: &Placed<f32, [Picked, Hidden]>,
+    routing: &Routing<WebGpuBackend>,
+    held: &Held<WebGpuBackend>,
+    ffn: &[Projection<WebGpuBackend, E>, Projection<WebGpuBackend, E>],
+    experts: &Experts,
+) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let picks = g.host(&routing.picks).data;
+    let slots = g.host(&held.slots).data;
+    let k = experts.k;
+    let slot_of = |pick: i32| slots[picks[pick] as i32] as i32;
+    let tokens = g.extents_of(rows)[0];
+    let on_host = (0..<tokens * k).any(|pick| slot_of(pick) < 0);
+    // What the host reads is read back before the device's products are
+    // queued, so that the host computes its picks while the device runs them.
+    let mut host_rows: List<f32> = [];
+    let mut host_weights: List<f32> = [];
+    if on_host {
+        host_rows = g.host(rows).data;
+        host_weights = g.host(&routing.weights).data;
+    }
+    let x = g.device_view(rows);
+    let weights = g.device_view(&routing.weights);
+    let [up, down] = [
+        expert_pool(g, &ffn.0),
+        expert_pool(g, &ffn.1),
+    ];
+    let mut totals: List<Option<DeviceTensor>> = [];
+    for let t of 0..<tokens {
+        let row = DeviceTensor {
+            ..x,
+            offset: x.offset + t * x.strides[0],
+            extents: [1, x.extents[1]],
+        };
+        let mut total: Option<DeviceTensor> = null;
+        for let j of 0..<k {
+            let slot = slot_of(t * k + j);
+            if slot < 0 {
+                continue;
+            }
+            let Some(inner) = g.gated_up(&row, &up, slot, experts) else {
+                assert !on_host, "the host's picks have no slot to fall back on";
+                return null;
+            };
+            let weight = DeviceTensor {
+                ..weights,
+                offset: weights.offset + t * weights.strides[0] + j * weights.strides[1],
+                extents: [1, 1],
+            };
+            let Some(sum) = g.weighed_down(&inner, &down, slot, &weight, optional(&total), &experts.quantized) else {
+                assert !on_host, "the host's picks have no slot to fall back on";
+                return null;
+            };
+            total = Option::Some(sum);
+        }
+        totals.push(total);
+    }
+    if on_host {
+        g.flush();
+        let up_at = ProjectionNode::of(&ffn.0).places(0);
+        let down_at = ProjectionNode::of(&ffn.1).places(up_at.end);
+        // The layer's first pool, as `HeldExperts` hands `experts_on_host`.
+        let host = &g.experts_on_host[g.experts_on_host_at[up.packed.slot]];
+        let host_up = host_projection(host, &up_at, up.shape, experts.step);
+        let host_down = host_projection(host, &down_at, down.shape, experts.step);
+        let hidden = x.extents[1];
+        for let t of 0..<tokens {
+            let mut sum = List::<f32>::filled(hidden, 0.0);
+            let row = host_rows[t * hidden..<(t + 1) * hidden].to_list();
+            for let j of 0..<k {
+                let weight = host_weights[t * k + j];
+                if slot_of(t * k + j) >= 0 || !(weight > 0.0) {
+                    continue;
+                }
+                let out = expert_row(&host_up, &host_down, picks[t * k + j] as i32, &row, experts);
+                for let i of 0..<hidden {
+                    sum[i] += weight * out[i];
+                }
+            }
+            let computed = g.upload(&Tensor::<f32, [Picked, Hidden]> {
+                data: sum,
+                extents: [1, hidden],
+            });
+            totals[t] = Option::Some(g.device_view(&match &totals[t] {
+                Some(d) => g.binary(Binary::Add, &Placed::<f32, [Picked, Hidden]>::Device(*d), &computed),
+                null => computed,
+            }));
+        }
+    }
+    let mut mixed: Option<Placed<f32, [Picked, Hidden]>> = null;
+    for let total of totals {
+        let done = Placed::<f32, [Picked, Hidden]>::Device(total.unwrap());
+        mixed = Option::Some(match &mixed {
+            Some(before) => g.concatenate(before, &done, 0),
+            null => done,
+        });
+    }
+    return Option::Some(g.device_view(&mixed.unwrap()));
+}
+
+/// A projection of every expert of the layer whose host step is `step`, as
+/// `host` holds it at `at` among the layer's weights.
+fn host_projection(host: &ExpertsOnHost, at: &ProjectionPlaces, shape: ProjectionShape, step: i32) -> HostProjection {
+    let scales = host.of(step, at.scales);
+    return HostProjection {
+        packed: host.of(step, at.packed).bytes(),
+        scales: scales.bytes(),
+        bias: match at.bias {
+            Some(b) => Option::Some(host.of(step, b).bytes()),
+            null => null,
+        },
+        zero_points: match at.zero_points {
+            Some(z) => Option::Some(host.of(step, z).bytes()),
+            null => null,
+        },
+        kind: scales.kind,
+        shape,
+    };
+}
+
+/// `p`'s pools on the device.
+fn expert_pool<E: Float>(
+    g: &mut WebGpuBackend,
+    p: &Projection<WebGpuBackend, E>,
+) -> ExpertPool with (GpuDevice, GpuQueue, GpuBuffer) {
+    let bias = match &p.bias {
+        Some(b) => Option::Some(g.device_view(b)),
+        null => null,
+    };
+    let zero_points = match &p.zero_points {
+        Some(z) => Option::Some(g.device_view(z)),
+        null => null,
+    };
+    return ExpertPool {
+        packed: g.device_view(&p.packed),
+        scales: g.device_view(&p.scales),
+        bias,
+        zero_points,
+        shape: p.shape,
+    };
 }
 
 /// `view` as a matrix of its last axis, its other axes one: what a quantized

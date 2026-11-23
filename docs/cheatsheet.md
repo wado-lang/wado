@@ -2082,8 +2082,6 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:fuel`](./stdlib-core-fuel.md) — `measure`, the fuel (Wasm instructions,
   each priced near its time) a region of a test ran, under
   `wado test --report-fuel`
-- [`core:pjrt`](./stdlib-core-pjrt.md) — a device behind a PJRT plugin, under
-  `wado run-pjrt`: compile StableHLO, move buffers, run what was compiled
 - [`core:eval`](./stdlib-core-eval.md) — compile and run a program from source
   under `wado test`, for testing code generators
 

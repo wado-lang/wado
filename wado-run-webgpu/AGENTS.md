@@ -1,7 +1,8 @@
 # wado-run-webgpu
 
 The `wado run-webgpu` subcommand: it compiles a Wado program with `wado` and
-runs the component on a wasmtime host that serves `wasi:webgpu`.
+runs the component on a wasmtime host that serves `wasi:webgpu`. Open work is
+in [TODO.md](./TODO.md).
 
 ## Rules
 

@@ -28,6 +28,8 @@ use {
 use { HashMap } from "core:collections";
 use { Any, Recorded, Recorder, Run, Untyped, assert_carries, constants, kept_any } from "./recorded.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
+use { ExpertsOnHost } from "./cpu_experts.wado";
+use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture } from "./experts.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -160,6 +162,14 @@ pub affine trait Backend: Graph with _ {
     /// `pool`, which [`Self::pool`] made, with its slot `slot` holding `row`:
     /// one slice along the first axis, as a checkpoint stores it.
     fn written(&mut self, pool: &mut Any<Self>, slot: i32, row: HostWeight);
+    /// Where the host holds the experts of the layers that share `pool`, the
+    /// first of their pools, quantized as `quantized`, if a decode step's
+    /// expert the pools lack may run on the host rather than be written into a
+    /// slot: [`Graph::expert_mixture`] then finds its slot -1, and computes it
+    /// from what this holds.
+    fn experts_on_host(&mut self, _quantized: &Quantized, _pool: &Any<Self>) -> Option<&mut ExpertsOnHost> with () {
+        return null;
+    }
     /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
     /// which the parameters `record` records take from its `first` on: each
     /// laid out from its stored bytes for the operations the recorded pass
@@ -442,6 +452,21 @@ pub affine trait Graph: Holds with _ {
             zero_points,
             quantized,
         );
+    }
+
+    /// The experts of onnxruntime's `QMoE` past its routing, Loam's own
+    /// composite: each of `rows` through the experts `routing` picks for it,
+    /// read where `held` says the pools hold them, weighed and summed, as
+    /// [`decomposed_mixture`] computes it.
+    fn expert_mixture<E: Float>(
+        &mut self,
+        rows: &Self::Tensor<f32, [Picked, Hidden]>,
+        routing: &Routing<Self>,
+        held: &Held<Self>,
+        ffn: &[Projection<Self, E>, Projection<Self, E>],
+        experts: &Experts,
+    ) -> Self::Tensor<f32, [Picked, Hidden]> with _ {
+        return decomposed_mixture::<Self, E>(self, rows, routing, held, ffn, experts);
     }
 
     /// ONNX's `ArgMax` keeping its axis: the index of each lane's first
