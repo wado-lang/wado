@@ -72,15 +72,12 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
 
 /// A function instance's `name` with the row each of its own effect parameters
 /// stands for, one `with(…)` apiece, so two rows are two instances.
-pub fn mangle_effect_args(name: String, effect_args: &[Vec<tir::EffectRef>]) -> String {
-    let mut out = name;
+pub fn mangle_effect_args(mut name: String, effect_args: &[Vec<tir::EffectRef>]) -> String {
     for row in effect_args {
         let effects: Vec<String> = row.iter().map(mangle_effect_ref).collect();
-        out.push_str("with(");
-        out.push_str(&effects.join(","));
-        out.push(')');
+        push_with_clause(&mut name, &effects);
     }
-    out
+    name
 }
 
 /// Mangle a tuple as `[T1,T2,…]`, e.g. `["i32","String"]` → `"[i32,String]"`.
@@ -278,11 +275,15 @@ pub fn mangle_fn_type(
         out.push_str(ret_type);
     }
     if !with_clause.is_empty() {
-        out.push_str("with(");
-        out.push_str(&with_clause.join(","));
-        out.push(')');
+        push_with_clause(&mut out, with_clause);
     }
     out
+}
+
+fn push_with_clause(out: &mut String, effects: &[String]) {
+    out.push_str("with(");
+    out.push_str(&effects.join(","));
+    out.push(')');
 }
 
 /// How a function type is spelled from its parts, as [`mangle_fn_type`] and

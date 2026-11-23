@@ -323,8 +323,6 @@ fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -
     link != outer
 }
 
-/// The method arguments `template` instantiates under at `site`: spelled, else
-/// recorded, else shown by its arguments; `None` while one stays open.
 /// The row each of `template`'s own effect parameters stands for at the call
 /// or function reference `expr`: what the arguments' rows, or the reference's
 /// type, meet them with. `None` where a row is still open, a parameter or a
@@ -375,6 +373,8 @@ fn effect_args_at(
         .collect()
 }
 
+/// The method arguments `template` instantiates under at `site`: spelled, else
+/// recorded, else shown by its arguments; `None` while one stays open.
 fn method_args_at(
     template: &TirFunction,
     site: &CallSite<'_>,

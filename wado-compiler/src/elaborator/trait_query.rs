@@ -3043,8 +3043,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .then(|| self.tysys.bound_written(bound))
                     .flatten()
                     .map(|trait_| {
-                        self.bound_trait_at_args(trait_, bound, params, type_args, self_binding)
-                            .map_rows(&|row| TypeTable::substitute_row(row, effect_rows))
+                        let at_args = self.bound_trait_at_args(
+                            trait_,
+                            bound,
+                            params,
+                            type_args,
+                            self_binding,
+                        );
+                        TypeTable::trait_at_rows(&at_args, effect_rows)
                     })
                     .and_then(|trait_| asked_at(trait_, &at_call, &frame_binders));
                 for &subject in &subjects {

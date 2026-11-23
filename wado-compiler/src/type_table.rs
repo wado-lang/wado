@@ -4843,15 +4843,15 @@ impl TypeTable {
         rows
     }
 
-    /// `effects` with each parameter or variable `rows` names replaced by its
-    /// row.
+    /// `trait_` with each parameter or variable `rows` names, in any of its
+    /// arguments' rows, replaced by its row.
     #[must_use]
-    pub fn substitute_row(effects: &[EffectRef], rows: &EffectRows) -> Vec<EffectRef> {
-        Leaves {
+    pub fn trait_at_rows(trait_: &FqTraitName, rows: &EffectRows) -> FqTraitName {
+        let leaves = Leaves {
             rows,
             ..Leaves::NONE
-        }
-        .row(effects)
+        };
+        trait_.map_rows(&|row| leaves.row(row))
     }
 
     /// [`Self::impl_effect_binding`] for one written type beside the type
@@ -4863,8 +4863,8 @@ impl TypeTable {
                 .filter(|e| !e.named_outright_in(we))
                 .cloned()
                 .collect();
-            for var in we.iter().filter_map(EffectRef::as_param) {
-                let row = rows.entry(RowVar::Param(var.binder)).or_default();
+            for param in we.iter().filter_map(EffectRef::as_param) {
+                let row = rows.entry(RowVar::Param(param.binder)).or_default();
                 for e in &met {
                     if !row.contains(e) {
                         row.push(e.clone());

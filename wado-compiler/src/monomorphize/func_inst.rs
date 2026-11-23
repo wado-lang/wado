@@ -2710,8 +2710,7 @@ impl Monomorphizer {
         if self.current_effect_rows.is_empty() {
             return info;
         }
-        let at_instance =
-            trait_name.map_rows(&|row| TypeTable::substitute_row(row, &self.current_effect_rows));
+        let at_instance = TypeTable::trait_at_rows(trait_name, &self.current_effect_rows);
         info.with_trait_type_args(at_instance.args())
     }
 

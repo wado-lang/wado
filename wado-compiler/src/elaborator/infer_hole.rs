@@ -444,7 +444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BoundRows::All(at) | BoundRows::Left(at) => Some(at),
                 };
                 let trait_ = match bound_at {
-                    Some(at) => trait_.map_rows(&|row| TypeTable::substitute_row(row, at)),
+                    Some(at) => TypeTable::trait_at_rows(&trait_, at),
                     None => trait_,
                 };
                 Some(DeclaredBound {
