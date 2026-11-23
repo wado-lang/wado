@@ -3750,6 +3750,7 @@ s : x EOF ;
 x : {true}? A | B {1 > 0}? A ;
 A : 'a' ;
 B : 'b' ;
+WS : ' ' -> skip ;
 ";
     assert count_occurrences(&gen_source(grammar), "fn pred_") == 1;
     assert parses(grammar, "s", ["a", "b a"]) == "a => (s (x a))\nb a => (s (x b a))\n";
