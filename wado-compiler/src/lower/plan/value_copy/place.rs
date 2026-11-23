@@ -47,9 +47,10 @@ pub struct Place {
     pub root: u32,
     pub selectors: Vec<Selector>,
     /// The chain read a reference part (a field, an element, a payload), so the
-    /// root only references what it ends at. [`Resolver::names`] must set it as it walks — it resolves
-    /// through a local binding and through a callee's [`ReturnPath`], which a
-    /// second walk over the expression's syntax would follow neither of.
+    /// root only references what it ends at. [`Resolver::names`] must set it as
+    /// it walks — it resolves through a local binding and through a callee's
+    /// [`ReturnPath`], which a second walk over the expression's syntax would
+    /// follow neither of.
     pub through_ref: bool,
 }
 
@@ -318,16 +319,16 @@ impl<'a> Resolver<'a> {
                 expr: inner,
                 field_index,
                 ..
-            } => {
-                let names = self.project(
+            } => self.part(
+                self.project(
                     inner,
                     Selector::Field {
                         owner: field_owner(inner.type_id, self.type_table),
                         index: *field_index,
                     },
-                );
-                self.part(names, expr.type_id)
-            }
+                ),
+                expr.type_id,
+            ),
             TirExprKind::VariantPayload {
                 expr: inner,
                 case_index,
