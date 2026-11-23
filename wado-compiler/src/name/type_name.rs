@@ -1571,6 +1571,7 @@ impl std::fmt::Display for FqTraitName {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstId;
 
     #[test]
     fn a_function_type_name_spells_as_its_mangle() {
@@ -1580,7 +1581,7 @@ mod tests {
             vec![FqTypeName::binder("T"), FqTypeName::builtin("i32")],
             inner,
             vec![tir::EffectRef::Param(tir::EffectParam {
-                binder: crate::ast::AstId::fresh(),
+                binder: AstId::fresh(),
                 name: "E".into(),
             })],
         );

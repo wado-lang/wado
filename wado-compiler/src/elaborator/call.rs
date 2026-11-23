@@ -2799,12 +2799,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let slots = self.tysys.callee_slots(&callee);
         self.settle_unreached_packs(&declared, &slots, &mut type_args, &reached);
 
+        let effect_rows = self
+            .tysys
+            .type_table
+            .borrow()
+            .call_effect_binding(&declared_param_types, &args);
         if !type_args.is_empty() {
-            let effect_rows = self
-                .tysys
-                .type_table
-                .borrow()
-                .call_effect_binding(&declared_param_types, &args);
             self.check_function_type_arg_bounds(&callee, &type_args, &effect_rows, call.span);
         }
 
@@ -2816,6 +2816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &callee,
                 &mut type_args,
                 &args,
+                &effect_rows,
                 expected_type,
                 call.span,
             );
@@ -4273,6 +4274,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
         args: &[TypeId],
+        effect_rows: &EffectRows,
         expected_type: Option<TypeId>,
         span: token::Span,
     ) {
@@ -4327,7 +4329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 new_args.push(type_args[i]);
                 continue;
             }
-            let bounds = self.declared_bounds(p, None, &[], BoundRows::Unbound);
+            let bounds = self.declared_bounds(p, None, &[], BoundRows::All(effect_rows));
             let stand_in = self.defer_slot(
                 type_args.get(i).copied(),
                 span,

@@ -1,7 +1,8 @@
-// A bound naming the callee's own effect parameter is checked at what the
-// call binds that parameter to: here `Stdout`, which `Loud` implements the
-// trait at. A free function, a method, a static method, and a generic caller
-// forwarding its own parameter all take it.
+// A dispatch through a bound naming the callee's own effect parameter runs the
+// impl at the row the call binds that parameter to: `Loud` implements the trait
+// at `Stdout` and at the empty row, so one `T` with two rows is two instances.
+// A free function, a method, a static method, and a generic caller forwarding
+// its own parameter all take it.
 use { println, Stdout } from "core:cli";
 
 trait Tr<A> with () {
@@ -13,6 +14,12 @@ struct Loud {}
 impl Tr<fn() with Stdout> for Loud {
     fn go(&self) -> String {
         return "loud";
+    }
+}
+
+impl Tr<fn()> for Loud {
+    fn go(&self) -> String {
+        return "quiet";
     }
 }
 
@@ -45,7 +52,9 @@ export fn run() with Stdout {
     let h = Holder {};
     println(h.need(&Loud {}, || { println("method"); }));
     println(Holder::make(&Loud {}, || { println("static"); }));
+    println(need(&Loud {}, || {}));
+    println(ask(&Loud {}, || {}));
 }
 
 __DATA__
-{"stdout": "free\nloud\nforwarded\nloud\nmethod\nloud\nstatic\nloud\n"}
+{"stdout": "free\nloud\nforwarded\nloud\nmethod\nloud\nstatic\nloud\nquiet\nquiet\n"}
