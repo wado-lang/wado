@@ -90,6 +90,6 @@ generator. Without a lock the compiler resolves and pulls lazily.
 
 A registry generator's options shape comes from its component WIT, and a WIT
 `record` has no field defaults. So every field is required at the use site
-unless its type is an `Option`, a `List` or a `TreeMap`
+unless its type is an `Option`, a `List` or a `HashMap`
 ([Options](../../docs/spec-kiln.md#options)). That is why the clause above
 writes `trace: false`, although `trace` defaults to `false` in gale's source.

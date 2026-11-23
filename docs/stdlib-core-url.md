@@ -29,14 +29,14 @@ characters (A-Z, a-z, 0-9, '-', '.', '_', '~') per RFC 3986 §2.3.
 Decodes percent-encoded sequences (%XX).
 Returns Err if the input contains invalid percent-encoding or invalid UTF-8.
 
-### `pub fn parse_query<S: AsStrSlice>(query: S) -> TreeMap<String, String>`
+### `pub fn parse_query<S: AsStrSlice>(query: S) -> HashMap<String, String>`
 
 Parses a query string into key-value pairs (insertion-order preserved).
 Input should not include the leading "?".
 Handles "+" as space and decodes percent-encoding.
 Duplicate keys use last-value-wins semantics.
 
-### `pub fn format_query(params: TreeMap<String, String>) -> String`
+### `pub fn format_query(params: HashMap<String, String>) -> String`
 
 Formats key-value pairs into a query string (insertion-order preserved).
 Output does not include the leading "?".
@@ -93,9 +93,9 @@ empty paths default to "/".
 
 Use `to_string()` to obtain the serialized URL.
 
-#### `pub fn query_params(&self) -> TreeMap<String, String>`
+#### `pub fn query_params(&self) -> HashMap<String, String>`
 
-Returns the query parameters as a `TreeMap`. Percent-encoded values
+Returns the query parameters as a `HashMap`. Percent-encoded values
 are decoded; "+" becomes " ". Returns an empty map if there is no
 query component.
 
@@ -124,9 +124,9 @@ Returns the effective port (explicit port or default for the scheme).
 Resolves a relative URL reference against this URL as the base.
 Follows RFC 3986 §5.
 
-#### `pub fn query_pairs(&self) -> TreeMap<String, String>`
+#### `pub fn query_pairs(&self) -> HashMap<String, String>`
 
-Parses the query string into a TreeMap (insertion-order preserved).
+Parses the query string into a HashMap (insertion-order preserved).
 
 #### `pub fn query_get<S: AsStrSlice>(&self, key: S) -> Option<String>`
 
@@ -137,7 +137,7 @@ Returns the value for the given query parameter key.
 Returns all values for the given query parameter key.
 Computed from the raw query string to preserve duplicate keys.
 
-#### `pub fn with_query_pairs(&self, params: TreeMap<String, String>) -> Url`
+#### `pub fn with_query_pairs(&self, params: HashMap<String, String>) -> Url`
 
 Returns a new Url with the query string replaced by the given params.
 
