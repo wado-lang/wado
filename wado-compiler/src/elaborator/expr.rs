@@ -657,17 +657,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "a node written in another module reached a travelled walk"
         );
         let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
-<<<<<<< HEAD
+        let reads = self.tysys.type_table.borrow().effect_vars_read();
         let type_id = if writes_inferable_type(expr) {
             self.closing_holes_on_error(|e| e.resolve_expr_inner(expr, ctx, expected_type))
         } else {
             self.resolve_expr_inner(expr, ctx, expected_type)
         };
-||||||| 4c0088a2ea3
-        let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
-=======
-        let reads = self.tysys.type_table.borrow().effect_vars_read();
-        let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
         if self.tysys.type_table.borrow().effect_vars_read() > reads {
             let closing = RowClosing {
                 span: expr.span(),
@@ -678,7 +673,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .close_effect_rows_read_since(reads, &closing);
         }
->>>>>>> origin/main
         self.record_expression_type(ast_id, type_id);
         if matches!(
             expr,

@@ -7693,7 +7693,9 @@ impl TypeTable {
         held == asked
             || matches!(self.get(asked), ResolvedType::InferVar(_))
             || self
-                .zip_shapes(held, asked, |h, a| self.fits_written(h, a))
+                .zip_shapes(held, asked, RowBinders::Left, |h, a| {
+                    self.fits_written(h, a)
+                })
                 .unwrap_or(false)
     }
 
