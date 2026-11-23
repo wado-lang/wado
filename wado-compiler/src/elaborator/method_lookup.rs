@@ -361,15 +361,24 @@ impl TypeSystem {
     }
 
     /// What a receiver fills the positions [`impl_target_args`] reads, a
-    /// reference read through to its pointee's (WEP 2026-08-12). A function
-    /// type fills its one position itself.
+    /// reference read through to its pointee's (WEP 2026-08-12). A block
+    /// targeting a function type reads [`Self::function_target_args`] instead.
     pub(crate) fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
+        let pointee = self.through_ref(receiver);
         let tt = self.type_table.borrow();
-        if let Some(function) = tt.function_position(receiver) {
-            return Some(vec![function]);
-        }
-        tt.nominal_type_args(tt.representation_head(self.through_ref(receiver)))
+        tt.nominal_type_args(tt.representation_head(pointee))
             .filter(|args| !args.is_empty())
+    }
+
+    /// What `receiver` fills a block's positions with when the block's target
+    /// is a function type: that one position, the receiver's own function
+    /// type. `None` for a block targeting anything else, even one a function
+    /// type underlies, such as a newtype over one.
+    pub(crate) fn function_target_args(&self, target: &Type, receiver: TypeId) -> Option<TypeId> {
+        match target.referent() {
+            Type::Function(_) => self.type_table.borrow().function_position(receiver),
+            _ => None,
+        }
     }
 
     /// Whether an implicit `&mut self` of a local receiver has to box
@@ -2671,6 +2680,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Extract type param mappings from the impl header before mutating self.
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
+        let function_position =
+            receiver_type_id.and_then(|r| self.tysys.function_target_args(&header.ty, r));
+        let receiver_type_args = match &function_position {
+            Some(function) => Some(std::slice::from_ref(function)),
+            None => receiver_type_args,
+        };
         let param_slots = ImplParamSlots::of(&header.ty, &header.type_params);
         let impl_struct_name = self.get_type_name(&header.ty);
         let is_blanket_type_param = matches!(

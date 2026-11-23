@@ -1,0 +1,23 @@
+// A tuple `for-of` walks its body once per element, and each element's
+// closure brings its own row to a method of an impl over the function type.
+// The second element prints, so the call demands `Stdout`.
+use { println } from "core:cli";
+
+trait Call with _ {
+    fn call(&self);
+}
+
+impl<effect E> Call for fn() with E {
+    fn call(&self) with E {
+        (*self)();
+    }
+}
+
+export fn run() {
+    for let f of [|| {}, || { println("x"); }] {
+        f.call();
+    }
+}
+
+__DATA__
+{"compile_error": ":18:9: analysis error: missing effect 'Stdout' required by 'call'"}

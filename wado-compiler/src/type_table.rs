@@ -5626,8 +5626,15 @@ impl TypeTable {
     /// what fills the one position a function-type impl target writes, which
     /// is itself. `None` for a receiver of any other shape.
     pub fn function_position(&self, receiver: TypeId) -> Option<TypeId> {
-        let head = self.representation_head(self.peel_refs(receiver));
-        matches!(self.get(head), ResolvedType::Function { .. }).then_some(head)
+        let mut current = receiver;
+        loop {
+            let below = self.representation_head(self.peel_refs(current));
+            if below == current {
+                break;
+            }
+            current = below;
+        }
+        matches!(self.get(current), ResolvedType::Function { .. }).then_some(current)
     }
 
     /// The type one link down the chain [`Self::representation_head`] walks:
@@ -7231,7 +7238,12 @@ impl TypeTable {
         }
         let written = &target.args;
         let instance = self.peel_refs(instance);
+        let function_target = matches!(
+            self.get(self.peel_refs(target.whole)),
+            ResolvedType::Function { .. }
+        );
         let args = match self.get(instance) {
+            ResolvedType::Function { .. } if function_target => vec![instance],
             ResolvedType::Struct { type_args, .. } => type_args.clone(),
             _ => self.declared_type_args(instance).unwrap_or_default(),
         };

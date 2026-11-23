@@ -1,0 +1,27 @@
+// A newtype over a reference to a function type reaches an impl generic over
+// the function type's row, and passes the reference it wraps as the receiver.
+use { println, Stdout } from "core:cli";
+
+trait Held with () {
+    type Out;
+    fn held(&self) -> Self::Out;
+}
+
+impl<effect E> Held for fn() with E {
+    type Out = fn() with E;
+    fn held(&self) -> fn() with E {
+        return *self;
+    }
+}
+
+type R = &fn() with Stdout;
+
+export fn run() with Stdout {
+    let f = || { println("held"); };
+    let r = &f as R;
+    let g = r.held();
+    g();
+}
+
+__DATA__
+{"stdout": "held\n"}

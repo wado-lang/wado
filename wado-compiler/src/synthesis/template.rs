@@ -812,9 +812,13 @@ pub(crate) fn written_impl_reaches_where(
     tt: &TypeTable,
     admits: impl Fn(DefId) -> bool,
 ) -> bool {
+    let reaches = |block: DefId| admits(block) && tt.impl_reaches_instance(block, receiver);
+    if matches!(tt.get(receiver), ResolvedType::Function { .. }) {
+        return trait_env.methodful_function_impls(trait_).any(reaches);
+    }
     trait_env
         .methodful_impls_by_receiver(&tt.impl_receiver_key(receiver), trait_)
-        .any(|block| admits(block) && tt.impl_reaches_instance(block, receiver))
+        .any(reaches)
 }
 
 /// The trait's `eq` emitted into the block of a `cmp` written alone.

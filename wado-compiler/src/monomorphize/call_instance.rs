@@ -184,7 +184,12 @@ impl Monomorphizer {
             return recorded.map(<[TypeId]>::to_vec);
         };
         let info = template.method_info.as_ref()?;
-        let args = match type_table.function_position(receiver) {
+        let function_position = info
+            .receiver()
+            .is_function()
+            .then(|| type_table.function_position(receiver))
+            .flatten();
+        let args = match function_position {
             Some(function) => Some(vec![function]),
             None => self
                 .struct_info_for_method(
