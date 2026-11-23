@@ -566,7 +566,7 @@ pub fn borrowed_value(referent: &TirExpr) -> &TirExpr {
 /// The value a shared borrow `&value` takes when `value` names no storage, so
 /// the reference refers to a value of its own.
 #[must_use]
-pub fn borrowed_temporary<'e>(expr: &'e TirExpr, items: &CompilerItems) -> Option<&'e TirExpr> {
+pub fn borrowed_temporary<'e>(expr: &'e TirExpr, type_table: &TypeTable) -> Option<&'e TirExpr> {
     let TirExprKind::Unary {
         op: TirUnaryOp::Ref,
         expr: referent,
@@ -575,15 +575,16 @@ pub fn borrowed_temporary<'e>(expr: &'e TirExpr, items: &CompilerItems) -> Optio
         return None;
     };
     let value = borrowed_value(referent);
-    (!names_storage(value, items)).then_some(value)
+    (!names_storage(value, type_table)).then_some(value)
 }
 
 /// Whether `value` is storage a reference to it reaches: a source place,
 /// what a reference reads, or a projection of either. A field of a call's
-/// result is none of them, so `&value` there refers to a value of its own.
+/// result is none of them, so `&value` there refers to a value of its own,
+/// unless that result is a reference the projection reads through.
 #[must_use]
-pub fn names_storage(value: &TirExpr, items: &CompilerItems) -> bool {
-    if is_source_place(value, items) {
+pub fn names_storage(value: &TirExpr, type_table: &TypeTable) -> bool {
+    if is_source_place(value, type_table.compiler_items()) {
         return true;
     }
     match &value.kind {
@@ -591,7 +592,9 @@ pub fn names_storage(value: &TirExpr, items: &CompilerItems) -> bool {
             op: TirUnaryOp::Deref,
             ..
         } => true,
-        _ => projection_base(value).is_some_and(|base| names_storage(base, items)),
+        _ => projection_base(value).is_some_and(|base| {
+            type_table.is_reference(base.type_id) || names_storage(base, type_table)
+        }),
     }
 }
 

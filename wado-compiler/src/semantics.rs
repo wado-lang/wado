@@ -18,6 +18,8 @@ use crate::compiler_trace;
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
 use crate::defs::DefId;
+use crate::effect_check::BodyFacts;
+use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
@@ -25,7 +27,6 @@ use crate::elaborator::sem::types::{
     CoercionKind, DesugarKind, FallbackSite, MethodDispatch, TypeAnnotations,
 };
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
-use crate::elaborator::{Elaborator, TypeError};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
@@ -210,17 +211,23 @@ impl TirMutVisitor for EffectRowWriter<'_> {
 
 impl Semantics {
     /// Write the row the effect check solved each effect variable to into every
-    /// type the TIR holds, so no TIR type names a variable from here on, and no
-    /// struct instance's argument carries a row. Answers the bounds that were
-    /// asked of a type with a row unsolved, and that are unmet with it solved.
-    pub fn write_back_effect_rows(&mut self, solved: &EffectRows) -> Vec<TypeError> {
+    /// type the TIR holds, so no TIR type names a variable from here on.
+    pub fn write_back_effect_rows(&mut self, solved: &EffectRows) {
         let Some(state) = &self.state else {
-            return Vec::new();
+            return;
         };
+        {
+            let table = state.tysys.type_table.borrow();
+            for var in table.effect_row_closings().keys() {
+                let early = &table.early_effect_rows()[var];
+                let late = solved.get(var).map(Vec::as_slice).unwrap_or_default();
+                assert!(
+                    early.len() == late.len() && early.iter().all(|e| late.contains(e)),
+                    "a closed row {var} keeps the solution it was read at"
+                );
+            }
+        }
         let rows = state.tysys.type_table.borrow().solved_effect_rows(solved);
-        // Asked while a struct's arguments still carry their rows, which an
-        // impl's target may write.
-        let unmet = state.tysys.unmet_deferred_bounds(&rows);
         let mut table = state.tysys.type_table.borrow_mut();
         table.close_effect_rows();
         let mut writer = EffectRowWriter {
@@ -236,7 +243,6 @@ impl Semantics {
                 writer.walk_global(global);
             }
         }
-        unmet
     }
 
     /// Power-assert capture plans across every module that annotate reached,
@@ -753,21 +759,6 @@ impl Semantics {
         self.expr_types(expr)
             .into_iter()
             .any(|ty| self.reaches_mut_ref(ty))
-    }
-
-    /// Types of `expr`, one per walk that reached it, preferring the type of
-    /// the binding an identifier names, where a parameter or a function-typed
-    /// local has one and the use site does not.
-    pub(crate) fn expr_types(&self, expr: &Expr) -> Vec<TypeId> {
-        if let Expr::Ident(ident) = expr
-            && let Some(def) = self.referenced_symbol(ident.id)
-        {
-            let bound: Vec<TypeId> = self.local_types(def).collect();
-            if !bound.is_empty() {
-                return bound;
-            }
-        }
-        self.expression_types(expr.id()).collect()
     }
 
     /// Where a write to `place` lands once it has gone down every field and
@@ -1612,6 +1603,7 @@ fn semantics_of_erased(
         None,
         &LivenessScope::Compilation,
         None,
+        &IndexSet::default(),
     )
 }
 
@@ -1627,6 +1619,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     profile: Option<Applied<'_>>,
     liveness_scope: &LivenessScope,
     dependencies: Option<Rc<Semantics>>,
+    provided_import_fqs: &IndexSet<String>,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1743,6 +1736,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             coverage,
             profile,
             liveness_scope,
+            provided_import_fqs,
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),
@@ -2034,6 +2028,7 @@ mod tests {
             profile.map(|profile| profile.applied(pgo::Thresholds::default())),
             &LivenessScope::Compilation,
             None,
+            &IndexSet::default(),
         )
     }
 

@@ -3840,6 +3840,7 @@ fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/
 
 fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/$Closure_3::$call"(self, request) {
     let self_4: ref null "effect_handler_async_client_send.wado//MockClient";
+    let _tx_future: ref null "core:prelude//$Resource";
     let $drop_spill_10: ref null "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $cm_pair_11: i64;
     let $local_12: ref "core:prelude/string.wado//String";
@@ -3850,7 +3851,6 @@ fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/
     let $licm_repr_31: ref Array<u8>;
     let self_32: ref null "core:prelude/list.wado//List<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>>>";
     let $arg_4: ref null "Array<core:prelude/types.wado/FutureWritable<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>>";
-    let $held_7: ref null "core:prelude//$Resource";
     return "effect_handler_async_client_send.wado/$cm_wrap_async__wasi:http/client@0.3.0#send"(local.tee self_4(self.$capture_0).calls = self_4.calls + 1; let $match_scrut_0: ref null "core:prelude/string.wado//String"; if @unlikely((if ref.is_null(local.tee $match_scrut_0("effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[method]request.get-path-with-query"(request))) == 0 -> i32 {
         $local_12 = ref.as_non_null($match_scrut_0);
         $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
@@ -3912,16 +3912,12 @@ condition: request.get_path_with_query() matches { Some(\"/upstream\") }
         }
         "core:rt/panic"(local.tee $local_12(global:effect_handler_async_client_send.wado::$const_obj_4).repr, $local_12.used);
         unreachable;
-        $held_7.value = $sroa_$pattern_temp_0_1_30.value;
-        $held_7.backing = $sroa_$pattern_temp_0_1_30.backing;
-        $sroa_$pattern_temp_0_1_30.value = 0;
-        $sroa_$pattern_temp_0_1_30.backing = ref.null eq;
-    }; self_32.used = i + 1; $sroa_$pattern_temp_0_1_30 = local.tee $local_14("effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, len)).0; $held_7 = $local_14.1; drop("effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.set-status-code"($sroa_$pattern_temp_0_1_30, 201)); $drop_spill_10 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: $sroa_$pattern_temp_0_1_30 }; if ref.is_null($held_7) == 0 {
-        if ref.is_null($held_7.backing) == 0 {
+    }; self_32.used = i + 1; $sroa_$pattern_temp_0_1_30 = local.tee $local_14("effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, len)).0; _tx_future = $local_14.1; drop("effect_handler_async_client_send.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.set-status-code"($sroa_$pattern_temp_0_1_30, 201)); $drop_spill_10 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: $sroa_$pattern_temp_0_1_30 }; if ref.is_null(_tx_future) == 0 {
+        if ref.is_null(_tx_future.backing) == 0 {
         } else {
-            len = $held_7.value;
-            $held_7.value = 0;
-            $held_7.backing = ref.null eq;
+            len = _tx_future.value;
+            _tx_future.value = 0;
+            _tx_future.backing = ref.null eq;
             "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(len);
         }
     }; if ref.is_null(request) == 0 {

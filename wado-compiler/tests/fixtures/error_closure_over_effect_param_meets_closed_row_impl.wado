@@ -1,0 +1,33 @@
+// A closure literal calling a function value of an effect parameter carries
+// that parameter in its row, so it meets no impl written for one row: the
+// body holds for every row `E` may be.
+
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+fn wrap2<effect E>(g: fn() with E) with (E, Stdout) {
+    let f = || g();
+    println(f.name());
+}
+
+export fn run() with Stdout {
+    wrap2(|| {});
+}
+
+__DATA__
+{"compile_error": ":25:13: analysis error: no method 'name' found on type 'fn() -> () with E'"}

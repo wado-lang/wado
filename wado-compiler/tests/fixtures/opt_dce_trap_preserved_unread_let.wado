@@ -6,11 +6,13 @@
 // `ElideWriteOnly` has two deletion paths: the `Drop(value)` rule and the
 // write-only `LocalSet { x_unused, value }` rule. Both paths consult
 // `may_trap(value)` to preserve sub-trees that can trap at runtime
-// (OOB heap reads, null receiver, div-by-zero, …).
+// (OOB heap reads, null receiver, div-by-zero, …). The index is opaque: a
+// constant one decides the range check at compile time, and the read behind
+// it is then dead.
 
 export fn run() {
     let arr: List<i32> = [10, 20, 30];
-    let _ = arr[5];
+    let _ = arr[builtin::black_box(5)];
 }
 
 __DATA__

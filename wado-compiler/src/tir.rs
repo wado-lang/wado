@@ -98,6 +98,29 @@ impl EffectRef {
     }
 }
 
+/// Put `row` in one order, each effect once: a row is a set, so two rows
+/// holding the same effects name one function type.
+pub fn canonicalize_row(row: &mut Vec<EffectRef>) {
+    row.sort_by_cached_key(|effect| {
+        let rank = match effect {
+            EffectRef::Concrete(_) | EffectRef::Undeclared { .. } => 0,
+            EffectRef::Param { .. } => 1,
+            EffectRef::Var { .. } => 2,
+        };
+        let id = match effect {
+            EffectRef::Var { id, .. } => *id,
+            _ => 0,
+        };
+        (
+            rank,
+            effect.name().to_string(),
+            effect.module().map(ToString::to_string),
+            id,
+        )
+    });
+    row.dedup();
+}
+
 /// Whether `row` still stands for whatever meets it: it names an effect
 /// parameter, or a variable the effect check solves.
 pub fn is_open_row(row: &[EffectRef]) -> bool {
@@ -2290,6 +2313,15 @@ pub struct RowFlow {
     pub module: String,
 }
 
+/// The expression whose elaboration read an effect variable's early solution,
+/// closing the row at it: a flow may no longer widen it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RowClosing {
+    pub span: Span,
+    /// The source path of the module the expression is written in.
+    pub module: String,
+}
+
 /// `effects` with each variable `rows` solves replaced by its solution, and each
 /// variable in that solution in turn, each effect once. `read` sees every
 /// variable looked up; one with no solution stays as it is.
@@ -2692,6 +2724,10 @@ pub struct TirFunction {
     /// Type parameters from the impl block (for methods on generic structs)
     /// e.g., for a method in `impl Counter<T>`, this contains T's info
     pub impl_type_params: Vec<TirTypeParam>,
+    /// The effect parameters the impl block's target writes in a row
+    /// (`E` in `impl<effect E> Slot<fn() with E>`). Each row a receiver has
+    /// there is an instance of its own, as each type is for a type parameter.
+    pub impl_effect_params: Vec<String>,
     /// The `impl` block a method was emitted into, which tells apart two blocks'
     /// like-named templates. `None` for anything else, instances included.
     pub impl_origin: Option<DefId>,
@@ -3466,6 +3502,7 @@ impl TirFunction {
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
+            impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
             method_info: None,
@@ -3520,10 +3557,20 @@ impl TirFunction {
         !self.type_params.is_empty()
     }
 
+    /// Emit this function into the `impl` block `block`, taking the effect
+    /// parameters its target writes, so it is instantiated per row as the
+    /// block's written methods are.
+    pub fn place_in_impl(&mut self, block: DefId, tt: &TypeTable) {
+        self.impl_origin = Some(block);
+        self.impl_effect_params = tt.impl_effect_params(block);
+    }
+
     /// Whether monomorphization instantiates this function rather than
     /// emitting it as written.
     pub fn is_template(&self) -> bool {
-        self.has_real_type_params() || !self.impl_type_params.is_empty()
+        self.has_real_type_params()
+            || !self.impl_type_params.is_empty()
+            || !self.impl_effect_params.is_empty()
     }
 
     /// The identity a call of this function records: its declaration and block,

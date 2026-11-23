@@ -1,8 +1,9 @@
 //! Cleanup and normalization pass for WIR.
 //!
 //! Removes dead locals, nops, redundant `ref.as_non_null`, and dead code after
-//! `Unreachable`. Leaves unnarrowed what an instruction traps on when null, which
-//! turns a non-null read of a nullable slot into a nullable one. Called multiple
+//! an instruction that always diverges. Leaves unnarrowed what an instruction
+//! traps on when null, which turns a non-null read of a nullable slot into a
+//! nullable one. Called multiple
 //! times throughout the pipeline as an interpass utility rather than a
 //! standalone optimization.
 
@@ -126,11 +127,17 @@ impl CleanupVisitor<'_> {
 impl WirMutVisitor for CleanupVisitor<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
         self.walk_body(body);
-        // Remove nops.
         body.retain(|i| !matches!(i, WirInstr::Nop));
-        // Truncate after first unreachable (dead code elimination).
-        if let Some(pos) = body.iter().position(|i| matches!(i, WirInstr::Unreachable)) {
-            body.truncate(pos + 1);
+        if let Some(pos) = body.iter().position(WirInstr::always_diverges) {
+            // Validation takes the end of a block or an `if` as reachable, so
+            // past one that diverges an `unreachable` stays for the stack the
+            // enclosing block expects.
+            if body[pos].ends_with_terminator() {
+                body.truncate(pos + 1);
+            } else if body.len() > pos + 1 {
+                body.truncate(pos + 2);
+                body[pos + 1] = WirInstr::Unreachable;
+            }
         }
     }
 
@@ -344,5 +351,51 @@ mod tests {
         let mut body = narrowed_call();
         clean_body(&mut body, &IndexSet::from_iter([0]));
         assert_matches!(body.as_slice(), [WirInstr::Call { .. }]);
+    }
+
+    fn return_seven() -> WirInstr {
+        WirInstr::Return {
+            value: Some(Box::new(WirInstr::I32Const(7))),
+        }
+    }
+
+    #[test]
+    fn code_after_an_if_branching_to_its_own_end_stays() {
+        let mut body = vec![
+            WirInstr::If {
+                condition: Box::new(effect()),
+                result: None,
+                then_body: vec![WirInstr::Br { depth: 0 }],
+                else_body: Some(vec![WirInstr::Br { depth: 0 }]),
+            },
+            return_seven(),
+        ];
+        clean_body(&mut body, &IndexSet::default());
+        assert_matches!(
+            body.as_slice(),
+            [WirInstr::If { .. }, WirInstr::Return { .. }]
+        );
+    }
+
+    #[test]
+    fn code_after_a_block_a_return_operand_leaves_stays() {
+        let mut body = vec![
+            WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![WirInstr::Return {
+                    value: Some(Box::new(WirInstr::Seq(vec![
+                        WirInstr::Br { depth: 0 },
+                        WirInstr::I32Const(0),
+                    ]))),
+                }],
+            },
+            return_seven(),
+        ];
+        clean_body(&mut body, &IndexSet::default());
+        assert_matches!(
+            body.as_slice(),
+            [WirInstr::Block { .. }, WirInstr::Return { .. }]
+        );
     }
 }

@@ -1,0 +1,29 @@
+// A closure's row is closed where an impl is picked for it. Moving a value
+// that performs more into the same binding afterwards would change the pick,
+// so it is an error at the move, naming where the row was closed.
+use { println, Stdout } from "core:cli";
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+export fn run() with Stdout {
+    let mut f = || {};
+    println(f.name());
+    f = || { println("r"); };
+}
+
+__DATA__
+{"compile_error": ":25:9: analysis error: this function value performs 'Stdout', beyond the row of the slot it moves into, which the expression at 24:13 read and so closed", "compile_error_count": 1}

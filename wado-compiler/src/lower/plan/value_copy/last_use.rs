@@ -258,6 +258,7 @@ struct WriteCheck<'a> {
 struct CallStart {
     mutations: usize,
     handed: usize,
+    opaque_writes: usize,
     beyond_handed_writes: usize,
 }
 
@@ -967,11 +968,14 @@ impl<'a> Analyzer<'a> {
             }
             // A write to storage no local names, a global's say, lands beyond
             // what calls are handed, as a callee's own such write does in
-            // `ModRef`.
+            // `ModRef`: points-to gives no location to a part that holds no
+            // reference, such as `GD.a`. Where it does give one, as for the
+            // referent of a reference an `if` picks, a binding sharing that
+            // storage must see the write.
             if self.mutations.len() == recorded {
                 self.beyond_handed_writes += 1;
                 let written = CallWrites {
-                    locations: IndexSet::default(),
+                    locations: self.landed(lands),
                     beyond_handed: true,
                 };
                 self.opaque_writes.push((written, live.clone()));
@@ -1389,7 +1393,7 @@ pub fn borrows_temporary(body: &TirBlock, type_table: &TypeTable) -> bool {
     }
     impl TirRefVisitor for Scan<'_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
-            self.found |= place::borrowed_temporary(expr, self.type_table.compiler_items())
+            self.found |= place::borrowed_temporary(expr, self.type_table)
                 .is_some_and(|value| needs_value_copy(value.type_id, self.type_table));
             if !self.found {
                 self.walk_expr(expr);
@@ -2625,7 +2629,7 @@ impl<'a> Analyzer<'a> {
         // A shared borrow of a value naming no place refers to a value of its
         // own, which lowering takes a copy for unless nothing writes the
         // storage it was read out of while the callee holds it.
-        let checked = match place::borrowed_temporary(arg, self.type_table.compiler_items()) {
+        let checked = match place::borrowed_temporary(arg, self.type_table) {
             Some(value) => value,
             None if matches!(
                 arg.kind,
@@ -2704,6 +2708,9 @@ impl<'a> Analyzer<'a> {
         for m in &self.mutations[since.mutations..] {
             written.extend(self.landed(m.lands));
         }
+        for (opaque, _) in &self.opaque_writes[since.opaque_writes..] {
+            written.extend(opaque.locations.iter().copied());
+        }
         CallWrites {
             locations: written,
             beyond_handed,
@@ -2716,6 +2723,7 @@ impl<'a> Analyzer<'a> {
         let start = CallStart {
             mutations: self.mutations.len(),
             handed: self.handed.len(),
+            opaque_writes: self.opaque_writes.len(),
             beyond_handed_writes: self.beyond_handed_writes,
         };
         self.beyond_handed_writes += usize::from(beyond_handed);

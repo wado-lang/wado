@@ -1,0 +1,47 @@
+// An impl generic over a function type's row meets a row holding the caller's
+// effect parameter, and a bound on the function's type lets the caller's row
+// pick the impl.
+use { println, Stdout } from "core:cli";
+
+trait Kind with () {
+    fn kind(&self) -> String;
+}
+
+impl<effect E> Kind for fn() with E {
+    fn kind(&self) -> String {
+        return "thunk";
+    }
+}
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for fn() {
+    fn name(&self) -> String {
+        return "pure";
+    }
+}
+
+impl Name for fn() with Stdout {
+    fn name(&self) -> String {
+        return "loud";
+    }
+}
+
+fn kind_of<effect E>(f: fn() with E) -> String {
+    return f.kind();
+}
+
+fn name_of<F: Name>(f: F) -> String {
+    return f.name();
+}
+
+export fn run() with Stdout {
+    println(kind_of(|| { println("x"); }));
+    println(name_of(|| { println("x"); }));
+    println(name_of(|| {}));
+}
+
+__DATA__
+{"stdout": "thunk\nloud\npure\n"}
