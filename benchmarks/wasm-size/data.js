@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795410799955,
+  "lastUpdate": 1795414514366,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81413,6 +81413,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/228fcaf485fba7c12dc7c8fbec8e4f906263170c"
         },
         "date": 1795410798734,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aa76b79f5e0546ae91488d962d38136e06cc6093",
+          "message": "Merge pull request #2735 from wado-lang/ccr-69422d32-rq0cmt\n\nfeat(collections)!: HashMap and HashSet as the default maps and sets",
+          "timestamp": "2026-11-23T14:57:21+09:00",
+          "tree_id": "fc14e2a9599cb87cd2318eaaabbc2aaa4f1504ab",
+          "url": "https://github.com/wado-lang/wado/commit/aa76b79f5e0546ae91488d962d38136e06cc6093"
+        },
+        "date": 1795414513029,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
