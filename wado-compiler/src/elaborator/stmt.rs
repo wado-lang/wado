@@ -546,6 +546,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
+        if let_stmt
+            .ty
+            .as_ref()
+            .is_some_and(|ty| first_infer_span(ty).is_some())
+        {
+            self.closing_holes_on_error(|e| e.resolve_let_annotated(let_stmt, ctx));
+        } else {
+            self.resolve_let_annotated(let_stmt, ctx);
+        }
+    }
+
+    fn resolve_let_annotated(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
         // Handle uninitialized declaration: `let x: T;` (no initializer)
         if let_stmt.value.is_none() {
             self.resolve_uninit_let(let_stmt, ctx);
@@ -557,13 +569,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for tuple literal to array coercion when type annotation is present
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
-            let resolved = self.resolve_type(annotated_type);
+            let target_type = self.with_writable_holes(|e| e.resolve_type(annotated_type));
             self.reject_unresolved_annotation(annotated_type);
-            let target_type = if first_infer_span(annotated_type).is_some() {
-                TypeTable::ERROR
-            } else {
-                resolved
-            };
             // Publish the resolved whole-pattern annotation so reify reads it
             // instead of re-running `resolve_type` against the AST.
             let key = let_stmt.id;
@@ -870,7 +877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .ty
             .as_ref()
             .expect("parser ensures type annotation for uninit let");
-        let type_id = self.resolve_type(annotated_type);
+        let type_id = self.with_writable_holes(|e| e.resolve_type(annotated_type));
         self.reject_unresolved_annotation(annotated_type);
         match (&let_stmt.pattern, let_stmt.pattern.as_name()) {
             (_, Some(n)) => {

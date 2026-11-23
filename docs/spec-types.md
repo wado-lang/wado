@@ -1548,9 +1548,9 @@ always wins. The arguments, the expected type or a later use settle it, as they
 settle an omitted turbofish. An uninferable `_` is the same error as an omitted
 turbofish on an uninferable parameter. A declaration's signature writes no `_`.
 
-> Not yet implemented: a `_` in a `let` annotation, after `as`, and below the
-> top of a path's type argument (`Bx::<List<_>>::make()`,
-> `Option::<List<_>>::None`) is rejected.
+A cast judges its conversion where it is written, so the expected type and the
+operand settle a `_` in its target there or not at all: `let n: i64 = 3 as _`
+is `3 as i64`, and `let n = 3 as _` is an error.
 
 A turbofish may also stop short of the declared parameters. The ones it does not
 name are inferred, as a `_` in their place would be.

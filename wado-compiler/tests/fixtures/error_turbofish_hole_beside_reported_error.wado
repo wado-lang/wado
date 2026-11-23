@@ -1,0 +1,44 @@
+// A call that reports its own error leaves the `_`s it wrote unreported: a
+// turbofish of the wrong length, an argument that names nothing, a newtype
+// case's prefix.
+
+struct Bx<T> {
+    v: T,
+}
+
+impl<T> Bx<T> {
+    fn make(v: T) -> Bx<T> {
+        return Bx { v };
+    }
+
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+type Opt<T> = Option<T>;
+
+fn one() -> i32 {
+    return 1;
+}
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+export fn run() {
+    let _a = one::<_>();
+    let b = Bx { v: 1 };
+    let _c = b.get::<_>();
+    let _d = Option::<List<_>, i32>::None;
+    let _e = id::<List<_>>(nope);
+    let _f = Bx::<List<_>>::make(nope);
+    let _g = Option::<List<_>>::Some(nope);
+    let _h = Opt::<_>::None;
+}
+
+__DATA__
+{
+    "compile_error": ":30:14: analysis error: `one` takes no type arguments, but 1 was supplied; 32:14: `get` takes no type arguments, but 1 was supplied; 33:14: `Option` takes 1 type argument, but 2 were supplied; 34:28: unknown identifier 'nope'; 35:34: unknown identifier 'nope'; 36:38: unknown identifier 'nope'; 37:14: cannot infer type parameter `T` of variant `Opt`; add a turbofish (`Opt::<...>::…`) or a type annotation",
+    "compile_error_count": 1
+}

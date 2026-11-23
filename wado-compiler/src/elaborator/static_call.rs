@@ -1870,7 +1870,7 @@ impl TypeSystem {
     /// Whether block `impl_def` implements its trait at `asked` for
     /// `receiver`: its parameters bound from those arguments and the receiver,
     /// as a method call's qualified spelling binds them, its trait arguments
-    /// are `asked`.
+    /// are `asked`, a `_` in them standing for any type.
     pub(super) fn impl_answers_trait_args(
         &self,
         impl_def: DefId,
@@ -1887,10 +1887,10 @@ impl TypeSystem {
             Some(receiver) => table.bind_impl_slots_asked(impl_def, asked, receiver, &mut slots),
             None => table.bind_each_into(&written, asked, &mut slots),
         }
-        written
-            .iter()
-            .zip(asked)
-            .all(|(&arg, &want)| table.substitute_type_params(arg, &slots) == want)
+        written.iter().zip(asked).all(|(&arg, &want)| {
+            let held = table.substitute_type_params(arg, &slots);
+            table.fits_written(held, want)
+        })
     }
 
     /// `ty`, written in block `impl_def`, with each slot the block's target

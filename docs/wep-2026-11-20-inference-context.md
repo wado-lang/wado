@@ -189,12 +189,32 @@ Each step keeps every fixture passing and deletes what it replaces.
   an unsettled one reports as its slot would. The call counts it among its own
   variables, so a literal under it waits for the expected type. A struct
   literal's turbofish names its slots, as a call's does.
-- [ ] A `_` standing for a whole turbofish slot, or anywhere in a path's type
-  argument, is a variable, so no call path reads `unknown` for it.
-- [ ] A `_` in a `let` annotation and after `as` is a variable.
+- [x] A `_` standing for a whole turbofish slot, or anywhere in a path's type
+  argument, is a variable. A call's slot meets it, and the solve counts it
+  among its own variables. A static call (its receiver and its own slots, a
+  newtype's inherited static read at the base) and a case path meet the
+  expected type before their arguments are typed, so a literal under a `_`
+  waits for it. A case path's `_` for a whole slot is that slot omitted
+  (`omit_bare_written_holes`), which the construction infers and reports, and
+  so is a trait turbofish of nothing but `_`. A function value's `_` is
+  settled by the expected `fn` type, as an omitted turbofish is. A `_` in a
+  trait turbofish admits every impl it fits, and settles as any selection's
+  variable does.
+  An associated constant's prefix reads no argument, so its `_`s ask for
+  nothing. Wherever it sits, an unsettled `_` reports as its slot would, and
+  an expression that reports its own error leaves its `_`s unreported. A check
+  whose types part around a `_` reports the mismatch at once.
+- [x] A `_` in a `let` annotation and after `as` is a variable. A cast's is
+  settled by the expected type and the operand at the cast, and reported
+  there where they leave it open, since the cast judges its conversion then.
 - [ ] The context is per body rather than per module.
 
 ## Known gaps
+
+- A trait-qualified call does not read the expected type while its selection
+  is undecided. `let y: List<i32> = Mk::<_, Self = S>::mk()` and
+  `Mk::<_>::mk(&s)` stay unsettled where the unqualified `s.mk()` selects by
+  the annotation.
 
 - `InferCtx` in `infer.rs` infers a single call's type arguments with
   parameters as holes, apart from the context's variables.

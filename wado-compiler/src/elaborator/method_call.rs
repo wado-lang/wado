@@ -21,9 +21,7 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{
-    ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer, turbofish_leaves_slot,
-};
+use super::call::{ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer};
 use super::callee::StaticMethodRef;
 use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
@@ -431,7 +429,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 this.receiver_waits(receiver, &method_call.method, method_call.span, None)
             },
             |this, receiver, ctx| {
-                // A `_` resolves to UNKNOWN, so these are their own hole mask.
                 let type_args: Vec<TypeId> = this.resolve_turbofish_args(&method_call.type_args);
                 let outcome = this.resolve_method_call_with(
                     MethodCallInput {
@@ -977,26 +974,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
         };
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
-            let mut known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
-                let mut infer =
-                    InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
-                let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
-                for (i, (&param_type, &arg)) in
-                    solve_params.iter().zip(solve_args.iter()).enumerate()
-                {
-                    if answers_last(args_ast.get(i)) {
-                        infer.add_deferred(param_type, arg);
-                    } else {
-                        infer.add(param_type, arg);
-                    }
+            let inst = inst
+                .as_ref()
+                .expect("a method with slots instantiates them");
+            // The call's own variables, which the turbofish and the expected
+            // type have met. One still open takes what the arguments solve it
+            // to at the base, which a newtype receiver's arguments meet.
+            let mut infer = InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
+            let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
+            for (i, (&param_type, &arg)) in solve_params.iter().zip(solve_args.iter()).enumerate() {
+                if answers_last(args_ast.get(i)) {
+                    infer.add_deferred(param_type, arg);
+                } else {
+                    infer.add(param_type, arg);
                 }
-                infer.solve()
-            } else {
-                type_args.clone()
-            };
-            // The solve above has seen every written argument, so a pack still
-            // open here is one the call left nothing over for — unless an
-            // argument reached it, which makes it the solve's failure.
+            }
+            let solved = infer.solve();
+            let mut known: Vec<TypeId> = inst
+                .vars
+                .iter()
+                .zip(solved)
+                .map(|(&var, solved)| {
+                    let answer = self.apply_infer_holes(var);
+                    if self.tysys.type_table.borrow().is_infer_var(answer) {
+                        solved
+                    } else {
+                        answer
+                    }
+                })
+                .collect();
+            // Instantiation leaves a pack rigid, so one the arguments did not
+            // reach is one the call left nothing over for.
             let reached = self
                 .tysys
                 .packs_args_reach(&expected_param_types, args.len());
@@ -1015,9 +1023,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             bind_nearer(&mut default_type_bindings, own);
         }
+        let default_expected = match &inst {
+            Some(inst) => self.instantiate_types(&expected_param_types, inst),
+            None => expected_param_types.clone(),
+        };
         self.fill_trailing_defaults(
             &mut args,
-            &expected_param_types,
+            &default_expected,
             &defaults,
             Some(callee_module.clone()),
             Some(self_binding),
@@ -1701,7 +1713,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let args: Vec<TypeId> = written
                 .into_iter()
                 .map(|arg| {
-                    if arg == TypeTable::UNKNOWN {
+                    if self.is_bare_written_hole(arg) {
                         self.mint_infer_var()
                     } else {
                         arg
@@ -1736,70 +1748,77 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method: &str,
         span: Span,
     ) -> Vec<TypeId> {
-        let mut trait_args: Vec<TypeId> = args.iter().map(|a| self.resolve_type(a)).collect();
-        let omitted: Vec<usize> = (0..trait_args.len())
-            .filter(|&i| trait_args[i] == TypeTable::UNKNOWN)
+        let mut trait_args = self.resolve_turbofish_args(args);
+        let holding: Vec<usize> = (0..trait_args.len())
+            .filter(|&i| self.holds_written_hole(trait_args[i]))
             .collect();
-        if omitted.is_empty() {
+        if holding.is_empty() {
             return trait_args;
         }
         let written: Vec<&ast::GenericParam> = ast::written_params(trait_params).collect();
-        let names: Vec<String> = omitted.iter().map(|&i| written[i].name.clone()).collect();
+        let names: Vec<String> = holding.iter().map(|&i| written[i].name.clone()).collect();
         let message = TypeError::cannot_infer_message(
             &names,
             &format!("trait `{head}`"),
             &format!("`{head}::<...>::{method}()`"),
         );
-        for (&i, name) in omitted.iter().zip(names) {
-            trait_args[i] = self.mint_infer_hole(span, message.clone(), name, Vec::new());
+        for (&i, name) in holding.iter().zip(names) {
+            self.blame_in_slot(&mut trait_args[i], span, &message, name);
         }
         trait_args
     }
 
-    /// Each `_` in `target`'s turbofish, made a variable a later use may settle
-    /// and blamed on the call `head::method(…)`, with the position it fills.
-    /// Only a generic declaration's instance has arguments to fill: a
-    /// turbofish on anything else is reported where it was resolved.
+    /// The variables of each `_` in `target`'s turbofish, which a later use may
+    /// settle. One standing for a whole argument is blamed on the call
+    /// `head::method(…)`, with the position it fills. Only a generic
+    /// declaration's instance has arguments to fill: a turbofish on anything
+    /// else is reported where it was resolved.
     fn mint_receiver_holes(
         &mut self,
         target: &mut TypeId,
         head: &str,
         method: &str,
         span: Span,
-    ) -> Vec<(usize, TypeId)> {
+    ) -> Vec<TypeId> {
         if !self.applies_written_args(*target) {
             return Vec::new();
         }
         let Some(mut args) = self.tysys.type_table.borrow().declared_type_args(*target) else {
             return Vec::new();
         };
-        let omitted: Vec<usize> = (0..args.len())
-            .filter(|&i| args[i] == TypeTable::UNKNOWN)
+        let vars = self.vars_holding_written_holes(&args);
+        let holding: Vec<usize> = (0..args.len())
+            .filter(|&i| self.holds_written_hole(args[i]))
             .collect();
-        if omitted.is_empty() {
-            return Vec::new();
+        if !holding.is_empty() {
+            self.blame_receiver_holes(&mut args, &holding, *target, [head, method], span);
+            *target = self.with_written_args(*target, &args);
         }
+        vars.into_iter()
+            .map(|var| self.apply_infer_holes(var))
+            .collect()
+    }
+
+    /// Blame each `_` in `args` at `holding` on the call `head::method(…)`, as
+    /// the argument of `target` it fills. One for a whole argument is replaced
+    /// by the blamed variable.
+    fn blame_receiver_holes(
+        &mut self,
+        args: &mut [TypeId],
+        holding: &[usize],
+        target: TypeId,
+        [head, method]: [&str; 2],
+        span: Span,
+    ) {
         let params = self
-            .type_decl_key(*target)
+            .type_decl_key(target)
             .and_then(|def| self.type_lookup().declared_generic_params(def))
             .expect("a `_` fills a parameter its declaration writes");
-        let names: Vec<String> = omitted.iter().map(|&i| params[i].name.clone()).collect();
+        let names: Vec<String> = holding.iter().map(|&i| params[i].name.clone()).collect();
         let message = TypeError::receiver_args_uninferred_message(&names, head, method);
-        let holes: Vec<(usize, TypeId)> = omitted
-            .iter()
-            .zip(names)
-            .map(|(&i, name)| {
-                (
-                    i,
-                    self.mint_infer_hole(span, message.clone(), name, Vec::new()),
-                )
-            })
-            .collect();
-        for &(i, hole) in &holes {
-            args[i] = hole;
+        for (&i, name) in holding.iter().zip(names) {
+            self.blame_in_slot(&mut args[i], span, &message, name);
         }
-        *target = self.with_written_args(*target, &args);
-        holes
     }
 
     /// Whether `receiver` spells a generic type without one of its arguments:
@@ -1812,7 +1831,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .declared_type_args(ty)
-            .is_some_and(|args| args.contains(&TypeTable::UNKNOWN))
+            .is_some_and(|args| args.iter().any(|&arg| self.is_bare_written_hole(arg)))
     }
 
     /// Whether the trait `block` implements is one the call site names, as
@@ -1999,26 +2018,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `receiver_type`, behind its references, is the type `spelled`
-    /// names, or a resource extending it.
-    fn receiver_is_spelled(&self, spelled: &ReceiverId, receiver_type: TypeId) -> bool {
+    /// names, or a resource extending it. A `_` the spelling writes meets
+    /// what the receiver has there.
+    fn receiver_is_spelled(&mut self, spelled: &ReceiverId, receiver_type: TypeId) -> bool {
         if receiver_type == TypeTable::ERROR || receiver_type == TypeTable::UNKNOWN {
             return true;
         }
+        let mut pointee = self.tysys.type_table.borrow().peel_refs(receiver_type);
+        let spelled = &match spelled.ty() {
+            Some(ty) => {
+                self.equate(pointee, ty);
+                pointee = self.apply_infer_holes(pointee);
+                spelled.at_type(Some(self.apply_infer_holes(ty)))
+            }
+            None => spelled.clone(),
+        };
         let table = self.tysys.type_table.borrow();
-        let pointee = table.peel_refs(receiver_type);
         if let (Some(sub), Some(sup)) = (table.nominal_def(pointee), spelled.key().decl()) {
             // Where the spelling writes the type's arguments, they are the
-            // receiver's too, but for one left to inference (`_`).
+            // receiver's too.
             let args_agree = |ty| match (
                 table.declared_type_args(ty),
                 table.declared_type_args(pointee),
             ) {
                 (Some(written), Some(held)) => {
                     written.len() == held.len()
-                        && written
-                            .iter()
-                            .zip(held.iter())
-                            .all(|(&w, &h)| w == TypeTable::UNKNOWN || w == h)
+                        && written.iter().zip(held.iter()).all(|(&w, &h)| w == h)
                 }
                 (Some(written), None) => written.is_empty(),
                 (None, _) => true,
@@ -2464,7 +2489,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(head) = &head {
             self.reject_unresolved_args(head.args);
         }
-        let mut target_type_id = self.resolve_type(&static_call.target_type);
+        let mut target_type_id =
+            self.with_writable_holes(|e| e.resolve_type(&static_call.target_type));
 
         // `Tag::<Point>::tag()` where `Tag` is a trait resolves to no type;
         // unreported it types `unknown` and lowering builds an invalid module.
@@ -2510,13 +2536,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             if takes_receiver && (writes_trait_args || self_type.is_some()) {
                 let declared_head = self.declared_trait_name(Some(head.site), &head.name);
-                let trait_args = self.resolve_trait_turbofish(
-                    head.args,
-                    &trait_params,
-                    &declared_head,
-                    &static_call.method,
-                    static_call.span,
-                );
+                // A `_` for every argument writes none of them, and the
+                // receiver selects the impl as an unqualified call's does.
+                let writes_trait_args = writes_trait_args
+                    && !head
+                        .args
+                        .iter()
+                        .all(|arg| matches!(arg, ast::Type::Infer(_)));
+                let trait_args = if writes_trait_args {
+                    self.resolve_trait_turbofish(
+                        head.args,
+                        &trait_params,
+                        &declared_head,
+                        &static_call.method,
+                        static_call.span,
+                    )
+                } else {
+                    Vec::new()
+                };
                 let args_spelled: Vec<String> = head
                     .args
                     .iter()
@@ -2703,10 +2740,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.resolve_args_without_callee(&static_call.args, ctx);
             }
             self.record_case_owner(static_call.id, owner.def);
+            self.unwrite_holes_in(target_type_id);
             let Some(written) = self.case_written(
                 &owner,
                 [&spelled, &static_call.method],
-                (head.args, Self::resolve_path_args),
+                (head.args, Self::resolve_turbofish_args),
                 static_call.span,
             ) else {
                 return self.resolve_args_without_callee(&static_call.args, ctx);
@@ -2841,14 +2879,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `ns::Wrapper<T>` supplies the target's arguments as `Wrapper<T>`
         // does; the namespace is the head's question, not the list's. A `_`
         // among them is a variable the arguments answer, as an omitted
-        // turbofish's slot is.
-        let mut declaring_args: Vec<TypeId> = written_arg_nodes(&static_call.target_type)
-            .iter()
-            .map(|t| self.resolve_type(t))
-            .collect();
-        for &(i, var) in &receiver_holes {
-            declaring_args[i] = var;
-        }
+        // turbofish's slot is, so a generic instance's are read off the
+        // target, which holds the variables its `_`s became.
+        let mut declaring_args: Vec<TypeId> = if self.applies_written_args(target_type_id) {
+            self.tysys
+                .type_table
+                .borrow()
+                .declared_type_args(target_type_id)
+                .expect("a generic instance has arguments")
+        } else {
+            written_arg_nodes(&static_call.target_type)
+                .iter()
+                .map(|t| self.resolve_type(t))
+                .collect()
+        };
         let callee_args = self.args_at_callee(target_type_id, &declaring_args, callee_sig.as_ref());
         self.instantiate_static_params(
             callee_sig.as_ref(),
@@ -2868,7 +2912,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
-        let mut args: Vec<TypeId> = if receiver_holes.is_empty() {
+        let written_vars: IndexSet<TypeId> = receiver_holes
+            .iter()
+            .copied()
+            .chain(self.vars_holding_written_holes(&method_type_args))
+            .collect();
+        let args: Vec<TypeId> = if written_vars.is_empty() {
             static_call
                 .args
                 .iter()
@@ -2879,15 +2928,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         } else {
-            let vars: Vec<TypeId> = receiver_holes.iter().map(|&(_, var)| var).collect();
-            let inst = Instantiated::of_vars(vars);
-            let args = self.resolve_args_against_params(
-                &static_call.args,
-                ctx,
-                &param_types,
-                Some(&inst),
-                None,
-            );
+            // The expected type answers a `_` before a literal under it takes
+            // its default. A newtype's inherited static is read at its base.
+            let (_, expected_at_base) =
+                self.at_inherited_base(newtype, declaring_link, &[], expected_type);
+            let ret = match (&callee_sig, expected_at_base) {
+                (Some(sig), Some(expected)) => {
+                    let declaring = sig
+                        .declaring_impl
+                        .map(|id| self.tysys.signatures.impl_sig(id));
+                    let declared = sig
+                        .instantiate_call_with(
+                            &self.tysys.type_table,
+                            declaring,
+                            &callee_args,
+                            &method_type_args,
+                        )
+                        .return_type;
+                    Some(ExpectedReturn { declared, expected })
+                }
+                (None, _) | (Some(_), None) => None,
+            };
+            let inst = Instantiated::of_vars(written_vars.into_iter().collect());
+            self.resolve_args_against_params(&static_call.args, ctx, &param_types, Some(&inst), ret)
+        };
+        let mut args: Vec<TypeId> = if receiver_holes.is_empty() {
+            args
+        } else {
             let (at_base, expected_at_base) =
                 self.at_inherited_base(newtype, declaring_link, &args, expected_type);
             // A `_` is answered as the bare spelling answers the slot it
@@ -2912,7 +2979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_default();
             // Both answer at the callee's link of a newtype chain, so each is
             // matched against the `_`s as that link spells them.
-            let vars: Vec<TypeId> = receiver_holes.iter().map(|&(_, var)| var).collect();
+            let vars = &receiver_holes;
             let answers: Vec<Option<TypeId>> = (0..callee_args.len())
                 .map(|j| {
                     inferred
@@ -2921,19 +2988,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .or_else(|| block_target.get(j).copied())
                 })
                 .collect();
-            let solved = self.answer_receiver_vars(&vars, &callee_args, &answers);
+            let solved = self.answer_receiver_vars(vars, &callee_args, &answers);
             let mut unanswered = Vec::new();
-            for (&(i, var), answer) in receiver_holes.iter().zip(solved) {
+            for (&var, answer) in vars.iter().zip(solved) {
                 if answer == var {
-                    unanswered.push(var);
+                    let now = self.apply_infer_holes(var);
+                    if self.tysys.type_table.borrow().is_infer_var(now) {
+                        unanswered.push(var);
+                    }
                 } else {
                     self.equate(var, answer);
-                    declaring_args[i] = answer;
                 }
             }
+            declaring_args = self.apply_infer_holes_each(&declaring_args);
             // A `_` nothing answered waits for a later use where the bare
             // spelling's slot would, and is reported now where none can come.
-            if !unanswered.is_empty() && !self.defers_uninferred(&args, &vars, expected_type) {
+            if !unanswered.is_empty() && !self.defers_uninferred(&args, vars, expected_type) {
                 self.close_uninferred(&unanswered);
                 return TypeTable::ERROR;
             }
@@ -2986,7 +3056,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .is_some_and(|sig| self.own_from_sig(sig));
         if let Some(sig) = callee_sig
-            && turbofish_leaves_slot(&method_type_args, sig.own_params.len())
+            && self.turbofish_leaves_slot(&method_type_args, sig.own_params.len())
             && !sig.own_params.is_empty()
             && let Some(receiver) = &lookup_receiver
         {
@@ -3215,7 +3285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if return_type == TypeTable::UNKNOWN {
             let open: Vec<TypeId> = receiver_holes
                 .iter()
-                .map(|&(_, var)| var)
+                .copied()
                 .chain(required_args.iter().copied())
                 .filter(|&var| {
                     let answered = self.apply_infer_holes(var);

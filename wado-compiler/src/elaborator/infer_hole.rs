@@ -15,6 +15,7 @@ use crate::type_table::TypeTable;
 use super::Elaborator;
 use super::call::assoc_target_slot;
 use super::infer::unify;
+use super::instantiate::InstanceKind;
 use super::pending_selection::{
     ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
 };
@@ -452,7 +453,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// of it: an unrolled tuple `for-of` and a default argument elaborate one
     /// `_` many times, each a use of its own.
     pub(super) fn written_hole(&mut self, span: Span) -> TypeId {
-        let var = self.mint_infer_var();
+        let var = self.mint_infer_var_named("_");
         self.infer_holes.written.push((span, var));
         var
     }
@@ -485,6 +486,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | Obligation::Check(_)
                 | Obligation::Pending(_) => false,
             })
+    }
+
+    /// Whether `ty` is a `_` the source wrote for a whole slot, still open.
+    pub(super) fn is_bare_written_hole(&self, ty: TypeId) -> bool {
+        let applied = self.apply_infer_holes(ty);
+        self.tysys.type_table.borrow().is_infer_var(applied) && self.holds_written_hole(ty)
+    }
+
+    /// `args` with each `_` standing for a whole slot made `unknown`, an
+    /// omitted slot, which the site's own inference answers and reports.
+    pub(super) fn omit_bare_written_holes(&mut self, args: Vec<TypeId>) -> Vec<TypeId> {
+        args.into_iter()
+            .map(|arg| {
+                if !self.is_bare_written_hole(arg) {
+                    return arg;
+                }
+                self.unwrite_holes_in(arg);
+                TypeTable::UNKNOWN
+            })
+            .collect()
+    }
+
+    /// Run `resolve`, and close each `_` it wrote that is still open where it
+    /// reported an error: that error is the whole fault, so neither the `_`
+    /// nor the slot it fills asks for itself as well.
+    pub(super) fn closing_holes_on_error<R>(&mut self, resolve: impl FnOnce(&mut Self) -> R) -> R {
+        let holes_before = self.infer_holes.written.len();
+        let errors_before = self.logger.offered_error_count();
+        let resolved = resolve(self);
+        if self.logger.offered_error_count() != errors_before {
+            let written: Vec<TypeId> = self.infer_holes.written[holes_before..]
+                .iter()
+                .map(|&(_, hole)| hole)
+                .collect();
+            for hole in written {
+                self.close_infer_var(hole);
+            }
+        }
+        resolved
+    }
+
+    /// Blame each `_` `arg` holds with `message`, the sentence for the slot
+    /// `param` it fills. One for the whole slot is replaced by a variable
+    /// blamed as [`Self::mint_infer_hole`] blames, joined with it.
+    pub(super) fn blame_in_slot(
+        &mut self,
+        arg: &mut TypeId,
+        span: Span,
+        message: &str,
+        param: String,
+    ) {
+        if self.is_bare_written_hole(*arg) {
+            let blamed = self.mint_infer_hole(span, message.to_string(), param, Vec::new());
+            self.equate(*arg, blamed);
+            self.unwrite_holes_in(*arg);
+            *arg = blamed;
+            return;
+        }
+        for hole in self.written_holes_in(*arg) {
+            self.attach_infer_var_diag(hole, span, message.to_string());
+        }
+    }
+
+    /// Let the `_`s `ty` holds go unreported: a site that resolves what they
+    /// were written in again answers and reports its own.
+    pub(super) fn unwrite_holes_in(&mut self, ty: TypeId) {
+        let held = self.tysys.type_table.borrow().infer_vars_in(ty);
+        self.infer_holes
+            .written
+            .retain(|(_, hole)| !held.contains(hole));
+    }
+
+    /// The variables `tys` name whose class holds an open `_` the source wrote.
+    pub(super) fn vars_holding_written_holes(&self, tys: &[TypeId]) -> IndexSet<TypeId> {
+        tys.iter()
+            .flat_map(|&ty| self.tysys.type_table.borrow().infer_vars_in(ty))
+            .filter(|&var| self.holds_written_hole(var))
+            .collect()
+    }
+
+    /// Whether `ty` still holds an open `_` the source wrote, at any depth.
+    pub(super) fn holds_written_hole(&self, ty: TypeId) -> bool {
+        !self.written_holes_in(ty).is_empty()
     }
 
     /// The variables of the `_`s the source wrote that `ty` still holds.
@@ -623,6 +707,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
+    /// A variable for the slot `param`, blamed as one of `owner`.
+    pub(super) fn mint_slot_hole(&mut self, span: Span, param: &str, owner: &str) -> TypeId {
+        let hole = self.mint_infer_var_named(param);
+        self.attach_infer_var_blame(hole, span, param.to_string(), owner.to_string());
+        hole
+    }
+
+    /// Blame each open `_` `arg` holds as the slot `param` it fills would be.
+    pub(super) fn blame_holes_as_slot(
+        &mut self,
+        arg: TypeId,
+        span: Span,
+        param: &str,
+        owner: &str,
+    ) {
+        for hole in self.written_holes_in(arg) {
+            self.attach_infer_var_blame(hole, span, param.to_string(), owner.to_string());
+        }
+    }
+
     /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
     /// parameter, so unsolved siblings of one use site coalesce.
     pub(super) fn attach_infer_var_blame(
@@ -666,13 +770,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !is_bare_decl {
             return type_id;
         }
-        let message = uninferable_type_param("variant", variant_name);
+        let owner = InstanceKind::Variant.slot_owner(variant_name);
         let holes: Vec<TypeId> = variant_info
             .type_params
             .iter()
-            .map(|param| {
-                self.mint_infer_hole(span, message.clone(), param.name.clone(), Vec::new())
-            })
+            .map(|param| self.mint_slot_hole(span, &param.name, &owner))
             .collect();
         assert_eq!(
             holes.len(),
@@ -713,6 +815,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `t` is a bare parameter or variable that is not one of the
     /// enclosing declaration's `scope_params`.
     pub(super) fn is_open_slot(&self, t: TypeId, scope_params: &ScopeParams) -> bool {
+        let t = self.apply_infer_holes(t);
         self.tysys.is_unbound_type_param(t)
             && !scope_params.owns(&self.tysys.type_table.borrow(), t)
     }
@@ -948,6 +1051,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter_map(|&var| self.infer_holes.vars.root_of(var))
             .collect();
+        self.blame_bare_written_holes(|root| classes.contains(&root));
         let blames = self.class_blames(&classes);
         assert_eq!(
             blames.len(),
@@ -960,8 +1064,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Blame each `_` the source wrote whose class no slot blames, at the `_`.
-    fn blame_bare_written_holes(&mut self) {
+    /// Blame each open `_` the source wrote in a class `within` takes and no
+    /// slot blames, at the `_`.
+    fn blame_bare_written_holes(&mut self, within: impl Fn(TypeId) -> bool) {
         let vars = &self.infer_holes.vars;
         let blamed: IndexSet<Option<TypeId>> = self
             .infer_holes
@@ -974,7 +1079,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .written
             .iter()
             .copied()
-            .filter(|&(_, w)| vars.is_unanswered(w) && !blamed.contains(&vars.root_of(w)))
+            .filter(|&(_, w)| {
+                let root = vars.root_of(w);
+                vars.is_unanswered(w) && !blamed.contains(&root) && root.is_some_and(&within)
+            })
             .collect();
         for (span, hole) in bare {
             self.attach_infer_var_diag(
@@ -995,7 +1103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A check queued after the last answer has not been asked yet.
         self.run_obligations();
         self.settle_pending_selections(Undecided::Report);
-        self.blame_bare_written_holes();
+        self.blame_bare_written_holes(|_| true);
         let mismatches = self.infer_holes.mismatches.take();
         let covered: IndexSet<TypeId> = self
             .infer_holes

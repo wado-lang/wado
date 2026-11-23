@@ -1,5 +1,6 @@
 // A `_` in the turbofish of a trait static called with `Self = T` is a
-// variable, and the one impl written at another argument does not settle it.
+// variable, at any depth, and the one impl written at another argument does
+// not settle it.
 
 trait Tagged<V> with () {
     fn tag() -> String;
@@ -13,12 +14,19 @@ impl Tagged<i32> for S {
     }
 }
 
+impl Tagged<List<i32>> for S {
+    fn tag() -> String {
+        return "List<i32>";
+    }
+}
+
 export fn run() {
     let _t = Tagged::<_, Self = S>::tag();
+    let _u = Tagged::<List<_>, Self = S>::tag();
 }
 
 __DATA__
 {
-    "compile_error": ":17:14: analysis error: cannot infer type parameter `V` of trait `Tagged`",
+    "compile_error": ":24:14: analysis error: cannot infer type parameter `V` of trait `Tagged`; add a turbofish (`Tagged::<...>::tag()`) or a type annotation; 25:14: cannot infer type parameter `V` of trait `Tagged`;",
     "compile_error_count": 1
 }
