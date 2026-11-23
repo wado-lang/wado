@@ -995,7 +995,6 @@ fn by_picks<E: Float>(
 /// its operands.
 fn host_projection(host: &ExpertsOnHost, pool: &ExpertPool, step: i32, first: i32) -> HostProjection {
     let scales = host.of(step, first + 1);
-    let zero_points_at = first + 2 + if pool.bias matches { Some(_) } { 1 } else { 0 };
     return HostProjection {
         packed: host.of(step, first).bytes(),
         scales: scales.bytes(),
@@ -1004,7 +1003,7 @@ fn host_projection(host: &ExpertsOnHost, pool: &ExpertPool, step: i32, first: i3
             null => null,
         },
         zero_points: match &pool.zero_points {
-            Some(_) => Option::Some(host.of(step, zero_points_at).bytes()),
+            Some(_) => Option::Some(host.of(step, first + places(pool) - 1).bytes()),
             null => null,
         },
         kind: scales.kind,
@@ -1014,11 +1013,9 @@ fn host_projection(host: &ExpertsOnHost, pool: &ExpertPool, step: i32, first: i3
 
 /// The places of `pool`'s weights among its layer's.
 fn places(pool: &ExpertPool) -> i32 {
-    return 2 + if pool.bias matches { Some(_) } { 1 } else { 0 } + if pool.zero_points matches { Some(_) } {
-        1;
-    } else {
-        0;
-    };
+    let biased = pool.bias matches { Some(_) };
+    let zero_points = pool.zero_points matches { Some(_) };
+    return 2 + biased as i32 + zero_points as i32;
 }
 
 /// `p`'s pools on the device.
