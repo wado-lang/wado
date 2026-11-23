@@ -913,12 +913,12 @@ fn by_picks<E: Float>(
     let k = experts.k;
     let slot_of = |pick: i32| slots[picks[pick] as i32] as i32;
     let tokens = g.extents_of(rows)[0];
-    let hosted = (0..<tokens * k).any(|pick| slot_of(pick) < 0);
+    let on_host = (0..<tokens * k).any(|pick| slot_of(pick) < 0);
     // What the host reads is read back before the device's products are
     // queued, so that the host computes its picks while the device runs them.
     let mut host_rows: List<f32> = [];
     let mut host_weights: List<f32> = [];
-    if hosted {
+    if on_host {
         host_rows = g.host(rows).data;
         host_weights = g.host(&routing.weights).data;
     }
@@ -942,7 +942,7 @@ fn by_picks<E: Float>(
                 continue;
             }
             let Some(inner) = g.gated_up(&row, &up, slot, experts) else {
-                assert !hosted, "the host's picks have no slot to fall back on";
+                assert !on_host, "the host's picks have no slot to fall back on";
                 return null;
             };
             let weight = DeviceTensor {
@@ -951,14 +951,14 @@ fn by_picks<E: Float>(
                 extents: [1, 1],
             };
             let Some(sum) = g.weighed_down(&inner, &down, slot, &weight, optional(&total), &experts.quantized) else {
-                assert !hosted, "the host's picks have no slot to fall back on";
+                assert !on_host, "the host's picks have no slot to fall back on";
                 return null;
             };
             total = Option::Some(sum);
         }
         totals.push(total);
     }
-    if hosted {
+    if on_host {
         g.flush();
         let host_up = host_projection(g, &up, experts.step);
         let host_down = host_projection(g, &down, experts.step);

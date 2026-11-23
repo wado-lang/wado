@@ -54,13 +54,15 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
     let ids = &generate[0].ids;
     model.continued(ids, steps);
     let read_before = read_nanoseconds();
-    let loaded_before = model.experts().counts().loaded_bytes;
+    let before = *model.experts().counts();
     let began = MonotonicClock::now();
     model.continued(ids, steps);
     let wall = (MonotonicClock::now() - began) as i64;
     let read = (read_nanoseconds() - read_before) as i64;
-    let loaded = model.experts().counts().loaded_bytes - loaded_before;
-    println(`the prompt of ${ids.len()} and ${steps} tokens, ${loaded} bytes of experts loaded:`);
+    let after = model.experts().counts();
+    let loaded = after.loaded_bytes - before.loaded_bytes;
+    let [picked, hosted] = [after.picked - before.picked, after.hosted - before.hosted];
+    println(`the prompt of ${ids.len()} and ${steps} tokens, ${loaded} bytes of experts loaded, ${hosted} of ${picked} picks on the host:`);
     println(`  wall      ${ms(wall):>10.1} ms`);
     println(`  reads     ${ms(read):>10.1} ms ${share(read, wall):>5.1}%`);
     // A profile submits each dispatch alone to time it, so it runs apart

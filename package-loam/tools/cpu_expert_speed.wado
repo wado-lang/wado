@@ -1,0 +1,77 @@
+//! How fast one guest core computes gpt-oss-20b's experts as `cpu_experts.wado`
+//! does: 40 experts of its shapes, far more than the L3 cache holds, so the
+//! figure is what memory serves one core.
+//!
+//!     wado run -O2 --no-spectre-mitigation tools/cpu_expert_speed.wado
+
+use { println, Stdout } from "core:cli";
+use { Benchmark } from "core:benchmark";
+use { LinearArray64 } from "core:linear";
+use { MonotonicClock } from "wasi:clocks";
+use { HostProjection, expert_row } from "../src/runtime/cpu_experts.wado";
+use { Experts, ProjectionShape } from "../src/runtime/experts.wado";
+use { Quantized } from "../src/runtime/hlo.wado";
+
+global EXPERTS: i32 = 40;
+global HIDDEN: i32 = 2880;
+
+/// `rows` rows of `cols` 4-bit values for each of `EXPERTS` experts, with f32
+/// scales and biases, all made up.
+fn weights(rows: i32, cols: i32) -> [LinearArray64<u8>, LinearArray64<u8>, LinearArray64<u8>] {
+    let blocks = cols / 32;
+    let all = EXPERTS as i64 * rows as i64;
+    let mut packed = LinearArray64::<u8>::filled(all * blocks as i64 * 16, 0);
+    for let i of 0..<packed.len() {
+        unchecked packed.set(i, (i * 37 % 256) as u8);
+    }
+    let mut scales = LinearArray64::<u8>::filled(4 * all * blocks as i64, 0);
+    for let i of 0..<all * blocks as i64 {
+        scales.store_at::<f32>(4 * i, 0.001 * (1 + i % 7) as f32);
+    }
+    let mut bias = LinearArray64::<u8>::filled(4 * all, 0);
+    for let i of 0..<all {
+        bias.store_at::<f32>(4 * i, 0.01 * (i % 5) as f32);
+    }
+    return [packed, scales, bias];
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let inner = HIDDEN;
+    let up_weights = weights(2 * inner, HIDDEN);
+    let down_weights = weights(HIDDEN, inner);
+    let shape = |rows: i32, cols: i32| ProjectionShape { rows, blocks: cols / 32, blob: 16, zero_bytes: 0 };
+    let up = HostProjection {
+        packed: &up_weights.0,
+        scales: &up_weights.1,
+        bias: Option::Some(&up_weights.2),
+        zero_points: null,
+        shape: shape(2 * inner, HIDDEN),
+    };
+    let down = HostProjection {
+        packed: &down_weights.0,
+        scales: &down_weights.1,
+        bias: Option::Some(&down_weights.2),
+        zero_points: null,
+        shape: shape(HIDDEN, inner),
+    };
+    let experts = Experts {
+        k: 4,
+        normalized: true,
+        alpha: 1.702,
+        beta: 1.0,
+        limit: 7.0,
+        quantized: Quantized { bits: 4, block: 32 },
+        step: 0,
+    };
+    let x: List<f32> = (0..<HIDDEN).map(|i| ((i * 11 % 200) - 100) as f32 * 0.01).collect();
+    let mut checksum: f32 = 0.0;
+    let mut bench = Benchmark { name: "gpt-oss-20b experts on one core" };
+    // The bytes the q4f16 export stores one expert in, f16 scales and biases.
+    bench.input_size = Option::Some(EXPERTS * 14_014_080);
+    bench.run("40 experts", || {
+        for let e of 0..<EXPERTS {
+            checksum += expert_row(&up, &down, e, &x, &experts)[7];
+        }
+    });
+    println(`${checksum}`);
+}
