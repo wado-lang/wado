@@ -454,6 +454,12 @@ fn check_cm_boundary_representable_inner(
         if let Some(elem) = type_table.as_list(type_id) {
             return recurse(elem, Slot::Value, visited);
         }
+        // A synchronous import's `list<T>` parameter, which the call lends.
+        if boundary == Boundary::Import
+            && let Some(elem) = type_table.list_view_ref_element(type_id)
+        {
+            return recurse(elem, Slot::Value, visited);
+        }
         // Exhaustive over `ResolvedType` on purpose — no wildcard. A wildcard
         // would silently classify an unhandled (or future) variant as
         // representable and let it fall through to the i32 lowering, which is
