@@ -154,12 +154,16 @@ wado`pos = ${name}(tokens);`  // pos = expr_list(tokens);
 
 The tag tracks what the template's own text has opened: code, a string, a char
 literal, a template, or a comment. A hole's value never changes that state. A
-hole in code is written as it renders, since there it is code itself. A format
+hole in code is written as it renders, since there it is code itself. A hole in
+a comment is written as it renders too, and traps if it holds what would end the
+comment: a line break in a line comment, `*/` in a block comment. A format
 specifier applies as usual (`${bits:x}`). Printable non-ASCII stays verbatim.
 
-Two helpers cover literals a hole cannot express:
+Three helpers cover literals a hole cannot express:
 
 - `byte_string_literal(bytes)` writes a `b"..."` literal.
+- `raw_string_literal(text)` writes a `#"..."#` literal, with as many `#`s as
+  the text needs.
 - `char_range_pat(range)` writes a char range pattern, or one literal when the
   range holds one char.
 

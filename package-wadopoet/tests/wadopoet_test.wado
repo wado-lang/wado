@@ -15,6 +15,7 @@ use {
     wado,
     char_range_pat,
     byte_string_literal,
+    raw_string_literal,
 } from "../src/lib.wado";
 use { eval, EvalHost } from "core:eval";
 use { Origin } from "core:kiln";
@@ -915,6 +916,39 @@ test "wado reads a quote in a line comment as text" {
     let got = wado`// ${comment}
 let s = "${text}";`;
     assert got == "// don't\nlet s = \"x\\\"y\";";
+}
+
+#[expect_trap]
+test "wado refuses a line break in a line comment's hole, which would end the comment" {
+    let reason = "first\nlet x = 1;";
+    wado`// ${reason}`;
+}
+
+#[expect_trap]
+test "wado refuses a block comment's closer in a block comment's hole" {
+    let reason = "a */ b";
+    wado`/* ${reason} */`;
+}
+
+test "wado keeps a comment's hole as written where it cannot end the comment" {
+    let reason = "don't \"quote\" */";
+    assert wado`// ${reason}` == "// don't \"quote\" */";
+}
+
+test "raw_string_literal reads back as its text, whatever it holds" {
+    let values: List<String> = ["", "plain", "a\"b", "\"#", "\"##x\"#", "line\nbreak \\n ${x}"];
+    let mut run = String::new();
+    let mut expected = String::new();
+    for let v of values {
+        run.push_str(wado`print(${raw_string_literal(&v)});`);
+        expected.push_str(&v);
+    }
+    assert printed(run) == expected;
+}
+
+test "raw_string_literal takes the fewest hashes that keep the text inside" {
+    assert raw_string_literal("a\"b") == "#\"a\"b\"#";
+    assert raw_string_literal("a\"#b") == "##\"a\"#b\"##";
 }
 
 test "wado reads a lone slash as division, not a comment" {
