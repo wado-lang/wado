@@ -41,3 +41,12 @@ test "a cast" {
     let w = [1, 2] as List<_>;
     assert v[1] == 5_000_000_000 && n == 3 && w.len() == 2;
 }
+
+type Tag<T> = List<T>;
+
+test "a cast settled by its operand" {
+    let xs: List<i64> = [5_000_000_000];
+    let ys = xs as List<_>;
+    let t = xs as Tag<_>;
+    assert ys[0] == 5_000_000_000 && t.len() == 1;
+}

@@ -68,6 +68,15 @@ test "a function value" {
     assert f([5_000_000_000])[0] == 5_000_000_000 && g(5_000_000_000) == 5_000_000_000;
 }
 
+fn tagged<T, U: Default>(x: T) -> [T, U] {
+    return [x, U::default()];
+}
+
+test "a function value's turbofish mixing `_` and a written type" {
+    let f: fn(i64) -> [i64, String] = tagged::<_, String>;
+    assert f(5_000_000_000) == [5_000_000_000, ""];
+}
+
 test "a path" {
     let b: Bx<List<i64>> = Bx::<List<_>>::make([5_000_000_000]);
     let e: Bx<Option<List<i64>>> = Bx::<List<_>>::empty();

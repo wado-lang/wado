@@ -1676,13 +1676,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let real_type_param_count = sig.decl.type_params.len();
 
+        if real_type_param_count == 0 && ident.type_args.is_empty() {
+            return self.func_ref_instance(ident, &sig, &[], expected_type);
+        }
+
         // (a) Turbofish on the identifier: `name::<T, ...>`.
-        let written = if ident.type_args.is_empty() {
-            if real_type_param_count == 0 {
-                return self.func_ref_instance(ident, &sig, &[], expected_type);
-            }
-            None
-        } else {
+        if !ident.type_args.is_empty() {
             if ident.type_args.len() != real_type_param_count {
                 let _ = self.emit(TypeError::TypeArgumentCount {
                     name: ident.name.clone(),
@@ -1693,30 +1692,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             }
             let written = self.resolve_turbofish_args(&ident.type_args);
-            if !written.iter().any(|&arg| self.holds_written_hole(arg)) {
-                return self.func_ref_instance(ident, &sig, &written, expected_type);
+            if written.iter().any(|&arg| self.holds_written_hole(arg)) {
+                return self.func_ref_with_holes(ident, &sig, &written, expected_type);
             }
-            Some(written)
-        };
+            return self.func_ref_instance(ident, &sig, &written, expected_type);
+        }
 
-        // (b) Generic with type arguments left to inference: a function value
-        // has no call to infer from, so only `expected_type` settles them.
+        // (b) Generic without turbofish: a function value has no call to infer
+        // from, so only `expected_type` settles its type arguments.
         if let Some(expected) = expected_type {
             match self.infer_func_ref_type_args(&sig, expected) {
                 FuncRefInference::Ok(inferred) => {
-                    let args = match written {
-                        Some(written) => {
-                            for (&arg, &answer) in written.iter().zip(&inferred) {
-                                self.equate(arg, answer);
-                            }
-                            written
-                                .iter()
-                                .map(|&arg| self.apply_infer_holes(arg))
-                                .collect()
-                        }
-                        None => inferred,
-                    };
-                    return self.func_ref_instance(ident, &sig, &args, Some(expected));
+                    return self.func_ref_instance(ident, &sig, &inferred, Some(expected));
                 }
                 FuncRefInference::ArityMismatch {
                     expected_params,
@@ -1740,6 +1727,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: ident.span,
         });
         TypeTable::ERROR
+    }
+
+    /// [`Self::func_ref_instance`] at `written`, whose `_`s only the expected
+    /// `fn` type can settle: a function value has no call to infer from. One
+    /// it leaves open reports as its slot.
+    fn func_ref_with_holes(
+        &mut self,
+        ident: &ast::IdentExpr,
+        sig: &FunctionSig,
+        written: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        let owner = InstanceKind::Function.slot_owner(&ident.name);
+        for ((param, _), &arg) in sig.decl.type_params.iter().zip(written) {
+            self.blame_holes_as_slot(arg, ident.span, param, &owner);
+        }
+        if let Some(expected) = expected_type
+            && let Some(instance) = self.compute_func_ref_type_from_sig(sig, written)
+        {
+            let expected = self.tysys.type_table.borrow().peel_refs(expected);
+            self.equate(instance, expected);
+        }
+        let args: Vec<TypeId> = written
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
+        self.func_ref_instance(ident, sig, &args, expected_type)
     }
 
     /// The type of `ident` naming `sig` instantiated at `type_args`, recorded
@@ -2362,6 +2376,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn report_not_indexable(&mut self, receiver: TypeId, span: Span) -> TypeId {
+        if receiver == TypeTable::ERROR {
+            return TypeTable::ERROR;
+        }
         let type_name = self.tysys.type_table.borrow().name(receiver);
         let _ = self.emit(TypeError::MissingTraitImpl {
             type_name,
@@ -3850,10 +3867,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let target_type = self.apply_infer_holes(target_type);
             self.resolve_cast_to(cast, ctx, target_type)
         };
-        let open: Vec<TypeId> = self
-            .vars_holding_written_holes(&[target_type])
-            .into_iter()
-            .collect();
+        let open = self.written_holes_in(target_type);
         if open.is_empty() {
             return self.apply_infer_holes(resolved);
         }
@@ -3865,7 +3879,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
-    /// [`Self::resolve_cast`] to `target_type`, which holds no `_`.
+    /// [`Self::resolve_cast`] to `target_type`, whose `_`s, nested in it, the
+    /// operand settles.
     fn resolve_cast_to(
         &mut self,
         cast: &ast::CastExpr,
@@ -3960,6 +3975,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;
         }
+        // A `_` the expected type left in the target takes what the operand
+        // has there, at the target or across a newtype at its base.
+        let target_type = if self.holds_written_hole(target_type) {
+            let base = self
+                .tysys
+                .type_table
+                .borrow()
+                .representation_head(target_type);
+            self.equate(target_type, source_type);
+            self.equate(base, source_type);
+            self.apply_infer_holes(target_type)
+        } else {
+            target_type
+        };
         let source_type = self
             .tysys
             .type_table
