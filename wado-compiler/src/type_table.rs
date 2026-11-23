@@ -60,7 +60,7 @@ impl ReadVars {
 
     fn since(&self, count: usize) -> Vec<RowVar> {
         let read = self.0.lock().expect("no reader panics holding it");
-        read.iter().skip(count).cloned().collect()
+        read.iter().skip(count).copied().collect()
     }
 }
 
