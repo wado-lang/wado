@@ -964,7 +964,7 @@ test "a scalar map key round-trips through its object spelling" {
 
 /// Asserts a one-entry map keyed by `key` spells it `spelling` and reads that
 /// back.
-fn assert_key_round_trips<K: Ord + Serialize + Deserialize + Inspect>(key: K, spelling: String) {
+fn assert_key_round_trips<K: Hash + Serialize + Deserialize + Inspect>(key: K, spelling: String) {
     let mut m = HashMap::<K, i32>::new();
     m[key] = 1;
     let v = to_value(&m).unwrap();
