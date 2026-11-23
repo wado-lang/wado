@@ -129,10 +129,10 @@ pub fn generate() {}
 #[test]
 fn descriptor_string_keyed_map_is_a_map() {
     let source = r#"
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 export struct Options {
-    pub dims: TreeMap<String, i32>,
+    pub dims: HashMap<String, i32>,
 }
 
 pub fn generate() {}
@@ -149,10 +149,10 @@ pub fn generate() {}
 #[test]
 fn descriptor_map_keyed_by_other_than_string_errors() {
     let source = r#"
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 export struct Options {
-    pub dims: TreeMap<i32, i32>,
+    pub dims: HashMap<i32, i32>,
 }
 
 pub fn generate() {}

@@ -22,7 +22,7 @@ The table below is the Wadoâ†”CM correspondence, read in both directions: Wadoâ†
 | `f32`, `f64`              | `f32`, `f64`              | Floating point                                                                             |
 | `String`                  | `string`                  | UTF-8 string                                                                               |
 | `List<T>`                 | `list<T>`                 | Dynamic array; a WASI binding names `list<u8>` as `ByteList`                               |
-| `TreeMap<K, V>`           | `map<K, V>`               | `K` is `bool`, `char`, `String`, or an integer; a repeated key takes the last pair's value |
+| `HashMap<K, V>`           | `map<K, V>`               | `K` is `bool`, `char`, `String`, or an integer; a repeated key takes the last pair's value |
 | `[T1, T2, ...]`           | `tuple<T1, T2, ...>`      | Tuple types                                                                                |
 | `Option<T>`               | `option<T>`               | Optional value                                                                             |
 | `Result<T, E>`            | `result<T, E>`            | Result type; `result<ok>` and bare `result` are the payload-elided forms                   |

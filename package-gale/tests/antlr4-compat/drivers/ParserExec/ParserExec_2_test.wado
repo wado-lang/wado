@@ -105,9 +105,7 @@ test "stage_a_parse: ParserExec/IfIfElseGreedyBinding2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/IfIfElseGreedyBinding2" {
     let input = "if y if y x else x";
-    let expected = "if y x else x
-if y if y x else x
-";
+    let expected = "if y x else x\nif y if y x else x\n";
     let result = t_IfIfElseGreedyBinding2::parse_start(&input);
     let actual = result.output;
     assert actual == expected;
@@ -145,9 +143,7 @@ test "stage_a_parse: ParserExec/IfIfElseNonGreedyBinding1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/IfIfElseNonGreedyBinding1" {
     let input = "if y if y x else x";
-    let expected = "if y x
-if y if y x else x
-";
+    let expected = "if y x\nif y if y x else x\n";
     let result = t_IfIfElseNonGreedyBinding1::parse_start(&input);
     let actual = result.output;
     assert actual == expected;
@@ -185,9 +181,7 @@ test "stage_a_parse: ParserExec/IfIfElseNonGreedyBinding2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/IfIfElseNonGreedyBinding2" {
     let input = "if y if y x else x";
-    let expected = "if y x
-if y if y x else x
-";
+    let expected = "if y x\nif y if y x else x\n";
     let result = t_IfIfElseNonGreedyBinding2::parse_start(&input);
     let actual = result.output;
     assert actual == expected;
@@ -225,8 +219,7 @@ test "stage_a_parse: ParserExec/Keyword_1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/Keyword_1" {
     let input = "break;continue;return;";
-    let expected = "break;continue;return;
-";
+    let expected = "break;continue;return;\n";
     let result = t_Keyword_1::parse_program(&input);
     let actual = result.output;
     assert actual == expected;
@@ -264,8 +257,7 @@ test "stage_a_parse: ParserExec/Keyword_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/Keyword_2" {
     let input = "break;continue;return;";
-    let expected = "break;continue;return;
-";
+    let expected = "break;continue;return;\n";
     let result = t_Keyword_2::parse_program(&input);
     let actual = result.output;
     assert actual == expected;
@@ -303,8 +295,7 @@ test "stage_a_parse: ParserExec/Keyword_3" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/Keyword_3" {
     let input = "break;continue;return;";
-    let expected = "break;continue;return;
-";
+    let expected = "break;continue;return;\n";
     let result = t_Keyword_3::parse_program(&input);
     let actual = result.output;
     assert actual == expected;
@@ -342,8 +333,7 @@ test "stage_a_parse: ParserExec/Keyword_4" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/Keyword_4" {
     let input = "break;continue;return;";
-    let expected = "break;continue;return;
-";
+    let expected = "break;continue;return;\n";
     let result = t_Keyword_4::parse_program(&input);
     let actual = result.output;
     assert actual == expected;
@@ -381,8 +371,7 @@ test "stage_a_parse: ParserExec/Keyword_5" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/Keyword_5" {
     let input = "break;continue;return;";
-    let expected = "break;continue;return;
-";
+    let expected = "break;continue;return;\n";
     let result = t_Keyword_5::parse_program(&input);
     let actual = result.output;
     assert actual == expected;
@@ -420,8 +409,7 @@ test "stage_a_parse: ParserExec/Keyword_6" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/Keyword_6" {
     let input = "break;continue;return;";
-    let expected = "break;continue;return;
-";
+    let expected = "break;continue;return;\n";
     let result = t_Keyword_6::parse_program(&input);
     let actual = result.output;
     assert actual == expected;
@@ -459,8 +447,7 @@ test "stage_a_parse: ParserExec/LL1OptionalBlock_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/LL1OptionalBlock_2" {
     let input = "a";
-    let expected = "a
-";
+    let expected = "a\n";
     let result = t_LL1OptionalBlock_1::parse_a(&input);
     let actual = result.output;
     assert actual == expected;

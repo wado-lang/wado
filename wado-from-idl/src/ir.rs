@@ -288,8 +288,8 @@ pub enum WadoType {
         err: Option<Box<WadoType>>,
     },
     List(Box<WadoType>),
-    /// 🗺️ `map<K, V>`, whose Wado spelling is `TreeMap<K, V>`.
-    TreeMap(Box<WadoType>, Box<WadoType>),
+    /// 🗺️ `map<K, V>`, whose Wado spelling is `HashMap<K, V>`.
+    HashMap(Box<WadoType>, Box<WadoType>),
     Tuple(Vec<WadoType>),
     Stream(Box<WadoType>),
     Future(Box<WadoType>),

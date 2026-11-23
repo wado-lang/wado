@@ -35,6 +35,7 @@ use {
     Recognizer,
     PINNED_VERSION,
 } from "./antlr4_oracle.wado";
+use { wado } from "lib:wadopoet";
 use sqlite from "../tests/grammars/SQLite.g4"
     with {
         generator: {
@@ -112,11 +113,6 @@ fn normalize(tree: &String) -> String {
     return out;
 }
 
-/// `text` as the inside of a Wado `"…"` literal.
-fn escape(text: &String) -> String {
-    return text.replace("\\", "\\\\").replace("\"", "\\\"");
-}
-
 /// A test name: the case with quotes and backslashes dropped, spaces
 /// collapsed, cut to 60 bytes.
 fn case_name(line: &String) -> String {
@@ -167,9 +163,11 @@ fn pinned_cases(
             todo += 1;
             tests.push_str("#[TODO]\n");
         }
-        tests.push_str(`test "oracle: ${case_name(&line)}" {\n`);
-        tests.push_str(`    assert_tree("${escape(&line)}", "${escape(&oracle)}");\n`);
-        tests.push_str("}\n\n");
+        tests.push_str(wado`test "oracle: ${case_name(&line)}" {
+    assert_tree("${line}", "${oracle}");
+}
+
+`);
     }
     return Ok([tests, count, todo]);
 }
@@ -190,7 +188,7 @@ fn regen(jar: &Jar, target: &Target) -> Result<(), String> with (Process, Preope
 
     let module = target.module;
     let out = fs::join(TESTS, `driver_cst_${target.key}_oracle_test.wado`);
-    let text = `#![generated(by = "package-gale/tools/regen_oracle.wado")]
+    let text = wado`#![generated(by = "package-gale/tools/regen_oracle.wado")]
 // Do not edit by hand — re-run tools/regen_oracle.wado ${target.key} to regenerate.
 // Generated against ANTLR4 ${jar.version} (the published jar, run as a black box).
 //
@@ -215,11 +213,11 @@ ${tests}`;
     if let Err(e) = fs::write(&out, &text) {
         return Err(`${e}`);
     }
-    let wado = match env("WADO") {
+    let wado_bin = match env("WADO") {
         Some(path) => path,
         null => "target/debug/wado",
     };
-    if let Err(e) = Command::new(wado).args(["format", "-w", out]).read() {
+    if let Err(e) = Command::new(wado_bin).args(["format", "-w", out]).read() {
         return Err(`${e}`);
     }
     eprintln(`// ${target.key}: ${count} cases, ${todo} #[TODO] (Gale diverges from ANTLR4).`);

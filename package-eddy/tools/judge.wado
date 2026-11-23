@@ -17,7 +17,7 @@ use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
 use { to_bytes_pretty, from_string } from "core:json";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { changed_paths, source_diff, merge_title, Census, FixResult, Judged, Pair, Verdict } from "./eval.wado";
 use { ask_json, json_object, Credential, Usage } from "../src/anthropic.wado";
 use { cost_summary } from "../src/cost.wado";
@@ -119,8 +119,8 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client, MonotonicC
 /// The verdicts an earlier run of this model left at `path`, by pair. A rerun
 /// judges only the pairs it did not settle, and a fix the census now blames on
 /// another pull request is a new pair.
-fn earlier_verdicts(path: &String) -> TreeMap<String, Verdict> with Preopens {
-    let mut by_pair = TreeMap::<String, Verdict>::new();
+fn earlier_verdicts(path: &String) -> HashMap<String, Verdict> with Preopens {
+    let mut by_pair = HashMap::<String, Verdict>::new();
     let Ok(text) = fs::read_to_string(path) else {
         return by_pair;
     };

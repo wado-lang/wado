@@ -21,7 +21,7 @@
 
 use { Serialize, SerializeError } from "core:serde";
 use { Value, to_value } from "core:value";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { to_string } from "core:json";
 use { log_stderr } from "core:rt";
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
@@ -186,7 +186,7 @@ fn box_fields<T: Serialize>(fields: T) -> Value {
         Ok(v) => v,
         Err(e) => {
             builtin::cold_path();
-            let mut reported = TreeMap::<String, Value>::new();
+            let mut reported = HashMap::<String, Value>::new();
             reported["log.fields_error"] = Value::String(`${e}`);
             Value::Object(reported);
         },
@@ -624,7 +624,7 @@ impl<C: Clock> JsonSink<C> {
     /// own serialize errors, so an unserializable event renders as `{}` rather
     /// than aborting the program.
     pub fn render(&mut self, event: &Event) -> String {
-        let mut obj = TreeMap::<String, Value>::new();
+        let mut obj = HashMap::<String, Value>::new();
         if let Some(ts) = C::now() {
             obj["ts"] = Value::String(ts);
         }
@@ -653,7 +653,7 @@ impl<C: Clock> JsonSink<C> {
 /// A one-field JSON object naming why the event could not be encoded. Built
 /// through the encoder so the reason is escaped, and empty if even that fails.
 fn json_error_line(reason: SerializeError) -> String {
-    let mut obj = TreeMap::<String, Value>::new();
+    let mut obj = HashMap::<String, Value>::new();
     obj["error"] = Value::String(`${reason}`);
     return to_string(&Value::Object(obj)).unwrap_or("{}");
 }
@@ -828,7 +828,7 @@ pub struct Context<T: Serialize> {
 
 impl<T: Serialize> Log for Context<T> {
     fn event(&self, event: Event) with Log {
-        let mut merged = TreeMap::<String, Value>::new();
+        let mut merged = HashMap::<String, Value>::new();
         if let Object(base) = box_fields(self.fields) {
             for let [key, value] of base.entries() {
                 merged[*key] = *value;

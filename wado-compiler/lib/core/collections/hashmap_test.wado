@@ -244,6 +244,24 @@ test "maps are equal when they hold equal entries in the same order" {
     assert s == t;
 }
 
+test "maps and sets key a HashSet by the entries they compare equal on" {
+    let mut a = HashMap::<String, i32>::new();
+    a["x"] = 1;
+    a["gone"] = 0;
+    a["y"] = 2;
+    assert a.remove("gone");
+    let mut b = HashMap::<String, i32>::with_seed(HashSeed::fixed(3, 4));
+    b["x"] = 1;
+    b["y"] = 2;
+    let mut c = HashMap::<String, i32>::new();
+    c["y"] = 2;
+    c["x"] = 1;
+    let maps = [a, b, c] as HashSet<HashMap<String, i32>>;
+    assert maps.len() == 2;
+    let sets = [[1, 2] as HashSet<i32>, [1, 2] as HashSet<i32>, [2, 1] as HashSet<i32>] as HashSet<HashSet<i32>>;
+    assert sets.len() == 2;
+}
+
 test "maps order by their entries in insertion order, then by length" {
     let mut a = HashMap::<i32, i32>::new();
     a[1] = 1;

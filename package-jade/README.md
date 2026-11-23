@@ -288,9 +288,9 @@ D reads B's table backwards:
 | `null`                                                              | `()`                          |
 | `anyOf` of `T` and `null`, or `type: [T, "null"]`                   | `Option<T>`                   |
 | `array`                                                             | `List<T>`                     |
-| `array` with `uniqueItems`                                          | `TreeSet<T>`                  |
+| `array` with `uniqueItems`                                          | `HashSet<T>`                  |
 | `array` with `prefixItems`, and `minItems` and `maxItems` its arity | a tuple                       |
-| `object` with `additionalProperties` alone                          | `TreeMap<String, V>`          |
+| `object` with `additionalProperties` alone                          | `HashMap<String, V>`          |
 | `object` with `properties`                                          | `struct`                      |
 | `enum` of strings                                                   | `enum`                        |
 | a definition of B's shape for `flags`                               | `flags`                       |
@@ -307,7 +307,7 @@ exception.
 An array with `uniqueItems` whose items are an `enum` of strings is a `flags`
 only where it is a definition of its own, as B writes one, where its members'
 wire names all come back under one `name_policy`, and where it has at most 32
-members. Otherwise it is a `TreeSet` of an `enum`. A definition that admits
+members. Otherwise it is a `HashSet` of an `enum`. A definition that admits
 `null` besides a struct, enum or variant written in place is the `Option` of
 that type, which is declared under the definition's name followed by `Value`.
 

@@ -2,7 +2,7 @@
 //! symbolic dimensions, the outputs `compute` returns, the outputs it returns
 //! the last position of, and those it returns the greatest element's index of.
 
-use { HashMap, HashSet, TreeMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { Extent, spelled_poly } from "./extent.wado";
 use {
     Attr,
@@ -40,7 +40,7 @@ fn conflict<T>(option: String, reason: String) -> Result<T, OptionConflict> {
 
 /// Every `dim_param` that `dims` names, made the static extent it gives. A name
 /// the graph never declares fixes nothing, so it is a mistake in the option.
-pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), OptionConflict> {
+pub fn bind_dims(graph: &mut Graph, dims: &HashMap<String, i32>) -> Result<(), OptionConflict> {
     for let [name, extent] of dims.entries() {
         if *extent < 0 {
             return conflict("dims", `${name} is ${extent}, and an extent is not negative`);
@@ -61,7 +61,7 @@ pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), O
     return Result::Ok(());
 }
 
-fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut HashSet<String>) -> Result<(), OptionConflict> {
+fn bind(vi: &mut ValueInfo, dims: &HashMap<String, i32>, bound: &mut HashSet<String>) -> Result<(), OptionConflict> {
     let Dims(written) = vi.rank else {
         return Result::Ok(());
     };
@@ -88,10 +88,10 @@ fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut HashSet<Str
 /// takes once `dims` fixes every name it reads, or `None` where it fixes none.
 fn spelled_extent(
     name: &String,
-    dims: &TreeMap<String, i32>,
+    dims: &HashMap<String, i32>,
     bound: &mut HashSet<String>,
 ) -> Result<Option<i32>, OptionConflict> {
-    let Some(free) = spelled_poly(name, &TreeMap::<String, i32>::new()) else {
+    let Some(free) = spelled_poly(name, &HashMap::<String, i32>::new()) else {
         return Result::Ok(null);
     };
     let read = free.symbols();

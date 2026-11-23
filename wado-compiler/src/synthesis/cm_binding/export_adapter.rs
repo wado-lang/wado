@@ -416,7 +416,7 @@ fn lower_to_flat_inner(
             result
         }
         ResolvedType::Struct { .. }
-            if let Some((key, value_type)) = ctx.type_table.borrow().as_tree_map(type_id) =>
+            if let Some((key, value_type)) = ctx.type_table.borrow().as_hash_map(type_id) =>
         {
             // `map<K, V>` flattens as the `list<tuple<K, V>>` it despecializes to.
             let lower_ctx = LowerContext {
@@ -848,7 +848,7 @@ pub(super) fn synthesize_lift_from_flat_params(
             }
         }
         Type::Generic(generic) => match item {
-            Some(CompilerItem::List | CompilerItem::TreeMap) => {
+            Some(CompilerItem::List | CompilerItem::HashMap) => {
                 // list<T> / map<K, V> flat ABI: (ptr: i32, len: i32), the
                 // elements in linear memory. Spilled to a temp block so the
                 // memory lift reads them.

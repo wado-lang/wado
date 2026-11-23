@@ -1,6 +1,6 @@
 //! Minting the names generated source declares.
 
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 use { is_reserved } from "./vocabulary.wado";
 
 /// A run of ids, each handed out once, for the names a generator suffixes so
@@ -32,8 +32,8 @@ pub struct NameClash {
 /// The names one scope of generated source declares, each held by the owner
 /// that claimed it, past those the language reserves and those `bind` adds.
 pub struct NameRegistry {
-    owners: TreeMap<String, String> = TreeMap::new(),
-    bound: TreeSet<String> = TreeSet::new(),
+    owners: HashMap<String, String> = HashMap::new(),
+    bound: HashSet<String> = HashSet::new(),
 }
 
 impl NameRegistry {
@@ -73,7 +73,7 @@ impl NameRegistry {
     /// `fresh` renames them, after the others and in the order of what they
     /// want, so each owner's name is the same whatever the order of the set.
     pub fn claim_all(&mut self, wants: &List<[String, String]>) -> Result<List<String>, NameClash> {
-        let mut wanted_by = TreeMap::<String, String>::new();
+        let mut wanted_by = HashMap::<String, String>::new();
         for let [name, owner] of wants {
             if let Some(other) = wanted_by.get_str(name) {
                 return Err(NameClash { name: *name, holder: other, claimant: *owner });

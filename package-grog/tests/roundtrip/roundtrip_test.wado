@@ -1,5 +1,5 @@
 // Schemas compiled by Grog, encoded and decoded by its runtime.
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { LinearArray, LinearBuffer } from "core:linear";
 use grog from "lib:grog";
 use { Account, AccountAddress, AccountContact, Spread, SpreadPick, Status } from "./demo.proto"
@@ -78,7 +78,7 @@ test "a oneof member is written at its own number" {
 }
 
 test "every mapping round-trips" {
-    let mut limits = TreeMap::<String, i32>::new();
+    let mut limits = HashMap::<String, i32>::new();
     limits["daily"] = 10;
     let account = Account {
         id: 7,
@@ -468,7 +468,7 @@ test "descriptor.proto describes itself" {
 }
 
 test "struct.proto nests values through a map and a oneof" {
-    let mut fields = TreeMap::<String, pbstruct::Value>::new();
+    let mut fields = HashMap::<String, pbstruct::Value>::new();
     fields["n"] = pbstruct::Value { kind: Option::Some(pbstruct::ValueKind::NumberValue(1.5)) };
     let value = pbstruct::Value {
         kind: Option::Some(pbstruct::ValueKind::ListValue(pbstruct::ListValue {

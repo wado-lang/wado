@@ -1043,8 +1043,8 @@ The output follows Wado's literal syntax where it has one:
 | Struct, no fields        | `Name {}`                                 | `Empty {}`                                  |
 | Tuple                    | `[elem, ...]`                             | `[1, "a", true]`                            |
 | `List`, `Array`, `Slice` | `[elem, ...]`                             | `[1, 2, 3]`                                 |
-| `TreeMap<K, V>`          | `{key: value, ...}`                       | `{"a": 1, "b": 2}`                          |
-| `TreeSet<T>`             | `{elem, ...}`                             | `{10, 20, 30}`                              |
+| `HashMap`, `TreeMap`     | `{key: value, ...}`                       | `{"a": 1, "b": 2}`                          |
+| `HashSet`, `TreeSet`     | `{elem, ...}`                             | `{10, 20, 30}`                              |
 | Enum                     | `Type::Case`                              | `Color::Red`                                |
 | Variant                  | `Type::Case(payload)`, a unit case bare   | `Shape::Circle(5.0)`, `Option::<i32>::None` |
 | Flags                    | set members joined by `\|`                | `Perms::Read \| Perms::Write`               |
@@ -1116,8 +1116,8 @@ precision replaces the cap. `Display` never applies it.
 
 The cap covers `String`, `StrSlice`, `List`, `Array` and `Slice`. A sequence
 that shows no element before the cut renders `[...]`, and the `#` form puts
-`...` on a line of its own. A tuple, a struct, a `TreeMap` and a `TreeSet` are
-never capped.
+`...` on a line of its own. A tuple, a struct, a map and a set are never
+capped.
 
 <!-- {"fixture":"spec_literals_format.wado"} -->
 
@@ -1336,7 +1336,7 @@ its name, so that name must be one a variable can take: `{ true }` is an error.
 
 ```wado
 // Functional-update spread: seed from a base map, then override/add keys
-let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
+let m2: HashMap<String, i32> = { ..map, "x": 99, "w": 40 };
 assert m2["x"] == 99 && m2["y"] == 20 && m2["w"] == 40;
 ```
 
@@ -1356,7 +1356,7 @@ coerced to any collection type through `From`. Coercing one materializes an
 | Literal         | Materializes    | Impl the target writes                            |
 | --------------- | --------------- | ------------------------------------------------- |
 | `[e0, e1, ...]` | `Array<E>`      | `From<Array<T>> for List<T>`                      |
-| `{ k: v, ... }` | `Array<[K, V]>` | `From<Array<[String, V]>> for TreeMap<String, V>` |
+| `{ k: v, ... }` | `Array<[K, V]>` | `From<Array<[String, V]>> for HashMap<String, V>` |
 
 This applies only where a coercion runs. The tuple and struct readings keep
 their priority: with no target type `[1, 2, 3]` is still the tuple
@@ -1370,11 +1370,11 @@ materializes is already the result.
 <!-- {"fixture":"spec_literals_lists.wado"} -->
 
 ```wado
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 test {
     let arr: List<i32> = [1, 2, 3];
-    let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
+    let map: HashMap<String, i32> = { width: 1920, height: 1080 };
     assert arr.len() == 3 && map["height"] == 1080;
 }
 ```
@@ -1412,7 +1412,7 @@ The target's `From<Array<X>>` impls decide which literal form it accepts:
 
 `core:value::Value` accepts both forms, and each literal reads as JSON reads it:
 
-| Literal      | `List<i32>`    | `TreeMap<String, i32>` | `Value`                        |
+| Literal      | `List<i32>`    | `HashMap<String, i32>` | `Value`                        |
 | ------------ | -------------- | ---------------------- | ------------------------------ |
 | `[1, 2]`     | accepted       | error: not pairs       | `Value::List`                  |
 | `{a: 1}`     | error: no impl | accepted               | `Value::Object`                |
@@ -1487,9 +1487,9 @@ and there may be several. Each `base` must have the literal's target type.
 <!-- {"fixture":"spec_literals_lists.wado"} -->
 
 ```wado
-let base: TreeMap<String, i32> = { a: 1, b: 2 };
-let more: TreeMap<String, i32> = { a: 9, d: 4 };
-let m: TreeMap<String, i32> = { ..base, ..more, c: 3 };   // a: 9, b: 2, c: 3, d: 4
+let base: HashMap<String, i32> = { a: 1, b: 2 };
+let more: HashMap<String, i32> = { a: 9, d: 4 };
+let m: HashMap<String, i32> = { ..base, ..more, c: 3 };   // a: 9, b: 2, c: 3, d: 4
 assert m["a"] == 9 && m["b"] == 2 && m["c"] == 3 && m["d"] == 4;
 ```
 

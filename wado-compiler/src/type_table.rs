@@ -2399,16 +2399,16 @@ impl TypeTable {
             .map(|_| self.compiler_variant_case(CompilerItem::OptionNone).3)
     }
 
-    /// `TreeMap<K, V>`'s key and value types, keyed by the declaration as
+    /// `HashMap<K, V>`'s key and value types, keyed by the declaration as
     /// [`Self::as_option`] is.
-    pub fn as_tree_map(&self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
+    pub fn as_hash_map(&self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
         let ResolvedType::Struct { type_args, .. } = self.get(type_id) else {
             return None;
         };
         let [key, value] = type_args[..] else {
             return None;
         };
-        self.is_compiler_item_type(type_id, CompilerItem::TreeMap)
+        self.is_compiler_item_type(type_id, CompilerItem::HashMap)
             .then_some((key, value))
     }
 
@@ -5340,11 +5340,11 @@ impl TypeTable {
         Some(element)
     }
 
-    /// Create a `TreeMap<K, V>` type — the Wado spelling of CM `map<K, V>`.
-    pub fn make_tree_map(&mut self, key: TypeId, value: TypeId) -> TypeId {
+    /// Create a `HashMap<K, V>` type — the Wado spelling of CM `map<K, V>`.
+    pub fn make_hash_map(&mut self, key: TypeId, value: TypeId) -> TypeId {
         let def = self
-            .compiler_item_def(CompilerItem::TreeMap)
-            .expect("the TreeMap declaration is a registered compiler item");
+            .compiler_item_def(CompilerItem::HashMap)
+            .expect("the HashMap declaration is a registered compiler item");
         self.make_generic_instance(def, vec![key, value])
     }
 

@@ -4,7 +4,7 @@
 //! stage and setting that would change the ids is checked, and one Loam does
 //! not generate names itself.
 
-use { HashMap, TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { from_string } from "core:json";
 use { Deserialize, DeserializeError, DeserializeMap, DeserializeSeq, Deserializer, Visitor } from "core:serde";
 use { PieceSplit, TokenSpelling, byte_chars, byte_token } from "./runtime/tokenizer.wado";
@@ -87,7 +87,7 @@ struct Model {
     /// Absent from the older files, which write only BPE.
     #[wire(name = "type")]
     kind: String = "BPE",
-    vocab: Option<TreeMap<String, i32>> = null,
+    vocab: Option<HashMap<String, i32>> = null,
     merges: Option<List<Merge>> = null,
     dropout: Option<f64> = null,
     continuing_subword_prefix: Option<String> = null,
@@ -437,7 +437,7 @@ fn id_of(ids: &HashMap<String, i32>, token: &String, what: String) -> Result<i32
 }
 
 /// The tokens of `vocab`, in id order.
-fn tokens_of(vocab: &TreeMap<String, i32>) -> Result<List<String>, TokenizerError> {
+fn tokens_of(vocab: &HashMap<String, i32>) -> Result<List<String>, TokenizerError> {
     let mut tokens = List::<String>::filled(vocab.len(), "");
     let mut seen = List::<bool>::filled(vocab.len(), false);
     for let [token, id] of vocab.entries() {
@@ -478,7 +478,7 @@ fn merges_of(merges: &List<Merge>, ids: &HashMap<String, i32>) -> Result<List<[i
 /// any other must be the vocabulary's own token of its id.
 fn specials_of(
     added: &List<AddedToken>,
-    vocab: &TreeMap<String, i32>,
+    vocab: &HashMap<String, i32>,
     tokens: &mut List<String>,
     normalizes: bool,
 ) -> Result<List<String>, TokenizerError> {

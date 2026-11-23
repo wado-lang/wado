@@ -105,6 +105,7 @@ impl Hasher for SeededHasher {
 /// Its hash function is keyed by a `HashSeed`: the host's under `new()`, which
 /// holds up against keys an attacker chooses, or the caller's under
 /// `with_seed`.
+#[compiler_item("hash_map")]
 pub struct HashMap<K, V> {
     log: EntryLog<K, V>,
     /// `fps[e]` is the fingerprint of entry `e`'s key.
@@ -119,6 +120,7 @@ pub struct HashMap<K, V> {
 
 impl<K: Hash, V> HashMap<K, V> {
     /// An empty map hashing under the host's seed.
+    #[compiler_item("hash_map_new")]
     pub fn new() -> HashMap<K, V> {
         return HashMap::with_seed(DEFAULT_HASH_SEED);
     }
@@ -135,6 +137,7 @@ impl<K: Hash, V> HashMap<K, V> {
     }
 
     /// Returns the number of key-value pairs in the map.
+    #[compiler_item("hash_map_len")]
     pub fn len(&self) -> i32 {
         return self.log.size;
     }
@@ -313,6 +316,7 @@ impl<K: Hash, V> HashMap<K, V> {
     }
 
     /// The key-value pairs, in insertion order.
+    #[compiler_item("hash_map_entries")]
     pub fn entries(&self) -> MapEntriesRefIter<K, V> {
         return self.log.entries();
     }
@@ -375,6 +379,13 @@ impl<K: Eq, V: Eq> Eq for HashMap<K, V> {
     }
 }
 
+/// The entries alone, so a map hashes the same under any seed.
+impl<K: Hash, V: Hash> Hash for HashMap<K, V> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.log.hash(h);
+    }
+}
+
 /// Entry by entry in insertion order, then by length.
 impl<K: Ord, V: Ord> Ord for HashMap<K, V> {
     fn cmp(&self, other: &HashMap<K, V>) -> Ordering {
@@ -392,6 +403,7 @@ impl<K: Inspect, V: Inspect> Inspect for HashMap<K, V> {
 impl<K: Hash, V> IndexAssign<K> for HashMap<K, V> {
     type Output = V;
 
+    #[compiler_item("hash_map_index_assign")]
     fn index_assign(&mut self, key: K, value: Self::Output) {
         self.insert(key, value);
     }
@@ -594,7 +606,12 @@ impl<K: Hash + Deserialize + Inspect, V: Deserialize> Deserialize for HashMap<K,
 impl<K: Hash + Inspect, V> HashMap<K, V> {
     /// Inserts a decoded entry: a repeated key is reported under `policy`,
     /// and one the policy admits takes the last value.
-    fn insert_decoded(&mut self, policy: DuplicateFieldPolicy, key: K, value: V) -> Result<(), DeserializeError> {
+    internal fn insert_decoded(
+        &mut self,
+        policy: DuplicateFieldPolicy,
+        key: K,
+        value: V,
+    ) -> Result<(), DeserializeError> {
         // The losing insert keeps the first value, so a repeat re-assigns.
         if !self.try_insert(key, value) {
             report_duplicate_field(policy, &key)?;

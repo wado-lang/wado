@@ -945,7 +945,7 @@ impl<'a> Emitter<'a> {
                 match (self.types.compiler_type_item(*def), type_args.as_slice()) {
                     (Some(CompilerItem::Option), [arg]) => CmShape::Option(*arg),
                     (Some(CompilerItem::List), [arg]) => CmShape::List(*arg),
-                    (Some(CompilerItem::TreeMap), [key, value]) => CmShape::Map(*key, *value),
+                    (Some(CompilerItem::HashMap), [key, value]) => CmShape::Map(*key, *value),
                     (Some(CompilerItem::Result), [ok, err]) => CmShape::Result {
                         ok: self.non_unit(*ok),
                         err: self.non_unit(*err),
@@ -1128,7 +1128,7 @@ fn classify_ast(ty: &ast::Type) -> CmShape<ast::Type> {
         AstType::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => CmShape::Option(g.args[0].clone()),
             "List" if g.args.len() == 1 => CmShape::List(g.args[0].clone()),
-            "TreeMap" if g.args.len() == 2 => CmShape::Map(g.args[0].clone(), g.args[1].clone()),
+            "HashMap" if g.args.len() == 2 => CmShape::Map(g.args[0].clone(), g.args[1].clone()),
             "Result" if g.args.len() == 2 => CmShape::Result {
                 ok: non_unit_ast(&g.args[0]),
                 err: non_unit_ast(&g.args[1]),

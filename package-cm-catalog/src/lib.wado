@@ -26,7 +26,7 @@
 //!   instantiates; the `export fn`s are dropped in the test world, so that run
 //!   does not exercise lift/lower.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 // --- Named types referenced by the identity exports below ---
 
@@ -244,26 +244,26 @@ export fn id_assoc_array(v: List<[String, u32]>) -> List<[String, u32]> {
 //
 // A `map` carries the association list above byte for byte; what these pin is
 // the specialization, which travels under its own type constructor and comes
-// back as a `TreeMap`. The key set is the Component Model's `keytype`, so one
+// back as a `HashMap`. The key set is the Component Model's `keytype`, so one
 // row per key shape that lowers differently: a pointer-and-length `string` and
 // a scalar. The value side reuses the value-type surface.
 
-export fn id_map_string_u32(v: TreeMap<String, u32>) -> TreeMap<String, u32> {
+export fn id_map_string_u32(v: HashMap<String, u32>) -> HashMap<String, u32> {
     return v;
 }
-export fn id_map_u32_string(v: TreeMap<u32, String>) -> TreeMap<u32, String> {
+export fn id_map_u32_string(v: HashMap<u32, String>) -> HashMap<u32, String> {
     return v;
 }
-export fn id_map_string_record(v: TreeMap<String, Point>) -> TreeMap<String, Point> {
+export fn id_map_string_record(v: HashMap<String, Point>) -> HashMap<String, Point> {
     return v;
 }
-export fn id_map_string_list(v: TreeMap<String, List<u8>>) -> TreeMap<String, List<u8>> {
+export fn id_map_string_list(v: HashMap<String, List<u8>>) -> HashMap<String, List<u8>> {
     return v;
 }
-export fn id_option_map(v: Option<TreeMap<String, u32>>) -> Option<TreeMap<String, u32>> {
+export fn id_option_map(v: Option<HashMap<String, u32>>) -> Option<HashMap<String, u32>> {
     return v;
 }
-export fn id_list_map(v: List<TreeMap<String, u32>>) -> List<TreeMap<String, u32>> {
+export fn id_list_map(v: List<HashMap<String, u32>>) -> List<HashMap<String, u32>> {
     return v;
 }
 
@@ -643,7 +643,7 @@ export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perm
 
 // Five flat params put the call on the one-buffer path, where the `map` is
 // stored as its `(ptr, count)` and what follows must land past both halves.
-export async fn map_in_params_buffer(m: TreeMap<String, u32>, o: Option<u8>, tail: u8) -> u32 {
+export async fn map_in_params_buffer(m: HashMap<String, u32>, o: Option<u8>, tail: u8) -> u32 {
     let mut total: u32 = 0;
     for let [_, v] of m.entries() {
         total += *v;

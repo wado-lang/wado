@@ -1,5 +1,18 @@
 // Tests for i128 and u128 types (lib/core/prelude/int128.wado)
 
+use { HashSet } from "core:collections";
+
+test "i128 and u128 key a HashSet" {
+    let signed = [-1, 0, i128::MIN, i128::MAX, -1] as HashSet<i128>;
+    assert signed.len() == 4;
+    assert signed.contains(i128::MIN);
+    assert !signed.contains(1);
+    let unsigned = [0, 1 as u128 << 64, u128::MAX, 0] as HashSet<u128>;
+    assert unsigned.len() == 3;
+    assert unsigned.contains(1 as u128 << 64);
+    assert !unsigned.contains(1);
+}
+
 test "u128 add method" {
     let a: u128 = 100;
     let b: u128 = 50;

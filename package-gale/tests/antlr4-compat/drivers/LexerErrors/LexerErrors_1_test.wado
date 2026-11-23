@@ -105,9 +105,7 @@ test "stage_a_err: LexerErrors/DFAToATNThatMatchesThenFailsInATN" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerErrors/EnforcedGreedyNestedBraces_1" {
     let input = "{ { } }";
-    let expected = "[@0,0:6='{ { } }',<1>,1:0]
-[@1,7:6='<EOF>',<-1>,1:7]
-";
+    let expected = "[@0,0:6='{ { } }',<1>,1:0]\n[@1,7:6='<EOF>',<-1>,1:7]\n";
     let tokens = t_EnforcedGreedyNestedBraces_1::tokenize(&input);
     let actual = t_EnforcedGreedyNestedBraces_1::to_lexer_string(&tokens, t_EnforcedGreedyNestedBraces_1::TK_EOF);
     assert actual == expected;
@@ -253,9 +251,7 @@ test "stage_a_err: LexerErrors/LexerExecDFA" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerErrors/StringsEmbeddedInActions_1" {
     let input = "[\"foo\"]";
-    let expected = "[@0,0:6='[\"foo\"]',<1>,1:0]
-[@1,7:6='<EOF>',<-1>,1:7]
-";
+    let expected = "[@0,0:6='[\"foo\"]',<1>,1:0]\n[@1,7:6='<EOF>',<-1>,1:7]\n";
     let tokens = t_StringsEmbeddedInActions_1::tokenize(&input);
     let actual = t_StringsEmbeddedInActions_1::to_lexer_string(&tokens, t_StringsEmbeddedInActions_1::TK_EOF);
     assert actual == expected;

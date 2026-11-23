@@ -40,7 +40,7 @@ not how to close it.
   `"yesterday"` for an `Instant`, matches the schema but does not decode. Bytes
   are the same: `contentEncoding: "base64url"` is an annotation, so `"!"`
   matches a `ByteList`'s schema.
-- [ ] **A map whose key is not a string.** `TreeMap<i32, V>` is written as an
+- [ ] **A map whose key is not a string.** `HashMap<i32, V>` is written as an
   object whose keys spell integers. JSON Schema states that through
   `propertyNames`, and the mapping table does not cover it.
 - [ ] **Some comments have no place in the schema.** An `enum` lists its

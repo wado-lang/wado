@@ -40,7 +40,6 @@ global NO_NODE: i32 = -1;
 ///
 /// This is similar to Rust's `indexmap::IndexMap` but uses a tree instead
 /// of a hash table for key lookups.
-#[compiler_item("tree_map")]
 pub struct TreeMap<K, V> {
     log: EntryLog<K, V>,
     /// Node `n` holds `lens[n]` entry indices, in key order, from
@@ -61,7 +60,6 @@ pub struct TreeMap<K, V> {
 
 impl<K: Ord, V> TreeMap<K, V> {
     /// Creates a new empty TreeMap.
-    #[compiler_item("tree_map_new")]
     pub fn new() -> TreeMap<K, V> {
         return TreeMap {
             log: EntryLog::new(),
@@ -76,7 +74,6 @@ impl<K: Ord, V> TreeMap<K, V> {
     }
 
     /// Returns the number of key-value pairs in the map.
-    #[compiler_item("tree_map_len")]
     pub fn len(&self) -> i32 {
         return self.log.size;
     }
@@ -380,7 +377,6 @@ impl<K: Ord, V> TreeMap<K, V> {
     }
 
     /// The key-value pairs, in insertion order.
-    #[compiler_item("tree_map_entries")]
     pub fn entries(&self) -> MapEntriesRefIter<K, V> {
         return self.log.entries();
     }
@@ -451,6 +447,12 @@ impl<K: Eq, V: Eq> Eq for TreeMap<K, V> {
     }
 }
 
+impl<K: Hash, V: Hash> Hash for TreeMap<K, V> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.log.hash(h);
+    }
+}
+
 /// Entry by entry in insertion order, then by length.
 impl<K: Ord, V: Ord> Ord for TreeMap<K, V> {
     fn cmp(&self, other: &TreeMap<K, V>) -> Ordering {
@@ -461,7 +463,6 @@ impl<K: Ord, V: Ord> Ord for TreeMap<K, V> {
 impl<K: Ord, V> IndexAssign<K> for TreeMap<K, V> {
     type Output = V;
 
-    #[compiler_item("tree_map_index_assign")]
     fn index_assign(&mut self, key: K, value: Self::Output) {
         self.insert(key, value);
     }
