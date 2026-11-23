@@ -31,14 +31,19 @@ from above. Release binaries, three alternating rounds, functions aligned to
 | 2 MiB                        | +10%        | **−3.7%**  | +9%         |
 | The last output's length + 8 | +10.1%      | +4.2%      | +8.3%       |
 
-One 2 MiB `array.new_default` costs more than the doublings it replaces. The
-zero-fill is paid on capacity, not on what is written, and the doublings zero
-about twice the output in total. Why canada still gains was not measured.
+On canada, one 2 MiB `array.new_default` costs more than the doublings it
+replaces. The zero-fill is paid on capacity, not on what is written, and the
+doublings zero about twice the output in total.
+
+The second row starts each buffer at the previous call's output length, held in
+a global. It wins every row, but only because a benchmark serializes one value
+repeatedly. The returned `ByteSlice` keeps the whole buffer alive, so a large
+output followed by many small ones leaves each small one holding the large
+capacity, and zero-filling it. A cap low enough to bound that loses the gain.
+The user declined it.
 
 Generalizes: the growth is not the cost a profile charges to `String::grow`.
-The zero-fill is, and it scales with the capacity asked for. An adaptive
-starting capacity wins where it lands near the output's size, as the second
-row does for a benchmark that serializes one value repeatedly.
+The zero-fill is, and it scales with the capacity asked for.
 
 ## `array.new_fixed` of zeros in place of a short `array.new_default` (2026-10-28)
 
