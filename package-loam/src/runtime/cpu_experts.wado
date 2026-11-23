@@ -136,7 +136,12 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
     let mut out = List::<f32>::filled(shape.rows, 0.0);
     for let mut r = 0; r < shape.rows; r += ROWS_AT_ONCE {
         let row = expert as i64 * shape.rows as i64 + r as i64;
-        let [mut s0, mut s1, mut s2, mut s3] = [f32x4::splat(0.0), f32x4::splat(0.0), f32x4::splat(0.0), f32x4::splat(0.0)];
+        let [mut s0, mut s1, mut s2, mut s3] = [
+            f32x4::splat(0.0),
+            f32x4::splat(0.0),
+            f32x4::splat(0.0),
+            f32x4::splat(0.0),
+        ];
         for let b of 0..<shape.blocks {
             let at = 2 * BLOCK * b;
             let [high_evens, high_odds, low_evens, low_odds] = [
@@ -150,7 +155,9 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
             let block = row * blocks + b as i64;
             let scaled = |n: i64| -> f32x4 {
                 let zero = if zero_points { zero_point(p, row + n, b) } else { 8 };
-                return block_sum(p, block + n * blocks, high_evens, high_odds, low_evens, low_odds, sums * i32x4::splat(zero), x_scale);
+                return block_sum(p, block + n * blocks, high_evens, high_odds, low_evens, low_odds, sums * i32x4::splat(
+                    zero,
+                ), x_scale);
             };
             s0 = s0 + scaled(0);
             s1 = s1 + scaled(1);
@@ -192,7 +199,9 @@ fn block_sum(
     let high = (high_evens as i16x8).relaxed_dot_i8x16_i7x16_s(&evens) + (high_odds as i16x8).relaxed_dot_i8x16_i7x16_s(
         &odds,
     );
-    let low = (low_evens as i16x8).relaxed_dot_i8x16_i7x16_s(&evens) + (low_odds as i16x8).relaxed_dot_i8x16_i7x16_s(&odds);
+    let low = (low_evens as i16x8).relaxed_dot_i8x16_i7x16_s(&evens) + (low_odds as i16x8).relaxed_dot_i8x16_i7x16_s(
+        &odds,
+    );
     let dot = (high as i32x4).dot_i16x8_s(&(i16x8::splat(128) as i32x4)) + (low as i32x4).dot_i16x8_s(
         &(i16x8::splat(1) as i32x4),
     );

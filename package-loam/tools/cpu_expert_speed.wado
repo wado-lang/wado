@@ -63,7 +63,7 @@ export fn run() with (Stdout, MonotonicClock) {
         quantized: Quantized { bits: 4, block: 32 },
         step: 0,
     };
-    let x: List<f32> = (0..<HIDDEN).map(|i| ((i * 11 % 200) - 100) as f32 * 0.01).collect();
+    let x: List<f32> = (0..<HIDDEN).map(|i| (i * 11 % 200 - 100) as f32 * 0.01).collect();
     let mut checksum: f32 = 0.0;
     let mut bench = Benchmark { name: "gpt-oss-20b experts on one core" };
     // The bytes the q4f16 export stores one expert in, f16 scales and biases.

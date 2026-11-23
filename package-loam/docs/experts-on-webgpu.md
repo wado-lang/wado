@@ -65,11 +65,13 @@ the picks' outputs. Its decomposition is what `by_picks` and `by_experts`
 compute now, so its meaning is Loam's own, as the sampler's is, and the
 routing stays operations before it.
 
-The recorder records it as one node, `Operation::ExpertMixture`, unless it
-decomposes. `Cpu` and `PjrtBackend` run the decomposition. `WebGpuBackend` runs
-a decode step's form, fewer picks than experts, as two quantized products a
-pick, each reading the expert's weight, scales and bias where its pool holds
-them:
+The recorder records a decode step's form, fewer picks than experts, as one
+node, `Operation::ExpertMixture`, unless it decomposes. A prompt's form is
+recorded as its operations, which fuse: run as one node, its decomposition ran
+each operation alone, and a prompt of 13 tokens ran the device out of memory.
+`Cpu` and `PjrtBackend` run the decomposition. `WebGpuBackend` runs the node
+as two quantized products a pick, each reading the expert's weight, scales and
+bias where its pool holds them:
 
 - `gated_up` is a paired product over the token's row, the weight's rows
   alternating between gate and up. Its epilogue adds the bias and takes the
@@ -81,8 +83,8 @@ them:
 The sum runs in pick order, as the decomposition's loop does, so the products
 differ from it only by what
 [Results Are Held to a Tolerance, Not to the Bit](../../docs/wep-2026-09-20-loam.md#results-are-held-to-a-tolerance-not-to-the-bit)
-allows. A prompt's form, at least as many picks as experts, decomposes until
-it is measured.
+allows. A pick whose expert the pools lack runs on the host, as
+[Experts on the CPU](./cpu-experts.md) describes.
 
 A layer's experts then take 2 dispatches a pick, 8 for gpt-oss-20b's 4, and
 nothing is copied out of a pool. The same step with the expert writes left out:
@@ -97,8 +99,9 @@ nothing is copied out of a pool. The same step with the expert writes left out:
 ```
 
 Both rows left the call to `written` in `HeldExperts::fetched` out by hand.
-With the writes in, the step runs at 1.59 tokens/s, so writing the experts
-the device lacks now sets the speed.
+With the experts the device lacks written in, the step ran at 1.59 tokens/s;
+[Experts on the CPU](./cpu-experts.md#measured-on-gpt-oss-20b) measures it
+with them computed on the host.
 
 ### A gather read in place
 

@@ -610,7 +610,12 @@ impl HeldExperts {
 
 /// What a host step answers: each of the `experts`' slot, the picked ones in
 /// `order` padded to them all, and how many were picked.
-fn slots_and_order<affine G: Backend>(g: &mut G, slot_of: List<i64>, order: List<i64>, experts: i32) -> List<Any<G>> with _ {
+fn slots_and_order<affine G: Backend>(
+    g: &mut G,
+    slot_of: List<i64>,
+    order: List<i64>,
+    experts: i32,
+) -> List<Any<G>> with _ {
     let count = order.len();
     let mut padded = order;
     while padded.len() < experts {

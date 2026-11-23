@@ -62,7 +62,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Web
     let after = model.experts().counts();
     let loaded = after.loaded_bytes - before.loaded_bytes;
     let [picked, hosted] = [after.picked - before.picked, after.hosted - before.hosted];
-    println(`the prompt of ${ids.len()} and ${steps} tokens, ${loaded} bytes of experts loaded, ${hosted} of ${picked} picks on the host:`);
+    println(
+        `the prompt of ${ids.len()} and ${steps} tokens, ${loaded} bytes of experts loaded, ${hosted} of ${picked} picks on the host:`,
+    );
     println(`  wall      ${ms(wall):>10.1} ms`);
     println(`  reads     ${ms(read):>10.1} ms ${share(read, wall):>5.1}%`);
     // A profile submits each dispatch alone to time it, so it runs apart

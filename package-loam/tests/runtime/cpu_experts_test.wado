@@ -50,7 +50,10 @@ test "the host computes each expert as the decomposition does" {
     for let e of 0..<4 {
         let mut logits = List::<f32>::filled(4, -f32::INFINITY);
         logits[e] = 5.0;
-        let alone = cpu.download(&mixing(cpu, &x, &cpu.upload(&Tensor::<f32, [A, C]> { data: logits, extents: [1, 4] }), &[
+        let alone = cpu.download(&mixing(cpu, &x, &cpu.upload(&Tensor::<f32, [A, C]> {
+            data: logits,
+            extents: [1, 4],
+        }), &[
             cpu.upload(&c.up.0),
             cpu.upload(&c.up.1),
             cpu.upload(&c.up.2),

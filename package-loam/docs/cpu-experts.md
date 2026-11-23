@@ -35,20 +35,45 @@ The sources are documents and papers, never code.
 On the RTX 4060 Ti machine, a Ryzen 7 5700X with 8 cores, 32 MiB of L3 and no
 AVX-512. One expert is 14,014,080 bytes as the `q4f16` export stores it.
 
-| What                                                     | Figure                                     |
-| -------------------------------------------------------- | ------------------------------------------ |
-| One guest core, 4-bit weights times i8 activations, DRAM | 10.84 GB/s of stored bytes, 1.29 ms/expert |
-| GPU pools of 5 GB, `LayerOrder`: a step's experts held   | 80.8% of 1344, 258 MB loaded a token       |
-| GPU pools of 5 GB, `Farthest` (the bound)                | 87.0%                                      |
-| GPU pools of 6.3 GB, as llama.cpp's best arm, `Recent`   | 84.7%                                      |
+| What                                                                  | Figure                                     |
+| --------------------------------------------------------------------- | ------------------------------------------ |
+| One guest core, one product of i8 activations alone, DRAM             | 10.84 GB/s of stored bytes, 1.29 ms/expert |
+| One guest core, `cpu_experts.wado`'s whole expert, 15-bit activations | 5.23 GB/s, 2.7 ms/expert                   |
+| GPU pools of 5 GB, `LayerOrder`: a step's experts held                | 80.8% of 1344, 258 MB loaded a token       |
+| GPU pools of 5 GB, `Farthest` (the bound)                             | 87.0%                                      |
+| GPU pools of 6.3 GB, as llama.cpp's best arm, `Recent`                | 84.7%                                      |
+| GPU pools of 5 GB filled by the prompt alone, 32 tokens               | 61% of 3263 picks held                     |
 
 ```sh
-(cd package-loam/benchmark/gpt_oss_20b && wado run -O3 --no-spectre-mitigation cpu_expert.wado)
+(cd package-loam && wado run -O2 --no-spectre-mitigation tools/cpu_expert_speed.wado)
 (cd package-loam && wado run tools/expert_eviction.wado -- \
     example/gpt-oss-20b/build/fetches.json 5000000000 6300000000)
+(cd package-loam/example/gpt-oss-20b && \
+    wado run-webgpu -O2 --no-spectre-mitigation --dir . profile.wado -- 5000000000 32)
 ```
 
-The replay covers 14 generated tokens. A longer run may hold fewer.
+The replay covers 14 generated tokens. The first row timed one product's i8
+dot alone, without its zero point; i8 activations part from the
+decomposition by 0.9% on `experts_case`, past the 1e-4 a device's product is
+held to, so the kernel quantizes them to 15 bits.
+
+## Measured on gpt-oss-20b
+
+The benchmark's 32 tokens, with the GPU's pools at 5 GB:
+
+| Experts the pools lack                                 | Throughput     |
+| ------------------------------------------------------ | -------------- |
+| Written into a slot                                    | 1.59 tokens/s  |
+| Computed on one guest core, as `cpu_experts.wado` does | 5.69 tokens/s  |
+| Not written, nor computed (the bound the pass sets)    | 24.28 tokens/s |
+
+```sh
+(cd package-loam/benchmark && mise run gpt-oss-20b)
+```
+
+The last row left the call to `written` in `HeldExperts::fetched` out by hand.
+The decode steps write nothing, so the pools hold what the prompt left in
+them, and the host computes 39% of the picks.
 
 ## The budget
 
@@ -72,20 +97,21 @@ round trips together take under about 13 ms.
 ## Design
 
 1. Placement. The GPU pools stay as they are, under the eviction order the
-   replay ranks best. The guest holds every other expert in a `LinearArray64`.
+   replay ranks best. `WebGpuBackend` holds every expert of a shared pool's
+   layers in a `LinearArray64`, which `HeldExperts::pools` hands it at load.
 2. Choice per expert, after Fiddler. In a host step, an expert the pools lack
    is computed on the CPU when the step routes fewer than T tokens to it, and
-   written into a slot otherwise, as today. A generated token routes 1. T is
-   measured: the token count where the CPU's time passes a write's.
-3. One layer. The host step already downloads the router's picks. It also
-   downloads the layer's input rows, 2880 f32s for each token. The GPU runs
-   the held experts while the CPU runs the rest, and the host uploads the
-   CPU's outputs, which the routing weights then sum with the GPU's.
-4. The kernel. It is Wado on `core:simd`, part of `WebGpuBackend`'s host step;
-   `Cpu` stays the reference and keeps its speed. Activations are quantized to
-   i8 per block of 32, as the measured kernel does. That parts from the GPU's
-   f16 product, and the tolerance check against onnxruntime decides whether it
-   holds. If it does not, the kernel computes in f32, at a speed to measure.
+   written into a slot otherwise. A generated token routes 1. T is to be
+   measured: the token count where the CPU's time passes a write's. Until it
+   is, a step of one token computes every miss, and a longer one writes them.
+3. One layer. The host step answers slot -1 for an expert the pools lack.
+   WebGPU's `Graph::expert_mixture` reads the layer's input rows and the
+   picks' weights back, queues the held experts' products, computes the rest
+   on the host while the device runs them, and adds them.
+4. The kernel. It is Wado on `core:simd`, in `cpu_experts.wado`; `Cpu` stays
+   the reference and keeps its speed. Activations are quantized to 15 bits per
+   block of 32, each split into two i8 halves that `relaxed_dot` multiplies
+   exactly, and four rows share each block's activations.
 5. Ahead of time. The TODO item Experts loaded ahead applies the next layer's
    router early. It then also tells the CPU which guest-held experts to warm
    and which file ranges to read.
@@ -127,11 +153,9 @@ The recommendation is A first. It needs no host change, and its measurements
 (T, the round trip, the GPU's clocks under the new pattern) decide whether the
 1/1.5 target needs B.
 
-## To measure first
+## To measure
 
 - The round trip of one host step on `wado run-webgpu`: a download of the
   picks and the rows, then an upload of the outputs.
-- The GPU's time for a token once no expert is written, with the pools as
-  they are.
-- The hit rate over a longer run than 14 tokens.
-- The product's error against onnxruntime with i8 activations.
+- T, where computing a miss on the host costs what writing it does.
+- The hit rate of pools a decode step adapts, against those the prompt fills.

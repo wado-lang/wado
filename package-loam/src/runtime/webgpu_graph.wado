@@ -335,7 +335,7 @@ impl Backend for WebGpuBackend {
 /// Where `WebGpuBackend::host_experts` holds the experts of the layer whose
 /// host step is `step`, for the pool `pool` views.
 fn host_expert_key(pool: &DeviceTensor, step: i32) -> i64 {
-    return (pool.slot as i64 << 32) | step as i64;
+    return pool.slot as i64 << 32 | step as i64;
 }
 
 impl Graph for WebGpuBackend {
@@ -976,7 +976,10 @@ fn by_picks<E: Float>(
                     sum[i] += weight * out[i];
                 }
             }
-            let computed = g.upload(&Tensor::<f32, [Picked, Hidden]> { data: sum, extents: [1, hidden] });
+            let computed = g.upload(&Tensor::<f32, [Picked, Hidden]> {
+                data: sum,
+                extents: [1, hidden],
+            });
             totals[t] = Option::Some(g.device_view(&match &totals[t] {
                 Some(d) => g.binary(Binary::Add, &Placed::<f32, [Picked, Hidden]>::Device(*d), &computed),
                 null => computed,
