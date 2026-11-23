@@ -787,7 +787,7 @@ pub fn mark_gated_predicates(
     }
 }
 
-/// Register `alt`'s gateable alt-initial predicates as gated, so the dispatch
+/// Mark `alt`'s gateable alt-initial predicates gated, so the dispatch
 /// carries them as its condition and the body does not repeat them as a guard.
 fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut EmitContext) {
     for let a of &alt.edge_gates() {
@@ -801,13 +801,8 @@ fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut EmitContext) {
 /// caller has emitted — for one that can only tell after rendering it
 /// (`group_admits`).
 pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut EmitContext) {
-    if !ctx.settings.emit_actions {
-        return;
-    }
-    for let a of &alt.edge_gates() {
-        if ctx.gate_condition(a) matches { Some(_) } {
-            ctx.cursor.mark_predicate_gated(a.source.action_id);
-        }
+    if ctx.settings.emit_actions {
+        mark_alt_gate_predicates(alt, ctx);
     }
 }
 
@@ -818,8 +813,8 @@ pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut EmitContext) -> String {
     return and_gate(alt_gate_condition(alt, ctx));
 }
 
-/// An alt's gateable predicates joined into one condition, registered as
-/// answered by it, or "" where it has none.
+/// An alt's gateable predicates joined into one condition, marked answered by
+/// it, or "" where it has none.
 pub fn alt_gate_condition(alt: &Alternative, ctx: &mut EmitContext) -> String {
     return join_gate_conds(&alt_initial_gate_conditions(alt, ctx));
 }
@@ -832,8 +827,8 @@ pub fn and_gate(cond: String) -> String {
     return ` && ${cond}`;
 }
 
-/// The same suffix and `pred_<id>` fn without claiming the predicate answered;
-/// the caller marks it with `mark_alt_gate_answered` once it can tell.
+/// The same suffix without claiming the predicate answered; the caller marks it
+/// with `mark_alt_gate_answered` once it can tell.
 pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut EmitContext) -> String {
     if !ctx.settings.emit_actions {
         return String::new();

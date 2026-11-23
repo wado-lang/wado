@@ -9047,9 +9047,9 @@ fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut E
 }
 
 /// The gate the current rule's alternative `idx` carries, or `null` where it
-/// carries none. Registering it emits the `pred_<id>` fn the condition names,
-/// which is why this asks `alt_has_gate` first rather than registering
-/// speculatively.
+/// carries none. Rendering the gate marks its predicate gated, which drops the
+/// body's inline guard, so this asks `alt_has_gate` first rather than
+/// rendering speculatively.
 fn alt_initial_gate(idx: i32, ctx: &mut EmitContext) -> Option<String> {
     let rule = ctx.current_rule();
     assert idx >= 0 && idx < rule.alternatives.len(), "alt_initial_gate: a tournament candidate is an alternative of the rule it belongs to";
@@ -9419,7 +9419,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
 }
 
 /// An alternative's gate as `side` evaluates it, or "" where it has none that
-/// side can. The parse's registers the predicate its condition names.
+/// side can. The parse's marks the predicate its condition names gated.
 fn side_gate(side: PickSide, alt: &Alternative, ctx: &mut EmitContext) -> String {
     return match side {
         _::Parse => alt_gate_condition(alt, ctx),
