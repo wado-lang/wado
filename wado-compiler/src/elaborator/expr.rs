@@ -136,10 +136,11 @@ fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
 }
 
-/// Whether `expr` writes type arguments a `_` may stand in: a turbofish on a
-/// call, a path or a struct literal, or a static call's receiver.
-fn writes_turbofish(expr: &Expr) -> bool {
-    matches!(expr, Expr::Call(call) if !call.type_args.is_empty())
+/// Whether `expr` writes a type a `_` may stand in: a turbofish on a call, a
+/// path or a struct literal, a static call's receiver, or an `as` target.
+fn writes_inferable_type(expr: &Expr) -> bool {
+    matches!(expr, Expr::Cast(_))
+        || matches!(expr, Expr::Call(call) if !call.type_args.is_empty())
         || matches!(expr, Expr::MethodCall(call) if !call.type_args.is_empty())
         || matches!(expr, Expr::Ident(ident) if !ident.type_args.is_empty())
         || matches!(expr, Expr::StructLiteral(lit) if !lit.type_args.is_empty())
@@ -656,7 +657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "a node written in another module reached a travelled walk"
         );
         let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
-        let type_id = if writes_turbofish(expr) {
+        let type_id = if writes_inferable_type(expr) {
             self.closing_holes_on_error(|e| e.resolve_expr_inner(expr, ctx, expected_type))
         } else {
             self.resolve_expr_inner(expr, ctx, expected_type)
@@ -3841,8 +3842,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(expected) = expected_type {
             self.equate(target_type, expected);
         }
-        let open_target = self.is_bare_written_hole(target_type);
-        let resolved = if open_target {
+        let errors_before = self.logger.offered_error_count();
+        let resolved = if self.is_bare_written_hole(target_type) {
             self.resolve_expr(&cast.expr, ctx, None);
             TypeTable::ERROR
         } else {
@@ -3853,11 +3854,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .vars_holding_written_holes(&[target_type])
             .into_iter()
             .collect();
-        if !open.is_empty() {
-            self.close_uninferred(&open);
-            return TypeTable::ERROR;
+        if open.is_empty() {
+            return self.apply_infer_holes(resolved);
         }
-        self.apply_infer_holes(resolved)
+        // An operand that reported its own error is the whole fault, and
+        // `resolve_expr` closes what it leaves open.
+        if self.logger.offered_error_count() == errors_before {
+            self.close_uninferred(&open);
+        }
+        TypeTable::ERROR
     }
 
     /// [`Self::resolve_cast`] to `target_type`, which holds no `_`.
