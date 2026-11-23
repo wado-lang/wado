@@ -5,6 +5,7 @@
 
 use { HashMap } from "core:collections";
 use { LoadError, WeightSource } from "./checkpoint.wado";
+use { ExpertsOnHost } from "./cpu_experts.wado";
 use { Picked, Pool, Tokens } from "./experts.wado";
 use { Backend, One, Quantized } from "./hlo.wado";
 use { Any, Untyped, typed } from "./recorded.wado";
@@ -537,9 +538,9 @@ impl HeldExperts {
                 if !run.shared() {
                     let experts: List<i32> = (0..<layout.experts).collect();
                     written(g, source, &layout.layers[run.first], &experts, &experts, &mut pools);
-                } else if g.computes_misses(&layout.quantized) {
+                } else if let Some(host) = g.experts_on_host(&layout.quantized) {
                     for let layer of run.first..<run.first + run.count {
-                        held_on_host(g, source, &layout.layers[layer], layout.experts, layout.steps[layer], &pools);
+                        held_on_host(host, source, &layout.layers[layer], layout.experts, layout.steps[layer]);
                     }
                 }
                 for let layer of run.first..<run.first + run.count {
@@ -555,10 +556,10 @@ impl HeldExperts {
 
     /// The host step `step`: the experts `read[0]` picks, each written into a
     /// slot of its run's pools unless one holds it already; then each expert's
-    /// slot, the picked experts in order, and how many they are. A backend
-    /// that computes misses is written from what it holds on the host, and in
-    /// a step of one token at most [`Self::limit_step_fills`]: the slot of
-    /// each other expert the pools lack is -1.
+    /// slot, the picked experts in order, and how many they are. Where the
+    /// backend has [`Backend::experts_on_host`], a slot is written from there,
+    /// and in a step of one token at most [`Self::limit_step_fills`]: the slot
+    /// of each other expert the pools lack is -1.
     pub fn fetched<affine G: Backend, affine Src: WeightSource>(
         &mut self,
         g: &mut G,
@@ -587,10 +588,10 @@ impl HeldExperts {
         let mut slot_of = List::<i64>::filled(experts, -1);
         let slot_bytes = layout.slot_bytes();
         let first = shared.run.first;
-        let from_host = g.computes_misses(&layout.quantized);
+        let on_host = g.experts_on_host(&layout.quantized);
         // Only a mixture that runs by picks reads a slot of -1, as `runs_by_picks` decides.
         let by_picks = picks.extents[0] == 1 && picks.extents[1] < experts;
-        let most_filled = if from_host && by_picks { self.step_fills } else { experts };
+        let most_filled = if on_host matches { Some(_) } && by_picks { self.step_fills } else { experts };
         let mut pools: List<Any<G>> = layout.weights[first].into_iter().map(|p| weights[p]).collect();
         let placed = shared.slots.placed(layer - first, &picked, |_| unreachable(), most_filled);
         let mut loading: List<i32> = [];
@@ -603,14 +604,15 @@ impl HeldExperts {
                 into.push(slot);
             }
         }
-        if from_host {
-            for let [i, expert] of loading.into_iter().enumerate() {
-                for let w of 0..<pools.len() {
-                    g.written_from_host(&mut pools[w], into[i], step, expert);
+        match on_host {
+            Some(host) => {
+                for let [i, expert] of loading.into_iter().enumerate() {
+                    for let w of 0..<pools.len() {
+                        g.written(&mut pools[w], into[i], host.of(step, w).expert(expert));
+                    }
                 }
-            }
-        } else {
-            written(g, source, &layout.layers[layer], &loading, &into, &mut pools);
+            },
+            null => written(g, source, &layout.layers[layer], &loading, &into, &mut pools),
         }
         for let l of first..<first + shared.run.count {
             for let [w, pool] of pools.into_iter().enumerate() {
@@ -692,15 +694,14 @@ fn written<affine G: Backend, affine Src: WeightSource>(
     }
 }
 
-/// Every expert of `stored`, a layer's weights whose host step is `step`,
-/// handed to `g` for the pool of each.
-fn held_on_host<affine G: Backend, affine Src: WeightSource>(
-    g: &mut G,
+/// Every expert of `stored`, a layer's weights whose host step is `step`, held
+/// by `host`.
+fn held_on_host<affine Src: WeightSource>(
+    host: &mut ExpertsOnHost,
     source: &Src,
     stored: &List<StoredExperts>,
     experts: i32,
     step: i32,
-    pools: &List<Any<G>>,
 ) with _ {
     for let [i, w] of stored.into_iter().enumerate() {
         let size = experts * w.slice_bytes();
@@ -713,7 +714,7 @@ fn held_on_host<affine G: Backend, affine Src: WeightSource>(
         };
         let mut extents: List<i32> = [experts];
         extents.extend(&w.extents);
-        g.held_on_host(&pools[i], step, HostWeight::stored(w.kind, extents, bytes));
+        host.held(step, i, &HostWeight::stored(w.kind, extents, bytes));
     }
 }
 

@@ -13,6 +13,7 @@
 //! exact on every host. The zero point comes off a block's sum as
 //! `zero · Σ v`.
 
+use { HashMap } from "core:collections";
 use { LinearArray, LinearArray64 } from "core:linear";
 use { f32x4, i16x8, i32x4, i64x2, i8x16, u8x16 } from "core:simd";
 use { Experts, ProjectionShape } from "./experts.wado";
@@ -60,6 +61,44 @@ impl HostExperts {
         bytes.copy_from_memory64(0, &self.stored, expert as i64 * size as i64, size);
         return HostWeight::stored(self.kind, slice, bytes);
     }
+}
+
+/// Every expert of each weight of the layers whose pools are shared, by the
+/// layer's host step and the weight's place among the layer's pools.
+pub affine struct ExpertsOnHost {
+    held: List<HostExperts>,
+    at: HashMap<i64, i32>,
+}
+
+impl ExpertsOnHost {
+    pub fn new() -> ExpertsOnHost {
+        return ExpertsOnHost { held: [], at: HashMap::new() };
+    }
+
+    /// Holds `experts`, the weight at `place` of the layer whose host step is
+    /// `step`, in place of what it held there.
+    pub fn held(&mut self, step: i32, place: i32, experts: &HostWeight) {
+        let held = HostExperts::of(experts);
+        let key = held_key(step, place);
+        match self.at.get(key) {
+            Some(at) => self.held[at] = held,
+            null => {
+                self.at[key] = self.held.len();
+                self.held.push(held);
+            },
+        }
+    }
+
+    pub fn of(&self, step: i32, place: i32) -> &HostExperts {
+        let Some(at) = self.at.get(held_key(step, place)) else {
+            panic(`no weight is held at place ${place} for host step ${step}`);
+        };
+        return &self.held[at];
+    }
+}
+
+fn held_key(step: i32, place: i32) -> i64 {
+    return step as i64 << 32 | place as i64;
 }
 
 /// One projection of every expert of a layer, each of its weights as a

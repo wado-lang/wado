@@ -42,7 +42,7 @@ use {
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { LinearArray } from "core:linear";
 use { HostWeight } from "./weight.wado";
-use { HostExperts } from "./cpu_experts.wado";
+use { ExpertsOnHost } from "./cpu_experts.wado";
 use { Experts, ProjectionShape } from "./experts.wado";
 use { Quantized } from "./hlo.wado";
 use { Untyped } from "./recorded.wado";
@@ -590,11 +590,7 @@ pub affine struct WebGpuBackend {
     bind_groups: i32,
     replays: i32,
     internal cpu: Cpu,
-    /// Every expert of each layer's weight that a shared pool holds a few of,
-    /// at the place `host_expert_at` gives for the pool's buffer and the
-    /// layer's host step.
-    internal host_experts: List<HostExperts>,
-    internal host_expert_at: HashMap<i64, i32>,
+    internal experts_on_host: ExpertsOnHost,
 }
 
 /// Invocations per workgroup of every shader but the product's: a power of
@@ -772,8 +768,7 @@ impl WebGpuBackend {
             bind_groups: 0,
             replays: 0,
             cpu: Cpu {},
-            host_experts: [],
-            host_expert_at: HashMap::new(),
+            experts_on_host: ExpertsOnHost::new(),
         });
     }
 

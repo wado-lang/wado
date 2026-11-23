@@ -28,6 +28,7 @@ use {
 use { HashMap } from "core:collections";
 use { Any, Recorded, Recorder, Run, Untyped, assert_carries, constants, kept_any } from "./recorded.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
+use { ExpertsOnHost } from "./cpu_experts.wado";
 use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture } from "./experts.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
@@ -161,24 +162,12 @@ pub affine trait Backend: Graph with _ {
     /// `pool`, which [`Self::pool`] made, with its slot `slot` holding `row`:
     /// one slice along the first axis, as a checkpoint stores it.
     fn written(&mut self, pool: &mut Any<Self>, slot: i32, row: HostWeight);
-    /// Whether a decode step's expert the pools lack, quantized as
-    /// `quantized`, may run on the host rather than be written into a slot:
-    /// [`Graph::expert_mixture`] then finds its slot -1, and its weights where
-    /// [`Self::held_on_host`] put them, which [`Self::written_from_host`]
-    /// writes the slots from.
-    fn computes_misses(&self, _quantized: &Quantized) -> bool with () {
-        return false;
-    }
-    /// Every expert of the layer whose host step is `step`, for the shared
-    /// `pool`: `experts`, each slice along its first axis one expert's, as a
-    /// checkpoint stores it.
-    fn held_on_host(&mut self, _pool: &Any<Self>, _step: i32, _experts: HostWeight) {
-        unreachable();
-    }
-    /// [`Self::written`] of expert `expert` of the layer whose host step is
-    /// `step`, from what [`Self::held_on_host`] holds of `pool`.
-    fn written_from_host(&mut self, _pool: &mut Any<Self>, _slot: i32, _step: i32, _expert: i32) {
-        unreachable();
+    /// Where the host holds the experts of the shared layers quantized as
+    /// `quantized`, if a decode step's expert the pools lack may run on the
+    /// host rather than be written into a slot: [`Graph::expert_mixture`] then
+    /// finds its slot -1, and computes it from what this holds.
+    fn experts_on_host(&mut self, _quantized: &Quantized) -> Option<&mut ExpertsOnHost> with () {
+        return null;
     }
     /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
     /// which the parameters `record` records take from its `first` on: each

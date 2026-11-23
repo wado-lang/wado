@@ -106,7 +106,7 @@ use {
 } from "./webgpu.wado";
 use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture, runs_by_picks } from "./experts.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
-use { HostExperts, HostProjection, computes_on_host, expert_row } from "./cpu_experts.wado";
+use { ExpertsOnHost, HostProjection, computes_on_host, expert_row } from "./cpu_experts.wado";
 use { LinearArray } from "core:linear";
 
 /// A pass recorded once per shape class and planned into kernels, which each
@@ -322,38 +322,12 @@ impl Backend for WebGpuBackend {
         self.written_slot(on_device(pool).unwrap(), slot, &row);
     }
 
-    fn computes_misses(&self, quantized: &Quantized) -> bool {
-        return computes_on_host(quantized);
-    }
-
-    fn held_on_host(&mut self, pool: &Any<WebGpuBackend>, step: i32, experts: HostWeight) {
-        let key = host_expert_key(on_device(pool).unwrap(), step);
-        let held = HostExperts::of(&experts);
-        match self.host_expert_at.get(key) {
-            Some(at) => self.host_experts[at] = held,
-            null => {
-                self.host_expert_at[key] = self.host_experts.len();
-                self.host_experts.push(held);
-            },
+    fn experts_on_host(&mut self, quantized: &Quantized) -> Option<&mut ExpertsOnHost> {
+        if !computes_on_host(quantized) {
+            return null;
         }
+        return Option::Some(&mut self.experts_on_host);
     }
-
-    fn written_from_host(
-        &mut self,
-        pool: &mut Any<WebGpuBackend>,
-        slot: i32,
-        step: i32,
-        expert: i32,
-    ) with (GpuQueue, GpuBuffer) {
-        let on = on_device(pool).unwrap();
-        self.written_slot(on, slot, &host_experts(self, on, step).expert(expert));
-    }
-}
-
-/// Where `WebGpuBackend::host_experts` holds the experts of the layer whose
-/// host step is `step`, for the pool `pool` views.
-fn host_expert_key(pool: &DeviceTensor, step: i32) -> i64 {
-    return pool.slot as i64 << 32 | step as i64;
 }
 
 impl Graph for WebGpuBackend {
@@ -978,8 +952,8 @@ fn by_picks<E: Float>(
     }
     if on_host {
         g.flush();
-        let host_up = host_projection(g, &up, experts.step);
-        let host_down = host_projection(g, &down, experts.step);
+        let host_up = host_projection(&g.experts_on_host, &up, experts.step, 0);
+        let host_down = host_projection(&g.experts_on_host, &down, experts.step, places(&up));
         let hidden = x.extents[1];
         for let t of 0..<tokens {
             let mut sum = List::<f32>::filled(hidden, 0.0);
@@ -1016,18 +990,21 @@ fn by_picks<E: Float>(
 }
 
 /// `pool`'s projection of every expert of the layer whose host step is `step`,
-/// as the host holds it.
-fn host_projection(g: &WebGpuBackend, pool: &ExpertPool, step: i32) -> HostProjection {
-    let scales = host_experts(g, &pool.scales, step);
+/// as `host` holds it from place `first` on: the packed weight, the scales,
+/// then the bias and the zero points where it has them, as a `QMoE` orders
+/// its operands.
+fn host_projection(host: &ExpertsOnHost, pool: &ExpertPool, step: i32, first: i32) -> HostProjection {
+    let scales = host.of(step, first + 1);
+    let zero_points_at = first + 2 + if pool.bias matches { Some(_) } { 1 } else { 0 };
     return HostProjection {
-        packed: host_experts(g, &pool.packed, step).bytes(),
+        packed: host.of(step, first).bytes(),
         scales: scales.bytes(),
         bias: match &pool.bias {
-            Some(b) => Option::Some(host_experts(g, b, step).bytes()),
+            Some(_) => Option::Some(host.of(step, first + 2).bytes()),
             null => null,
         },
         zero_points: match &pool.zero_points {
-            Some(z) => Option::Some(host_experts(g, z, step).bytes()),
+            Some(_) => Option::Some(host.of(step, zero_points_at).bytes()),
             null => null,
         },
         kind: scales.kind,
@@ -1035,13 +1012,13 @@ fn host_projection(g: &WebGpuBackend, pool: &ExpertPool, step: i32) -> HostProje
     };
 }
 
-/// The weight the pool `pool` views holds, of every expert of the layer whose
-/// host step is `step`, as the host holds it.
-fn host_experts(g: &WebGpuBackend, pool: &DeviceTensor, step: i32) -> &HostExperts {
-    let Some(at) = g.host_expert_at.get(host_expert_key(pool, step)) else {
-        panic(`no layer's experts are held on the host for host step ${step}`);
+/// The places of `pool`'s weights among its layer's.
+fn places(pool: &ExpertPool) -> i32 {
+    return 2 + if pool.bias matches { Some(_) } { 1 } else { 0 } + if pool.zero_points matches { Some(_) } {
+        1;
+    } else {
+        0;
     };
-    return &g.host_experts[at];
 }
 
 /// `p`'s pools on the device.
