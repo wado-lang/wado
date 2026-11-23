@@ -650,6 +650,18 @@ fn pick<effect E>(f: fn() with E) -> String {
 
 `pick` is an error: `E` may be `Stdout` as well as nothing.
 
+A bound may name the function's own effect parameter, as in
+`T: Tr<fn() with E>`. In the body, the bound states `Tr` for that `E` alone. It
+says nothing of `Tr<fn() with Stdout>`, or of `Tr` for another parameter. A
+call checks the bound at the row it binds `E` to, so `Loud`, which implements
+`Tr<fn() with Stdout>`, meets it where the call binds `E` to `Stdout`
+(`effect_param_bound_substituted_at_call.wado`,
+`error_effect_param_bound_rigid_in_asking_frame.wado`).
+
+> Not yet implemented: a dispatch through such a bound in the body, `t.go()`
+> under `T: Tr<fn() with E>`, finds no impl, since an instance carries no
+> effect arguments.
+
 ### `with _`
 
 `with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. Every `_` in one signature is the same parameter, distinct from any `<effect E>` the signature declares:

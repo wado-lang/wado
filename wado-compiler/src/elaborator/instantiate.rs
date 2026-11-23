@@ -13,6 +13,7 @@ use crate::type_table::TypeTable;
 use super::Elaborator;
 use super::call::{bound_targets, slot_names};
 use super::coercion::ExpectedReturn;
+use super::infer_hole::BoundRows;
 use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
 use super::types::FunctionContext;
@@ -351,7 +352,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if diag.is_none() {
                 continue;
             }
-            let bounds = self.declared_bounds(param, self_binding, impl_args);
+            let bounds = self.declared_bounds(param, self_binding, impl_args, BoundRows::Unbound);
             self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
         }
     }
@@ -388,7 +389,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let var = self.mint_infer_var_named(&pack.name);
                 self.mark_pack_var(var);
                 self.attach_infer_var_blame(var, span, pack.name.clone(), owner.clone());
-                let bounds = self.declared_bounds(pack, self_binding, impl_args);
+                let bounds =
+                    self.declared_bounds(pack, self_binding, impl_args, BoundRows::Unbound);
                 self.attach_infer_var_bounds(var, pack.name.clone(), bounds, span);
                 solved[j] = var;
             }

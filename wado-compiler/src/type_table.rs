@@ -4829,6 +4829,31 @@ impl TypeTable {
         rows
     }
 
+    /// What each effect parameter a callee's `declared` parameter types name
+    /// stands for where the call's argument types `actual` meet them, each
+    /// variable solved so far read through.
+    pub fn call_effect_binding(&self, declared: &[TypeId], actual: &[TypeId]) -> EffectRows {
+        let mut rows = EffectRows::default();
+        for (&declared, &actual) in declared.iter().zip(actual) {
+            self.bind_rows(declared, actual, &mut rows);
+        }
+        for row in rows.values_mut() {
+            *row = self.read_effect_row(row);
+        }
+        rows
+    }
+
+    /// `effects` with each parameter or variable `rows` names replaced by its
+    /// row.
+    #[must_use]
+    pub fn substitute_row(effects: &[EffectRef], rows: &EffectRows) -> Vec<EffectRef> {
+        Leaves {
+            rows,
+            ..Leaves::NONE
+        }
+        .row(effects)
+    }
+
     /// [`Self::impl_effect_binding`] for one written type beside the type
     /// that meets it.
     fn bind_rows(&self, written: TypeId, actual: TypeId, rows: &mut EffectRows) {

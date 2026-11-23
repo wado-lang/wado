@@ -14,7 +14,8 @@ use crate::name::{
 };
 use crate::resolve::Resolution;
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeArgMap, TypeId, TypeParamId,
+    EffectRows, FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeArgMap, TypeId,
+    TypeParamId,
 };
 use crate::type_table::TypeTable;
 
@@ -22,7 +23,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
-use super::infer_hole::uninferable_type_param;
+use super::infer_hole::{BoundRows, uninferable_type_param};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{
     PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
@@ -187,6 +188,8 @@ struct StaticTypeArgs {
     params: Vec<ast::GenericParam>,
     impl_args: Vec<TypeId>,
     method_args: Vec<TypeId>,
+    /// What the call binds the method's own effect parameters to.
+    effect_rows: EffectRows,
 }
 
 /// A static a newtype inherits: the link it is declared on, read as the
@@ -2797,7 +2800,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.settle_unreached_packs(&declared, &slots, &mut type_args, &reached);
 
         if !type_args.is_empty() {
-            self.check_function_type_arg_bounds(&callee, &type_args, call.span);
+            let effect_rows = self
+                .tysys
+                .type_table
+                .borrow()
+                .call_effect_binding(&declared_param_types, &args);
+            self.check_function_type_arg_bounds(&callee, &type_args, &effect_rows, call.span);
         }
 
         let generic = !self.lookup_function_type_params(&callee).is_empty();
@@ -4038,8 +4046,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         sig.own_params.get(*slot)
                     };
-                    let bounds =
-                        param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
+                    let bounds = param.map_or_else(Vec::new, |p| {
+                        self.declared_bounds(p, None, &[], BoundRows::Unbound)
+                    });
                     let var =
                         self.defer_slot(inferred, span, message.clone(), name.clone(), bounds);
                     if param.is_some_and(|p| p.is_pack) {
@@ -4318,7 +4327,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 new_args.push(type_args[i]);
                 continue;
             }
-            let bounds = self.declared_bounds(p, None, &[]);
+            let bounds = self.declared_bounds(p, None, &[], BoundRows::Unbound);
             let stand_in = self.defer_slot(
                 type_args.get(i).copied(),
                 span,
@@ -4739,20 +4748,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An unwritten turbofish leaves the impl level to infer as well, which
         // the method's own slot count says nothing about.
         let expected_args = self.expected_receiver_args(callee.receiver, expected_type);
-        let (method_def, [declaring_slots, own_slots]) = self
+        let (method_def, [declaring_slots, own_slots], effect_rows) = self
             .owner_static_sig(
                 callee.receiver.key(),
                 callee.method_name,
                 SigChoice::Any,
                 &expected_args,
             )
-            .map_or((None, [0, 0]), |sig| {
+            .map_or((None, [0, 0], EffectRows::default()), |sig| {
                 (
                     Some(sig.def),
                     [
                         sig.declaring_type_params().len(),
                         sig.own_type_params().len(),
                     ],
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .call_effect_binding(&sig.decl.param_types, args),
                 )
             });
         let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
@@ -4784,6 +4797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             params,
             impl_args,
             method_args,
+            effect_rows,
         })
     }
 
@@ -4802,6 +4816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &type_args.method_args,
             &[],
             self_binding,
+            &type_args.effect_rows,
             span,
         );
     }

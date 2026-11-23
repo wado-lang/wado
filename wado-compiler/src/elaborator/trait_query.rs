@@ -19,7 +19,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::callee::CalleeRef;
-use super::infer_hole::{Obligation, ProjectionLink};
+use super::infer_hole::{BoundRows, Obligation, ProjectionLink};
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
     BinderInScope, BoundSelf, BoundsOf, ElaboratedBound, FamilySite, ParamRef, Scope, ScopedBound,
@@ -2815,11 +2815,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// hold no slot in it (see [`ast::GenericParam::is_real_type_param`], the
     /// filter inference and projection pair by). Zipping the declared list
     /// instead would shift every parameter after one of those onto the next
-    /// argument's bounds.
+    /// argument's bounds. `effect_rows` is what the call binds the callee's own
+    /// effect parameters to.
     pub(super) fn check_function_type_arg_bounds(
         &mut self,
         callee: &CalleeRef,
         type_args: &[TypeId],
+        effect_rows: &EffectRows,
         span: Span,
     ) {
         let type_params: Vec<ast::GenericParam> = self
@@ -2827,7 +2829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(ast::GenericParam::is_real_type_param)
             .collect();
-        self.enforce_type_arg_bounds(&type_params, type_args, &[], None, span);
+        self.enforce_type_arg_bounds(&type_params, type_args, &[], None, effect_rows, span);
     }
 
     /// Check the bounds on a generic type declaration's type arguments, for
@@ -2979,13 +2981,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// bound from the bounds in force on it (spec-traits.md §Eligibility).
     /// `self_binding` is what a bound's `Self::Assoc` projects off where the
     /// call binds one, and `impl_args` what the receiver binds the enclosing
-    /// impl's parameters to, which a method's bound may name.
+    /// impl's parameters to, which a method's bound may name. `effect_rows` is
+    /// what the call binds the declaration's own effect parameters to, which a
+    /// bound's function types may name.
     pub(super) fn enforce_type_arg_bounds(
         &mut self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
         impl_args: &[(ParamRef, TypeId)],
         self_binding: Option<SelfBinding>,
+        effect_rows: &EffectRows,
         span: Span,
     ) {
         let at_call = self.tysys.call_site_types(params, type_args, impl_args);
@@ -3019,11 +3024,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             if !rigid {
-                // A hole carries its own slot's bounds to finalize; this slot's
-                // go with an answer an enclosing call is still to give.
-                if self.awaits_pending_call(type_arg) {
-                    self.defer_bounds_to_answer(param, type_arg, self_binding, impl_args, span);
-                }
+                // A hole carries its own slot's bounds to finalize, but for
+                // those naming an effect parameter, which wait for this call;
+                // this slot's go with an answer an enclosing call is still to
+                // give.
+                let rows = if self.awaits_pending_call(type_arg) {
+                    BoundRows::All(effect_rows)
+                } else {
+                    BoundRows::Left(effect_rows)
+                };
+                self.defer_bounds_to_answer(param, type_arg, self_binding, impl_args, rows, span);
                 continue;
             }
             for bound in &param.real_bounds() {
@@ -3034,6 +3044,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .flatten()
                     .map(|trait_| {
                         self.bound_trait_at_args(trait_, bound, params, type_args, self_binding)
+                            .map_rows(&|row| TypeTable::substitute_row(row, effect_rows))
                     })
                     .and_then(|trait_| asked_at(trait_, &at_call, &frame_binders));
                 for &subject in &subjects {
@@ -3160,7 +3171,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 else {
                     return;
                 };
-                self.enforce_type_arg_bounds(&params, &type_args, &[], None, span);
+                self.enforce_type_arg_bounds(
+                    &params,
+                    &type_args,
+                    &[],
+                    None,
+                    &EffectRows::default(),
+                    span,
+                );
             }
             Owed::TraitArgs {
                 trait_,
@@ -3173,7 +3191,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_id: subject,
                     declaring_trait: Some(trait_),
                 };
-                self.enforce_type_arg_bounds(&params, &type_args, &[], Some(implementing), span);
+                self.enforce_type_arg_bounds(
+                    &params,
+                    &type_args,
+                    &[],
+                    Some(implementing),
+                    &EffectRows::default(),
+                    span,
+                );
             }
             Owed::BoundArgs { bound, subject } => {
                 let trait_ = self

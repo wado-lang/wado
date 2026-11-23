@@ -104,9 +104,8 @@ Each step keeps every fixture passing and deletes what it replaces.
   elaborating it, so the effect variables it mints are never solved. A
   selection over a synthesized argument reads them as the empty row, and
   nothing closes them (`closure_row_in_synthesized_argument.wado`).
-- An asking frame's effect parameter in a bound (`T: Tr<fn() with E>`) is read
-  as an open row, not as `E`. A request for `Tr<fn() with F>`, where `F` is
-  another of the frame's parameters, is answered by that bound. Reading it as
-  `E` is not enough alone: a call does not substitute its callee's effect
-  parameters into the callee's bounds, and monomorphization carries no effect
-  arguments, so a dispatch through such a bound would find no impl.
+- Monomorphization carries no effect arguments. A call checks its callee's
+  bounds at what it binds the callee's effect parameters to
+  (`effect_param_bound_substituted_at_call.wado`), but the instance's body
+  still names the parameter. A dispatch through a bound that names one, such
+  as `t.go()` under `T: Tr<fn() with G>`, finds no impl.
