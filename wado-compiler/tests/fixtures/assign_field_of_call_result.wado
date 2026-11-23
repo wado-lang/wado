@@ -1,7 +1,10 @@
 // A by-value call's result is a temporary, so a write into it is discarded
 // with it and changes nothing the writer can see, whether the callee returns
-// a value of its own or storage the caller holds. It is refused, as a write
-// through a by-value index is. A call returning a `&mut` is written through.
+// a value of its own or storage the caller holds. So is a constant's value. It
+// is refused, as a write through a by-value index is.
+//
+// A call returning a `&mut` is written through, in
+// `value_copy_write_through_returned_reference_field`.
 
 struct Pair {
     a: i32,
@@ -23,12 +26,10 @@ fn list() -> List<Pair> {
 }
 
 impl Box {
+    const DEFAULT_PAIR: Pair = Pair { a: 1, s: [] };
+
     fn get(&self) -> Pair {
         return self.pair;
-    }
-
-    fn get_mut(&mut self) -> &mut Pair {
-        return &mut self.pair;
     }
 }
 
@@ -40,11 +41,11 @@ export fn run() {
     let mut b = Box { pair: Pair { a: 1, s: [] } };
     b.get().a = 1001;
     Pair { a: 1, s: [] }.a = 2;
-    b.get_mut().a = 1001;
+    Box::DEFAULT_PAIR.a = 2;
 }
 
 __DATA__
 {
     "compile_error": "cannot assign into a temporary",
-    "compile_error_count": 6
+    "compile_error_count": 7
 }

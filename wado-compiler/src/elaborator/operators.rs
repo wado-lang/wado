@@ -1594,8 +1594,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .is_some_and(|stop| {
                 !self.is_reference_expr(stop)
-                    && !matches!(stop, ast::Expr::Ident(_) | ast::Expr::Error(_))
-                    && !matches!(stop, ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref)
+                    && match stop {
+                        // A name holds storage where it resolved to a variable;
+                        // a constant's value is a temporary.
+                        ast::Expr::Ident(id) => self.assign_place_of(id.id).is_none(),
+                        ast::Expr::Unary(u) => u.op != ast::UnaryOp::Deref,
+                        ast::Expr::Error(_) => false,
+                        _ => true,
+                    }
             })
     }
 
