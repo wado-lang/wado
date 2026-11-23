@@ -18,6 +18,7 @@ use {
     alt_has_gate,
     alt_meets_gate,
     alt_scan_gate_conditions,
+    GateCond,
     gate_condition_for,
     predicates_met_entering,
 } from "./gate_conditions.wado";
@@ -98,35 +99,6 @@ pub struct EmitCursor {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32> = [],
-}
-
-/// A rendered predicate condition and the generated fn it calls, if any.
-/// Rendering stays pure; the text is handed out only through
-/// `EmitCursor::take_cond`, which records the call, so `prune` keeps the fn of
-/// every condition written and drops the rest.
-pub struct GateCond {
-    text: String,
-    calls: Option<String>,
-}
-
-impl GateCond {
-    /// A condition calling no generated fn.
-    pub fn new(text: String) -> GateCond {
-        return GateCond { text, calls: null };
-    }
-
-    /// A condition calling the generated fn `name`.
-    pub fn calling(name: String, text: String) -> GateCond {
-        return GateCond { text, calls: Option::Some(name) };
-    }
-
-    /// The text of a scan's condition, which renders against the scan's own
-    /// handle and so calls no parser fn.
-    pub fn scan_text(&self) -> String
-        contract self.calls matches { null }, "a scan condition calls no generated fn"
-    {
-        return self.text;
-    }
 }
 
 impl EmitCursor {
@@ -282,10 +254,7 @@ impl EmitCursor {
 
     /// The text of `cond`, the fn it calls recorded as `note_ref` records one.
     pub fn take_cond(&mut self, cond: GateCond) -> String {
-        if let Some(name) = &cond.calls {
-            self.note_ref(name);
-        }
-        return cond.text;
+        return cond.text_noting(|name| self.note_ref(name));
     }
 
     pub fn next_scan_id(&mut self) -> i32 {
