@@ -502,7 +502,9 @@ pub(crate) mod fixture {
     pub(crate) fn write_manifest(dir: &Path, section: &str) {
         fs::write(
             dir.join("wado.toml"),
-            format!("[package]\nnamespace = \"acme\"\nname = \"p\"\nversion = \"0.0.0\"\n\n{section}"),
+            format!(
+                "[package]\nnamespace = \"acme\"\nname = \"p\"\nversion = \"0.0.0\"\n\n{section}"
+            ),
         )
         .unwrap();
     }

@@ -61,7 +61,14 @@ fn test_init_force_overwrites() {
     .unwrap();
 
     wado_in(tmp.path())
-        .args(["init", "--name", "new-app", "--namespace", "myorg", "--force"])
+        .args([
+            "init",
+            "--name",
+            "new-app",
+            "--namespace",
+            "myorg",
+            "--force",
+        ])
         .assert()
         .success()
         .stderr(predicate::str::contains("Created wado.toml"));

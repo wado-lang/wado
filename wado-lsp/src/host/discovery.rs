@@ -419,17 +419,19 @@ pub fn keyed_lib_entry(
     let Some(coordinate) = wado_manifest::dependency::key_coordinate(key) else {
         return Ok(entry);
     };
-    match package {
-        None => Err(format!(
+    let Some(package) = package else {
+        return Err(format!(
             "the dependency key `{key}` names a single file, which has no coordinate; \
              name it with a `lib:` key"
-        )),
-        Some(package) if package.unversioned_coordinate() != coordinate => Err(format!(
-            "the dependency key `{key}` names a package whose coordinate is `{}`",
-            package.unversioned_coordinate()
-        )),
-        Some(_) => Ok(entry),
+        ));
+    };
+    let declared = package.unversioned_coordinate();
+    if declared != coordinate {
+        return Err(format!(
+            "the dependency key `{key}` names a package whose coordinate is `{declared}`"
+        ));
     }
+    Ok(entry)
 }
 
 /// The entry module of a source dependency, and its `[package]`: `None` for a
@@ -451,14 +453,18 @@ fn package_lib(
     // member force-inherits `version` and fails a standalone parse.
     let manifest = resolve_member_manifest(dep_path, &text, files)
         .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
-    let package = manifest.package.filter(|p| p.lib.is_some()).ok_or_else(|| {
-        format!(
-            "{} declares no [package].lib entry",
-            manifest_path.display()
-        )
-    })?;
-    let entry = dep_path.join(package.lib.as_ref().expect("filtered on `lib`"));
-    Ok((entry, Some(package)))
+    let entry = manifest
+        .package
+        .as_ref()
+        .and_then(|p| p.lib.as_ref())
+        .map(|lib| dep_path.join(lib))
+        .ok_or_else(|| {
+            format!(
+                "{} declares no [package].lib entry",
+                manifest_path.display()
+            )
+        })?;
+    Ok((entry, manifest.package))
 }
 
 /// The root and manifest of the package whose `[package].lib` is `entry`, a

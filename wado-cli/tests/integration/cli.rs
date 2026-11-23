@@ -1986,8 +1986,11 @@ fn test_test_reruns_a_passed_file_once_a_transitive_path_dependency_names_anothe
     let tmp = tempfile::tempdir().unwrap();
     let greet = tmp.path().join("greet");
     std::fs::create_dir_all(&greet).unwrap();
-    let manifest =
-        |lib: &str| format!("[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n");
+    let manifest = |lib: &str| {
+        format!(
+            "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n"
+        )
+    };
     std::fs::write(greet.join("wado.toml"), manifest("a.wado")).unwrap();
     std::fs::write(greet.join("a.wado"), "pub fn n() -> i32 { return 1; }\n").unwrap();
     std::fs::write(greet.join("b.wado"), "pub fn n() -> i32 { return 2; }\n").unwrap();

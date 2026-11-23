@@ -1443,13 +1443,20 @@ fn compatibility_key(coordinate: &str) -> String {
     let (name, version) = coordinate
         .split_once('@')
         .expect("a package's coordinate carries its version");
-    let release = version.split(['-', '+']).next().unwrap_or(version);
-    let parts: Vec<&str> = release.split('.').collect();
-    let significant = parts
-        .iter()
-        .position(|part| *part != "0")
-        .map_or(parts.len(), |i| i + 1);
-    format!("{name}@{}", parts[..significant].join("."))
+    let version =
+        semver::Version::parse(version).expect("a manifest's version is validated as semver");
+    match version {
+        semver::Version {
+            major: 0,
+            minor: 0,
+            patch,
+            ..
+        } => format!("{name}@0.0.{patch}"),
+        semver::Version {
+            major: 0, minor, ..
+        } => format!("{name}@0.{minor}"),
+        semver::Version { major, .. } => format!("{name}@{major}"),
+    }
 }
 
 /// How many leading directory components `path` and `root` share. Comparing

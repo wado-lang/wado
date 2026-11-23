@@ -563,9 +563,11 @@ default = "https://wa.dev"
 
     fn leaf_info(name: &str, version: &str, integrity: &str) -> RegistryPackageInfo {
         RegistryPackageInfo {
-            manifest: format!("[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"{version}\"\n")
-                .parse()
-                .unwrap(),
+            manifest: format!(
+                "[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"{version}\"\n"
+            )
+            .parse()
+            .unwrap(),
             integrity: integrity.to_string(),
         }
     }

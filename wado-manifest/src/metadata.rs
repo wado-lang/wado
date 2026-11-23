@@ -273,7 +273,9 @@ license-file = "LICENSE-COMMERCIAL"
 
     #[test]
     fn spdx_license_has_no_license_text_section() {
-        let pkg = package("[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\n");
+        let pkg = package(
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\n",
+        );
         // Even if text is (spuriously) supplied, an SPDX license embeds no text.
         let sections = metadata_sections(&pkg, None, Some("should be ignored"));
         assert_eq!(value_of(&sections, "licenses"), Some("MIT"));

@@ -725,7 +725,9 @@ fn an_exported_file_of_a_package_reached_by_a_path_is_named_by_its_package() {
         .args(["dump", "--modules", "src/lib.wado"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\n  acme:b@0.1.0/src/sub/x.wado\n"));
+        .stdout(predicate::str::contains(
+            "\n  acme:b@0.1.0/src/sub/x.wado\n",
+        ));
 }
 
 /// A single-file dependency reached by its name and by a path is one module,

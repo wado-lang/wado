@@ -99,7 +99,10 @@ pub fn key_coordinate(key: &str) -> Option<&str> {
     if namespace == "lib" {
         return None;
     }
-    Some(key.split_once('@').map_or(key, |(coordinate, _)| coordinate))
+    Some(
+        key.split_once('@')
+            .map_or(key, |(coordinate, _)| coordinate),
+    )
 }
 
 /// The lock id a registry dependency pins under. One implementation, so a pin

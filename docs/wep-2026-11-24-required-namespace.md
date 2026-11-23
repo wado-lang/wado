@@ -17,7 +17,7 @@ and the rules around packages grew a second case for it:
 
 The namespace was optional so that a package nobody publishes did not have to
 pick one. `publish = false` already says that, so the optional namespace bought
-nothing the second case did not cost.
+nothing, and cost a second case in each rule above.
 
 With the second case gone, a coordinate key still trusted its source: nothing
 checked that `"acme:geo" = { path = "../geo" }` reaches `acme:geo`, and two
@@ -74,11 +74,11 @@ A `lib:` key that only shortened a sibling's coordinate (`"lib:gale"` for
 ## Roadmap
 
 1. [x] `wado-manifest` refuses a `[package]` with no `namespace`, and
-       `wado init` requires `--namespace`.
+   `wado init` requires `--namespace`.
 2. [x] Every manifest in this repository declares a namespace or inherits one.
 3. [x] A coordinate key is checked against the `[package]` its source holds,
-       and a single file under one is refused.
+   and a single file under one is refused.
 4. [x] A second directory claiming a package already held is refused at the
-       `use` that reaches it.
+   `use` that reaches it.
 5. [x] This repository's manifests and `use`s name sibling packages by
-       coordinate.
+   coordinate.
