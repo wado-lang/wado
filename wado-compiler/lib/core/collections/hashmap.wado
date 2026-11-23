@@ -599,7 +599,7 @@ impl<K: Hash + Deserialize + Inspect, V: Deserialize> Deserialize for HashMap<K,
 impl<K: Hash + Inspect, V> HashMap<K, V> {
     /// Inserts a decoded entry: a repeated key is reported under `policy`,
     /// and one the policy admits takes the last value.
-    fn insert_decoded(&mut self, policy: DuplicateFieldPolicy, key: K, value: V) -> Result<(), DeserializeError> {
+    internal fn insert_decoded(&mut self, policy: DuplicateFieldPolicy, key: K, value: V) -> Result<(), DeserializeError> {
         // The losing insert keeps the first value, so a repeat re-assigns.
         if !self.try_insert(key, value) {
             report_duplicate_field(policy, &key)?;
