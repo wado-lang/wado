@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795449620403,
+  "lastUpdate": 1795475108421,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81721,6 +81721,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f1ed234bf721d8fb73d7b2c4265be311bb0e4be8"
         },
         "date": 1795449619559,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a86a017b1ef94393624ad7b41d2bfb2a921e583c",
+          "message": "Merge pull request #2742 from wado-lang/gfx/value-copy-struct-field-through-ref\n\nrefactor(value-copy): decide every pattern part's reference-ness from its holder's type",
+          "timestamp": "2026-11-24T07:47:17+09:00",
+          "tree_id": "ec11c733b9291cf4a4a5bc0d58bfca2d2de376da",
+          "url": "https://github.com/wado-lang/wado/commit/a86a017b1ef94393624ad7b41d2bfb2a921e583c"
+        },
+        "date": 1795475107518,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
