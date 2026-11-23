@@ -462,7 +462,7 @@ impl<'a> Resolver<'a> {
                 let field_types = self
                     .type_table
                     .struct_field_types(owner)
-                    .expect("a struct pattern matches a struct of known fields");
+                    .expect("a struct pattern matches a registered struct");
                 for field in fields {
                     let nested = match base {
                         Names::Place(place) => {

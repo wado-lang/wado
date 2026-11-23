@@ -27,8 +27,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-    BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
-    TypeId, TypeParamId,
+    BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
+    TypeParamId,
 };
 use crate::type_table::{TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
@@ -345,10 +345,8 @@ pub(super) fn register_type_templates(flat: &FlatPackage) {
         type_table.register_variant_cases(variant.def, cases);
     }
     for s in &flat.structs {
-        if let StructDef::Decl(def) = s.def {
-            let fields = s.fields.iter().map(|f| f.type_id).collect();
-            type_table.register_struct_fields(def, s.type_args.clone(), fields);
-        }
+        let fields = s.fields.iter().map(|f| f.type_id).collect();
+        type_table.register_struct_fields(s.def, s.type_args.clone(), fields);
     }
 }
 
