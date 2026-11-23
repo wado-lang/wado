@@ -3756,6 +3756,22 @@ WS : ' ' -> skip ;
     assert parses(grammar, "s", ["a", "b a"]) == "a => (s (x a))\nb a => (s (x b a))\n";
 }
 
+test "a tournament whose scan checks the gate keeps no predicate fn" {
+    // The scan answers `{true}?` against its own handle, so the tournament
+    // writes the bare scan call and nothing calls `pred_<id>`.
+    let grammar = "grammar T;
+options { language = Wado; }
+s : r EOF ;
+r : {true}? a | a B ;
+a : A+ ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+    assert count_occurrences(&longest_source(grammar), "fn pred_") == 0;
+    assert parses(grammar, "s", ["a a", "a b"], &LONGEST) == "a a => (s (r (a a a)))\na b => (s (r (a a) b))\n";
+}
+
 test "a predicate fn keeps the line break that ends its body's comment" {
     let grammar = "grammar T;
 options { language = Wado; }
