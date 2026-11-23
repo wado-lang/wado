@@ -2916,7 +2916,7 @@ global NO_SCAN_GATE_COND: String = "";
 global NO_CONT_DONE: String = "";
 
 /// Score a gated alternative as no match where the scan's copy of the members
-/// says it does not exist. The parse side's twin is the `alt_initial_gate`
+/// says it does not exist. The parse side's twin is the `tournament_gate`
 /// guard on the tournament; both have to be present or the measurement and the
 /// parse disagree about which alternatives are in the running.
 fn gen_scan_gate_check<S: AsStrSlice, S1: AsStrSlice>(
@@ -8954,16 +8954,12 @@ fn emit_scan_tournament_winner<S: AsStrSlice>(
         // here, where the parser is in scope, and score a refused alternative as
         // no match — otherwise the tournament picks by length an alternative the
         // parse then refuses outright.
-        let Some(gate) = alt_initial_gate(idx, ctx) else {
+        let Some(gate) = tournament_gate(idx, ctx) else {
             w.call(scan);
             continue;
         };
-        if alt_scan_checks_gate(idx, ctx) {
-            w.call(scan);
-        } else {
-            ctx.cursor.note_ref(&scan.callee);
-            w.line(`let _sd_p_${idx} = if ${gate} { ${scan.callee}(${scan.args.join(", ")}) } else { -1 };`);
-        }
+        ctx.cursor.note_ref(&scan.callee);
+        w.line(`let _sd_p_${idx} = if ${gate} { ${scan.callee}(${scan.args.join(", ")}) } else { -1 };`);
     }
     if fallback >= 0 {
         assert !others.is_empty(), "a tournament has a candidate besides its fallback";
@@ -9046,15 +9042,19 @@ fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut E
     return true;
 }
 
-/// The gate the current rule's alternative `idx` carries, or `null` where it
-/// carries none. Registering it emits the `pred_<id>` fn the condition names,
-/// which is why this asks `alt_has_gate` first rather than registering
-/// speculatively.
-fn alt_initial_gate(idx: i32, ctx: &mut EmitContext) -> Option<String> {
+/// The gate the tournament tests before alternative `idx`'s scan, or `null`
+/// where the scan call stands alone: the alternative has no gate, or its scan
+/// checks the gate itself. Either way its predicate is marked gated, so the
+/// body drops its inline guard; only a gate the tournament writes is rendered.
+fn tournament_gate(idx: i32, ctx: &mut EmitContext) -> Option<String> {
     let rule = ctx.current_rule();
-    assert idx >= 0 && idx < rule.alternatives.len(), "alt_initial_gate: a tournament candidate is an alternative of the rule it belongs to";
+    assert idx >= 0 && idx < rule.alternatives.len(), "tournament_gate: a tournament candidate is an alternative of the rule it belongs to";
     let alt = &rule.alternatives[idx];
     if !ctx.alt_has_gate(alt) {
+        return null;
+    }
+    if alt_scan_checks_gate(idx, ctx) {
+        mark_alt_gate_answered(alt, ctx);
         return null;
     }
     return Option::Some(alt_gate_condition(alt, ctx));
@@ -9419,7 +9419,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
 }
 
 /// An alternative's gate as `side` evaluates it, or "" where it has none that
-/// side can. The parse's registers the predicate its condition names.
+/// side can. The parse's marks the predicate its condition names gated.
 fn side_gate(side: PickSide, alt: &Alternative, ctx: &mut EmitContext) -> String {
     return match side {
         _::Parse => alt_gate_condition(alt, ctx),

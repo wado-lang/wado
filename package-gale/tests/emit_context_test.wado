@@ -5,7 +5,7 @@ use { GenSettings } from "../src/gen_settings.wado";
 use { RuleFollow } from "../src/follow_env.wado";
 use { TableRegistry } from "../src/table_registry.wado";
 use { ParserPlan } from "../src/parser_plan.wado";
-use { decision_predicates } from "../src/gate_conditions.wado";
+use { GateCond, decision_predicates } from "../src/gate_conditions.wado";
 use { Diagnostics, admits_is_untestable, admits_or_everything, admits_or_untestable } from "../src/gir.wado";
 use { readings_of_position } from "../src/readings.wado";
 
@@ -127,6 +127,20 @@ test "a table reference belongs to the innermost function frame, else to the roo
     assert outer.len() == 0;
     let root = ctx.cursor.take_root_refs();
     assert root.contains("FOLLOW_SITE_0") && root.len() == 1;
+}
+
+test "taking a condition records the fn it calls in the function being emitted" {
+    let mut ctx = mk_ctx();
+    ctx.cursor.begin_ref_frame();
+    assert ctx.cursor.take_cond(GateCond::calling("pred_3", "pred_3(p)")) == "pred_3(p)";
+    assert ctx.cursor.take_cond(GateCond::new("p.ok")) == "p.ok";
+    let refs = ctx.cursor.end_ref_frame();
+    assert refs.contains("pred_3") && refs.len() == 1;
+}
+
+#[expect_trap]
+test "a condition calling a parser fn has no scan text" {
+    GateCond::calling("pred_3", "pred_3(p)").scan_text();
 }
 
 test "kind_negate_check_str: single token uses '!='" {

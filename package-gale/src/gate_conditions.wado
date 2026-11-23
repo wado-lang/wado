@@ -16,6 +16,43 @@ use { SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from 
 use { translate_predicate } from "./java2wado.wado";
 use { alt_is_left_recursive, rule_is_left_recursive } from "./lr_util.wado";
 
+/// A rendered predicate condition and the generated fn it calls, if any.
+/// Rendering stays pure; emit takes the text through `EmitCursor::take_cond`,
+/// which records the call, so `prune` keeps the fn of every condition written
+/// and drops the rest.
+pub struct GateCond {
+    text: String,
+    calls: Option<String>,
+}
+
+impl GateCond {
+    /// A condition calling no generated fn.
+    pub fn new(text: String) -> GateCond {
+        return GateCond { text, calls: null };
+    }
+
+    /// A condition calling the generated fn `name`.
+    pub fn calling(name: String, text: String) -> GateCond {
+        return GateCond { text, calls: Option::Some(name) };
+    }
+
+    /// The text, handing `note` the fn it calls.
+    pub fn text_noting(&self, mut note: fn mut(&String)) -> String {
+        if let Some(name) = &self.calls {
+            note(name);
+        }
+        return self.text;
+    }
+
+    /// The text of a scan's condition, which renders against the scan's own
+    /// handle and so calls no parser fn.
+    pub fn scan_text(&self) -> String
+        contract self.calls matches { null }, "a scan condition calls no generated fn"
+    {
+        return self.text;
+    }
+}
+
 /// Where a predicate's condition is rendered: the rule whose environment it
 /// translates in, whether that rule's value channel is in scope, and the
 /// alternative's bindings.
@@ -50,7 +87,7 @@ pub fn gate_condition_for(
     analysis: &GrammarAnalysis,
     site: &PredicateSite,
     handle: &String = &PARSER_HANDLE,
-) -> Option<String>
+) -> Option<GateCond>
     contract a.before_index == 0
 {
     return predicate_condition_for(a, settings, analysis, site, handle);
@@ -63,19 +100,16 @@ pub fn predicate_condition_for(
     analysis: &GrammarAnalysis,
     site: &PredicateSite,
     handle: &String = &PARSER_HANDLE,
-) -> Option<String> {
-    if a.kind matches { _::Action } {
+) -> Option<GateCond> {
+    if a.kind matches { _::Action } || body_names_unwired_base(&a.source.text, settings) {
         return null;
     }
-    if body_names_unwired_base(&a.source.text, settings) {
-        return null;
-    }
-    if body_needs_no_translator(&a.source.text, settings) && *handle == PARSER_HANDLE {
-        // Extracted to a standalone `pred_<id>(p)` fn (`gen_predicate_fns`), so
-        // the dispatch calls it rather than inlining the condition. Only for the
-        // parser: the fn takes one, and a scan has none. A scan asks for its own
-        // handle and falls through to the translator, which renders against it.
-        return Option::Some(`${pred_fn_name(analysis.predicate_fn_id(a.source.action_id))}(p)`);
+    // Only the parser calls the fn: it takes one, and a scan has none. A scan
+    // asks for its own handle and falls through to the translator, which
+    // renders against it.
+    if *handle == PARSER_HANDLE && predicate_is_fn(a, settings) {
+        let name = pred_fn_name(analysis.predicate_fn_id(a.source.action_id));
+        return Option::Some(GateCond::calling(name, `${name}(p)`));
     }
     let rules = analysis.parser_rules();
     let rule = &rules[site.rule_index];
@@ -90,9 +124,18 @@ pub fn predicate_condition_for(
         &settings.action_members,
         handle,
     ) {
-        Ok(code) => Option::Some(code),
+        Ok(code) => Option::Some(GateCond::new(code)),
         Err(_) => null,
     };
+}
+
+/// Whether the parser evaluates predicate `a` by calling its `pred_<id>` fn
+/// (`gen_predicate_fns`): a body already Wado, which every copy shares
+/// verbatim, rather than one translated per site.
+pub fn predicate_is_fn(a: &AltAction, settings: &GenSettings) -> bool {
+    return a.kind matches { _::Predicate }
+        && !body_names_unwired_base(&a.source.text, settings)
+        && body_needs_no_translator(&a.source.text, settings);
 }
 
 /// Whether `alt` carries an alt-initial predicate that will reach its emitted
@@ -858,7 +901,7 @@ pub fn scan_gate_condition_for(
     let Some(rendered) = predicate_condition_for(a, settings, analysis, &unlabelled, &SCAN_GATE_HANDLE) else {
         return null;
     };
-    let code = scan_gate_condition(&rendered, &settings.scan_gate_fields);
+    let code = scan_gate_condition(&rendered.scan_text(), &settings.scan_gate_fields);
     if !reads_only_scan_gate_fields(&code, &settings.scan_gate_fields) {
         return null;
     }
