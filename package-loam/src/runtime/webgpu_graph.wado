@@ -106,7 +106,7 @@ use {
 } from "./webgpu.wado";
 use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture, runs_by_picks } from "./experts.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
-use { HostExperts, HostProjection, expert_row } from "./cpu_experts.wado";
+use { HostExperts, HostProjection, computes_on_host, expert_row } from "./cpu_experts.wado";
 use { LinearArray } from "core:linear";
 
 /// A pass recorded once per shape class and planned into kernels, which each
@@ -322,12 +322,17 @@ impl Backend for WebGpuBackend {
         self.written_slot(on_device(pool).unwrap(), slot, &row);
     }
 
-    fn computes_misses(&self) -> bool {
-        return true;
+    fn computes_misses(&self, quantized: &Quantized) -> bool {
+        return computes_on_host(quantized);
     }
 
     fn held_on_host(&mut self, pool: &Any<WebGpuBackend>, step: i32, experts: HostWeight) {
-        self.host_expert_at[host_expert_key(on_device(pool).unwrap(), step)] = self.host_experts.len();
+        let key = host_expert_key(on_device(pool).unwrap(), step);
+        if let Some(at) = self.host_expert_at.get(key) {
+            self.host_experts[at] = HostExperts::of(&experts);
+            return;
+        }
+        self.host_expert_at[key] = self.host_experts.len();
         self.host_experts.push(HostExperts::of(&experts));
     }
 

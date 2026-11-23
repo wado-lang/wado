@@ -1,0 +1,15 @@
+// A `#[cm]` operation lends a list only as a parameter of its own; inside an
+// `Option` the view is a reference to no resource.
+use { ListView } from "core:linear";
+
+interface Sink {
+    #[cm("wasi:demo/sink@0.1.0#put")]
+    fn put(bytes: Option<&ListView<u8>>) -> u32;
+}
+
+export fn run() with Sink {
+    let _ = Sink::put(null);
+}
+
+__DATA__
+{"compile_error": "import function `put`: a reference crosses a Component Model import only as a borrowed resource handle, and `&ListView<u8>` refers to no resource"}

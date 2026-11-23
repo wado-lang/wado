@@ -1055,11 +1055,23 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
             } else {
                 op.return_type
             };
-            // A closure crosses as an extern handle; the elaborator checked its shape.
-            let values = op
-                .params
-                .iter()
-                .filter(|p| !matches!(tt.get(p.type_id), ResolvedType::Function { .. }));
+            // A closure crosses as an extern handle; the elaborator checked its
+            // shape. A synchronous operation's `&ListView<T>` parameter crosses
+            // as the `list<T>` it lends, which a `T` with a list's
+            // representation has.
+            let mut lent = Vec::new();
+            let values = op.params.iter().filter(|p| {
+                if matches!(tt.get(p.type_id), ResolvedType::Function { .. }) {
+                    return false;
+                }
+                if !op.is_async
+                    && let Some(element) = tt.list_view_ref_element(p.type_id)
+                {
+                    lent.push((element, p.span));
+                    return false;
+                }
+                true
+            });
             signature_representable(
                 values,
                 (result, op.span),
@@ -1070,6 +1082,19 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
             .map_err(|(reason, span)| {
                 SynthesisError::at(span, format!("import function `{}`: {reason}", op.name))
             })?;
+            for (element, span) in lent {
+                types::check_cm_boundary_representable(
+                    element,
+                    Slot::Value,
+                    Boundary::Import,
+                    &tt,
+                    &project.tir_modules,
+                    &mut Vec::new(),
+                )
+                .map_err(|reason| {
+                    SynthesisError::at(span, format!("import function `{}`: {reason}", op.name))
+                })?;
+            }
         }
     }
     Ok(())

@@ -587,10 +587,11 @@ fn emit_expert_layouts(w: &mut CodeWriter, graph: &Graph, checked: &Checked, kep
         }
         let steps: List<String> = group.steps.into_iter().map(|s| `${s}`).collect();
         let x = static_extents(&checked.shapes[group.pools()[0]]).unwrap()[0];
+        let q = &group.quantized;
         layouts.push(
             `ExpertLayout { weights: [${pools.join(", ")}], layers: [${layers.join(", ")}], steps: [${steps.join(
                 ", ",
-            )}], experts: ${x} }`,
+            )}], experts: ${x}, quantized: Quantized { bits: ${q.bits}, block: ${q.block} } }`,
         );
     }
     w.blank();

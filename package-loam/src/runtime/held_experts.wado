@@ -6,7 +6,7 @@
 use { HashMap } from "core:collections";
 use { LoadError, WeightSource } from "./checkpoint.wado";
 use { Picked, Pool, Tokens } from "./experts.wado";
-use { Backend, One } from "./hlo.wado";
+use { Backend, One, Quantized } from "./hlo.wado";
 use { Any, Untyped, typed } from "./recorded.wado";
 use { ElementKind, Tensor } from "./tensor.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
@@ -45,6 +45,8 @@ pub struct ExpertLayout {
     pub steps: List<i32>,
     /// The experts of one layer.
     pub experts: i32,
+    /// How the layers quantize their expert weights.
+    pub quantized: Quantized,
 }
 
 impl ExpertLayout {
@@ -535,7 +537,7 @@ impl HeldExperts {
                 if !run.shared() {
                     let experts: List<i32> = (0..<layout.experts).collect();
                     written(g, source, &layout.layers[run.first], &experts, &experts, &mut pools);
-                } else if g.computes_misses() {
+                } else if g.computes_misses(&layout.quantized) {
                     for let layer of run.first..<run.first + run.count {
                         held_on_host(g, source, &layout.layers[layer], layout.experts, layout.steps[layer], &pools);
                     }
@@ -585,8 +587,10 @@ impl HeldExperts {
         let mut slot_of = List::<i64>::filled(experts, -1);
         let slot_bytes = layout.slot_bytes();
         let first = shared.run.first;
-        let from_host = g.computes_misses();
-        let most_filled = if from_host && picks.extents[0] == 1 { self.step_fills } else { experts };
+        let from_host = g.computes_misses(&layout.quantized);
+        // Only a mixture that runs by picks reads a slot of -1, as `runs_by_picks` decides.
+        let by_picks = picks.extents[0] == 1 && picks.extents[1] < experts;
+        let most_filled = if from_host && by_picks { self.step_fills } else { experts };
         let mut pools: List<Any<G>> = layout.weights[first].into_iter().map(|p| weights[p]).collect();
         let placed = shared.slots.placed(layer - first, &picked, |_| unreachable(), most_filled);
         let mut loading: List<i32> = [];
