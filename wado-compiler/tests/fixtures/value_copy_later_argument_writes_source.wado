@@ -5,8 +5,8 @@
 // spot, an assignment, a `&mut` some local or struct keeps, a closure that
 // captured the value, a second reference parameter naming the same storage, a
 // reference into a list's element, a `&mut` a global keeps, a global, or a
-// reference an `if` picks from either arm, and whether the argument is a local,
-// a global, or a call handing back part of one.
+// reference an `if` picks from either arm, written to or handed to a call, and
+// whether the argument is a local, a global, or a call handing back part of one.
 
 struct Pair {
     a: i32,
@@ -132,6 +132,8 @@ export fn run() {
     let into_o = Holder { w: &mut o };
     assert two(s, then: { (if !c { into_o.w } else { into_s.w }).a = 1001; s }) == 1011;
     assert two(s, then: { (if c { into_s.w } else { into_o.w }).a = 2001; s }) == 12011;
+    assert two(UNHELD, then: { (if c { &mut UNHELD } else { picked.w }).a = 1001; UNHELD }) == 1001;
+    assert two(UNHELD, then: { bump_a(if c { &mut UNHELD } else { picked.w }); UNHELD }) == 12011;
 }
 
 __DATA__

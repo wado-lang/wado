@@ -41,6 +41,12 @@ test {
 }
 ```
 
+A write must land in storage a variable holds, directly or through a
+reference. A by-value call's result, or any other value no variable holds, is a
+temporary: a write into it would be discarded with it, so it is a compile error.
+`get().a = 1` is refused; `get_mut().a = 1` writes through the `&mut` that
+`get_mut` returns.
+
 These semantics are as-if. A program may rely on the value each expression
 denotes; it may not rely on the number of copies performed to produce it.
 
