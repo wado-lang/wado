@@ -2131,7 +2131,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_types = self.instantiate_types(param_types, inst);
         let decl_return_type = self.instantiate_type(decl_return_type, inst);
 
-        let (mut inferred, _) = self.solve_call_type_args(CallSolve {
+        let mut inferred = self.solve_call_in_context(CallSolve {
             slots: &inst.vars,
             param_types: &param_types,
             args,

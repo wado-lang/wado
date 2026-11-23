@@ -21,11 +21,10 @@ use crate::tir::{
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::call::{ArgSite, CaseSite, InheritedStatic, SigChoice, bind_nearer};
+use super::call::{ArgSite, CallSolve, CaseSite, InheritedStatic, SigChoice, bind_nearer};
 use super::callee::StaticMethodRef;
-use super::coercion::{ExpectedReturn, answers_last};
+use super::coercion::ExpectedReturn;
 use super::expr::IndexAccess;
-use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::pending_selection::{DispatchSite, PendingCall};
@@ -977,32 +976,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inst = inst
                 .as_ref()
                 .expect("a method with slots instantiates them");
-            // The call's own variables, which the turbofish and the expected
-            // type have met. One still open takes what the arguments solve it
-            // to at the base, which a newtype receiver's arguments meet.
-            let mut infer = InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
+            // The arguments meet the parameters at the base, which a newtype
+            // receiver's arguments meet.
+            let param_types = self.instantiate_types(&solve_params, inst);
             let solve_args = InheritedFrame::solved_at(inherited, &self.tysys, &args);
-            for (i, (&param_type, &arg)) in solve_params.iter().zip(solve_args.iter()).enumerate() {
-                if answers_last(args_ast.get(i)) {
-                    infer.add_deferred(param_type, arg);
-                } else {
-                    infer.add(param_type, arg);
-                }
-            }
-            let solved = infer.solve();
-            let mut known: Vec<TypeId> = inst
-                .vars
-                .iter()
-                .zip(solved)
-                .map(|(&var, solved)| {
-                    let answer = self.apply_infer_holes(var);
-                    if self.tysys.type_table.borrow().is_infer_var(answer) {
-                        solved
-                    } else {
-                        answer
-                    }
-                })
-                .collect();
+            let mut known = self.solve_call_in_context(CallSolve {
+                slots: &inst.vars,
+                param_types: &param_types,
+                args: &solve_args,
+                raw_args: args_ast,
+                ret: None,
+            });
             // Instantiation leaves a pack rigid, so one the arguments did not
             // reach is one the call left nothing over for.
             let reached = self
@@ -2967,6 +2951,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &at_base,
                     expected_at_base,
                     static_call.span,
+                    None,
                 )
                 .0
             });

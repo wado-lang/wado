@@ -2837,7 +2837,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether filling `params` with `type_args` owes anything: a trait bound
-    /// to meet, or an affine argument for a parameter not declared `affine`.
+    /// to meet, or an argument that is or may yet be affine for a parameter
+    /// not declared `affine`.
     fn args_owe_anything<'p>(
         &self,
         params: impl IntoIterator<Item = &'p ast::GenericParam>,
@@ -2846,7 +2847,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let affine_params = self.annotate_ctx.trait_ctx.affine_params();
         params.into_iter().zip(type_args).any(|(p, &arg)| {
             p.bounds.iter().any(ast::TraitBound::names_a_trait)
-                || (!p.is_affine && self.tysys.is_affine(arg, &affine_params))
+                || (!p.is_affine
+                    && (self.tysys.type_table.borrow().contains_infer_var(arg)
+                        || self.tysys.is_affine(arg, &affine_params)))
         })
     }
 
@@ -2983,10 +2986,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .solver()
                 .is_rigid(&self.tysys, &self.annotate_ctx, type_arg);
             // An element of an enclosing pack is no one type, yet its kind is
-            // its pack's: only a hole leaves the kind open.
-            if !param.is_affine
-                && (rigid || !self.tysys.type_table.borrow().contains_infer_var(type_arg))
-            {
+            // its pack's: only a hole leaves the kind open, until it settles.
+            let settled = rigid || !self.tysys.type_table.borrow().contains_infer_var(type_arg);
+            if !param.is_affine && !settled {
+                self.infer_holes.require(Obligation::Copyable {
+                    ty: type_arg,
+                    param: param.name.clone(),
+                    span,
+                });
+            }
+            if !param.is_affine && settled {
                 let affine_params = self.annotate_ctx.trait_ctx.affine_params();
                 if let Some(&affine) = subjects
                     .iter()

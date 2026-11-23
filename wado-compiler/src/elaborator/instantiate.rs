@@ -80,8 +80,7 @@ pub(super) struct Instantiation<'a> {
 /// A declaration's slots rewritten into one use site's variables.
 pub(super) struct Instantiated {
     /// What each slot became, in declaration order: a fresh variable, or the
-    /// slot itself where instantiation was declined. Feed this to
-    /// `InferCtx::new` so `solve` answers positionally.
+    /// slot itself where instantiation was declined.
     pub(super) vars: Vec<TypeId>,
     /// Rewrites a type written in the declaration's frame into this use site's
     /// variables. Apply with `TypeTable::substitute_type_params`.
@@ -91,6 +90,18 @@ pub(super) struct Instantiated {
     /// use site commits. `None` marks a slot that cannot go unanswered: one left
     /// rigid, or one the turbofish named.
     diags: Vec<Option<(Span, String, String)>>,
+    /// The associated-type equalities the slots' bounds state, linked once the
+    /// arguments other than literals have met their slots.
+    pub(super) links: Option<SlotLinks>,
+}
+
+/// What [`Elaborator::link_deferred_assoc_equalities`] reads of a call's slots.
+#[derive(Clone)]
+pub(super) struct SlotLinks {
+    pub(super) owners: Vec<GenericParam>,
+    pub(super) names: Vec<ParamRef>,
+    pub(super) self_binding: Option<SelfBinding>,
+    pub(super) span: Span,
 }
 
 impl Instantiated {
@@ -103,6 +114,7 @@ impl Instantiated {
             vars,
             subst: TypeArgMap::default(),
             diags,
+            links: None,
         }
     }
 }
@@ -176,7 +188,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             diags.push(Some((of.span, name, owner)));
         }
-        Instantiated { vars, subst, diags }
+        Instantiated {
+            vars,
+            subst,
+            diags,
+            links: None,
+        }
     }
 
     /// Rewrite a type written in a declaration's frame into `inst`'s variables.
@@ -300,16 +317,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let args = self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
             return (args, None);
         }
-        let inst = self.instantiate(slots, of);
+        let mut inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.impl_args, of.span);
-        let names = slot_names(own_params, &self.tysys.resolutions);
-        self.link_deferred_assoc_equalities(
-            own_params,
-            &names,
-            &inst.vars,
-            of.self_binding,
-            of.span,
-        );
+        inst.links = Some(SlotLinks {
+            owners: own_params.to_vec(),
+            names: slot_names(own_params, &self.tysys.resolutions),
+            self_binding: of.self_binding,
+            span: of.span,
+        });
         let param_types = self.instantiate_types(param_types, &inst);
         let ret = ret.map(|ret| ExpectedReturn {
             declared: self.instantiate_type(ret.declared, &inst),

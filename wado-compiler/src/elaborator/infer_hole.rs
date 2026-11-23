@@ -15,7 +15,6 @@ use crate::type_table::TypeTable;
 use super::Elaborator;
 use super::call::assoc_target_slot;
 use super::infer::unify;
-use super::instantiate::InstanceKind;
 use super::pending_selection::{
     ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
 };
@@ -32,8 +31,7 @@ use crate::elaborator::sem::types::{
     LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch, SequenceCoercionFacts,
     StaticMethodDispatch,
 };
-use crate::elaborator::typecheck::{TypeMismatchPayload, meetings};
-use crate::elaborator::types::VariantInfo;
+use crate::elaborator::typecheck::{MeetRules, NeverMeets, TypeMismatchPayload, meetings};
 use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name, written_param_name};
 use crate::tir;
 
@@ -70,6 +68,9 @@ pub(crate) struct InferHoleTable {
     /// The unrolled tuple `for-of` element being walked, which a selection
     /// queued now is made into the facts of.
     pub(super) element_home: Option<ElementHome>,
+    /// Whether an equation is being settled, which asks the obligations once
+    /// it is.
+    equating: bool,
 }
 
 /// A question a variable left undecided. Asked again whenever a variable
@@ -85,6 +86,9 @@ pub(super) enum Obligation {
         bound: DeclaredBound,
         span: Span,
     },
+    /// `ty`, which a slot not declared `affine` was given, answers no affine
+    /// type once its variables settle.
+    Copyable { ty: TypeId, param: String, span: Span },
     /// An associated-type equality of a bound on a slot a variable fills.
     Projection(ProjectionLink),
     /// An impl a call committed to while its receiver held variables. Asked
@@ -171,6 +175,7 @@ impl InferHoleTable {
             .map(|o| match o {
                 Obligation::Pending(waiting) => waiting,
                 Obligation::Bound { .. }
+                | Obligation::Copyable { .. }
                 | Obligation::Projection(_)
                 | Obligation::Selection(_)
                 | Obligation::Check(_) => unreachable!("partitioned to the pending ones"),
@@ -482,6 +487,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.holds_class_of(link.target, var) && !self.holds_class_of(link.owner, var)
                 }
                 Obligation::Bound { .. }
+                | Obligation::Copyable { .. }
                 | Obligation::Selection(_)
                 | Obligation::Check(_)
                 | Obligation::Pending(_) => false,
@@ -699,11 +705,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether every variable `ty` names is still unanswered and reports
     /// itself if it stays so.
     pub(super) fn awaits_report(&self, tt: &TypeTable, ty: TypeId) -> bool {
+        let store = &self.infer_holes.vars;
         let vars = tt.infer_vars_in(ty);
         !vars.is_empty()
-            && vars.iter().all(|var| {
-                self.infer_holes.diags.contains_key(var)
-                    && self.infer_holes.vars.is_unanswered(*var)
+            && vars.iter().all(|&var| {
+                let class = store.root_of(var);
+                store.is_unanswered(var)
+                    && self
+                        .infer_holes
+                        .diags
+                        .keys()
+                        .any(|&reported| store.root_of(reported) == class)
             })
     }
 
@@ -743,56 +755,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Defer a variant constructor whose type arguments did not resolve here.
-    ///
-    /// `infer_variant_type_args` answers with the bare declaration type when
-    /// nothing pinned the parameters. That type has no case types registered,
-    /// so it dies in WIR build — yet a sibling field
-    /// (`Paired { v: Option::None, k: 1 }`), an annotation, or a later use can
-    /// still pin it. Mint a hole per parameter so a real sink may solve it and
-    /// `finalize_infer_holes` reports only what never was.
-    pub(super) fn defer_uninferable_variant(
-        &mut self,
-        type_id: TypeId,
-        variant_name: &str,
-        variant_info: &VariantInfo,
-        span: Span,
-    ) -> TypeId {
-        if variant_info.type_param_type_ids.is_empty() {
-            return type_id;
-        }
-        let is_bare_decl = self
-            .tysys
-            .type_table
-            .borrow()
-            .type_id_of_decl(variant_info.defined_at)
-            == type_id;
-        if !is_bare_decl {
-            return type_id;
-        }
-        let owner = InstanceKind::Variant.slot_owner(variant_name);
-        let holes: Vec<TypeId> = variant_info
-            .type_params
-            .iter()
-            .map(|param| self.mint_slot_hole(span, &param.name, &owner))
-            .collect();
-        assert_eq!(
-            holes.len(),
-            variant_info.type_param_type_ids.len(),
-            "a variant's parameters and their ids are one list"
-        );
-        {
-            let def = self
-                .tysys
-                .resolutions
-                .defs()
-                .def_at(variant_info.defined_at);
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_generic_instance(def, holes)
-        }
-    }
 
     /// Whether the type argument `t` is a slot nothing answers: a bare
     /// parameter or variable, neither one of the enclosing declaration's
@@ -858,7 +820,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         self.infer_holes.vars.answer_with(var, answer);
-        self.run_obligations();
+        if !self.infer_holes.equating {
+            self.run_obligations();
+        }
         true
     }
 
@@ -868,25 +832,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// variable too. A side naming a callee's own parameter binds nothing,
     /// since the callee's solve answers it.
     pub(super) fn equate(&mut self, actual: TypeId, expected: TypeId) {
+        self.equate_meeting(actual, expected, NeverMeets::Nothing);
+    }
+
+    /// [`Self::equate`], where a `!` in `actual` also answers the variable it
+    /// meets. A value of `!` fits any type, so a call reads it only once
+    /// everything else has had its say.
+    pub(super) fn equate_with_never(&mut self, actual: TypeId, expected: TypeId) {
+        self.equate_meeting(actual, expected, NeverMeets::Variables);
+    }
+
+    /// Settle every pair the two types meet at, then ask the obligations once:
+    /// an equation holds as a whole, so nothing it settles is read by an
+    /// obligation before the rest of it is.
+    fn equate_meeting(&mut self, actual: TypeId, expected: TypeId, never: NeverMeets) {
         if !self.type_has_infer_hole(actual) && !self.type_has_infer_hole(expected) {
             return;
         }
         let scope = self.scope_type_param_ids();
+        let [actual_bases, expected_bases] = [actual, expected].map(|written| {
+            let tt = self.tysys.type_table.borrow();
+            tt.assoc_type_projections(written)
+                .into_iter()
+                .filter_map(|projection| match tt.get(projection) {
+                    ResolvedType::AssocTypeProjection { param_id, .. } => Some(*param_id),
+                    _ => None,
+                })
+                .collect::<Vec<TypeId>>()
+        });
+        let outer = std::mem::replace(&mut self.infer_holes.equating, true);
         loop {
             let mut pairs = Vec::new();
             meetings(
                 self.apply_infer_holes(actual),
                 self.apply_infer_holes(expected),
                 &self.tysys.type_table.borrow(),
-                &|t| self.infer_holes.vars.is_pack(t),
+                MeetRules {
+                    is_pack: &|t| self.infer_holes.vars.is_pack(t),
+                    never,
+                    written_base: &|base| {
+                        actual_bases.contains(&base) && expected_bases.contains(&base)
+                    },
+                },
                 &mut pairs,
             );
             if !pairs
                 .into_iter()
                 .any(|(a, e)| self.settle_meeting(a, e, &scope))
             {
-                return;
+                break;
             }
+        }
+        self.infer_holes.equating = outer;
+        if !outer {
+            self.run_obligations();
         }
     }
 
@@ -1281,6 +1280,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 None
             }
+            Obligation::Copyable { ty, param, span } => {
+                let answer = self.apply_infer_holes(ty);
+                if !self.is_settled(answer) {
+                    return Some(Obligation::Copyable { ty, param, span });
+                }
+                // A forwarded parameter is checked where its owner is.
+                let parametric = self.tysys.type_table.borrow().contains_type_param(answer);
+                if !parametric && self.tysys.is_affine(answer, &[]) {
+                    let type_name = self.tysys.type_id_to_string(answer);
+                    let _ = self.emit(TypeError::AffineArgument {
+                        type_name,
+                        param_name: param,
+                        span,
+                    });
+                }
+                None
+            }
             Obligation::Projection(link) => {
                 (!self.settle_projection_link(&link)).then_some(Obligation::Projection(link))
             }
@@ -1419,7 +1435,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Obligation::Selection(commitment) => Some(commitment),
                 // An owner closed behind a report has no projection to give.
                 Obligation::Projection(_) => None,
-                Obligation::Bound { .. } | Obligation::Check(_) => {
+                Obligation::Bound { .. } | Obligation::Copyable { .. } | Obligation::Check(_) => {
                     unreachable!("a settled variable decides a bound or a check")
                 }
                 Obligation::Pending(_) => {

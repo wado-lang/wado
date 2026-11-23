@@ -259,8 +259,6 @@ pub(crate) struct VariantInfo {
     /// follow resources nested in variant case payloads.
     pub(crate) cases: Vec<VariantCaseData>,
     /// `TypeIds` of the variant's own type parameters in declaration order.
-    /// Used by `infer_variant_type_args` to fill type params from payload args
-    /// and expected type context.
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
 

@@ -327,20 +327,55 @@ fn check_at(
     TypeCheckResult::Compatible
 }
 
+/// Whether an actual `!` meets the variable it reaches.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum NeverMeets {
+    Nothing,
+    Variables,
+}
+
+/// What [`meetings`] reads beyond the two types.
+#[derive(Clone, Copy)]
+pub(super) struct MeetRules<'a> {
+    /// A variable standing for a list where a tuple holds it, whose elements,
+    /// as a rigid pack's do, meet no positions until it is answered.
+    pub(super) is_pack: &'a dyn Fn(TypeId) -> bool,
+    pub(super) never: NeverMeets,
+    /// A projection base both sides were written with. Two projections of one
+    /// family meet argument by argument only over such a base: one a variable
+    /// reached is no alias the source wrote.
+    pub(super) written_base: &'a dyn Fn(TypeId) -> bool,
+}
+
+impl MeetRules<'_> {
+    /// No packs, no `!` answers, and no projection meets another.
+    pub(super) const PLAIN: MeetRules<'static> = MeetRules {
+        is_pack: &|_| false,
+        never: NeverMeets::Nothing,
+        written_base: &|_| false,
+    };
+}
+
 /// Each pair a value of `actual` meeting a slot of `expected` equates, where
 /// one side is an inference variable: the places [`check_at`] reaches by the
 /// same rules before an undecided type stops it. A place where no coercion
 /// can be chosen, since a head is still a variable, equates the two whole.
-/// A `!`, `unknown` or `error` side equates nothing, which every check admits.
-/// A tuple holding a variable `is_pack` says stands for a list there, whose
-/// elements meet no positions until it is answered.
+/// A `!`, `unknown` or `error` side equates nothing, which every check admits,
+/// but for an actual `!` meeting a variable where `rules` asks for it.
 pub(super) fn meetings(
     actual: TypeId,
     expected: TypeId,
     type_table: &TypeTable,
-    is_pack: &dyn Fn(TypeId) -> bool,
+    rules: MeetRules<'_>,
     out: &mut Vec<(TypeId, TypeId)>,
 ) {
+    if rules.never == NeverMeets::Variables
+        && type_table.is_never(actual)
+        && type_table.is_infer_var(expected)
+    {
+        out.push((actual, expected));
+        return;
+    }
     if actual == expected || says_nothing(actual) || says_nothing(expected) {
         return;
     }
@@ -351,7 +386,7 @@ pub(super) fn meetings(
     let pairwise = |actual: &[TypeId], expected: &[TypeId], out: &mut Vec<_>| {
         if actual.len() == expected.len() {
             for (&a, &e) in actual.iter().zip(expected) {
-                meetings(a, e, type_table, is_pack, out);
+                meetings(a, e, type_table, rules, out);
             }
         }
     };
@@ -360,14 +395,15 @@ pub(super) fn meetings(
     if actual_is_ref || expected_is_ref {
         let into_mut = !type_table.is_mut_ref(actual) && type_table.is_mut_ref(expected);
         if actual_is_ref && expected_is_ref && !into_mut {
-            meetings(actual_inner, expected_inner, type_table, is_pack, out);
+            meetings(actual_inner, expected_inner, type_table, rules, out);
         }
         return;
     }
     match (type_table.get(actual), type_table.get(expected)) {
         (ResolvedType::Tuple(a), ResolvedType::Tuple(e)) => {
-            if !a.iter().chain(e).any(|&t| is_pack(t)) {
-                pairwise(a, e, out);
+            let is_pack = |t: TypeId| (rules.is_pack)(t) || type_table.is_type_pack(t);
+            for (a, e) in fixed_around_packs(a, e, &is_pack) {
+                meetings(a, e, type_table, rules, out);
             }
         }
         (
@@ -384,7 +420,36 @@ pub(super) fn meetings(
         ) => {
             if a_params.len() == e_params.len() {
                 pairwise(a_params, e_params, out);
-                meetings(*a_ret, *e_ret, type_table, is_pack, out);
+                meetings(*a_ret, *e_ret, type_table, rules, out);
+            }
+        }
+        // A projection over a rigid base answers nothing yet, so two of one
+        // family meet argument by argument, as Rust relates rigid aliases.
+        (
+            ResolvedType::AssocTypeProjection {
+                param_id: a_base,
+                assoc_name: a_name,
+                args: a_args,
+                owning_trait: a_trait,
+                trait_args: a_trait_args,
+                ..
+            },
+            ResolvedType::AssocTypeProjection {
+                param_id: e_base,
+                assoc_name: e_name,
+                args: e_args,
+                owning_trait: e_trait,
+                trait_args: e_trait_args,
+                ..
+            },
+        ) if a_base == e_base
+            && (rules.written_base)(*e_base)
+            && a_name == e_name
+            && a_trait == e_trait =>
+        {
+            pairwise(a_args, e_args, out);
+            if let (Some(a), Some(e)) = (a_trait_args, e_trait_args) {
+                pairwise(a, e, out);
             }
         }
         _ => {
@@ -393,6 +458,69 @@ pub(super) fn meetings(
             }
         }
     }
+}
+
+/// The elements of two tuples at one position whatever their packs expand
+/// to: all of them where neither holds a pack, else those ahead of the first
+/// pack and behind the last, counted from each end. Two tuples both holding
+/// packs place them alike or pair nothing.
+fn fixed_around_packs(
+    a: &[TypeId],
+    e: &[TypeId],
+    is_pack: &dyn Fn(TypeId) -> bool,
+) -> Vec<(TypeId, TypeId)> {
+    let packs_at = |t: &[TypeId]| -> Vec<usize> {
+        t.iter()
+            .enumerate()
+            .filter(|&(_, &t)| is_pack(t))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    let (a_packs, e_packs) = (packs_at(a), packs_at(e));
+    if a_packs.is_empty() && e_packs.is_empty() {
+        return if a.len() == e.len() {
+            a.iter().copied().zip(e.iter().copied()).collect()
+        } else {
+            Vec::new()
+        };
+    }
+    if !a_packs.is_empty() && !e_packs.is_empty() {
+        return if a.len() == e.len() && a_packs == e_packs {
+            a.iter()
+                .copied()
+                .zip(e.iter().copied())
+                .filter(|&(a, _)| !is_pack(a))
+                .collect()
+        } else {
+            Vec::new()
+        };
+    }
+    let (packed, packs, other) = if e_packs.is_empty() {
+        (a, &a_packs, e)
+    } else {
+        (e, &e_packs, a)
+    };
+    let before = packs[0];
+    let after = packed.len() - packs[packs.len() - 1] - 1;
+    if other.len() < before + after {
+        return Vec::new();
+    }
+    let ends = (0..before).chain(packed.len() - after..packed.len());
+    let other_at = |i: usize| {
+        if i < before {
+            other[i]
+        } else {
+            other[other.len() - (packed.len() - i)]
+        }
+    };
+    ends.map(|i| {
+        if e_packs.is_empty() {
+            (packed[i], other_at(i))
+        } else {
+            (other_at(i), packed[i])
+        }
+    })
+    .collect()
 }
 
 /// Whether `actual` and `expected` part at some position: their heads, or

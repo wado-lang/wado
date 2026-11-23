@@ -23,11 +23,12 @@ use super::Elaborator;
 use super::call::{CaseSite, DefaultWalk, WalkedDefault, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
-use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::pending_selection::{PendingOp, PendingOperator};
 use super::synth::{ArgClass, KeyedAccess};
-use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
+use super::typecheck::{
+    MeetRules, SlotFrame, TypeCheckResult, admits_condition, check_assignable, meetings,
+};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
@@ -40,7 +41,6 @@ use crate::elaborator::control_flow::{
     collect_unresolved_null_tails_in_block,
 };
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
-use crate::elaborator::infer::unify;
 use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
@@ -1721,7 +1721,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (b) Generic without turbofish: a function value has no call to infer
         // from, so only `expected_type` settles its type arguments.
         if let Some(expected) = expected_type {
-            match self.infer_func_ref_type_args(&sig, expected) {
+            match self.infer_func_ref_type_args(&ident.name, &sig, expected) {
                 FuncRefInference::Ok(inferred) => {
                     return self.func_ref_instance(ident, &sig, &inferred, Some(expected));
                 }
@@ -1864,6 +1864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `NotApplicable` so callers can raise a focused diagnostic.
     fn infer_func_ref_type_args(
         &mut self,
+        name: &str,
         sig: &FunctionSig,
         expected: TypeId,
     ) -> FuncRefInference {
@@ -1900,13 +1901,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return FuncRefInference::NotApplicable;
         }
 
-        let mut infer = InferCtx::new(&self.tysys.type_table, type_param_ids.clone());
-        for (decl, expected) in decl_params.iter().zip(expected_params.iter()) {
-            infer.add(*decl, *expected);
+        // The declaration's side first, so a variable it leaves open joins
+        // the one the expected type holds rather than taking it in.
+        let inst = self.instantiate(
+            &type_param_ids,
+            &Instantiation {
+                kind: InstanceKind::Function,
+                name,
+                span: Span::default(),
+                type_args: &[],
+                self_binding: None,
+                impl_args: &[],
+            },
+        );
+        for (&decl, &expected) in decl_params.iter().zip(&expected_params) {
+            let decl = self.instantiate_type(decl, &inst);
+            self.equate(decl, expected);
         }
-        infer.add_expected_return(decl_return, expected_return);
-        let (inferred, bindings) = infer.solve_with_bindings();
-        if !type_param_ids.iter().all(|id| bindings.contains_key(id)) {
+        let decl_return = self.instantiate_type(decl_return, &inst);
+        self.equate(decl_return, expected_return);
+        let inferred = self.apply_infer_holes_each(&inst.vars);
+        if inferred.iter().zip(&inst.vars).any(|(answer, var)| answer == var) {
             return FuncRefInference::NotApplicable;
         }
         FuncRefInference::Ok(inferred)
@@ -5097,52 +5112,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // caller's expected type fills the same slot: that is what turned the
         // prelude's `IterChain { first: *self, second: other }` into `expected
         // StrCharIter, found J`. Only the literal's own fields are consulted.
-        let mut agreed: IndexMap<TypeId, TypeId> = IndexMap::default();
         for (struct_field, expected_field_type) in
             declared_pairs(fields, &field_types, &decl_field_names)
         {
-            let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
-            unify(
-                &self.tysys.type_table,
-                expected_field_type,
+            let mut pairs = Vec::new();
+            meetings(
                 struct_field.type_id,
-                &mut bindings,
+                expected_field_type,
+                &self.tysys.type_table.borrow(),
+                MeetRules::PLAIN,
+                &mut pairs,
             );
-            for (var, answer) in bindings {
-                let Some(&first) = agreed.get(&var) else {
-                    agreed.insert(var, answer);
-                    continue;
-                };
+            for (value, slot) in pairs {
+                let first = self.apply_infer_holes(slot);
                 let disagrees = {
                     let table = self.tysys.type_table.borrow();
                     !table.contains_undecided(first)
-                        && !table.contains_undecided(answer)
+                        && !table.contains_undecided(value)
                         && matches!(
-                            check_assignable(answer, first, &table),
+                            check_assignable(value, first, &table),
                             TypeCheckResult::Incompatible
                         )
                 };
                 if disagrees {
                     let _ = self.emit(TypeError::TypeMismatch {
                         expected: self.tysys.type_table.borrow().name(first),
-                        found: self.tysys.type_table.borrow().name(answer),
+                        found: self.tysys.type_table.borrow().name(value),
                         span: struct_field.span,
                     });
                 }
             }
+            self.equate(struct_field.type_id, expected_field_type);
         }
 
-        let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
-
-        for (struct_field, expected_field_type) in
+        let (mut values, mut declared): (Vec<TypeId>, Vec<TypeId>) =
             declared_pairs(fields, &field_types, &decl_field_names)
-        {
-            infer.add(expected_field_type, struct_field.type_id);
-        }
-
-        // Back-infer from the caller's expected type: if it's an instance of
-        // this same struct, unify its type-args against the declaration-order
-        // type params so phantoms (fields-less params) get concrete bindings.
+                .map(|(field, declared)| (field.type_id, declared))
+                .unzip();
+        // An instance of this same struct the caller expects answers what the
+        // fields leave open, a phantom parameter among them.
         if let Some(expected) = expected_type {
             let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
             if let ResolvedType::Struct {
@@ -5154,12 +5162,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && expected_args.len() == struct_info.type_param_type_ids.len()
             {
                 for (&var, &expected_arg) in inst.vars.iter().zip(expected_args.iter()) {
-                    infer.add_expected_return(var, expected_arg);
+                    self.equate(var, expected_arg);
+                    declared.push(var);
+                    values.push(expected_arg);
                 }
             }
         }
+        for (&value, &declared) in values.iter().zip(&declared) {
+            self.equate_with_never(value, declared);
+        }
 
-        let mut inferred = infer.solve();
+        let mut inferred = self.solved_with_packs(&inst.vars, &declared, &values);
         // A phantom parameter — one no field mentions — is not an inference
         // failure: the declaration answers it, with its `= Default` if it wrote
         // one, and the bound is checked against that answer. A slot a field does
