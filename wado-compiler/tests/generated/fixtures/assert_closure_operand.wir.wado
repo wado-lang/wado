@@ -88,7 +88,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
 
-type "functype//assert_closure_operand.wado/fn(i32)->i32with($e_260)^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(32)
+type "functype//assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//$Cell<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
 type "functype//assert_closure_operand.wado/assert_closure_operand.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(33)
 
@@ -340,7 +340,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "assert_closure_operand.wado/fn(i32)->i32with($e_260)^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+fn "assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
     call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
@@ -386,7 +386,7 @@ condition: apply(|x: i32| -> i32 { return x * 2; }, n) == 99
     local.tee out_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(253), used: 0 }).used = 154;
     builtin::array_copy<u8>(out_3.repr, 0, global:core:prelude/string.wado::$const_obj_12, 0, 154);
     $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
-    "assert_closure_operand.wado/fn(i32)->i32with($e_260)^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: t }, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0);
+    "assert_closure_operand.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//$Cell<fn(i32)->i32>" { value: t }, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_closure_operand_wado__tmpl_053cee3811ed67a3_fn_i32___i32___fmt_7_0);
     if @unlikely(local.tee new_used_150(out_3.used + 4) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_150);
