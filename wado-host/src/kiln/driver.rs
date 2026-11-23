@@ -40,7 +40,7 @@ use wado_compiler::kiln::{
     FileHash, GENERATOR_WORLD_FQ, GeneratedHeader, GeneratorModule, Invocation, InvocationIndex,
     InvocationPath, OptionsAnchor, OptionsDescriptor, Plan, PlanError, collect_inline_invocations,
     content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
-    hex_digest, parse_header, validate_options,
+    hex_digest, located_apart_message, parse_header, validate_options,
 };
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{Code, CompilerOptions, Diagnostic, Lints, OptLevel, Severity};
@@ -204,6 +204,7 @@ pub async fn execute<H: CompilerHost>(
             .iter()
             .map(|(path, use_type, pin)| ProbeInput {
                 path: path.as_str().to_string(),
+                read_at: invocation.read_path(path).to_string(),
                 use_type: use_type.cloned(),
                 integrity: *pin,
             })
@@ -236,7 +237,7 @@ pub async fn execute<H: CompilerHost>(
         loaded.push(GeneratorInputFile {
             path: path.as_str().to_string(),
             content: host
-                .load_file(path.as_str(), *extent, *pin)
+                .load_file(invocation.read_path(path), *extent, *pin)
                 .await
                 .map_err(|source| load_error(path, source))?,
             use_type: use_type.cloned(),
@@ -458,7 +459,7 @@ pub async fn cache_matches<H: CompilerHost>(
     }
     if !matches_file(
         host,
-        &invocation.from,
+        invocation.read_path(&invocation.from),
         invocation.integrity,
         &metadata.primary.hash,
         metadata.primary.extent,
@@ -489,7 +490,7 @@ pub async fn cache_matches<H: CompilerHost>(
         }
         if !matches_file(
             host,
-            &declared.path,
+            invocation.read_path(&declared.path),
             declared.integrity,
             &recorded.hash,
             recorded.extent,
@@ -620,12 +621,12 @@ fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::i
 /// below still differs and the build misses.
 async fn matches_file<H: CompilerHost>(
     host: &H,
-    path: &InvocationPath,
+    path: &str,
     pin: Option<Integrity>,
     expected_hex: &str,
     extent: Option<u64>,
 ) -> bool {
-    match host.load_file(path.as_str(), extent, pin).await {
+    match host.load_file(path, extent, pin).await {
         Ok(bytes) => hash_matches_bytes(&bytes, expected_hex),
         Err(_) => false,
     }
@@ -1061,11 +1062,20 @@ pub async fn harvest_invocations(
             .or_default()
             .push((key.as_str(), module));
     }
+    // A module's path is anchored on the entry's directory, and so is the
+    // path of a file a dependency exports. The pipeline reads it from the
+    // manifest root, so it is made absolute.
+    let exported = |module: &str, package: &str, file: &str| {
+        let mut found = harvest.exported_file(host, module, package, file)?;
+        let path = std::path::absolute(entry_dir.join(&found.path))
+            .map_err(|e| format!("locating `{package}/{file}`: {e}"))?;
+        found.path = path.display().to_string();
+        Ok(found)
+    };
     let mut invocations = Vec::new();
     let mut diagnostics = Vec::new();
     for modules in by_package.into_values() {
-        let (mut collected, mut reported) =
-            collect_inline_invocations(modules, &IndexMap::default(), "");
+        let (mut collected, mut reported) = collect_inline_invocations(modules, &exported, "");
         invocations.append(&mut collected);
         diagnostics.append(&mut reported);
     }
@@ -1089,6 +1099,15 @@ pub fn merge_across_packages(
     for invocation in invocations {
         let tuple = invocation.identity_tuple();
         if let Some(existing) = merged.iter_mut().find(|m| m.identity_tuple() == tuple) {
+            if let Some(reference) = existing.located_apart(&invocation) {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Error,
+                    code: Code::Log,
+                    message: located_apart_message(reference, existing, &invocation),
+                    span: None,
+                });
+                continue;
+            }
             for site in invocation.decl_sites {
                 if !existing.decl_sites.contains(&site) {
                     existing.decl_sites.push(site);
@@ -1674,11 +1693,40 @@ mod tests {
                     use_type: None,
                     integrity: None,
                 }],
+                located: IndexMap::default(),
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,
                 options_span: wado_compiler::Span::default(),
             }
+        }
+
+        #[test]
+        fn two_checkouts_of_one_coordinate_do_not_merge() {
+            let at = |module: &str, path: &str| {
+                let mut invocation = sample_invocation();
+                invocation.decl_sites[0].module = module.to_string();
+                invocation
+                    .located
+                    .insert(invocation.from.clone(), path.to_string());
+                invocation
+            };
+            let same = merge_across_packages(vec![
+                at("a/main.wado", "/x/schema.proto"),
+                at("b/main.wado", "/x/schema.proto"),
+            ])
+            .unwrap();
+            assert_eq!(same.len(), 1);
+            let apart = merge_across_packages(vec![
+                at("a/main.wado", "/x/schema.proto"),
+                at("b/main.wado", "/y/schema.proto"),
+            ])
+            .unwrap_err();
+            assert!(
+                apart[0].message.contains("/y/schema.proto"),
+                "{}",
+                apart[0].message
+            );
         }
 
         fn runtime() -> tokio::runtime::Runtime {
@@ -2032,6 +2080,7 @@ mod tests {
                     use_type: None,
                     integrity: None,
                 }],
+                located: IndexMap::default(),
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,

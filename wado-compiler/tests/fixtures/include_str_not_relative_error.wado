@@ -1,5 +1,5 @@
-// An include path starts with `./` or `../`: a bare or absolute path names no
-// file beside the module.
+// An include path starts with `./` or `../`, or names a file a dependency
+// exports: a bare or absolute path names no file beside the module.
 
 export fn run() {
     let text = #include_str("/etc/hostname");
@@ -7,6 +7,6 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":5:29: analysis error: invalid include path '/etc/hostname'; an include path starts with './' or '../'",
+  "compile_error": ":5:29: analysis error: invalid include path '/etc/hostname'; an include path starts with './' or '../', or names a file a dependency exports as '<package>/<file>'",
   "compile_error_codes": ["MODULE_NOT_FOUND"]
 }

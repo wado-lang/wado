@@ -433,6 +433,54 @@ fn an_unlisted_file_is_refused_by_package() {
     ));
 }
 
+/// `#include_str` and `#include_bytes` name an exported file as `use` does, and
+/// are refused at the package for an unlisted one.
+#[test]
+fn an_exported_file_is_included_by_package_and_path() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let assets = root.join("assets");
+    exporting_library(&assets, &["data/greeting.txt"], "", "pub fn f() {}\n");
+    fs::create_dir(assets.join("data")).unwrap();
+    fs::write(assets.join("data/greeting.txt"), "hi from assets").unwrap();
+    fs::write(assets.join("data/hidden.txt"), "hidden").unwrap();
+    let app = root.join("app");
+    let main = |include: &str| {
+        fs::create_dir_all(app.join("src")).unwrap();
+        fs::write(
+            app.join("wado.toml"),
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+             [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
+             [dependencies]\n\"lib:assets\" = { path = \"../assets\" }\n",
+        )
+        .unwrap();
+        fs::write(
+            app.join("src/main.wado"),
+            format!(
+                "use {{ println, Stdout }} from \"core:cli\";\n\n\
+                 export fn run() with Stdout {{\n    \
+                 println(#include_str(\"{include}\"));\n    \
+                 println(`${{#include_bytes(\"{include}\").len()}}`);\n}}\n"
+            ),
+        )
+        .unwrap();
+        wado_in(&app).args(["run", "src/main.wado"]).assert()
+    };
+    main("lib:assets/data/greeting.txt")
+        .success()
+        .stdout("hi from assets\n14\n");
+    main("lib:assets/data/hidden.txt")
+        .failure()
+        .stderr(predicate::str::contains(
+            "package `lib:assets` exports no file `data/hidden.txt`",
+        ));
+    main("lib:other/data/greeting.txt")
+        .failure()
+        .stderr(predicate::str::contains(
+            "dependency 'lib:other' is not declared in [dependencies] of ",
+        ));
+}
+
 /// A namespace may carry `-`, as a manifest name does.
 #[test]
 fn an_undeclared_hyphenated_namespace_names_the_manifest() {

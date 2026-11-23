@@ -4,6 +4,7 @@
 //! the manifest no longer declares any. See WEP 2026-04-12 §"Use-site syntax".
 
 use crate::ast::AttrValue;
+use crate::hashmap::IndexMap;
 use crate::kiln::cache::{encode_options_canonical, encode_written_options};
 use crate::kiln::inline::default_output_dir;
 use crate::kiln::options_check::CanonicalOptions;
@@ -17,32 +18,21 @@ use std::fmt;
 pub const GENERATOR_WORLD_FQ: &str = "core:kiln/generator";
 
 /// The parts of a `module:` build-dependency specifier: the
-/// `[build-dependencies]` lookup key (`ns:name` or `lib:nick`), an optional
-/// pinned `@version`, and an optional `/submodule` path. The coordinate and
-/// version never contain `/`, so the first `/` starts the submodule; the `@`
-/// split only applies to a segment carrying a `:`.
+/// `[build-dependencies]` lookup key (`ns:name` or `lib:nick`) and an optional
+/// pinned `@version`. The `@` split only applies to a key carrying a `:`.
 pub struct SpecParts<'a> {
     pub key: &'a str,
     pub version: Option<&'a str>,
-    pub submodule: Option<&'a str>,
 }
 
 /// Parse a `module:` specifier into its [`SpecParts`].
 #[must_use]
 pub fn parse_spec(spec: &str) -> SpecParts<'_> {
-    let (head, submodule) = match spec.split_once('/') {
-        Some((h, s)) => (h, Some(s)),
-        None => (spec, None),
-    };
-    let (key, version) = match head.split_once('@') {
+    let (key, version) = match spec.split_once('@') {
         Some((k, v)) if k.contains(':') => (k, Some(v)),
-        _ => (head, None),
+        _ => (spec, None),
     };
-    SpecParts {
-        key,
-        version,
-        submodule,
-    }
+    SpecParts { key, version }
 }
 
 /// The `[build-dependencies]` lookup key for a `module:` specifier.
@@ -127,8 +117,8 @@ impl fmt::Display for DeclSite {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GeneratorModule {
     /// A `[build-dependencies]` specifier — an open coordinate
-    /// (`"ns:name[@version]"`) or a `"lib:nickname"` indirection, with an
-    /// optional `/<submodule>` suffix. Resolved by the host against
+    /// (`"ns:name[@version]"`) or a `"lib:nickname"` indirection. Resolved by
+    /// the host against
     /// `[build-dependencies]`, dispatching on the matched entry's source: a
     /// path entry is rewritten to [`GeneratorModule::LocalPath`] (compiled from
     /// source) before it reaches the provider; a registry entry is pulled as a
@@ -154,8 +144,7 @@ impl GeneratorModule {
 /// the fields opaquely; the host resolves them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratorSpec {
-    /// The specifier string (`ns:name[@ver]`, `lib:nick`, with an optional
-    /// `/submodule` suffix).
+    /// The specifier string (`ns:name[@ver]` or `lib:nick`).
     pub spec: String,
     /// Inline semver requirement (`generator.version`); single-file only.
     pub version: Option<String>,
@@ -231,14 +220,19 @@ pub struct Invocation {
     /// Supplementary schema files, resolved relative to the declaring `.wado`
     /// file, preserving declaration order.
     pub inputs: Vec<InvocationInput>,
+    /// Where each local file the invocation names is read: a file a dependency
+    /// exports by its package reference (`ns:pkg@ver/path`) → its path on this
+    /// machine, and any other local path → itself. Excluded from
+    /// [`Invocation::identity_tuple`], which must not depend on where a
+    /// dependency's checkout lies.
+    pub located: IndexMap<InvocationPath, String>,
     /// Resolved output directory (default: `build/kiln/<synthesized-id>`).
     pub output_dir: InvocationPath,
     /// Validated, typed options for this invocation. Crosses to the generator
     /// as a typed WIT argument (the host builds a Component-Model value from
     /// it); its canonical byte encoding ([`Self::options_canonical`]) feeds the
-    /// invocation cache key. Empty until the generator's `OptionsDescriptor`
-    /// is known (inline when it is available, otherwise the driver's
-    /// typed-encode pass).
+    /// invocation cache key. Empty until the driver's typed-encode pass knows
+    /// the generator's `OptionsDescriptor`.
     pub options: CanonicalOptions,
     /// Raw `options` `AttrValue` recovered from the inline
     /// `with { generator: { options: { ... } } }` clause. Stashed so the
@@ -286,6 +280,24 @@ impl Invocation {
         )
     }
 
+    /// Where the file the invocation names `path` is read: a file a dependency
+    /// exports where it lies, any other as named.
+    #[must_use]
+    pub fn read_path<'a>(&'a self, path: &'a InvocationPath) -> &'a str {
+        self.located.get(path).map_or(path.as_str(), String::as_str)
+    }
+
+    /// A path both invocations name that lies in a different place for each:
+    /// two checkouts claiming one coordinate, since a local path lies where it
+    /// says.
+    #[must_use]
+    pub fn located_apart(&self, other: &Self) -> Option<&InvocationPath> {
+        self.located
+            .iter()
+            .find(|&(reference, at)| other.located.get(reference).is_some_and(|o| o != at))
+            .map(|(reference, _)| reference)
+    }
+
     /// Canonical byte encoding of [`Self::options`], for the invocation cache
     /// key. Nothing decodes it.
     #[must_use]
@@ -330,26 +342,18 @@ mod tests {
     use crate::token::Span;
 
     #[test]
-    fn parse_spec_splits_version_and_submodule() {
+    fn parse_spec_splits_version() {
         let bare = parse_spec("wado-lang:gale");
         assert_eq!(bare.key, "wado-lang:gale");
         assert_eq!(bare.version, None);
-        assert_eq!(bare.submodule, None);
 
         let versioned = parse_spec("wado-lang:gale@0.0.9");
         assert_eq!(versioned.key, "wado-lang:gale");
         assert_eq!(versioned.version, Some("0.0.9"));
-        assert_eq!(versioned.submodule, None);
 
-        let sub = parse_spec("example:proto-codegen@1.2/generator");
-        assert_eq!(sub.key, "example:proto-codegen");
-        assert_eq!(sub.version, Some("1.2"));
-        assert_eq!(sub.submodule, Some("generator"));
-
-        let sub_no_ver = parse_spec("lib:gen/sub");
-        assert_eq!(sub_no_ver.key, "lib:gen");
-        assert_eq!(sub_no_ver.version, None);
-        assert_eq!(sub_no_ver.submodule, Some("sub"));
+        let nick = parse_spec("lib:gen");
+        assert_eq!(nick.key, "lib:gen");
+        assert_eq!(nick.version, None);
     }
 
     #[test]
@@ -417,6 +421,7 @@ mod tests {
             from: InvocationPath::normalize("s.proto"),
             integrity: None,
             inputs: vec![],
+            located: IndexMap::default(),
             output_dir: InvocationPath::normalize("build/kiln/a"),
             options: CanonicalOptions::default(),
             raw_options: None,
