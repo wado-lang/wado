@@ -21,12 +21,13 @@ in the callee's loop, so each splice saves one call per string while copying
 the whole loop. In `try_inline_call_expr`, a hot site now takes the plain price
 when the callee holds a loop (`loopy`), the innermost loop calls it from more
 than one site (`CallerFrame::sole_loop_site`), and no argument is a constant
-integer. A constant argument may fold the loop once spliced: without that
+(`is_constant_arg`). A constant argument may fold the loop once spliced: without that
 exception, `read_be` lost its splice in `read_float` and cbor_canada de
 measured 10% slower.
 
 Every Wado row ran through `mise run all-wado`, two full runs per arm, in
-alternating order, against the build before it. Two ranges are the two runs.
+alternating order, against the build before it. Two figures are the two runs;
+json_twitter ser kept only the first.
 
 | Row                | Change           |
 | ------------------ | ---------------- |
@@ -46,7 +47,10 @@ count, and a rule that reads the trip count could keep both sides.
 Two wider rules were set aside. Dropping the hot price for every looping
 callee won json_twitter by the same margin and cost cbor_canada 30%. Requiring
 more than one hot site, counting those a splice carries, lost json_catalog ser
-5.2%. The user decides whether to keep the change.
+5.2%.
+
+Not yet decided: the change awaits the user's keep-or-drop, and this entry
+goes with it if dropped.
 
 ## `param_spec`'s clone cap raised from 128 to 4096 (2026-10-28)
 

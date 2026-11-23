@@ -860,11 +860,8 @@ impl Interpreter<'_> {
         let Lattice::Const(value) = self.operand_to_lattice(sink.body(), *scrutinee) else {
             return false;
         };
-        let Some(key) = switch_key(&value) else {
-            return false;
-        };
-        let taken = key
-            .checked_sub(*min_value)
+        let taken = switch_key(&value)
+            .and_then(|key| key.checked_sub(*min_value))
             .and_then(|offset| usize::try_from(offset).ok())
             .and_then(|offset| table.get(offset).copied().flatten())
             .map_or(*default, |arm| arms[arm]);
@@ -1056,18 +1053,16 @@ fn rewrite_bool_discriminator<S: EditSink>(
 }
 
 /// The key a `Switch` table is indexed by for `value`, as `match_to_switch`
-/// keys its patterns: an integer or `char` by value, an enum by case index. An
-/// unsigned value past `i64::MAX` has no key, and no table reaches it.
+/// keys its patterns: an integer, `char` or enum by value. An unsigned value
+/// past `i64::MAX` has no key, so it takes the default.
 fn switch_key(value: &Value) -> Option<i64> {
     match value {
-        Value::Int { value, prim } => i64::try_from(int_value_as_i128(*value, *prim)?).ok(),
+        Value::Int { value, prim } => {
+            let wide = int_value_as_i128(*value, *prim).expect("a Switch keys an integer");
+            i64::try_from(wide).ok()
+        }
         Value::Char(c) => Some(i64::from(u32::from(*c))),
-        Value::Variant {
-            case_index,
-            payload: None,
-            ..
-        } => Some(i64::from(*case_index)),
-        _ => None,
+        _ => unreachable!("a Switch scrutinee is an integer, a char or an enum"),
     }
 }
 

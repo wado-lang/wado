@@ -3866,23 +3866,23 @@ fn try_inline_call_expr(
     else {
         return None;
     };
-    let passes_constant_int = args
-        .iter()
-        .any(|a| caller.operand_const_int(a.expr).is_some());
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
     let landing = call_heat(candidates.heat_map, &caller.exprs[call_id]);
     // A looping callee spends its time in its loop, so a splice saves one call
     // per run while copying the loop to every site; a loop calling it from
-    // several sites pays that copy at each. A constant integer argument may
-    // fold the loop once spliced, which is worth the hot price.
+    // several sites pays that copy at each. A constant argument may fold the
+    // loop once spliced, which is worth the hot price; `CostWalk::call_price`
+    // asks the same question.
     let heat = landing.plain_where(
         !site.heats()
             || frame.movable
             || (candidates.loopy[func_id.index()]
                 && !frame.sole_loop_site(func_id)
-                && !passes_constant_int),
+                && !args
+                    .iter()
+                    .any(|a| is_constant_arg(caller, a.expr, &IndexSet::default()))),
     );
     let reach = *candidates.reach[&func_id].at(heat);
     let sole_site = |frame: &CallerFrame<'_>| {

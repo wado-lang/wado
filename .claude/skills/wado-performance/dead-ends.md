@@ -24,12 +24,12 @@ for i in 1 2 3; do mise run json-catalog; done           # before and after
 serialize, where the output buffer doubles from `SERIALIZE_BUFFER_CAPACITY`'s
 128 bytes. Starting it at 2 MiB removes every growth, so it prices the growth
 from above. Release binaries, three alternating rounds, functions aligned to
-64 bytes:
+64 bytes, against 128 bytes:
 
-| `SERIALIZE_BUFFER_CAPACITY` | twitter ser | canada ser | catalog ser |
-| --------------------------- | ----------- | ---------- | ----------- |
-| 128 (today)                 | 0.532 ms    | 5.735 ms   | 0.587 ms    |
-| 2 MiB                       | **−10%**    | +3.7%      | **−9%**     |
+| Starting capacity              | twitter ser | canada ser | catalog ser |
+| ------------------------------ | ----------- | ---------- | ----------- |
+| 2 MiB                          | +10%        | **−3.7%**  | +9%         |
+| The last output's length + 8   | +10.1%      | +4.2%      | +8.3%       |
 
 One 2 MiB `array.new_default` costs more than the doublings it replaces. The
 zero-fill is paid on capacity, not on what is written, and the doublings zero
@@ -37,7 +37,8 @@ about twice the output in total. Why canada still gains was not measured.
 
 Generalizes: the growth is not the cost a profile charges to `String::grow`.
 The zero-fill is, and it scales with the capacity asked for. An adaptive
-starting capacity can only win where it lands near the output's size.
+starting capacity wins where it lands near the output's size, as the second
+row does for a benchmark that serializes one value repeatedly.
 
 ## `array.new_fixed` of zeros in place of a short `array.new_default` (2026-10-28)
 
