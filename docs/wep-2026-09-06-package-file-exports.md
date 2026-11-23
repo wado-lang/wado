@@ -228,8 +228,8 @@ one names as left.
    package-root-relative path with an extension and no `..`, NFC-normalized.
    Done when a manifest round-trips it and `wado publish` refuses a list naming
    a file the package does not carry.
-2. Specifier resolution: split `<coordinate>/<path.ext>` once (`kiln::parse_spec`
-   already separates the segment), resolve the package through the dependency
+2. Specifier resolution: split `<coordinate>/<path.ext>` once, resolve the
+   package through the dependency
    index, check the allowlist under NFC with case compared exactly, and refuse
    at package granularity. Done when `use { … } from "lib:x/src/y.wado"`
    compiles against a path dependency, and an unlisted path produces the

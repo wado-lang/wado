@@ -933,15 +933,6 @@ impl CliGeneratorProvider {
         spec: &wado_compiler::kiln::GeneratorSpec,
     ) -> Result<ResolvedGenerator, ProviderError> {
         let parts = parse_spec(&spec.spec);
-        if parts.submodule.is_some() {
-            return Err(ProviderError::Unsupported {
-                message: format!(
-                    "kiln: submodule paths in a generator specifier are not yet supported: `{}`",
-                    spec.spec
-                ),
-            });
-        }
-
         // The specifier resolves against a `[build-dependencies]` entry when the
         // manifest declares it; otherwise its source is supplied inline at the
         // `use` site (single-file mode).
