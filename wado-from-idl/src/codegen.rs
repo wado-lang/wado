@@ -423,8 +423,8 @@ impl WadoCodeGenerator {
             // `AsByteSlice` treat it as bytes rather than a list of numbers.
             WadoType::List(inner) if matches!(**inner, WadoType::U8) => "ByteList".to_string(),
             WadoType::List(inner) => format!("List<{}>", Self::format_type(inner)),
-            WadoType::TreeMap(key, value) => format!(
-                "TreeMap<{}, {}>",
+            WadoType::HashMap(key, value) => format!(
+                "HashMap<{}, {}>",
                 Self::format_type(key),
                 Self::format_type(value)
             ),

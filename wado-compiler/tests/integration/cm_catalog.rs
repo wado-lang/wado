@@ -1926,7 +1926,7 @@ fn cm_lib_rejects_two_types_sharing_a_cm_name() {
 
 /// The Component Model states that a `map` may carry a repeated key, and that a
 /// bindings generator may deduplicate it as long as the *last* pair wins. The
-/// guest lifts with `map[k] = v`, so it does; and it lowers from a `TreeMap`,
+/// guest lifts with `map[k] = v`, so it does; and it lowers from a `HashMap`,
 /// which cannot repeat one. One round trip shows both halves.
 #[test]
 fn map_last_wins_on_a_repeated_key() {
@@ -1974,17 +1974,17 @@ fn map_last_wins_on_a_repeated_key() {
     });
 }
 
-/// WASI 0.3.1 requires the Component Model `map<K, V>` type, and `TreeMap` is
+/// WASI 0.3.1 requires the Component Model `map<K, V>` type, and `HashMap` is
 /// its Wado spelling. The despecialized `list<tuple<K, V>>` already crosses the
 /// boundary, so what this pins is the specialization: the same bytes under a
 /// distinct type constructor.
 #[test]
-fn cm_lib_accepts_a_tree_map_boundary_type() {
+fn cm_lib_accepts_a_hash_map_boundary_type() {
     try_compile_lib(
-        "use { TreeMap } from \"core:collections\";\n\
-         export fn id_map(v: TreeMap<String, u32>) -> TreeMap<String, u32> {\n    return v;\n}\n",
+        "use { HashMap } from \"core:collections\";\n\
+         export fn id_map(v: HashMap<String, u32>) -> HashMap<String, u32> {\n    return v;\n}\n",
     )
-    .expect("a `TreeMap` export should compile as `map<string, u32>`");
+    .expect("a `HashMap` export should compile as `map<string, u32>`");
 }
 
 /// The Component Model's `keytype` is a deliberate subset of `valtype` — the
@@ -1994,9 +1994,9 @@ fn cm_lib_accepts_a_tree_map_boundary_type() {
 #[test]
 fn cm_lib_rejects_a_map_key_outside_the_component_model_key_types() {
     let err = try_compile_lib(
-        "use { TreeMap } from \"core:collections\";\n\
+        "use { HashMap } from \"core:collections\";\n\
          export struct Point {\n    pub x: u32,\n    pub y: u32,\n}\n\
-         export fn id_map(v: TreeMap<Point, u32>) -> TreeMap<Point, u32> {\n    return v;\n}\n",
+         export fn id_map(v: HashMap<Point, u32>) -> HashMap<Point, u32> {\n    return v;\n}\n",
     )
     .expect_err("a record-keyed map export should fail to compile");
     assert!(

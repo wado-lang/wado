@@ -1,5 +1,5 @@
 use { CmCatalog, Color, Point, Single, Shape, Perms, Mixed, Meters, Status } from "./sub/cm-catalog.wasm" with { type: "wasm" };
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -123,12 +123,12 @@ test "narrow scalars in the indirect params buffer" {
 }
 
 test "map round-trip" {
-    let m = { a: 1, b: 2 } as TreeMap<String, u32>;
+    let m = { a: 1, b: 2 } as HashMap<String, u32>;
     let back = CmCatalog::id_map_string_u32(m);
     assert back.len() == 2;
     assert back["a"] == 1;
     assert back["b"] == 2;
-    assert CmCatalog::id_map_string_u32(TreeMap::<String, u32>::new()).len() == 0;
+    assert CmCatalog::id_map_string_u32(HashMap::<String, u32>::new()).len() == 0;
 
     let nested = CmCatalog::id_option_map(Option::Some(m));
     assert nested.unwrap()["b"] == 2;
@@ -136,7 +136,7 @@ test "map round-trip" {
 }
 
 test "map in the indirect params buffer" {
-    let m = { a: 1, b: 2 } as TreeMap<String, u32>;
+    let m = { a: 1, b: 2 } as HashMap<String, u32>;
     assert CmCatalog::map_in_params_buffer(m, Option::Some(7), 9).wait() == 30709;
 }
 
