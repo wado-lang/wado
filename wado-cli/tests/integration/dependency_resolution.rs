@@ -31,6 +31,7 @@ fn path_dependency_resolves_via_bare_name_use() {
     fs::write(
         greet.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "greet"
 version = "0.1.0"
 lib = "src/lib.wado"
@@ -52,6 +53,7 @@ lib = "src/lib.wado"
     fs::write(
         app.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -111,7 +113,7 @@ fn a_cached_registry_dependency_resolves_without_a_lock() {
     fs::create_dir_all(lib.join("src")).unwrap();
     fs::write(
         lib.join("wado.toml"),
-        "[package]\nname = \"demo-lib\"\nnamespace = \"acme\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"demo-lib\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -130,6 +132,7 @@ fn a_cached_registry_dependency_resolves_without_a_lock() {
     fs::write(
         app.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -182,6 +185,7 @@ fn dependency_internal_relative_import_resolves() {
     fs::write(
         greet.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "greet"
 version = "0.1.0"
 lib = "src/lib.wado"
@@ -212,6 +216,7 @@ export fn hello() -> String {
     fs::write(
         app.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -255,6 +260,7 @@ fn dependency_without_lib_reports_precise_error() {
     fs::write(
         greet.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "greet"
 version = "0.1.0"
 "#,
@@ -271,6 +277,7 @@ version = "0.1.0"
     fs::write(
         app.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -311,7 +318,7 @@ fn an_undeclared_alias_names_the_manifest() {
     fs::create_dir_all(app.join("src")).unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     fs::write(
@@ -350,7 +357,7 @@ fn exporting_library(dir: &std::path::Path, exports: &[&str], deps: &str, lib: &
     fs::write(
         dir.join("wado.toml"),
         format!(
-            "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\
+            "[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\
              exports = [{exports}]\n\n[dependencies]\n{deps}"
         ),
     )
@@ -449,7 +456,7 @@ fn an_exported_file_is_included_by_package_and_path() {
         fs::create_dir_all(app.join("src")).unwrap();
         fs::write(
             app.join("wado.toml"),
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
              [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
              [dependencies]\n\"lib:assets\" = { path = \"../assets\" }\n",
         )
@@ -718,7 +725,7 @@ fn an_exported_file_of_a_package_reached_by_a_path_is_named_by_its_package() {
         .args(["dump", "--modules", "src/lib.wado"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\n  b@0.1.0/src/sub/x.wado\n"));
+        .stdout(predicate::str::contains("\n  acme:b@0.1.0/src/sub/x.wado\n"));
 }
 
 /// A single-file dependency reached by its name and by a path is one module,
@@ -924,7 +931,7 @@ fn same_alias_different_package_resolves_per_project() {
         fs::create_dir_all(dir.join("src")).unwrap();
         fs::write(
             dir.join("wado.toml"),
-            format!("[package]\nname = \"{pkg}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
+            format!("[package]\nnamespace = \"acme\"\nname = \"{pkg}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
         )
         .unwrap();
         fs::write(
@@ -945,6 +952,7 @@ fn same_alias_different_package_resolves_per_project() {
             dir.join("wado.toml"),
             format!(
                 r#"[package]
+namespace = "acme"
 name = "{app}"
 version = "0.1.0"
 
@@ -989,7 +997,7 @@ fn two_aliases_for_one_package_share_type_identity() {
     fs::create_dir_all(shared.join("src")).unwrap();
     fs::write(
         shared.join("wado.toml"),
-        "[package]\nname = \"shared\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"shared\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -1014,6 +1022,7 @@ export fn get_x(p: Point) -> i32 {
     fs::write(
         app.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 

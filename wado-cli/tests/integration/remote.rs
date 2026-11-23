@@ -200,7 +200,7 @@ const UTIL: &str = "pub fn exclaim(s: String) -> String { return `${s}!`; }\n";
 fn write_package(root: &Path, main: &str) {
     std::fs::write(
         root.join("wado.toml"),
-        "[package]\nname = \"remote\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"remote\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
     )
     .unwrap();
     std::fs::create_dir_all(root.join("src")).unwrap();
@@ -885,7 +885,7 @@ fn a_remote_module_clause_resolves_against_the_consumer_build_dependencies() {
     std::fs::create_dir_all(generator.join("src")).unwrap();
     std::fs::write(
         generator.join("wado.toml"),
-        "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
          [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
     )
     .unwrap();

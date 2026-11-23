@@ -551,7 +551,7 @@ fn lsp_warns_when_a_prefetch_fails() {
     // Port 9 (discard) refuses the connection, so the pull fails at once.
     std::fs::write(
         project.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[registries]\ndefault = \"oci://127.0.0.1:9\"\n\n[dependencies]\n\"acme:demo\" = { version = \"^0.1\" }\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n[registries]\ndefault = \"oci://127.0.0.1:9\"\n\n[dependencies]\n\"acme:demo\" = { version = \"^0.1\" }\n",
     )
     .unwrap();
     std::fs::write(
@@ -2300,7 +2300,7 @@ fn kiln_consumer_fixture(root: &std::path::Path) -> std::path::PathBuf {
     std::fs::create_dir_all(gen_pkg.join("src")).unwrap();
     std::fs::write(
         gen_pkg.join("wado.toml"),
-        "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n[world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"gen\"\nversion = \"0.1.0\"\n\n[world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -2324,7 +2324,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     std::fs::create_dir_all(app.join("src")).unwrap();
     std::fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n[build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n[build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
     )
     .unwrap();
     std::fs::write(app.join("src/schema.idl"), "anything\n").unwrap();
@@ -2705,7 +2705,7 @@ fn query_scip_leaves_out_what_an_exclude_matches() {
     // A package of its own: the glob still reaches it from the root.
     std::fs::write(
         tmp.path().join("pkg/wado.toml"),
-        "[package]\nname = \"pkg\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"pkg\"\n",
     )
     .unwrap();
     std::fs::write(

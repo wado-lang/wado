@@ -13,7 +13,7 @@ use crate::common::wado_in;
 fn write_package(root: &Path) {
     fs::write(
         root.join("wado.toml"),
-        "[package]\nname = \"fuel\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"fuel\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     fs::write(

@@ -62,7 +62,7 @@ fn a_builtin_runs_even_when_path_offers_its_name() {
 
     wado_in(tmp.path())
         .env("PATH", tmp.path())
-        .args(["init", "--name", "shadowed"])
+        .args(["init", "--name", "shadowed", "--namespace", "acme"])
         .assert()
         .success()
         .stdout(predicate::str::contains("ran ").not());
