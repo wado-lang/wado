@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795424897204,
+  "lastUpdate": 1795426810548,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81545,6 +81545,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8b1bdc8c09552e385f03bdf88edd88e4cceecdf3"
         },
         "date": 1795424895945,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15c96bffaf4545bb4cf567f9fb57a54b8285a409",
+          "message": "Merge pull request #2736 from wado-lang/gfx/value-copy-names-unknown\n\nfix(value-copy): treat every reference part of a fresh value as aliasing storage",
+          "timestamp": "2026-11-23T18:23:47+09:00",
+          "tree_id": "b75d03339d17c8a880fa2aa8f08c28211535da1c",
+          "url": "https://github.com/wado-lang/wado/commit/15c96bffaf4545bb4cf567f9fb57a54b8285a409"
+        },
+        "date": 1795426809575,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
