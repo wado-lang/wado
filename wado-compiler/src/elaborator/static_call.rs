@@ -1887,13 +1887,14 @@ impl TypeSystem {
         receiver: Option<TypeId>,
         asked: &[TypeId],
     ) -> bool {
+        if self.type_table.borrow().impl_trait_args(impl_def).len() != asked.len() {
+            return false;
+        }
         let held = self.impl_trait_args_asked(impl_def, receiver, asked);
         let table = self.type_table.borrow();
-        held.len() == asked.len()
-            && held
-                .iter()
-                .zip(asked)
-                .all(|(&held, &want)| table.fits_written(held, want))
+        held.iter()
+            .zip(asked)
+            .all(|(&held, &want)| table.fits_written(held, want))
     }
 
     /// Block `impl_def`'s trait arguments, its parameters bound as
@@ -1906,9 +1907,11 @@ impl TypeSystem {
     ) -> Vec<TypeId> {
         let mut table = self.type_table.borrow_mut();
         let written = table.impl_trait_args(impl_def).to_vec();
-        if written.len() != asked.len() {
-            return written;
-        }
+        assert_eq!(
+            written.len(),
+            asked.len(),
+            "a trait's arguments are asked whole"
+        );
         let mut slots = TypeArgMap::default();
         match receiver {
             Some(receiver) => table.bind_impl_slots_asked(impl_def, asked, receiver, &mut slots),

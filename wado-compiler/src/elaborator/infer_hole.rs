@@ -703,8 +703,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
-    /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
-    /// parameter, so unsolved siblings of one use site coalesce.
     /// A variable for the slot `param`, blamed as one of `owner`.
     pub(super) fn mint_slot_hole(&mut self, span: Span, param: &str, owner: &str) -> TypeId {
         let hole = self.mint_infer_var_named(param);
@@ -713,12 +711,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Blame each open `_` `arg` holds as the slot `param` it fills would be.
-    pub(super) fn blame_holes_as_slot(&mut self, arg: TypeId, span: Span, param: &str, owner: &str) {
+    pub(super) fn blame_holes_as_slot(
+        &mut self,
+        arg: TypeId,
+        span: Span,
+        param: &str,
+        owner: &str,
+    ) {
         for hole in self.written_holes_in(arg) {
             self.attach_infer_var_blame(hole, span, param.to_string(), owner.to_string());
         }
     }
 
+    /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
+    /// parameter, so unsolved siblings of one use site coalesce.
     pub(super) fn attach_infer_var_blame(
         &mut self,
         var: TypeId,

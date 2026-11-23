@@ -2530,7 +2530,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A `_` for every argument writes none of them, and the
                 // receiver selects the impl as an unqualified call's does.
                 let writes_trait_args = writes_trait_args
-                    && !head.args.iter().all(|arg| matches!(arg, ast::Type::Infer(_)));
+                    && !head
+                        .args
+                        .iter()
+                        .all(|arg| matches!(arg, ast::Type::Infer(_)));
                 let trait_args = if writes_trait_args {
                     self.resolve_trait_turbofish(
                         head.args,

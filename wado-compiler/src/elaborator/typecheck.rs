@@ -395,13 +395,9 @@ pub(super) fn meetings(
     }
 }
 
-/// Whether `actual` and `expected` are apart at their outermost type, which no
-/// rule here relates across: two declarations, two primitives, or two kinds of
-/// type. A reference, a resource and `!` are not judged here, since a rule
-/// relates one to another of a different outermost type, and a hole or a
-/// parameter is no outermost type at all.
 /// Whether `actual` and `expected` part at some position: their heads, or
-/// the heads of a pair of arguments one constructor holds in both.
+/// the heads of a pair of arguments one constructor, or one `fn` type, holds
+/// in both.
 fn apart_around_holes(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
     let any_apart = |a_args: &[TypeId], e_args: &[TypeId]| {
         a_args.len() == e_args.len()
@@ -434,6 +430,11 @@ fn apart_around_holes(actual: TypeId, expected: TypeId, type_table: &TypeTable) 
         .is_some_and(|(a_args, e_args)| any_apart(a_args, e_args))
 }
 
+/// Whether `actual` and `expected` are apart at their outermost type, which no
+/// rule here relates across: two declarations, two primitives, or two kinds of
+/// type. A reference, a resource and `!` are not judged here, since a rule
+/// relates one to another of a different outermost type, and a hole or a
+/// parameter is no outermost type at all.
 fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
     let head = |id: TypeId| match type_table.get(id) {
         ResolvedType::Primitive(_)
