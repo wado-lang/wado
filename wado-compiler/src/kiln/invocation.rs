@@ -220,10 +220,11 @@ pub struct Invocation {
     /// Supplementary schema files, resolved relative to the declaring `.wado`
     /// file, preserving declaration order.
     pub inputs: Vec<InvocationInput>,
-    /// Where each file a dependency exports is read: its package reference
-    /// (`ns:pkg@ver/path`), which `from` or an input holds, → its path on this
-    /// machine. Excluded from [`Invocation::identity_tuple`], which must not
-    /// depend on where a dependency's checkout lies.
+    /// Where each local file the invocation names is read: a file a dependency
+    /// exports by its package reference (`ns:pkg@ver/path`) → its path on this
+    /// machine, and any other local path → itself. Excluded from
+    /// [`Invocation::identity_tuple`], which must not depend on where a
+    /// dependency's checkout lies.
     pub located: IndexMap<InvocationPath, String>,
     /// Resolved output directory (default: `build/kiln/<synthesized-id>`).
     pub output_dir: InvocationPath,

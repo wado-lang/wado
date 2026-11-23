@@ -572,8 +572,10 @@ fn lower_input(
 
 /// A `from` or `inputs` path: a URL as written, a path relative to the remote
 /// module declaring it, a file a dependency exports by its package reference,
-/// recorded in `located` with where it lies, or a `./` / `../` path relative to
-/// the declaring file.
+/// or a `./` / `../` path relative to the declaring file. A reference and a
+/// local path are recorded in `located` with where each lies, and a path that
+/// names two places is refused: a local directory can be spelled as a
+/// reference.
 fn resolve_source(
     clause: &Clause<'_>,
     raw: &str,
@@ -587,11 +589,21 @@ fn resolve_source(
         use_decl,
         exported,
     } = *clause;
+    let mut place = |path: &InvocationPath, at: String, errors: &mut Vec<Diagnostic>| {
+        let known = located.entry(path.clone()).or_insert_with(|| at.clone());
+        if *known != at {
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                format!("kiln: `{field}`: `{path}` names both `{known}` and `{at}`"),
+            ));
+        }
+    };
     if let Some((package, file)) = split_exported_file(raw) {
         return match exported(module_path, package, file) {
             Ok(ExportedInput { reference, path }) => {
                 let reference = InvocationPath(reference);
-                located.insert(reference.clone(), path);
+                place(&reference, path, errors);
                 reference
             }
             Err(reason) => {
@@ -618,14 +630,7 @@ fn resolve_source(
         return InvocationPath::normalize(&resolve_module_path(module_path, raw));
     }
     let local = resolve_or_reject(module_path, raw, manifest_root, field, use_decl, errors);
-    // A reference and a local path share one namespace in `located`.
-    if split_exported_file(local.as_str()).is_some() {
-        errors.push(use_error(
-            module_path,
-            use_decl,
-            format!("kiln: `{field}` names `{local}`, a local path spelled as a package reference"),
-        ));
-    }
+    place(&local, local.as_str().to_string(), errors);
     local
 }
 
@@ -962,16 +967,31 @@ mod tests {
 
     #[test]
     fn a_local_path_spelled_as_a_package_reference_is_rejected() {
-        let attrs = attr_with_generator(&[("module", AttrValue::string("lib:gen".to_string()))]);
-        let module = module_with_use("./acme:schemas@0.2.0/a.idl", attrs);
+        // A package with no namespace names its files with no `:`.
+        let schemas = |_: &str, _: &str, file: &str| {
+            Ok(ExportedInput {
+                reference: format!("schemas@0.2.0/{file}"),
+                path: format!("/dep/{file}"),
+            })
+        };
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::string("lib:gen".to_string())),
+            (
+                "inputs",
+                AttrValue::Array(vec![AttrItem {
+                    span: span(),
+                    value: AttrValue::string("lib:schemas/a.idl".to_string()),
+                }]),
+            ),
+        ]);
+        let module = module_with_use("./schemas@0.2.0/a.idl", attrs);
         let errs = expect_errors(collect_inline_invocations(
             [("main.wado", &module)],
-            &no_exports,
+            &schemas,
             "",
         ));
         assert!(
-            errs.iter()
-                .any(|d| d.message.contains("spelled as a package reference")),
+            errs.iter().any(|d| d.message.contains("names both")),
             "{errs:?}"
         );
     }
