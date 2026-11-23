@@ -3879,8 +3879,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
-    /// [`Self::resolve_cast`] to `target_type`, whose `_`s, nested in it, the
-    /// operand settles.
+    /// [`Self::resolve_cast`] to `target_type`, whose `_`s the operand
+    /// settles.
     fn resolve_cast_to(
         &mut self,
         cast: &ast::CastExpr,
