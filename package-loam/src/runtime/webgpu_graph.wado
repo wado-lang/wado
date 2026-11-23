@@ -106,7 +106,8 @@ use {
 } from "./webgpu.wado";
 use { Experts, Held, Hidden, Picked, Projection, Routing, decomposed_mixture, runs_by_picks } from "./experts.wado";
 use { HostWeight, stored_bytes } from "./weight.wado";
-use { LinearArray } from "core:linear";
+use { HostProjection, expert_row, host_bytes } from "./cpu_experts.wado";
+use { LinearArray, LinearArray64 } from "core:linear";
 
 /// A pass recorded once per shape class and planned into kernels, which each
 /// call launches, and the values of the nodes that read no argument, kept on
@@ -320,6 +321,21 @@ impl Backend for WebGpuBackend {
     fn written(&mut self, pool: &mut Any<WebGpuBackend>, slot: i32, row: HostWeight) with (GpuQueue, GpuBuffer) {
         self.written_slot(on_device(pool).unwrap(), slot, &row);
     }
+
+    fn computes_misses(&self) -> bool {
+        return true;
+    }
+
+    fn held_on_host(&mut self, pool: &Any<WebGpuBackend>, step: i32, experts: HostWeight) {
+        self.host_expert_at[host_expert_key(on_device(pool).unwrap(), step)] = self.host_experts.len();
+        self.host_experts.push(host_bytes(&experts));
+    }
+}
+
+/// Where `WebGpuBackend::host_experts` holds the experts of the layer whose
+/// host step is `step`, for the pool `pool` views.
+fn host_expert_key(pool: &DeviceTensor, step: i32) -> i64 {
+    return (pool.slot as i64 << 32) | step as i64;
 }
 
 impl Graph for WebGpuBackend {
@@ -894,15 +910,26 @@ fn by_picks<E: Float>(
 ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
     let picks = g.host(&routing.picks).data;
     let slots = g.host(&held.slots).data;
+    let k = experts.k;
+    let slot_of = |pick: i32| slots[picks[pick] as i32] as i32;
+    let tokens = g.extents_of(rows)[0];
+    let hosted = (0..<tokens * k).any(|pick| slot_of(pick) < 0);
+    // What the host reads is read back before the device's products are
+    // queued, so that the host computes its picks while the device runs them.
+    let mut host_rows: List<f32> = [];
+    let mut host_weights: List<f32> = [];
+    if hosted {
+        host_rows = g.host(rows).data;
+        host_weights = g.host(&routing.weights).data;
+    }
     let x = g.device_view(rows);
     let weights = g.device_view(&routing.weights);
     let [up, down] = [
         expert_pool(g, &ffn.0),
         expert_pool(g, &ffn.1),
     ];
-    let k = experts.k;
-    let mut mixed: Option<Placed<f32, [Picked, Hidden]>> = null;
-    for let t of 0..<x.extents[0] {
+    let mut totals: List<Option<DeviceTensor>> = [];
+    for let t of 0..<tokens {
         let row = DeviceTensor {
             ..x,
             offset: x.offset + t * x.strides[0],
@@ -910,8 +937,12 @@ fn by_picks<E: Float>(
         };
         let mut total: Option<DeviceTensor> = null;
         for let j of 0..<k {
-            let slot = slots[picks[t * k + j] as i32] as i32;
+            let slot = slot_of(t * k + j);
+            if slot < 0 {
+                continue;
+            }
             let Some(inner) = g.gated_up(&row, &up, slot, experts) else {
+                assert !hosted, "the host's picks have no slot to fall back on";
                 return null;
             };
             let weight = DeviceTensor {
@@ -920,10 +951,40 @@ fn by_picks<E: Float>(
                 extents: [1, 1],
             };
             let Some(sum) = g.weighed_down(&inner, &down, slot, &weight, optional(&total), &experts.quantized) else {
+                assert !hosted, "the host's picks have no slot to fall back on";
                 return null;
             };
             total = Option::Some(sum);
         }
+        totals.push(total);
+    }
+    if hosted {
+        g.flush();
+        let host_up = host_projection(g, &up, experts.step);
+        let host_down = host_projection(g, &down, experts.step);
+        let hidden = x.extents[1];
+        for let t of 0..<tokens {
+            let mut sum = List::<f32>::filled(hidden, 0.0);
+            for let j of 0..<k {
+                let weight = host_weights[t * k + j];
+                if slot_of(t * k + j) >= 0 || !(weight > 0.0) {
+                    continue;
+                }
+                let row = host_rows[t * hidden..<(t + 1) * hidden].to_list();
+                let out = expert_row(&host_up, &host_down, picks[t * k + j] as i32, &row, experts);
+                for let i of 0..<hidden {
+                    sum[i] += weight * out[i];
+                }
+            }
+            let computed = g.upload(&Tensor::<f32, [Picked, Hidden]> { data: sum, extents: [1, hidden] });
+            totals[t] = Option::Some(g.device_view(&match &totals[t] {
+                Some(d) => g.binary(Binary::Add, &Placed::<f32, [Picked, Hidden]>::Device(*d), &computed),
+                null => computed,
+            }));
+        }
+    }
+    let mut mixed: Option<Placed<f32, [Picked, Hidden]>> = null;
+    for let total of totals {
         let done = Placed::<f32, [Picked, Hidden]>::Device(total.unwrap());
         mixed = Option::Some(match &mixed {
             Some(before) => g.concatenate(before, &done, 0),
@@ -931,6 +992,33 @@ fn by_picks<E: Float>(
         });
     }
     return Option::Some(g.device_view(&mixed.unwrap()));
+}
+
+/// `pool`'s projection of every expert of the layer whose host step is `step`,
+/// as the host holds it.
+fn host_projection(g: &WebGpuBackend, pool: &ExpertPool, step: i32) -> HostProjection {
+    return HostProjection {
+        packed: host_weight(g, &pool.packed, step),
+        scales: host_weight(g, &pool.scales, step),
+        bias: match &pool.bias {
+            Some(b) => Option::Some(host_weight(g, b, step)),
+            null => null,
+        },
+        zero_points: match &pool.zero_points {
+            Some(z) => Option::Some(host_weight(g, z, step)),
+            null => null,
+        },
+        shape: pool.shape,
+    };
+}
+
+/// The weight the pool `pool` views holds of every expert of the layer whose
+/// host step is `step`, as the host holds it.
+fn host_weight(g: &WebGpuBackend, pool: &DeviceTensor, step: i32) -> &LinearArray64<u8> {
+    let Some(at) = g.host_expert_at.get(host_expert_key(pool, step)) else {
+        panic(`no layer's experts are held on the host for host step ${step}`);
+    };
+    return &g.host_experts[at];
 }
 
 /// `p`'s pools on the device.

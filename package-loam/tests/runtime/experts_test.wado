@@ -166,8 +166,8 @@ test "a replay counts the picks of layers holding their own experts as held" {
 test "experts fetched into pools of fewer slots compute what pools of every slot do, in a loop or a branch too" {
     let mut cpu = Cpu {};
     for let stacking of STACKINGS {
-        let resident = stacked_runs(&mut cpu, 8, stacking, STACKED_RUNS);
-        let fetched = stacked_runs(&mut cpu, 5, stacking, STACKED_RUNS);
+        let [resident, _] = stacked_runs(&mut cpu, 8, stacking, STACKED_RUNS);
+        let [fetched, _] = stacked_runs(&mut cpu, 5, stacking, STACKED_RUNS);
         for let [r, f] of resident.into_iter().zip(fetched.into_iter()) {
             let [want, got] = [
                 cpu.download(&typed::<Cpu, f32, [A, B]>(&cpu, &r)),

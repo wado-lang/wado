@@ -19,7 +19,7 @@ use {
 } from "./hlo.wado";
 use { Any, Programs, Recorded, Recorder, Untyped, Value, typed } from "./recorded.wado";
 use { Experts, mixture_of_experts } from "./experts.wado";
-use { ExpertBytes, ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
+use { ExpertBytes, ExpertCounts, ExpertLayout, HeldExperts, StoredExperts } from "./held_experts.wado";
 use { HashMap } from "core:collections";
 use { HostWeight, stored_bytes } from "./weight.wado";
 use { Attention, ElementKind, Float, Tensor, element_count } from "./tensor.wado";
@@ -665,9 +665,11 @@ pub global STACKINGS: List<Stacking> = [Stacking::Straight, Stacking::Looped, St
 
 /// The `[tokens, count]` each stacking runs over. Each layer of 3 tokens runs
 /// every expert it picks, which 5 slots hold only by giving way to the other
-/// layer's; 1 token runs its picks. A budget of 8 experts holds both layers.
-/// A count of 0 runs no loop and takes no branch.
+/// layer's; 1 token runs its picks, the first time from pools that hold none
+/// of them. A budget of 8 experts holds both layers. A count of 0 runs no loop
+/// and takes no branch.
 pub global STACKED_RUNS: List<[i32, i64]> = [
+    [1, 1],
     [3, 2],
     [1, 0],
     [3, 1],
@@ -675,13 +677,14 @@ pub global STACKED_RUNS: List<[i32, i64]> = [
 
 /// `stacked_pass` over pools within a budget of `slots` experts, its layers
 /// where `stacking` puts them, run once for each `[tokens, count]` of `runs`;
-/// each run's result, of `f32` over `[A, B]`.
+/// each run's result, of `f32` over `[A, B]`, and how the host steps held the
+/// experts.
 pub fn stacked_runs<affine G: Backend>(
     g: &mut G,
     slots: i32,
     stacking: Stacking,
     runs: List<[i32, i64]>,
-) -> List<Any<G>> with _ {
+) -> [List<Any<G>>, ExpertCounts] with _ {
     let [files, layers] = stacked_experts();
     let expert_bytes = layers[0].into_iter().map(|w| stored_bytes(w.kind, &w.extents)).sum().unwrap();
     let mut store = HeldExperts::within(
@@ -715,7 +718,7 @@ pub fn stacked_runs<affine G: Backend>(
         ], || pools, |step, read, weights| store.fetched(g, &files, step, read, weights));
         results.push(got[0]);
     }
-    return results;
+    return [results, *store.counts()];
 }
 
 /// `mixing` of `experts_case(tokens)` recorded, its input and router then its

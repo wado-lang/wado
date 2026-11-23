@@ -2,12 +2,13 @@
 //! stores them, where a device's pools lack it: the SwiGLU between two
 //! block-quantized products that `experts.wado`'s decomposition computes. Its
 //! values are 4 bits in blocks of 32, so one guest core runs each product in
-//! 128-bit SIMD, its activations quantized to i8 per block. That parts from the
-//! decomposition's f32 by at most half an i8 step of each block's largest
-//! activation.
+//! 128-bit SIMD, its activations quantized to i16 per block. That parts from
+//! the decomposition's f32 by at most half an i16 step of each block's largest
+//! activation; i8 steps part from it by 0.9% on `experts_case`, past what a
+//! device's product is held to.
 
 use { LinearArray, LinearArray64 } from "core:linear";
-use { f32x4, i32x4, i8x16, u8x16 } from "core:simd";
+use { f32x4, i16x8, i32x4, i8x16, u8x16 } from "core:simd";
 use { Experts, ProjectionShape } from "./experts.wado";
 use { Quantized } from "./hlo.wado";
 use { HostWeight } from "./weight.wado";
@@ -72,7 +73,7 @@ pub fn expert_row(
     return product(down, expert, &QuantizedRow::of(&gated));
 }
 
-/// A row of activations quantized to i8 per block: each block's values `v`
+/// A row of activations quantized to i16 per block: each block's values `v`
 /// stand for `v · scale`, its even places first and then its odd ones, as a
 /// weight's byte holds an even place in its low bits and the next in its high
 /// bits. `sums` holds each block's values summed, which a zero point scales.
@@ -87,7 +88,7 @@ impl QuantizedRow {
         contract x.len() % BLOCK == 0, "a row spans whole blocks"
     {
         let blocks = x.len() / BLOCK;
-        let mut values = LinearArray::<u8>::filled(x.len(), 0);
+        let mut values = LinearArray::<u8>::filled(2 * x.len(), 0);
         let mut scales = List::<f32>::filled(blocks, 0.0);
         let mut sums = List::<i32>::filled(blocks, 0);
         for let b of 0..<blocks {
@@ -99,13 +100,13 @@ impl QuantizedRow {
             if largest == 0.0 {
                 continue;
             }
-            let scale = largest / 127.0;
+            let scale = largest / 32767.0;
             scales[b] = scale;
             let mut sum = 0;
             for let i of 0..<BLOCK {
                 let v = f32::round(x[first + i] / scale) as i32;
                 let place = if i % 2 == 0 { i / 2 } else { BLOB + i / 2 };
-                values[first + place] = v as u8;
+                values.store_at::<i16>(2 * (first + place), v as i16);
                 sum += v;
             }
             sums[b] = sum;
@@ -117,9 +118,8 @@ impl QuantizedRow {
 /// Each row of expert `expert`'s weight in `p` times `x`, plus its bias.
 fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
     let shape = &p.shape;
-    assert shape.blob == BLOB && shape.blocks * BLOCK == x.values.len(), "the row spans the weight's blocks";
+    assert shape.blob == BLOB && shape.blocks == x.scales.len(), "the row spans the weight's blocks";
     let low = u8x16::splat(15);
-    let zero = i32x4::splat(0);
     let first_row = expert as i64 * shape.rows as i64;
     let mut out = List::<f32>::filled(shape.rows, 0.0);
     for let r of 0..<shape.rows {
@@ -132,12 +132,11 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
             let packed = unchecked p.packed.load_at::<v128>(BLOB as i64 * block) as u8x16;
             let evens = (packed & low) as i8x16;
             let odds = (packed >> 4) as i8x16;
-            let x_evens = unchecked x.values.load_at::<v128>(BLOCK * b) as i8x16;
-            let x_odds = unchecked x.values.load_at::<v128>(BLOCK * b + BLOB) as i8x16;
-            let dot = i32x4::relaxed_dot_i8x16_i7x16_add_s(x_odds, odds, &i32x4::relaxed_dot_i8x16_i7x16_add_s(
-                x_evens,
+            let at = 2 * BLOCK * b;
+            let dot = half_dot(x, at, i16x8::extend_low_i8x16_u(evens)) + half_dot(x, at + 16, i16x8::extend_high_i8x16_u(
                 evens,
-                &zero,
+            )) + half_dot(x, at + 32, i16x8::extend_low_i8x16_u(odds)) + half_dot(x, at + 48, i16x8::extend_high_i8x16_u(
+                odds,
             ));
             let scale = unchecked p.scales.load_at::<f32>(4 * block) * unchecked x.scales[b];
             sum = sum + f32x4::convert_i32x4_s(dot) * f32x4::splat(scale);
@@ -150,6 +149,11 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
         out[r] = value;
     }
     return out;
+}
+
+/// The eight values of `x` from its byte `at` times `w`, summed in pairs.
+fn half_dot(x: &QuantizedRow, at: i32, w: i16x8) -> i32x4 {
+    return (unchecked x.values.load_at::<v128>(at) as i32x4).dot_i16x8_s(&(w as i32x4));
 }
 
 /// The zero point of block `b` of the weight's row `row`, packed two to a

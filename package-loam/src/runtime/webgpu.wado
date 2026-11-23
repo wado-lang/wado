@@ -40,7 +40,7 @@ use {
     row_extents,
 } from "./tensor.wado";
 use { HashMap, HashSet, TreeMap } from "core:collections";
-use { LinearArray } from "core:linear";
+use { LinearArray, LinearArray64 } from "core:linear";
 use { HostWeight } from "./weight.wado";
 use { Experts, ProjectionShape } from "./experts.wado";
 use { Quantized } from "./hlo.wado";
@@ -589,6 +589,11 @@ pub affine struct WebGpuBackend {
     bind_groups: i32,
     replays: i32,
     internal cpu: Cpu,
+    /// Every expert of each layer's weight that a shared pool holds a few of,
+    /// as `host_bytes` holds them, at the place `host_expert_at` gives for the
+    /// pool's buffer and the layer's host step.
+    internal host_experts: List<LinearArray64<u8>>,
+    internal host_expert_at: HashMap<i64, i32>,
 }
 
 /// Invocations per workgroup of every shader but the product's: a power of
@@ -766,6 +771,8 @@ impl WebGpuBackend {
             bind_groups: 0,
             replays: 0,
             cpu: Cpu {},
+            host_experts: [],
+            host_expert_at: HashMap::new(),
         });
     }
 
@@ -1595,7 +1602,7 @@ impl WebGpuBackend {
     }
 
     /// Submits every command recorded.
-    fn flush(
+    internal fn flush(
         &mut self,
     ) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer, GpuComputePassEncoder) {
         self.write_parameters();

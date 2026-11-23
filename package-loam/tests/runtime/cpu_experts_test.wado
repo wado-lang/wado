@@ -1,5 +1,5 @@
 //! An expert the host computes from the stored weights matches the one the
-//! decomposition computes, within its activations' i8 steps.
+//! decomposition computes, within what a device's product is held to.
 
 use { LinearArray64 } from "core:linear";
 use { A, C, experts_case, mixing } from "../../src/runtime/graph_cases.wado";
@@ -62,7 +62,7 @@ test "the host computes each expert as the decomposition does" {
         let got = expert_row(&up, &down, e, &c.x.data, &experts);
         let largest = alone.data.into_iter().map(|v| f32::abs(v)).max().unwrap();
         for let i of 0..<got.len() {
-            assert f32::abs(got[i] - alone.data[i]) <= 0.01 * largest;
+            assert f32::abs(got[i] - alone.data[i]) <= 1e-4 * largest;
         }
     }
 }
