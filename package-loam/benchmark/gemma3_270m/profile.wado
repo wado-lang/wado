@@ -5,7 +5,7 @@
 //!     wado run-webgpu --no-spectre-mitigation --dir ../example/gemma3-270m gemma3_270m/profile.wado q4
 
 use { println, args, Environment, Stdout } from "core:cli";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Preopens } from "core:fs";
 use {
     Webgpu,
@@ -62,7 +62,7 @@ export fn run() with (Environment, Stdout, Preopens, Webgpu, Gpu, GpuAdapter, Gp
 /// Prints the time of each kind of kernel, then of each kernel on its grid.
 fn report(times: &List<KernelTime>) with Stdout {
     let mut total: i64 = 0;
-    let mut by_kind = TreeMap::<String, [i32, i64]>::new();
+    let mut by_kind = HashMap::<String, [i32, i64]>::new();
     for let t of times {
         total += t.nanoseconds;
         let [dispatches, nanoseconds] = by_kind.get_or_insert(t.kernel, [0, 0 as i64]);

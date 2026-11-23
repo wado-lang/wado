@@ -31,6 +31,8 @@ use {
     Shl,
     Shr,
     Eq,
+    Hash,
+    Hasher,
     Ord,
     Ordering,
     Default,
@@ -646,6 +648,13 @@ impl Eq for u128 {
     }
 }
 
+impl Hash for u128 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(self.low);
+        h.write_u64(self.high);
+    }
+}
+
 // Ord implementation for u128
 impl Ord for u128 {
     pub fn cmp(&self, other: &Self) -> Ordering {
@@ -1182,6 +1191,13 @@ impl UpperHex for i128 {
 impl Eq for i128 {
     pub fn eq(&self, other: &Self) -> bool {
         return self.low == other.low && self.high == other.high;
+    }
+}
+
+impl Hash for i128 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(self.low);
+        h.write_u64(self.high as u64);
     }
 }
 

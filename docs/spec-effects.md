@@ -410,8 +410,8 @@ fn make_pair() -> [Stream<u8>, StreamWritable<u8>] with Stream {
 }
 
 // `Headers` is a newtype of the `Fields` resource.
-fn headers_to_map(headers: &Headers) -> TreeMap<String, String> with Fields {
-    let mut map = TreeMap::<String, String>::new();
+fn headers_to_map(headers: &Headers) -> HashMap<String, String> with Fields {
+    let mut map = HashMap::<String, String>::new();
     for let [name, value] of headers.copy_all() {
         map[name as String] = String::from_utf8_lossy(&value);
     }

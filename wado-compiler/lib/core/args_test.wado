@@ -6,7 +6,7 @@
 
 use { Deserialize, Deserializer, DeserializeError } from "core:serde";
 use { parse, from_env, ArgsError, ArgsErrorKind } from "core:args";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Uuid } from "core:uuid";
 use { Instant } from "core:temporal";
 
@@ -516,7 +516,7 @@ test "a field type's own failure reports InvalidValue" {
 }
 
 struct MapOpt {
-    pairs: TreeMap<String, String> = TreeMap::new(),
+    pairs: HashMap<String, String> = HashMap::new(),
 }
 impl Deserialize for MapOpt;
 

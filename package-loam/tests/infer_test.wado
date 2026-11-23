@@ -21,7 +21,7 @@ use { read } from "../src/onnx_text.wado";
 use { Poly } from "../src/poly.wado";
 use { AxisConflict } from "../src/shape.wado";
 use { bind_dims } from "../src/specialize.wado";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 
 fn is_error<E: Error>() {
 }
@@ -53,9 +53,9 @@ fn y_axes(source: String) -> Result<String, String> {
 }
 
 /// The shapes stage 0 gives `source`.
-fn shapes_of(source: String) -> TreeMap<String, List<String>> {
+fn shapes_of(source: String) -> HashMap<String, List<String>> {
     let graph = read(&source).unwrap();
-    let mut names = TreeMap::<String, List<String>>::new();
+    let mut names = HashMap::<String, List<String>>::new();
     for let [tensor, shape] of infer(&graph).unwrap().shapes.entries() {
         names[*tensor] = shape.names();
     }
@@ -112,7 +112,7 @@ test "a dim_param on two inputs is one axis, though no operation meets them" {
     assert shapes["Z"].axes[0].name == "N";
 
     let mut bound = graph;
-    bind_dims(&mut bound, &({ N: 1 } as TreeMap<String, i32>)).unwrap();
+    bind_dims(&mut bound, &({ N: 1 } as HashMap<String, i32>)).unwrap();
     let fixed = infer(&bound).unwrap().shapes;
     assert `${fixed["Y"].axes[0].name}=${fixed["Y"].axes[0].extent}` == "N=1";
     assert fixed["Z"].axes[0].name == "N";

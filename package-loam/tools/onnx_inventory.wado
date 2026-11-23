@@ -7,7 +7,7 @@
 use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use grog from "lib:grog";
 use onnx from "../src/onnx.proto"
     with {
@@ -24,7 +24,7 @@ struct Operator {
     nodes: i32 = 0,
     inputs: List<i32> = [],
     outputs: List<i32> = [],
-    attrs: TreeMap<String, List<String>> = TreeMap::<String, List<String>>::new(),
+    attrs: HashMap<String, List<String>> = HashMap::<String, List<String>>::new(),
 }
 
 struct Tally {
@@ -109,7 +109,7 @@ fn push_new<T: Eq>(values: &mut List<T>, value: T) {
 }
 
 /// Counts `graph`'s nodes into `ops`, and those of every branch under them.
-fn count_nodes(graph: &onnx::GraphProto, ops: &mut TreeMap<String, Operator>) {
+fn count_nodes(graph: &onnx::GraphProto, ops: &mut HashMap<String, Operator>) {
     for let node of graph.node {
         let domain = match node.domain {
             Some(domain) && domain != "" => domain,
@@ -171,14 +171,14 @@ fn stored_bytes(t: &onnx::TensorProto) -> i64 {
     return (bits * count).div_ceil(8);
 }
 
-fn tally(into: &mut TreeMap<String, Tally>, key: String, bytes: i64) {
+fn tally(into: &mut HashMap<String, Tally>, key: String, bytes: i64) {
     let mut entry = into.get(key).unwrap_or(Tally {});
     entry.tensors += 1;
     entry.bytes += bytes;
     into[key] = entry;
 }
 
-fn print_tallies(title: String, tallies: &TreeMap<String, Tally>) with Stdout {
+fn print_tallies(title: String, tallies: &HashMap<String, Tally>) with Stdout {
     println(`\n${title}`);
     for let [key, t] of tallies.entries() {
         println(`  ${key}: ${t.tensors} tensors, ${t.bytes} bytes`);
@@ -220,7 +220,7 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
     println(`opsets ${joined(&opsets, " ")}`);
     println(`functions ${model.functions.len()}`);
 
-    let mut ops = TreeMap::<String, Operator>::new();
+    let mut ops = HashMap::<String, Operator>::new();
     count_nodes(graph, &mut ops);
     let mut names: List<String> = [];
     for let [name, _] of ops.entries() {
@@ -236,8 +236,8 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
         }
     }
 
-    let mut by_type = TreeMap::<String, Tally>::new();
-    let mut by_file = TreeMap::<String, Tally>::new();
+    let mut by_type = HashMap::<String, Tally>::new();
+    let mut by_file = HashMap::<String, Tally>::new();
     let mut weights: List<Weight> = [];
     let mut initializers: List<String> = [];
     for let t of graph.initializer {

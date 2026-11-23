@@ -7,6 +7,7 @@ import { CORES } from "./gen/cores.js";
 import { types } from "./shims/http.js";
 import * as cli from "./shims/cli.js";
 import * as clocks from "./shims/clocks.js";
+import * as random from "./shims/random.js";
 
 const { Fields, Request, Response: WasiResponse } = types;
 
@@ -23,6 +24,7 @@ function guest() {
   }, {
     "./shims/cli.js": cli,
     "./shims/clocks.js": clocks,
+    "./shims/random.js": random,
     "./shims/http.js": { types },
   }).then((x) => x.handler ?? x["wasi:http/handler@0.3.0"]);
 }

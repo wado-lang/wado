@@ -25,16 +25,18 @@ nothing here waits on a runtime upgrade.
 
 ## Decision
 
-### `TreeMap<K, V>` is the Wado spelling of `map<K, V>`
+### `HashMap<K, V>` is the Wado spelling of `map<K, V>`
 
 | Direction       | Mapping                       |
 | --------------- | ----------------------------- |
-| Wado → WIT / CM | `TreeMap<K, V>` → `map<k, v>` |
-| WIT / CM → Wado | `map<k, v>` → `TreeMap<K, V>` |
+| Wado → WIT / CM | `HashMap<K, V>` → `map<k, v>` |
+| WIT / CM → Wado | `map<k, v>` → `HashMap<K, V>` |
 
-No new Wado type. `TreeMap` is what a Wado author already reaches for, and
-insertion-order iteration is exactly the "last write wins, order unspecified"
-contract `map` states.
+No new Wado type. The spelling was `TreeMap` until
+[WEP: HashMap](./wep-2026-10-01-hash-map.md) made `HashMap` the default map.
+Both iterate in insertion order, which is exactly the "last write wins, order
+unspecified" contract `map` states. A `HashMap` built by a lift hashes under the
+host's seed, as `new()` does.
 
 ### `K` is restricted to the Component Model key types
 
@@ -45,10 +47,10 @@ keytype ::= bool | s8 | u8 | s16 | u16 | s32 | u32 | s64 | u64 | char | string
 ```
 
 At a component boundary, `K` must be one of `bool`, `i8`–`i64`, `u8`–`u64`,
-`char`, `String`. A `TreeMap` with any other key is diagnosed at the boundary,
+`char`, `String`. A `HashMap` with any other key is diagnosed at the boundary,
 naming the key type and the admissible set. It is not degraded to
 `list<tuple<K, V>>`, which would make the emitted WIT disagree with the source.
-`TreeMap` itself is unchanged: any `K: Ord` remains legal away from the
+`HashMap` itself is unchanged: any `K: Hash` remains legal away from the
 boundary.
 
 `f32` / `f64` are absent from `keytype` and stay absent here.
@@ -62,39 +64,39 @@ type's, unchanged:
 - in memory: 8 bytes, align 4
 - elements at `ptr + i * cm_size(tuple<K, V>)`
 
-`cm_size` / `cm_align` / `cm_flatten` answer for `TreeMap<K, V>` exactly what
+`cm_size` / `cm_align` / `cm_flatten` answer for `HashMap<K, V>` exactly what
 they answer for `List<[K, V]>`. Only the component _type section_ differs, where
 `CmDefined::Map` encodes `0x63` instead of a list of a tuple.
 
-### Lift and lower go straight through `TreeMap`'s public API
+### Lift and lower go straight through `HashMap`'s public API
 
 No intermediate `List<[K, V]>`: Wado's assignment is a copy, so a pair list is a
 second full copy of the map's contents on every crossing. The despecialization
 describes the _bytes_; reusing it as a Wado value in between is not the same
 thing.
 
-The binding also does not learn `TreeMap`'s representation, an AA-tree over two
-backing lists with a tombstone flag. That would break the moment the tree is
+The binding also does not learn the map's representation, an index over an
+entry log with a tombstone flag. That would break the moment the map is
 retuned. Everything it needs is public, and is what user code writes:
 
-- **Lift** (`map` → `TreeMap`): `TreeMap::new()`, then the list-lift loop with
+- **Lift** (`map` → `HashMap`): `HashMap::new()`, then the list-lift loop with
   its accumulator swapped. Each iteration lifts `K` at the pair's offset and
   `V` at the next, and calls `IndexAssign::index_assign` (`map[k] = v`). That
   is a last-wins, order-preserving insert, exactly the rule the spec states for
   a duplicate key.
-- **Lower** (`TreeMap` → `map`): `len()` sizes the `realloc`'d buffer (it counts
+- **Lower** (`HashMap` → `map`): `len()` sizes the `realloc`'d buffer (it counts
   live pairs, not tombstones), then the loop walks `entries()` and writes each
   pair at `base + i * stride`. The iterator yields `[&K, &V]`, so the lower
   reads through the references and copies nothing.
 - **Free**: the list free, unchanged, since the buffer is a list buffer.
 
 `entries()` yields insertion order and skips tombstones, so a lowered `map`
-never carries a duplicate. Round-tripping a `TreeMap` is therefore the identity,
+never carries a duplicate. Round-tripping a `HashMap` is therefore the identity,
 and round-tripping a duplicate-bearing `map` normalizes it, both of which the
 spec permits.
 
 The lower is the one place this costs new machinery. The existing loop is
-index-driven (`len` + `index_value`), and a `TreeMap` has no positional accessor
+index-driven (`len` + `index_value`), and a `HashMap` has no positional accessor
 over live pairs, because a tombstone parts position from index. So the CM
 binding gains an iterator-driven loop.
 
@@ -107,13 +109,13 @@ baseline, where 🗺️ is required. Wado's own validation already admits it
 
 ## Consequences
 
-- `wado wit` emits `map<k, v>` for a `TreeMap<K, V>` in an exported signature,
-  and `wado-from-idl` / `wit_consume` produce `TreeMap<K, V>` for `map<k, v>`,
+- `wado wit` emits `map<k, v>` for a `HashMap<K, V>` in an exported signature,
+  and `wado-from-idl` / `wit_consume` produce `HashMap<K, V>` for `map<k, v>`,
   so the `wasi:*` stdlib regenerates cleanly when a 0.3.1 interface adopts one.
 - `package-cm-catalog` gains `map` rows. The catalog already carries the
   despecialized shape, `id_assoc_array(List<[String, u32]>)`, so the new rows
   pin the _specialization_: same bytes, different type constructor.
-- A `TreeMap` key outside `keytype` is a boundary diagnostic, not a silent
+- A `HashMap` key outside `keytype` is a boundary diagnostic, not a silent
   fallback.
 - Every method the binding calls is a registered `CompilerItem`: `new`,
   `index_assign`, `len`, `entries`, and the entry iterator's `next`.
@@ -121,8 +123,8 @@ baseline, where 🗺️ is required. Wado's own validation already admits it
   has no edge in it, so an unregistered method is gone by the time the binding
   names it. The registry also gives the binding the name to call.
 - An imported component's `map` crosses in both directions too: its binding
-  module imports `TreeMap` from `core:collections`, and the import adapter
-  lowers a `TreeMap` argument through the same pair buffer.
+  module imports `HashMap` from `core:collections`, and the import adapter
+  lowers a `HashMap` argument through the same pair buffer.
 
 ## Roadmap
 

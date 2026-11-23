@@ -1,7 +1,9 @@
 use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
-use { to_string } from "core:json";
+use { to_string, from_string } from "core:json";
 use {
     SerializeError,
+    SerializeErrorKind,
+    DeserializeErrorKind,
     Deserialize,
     Deserializer,
     DeserializeError,
@@ -514,6 +516,17 @@ test "maps are equal when they hold equal entries in the same order" {
     assert s == [1, 2] as TreeSet<i32> && s != [2, 1] as TreeSet<i32>;
 }
 
+test "maps and sets key a HashSet by the entries they compare equal on" {
+    let mut a: TreeMap<String, i32> = { x: 1, gone: 0, y: 2 };
+    assert a.remove("gone");
+    let b: TreeMap<String, i32> = { x: 1, y: 2 };
+    let c: TreeMap<String, i32> = { y: 2, x: 1 };
+    let maps = [a, b, c] as HashSet<TreeMap<String, i32>>;
+    assert maps.len() == 2;
+    let sets = [[1, 2] as TreeSet<i32>, [1, 2] as TreeSet<i32>, [2, 1] as TreeSet<i32>] as HashSet<TreeSet<i32>>;
+    assert sets.len() == 2;
+}
+
 test "maps order by their entries in insertion order, then by length" {
     let a: TreeMap<String, i32> = { x: 1, y: 2 };
     let mut b: TreeMap<String, i32> = { x: 1, gone: 0, y: 2 };
@@ -711,6 +724,21 @@ test "serde Serializer" {
 
     let result: Result<String, SerializeError> = to_string(&map);
     assert result matches { Ok(s) && s == `{"foo":"1","bar":"2","baz":"3"}` };
+}
+
+test "serde reports what a key or a value refuses" {
+    let mut keyed = TreeMap::<List<i32>, i32>::new();
+    keyed[[1]] = 1;
+    assert to_string(&keyed) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    let mut valued = TreeMap::<String, f64>::new();
+    valued["nan"] = f64::NAN;
+    assert to_string(&valued) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+
+    assert from_string::<TreeMap<String, i32>>("[]") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert from_string::<TreeMap<i32, i32>>(`{"x":1}`) matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+    assert from_string::<TreeMap<String, i32>>(`{"a":"x"}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_string::<TreeMap<String, i32>>(`{"a":1,"a":2}`) matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+    assert from_string::<TreeMap<i32, String>>(`{"2":"two"}`) matches { Ok(m) && m[2] == "two" };
 }
 
 /// An empty map or sequence whose close fails. No stdlib format's does once

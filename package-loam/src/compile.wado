@@ -1,7 +1,7 @@
 //! What a graph or a tokenizer becomes, apart from where it was read: the Kiln
 //! generator and the `loam` command both run it.
 
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { CodeWriter, ModuleSpec } from "lib:wadopoet";
 use { Deserialize } from "core:serde";
 use { Decode, Placement, emit } from "./emit.wado";
@@ -20,18 +20,18 @@ use { bind_dims, keep_last, keep_outputs, take_arg_max } from "./specialize.wado
 /// The `generator.options` a `use ... with` site writes.
 export struct Options {
     /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
-    pub dims: TreeMap<String, i32> = {},
+    pub dims: HashMap<String, i32> = {},
     /// The graph outputs `compute` returns. Empty keeps every output.
     pub outputs: List<String> = [],
     /// Outputs `compute` returns only the last position of, each by the axis
     /// it is cut along. What computes each position from the same position of
     /// its operands computes the last alone; what reads across them, as
     /// attention does, still computes them all.
-    pub last: TreeMap<String, i32> = {},
+    pub last: HashMap<String, i32> = {},
     /// Outputs `compute` returns the index of the greatest element of, each by
     /// the axis it ranks along, kept at extent 1: a greedy pick reads one
     /// index rather than a vocabulary's scores. Applied after `last`.
-    pub arg_max: TreeMap<String, i32> = {},
+    pub arg_max: HashMap<String, i32> = {},
     /// The tensors a `decode` entry loops over, beside `compute`, which then
     /// takes how many positions its cache keeps room for.
     pub decode: Option<Decode> = null,
@@ -132,7 +132,7 @@ pub fn check_in_place(
     }
     // A path the reader was handed content for names a file.
     let file = fs::file_name(path).unwrap().to_string();
-    let mut in_place = model.graph.in_place.unwrap_or(InPlace { ranges: TreeMap::<String, WeightRange>::new() });
+    let mut in_place = model.graph.in_place.unwrap_or(InPlace { ranges: HashMap::<String, WeightRange>::new() });
     for let [name, [start, end]] of slim.ranges.entries() {
         in_place.ranges[*name] = WeightRange { file, start: *start, end: *end };
     }

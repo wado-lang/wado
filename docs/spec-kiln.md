@@ -203,7 +203,7 @@ runs, so a typo or a type mismatch is reported on the offending key.
   `"high-contrast"`. That is the name the generator's WIT gives the case, so a
   generator takes the same values whether it is named by its source or by its
   component.
-- A `TreeMap<String, V>` option is written as an object whose keys are the
+- A `HashMap<String, V>` option is written as an object whose keys are the
   author's own. The generator receives it sorted by key.
 
 What an omitted field takes depends on how the generator is resolved. A
@@ -215,17 +215,17 @@ has none:
 | Omitted field, without a default | Built from source     | Prebuilt component    |
 | -------------------------------- | --------------------- | --------------------- |
 | `Option<T>`                      | `None`                | `None`                |
-| `List<T>`, `TreeMap<String, V>`  | the empty list or map | the empty list or map |
+| `List<T>`, `HashMap<String, V>`  | the empty list or map | the empty list or map |
 | Any other type                   | required              | required              |
 
 | Omitted field, with a default   | Built from source | Prebuilt component    |
 | ------------------------------- | ----------------- | --------------------- |
 | `Option<T>`                     | the default       | `None`                |
-| `List<T>`, `TreeMap<String, V>` | the default       | the empty list or map |
+| `List<T>`, `HashMap<String, V>` | the default       | the empty list or map |
 | Any other type                  | the default       | required              |
 
 So a use site that must work with both writes every field that is not an
-`Option`, a `List`, or a `TreeMap`.
+`Option`, a `List`, or a `HashMap`.
 
 Loam's options hold three maps, a list of strings, an optional struct, and a
 flag. They are declared in `compile.wado`, which the `loam` command reads too,
@@ -236,18 +236,18 @@ and the entry module re-exports them:
 ```wado
 export struct Options {
     /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
-    pub dims: TreeMap<String, i32> = {},
+    pub dims: HashMap<String, i32> = {},
     /// The graph outputs `compute` returns. Empty keeps every output.
     pub outputs: List<String> = [],
     /// Outputs `compute` returns only the last position of, each by the axis
     /// it is cut along. What computes each position from the same position of
     /// its operands computes the last alone; what reads across them, as
     /// attention does, still computes them all.
-    pub last: TreeMap<String, i32> = {},
+    pub last: HashMap<String, i32> = {},
     /// Outputs `compute` returns the index of the greatest element of, each by
     /// the axis it ranks along, kept at extent 1: a greedy pick reads one
     /// index rather than a vocabulary's scores. Applied after `last`.
-    pub arg_max: TreeMap<String, i32> = {},
+    pub arg_max: HashMap<String, i32> = {},
     /// The tensors a `decode` entry loops over, beside `compute`, which then
     /// takes how many positions its cache keeps room for.
     pub decode: Option<Decode> = null,
@@ -291,7 +291,7 @@ A map reaches the generator in key order. Given
 
 ```wado
 export struct Options {
-    pub sizes: TreeMap<String, i32>,
+    pub sizes: HashMap<String, i32>,
 }
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> {
@@ -311,7 +311,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 
 An `Options` field is one of `bool`, a fixed-width integer, `f32`, `f64`,
 `String`, a payload-less `enum`, a non-recursive `struct` of such fields,
-`Option<T>`, `List<T>`, or `TreeMap<String, V>`. A field default is a literal.
+`Option<T>`, `List<T>`, or `HashMap<String, V>`. A field default is a literal.
 Any other field fails the generator's own compile, since no use site could
 supply it.
 

@@ -6,7 +6,7 @@ use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "cor
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { from_string } from "core:json";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { CodeWriter, FnSpec, ModuleSpec, Vis, wado } from "../src/lib.wado";
 
 struct PreludeName {
@@ -81,7 +81,7 @@ fn render(vocabulary: &Vocabulary) -> String {
 /// A predicate over `words`, dispatched on length first so most names are
 /// rejected without a string comparison.
 fn emit_membership(w: &mut CodeWriter, name: String, vis: Vis, words: &List<String>) {
-    let mut by_len = TreeMap::<i32, List<String>>::new();
+    let mut by_len = HashMap::<i32, List<String>>::new();
     for let word of words {
         by_len.get_or_insert(word.len(), []);
         by_len[word.len()].push(*word);

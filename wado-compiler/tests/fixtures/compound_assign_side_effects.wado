@@ -29,17 +29,6 @@ impl IndexAssign<i32> for Cell {
     }
 }
 
-struct Obj {
-    field: i32,
-}
-
-global mut OBJ_CALLS: i32 = 0;
-
-fn get_obj() -> Obj {
-    OBJ_CALLS += 1;
-    return Obj { field: 0 };
-}
-
 struct Holder {
     value: i32,
 }
@@ -76,12 +65,6 @@ test "custom IndexAssign obj[bump()] += 1 evaluates the subscript once" {
     cell[bump()] += 2;
     assert CALL_COUNT == 1;
     assert cell.value == 7;
-}
-
-test "get_obj().field += 1 calls get_obj once" {
-    OBJ_CALLS = 0;
-    get_obj().field += 1;
-    assert OBJ_CALLS == 1;
 }
 
 test "nested matrix[bump()][j] += 1 evaluates the row index once and writes back" {

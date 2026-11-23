@@ -317,7 +317,7 @@ pub variant Value {
     String(String),
     Bytes(ByteList),                 // a byte-string *value*
     List(List<Value>),
-    Object(TreeMap<String, Value>),  // string keys only, insertion order preserved
+    Object(HashMap<String, Value>),  // string keys only, insertion order preserved
     Undefined,                       // CBOR simple 23; also present in JS/MsgPack data
     Unknown(ByteList),               // raw encoded bytes of an unrepresentable item
 }
@@ -490,6 +490,6 @@ signature over float-bearing data does not verify against one.
 
 ### `Value` has text keys only
 
-`Value::Object` is a `TreeMap<String, Value>`, so a CBOR map with integer keys
+`Value::Object` is a `HashMap<String, Value>`, so a CBOR map with integer keys
 read into a `Value` comes back with text keys: `{1: -7}` re-encodes as
 `{"1": -7}`.

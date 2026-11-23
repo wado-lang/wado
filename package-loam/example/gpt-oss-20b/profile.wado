@@ -8,7 +8,7 @@
 //!     wado run-webgpu profile.wado -- 5000000000 8
 
 use { eprintln, println, Environment, Stderr, Stdout } from "core:cli";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
 use {
@@ -117,7 +117,7 @@ fn timed_writes(
 
 /// The device time of each kind of kernel.
 fn report(times: &List<KernelTime>, total: i64) with Stdout {
-    let mut by_kind = TreeMap::<String, [i32, i64]>::new();
+    let mut by_kind = HashMap::<String, [i32, i64]>::new();
     for let t of times {
         let [dispatches, nanoseconds] = by_kind.get_or_insert(t.kernel, [0, 0 as i64]);
         by_kind[t.kernel] = [dispatches + t.dispatches, nanoseconds + t.nanoseconds];

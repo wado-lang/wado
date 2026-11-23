@@ -13,7 +13,7 @@
 use { println, eprintln, args, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { TreeSet } from "core:collections";
+use { HashSet } from "core:collections";
 
 struct Span {
     rule: String,
@@ -143,7 +143,7 @@ struct Divergence {
 /// The spans of `side` that `other` lacks, tagged with which side has them
 /// and where they open in it.
 fn only_in(side: &Tree, other: &Tree, from_jar: bool) -> List<[Span, bool, i32]> {
-    let mut keys = TreeSet::<String>::new();
+    let mut keys = HashSet::<String>::new();
     for let s of &other.spans {
         keys.insert(span_key(s));
     }

@@ -4284,6 +4284,10 @@ Convert u128 to String (for template string interpolation)
 
 ##### `pub fn eq(&self, other: &Self) -> bool`
 
+#### `impl Hash for u128`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Ord for u128`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
@@ -4548,6 +4552,10 @@ Convert i128 to String (for template string interpolation)
 #### `impl Eq for i128`
 
 ##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Hash for i128`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Ord for i128`
 

@@ -33,9 +33,9 @@ use crate::tir::CallArg;
 use crate::tir::FunctionRef;
 use crate::tir::StructDef;
 
-/// The binder `impl<K: Ord> IndexAssign<K> for TreeMap<K, V>` declares, which is
+/// The binder `impl<K: Hash, V> IndexAssign<K> for HashMap<K, V>` declares, which is
 /// what the mangled `index_assign` carries — the concrete key is on the receiver.
-const TREE_MAP_KEY_BINDER: &str = "K";
+const HASH_MAP_KEY_BINDER: &str = "K";
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
 ///
@@ -88,7 +88,7 @@ pub(super) fn synthesize_lift_into(
             locals,
             ctx,
         ),
-        (Some(CompilerItem::TreeMap), Type::Generic(g)) => synthesize_lift_map(
+        (Some(CompilerItem::HashMap), Type::Generic(g)) => synthesize_lift_map(
             &g.args[0],
             &g.args[1],
             addr,
@@ -326,7 +326,7 @@ fn synthesize_lift_inner(
             Some(CompilerItem::Result) => synthesize_lift_result_inner(
                 &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
             ),
-            Some(CompilerItem::TreeMap) => synthesize_lift_map(
+            Some(CompilerItem::HashMap) => synthesize_lift_map(
                 &g.args[0], &g.args[1], addr, None, next_local, stmts, locals, ctx,
             ),
             Some(CompilerItem::Stream | CompilerItem::Future) => lift_handle(ty, addr, ctx),
@@ -906,7 +906,7 @@ fn synthesize_lift_list(
     local_ref(result_local, "$result", array_type_id)
 }
 
-/// Lift a `map<K, V>` at `addr` into `override_map_ty`, or a fresh `TreeMap`.
+/// Lift a `map<K, V>` at `addr` into `override_map_ty`, or a fresh `HashMap`.
 /// `map[k] = v` keeps the last pair for a repeated key, as the CM requires.
 fn synthesize_lift_map(
     key_ty: &Type,
@@ -926,26 +926,26 @@ fn synthesize_lift_map(
     let (map_type_id, key_tid, value_tid, map_head, map_source, index_assign, templates) = {
         let mut tt = ctx.type_table.borrow_mut();
         let (map_type_id, key_tid, value_tid) = if let Some(tid) = override_map_ty
-            && let Some((key_tid, value_tid)) = tt.as_tree_map(tid)
+            && let Some((key_tid, value_tid)) = tt.as_hash_map(tid)
         {
             (tid, key_tid, value_tid)
         } else {
             let key_tid = ctx.cm_type_id(key_ty, &mut tt);
             let value_tid = ctx.cm_type_id(value_ty, &mut tt);
-            (tt.make_tree_map(key_tid, value_tid), key_tid, value_tid)
+            (tt.make_hash_map(key_tid, value_tid), key_tid, value_tid)
         };
-        let map_head = tt.compiler_struct_fq_name(CompilerItem::TreeMap);
+        let map_head = tt.compiler_struct_fq_name(CompilerItem::HashMap);
         let items = tt.compiler_items();
-        let map_source = items.require_struct(CompilerItem::TreeMap).0.clone();
+        let map_source = items.require_struct(CompilerItem::HashMap).0.clone();
         let index_assign = items
             .trait_fq(CompilerItem::IndexAssign)
-            .with_args(vec![FqTypeName::binder(TREE_MAP_KEY_BINDER)]);
+            .with_args(vec![FqTypeName::binder(HASH_MAP_KEY_BINDER)]);
         let method = items
-            .method_name(CompilerItem::TreeMapIndexAssign)
+            .method_name(CompilerItem::HashMapIndexAssign)
             .to_string();
         let templates = (
-            items.require_template(CompilerItem::TreeMapNew),
-            items.require_template(CompilerItem::TreeMapIndexAssign),
+            items.require_template(CompilerItem::HashMapNew),
+            items.require_template(CompilerItem::HashMapIndexAssign),
         );
         (
             map_type_id,

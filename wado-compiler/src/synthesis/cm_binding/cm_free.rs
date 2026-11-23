@@ -97,7 +97,7 @@ pub(super) fn cm_shape(ty: &Type, registry: &CmInterfaceRegistry) -> CmShape {
         Type::Generic(g) if item == Some(CompilerItem::List) => {
             CmShape::List(Box::new(field_of(&g.args[0], 0, registry)))
         }
-        Type::Generic(g) if item == Some(CompilerItem::TreeMap) => {
+        Type::Generic(g) if item == Some(CompilerItem::HashMap) => {
             // A `map<K, V>` owns what the `list<tuple<K, V>>` it despecializes
             // to owns: the pair buffer, and what each key and value own.
             let pair = Type::Tuple(vec![g.args[0].clone(), g.args[1].clone()]);

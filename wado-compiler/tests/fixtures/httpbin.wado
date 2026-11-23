@@ -3,7 +3,7 @@
 // `handle` would block on writing a body nothing reads.
 
 use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Trailers, StatusCode, Method } from "wasi:http";
-use { TreeMap } from "core:collections";
+use { HashMap } from "core:collections";
 use { decode } from "core:base64";
 use { Value } from "core:value";
 use { to_string } from "core:json";
@@ -69,8 +69,8 @@ fn read_body(request: Request) -> String with Request {
     return body;
 }
 
-fn parse_query_params(query: String) -> TreeMap<String, Value> {
-    let mut params = TreeMap::<String, Value>::new();
+fn parse_query_params(query: String) -> HashMap<String, Value> {
+    let mut params = HashMap::<String, Value>::new();
     for let pair of query.split("&") {
         if pair.is_empty() {
             continue;
@@ -85,7 +85,7 @@ fn parse_query_params(query: String) -> TreeMap<String, Value> {
 }
 
 fn headers_to_json(headers: List<[String, String]>) -> Value {
-    let mut map = TreeMap::<String, Value>::new();
+    let mut map = HashMap::<String, Value>::new();
     for let [name, value] of headers {
         map[name] = Value::String(value);
     }
@@ -110,18 +110,18 @@ fn parse_status_code(s: StrSlice) -> Option<u16> {
     return null;
 }
 
-fn json(obj: TreeMap<String, Value>) -> MockResponse {
+fn json(obj: HashMap<String, Value>) -> MockResponse {
     return MockResponse { status: 200, content_type: "application/json", body: to_string(&Value::Object(obj)).unwrap() };
 }
 
 fn json_error(status: i32, msg: String) -> MockResponse {
-    let mut obj = TreeMap::<String, Value>::new();
+    let mut obj = HashMap::<String, Value>::new();
     obj["error"] = Value::String(msg);
     return MockResponse { ..json(obj), status };
 }
 
 fn echo(request: &MockRequest, path: String, query: String, with_body: bool) -> MockResponse {
-    let mut obj = TreeMap::<String, Value>::new();
+    let mut obj = HashMap::<String, Value>::new();
     obj["method"] = Value::String(request.method);
     obj["path"] = Value::String(path);
     obj["args"] = Value::Object(parse_query_params(query));
@@ -157,18 +157,18 @@ fn route(request: &MockRequest) -> MockResponse {
         return echo(request, path, query, sends_body);
     }
     if path == "/headers" {
-        let mut obj = TreeMap::<String, Value>::new();
+        let mut obj = HashMap::<String, Value>::new();
         obj["headers"] = headers_to_json(request.headers);
         return json(obj);
     }
     if path == "/ip" {
         let origin = get_header(request.headers, "x-forwarded-for");
-        let mut obj = TreeMap::<String, Value>::new();
+        let mut obj = HashMap::<String, Value>::new();
         obj["origin"] = Value::String(if origin.is_empty() { "unknown" } else { origin });
         return json(obj);
     }
     if path == "/user-agent" {
-        let mut obj = TreeMap::<String, Value>::new();
+        let mut obj = HashMap::<String, Value>::new();
         obj["user-agent"] = Value::String(get_header(request.headers, "user-agent"));
         return json(obj);
     }
