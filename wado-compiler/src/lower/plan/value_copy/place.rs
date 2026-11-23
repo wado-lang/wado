@@ -46,8 +46,8 @@ impl Selector {
 pub struct Place {
     pub root: u32,
     pub selectors: Vec<Selector>,
-    /// The chain read a `&` / `&mut` field, so the root only references what it
-    /// ends at. [`Resolver::names`] must set it as it walks — it resolves
+    /// The chain read a reference part (a field, an element, a payload), so the
+    /// root only references what it ends at. [`Resolver::names`] must set it as it walks — it resolves
     /// through a local binding and through a callee's [`ReturnPath`], which a
     /// second walk over the expression's syntax would follow neither of.
     pub through_ref: bool,
@@ -357,7 +357,10 @@ impl<'a> Resolver<'a> {
             // so which component it lands on is not known here.
             TirExprKind::Call { func, args, .. } if self.builtins.declares(&**func) => {
                 match self.builtins.part_of_params(&**func) {
-                    Some(&[p]) => self.project(arg_at(func, args, p), Selector::Index),
+                    Some(&[p]) => self.part(
+                        self.project(arg_at(func, args, p), Selector::Index),
+                        expr.type_id,
+                    ),
                     // `builtin::select` hands back one of two, naming neither.
                     _ => self.unclassified(expr),
                 }
@@ -434,18 +437,22 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Bind a sub-pattern matching a part of what `whole` names.
-    fn bind_part(&mut self, pattern: &TirPattern, whole: &Names) {
-        match pattern.declared_local() {
-            Some((_, part_type)) => {
-                let part = self.part(whole.clone(), part_type);
-                self.bind_pattern(pattern, &part);
-            }
-            None => self.bind_pattern(pattern, whole),
-        }
+    /// Bind a sub-pattern matching a part of what `whole` names, the part of
+    /// type `part_type` where the holder says. Otherwise the binding's own type
+    /// stands in: match ergonomics only ever adds a reference to it, which
+    /// errs toward the part being one.
+    fn bind_part(&mut self, pattern: &TirPattern, whole: &Names, part_type: Option<TypeId>) {
+        let decided = part_type.or_else(|| pattern.declared_local().map(|(_, ty)| ty));
+        let part = match decided {
+            Some(ty) => self.part(whole.clone(), ty),
+            None => whole.clone(),
+        };
+        self.bind_pattern(pattern, &part, part_type);
     }
 
-    fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names) {
+    /// Bind `pattern`, matching a value of type `matched` where known, to what
+    /// `base` names.
+    fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names, matched: Option<TypeId>) {
         match pattern {
             TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
                 self.bindings.set(*local_index, base.clone());
@@ -464,28 +471,42 @@ impl<'a> Resolver<'a> {
                                 owner,
                                 index: field.field_index,
                             });
-                            // The pattern carries no type to say whether the
-                            // field is a reference, and a wrong `false` here costs the
-                            // value semantics rather than a copy.
+                            // The resolver holds no field types to say whether
+                            // the field is a reference, and a wrong `false` here
+                            // costs the value semantics rather than a copy.
                             place.through_ref = true;
                             Names::Place(place)
                         }
                         Names::Value => Names::Value,
                         Names::Unknown => Names::Unknown,
                     };
-                    self.bind_part(&field.pattern, &nested);
+                    self.bind_part(&field.pattern, &nested, None);
                 }
             }
             // The binding names the value the pattern tested, not a projection of
             // it: deepening by the payload's selector is sound and measures worse.
-            TirPattern::Tuple(sub, _) | TirPattern::Variant { bindings: sub, .. } => {
-                for pattern in sub {
-                    self.bind_part(pattern, base);
+            TirPattern::Tuple(elements, _) => {
+                let element_types = matched.and_then(|ty| {
+                    self.type_table
+                        .tuple_representation(self.type_table.peel_refs(ty))
+                });
+                for (index, element) in elements.iter().enumerate() {
+                    let ty = element_types.as_ref().map(|types| types[index]);
+                    self.bind_part(element, base, ty);
+                }
+            }
+            TirPattern::Variant {
+                bindings,
+                payload_type,
+                ..
+            } => {
+                for binding in bindings {
+                    self.bind_part(binding, base, Some(*payload_type));
                 }
             }
             TirPattern::Or(alternatives) => {
                 for pattern in alternatives {
-                    self.bind_pattern(pattern, base);
+                    self.bind_pattern(pattern, base, matched);
                 }
             }
             TirPattern::Wildcard
@@ -906,7 +927,8 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 let base = self.resolver.names(value);
-                self.resolver.bind_pattern(pattern, &base);
+                self.resolver
+                    .bind_pattern(pattern, &base, Some(value.type_id));
             }
             _ => {}
         }
@@ -929,7 +951,8 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
             } => {
                 let base = self.resolver.names(scrutinee);
                 for arm in arms {
-                    self.resolver.bind_pattern(&arm.pattern, &base);
+                    self.resolver
+                        .bind_pattern(&arm.pattern, &base, Some(scrutinee.type_id));
                 }
             }
             _ => {}
