@@ -1056,9 +1056,8 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
                 op.return_type
             };
             // A closure crosses as an extern handle; the elaborator checked its
-            // shape. A synchronous operation's `&ListView<T>` parameter crosses
-            // as the `list<T>` it lends, which a `T` with a list's
-            // representation has.
+            // shape. A synchronous operation's own `&ListView<T>` parameter
+            // crosses as the `list<T>` it lends, so only its `T` is checked.
             let mut lent = Vec::new();
             let values = op.params.iter().filter(|p| {
                 if matches!(tt.get(p.type_id), ResolvedType::Function { .. }) {

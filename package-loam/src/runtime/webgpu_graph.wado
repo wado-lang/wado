@@ -328,12 +328,14 @@ impl Backend for WebGpuBackend {
 
     fn held_on_host(&mut self, pool: &Any<WebGpuBackend>, step: i32, experts: HostWeight) {
         let key = host_expert_key(on_device(pool).unwrap(), step);
-        if let Some(at) = self.host_expert_at.get(key) {
-            self.host_experts[at] = HostExperts::of(&experts);
-            return;
+        let held = HostExperts::of(&experts);
+        match self.host_expert_at.get(key) {
+            Some(at) => self.host_experts[at] = held,
+            null => {
+                self.host_expert_at[key] = self.host_experts.len();
+                self.host_experts.push(held);
+            },
         }
-        self.host_expert_at[key] = self.host_experts.len();
-        self.host_experts.push(HostExperts::of(&experts));
     }
 
     fn written_from_host(
