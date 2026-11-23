@@ -14,10 +14,11 @@
 //! `zero · Σ v`.
 
 use { LinearArray, LinearArray64 } from "core:linear";
-use { f32x4, i16x8, i32x4, i8x16, u8x16 } from "core:simd";
+use { f32x4, i16x8, i32x4, i64x2, i8x16, u8x16 } from "core:simd";
 use { Experts, ProjectionShape } from "./experts.wado";
 use { Quantized } from "./hlo.wado";
-use { HostWeight } from "./weight.wado";
+use { ElementKind } from "./tensor.wado";
+use { HostWeight, stored_bytes, stored_width } from "./weight.wado";
 
 /// The values a block holds, and the bytes of one block of 4-bit values.
 global BLOCK: i32 = 32;
@@ -28,31 +29,48 @@ pub fn computes_on_host(quantized: &Quantized) -> bool {
     return quantized.bits == 4 && quantized.block == BLOCK;
 }
 
-/// `experts` as the host reads them: bytes as they are stored, and floats
-/// widened to f32, so a product reads each scale without converting it.
-pub fn host_bytes(experts: &HostWeight) -> LinearArray64<u8> {
-    let bytes = experts.bytes();
-    if experts.kind matches { _::U8 } {
-        let mut held = LinearArray64::<u8>::filled(bytes.len() as i64, 0);
-        held.copy_from(0, bytes, 0, bytes.len());
-        return held;
-    }
-    assert experts.kind matches { _::F16 | _::BF16 | _::F32 }, "a scale or a bias is a float";
-    let count = experts.count();
-    let mut held = LinearArray64::<u8>::filled(4 * count as i64, 0);
-    for let i of 0..<count {
-        held.store_at::<f32>(4 * i as i64, experts.value(i));
-    }
-    return held;
+/// Every expert of one weight of a layer, as a checkpoint stores them: what a
+/// product reads, and a slot is written from.
+pub affine struct HostExperts {
+    pub kind: ElementKind,
+    extents: List<i32>,
+    stored: LinearArray64<u8>,
 }
 
-/// One projection of every expert of a layer, as [`host_bytes`] holds each
-/// of its weights, and one expert's shape.
+impl HostExperts {
+    /// `experts`, each slice along its first axis one expert's.
+    pub fn of(experts: &HostWeight) -> HostExperts {
+        let bytes = experts.bytes();
+        let mut stored = LinearArray64::<u8>::filled(bytes.len() as i64, 0);
+        stored.copy_from(0, bytes, 0, bytes.len());
+        return HostExperts { kind: experts.kind, extents: experts.extents, stored };
+    }
+
+    pub fn bytes(&self) -> &LinearArray64<u8> {
+        return &self.stored;
+    }
+
+    /// Expert `expert`, as a checkpoint stores it.
+    pub fn expert(&self, expert: i32) -> HostWeight
+        contract 0 <= expert < self.extents[0]
+    {
+        let slice: List<i32> = self.extents[1..<self.extents.len()].to_list();
+        let size = stored_bytes(self.kind, &slice);
+        let mut bytes = LinearArray::<u8>::filled(size, 0);
+        bytes.copy_from_memory64(0, &self.stored, expert as i64 * size as i64, size);
+        return HostWeight::stored(self.kind, slice, bytes);
+    }
+}
+
+/// One projection of every expert of a layer, each of its weights as a
+/// checkpoint stores it, the scales and bias floats of `kind`, and one
+/// expert's shape.
 pub struct HostProjection {
     pub packed: &LinearArray64<u8>,
     pub scales: &LinearArray64<u8>,
     pub bias: Option<&LinearArray64<u8>>,
     pub zero_points: Option<&LinearArray64<u8>>,
+    pub kind: ElementKind,
     pub shape: ProjectionShape,
 }
 
@@ -138,8 +156,10 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
     assert shape.rows % ROWS_AT_ONCE == 0, "a projection's rows come in fours";
     let blocks = shape.blocks as i64;
     let mut out = List::<f32>::filled(shape.rows, 0.0);
+    let mut scales = LinearArray::<u8>::filled(4 * ROWS_AT_ONCE * shape.blocks, 0);
     for let mut r = 0; r < shape.rows; r += ROWS_AT_ONCE {
         let row = expert as i64 * shape.rows as i64 + r as i64;
+        widened(p, row * blocks, ROWS_AT_ONCE * shape.blocks, &mut scales);
         let [mut s0, mut s1, mut s2, mut s3] = [
             f32x4::splat(0.0),
             f32x4::splat(0.0),
@@ -157,9 +177,19 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
             let sums = unchecked x.sums.load_at::<v128>(16 * b) as i32x4;
             let x_scale = unchecked x.scales[b];
             let block = row * blocks + b as i64;
-            let scaled = |n: i64| -> f32x4 {
-                let offset = sums * i32x4::splat(zero_point(p, row + n, b));
-                return block_sum(p, block + n * blocks, high_evens, high_odds, low_evens, low_odds, offset, x_scale);
+            let scaled = |n: i32| -> f32x4 {
+                let offset = sums * i32x4::splat(zero_point(p, row + n as i64, b));
+                let scale = unchecked scales.load_at::<f32>(4 * (n * shape.blocks + b)) * x_scale;
+                return block_sum(
+                    p,
+                    block + n as i64 * blocks,
+                    high_evens,
+                    high_odds,
+                    low_evens,
+                    low_odds,
+                    offset,
+                    scale,
+                );
             };
             s0 = s0 + scaled(0);
             s1 = s1 + scaled(1);
@@ -169,7 +199,7 @@ fn product(p: &HostProjection, expert: i32, x: &QuantizedRow) -> List<f32> {
         for let [n, s] of ([s0, s1, s2, s3] as List<f32x4>).into_iter().enumerate() {
             let mut value = s.extract_lane(0) + s.extract_lane(1) + s.extract_lane(2) + s.extract_lane(3);
             if let Some(bias) = p.bias {
-                value += bias.load_at::<f32>(4 * (row + n as i64));
+                value += value_at(p.kind, bias, row + n as i64);
             }
             out[r + n] = value;
         }
@@ -182,7 +212,7 @@ global ROWS_AT_ONCE: i32 = 4;
 
 /// Block `block` of `p`'s weight times the block of activations whose 15-bit
 /// values' halves `high_*` and `low_*` hold, `offset` taken off for the zero
-/// point, scaled by the weight's scale and `x_scale`: lanes that sum to it.
+/// point, times `scale`: lanes that sum to it.
 fn block_sum(
     p: &HostProjection,
     block: i64,
@@ -191,7 +221,7 @@ fn block_sum(
     low_evens: i8x16,
     low_odds: i8x16,
     offset: i32x4,
-    x_scale: f32,
+    scale: f32,
 ) -> f32x4 {
     let packed = unchecked p.packed.load_at::<v128>(BLOB as i64 * block) as u8x16;
     let evens = (packed & u8x16::splat(15)) as i16x8;
@@ -207,8 +237,58 @@ fn block_sum(
     let dot = (high as i32x4).dot_i16x8_s(&(i16x8::splat(128) as i32x4)) + (low as i32x4).dot_i16x8_s(
         &(i16x8::splat(1) as i32x4),
     );
-    let scale = unchecked p.scales.load_at::<f32>(4 * block) * x_scale;
     return f32x4::convert_i32x4_s(dot - offset) * f32x4::splat(scale);
+}
+
+/// `count` of `p`'s scales from the `first` on, as f32, into the start of
+/// `into`.
+fn widened(p: &HostProjection, first: i64, count: i32, into: &mut LinearArray<u8>)
+    contract count % 4 == 0
+{
+    let width = stored_width(p.kind) as i64;
+    for let mut at = 0; at < count; at += 4 {
+        let from = width * (first + at as i64);
+        let values = match p.kind {
+            _::F32 => unchecked p.scales.load_at::<v128>(from) as f32x4,
+            _::F16 => f16_widened(halves(p.scales, from)),
+            _::BF16 => (halves(p.scales, from) << 16) as f32x4,
+            _ => unreachable(),
+        };
+        unchecked into.store_at::<v128>(4 * at, values as v128);
+    }
+}
+
+/// The four 16-bit values from `from`, each in a lane's low bits.
+fn halves(bytes: &LinearArray64<u8>, from: i64) -> i32x4 {
+    let four = unchecked bytes.load_at::<i64>(from);
+    return i32x4::extend_low_i16x8_u(i64x2::splat(four) as i16x8);
+}
+
+/// 2^112: an f16's exponent bias, 15, from f32's, 127.
+global REBIASED: f32 = f32::from_bits(0x7780_0000);
+
+/// The f32 each lane's f16 bits stand for.
+internal fn f16_widened(h: i32x4) -> f32x4 {
+    let magnitude = h & i32x4::splat(0x7fff);
+    let sign = (h & i32x4::splat(0x8000)) << 16;
+    // In f32's places, an f16's exponent is short of f32's bias by 112, which
+    // a product restores exactly, for a subnormal too. Infinity and NaN keep
+    // the exponent all ones instead.
+    let placed = magnitude << 13;
+    let finite = (placed as f32x4 * f32x4::splat(REBIASED)) as i32x4;
+    let special = placed | i32x4::splat(0x7f80_0000);
+    let bits = special.bitselect(&magnitude.ge(&i32x4::splat(0x7c00)), &finite);
+    return (bits | sign) as f32x4;
+}
+
+/// Element `i` of `bytes`, floats of `kind`.
+fn value_at(kind: ElementKind, bytes: &LinearArray64<u8>, i: i64) -> f32 {
+    return match kind {
+        _::F32 => bytes.load_at::<f32>(4 * i),
+        _::F16 => f16::from_bits(bytes.load_at::<u16>(2 * i)) as f32,
+        _::BF16 => bf16::from_bits(bytes.load_at::<u16>(2 * i)) as f32,
+        _ => unreachable(),
+    };
 }
 
 /// The zero point of block `b` of the weight's row `row`, packed two to a

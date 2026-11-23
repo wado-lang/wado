@@ -702,6 +702,9 @@ pub fn stacked_runs<affine G: Backend>(
         (slots * expert_bytes) as i64,
         g,
     ).unwrap();
+    // Below the 2 experts a token picks, so that a cold step of one token
+    // both fills a slot and leaves an expert to the host.
+    store.limit_step_fills(1);
     let pools = store.pools(g, &files);
     let mut programs = Programs::<G>::new();
     let mut results: List<Any<G>> = [];

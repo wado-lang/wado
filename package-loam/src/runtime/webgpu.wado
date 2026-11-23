@@ -40,8 +40,9 @@ use {
     row_extents,
 } from "./tensor.wado";
 use { HashMap, HashSet, TreeMap } from "core:collections";
-use { LinearArray, LinearArray64 } from "core:linear";
+use { LinearArray } from "core:linear";
 use { HostWeight } from "./weight.wado";
+use { HostExperts } from "./cpu_experts.wado";
 use { Experts, ProjectionShape } from "./experts.wado";
 use { Quantized } from "./hlo.wado";
 use { Untyped } from "./recorded.wado";
@@ -590,9 +591,9 @@ pub affine struct WebGpuBackend {
     replays: i32,
     internal cpu: Cpu,
     /// Every expert of each layer's weight that a shared pool holds a few of,
-    /// as `host_bytes` holds them, at the place `host_expert_at` gives for the
-    /// pool's buffer and the layer's host step.
-    internal host_experts: List<LinearArray64<u8>>,
+    /// at the place `host_expert_at` gives for the pool's buffer and the
+    /// layer's host step.
+    internal host_experts: List<HostExperts>,
     internal host_expert_at: HashMap<i64, i32>,
 }
 

@@ -11,11 +11,12 @@ use { MonotonicClock } from "wasi:clocks";
 use { HostProjection, expert_row } from "../src/runtime/cpu_experts.wado";
 use { Experts, ProjectionShape } from "../src/runtime/experts.wado";
 use { Quantized } from "../src/runtime/hlo.wado";
+use { ElementKind } from "../src/runtime/tensor.wado";
 
 global EXPERTS: i32 = 40;
 global HIDDEN: i32 = 2880;
 
-/// `rows` rows of `cols` 4-bit values for each of `EXPERTS` experts, with f32
+/// `rows` rows of `cols` 4-bit values for each of `EXPERTS` experts, with f16
 /// scales and biases, all made up.
 fn weights(rows: i32, cols: i32) -> [LinearArray64<u8>, LinearArray64<u8>, LinearArray64<u8>] {
     let blocks = cols / 32;
@@ -24,13 +25,13 @@ fn weights(rows: i32, cols: i32) -> [LinearArray64<u8>, LinearArray64<u8>, Linea
     for let i of 0..<packed.len() {
         unchecked packed.set(i, (i * 37 % 256) as u8);
     }
-    let mut scales = LinearArray64::<u8>::filled(4 * all * blocks as i64, 0);
+    let mut scales = LinearArray64::<u8>::filled(2 * all * blocks as i64, 0);
     for let i of 0..<all * blocks as i64 {
-        scales.store_at::<f32>(4 * i, 0.001 * (1 + i % 7) as f32);
+        scales.store_at::<u16>(2 * i, ((0.001 * (1 + i % 7) as f32) as f16).to_bits());
     }
-    let mut bias = LinearArray64::<u8>::filled(4 * all, 0);
+    let mut bias = LinearArray64::<u8>::filled(2 * all, 0);
     for let i of 0..<all {
-        bias.store_at::<f32>(4 * i, 0.01 * (i % 5) as f32);
+        bias.store_at::<u16>(2 * i, ((0.01 * (i % 5) as f32) as f16).to_bits());
     }
     return [packed, scales, bias];
 }
@@ -45,6 +46,7 @@ export fn run() with (Stdout, MonotonicClock) {
         scales: &up_weights.1,
         bias: Option::Some(&up_weights.2),
         zero_points: null,
+        kind: ElementKind::F16,
         shape: shape(2 * inner, HIDDEN),
     };
     let down = HostProjection {
@@ -52,6 +54,7 @@ export fn run() with (Stdout, MonotonicClock) {
         scales: &down_weights.1,
         bias: Option::Some(&down_weights.2),
         zero_points: null,
+        kind: ElementKind::F16,
         shape: shape(HIDDEN, inner),
     };
     let experts = Experts {

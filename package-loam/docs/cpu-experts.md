@@ -38,42 +38,50 @@ AVX-512. One expert is 14,014,080 bytes as the `q4f16` export stores it.
 | What                                                                  | Figure                                     |
 | --------------------------------------------------------------------- | ------------------------------------------ |
 | One guest core, one product of i8 activations alone, DRAM             | 10.84 GB/s of stored bytes, 1.29 ms/expert |
-| One guest core, `cpu_experts.wado`'s whole expert, 15-bit activations | 5.23 GB/s, 2.7 ms/expert                   |
+| One guest core, `cpu_experts.wado`'s whole expert, 15-bit activations | 4.68 GB/s, 3.0 ms/expert                   |
+| Host time of a write to a slot, one layer's `gate_up_proj` at once    | 3.96 GB/s                                  |
 | GPU pools of 5 GB, `LayerOrder`: a step's experts held                | 80.8% of 1344, 258 MB loaded a token       |
-| GPU pools of 5 GB, `Farthest` (the bound)                             | 87.0%                                      |
+| The same, a step filling at most 2 slots a layer                      | 80.4%, 0.8% on the host, 253 MB a token    |
+| The same, a step filling at most 1                                    | 80.0%, 5.2% on the host, 199 MB a token    |
+| The same, a step filling none                                         | 69.0%, 31.0% on the host                   |
+| GPU pools of 5 GB, `Farthest` (the bound)                             | 87.1%                                      |
 | GPU pools of 6.3 GB, as llama.cpp's best arm, `Recent`                | 84.7%                                      |
-| GPU pools of 5 GB filled by the prompt alone, 32 tokens               | 61% of 3263 picks held                     |
 
 ```sh
 (cd package-loam && wado run -O2 --no-spectre-mitigation tools/cpu_expert_speed.wado)
 (cd package-loam && wado run tools/expert_eviction.wado -- \
     example/gpt-oss-20b/build/fetches.json 5000000000 6300000000)
 (cd package-loam/example/gpt-oss-20b && \
-    wado run-webgpu -O2 --no-spectre-mitigation --dir . profile.wado -- 5000000000 32)
+    wado run-webgpu -O2 --no-spectre-mitigation --dir . profile.wado -- 5000000000 0)
 ```
 
 The replay covers 14 generated tokens. The first row timed one product's i8
 dot alone, without its zero point; i8 activations part from the
 decomposition by 0.9% on `experts_case`, past the 1e-4 a device's product is
-held to, so the kernel quantizes them to 15 bits.
+held to, so the kernel quantizes them to 15 bits. It reads the scales as the
+export stores them, f16, and widens them as it goes, as the host holds every
+expert once.
 
 ## Measured on gpt-oss-20b
 
 The benchmark's 32 tokens, with the GPU's pools at 5 GB:
 
-| Experts the pools lack                                 | Throughput     |
-| ------------------------------------------------------ | -------------- |
-| Written into a slot                                    | 1.59 tokens/s  |
-| Computed on one guest core, as `cpu_experts.wado` does | 5.69 tokens/s  |
-| Not written, nor computed (the bound the pass sets)    | 24.28 tokens/s |
+| Experts the pools lack                                                | Throughput     |
+| --------------------------------------------------------------------- | -------------- |
+| Written into a slot from the files                                    | 1.59 tokens/s  |
+| Computed on one guest core, as `cpu_experts.wado` does                | 5.69 tokens/s  |
+| Written from host memory, at most 2 a layer a step, the rest computed | 8.87 tokens/s  |
+| Not written, nor computed (the bound the pass sets)                   | 24.28 tokens/s |
 
 ```sh
 (cd package-loam/benchmark && mise run gpt-oss-20b)
 ```
 
 The last row left the call to `written` in `HeldExperts::fetched` out by hand.
-The decode steps write nothing, so the pools hold what the prompt left in
-them, and the host computes 39% of the picks.
+In the second, the decode steps write nothing, so the pools hold what the
+prompt left in them, and the host computes 39% of the picks. In the third, the
+host computes 0.7% of them, and the writes take most of a token's time: the
+32 tokens and their prompt write 9.0 GB.
 
 ## The budget
 
@@ -98,12 +106,12 @@ round trips together take under about 13 ms.
 
 1. Placement. The GPU pools stay as they are, under the eviction order the
    replay ranks best. `WebGpuBackend` holds every expert of a shared pool's
-   layers in a `LinearArray64`, which `HeldExperts::pools` hands it at load.
-2. Choice per expert, after Fiddler. In a host step, an expert the pools lack
-   is computed on the CPU when the step routes fewer than T tokens to it, and
-   written into a slot otherwise. A generated token routes 1. T is to be
-   measured: the token count where the CPU's time passes a write's. Until it
-   is, a step of one token computes every miss, and a longer one writes them.
+   layers in a `LinearArray64`, which `HeldExperts::pools` hands it at load,
+   and writes a slot from there rather than from the files.
+2. Choice per expert. A write costs the host about what computing the expert
+   does, and the expert then stays for the tokens after. A step of one token
+   writes the first 2 misses of a layer into slots and computes the rest on
+   the CPU; a longer step writes every miss.
 3. One layer. The host step answers slot -1 for an expert the pools lack.
    WebGPU's `Graph::expert_mixture` reads the layer's input rows and the
    picks' weights back, queues the held experts' products, computes the rest
@@ -157,5 +165,5 @@ The recommendation is A first. It needs no host change, and its measurements
 
 - The round trip of one host step on `wado run-webgpu`: a download of the
   picks and the rows, then an upload of the outputs.
-- T, where computing a miss on the host costs what writing it does.
-- The hit rate of pools a decode step adapts, against those the prompt fills.
+- Where a write's host time goes: the copy out of the `LinearArray64`, the
+  copy across the component boundary, and wgpu's staging.

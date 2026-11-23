@@ -1,40 +1,53 @@
 //! An expert the host computes from the stored weights matches the one the
 //! decomposition computes, within what a device's product is held to.
 
-use { LinearArray64 } from "core:linear";
 use { A, C, experts_case, mixing } from "../../src/runtime/graph_cases.wado";
-use { HostProjection, expert_row, host_bytes } from "../../src/runtime/cpu_experts.wado";
+use { i32x4 } from "core:simd";
+use { HostExperts, HostProjection, expert_row, f16_widened } from "../../src/runtime/cpu_experts.wado";
 use { Experts, ProjectionShape } from "../../src/runtime/experts.wado";
 use { Quantized } from "../../src/runtime/hlo.wado";
-use { Cpu, Holds, Tensor } from "../../src/runtime/tensor.wado";
+use { Cpu, Element, Holds, Tensor } from "../../src/runtime/tensor.wado";
 use { HostWeight } from "../../src/runtime/weight.wado";
 
-test "the host computes each expert as the decomposition does" {
+test "the host computes each expert as the decomposition does, its scales and biases f32 or f16" {
+    computes_as_decomposed::<f32>();
+    computes_as_decomposed::<f16>();
+}
+
+/// Each expert of `experts_case`, its scales and biases stored as `E`, alone
+/// through `expert_row` and through `mixing` in f32.
+fn computes_as_decomposed<E: Element>() {
     let cpu = &mut Cpu {};
-    let c = experts_case(1);
-    let held = |t: &HostWeight| host_bytes(t);
-    let up_bytes: List<LinearArray64<u8>> = [
+    let mut c = experts_case(1);
+    c.up.1 = c.up.1.converted::<E>().converted::<f32>();
+    c.up.2 = c.up.2.converted::<E>().converted::<f32>();
+    c.down.1 = c.down.1.converted::<E>().converted::<f32>();
+    c.down.2 = c.down.2.converted::<E>().converted::<f32>();
+    let held = |t: &HostWeight| HostExperts::of(t);
+    let up_experts: List<HostExperts> = [
         held(&HostWeight::of(&c.up.0)),
-        held(&HostWeight::of(&c.up.1)),
-        held(&HostWeight::of(&c.up.2)),
+        held(&HostWeight::of(&c.up.1.converted::<E>())),
+        held(&HostWeight::of(&c.up.2.converted::<E>())),
     ];
-    let down_bytes: List<LinearArray64<u8>> = [
+    let down_experts: List<HostExperts> = [
         held(&HostWeight::of(&c.down.0)),
-        held(&HostWeight::of(&c.down.1)),
-        held(&HostWeight::of(&c.down.2)),
+        held(&HostWeight::of(&c.down.1.converted::<E>())),
+        held(&HostWeight::of(&c.down.2.converted::<E>())),
     ];
     let up = HostProjection {
-        packed: &up_bytes[0],
-        scales: &up_bytes[1],
-        bias: Option::Some(&up_bytes[2]),
+        packed: up_experts[0].bytes(),
+        scales: up_experts[1].bytes(),
+        bias: Option::Some(up_experts[2].bytes()),
         zero_points: null,
+        kind: up_experts[1].kind,
         shape: ProjectionShape { rows: c.up.0.extents[1], blocks: 1, blob: c.up.0.extents[2], zero_bytes: 0 },
     };
     let down = HostProjection {
-        packed: &down_bytes[0],
-        scales: &down_bytes[1],
-        bias: Option::Some(&down_bytes[2]),
+        packed: down_experts[0].bytes(),
+        scales: down_experts[1].bytes(),
+        bias: Option::Some(down_experts[2].bytes()),
         zero_points: null,
+        kind: down_experts[1].kind,
         shape: ProjectionShape { rows: c.down.0.extents[1], blocks: 1, blob: c.down.0.extents[2], zero_bytes: 0 },
     };
     let experts = Experts {
@@ -68,4 +81,27 @@ test "the host computes each expert as the decomposition does" {
             assert f32::abs(got[i] - alone.data[i]) <= 1e-4 * largest;
         }
     }
+}
+
+test "the host widens every f16 to the f32 it stands for" {
+    for let first of (0..<65536).step_by(4) {
+        let lanes: i32x4 = [first, first + 1, first + 2, first + 3];
+        let widened = f16_widened(lanes);
+        for let lane of 0..<4 {
+            let got = widened.extract_lane(lane);
+            let expected = f16::from_bits((first + lane) as u16) as f32;
+            assert got.to_bits() == expected.to_bits() || got.is_nan() && expected.is_nan();
+        }
+    }
+}
+
+test "the host gives back each expert as a checkpoint stores it" {
+    let c = experts_case(1);
+    let scales = HostWeight::of(&c.up.1);
+    let held = HostExperts::of(&scales);
+    let expert = held.expert(2);
+    assert expert.kind == scales.kind;
+    assert expert.extents == scales.extents[1..<scales.extents.len()].to_list();
+    let size = expert.bytes().len();
+    assert expert.stored_bytes() == scales.stored_bytes()[2 * size..<3 * size].to_list() as ByteList;
 }
