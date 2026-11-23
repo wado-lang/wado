@@ -56,9 +56,9 @@ enum DeclKey {
     },
     /// One head for every effect a function type names that reached nothing.
     UndeclaredEffect,
-    /// An effect parameter of the asking frame, by name: rigid, so it is an
-    /// effect of its own, and one frame never declares two of one name.
-    EffectParam(String),
+    /// An effect parameter of the asking frame, by its binder: rigid, so it is
+    /// an effect of its own.
+    EffectParam(AstId),
 }
 
 /// Why the lowering states nothing about a type, most telling first: a type
@@ -296,9 +296,9 @@ impl Lowering {
         for param in resolutions.effect_params() {
             let head = TypeDeclId(intern(
                 &mut lowering.decls,
-                DeclKey::EffectParam(param.name().to_string()),
+                DeclKey::EffectParam(param.binder),
             ));
-            lowering.effects.insert(param, head);
+            lowering.effects.insert(EffectRef::Param(param), head);
         }
         lowering
     }

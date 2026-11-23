@@ -54,7 +54,9 @@ use crate::synthesis::template::{PairedEq, eq_from_written_cmp, written_impl_rea
 use crate::synthesis::traits::{
     REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
 };
-use crate::tir::{AssocTypeSig, EffectRows, ProjectionAnswer, SlotProjections, TraitRef};
+use crate::tir::{
+    AssocTypeSig, EffectRef, EffectRows, ProjectionAnswer, RowVar, SlotProjections, TraitRef,
+};
 use crate::trait_solver::args_per_param;
 use crate::unparse::unparse_generic_params_into;
 
@@ -693,10 +695,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_slots.insert(table.declared_param(*from), *to);
                 }
             }
-            let expected = declared.sig.decl.instantiate_slots_with(
+            // The impl's own effect parameters stand where the trait's do, in
+            // the order both declare them.
+            let renamed: EffectRows = declared
+                .sig
+                .decl
+                .own_effects
+                .iter()
+                .zip(&written.decl.own_effects)
+                .map(|(from, to)| {
+                    (
+                        RowVar::Param(from.binder),
+                        vec![EffectRef::Param(to.clone())],
+                    )
+                })
+                .collect();
+            let expected = declared.sig.decl.instantiate_bound(
                 &self.tysys.type_table,
                 &method_slots,
                 &projections,
+                &renamed,
             );
             let value_params = method
                 .params

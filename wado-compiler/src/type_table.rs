@@ -30,7 +30,8 @@ use crate::symbol_notation::render;
 use crate::token::{Delimiter, Quote, Span};
 
 use crate::tir::{
-    AnonShape, AssocParamId, AssocTypeSig, EffectRef, EffectRows, InferVarId, REFLECT_NEWTYPE_BASE,
+    AnonShape, AssocParamId, AssocTypeSig, EffectParam, EffectRef, EffectRows, InferVarId,
+    REFLECT_NEWTYPE_BASE, RowVar,
     ResolvedType, RowClosing, RowFlow, ShapeSubstitution, SlotProjections, StructDef, TemplateHole,
     TemplateShape, TirExpr, TirExprKind, TirUnaryOp, TraitFrame, TraitRef, TupleSlot, TypeArgMap,
     TypeId, TypeParamId, canonicalize_row, positional_substitution, projection_arguments,
@@ -40,17 +41,17 @@ use crate::tir::{
 /// The effect variables a question read, noted behind a shared reference: a
 /// question reads the table without writing it.
 #[derive(Debug, Default)]
-struct ReadVars(std::sync::Mutex<IndexSet<String>>);
+struct ReadVars(std::sync::Mutex<IndexSet<RowVar>>);
 
 impl ReadVars {
-    fn note(&self, var: &str) {
+    fn note(&self, var: RowVar) {
         self.0
             .lock()
             .expect("no reader panics holding it")
-            .insert(var.to_string());
+            .insert(var);
     }
 
-    fn all(&self) -> IndexSet<String> {
+    fn all(&self) -> IndexSet<RowVar> {
         self.0.lock().expect("no reader panics holding it").clone()
     }
 
@@ -58,7 +59,7 @@ impl ReadVars {
         self.0.lock().expect("no reader panics holding it").len()
     }
 
-    fn since(&self, count: usize) -> Vec<String> {
+    fn since(&self, count: usize) -> Vec<RowVar> {
         let read = self.0.lock().expect("no reader panics holding it");
         read.iter().skip(count).cloned().collect()
     }
@@ -96,10 +97,10 @@ pub struct TypeTable {
     read_effect_vars: ReadVars,
     /// The closure literal that minted each variable of
     /// [`Self::early_effect_rows`].
-    early_effect_sites: IndexMap<String, RowClosing>,
+    early_effect_sites: IndexMap<RowVar, RowClosing>,
     /// The expression whose resolution first read each variable of
     /// [`Self::read_effect_vars`], where an expression did.
-    effect_row_closings: IndexMap<String, RowClosing>,
+    effect_row_closings: IndexMap<RowVar, RowClosing>,
     /// Where a function value whose row holds a variable moved into a slot,
     /// which the type check admits unbounded and the effect check bounds.
     row_flows: IndexSet<RowFlow>,
@@ -3432,10 +3433,10 @@ impl TypeTable {
     /// Solve `var`, minted by the closure literal at `site`, to `row` while
     /// the bodies are walked. A variable is solved once, before any question
     /// reads it.
-    pub fn solve_effect_var(&mut self, var: &str, row: Vec<EffectRef>, site: RowClosing) {
-        let previous = self.early_effect_rows.insert(var.to_string(), row);
+    pub fn solve_effect_var(&mut self, var: RowVar, row: Vec<EffectRef>, site: RowClosing) {
+        let previous = self.early_effect_rows.insert(var, row);
         assert!(previous.is_none(), "a row variable is solved once");
-        self.early_effect_sites.insert(var.to_string(), site);
+        self.early_effect_sites.insert(var, site);
     }
 
     /// What each effect row variable is solved to while the bodies are walked.
@@ -3448,7 +3449,7 @@ impl TypeTable {
     /// stays what it was.
     pub fn read_effect_row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
         let mut row = solve_row(effects, &self.early_effect_rows, &mut |var| {
-            if self.early_effect_rows.contains_key(var) {
+            if self.early_effect_rows.contains_key(&var) {
                 self.read_effect_vars.note(var);
             }
         });
@@ -3467,7 +3468,7 @@ impl TypeTable {
             .into_iter()
             .map(|var| {
                 let row = self.read_effect_row(std::slice::from_ref(&var));
-                (var.name().to_string(), row)
+                (var.row_var().expect("a variable"), row)
             })
             .collect();
         self.substitute_effect_rows(id, &rows)
@@ -3491,7 +3492,7 @@ impl TypeTable {
     /// Where each variable a question read was closed: the expression whose
     /// resolution read it, or, for a read outside any expression, the closure
     /// literal that minted it.
-    pub fn effect_row_closings(&self) -> IndexMap<String, RowClosing> {
+    pub fn effect_row_closings(&self) -> IndexMap<RowVar, RowClosing> {
         self.read_effect_vars
             .all()
             .into_iter()
@@ -4109,9 +4110,10 @@ impl TypeTable {
                 params,
                 return_type,
                 effects,
-            } if effects
-                .iter()
-                .any(|e| self.early_effect_rows.contains_key(e.name())) =>
+            } if effects.iter().any(|e| {
+                e.row_var()
+                    .is_some_and(|var| self.early_effect_rows.contains_key(&var))
+            }) =>
             {
                 let solved = ResolvedType::Function {
                     is_mut: *is_mut,
@@ -4759,35 +4761,34 @@ impl TypeTable {
     }
 
     /// A declared type with each effect parameter its rows name replaced by a
-    /// fresh variable, for the effect check to solve at one use. Applied in the
-    /// declaration's frame, before its type arguments are, so a parameter the
-    /// use site declares under the same name stays its own.
+    /// fresh variable, for the effect check to solve at one use. Applied
+    /// before its type arguments are, which may name the use site's own.
     pub fn instantiate_effect_params(&mut self, type_id: TypeId) -> TypeId {
-        let mut named = IndexSet::default();
-        self.effect_params_in(type_id, &mut named);
-        let rows = self.fresh_effect_vars(named.iter());
+        let mut params = IndexSet::default();
+        self.effect_params_in(type_id, &mut params);
+        let rows = self.fresh_effect_vars(params.iter());
         self.substitute_effect_rows(type_id, &rows)
     }
 
-    /// A fresh variable for each of the effect parameters `names`, or none
+    /// A fresh variable for each of the effect parameters `params`, or none
     /// once the effect check has solved the variables: no check is left to
     /// solve a new one.
-    pub fn fresh_effect_vars<'n>(
+    pub fn fresh_effect_vars<'p>(
         &mut self,
-        names: impl IntoIterator<Item = &'n String>,
+        params: impl IntoIterator<Item = &'p EffectParam>,
     ) -> EffectRows {
         if self.effect_vars_solved {
             return EffectRows::default();
         }
-        names
+        params
             .into_iter()
-            .map(|name| (name.clone(), vec![self.mint_effect_var()]))
+            .map(|param| (RowVar::Param(param.binder), vec![self.mint_effect_var()]))
             .collect()
     }
 
     /// The effect parameters impl block `def`'s target writes in its function
     /// types' rows, which [`Self::impl_effect_binding`] binds.
-    pub fn impl_effect_params(&self, def: DefId) -> Vec<String> {
+    pub fn impl_effect_params(&self, def: DefId) -> Vec<EffectParam> {
         let mut named = IndexSet::default();
         for &written in self.impl_target_args(def) {
             self.effect_params_in(written, &mut named);
@@ -4807,40 +4808,24 @@ impl TypeTable {
         rows
     }
 
-    /// What each of the effect parameters `names` stands for where `declared`
+    /// What each of the effect parameters `params` stands for where `declared`
     /// meets `actual`: the row `actual` has at the same place, less what
     /// `declared` names outright there. A parameter no row reaches is empty.
-    /// `actual` is written in another frame, whose own parameter of the same
-    /// name is a different one, so each of `names` is told apart from it by a
-    /// fresh variable while the two are matched.
     pub fn effect_binding(
-        &mut self,
+        &self,
         declared: TypeId,
         actual: TypeId,
-        names: &[String],
+        params: &[EffectParam],
     ) -> EffectRows {
-        let marks: Vec<(String, EffectRef)> = names
+        let mut rows: EffectRows = params
             .iter()
-            .map(|name| (name.clone(), self.mint_effect_var()))
+            .map(|param| (RowVar::Param(param.binder), Vec::new()))
             .collect();
-        let marked_rows: EffectRows = marks
-            .iter()
-            .map(|(name, mark)| (name.clone(), vec![mark.clone()]))
-            .collect();
-        let marked = self.substitute_effect_rows(declared, &marked_rows);
-        let mut rows: EffectRows = names
-            .iter()
-            .map(|name| (name.clone(), Vec::new()))
-            .collect();
-        self.zip_rows(marked, actual, true, &mut |we, ae| {
-            for (name, _) in marks.iter().filter(|(_, mark)| we.contains(mark)) {
-                let row = rows.get_mut(name).expect("every name has a row");
-                for e in ae.iter().filter(|e| !we.contains(e)) {
-                    if !row.contains(e) {
-                        row.push(e.clone());
-                    }
-                }
-            }
+        self.bind_rows(declared, actual, &mut rows);
+        rows.retain(|var, _| {
+            params
+                .iter()
+                .any(|param| *var == RowVar::Param(param.binder))
         });
         rows
     }
@@ -4850,8 +4835,8 @@ impl TypeTable {
     fn bind_rows(&self, written: TypeId, actual: TypeId, rows: &mut EffectRows) {
         self.zip_rows(written, actual, true, &mut |we, ae| {
             let met: Vec<EffectRef> = ae.iter().filter(|e| !we.contains(e)).cloned().collect();
-            for param in we.iter().filter(|e| e.is_param()) {
-                let row = rows.entry(param.name().to_string()).or_default();
+            for var in we.iter().filter_map(EffectRef::as_param) {
+                let row = rows.entry(RowVar::Param(var.binder)).or_default();
                 for e in &met {
                     if !row.contains(e) {
                         row.push(e.clone());
@@ -4938,13 +4923,9 @@ impl TypeTable {
     /// Every effect parameter named in a row of `type_id` that
     /// [`Self::zip_rows`] reaches: those an argument's type can determine, and
     /// no other.
-    pub fn effect_params_in(&self, type_id: TypeId, out: &mut IndexSet<String>) {
+    pub fn effect_params_in(&self, type_id: TypeId, out: &mut IndexSet<EffectParam>) {
         self.zip_rows(type_id, type_id, true, &mut |row, _| {
-            out.extend(
-                row.iter()
-                    .filter(|e| e.is_param())
-                    .map(|e| e.name().to_string()),
-            );
+            out.extend(row.iter().filter_map(EffectRef::as_param).cloned());
         });
     }
 
@@ -5454,7 +5435,7 @@ impl TypeTable {
             .map(|(var, solution)| {
                 let mut solved = solve_row(solution, &rows, &mut |_| {});
                 solved.retain(|effect| !effect.is_var());
-                (var.clone(), solved)
+                (*var, solved)
             })
             .collect()
     }
@@ -5469,7 +5450,8 @@ impl TypeTable {
     fn unsolved_vars_in(&self, id: TypeId, rows: &mut EffectRows) {
         if let ResolvedType::Function { effects, .. } = self.types.get(id).unwrap() {
             for effect in effects.iter().filter(|e| e.is_var()) {
-                rows.entry(effect.name().to_string()).or_default();
+                rows.entry(effect.row_var().expect("a variable"))
+                    .or_default();
             }
         }
     }
@@ -8172,10 +8154,7 @@ impl Leaves<'_> {
     fn row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
         let mut out: Vec<EffectRef> = Vec::new();
         for effect in effects {
-            let replaced = match effect {
-                EffectRef::Param { name } | EffectRef::Var { name, .. } => self.rows.get(name),
-                EffectRef::Concrete(_) | EffectRef::Undeclared { .. } => None,
-            };
+            let replaced = effect.row_var().and_then(|var| self.rows.get(&var));
             for e in replaced.map_or(std::slice::from_ref(effect), Vec::as_slice) {
                 if !out.contains(e) {
                     out.push(e.clone());

@@ -7,7 +7,7 @@ use crate::ast::{AstId, Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{EffectRows, TemplateId, TypeArgMap, TypeId, TypeParamId};
+use crate::tir::{EffectParam, EffectRows, TemplateId, TypeArgMap, TypeId, TypeParamId};
 use crate::type_table::TypeTable;
 
 use super::sem::decls::FunctionSig;
@@ -205,15 +205,18 @@ pub(crate) struct DeclSig {
     /// The declaration's own effect parameters, `_` among them: each use
     /// takes a fresh variable for one. An effect parameter of the enclosing
     /// impl is the receiver's to bind instead.
-    pub(crate) own_effects: Vec<String>,
+    pub(crate) own_effects: Vec<EffectParam>,
 }
 
 /// The effect parameters `params` declare, `_` among them.
-pub(crate) fn own_effect_params(params: &[ast::GenericParam]) -> Vec<String> {
+pub(crate) fn own_effect_params(params: &[ast::GenericParam]) -> Vec<EffectParam> {
     params
         .iter()
         .filter(|p| p.is_effect)
-        .map(|p| p.name.clone())
+        .map(|p| EffectParam {
+            binder: p.id,
+            name: p.name.clone(),
+        })
         .collect()
 }
 
@@ -686,9 +689,7 @@ impl DeclSig {
 
     /// [`Self::instantiate_slots_with`] with what the enclosing impl's effect
     /// parameters stand for at the receiver, `bound`. Each of the
-    /// declaration's own takes a fresh variable for the result to carry out,
-    /// minted in the declaration's frame before the slots are filled, so a
-    /// parameter of the use site's own keeps its name.
+    /// declaration's own takes a fresh variable for the result to carry out.
     pub(crate) fn instantiate_bound(
         &self,
         type_table: &RefCell<TypeTable>,

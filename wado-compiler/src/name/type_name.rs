@@ -318,7 +318,7 @@ fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
                 .expect("a ground effect is named in a module");
             effect_namespace(module, effect.name())
         }
-        tir::EffectRef::Param { name } | tir::EffectRef::Var { name, .. } => name.clone(),
+        tir::EffectRef::Param(_) | tir::EffectRef::Var { .. } => effect.name().to_string(),
     }
 }
 
@@ -1565,7 +1565,10 @@ mod tests {
             true,
             vec![FqTypeName::binder("T"), FqTypeName::builtin("i32")],
             inner,
-            vec![tir::EffectRef::Param { name: "E".into() }],
+            vec![tir::EffectRef::Param(tir::EffectParam {
+                binder: crate::ast::AstId::fresh(),
+                name: "E".into(),
+            })],
         );
         assert_eq!(f.to_mangled(), "fn mut(T,i32)->(fn()->())with(E)");
         assert_eq!(f.to_display(), "fn mut(T, i32) -> (fn() -> ()) with E");

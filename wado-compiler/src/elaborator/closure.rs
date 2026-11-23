@@ -365,7 +365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut table = self.tysys.type_table.borrow_mut();
         let var = table.mint_effect_var();
         if let Some(performed) = performed {
-            table.solve_effect_var(var.name(), performed, site);
+            table.solve_effect_var(var.row_var().expect("a variable"), performed, site);
         }
         let row = vec![var];
         let func_type =
@@ -399,7 +399,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let mut table = self.tysys.type_table.borrow_mut();
         for (var, row) in solved {
-            table.solve_effect_var(&var, row, site.clone());
+            table.solve_effect_var(var, row, site.clone());
         }
     }
 
