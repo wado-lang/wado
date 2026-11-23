@@ -224,13 +224,17 @@ module cannot capture the name. Fixture:
 An effect parameter (`<effect E>`) names that parameter, and the parameter is
 its binder: two declarations' parameters of one spelling are two effects
 wherever both reach one question. A row substitution (`EffectRows`) and the
-solver's head (`DeclKey::EffectParam`) are keyed by the binder. An impl's own
-parameters stand for its trait's by position. Fixture:
-`error_effect_param_same_name_in_impl_and_caller.wado`.
+solver's head (`DeclKey::EffectParam`) are keyed by the binder. A parameter met
+by its own binder, as in a function's reference to itself, stands for itself.
+An impl's own parameters stand for its trait's by position, in the parameters
+and the return type alike. Fixtures:
+`error_effect_param_same_name_in_impl_and_caller.wado`,
+`error_effect_param_own_reference_into_pure_slot.wado`,
+`trait_method_effect_param_in_return.wado`.
 
-A type parameter names
-no effect. A name reaching no `interface` or resource is rejected where it is
-written, even when another module declares an effect of that name. So
+A type parameter names no effect. A name reaching no `interface` or resource is
+rejected where it is written, even when another module declares an effect of
+that name. So
 `with Stdout` needs `Stdout` in scope like any other name. `#[ambient(E)]` is
 held to the same rule, and so is a bare operation call: `use { E::{op} }` brings
 `op` into scope but not `E`, and the call still requires `E`. Fixtures:

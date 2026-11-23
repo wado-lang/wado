@@ -4833,7 +4833,11 @@ impl TypeTable {
     /// that meets it.
     fn bind_rows(&self, written: TypeId, actual: TypeId, rows: &mut EffectRows) {
         self.zip_rows(written, actual, true, &mut |we, ae| {
-            let met: Vec<EffectRef> = ae.iter().filter(|e| !we.contains(e)).cloned().collect();
+            let met: Vec<EffectRef> = ae
+                .iter()
+                .filter(|e| !e.named_outright_in(we))
+                .cloned()
+                .collect();
             for var in we.iter().filter_map(EffectRef::as_param) {
                 let row = rows.entry(RowVar::Param(var.binder)).or_default();
                 for e in &met {

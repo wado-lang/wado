@@ -3097,7 +3097,7 @@ fn resolve_effect_params(
         let actual: Vec<EffectRef> = rows
             .row(&actual_rows.concat())
             .into_iter()
-            .filter(|e| e.is_param() || !formal.contains(e))
+            .filter(|e| !e.named_outright_in(&formal))
             .collect();
         for formal_effect in formal {
             if let EffectRef::Param(param) = formal_effect
@@ -3203,7 +3203,7 @@ fn pair_effects(
         let performed: Vec<EffectRef> = rows
             .row(ae)
             .into_iter()
-            .filter(|e| !de.contains(e))
+            .filter(|e| !e.named_outright_in(de))
             .collect();
         for param in de.iter().filter_map(EffectRef::as_param) {
             if let Some(slot) = met.get_mut(param) {
@@ -3276,7 +3276,7 @@ fn rows_written_as(
             out.extend(
                 actual_row
                     .iter()
-                    .filter(|e| !written_row.contains(e))
+                    .filter(|e| !e.named_outright_in(written_row))
                     .cloned(),
             );
         }

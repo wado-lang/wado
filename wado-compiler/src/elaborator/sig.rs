@@ -7,7 +7,7 @@ use crate::ast::{AstId, Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{EffectParam, EffectRows, TemplateId, TypeArgMap, TypeId, TypeParamId};
+use crate::tir::{EffectParam, EffectRows, RowVar, TemplateId, TypeArgMap, TypeId, TypeParamId};
 use crate::type_table::TypeTable;
 
 use super::sem::decls::FunctionSig;
@@ -718,7 +718,11 @@ impl DeclSig {
     ) -> InstantiatedSig {
         let mut table = type_table.borrow_mut();
         let mut rows = bound.clone();
-        rows.extend(table.fresh_effect_vars(&self.own_effects));
+        let unbound = self
+            .own_effects
+            .iter()
+            .filter(|param| !bound.contains_key(&RowVar::Param(param.binder)));
+        rows.extend(table.fresh_effect_vars(unbound));
         let return_type =
             table.substitute_effect_rows(self.return_type.unwrap_or(TypeTable::UNIT), &rows);
         let fill = |table: &mut TypeTable, ty| {

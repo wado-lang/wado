@@ -131,6 +131,13 @@ impl EffectRef {
         }
     }
 
+    /// Whether `declared` names this effect outright, so an actual row meeting
+    /// it there adds nothing by it. A parameter met by its own binder is not
+    /// named outright: it stands for itself there, as in a recursive call.
+    pub fn named_outright_in(&self, declared: &[EffectRef]) -> bool {
+        !self.is_param() && declared.contains(self)
+    }
+
     pub fn as_var(&self) -> Option<RowVar> {
         match self {
             EffectRef::Var { id, .. } => Some(RowVar::Var(*id)),
