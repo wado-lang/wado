@@ -519,8 +519,7 @@ impl ModuleSourceInterner {
     /// Where the file `file` of the source dependency `name` lies, as
     /// [`Self::resolve_exported_file`] finds it, for a reader of its bytes
     /// rather than of its module.
-    #[must_use]
-    pub fn exported_file(
+    fn exported_file(
         &self,
         importer: &ModuleSource,
         name: &str,

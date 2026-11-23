@@ -2278,20 +2278,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             return Ok(resolved);
         }
 
-        let exported_file = split_exported_file(import_source);
-        if let Some((package, file)) = exported_file
-            && let Some(Err(refusal)) =
-                self.interner
-                    .resolve_exported_file(from_module_source, package, file)
-        {
-            return Err(LoadError::UnexportedFile {
-                package: package.to_string(),
-                file: file.to_string(),
-                refusal,
-            });
+        if let Some((package, file)) = split_exported_file(import_source) {
+            return Err(self
+                .interner
+                .locate_exported_file(from_module_source, package, file)
+                .expect_err("an exported file that resolves is its package's module"));
         }
-        let name = exported_file.map_or(import_source, |(package, _)| package);
-        if let Some(missing) = self.interner.missing_dependency(from_module_source, name) {
+        if let Some(missing) = self
+            .interner
+            .missing_dependency(from_module_source, import_source)
+        {
             return Err(missing);
         }
 
