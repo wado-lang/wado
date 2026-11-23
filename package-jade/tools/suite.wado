@@ -19,6 +19,7 @@ use { to_string } from "core:json";
 use { Uri } from "core:uri";
 use { Document, Node, Schema, SchemaSet } from "../src/lib.wado";
 use { DEFAULT_BASE } from "../src/validate.wado";
+use { raw_string_literal, wado } from "lib:wadopoet";
 
 global SUITE: String = "vendor/JSON-Schema-Test-Suite/tests/draft2020-12";
 global REMOTES: String = "vendor/JSON-Schema-Test-Suite/remotes";
@@ -114,7 +115,7 @@ impl Suite {
             let remotes = match remotes_of(&schema_text) {
                 Ok(r) => r,
                 Err(why) => {
-                    skipped.push(`//   ${description}: ${why}`);
+                    skipped.push(wado`//   ${description}: ${why}`);
                     continue;
                 },
             };
@@ -135,18 +136,18 @@ impl Suite {
                 }
                 let data = json(&t.get("data").unwrap());
                 let valid = t.get("valid").unwrap().as_bool().unwrap();
-                tests.push_str(`
-test ${to_string(&name).unwrap()} {
+                tests.push_str(wado`
+test "${name}" {
     ${harness}(
-        ${raw(&schema_text)},
-        ${raw(&data)},
+        ${raw_string_literal(&schema_text)},
+        ${raw_string_literal(&data)},
         ${valid},${remotes_arg}
     );
 }
 `);
             }
         }
-        self.sections.push_str(`
+        self.sections.push_str(wado`
 // ${*file}
 `);
         if !skipped.is_empty() {
@@ -161,7 +162,7 @@ test ${to_string(&name).unwrap()} {
     }
 
     fn to_string(&self) -> String {
-        let mut out = `#![generated(by = "package-jade/tools/suite.wado", sources = [${to_string(&SUITE).unwrap()}])]
+        let mut out = wado`#![generated(by = "package-jade/tools/suite.wado", sources = ["${SUITE}"])]
 // Regenerate with \`mise run suite-jade\`; do not edit.
 
 use { ${self.harnesses.join(", ")} } from "../suite.wado";
@@ -169,9 +170,7 @@ use { ${self.harnesses.join(", ")} } from "../suite.wado";
         if !self.embedded.is_empty() {
             out.push_str("\nglobal REMOTES: List<[String, String]> = [\n");
             for let path of self.embedded {
-                let uri = to_string(&`${REMOTE_BASE}${path}`).unwrap();
-                let include = to_string(&`./remotes/${path}`).unwrap();
-                out.push_str(`    [${uri}, #include_str(${include})],\n`);
+                out.push_str(wado`    ["${REMOTE_BASE}${path}", #include_str("./remotes/${path}")],\n`);
             }
             out.push_str("];\n");
         }
@@ -202,16 +201,6 @@ fn json(node: &Node) -> String {
         },
         _::Null | _::Bool | _::String => to_string(node).unwrap(),
     };
-}
-
-/// `text` as a Wado raw string. `core:json` escapes every control character,
-/// so none is left for the raw string to carry unseen.
-fn raw(text: &String) -> String {
-    let mut hashes = "#";
-    while text.contains(`"${hashes}`) {
-        hashes.push_str("#");
-    }
-    return `${hashes}"${*text}"${hashes}`;
 }
 
 /// The documents the schema `text` refers to, each as its path under
