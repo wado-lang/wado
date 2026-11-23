@@ -229,9 +229,9 @@ one names as left.
    Done when a manifest round-trips it and `wado publish` refuses a list naming
    a file the package does not carry.
 2. Specifier resolution: split `<coordinate>/<path.ext>` once, resolve the
-   package through the dependency
-   index, check the allowlist under NFC with case compared exactly, and refuse
-   at package granularity. Done when `use { … } from "lib:x/src/y.wado"`
+   package through the dependency index, check the allowlist under NFC with
+   case compared exactly, and refuse at package granularity. Done when
+   `use { … } from "lib:x/src/y.wado"`
    compiles against a path dependency, and an unlisted path produces the
    package-level diagnostic, a case-only mismatch among them.
 3. Kiln `from` / `inputs`: accept the reference, key the cache and the header on

@@ -186,7 +186,7 @@ Each value is an inline table that gives the dependency's source: where its code
 comes from. A source is a local path, a git repository, or a registry.
 
 Git is the primary source: any repository on any host serves a package, with no
-registry to publish to and no `namespace` to claim. A path source serves a
+registry to publish to. A path source serves a
 package beside this one, such as another member of a workspace. A registry
 serves a package published under its coordinate. Everything a dependency offers
 reaches a git or path dependency. A registry dependency offers only what its

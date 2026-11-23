@@ -741,18 +741,19 @@ fn lower_module_specifier(
         )));
     }
     // A `[build-dependencies]` specifier: an open coordinate (`ns:name[@ver]`)
-    // or a `lib:nickname` indirection. Both carry a `<segment>:` prefix; the
-    // compiler does not interpret the body here — the host resolves it against
-    // `[build-dependencies]`, dispatching on the matched entry's source.
+    // or a `lib:nickname` indirection, which the host resolves against
+    // `[build-dependencies]`, dispatching on the matched entry's source. The
+    // host reads the version; only its characters are held here.
     let SpecParts { key, version } = parse_spec(spec);
+    let version_chars = |v: &str| {
+        !v.is_empty()
+            && v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
+    };
     if let Some((namespace, name)) = key.split_once(':')
         && is_package_namespace(namespace)
         && is_package_namespace(name)
-        && version.is_none_or(|v| {
-            !v.is_empty()
-                && v.chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
-        })
+        && version.is_none_or(version_chars)
     {
         return Some(GeneratorModule::Spec(GeneratorSpec {
             spec: spec.to_string(),
@@ -954,7 +955,13 @@ mod tests {
     fn a_module_that_is_no_specifier_is_rejected() {
         // Only relative paths and `[build-dependencies]` specifiers (coordinate
         // / `lib:` nickname) name a generator.
-        for spec in ["gen", "ns:gen/sub", "lib:gen/sub", "ns:gen@1.0/sub", "ns:gen@"] {
+        for spec in [
+            "gen",
+            "ns:gen/sub",
+            "lib:gen/sub",
+            "ns:gen@1.0/sub",
+            "ns:gen@",
+        ] {
             let attrs = attr_with_generator(&[("module", AttrValue::string(spec.to_string()))]);
             let module = module_with_use("./schema.proto", attrs);
             let mut mods: IndexMap<String, Module> = IndexMap::default();
