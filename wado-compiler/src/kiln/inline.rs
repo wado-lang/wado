@@ -617,7 +617,16 @@ fn resolve_source(
     if is_remote(module_path) && is_cwd_relative(raw) {
         return InvocationPath::normalize(&resolve_module_path(module_path, raw));
     }
-    resolve_or_reject(module_path, raw, manifest_root, field, use_decl, errors)
+    let local = resolve_or_reject(module_path, raw, manifest_root, field, use_decl, errors);
+    // A reference and a local path share one namespace in `located`.
+    if split_exported_file(local.as_str()).is_some() {
+        errors.push(use_error(
+            module_path,
+            use_decl,
+            format!("kiln: `{field}` names `{local}`, a local path spelled as a package reference"),
+        ));
+    }
+    local
 }
 
 /// The pin `value` writes for `path`, reporting through `error` a value that
@@ -949,6 +958,22 @@ mod tests {
         ));
         assert_matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "lib:gen");
         assert_eq!(result[0].invoked_as, "lib:gen");
+    }
+
+    #[test]
+    fn a_local_path_spelled_as_a_package_reference_is_rejected() {
+        let attrs = attr_with_generator(&[("module", AttrValue::string("lib:gen".to_string()))]);
+        let module = module_with_use("./acme:schemas@0.2.0/a.idl", attrs);
+        let errs = expect_errors(collect_inline_invocations(
+            [("main.wado", &module)],
+            &no_exports,
+            "",
+        ));
+        assert!(
+            errs.iter()
+                .any(|d| d.message.contains("spelled as a package reference")),
+            "{errs:?}"
+        );
     }
 
     #[test]

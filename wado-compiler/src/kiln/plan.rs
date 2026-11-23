@@ -199,6 +199,7 @@ fn path_inside(candidate: &InvocationPath, dir: &InvocationPath) -> bool {
 mod tests {
     use super::*;
     use crate::ast::{AttrEntry, AttrObject, AttrValue};
+    use crate::hashmap::IndexMap;
     use crate::kiln::invocation::{DeclSite, GeneratorModule, InvocationInput};
     use crate::kiln::options_check::CanonicalOptions;
     use crate::token::Span;
@@ -223,7 +224,7 @@ mod tests {
                     integrity: None,
                 })
                 .collect(),
-            located: crate::hashmap::IndexMap::default(),
+            located: IndexMap::default(),
             output_dir: InvocationPath::normalize(out),
             options: CanonicalOptions::default(),
             raw_options: None,

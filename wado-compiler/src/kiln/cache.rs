@@ -336,6 +336,7 @@ fn write_file_hash(h: &mut Sha256, f: &FileHash) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hashmap::IndexMap;
     use crate::kiln::invocation::{DeclSite, GeneratorModule, Invocation, InvocationInput};
     use crate::token::Span;
 
@@ -454,7 +455,7 @@ mod tests {
                 use_type: None,
                 integrity: None,
             }],
-            located: crate::hashmap::IndexMap::default(),
+            located: IndexMap::default(),
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options: CanonicalOptions::default(),
             raw_options: None,
