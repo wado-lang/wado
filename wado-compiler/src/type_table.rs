@@ -2693,6 +2693,29 @@ impl TypeTable {
         self.struct_field_index.insert((def, args), fields);
     }
 
+    /// The field types of struct `ty`, where its fields are known: a
+    /// registered declaration instance, or an anonymous shape of fields.
+    #[must_use]
+    pub fn struct_field_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        match self.get(ty) {
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            } => self
+                .struct_field_index
+                .get(&(*def, type_args.clone()))
+                .cloned(),
+            ResolvedType::Struct {
+                def: StructDef::Anon(id),
+                ..
+            } => match &self.anon_structs[id.0 as usize].shape {
+                AnonShape::Fields(fields) => Some(fields.iter().map(|(_, ty)| *ty).collect()),
+                AnonShape::Synthetic(_) | AnonShape::Template(_) => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Whether a value of `ty` is, or holds at any depth, an affine resource:
     /// what makes each place holding one a nullable reference to its object
     /// (WEP: Affine Types). A reference, a function and an unrestricted

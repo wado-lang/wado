@@ -438,22 +438,17 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Bind a sub-pattern matching a part of what `whole` names, the part of
-    /// type `part_type` where the holder says. Otherwise the binding's own type
-    /// stands in: match ergonomics only ever adds a reference to it, which
-    /// errs toward the part being one.
-    fn bind_part(&mut self, pattern: &TirPattern, whole: &Names, part_type: Option<TypeId>) {
-        let decided = part_type.or_else(|| pattern.declared_local().map(|(_, ty)| ty));
-        let part = match decided {
-            Some(ty) => self.part(whole.clone(), ty),
-            None => whole.clone(),
-        };
+    /// Bind a sub-pattern matching a part of type `part_type`, as its holder
+    /// declares it, of what `whole` names. A binding's own type cannot stand
+    /// in: match ergonomics adds a reference to it.
+    fn bind_part(&mut self, pattern: &TirPattern, whole: &Names, part_type: TypeId) {
+        let part = self.part(whole.clone(), part_type);
         self.bind_pattern(pattern, &part, part_type);
     }
 
-    /// Bind `pattern`, matching a value of type `matched` where known, to what
-    /// `base` names.
-    fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names, matched: Option<TypeId>) {
+    /// Bind `pattern`, matching a value of type `matched`, to what `base`
+    /// names.
+    fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names, matched: TypeId) {
         match pattern {
             TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
                 self.bindings.set(*local_index, base.clone());
@@ -464,6 +459,10 @@ impl<'a> Resolver<'a> {
                 ..
             } => {
                 let owner = field_owner(*struct_type, self.type_table);
+                let field_types = self
+                    .type_table
+                    .struct_field_types(owner)
+                    .expect("a struct pattern matches a struct of known fields");
                 for field in fields {
                     let nested = match base {
                         Names::Place(place) => {
@@ -472,28 +471,25 @@ impl<'a> Resolver<'a> {
                                 owner,
                                 index: field.field_index,
                             });
-                            // The resolver holds no field types to say whether
-                            // the field is a reference, and a wrong `false` here
-                            // costs the value semantics rather than a copy.
-                            place.through_ref = true;
                             Names::Place(place)
                         }
                         Names::Value => Names::Value,
                         Names::Unknown => Names::Unknown,
                     };
-                    self.bind_part(&field.pattern, &nested, None);
+                    let field_type = field_types[field.field_index as usize];
+                    self.bind_part(&field.pattern, &nested, field_type);
                 }
             }
             // The binding names the value the pattern tested, not a projection of
             // it: deepening by the payload's selector is sound and measures worse.
             TirPattern::Tuple(elements, _) => {
-                let element_types = matched.and_then(|ty| {
-                    self.type_table
-                        .tuple_representation(self.type_table.peel_refs(ty))
-                });
-                for (index, element) in elements.iter().enumerate() {
-                    let ty = element_types.as_ref().map(|types| types[index]);
-                    self.bind_part(element, base, ty);
+                let element_types = self
+                    .type_table
+                    .tuple_representation(self.type_table.peel_refs(matched))
+                    .expect("a tuple pattern matches a tuple");
+                assert!(elements.len() <= element_types.len());
+                for (element, &element_type) in elements.iter().zip(&element_types) {
+                    self.bind_part(element, base, element_type);
                 }
             }
             TirPattern::Variant {
@@ -502,7 +498,7 @@ impl<'a> Resolver<'a> {
                 ..
             } => {
                 for binding in bindings {
-                    self.bind_part(binding, base, Some(*payload_type));
+                    self.bind_part(binding, base, *payload_type);
                 }
             }
             TirPattern::Or(alternatives) => {
@@ -928,8 +924,7 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 let base = self.resolver.names(value);
-                self.resolver
-                    .bind_pattern(pattern, &base, Some(value.type_id));
+                self.resolver.bind_pattern(pattern, &base, value.type_id);
             }
             _ => {}
         }
@@ -953,7 +948,7 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
                 let base = self.resolver.names(scrutinee);
                 for arm in arms {
                     self.resolver
-                        .bind_pattern(&arm.pattern, &base, Some(scrutinee.type_id));
+                        .bind_pattern(&arm.pattern, &base, scrutinee.type_id);
                 }
             }
             _ => {}
