@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795414514366,
+  "lastUpdate": 1795423135465,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81457,6 +81457,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aa76b79f5e0546ae91488d962d38136e06cc6093"
         },
         "date": 1795414513029,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a5ee102ec58cc86087d8ec63ee5d03eecb41646c",
+          "message": "Merge pull request #2737 from wado-lang/ccr-4886d32c-9ndzfw\n\nrefactor(wadopoet): emit Jade's and Gale's generated tests through the wado tag",
+          "timestamp": "2026-11-23T17:20:30+09:00",
+          "tree_id": "8d7d3bd4dd1f5f99c41aac861b6097d3745d59b8",
+          "url": "https://github.com/wado-lang/wado/commit/a5ee102ec58cc86087d8ec63ee5d03eecb41646c"
+        },
+        "date": 1795423134114,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
