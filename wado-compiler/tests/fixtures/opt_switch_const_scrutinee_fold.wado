@@ -1,0 +1,36 @@
+// A dense `match` becomes a `Switch` in its own function before the inliner
+// runs, so the constant a call site passes reaches the scrutinee only after the
+// splice. The fold then takes the arm that value selects, as it does for a
+// `match`, leaving no `br_table`. One value hits the table, one falls past it
+// to the default, and one is an enum case.
+use { println, Stdout } from "core:cli";
+
+enum Tone { C, D, E, F, G, A, B, C2, D2, E2, F2, G2, A2 }
+
+fn pick(i: i32, x: i32) -> i32 {
+    return match i {
+        1 => x + 11, 2 => x * 3, 3 => x - 7, 4 => x ^ 5, 5 => x | 9, 6 => x & 3, 7 => x << 2,
+        8 => x >> 1, 9 => x % 7, 10 => x / 3, 11 => x + 100, 12 => x * 17, 13 => x - 50,
+        _ => x + 1000,
+    };
+}
+
+fn pitch(t: Tone, x: i32) -> i32 {
+    return match t {
+        _::C => x + 1, _::D => x + 2, _::E => x + 3, _::F => x + 4, _::G => x + 5,
+        _::A => x + 6, _::B => x + 7, _::C2 => x + 8, _::D2 => x + 9, _::E2 => x + 10,
+        _::F2 => x + 11, _::G2 => x + 12, _::A2 => x + 13,
+    };
+}
+
+export fn run() with Stdout {
+    let x = builtin::black_box(4);
+    println(`${pick(3, x)} ${pick(12, x)} ${pick(99, x)}`);
+    println(`${pitch(Tone::E2, x)} ${pitch(Tone::C, x)}`);
+}
+
+__DATA__
+{
+    "stdout": "-3 68 1004\n14 5\n",
+    "wir_not_expect:O2": ["br_table"]
+}

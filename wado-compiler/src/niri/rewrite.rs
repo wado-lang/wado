@@ -5,7 +5,7 @@
 //! lower phase emits for it.
 
 use crate::compiler_item::SeqField;
-use crate::const_eval::Value;
+use crate::const_eval::{Value, is_signed_int};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand,
@@ -102,6 +102,9 @@ impl Interpreter<'_> {
             return true;
         }
         if self.rewrite_if_expr_via(sink, e) {
+            return true;
+        }
+        if self.rewrite_switch_expr_via(sink, e) {
             return true;
         }
         self.rewrite_match_expr_via(sink, e)
@@ -840,6 +843,37 @@ impl Interpreter<'_> {
             || collapse_equal_arms(sink, e, condition, then_value, else_value)
     }
 
+    /// Replace a `Switch` whose scrutinee is constant with the block it
+    /// dispatches to. `match_to_switch` runs before the inliner, so a call site's
+    /// constant reaches a callee's scrutinee only once the switch is built.
+    fn rewrite_switch_expr_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
+        let ExprKind::Switch {
+            scrutinee,
+            min_value,
+            table,
+            arms,
+            default,
+        } = &sink.body().exprs[e].kind
+        else {
+            return false;
+        };
+        let Lattice::Const(value) = self.operand_to_lattice(sink.body(), *scrutinee) else {
+            return false;
+        };
+        let Some(key) = switch_key(&value) else {
+            return false;
+        };
+        let taken = key
+            .checked_sub(*min_value)
+            .and_then(|offset| usize::try_from(offset).ok())
+            .and_then(|offset| table.get(offset).copied().flatten())
+            .map_or(*default, |arm| arms[arm]);
+        self.shed_markers(sink, NodeRef::Block(taken));
+        let ty = sink.body().exprs[e].type_id;
+        sink.replace_kind(e, ExprKind::plain_block(taken, ty, "switch_arm"));
+        true
+    }
+
     /// Collapse a `match` with a constant scrutinee or a bool-discriminator
     /// shape.
     ///
@@ -1019,6 +1053,23 @@ fn rewrite_bool_discriminator<S: EditSink>(
         },
     );
     true
+}
+
+/// The key a `Switch` table is indexed by for `value`, as `match_to_switch`
+/// keys its patterns: an integer or `char` by value, an enum by case index. An
+/// unsigned value past `i64::MAX` has no key, and no table reaches it.
+fn switch_key(value: &Value) -> Option<i64> {
+    match value {
+        Value::Int { value, prim } if is_signed_int(*prim) => Some(*value as i64),
+        Value::Int { value, .. } => i64::try_from(*value).ok(),
+        Value::Char(c) => Some(i64::from(u32::from(*c))),
+        Value::Variant {
+            case_index,
+            payload: None,
+            ..
+        } => Some(i64::from(*case_index)),
+        _ => None,
+    }
 }
 
 /// Replace the `if` with the branch its constant condition chooses. A missing
