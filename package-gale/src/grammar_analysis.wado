@@ -77,6 +77,9 @@ pub struct GrammarAnalysis {
     /// By snake name, the kinds of each rule whose scan is one token test.
     one_token_rules: HashMap<String, List<i32>>,
     predicate_fn_owners: HashMap<i32, i32>,
+    /// The first predicate of each distinct text, in grammar order: one per
+    /// `pred_<id>` fn.
+    predicate_owners: List<AltAction>,
     left_edges: Option<RuleLeftEdges> = null,
 }
 
@@ -90,10 +93,9 @@ pub struct RuleLeftEdges {
 }
 
 /// By action id, the id of the grammar's first predicate with the same text:
-/// the one `pred_<id>` fn every copy of that body calls. Derived from the
-/// grammar rather than from registration, so a condition rendered before its
-/// predicate is registered names the same fn.
-fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> HashMap<i32, i32> {
+/// the one `pred_<id>` fn every copy of that body calls. Beside it, those first
+/// predicates themselves, in grammar order.
+fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> [HashMap<i32, i32>, List<AltAction>] {
     let mut actions: List<&AltAction> = [];
     for let rule of parser_rules {
         for let alt of &rule.alternatives {
@@ -101,14 +103,19 @@ fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> HashMap<i32, i32> {
         }
     }
     let mut by_text = HashMap::<String, i32>::new();
-    let mut owners = HashMap::<i32, i32>::new();
+    let mut owner_of = HashMap::<i32, i32>::new();
+    let mut owners: List<AltAction> = [];
     for let a of &actions {
         if a.kind matches { _::Predicate } {
             let id = a.source.action_id;
-            owners[id] = by_text.get_or_insert(a.source.text.trim().to_string(), id);
+            let owner = by_text.get_or_insert(a.source.text.trim().to_string(), id);
+            if owner == id {
+                owners.push(**a);
+            }
+            owner_of[id] = owner;
         }
     }
-    return owners;
+    return [owner_of, owners];
 }
 
 fn is_one_token_rule(rule: &ParserRule) -> bool {
@@ -132,6 +139,7 @@ impl GrammarAnalysis {
         // test-path table built without one.
         let mut token_kinds = token_kinds;
         let eof_kind = token_kinds.intern("TK_EOF");
+        let [owner_of, owners] = predicate_fn_owners(parser_rules);
         let mut analysis = GrammarAnalysis {
             parser_rules: *parser_rules,
             scan_cyclic: compute_scan_cyclic(parser_rules),
@@ -151,7 +159,8 @@ impl GrammarAnalysis {
             readings_cache: HashMap::new(),
             single_alt_owner: build_single_alt_owner_map(parser_rules),
             one_token_rules: HashMap::new(),
-            predicate_fn_owners: predicate_fn_owners(parser_rules),
+            predicate_fn_owners: owner_of,
+            predicate_owners: owners,
         };
         for let rule of parser_rules {
             if is_one_token_rule(rule) {
@@ -213,6 +222,11 @@ impl GrammarAnalysis {
     /// predicate in the grammar with the same text.
     pub fn predicate_fn_id(&self, id: i32) -> i32 {
         return self.predicate_fn_owners.get(id).expect("a gated predicate is one of the grammar's");
+    }
+
+    /// The first predicate of each distinct text, in grammar order.
+    pub fn predicate_owners(&self) -> &List<AltAction> {
+        return &self.predicate_owners;
     }
 
     /// The kinds a rule matches when its scan is one token test, or `null`.

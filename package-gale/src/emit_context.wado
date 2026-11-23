@@ -98,11 +98,35 @@ pub struct EmitCursor {
     /// `action_id`s of alt-initial predicates resolved at the dispatch by
     /// prediction-time gating; their in-body emit is suppressed.
     predicate_gated: List<i32> = [],
-    /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
-    /// fns: `[predicate_fn_id, body]`. The dispatch calls `pred_<id>(p)` instead of
-    /// inlining the condition, so the same fn is callable from every decision
-    /// path (token-led / interchangeable dispatch and the ATN's disabled alternatives).
-    predicate_fns: List<[i32, String]> = [],
+}
+
+/// A rendered predicate condition and the generated fn it calls, if any.
+/// Rendering stays pure; the text is handed out only through
+/// `EmitCursor::take_cond`, which records the call, so `prune` keeps the fn of
+/// every condition written and drops the rest.
+pub struct GateCond {
+    text: String,
+    calls: Option<String>,
+}
+
+impl GateCond {
+    /// A condition calling no generated fn.
+    pub fn new(text: String) -> GateCond {
+        return GateCond { text, calls: null };
+    }
+
+    /// A condition calling the generated fn `name`.
+    pub fn calling(name: String, text: String) -> GateCond {
+        return GateCond { text, calls: Option::Some(name) };
+    }
+
+    /// The text of a scan's condition, which renders against the scan's own
+    /// handle and so calls no parser fn.
+    pub fn scan_text(&self) -> String
+        contract self.calls matches { null }, "a scan condition calls no generated fn"
+    {
+        return self.text;
+    }
 }
 
 impl EmitCursor {
@@ -256,6 +280,14 @@ impl EmitCursor {
         return name;
     }
 
+    /// The text of `cond`, the fn it calls recorded as `note_ref` records one.
+    pub fn take_cond(&mut self, cond: GateCond) -> String {
+        if let Some(name) = &cond.calls {
+            self.note_ref(name);
+        }
+        return cond.text;
+    }
+
     pub fn next_scan_id(&mut self) -> i32 {
         return self.scan_ids.next();
     }
@@ -304,11 +336,6 @@ impl EmitCursor {
     /// Whether the dispatch resolves predicate `id`.
     pub fn is_predicate_gated(&self, id: i32) -> bool {
         return self.predicate_gated.contains(&id);
-    }
-
-    /// The standalone predicate fns registered so far, as `[id, body]`.
-    pub fn predicate_fns(&self) -> &List<[i32, String]> {
-        return &self.predicate_fns;
     }
 }
 
@@ -456,7 +483,7 @@ impl EmitContext {
     }
 
     /// `gate_conditions::gate_condition_for` at the alternative being emitted.
-    pub fn gate_condition(&self, a: &AltAction, handle: &String = &PARSER_HANDLE) -> Option<String> {
+    pub fn gate_condition(&self, a: &AltAction, handle: &String = &PARSER_HANDLE) -> Option<GateCond> {
         return gate_condition_for(a, &self.settings, &self.analysis, &self.predicate_site(), handle);
     }
 
@@ -533,18 +560,6 @@ impl EmitContext {
     /// Whether a body of the rule being emitted names the binding `base`.
     pub fn names_binding<S: AsStrSlice>(&self, base: S) -> bool {
         return self.plan.names_binding(self.cursor.current_rule_index(), base);
-    }
-
-    /// Register a context-free gated predicate's body for a standalone
-    /// `pred_<id>(p)` fn, one per distinct body.
-    pub fn register_predicate_fn<S: AsStrSlice>(&mut self, action_id: i32, body: S) {
-        let id = self.analysis.predicate_fn_id(action_id);
-        for let e of &self.cursor.predicate_fns {
-            if e.0 == id {
-                return;
-            }
-        }
-        self.cursor.predicate_fns.push([id, body.to_string()]);
     }
 
     /// `scan_<snake>`, the name of a scan function rule `snake` defines, for

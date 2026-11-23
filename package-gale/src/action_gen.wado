@@ -24,6 +24,7 @@ use {
     join_gate_conds,
     pred_fn_name,
     predicate_condition_for,
+    predicate_is_fn,
     scan_answered_at_edge,
     scan_gate_condition_for,
 } from "./gate_conditions.wado";
@@ -277,17 +278,22 @@ pub fn add_parser_super_effect(f: &mut FnSpec, ctx: &EmitContext) {
     }
 }
 
-/// Emit each context-free gated predicate as a standalone fn
-/// `fn pred_<id>(p: &Parser) -> bool { return <body>; }`. Registered during the
-/// per-rule marking pass; a `&Parser` receiver keeps it read-only (the same fn
-/// the ATN's disabled alternatives call). No-op when none were registered.
+/// Define `fn pred_<id>(p: &Parser) -> bool { return <body>; }` for each of the
+/// grammar's predicates the parser evaluates by call (`predicate_is_fn`),
+/// prunable: only those a written condition calls (`EmitCursor::take_cond`)
+/// survive `prune`. A `&Parser` receiver keeps it read-only, so the dispatch and
+/// the ATN's disabled alternatives call the same fn.
 pub fn gen_predicate_fns(w: &mut CodeWriter, ctx: &EmitContext) {
-    for let entry of ctx.cursor.predicate_fns() {
-        let mut f = FnSpec::new(&pred_fn_name(entry.0));
+    for let a of ctx.analysis.predicate_owners() {
+        if !predicate_is_fn(a, &ctx.settings) {
+            continue;
+        }
+        let mut f = FnSpec::new(&pred_fn_name(a.source.action_id));
         f.add_param({ name: PARSER_HANDLE, type: "&Parser" });
         add_parser_super_effect(&mut f, ctx);
         f.set_return_type("bool");
-        f.emit(w, |w| w.line(`return ${entry.1};`));
+        f.set_prunable();
+        f.emit(w, |w| w.line(`return ${a.source.text};`));
         w.blank();
     }
 }
@@ -636,24 +642,20 @@ pub fn atn_decision_gates(met: &List<MetPredicate>, ctx: &mut EmitContext, in_sc
                 scan_answered_at_edge(&ctx.settings, &c),
             ));
         } else {
-            predicate_condition_for(a, &ctx.settings, &ctx.analysis, &site);
+            predicate_condition_for(a, &ctx.settings, &ctx.analysis, &site).map(|c| ctx.cursor.take_cond(c));
         };
         let Some(cond) = cond else {
             continue;
         };
-        if !in_scan {
-            need_predicate_fn(a, ctx);
-        }
         gates.push(AtnGate { label: a.source.action_id, cond, own_invocation: own && reads_invocation });
     }
     return gates;
 }
 
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar
-/// order — and registered as it goes: a condition names `pred_<id>`, so handing
-/// one out without emitting that fn (and without suppressing the body's own
-/// inline guard) is what this refuses to make possible. Ask `alt_has_gate` for
-/// the question alone.
+/// order — and marked gated as it goes: handing one out without suppressing
+/// the body's own inline guard is what this refuses to make possible. Ask
+/// `alt_has_gate` for the question alone.
 pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut EmitContext) -> List<String> {
     if !ctx.settings.emit_actions {
         return [];
@@ -661,8 +663,8 @@ pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut EmitContext) -> 
     let mut conds: List<String> = [];
     for let a of &alt.edge_gates() {
         if let Some(c) = ctx.gate_condition(a) {
-            mark_gate_predicate(a, ctx);
-            conds.push(c);
+            ctx.cursor.mark_predicate_gated(a.source.action_id);
+            conds.push(ctx.cursor.take_cond(c));
         }
     }
     return conds;
@@ -790,23 +792,8 @@ pub fn mark_gated_predicates(
 fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut EmitContext) {
     for let a of &alt.edge_gates() {
         if ctx.gate_condition(a) matches { Some(_) } {
-            mark_gate_predicate(a, ctx);
+            ctx.cursor.mark_predicate_gated(a.source.action_id);
         }
-    }
-}
-
-/// Register one gated predicate: the dispatch carries it, so the body must not
-/// repeat it, and a condition naming `pred_<id>` needs that fn emitted.
-fn mark_gate_predicate(a: &AltAction, ctx: &mut EmitContext) {
-    ctx.cursor.mark_predicate_gated(a.source.action_id);
-    need_predicate_fn(a, ctx);
-}
-
-/// The half every renderer owes: a condition naming `pred_<id>` needs the fn
-/// emitted, whether or not that condition answers the predicate.
-fn need_predicate_fn(a: &AltAction, ctx: &mut EmitContext) {
-    if body_needs_no_translator(&a.source.text, &ctx.settings) {
-        ctx.register_predicate_fn(a.source.action_id, &a.source.text);
     }
 }
 
@@ -854,8 +841,7 @@ pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut EmitContext) -> S
     let mut conds: List<String> = [];
     for let a of &alt.edge_gates() {
         if let Some(c) = ctx.gate_condition(a) {
-            need_predicate_fn(a, ctx);
-            conds.push(c);
+            conds.push(ctx.cursor.take_cond(c));
         }
     }
     return and_gate(join_gate_conds(&conds));
