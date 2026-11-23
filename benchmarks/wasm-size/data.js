@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795426810548,
+  "lastUpdate": 1795438918228,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81589,6 +81589,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/15c96bffaf4545bb4cf567f9fb57a54b8285a409"
         },
         "date": 1795426809575,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aa1d2890a60dafa99a677bec7ff6698fb97da2c2",
+          "message": "Merge pull request #2739 from wado-lang/loam/composites\n\nperf(loam)!: run gpt-oss-20b's experts on WebGPU and the host, 8.87 tokens/s at 5 GB",
+          "timestamp": "2026-11-23T21:43:41+09:00",
+          "tree_id": "36db2e18578330dad7a5754453c90d2e43a3e81e",
+          "url": "https://github.com/wado-lang/wado/commit/aa1d2890a60dafa99a677bec7ff6698fb97da2c2"
+        },
+        "date": 1795438916922,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
