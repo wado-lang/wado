@@ -12,6 +12,42 @@ An entry names the price that changed (a constant, a predicate), the A/B for
 every row whose wasm changed, the reason the losing row lost, and who decided
 to keep the change.
 
+## A hot site does not raise the price of a looping callee called from several sites of one loop (2026-11-24)
+
+A hot site prices its callee at 5× the plain threshold. `write_escaped_string`
+carries a loop, and the serializers call it once per field, so the profile
+heated all of its sites and the inliner spliced it at 37 of them. The time is
+in the callee's loop, so each splice saves one call per string while copying
+the whole loop. In `try_inline_call_expr`, a hot site now takes the plain price
+when the callee holds a loop (`loopy`), the innermost loop calls it from more
+than one site (`CallerFrame::sole_loop_site`), and no argument is a constant
+integer. A constant argument may fold the loop once spliced: without that
+exception, `read_be` lost its splice in `read_float` and cbor_canada de
+measured 10% slower.
+
+Every Wado row ran through `mise run all-wado`, two full runs per arm, in
+alternating order, against the build before it. Two ranges are the two runs.
+
+| Row                | Change           |
+| ------------------ | ---------------- |
+| json_twitter / ser | +6.4%            |
+| json_twitter / de  | +2.8%, +3.7%     |
+| cbor_catalog / de  | +2.1%, +4.0%     |
+| json_catalog / ser | **−1.8%**        |
+| cbor_twitter / de  | **−1.8%, −1.9%** |
+| zlib compress      | **−2.0%, −2.6%** |
+| gale_gen           | noise, **−1.0%** |
+
+zlib compress lost the splice of `Matcher::insert_run` at its two hot sites in
+`deflate_raw`. That loop runs over one match's length, a few bytes, so the call
+is a real share of its cost. The rule reads the loop's presence, not its trip
+count, and a rule that reads the trip count could keep both sides.
+
+Two wider rules were set aside. Dropping the hot price for every looping
+callee won json_twitter by the same margin and cost cbor_canada 30%. Requiring
+more than one hot site, counting those a splice carries, lost json_catalog ser
+5.2%. The user decides whether to keep the change.
+
 ## `param_spec`'s clone cap raised from 128 to 4096 (2026-10-28)
 
 `MAX_TOTAL_SPECIALIZATIONS` bounds the clones `param_spec` mints over a whole

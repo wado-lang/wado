@@ -2593,6 +2593,8 @@ struct Candidates<'a> {
     awaiting: &'a IndexMap<FuncId, IndexSet<u32>>,
     /// [`Caller::opens`].
     opens: &'a [bool],
+    /// Per function, whether its body holds a loop.
+    loopy: &'a [bool],
     /// What the re-scan of a splice may add, by the heat of the site that
     /// started it: a hot site's own callee may spend a plain cap by itself.
     rescan_cap: ByHeat<usize>,
@@ -3117,6 +3119,7 @@ fn inline_round(
             fold_pending,
             awaiting: &awaiting,
             opens: &opens,
+            loopy: &loopy,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels. A cold site
             // splices less, but what it spliced recurses as far as a plain one.
@@ -3857,14 +3860,30 @@ fn try_inline_call_expr(
     labels: &mut InlineLabels,
     site: Site,
 ) -> Option<(ExprId, FuncId, Heat)> {
-    let ExprKind::Call { func_id, .. } = caller.exprs[call_id].kind else {
+    let ExprKind::Call {
+        func_id, ref args, ..
+    } = caller.exprs[call_id].kind
+    else {
         return None;
     };
+    let passes_constant_int = args
+        .iter()
+        .any(|a| caller.operand_const_int(a.expr).is_some());
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
     let landing = call_heat(candidates.heat_map, &caller.exprs[call_id]);
-    let heat = landing.plain_where(!site.heats() || frame.movable);
+    // A looping callee spends its time in its loop, so a splice saves one call
+    // per run while copying the loop to every site; a loop calling it from
+    // several sites pays that copy at each. A constant integer argument may
+    // fold the loop once spliced, which is worth the hot price.
+    let heat = landing.plain_where(
+        !site.heats()
+            || frame.movable
+            || (candidates.loopy[func_id.index()]
+                && !frame.sole_loop_site(func_id)
+                && !passes_constant_int),
+    );
     let reach = *candidates.reach[&func_id].at(heat);
     let sole_site = |frame: &CallerFrame<'_>| {
         if frame.glue {
