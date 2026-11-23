@@ -656,11 +656,9 @@ says nothing of `Tr<fn() with Stdout>`, or of `Tr` for another parameter. A
 call checks the bound at the row it binds `E` to, so `Loud`, which implements
 `Tr<fn() with Stdout>`, meets it where the call binds `E` to `Stdout`
 (`effect_param_bound_substituted_at_call.wado`,
-`error_effect_param_bound_rigid_in_asking_frame.wado`).
-
-> Not yet implemented: a dispatch through such a bound in the body, `t.go()`
-> under `T: Tr<fn() with E>`, finds no impl, since an instance carries no
-> effect arguments.
+`error_effect_param_bound_rigid_in_asking_frame.wado`). A dispatch through the
+bound in the body, `t.go()`, runs the impl for that row
+(`effect_param_bound_dispatch_in_instance.wado`).
 
 ### `with _`
 

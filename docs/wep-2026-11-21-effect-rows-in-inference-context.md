@@ -67,6 +67,15 @@ obligation the row's own inclusions wait on) closes the row at what it holds.
 A later flow that would widen a closed row is an error at that flow, naming
 the site that closed it.
 
+### Instances are keyed by effect arguments
+
+A function's own effect parameters are part of its instance's key, as its type
+parameters are, so its body reads each bound row and a dispatch through a bound
+that names one finds the impl for that row. Every distinct row is a distinct
+instance, even where the body never reads the row. Merging instances whose
+bodies come out identical is the optimizer's job, not the key's: the key stays
+the same shape for type and effect arguments.
+
 ### What goes
 
 The effect check verifies rows it is given; it no longer solves any.
@@ -104,8 +113,3 @@ Each step keeps every fixture passing and deletes what it replaces.
   elaborating it, so the effect variables it mints are never solved. A
   selection over a synthesized argument reads them as the empty row, and
   nothing closes them (`closure_row_in_synthesized_argument.wado`).
-- Monomorphization carries no effect arguments. A call checks its callee's
-  bounds at what it binds the callee's effect parameters to
-  (`effect_param_bound_substituted_at_call.wado`), but the instance's body
-  still names the parameter. A dispatch through a bound that names one, such
-  as `t.go()` under `T: Tr<fn() with G>`, finds no impl.
