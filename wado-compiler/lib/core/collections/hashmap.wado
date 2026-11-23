@@ -379,6 +379,13 @@ impl<K: Eq, V: Eq> Eq for HashMap<K, V> {
     }
 }
 
+/// The entries alone, so a map hashes the same under any seed.
+impl<K: Hash, V: Hash> Hash for HashMap<K, V> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.log.hash(h);
+    }
+}
+
 /// Entry by entry in insertion order, then by length.
 impl<K: Ord, V: Ord> Ord for HashMap<K, V> {
     fn cmp(&self, other: &HashMap<K, V>) -> Ordering {

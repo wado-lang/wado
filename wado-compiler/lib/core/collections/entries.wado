@@ -215,6 +215,19 @@ impl<K: Eq, V: Eq> Eq for EntryLog<K, V> {
     }
 }
 
+/// What `eq` compares: the live entries in order, and their number.
+impl<K: Hash, V: Hash> Hash for EntryLog<K, V> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(self.size as u64);
+        let mut i = self.next_live(0);
+        while i < self.count {
+            self.keys[i].hash(h);
+            self.values[i].hash(h);
+            i = self.next_live(i + 1);
+        }
+    }
+}
+
 /// Lexicographic over the live entries in order, each by key and then value,
 /// and then by length, as a `List<[K, V]>` orders.
 impl<K: Ord, V: Ord> Ord for EntryLog<K, V> {

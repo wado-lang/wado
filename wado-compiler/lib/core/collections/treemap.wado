@@ -447,6 +447,12 @@ impl<K: Eq, V: Eq> Eq for TreeMap<K, V> {
     }
 }
 
+impl<K: Hash, V: Hash> Hash for TreeMap<K, V> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.log.hash(h);
+    }
+}
+
 /// Entry by entry in insertion order, then by length.
 impl<K: Ord, V: Ord> Ord for TreeMap<K, V> {
     fn cmp(&self, other: &TreeMap<K, V>) -> Ordering {
