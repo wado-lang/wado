@@ -545,7 +545,7 @@ impl HeldExperts {
                 if !run.shared() {
                     let experts: List<i32> = (0..<layout.experts).collect();
                     written(g, source, &layout.layers[run.first], &experts, &experts, &mut pools);
-                } else if let Some(host) = g.experts_on_host(&layout.quantized) {
+                } else if let Some(host) = g.experts_on_host(&layout.quantized, &pools[0]) {
                     for let layer of run.first..<run.first + run.count {
                         held_on_host(host, source, &layout.layers[layer], layout.experts, layout.steps[layer]);
                     }
@@ -595,10 +595,10 @@ impl HeldExperts {
         let mut slot_of = List::<i64>::filled(experts, -1);
         let slot_bytes = layout.slot_bytes();
         let first = shared.run.first;
-        let on_host = g.experts_on_host(&layout.quantized);
+        let mut pools: List<Any<G>> = layout.weights[first].into_iter().map(|p| weights[p]).collect();
+        let on_host = g.experts_on_host(&layout.quantized, &pools[0]);
         let step_fills = if on_host matches { Some(_) } { self.step_fills } else { experts };
         let most = most_filled(picks.extents[0], picked.len(), experts, step_fills);
-        let mut pools: List<Any<G>> = layout.weights[first].into_iter().map(|p| weights[p]).collect();
         let placed = shared.slots.placed(layer - first, &picked, |_| unreachable(), most);
         let mut loading: List<i32> = [];
         let mut into: List<i32> = [];

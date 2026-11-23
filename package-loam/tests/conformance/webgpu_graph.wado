@@ -387,7 +387,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`quantized layer ${i} ${apart(&mut gpu, &output, &expected)}`);
     }
 
-    for let tokens of [1, 3] as List<i32> {
+    for let tokens of [0, 1, 3] as List<i32> {
         let c = cases::experts_case(tokens);
         let mixing = cases::compiled_from(&mut gpu, |r| cases::mixing_pass(r, tokens), &[], &[]);
         let arguments = cases::mixing_arguments(&mut gpu, tokens);

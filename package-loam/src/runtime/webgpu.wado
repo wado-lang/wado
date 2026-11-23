@@ -590,7 +590,11 @@ pub affine struct WebGpuBackend {
     bind_groups: i32,
     replays: i32,
     internal cpu: Cpu,
-    internal experts_on_host: ExpertsOnHost,
+    /// What `Backend::experts_on_host` answers for each run of shared layers,
+    /// at the place `experts_on_host_at` gives for the buffer of its first
+    /// pool.
+    internal experts_on_host: List<ExpertsOnHost>,
+    internal experts_on_host_at: HashMap<i32, i32>,
 }
 
 /// Invocations per workgroup of every shader but the product's: a power of
@@ -768,7 +772,8 @@ impl WebGpuBackend {
             bind_groups: 0,
             replays: 0,
             cpu: Cpu {},
-            experts_on_host: ExpertsOnHost::new(),
+            experts_on_host: [],
+            experts_on_host_at: HashMap::new(),
         });
     }
 

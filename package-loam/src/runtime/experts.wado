@@ -138,14 +138,16 @@ pub fn decomposed_mixture<affine G: Graph, E: Float>(
 }
 
 /// Whether the tokens of `rows` pick fewer experts than there are, as a step's
-/// do, so that a mixture runs each pick rather than each expert.
+/// do, so that a mixture runs each pick rather than each expert. No token
+/// picks none, which the decomposition runs.
 pub fn runs_by_picks<affine G: Graph>(
     g: &G,
     rows: &G::Tensor<f32, [Picked, Hidden]>,
     routing: &Routing<G>,
     experts: &Experts,
 ) -> bool with _ {
-    return g.extents_of(rows)[0] * experts.k < g.extents_of(&routing.gates)[1];
+    let picks = g.extents_of(rows)[0] * experts.k;
+    return 0 < picks < g.extents_of(&routing.gates)[1];
 }
 
 /// A layer's routing: each token's weight for each expert, zero where it does

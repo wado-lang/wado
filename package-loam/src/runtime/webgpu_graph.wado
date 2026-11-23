@@ -334,11 +334,16 @@ impl Backend for WebGpuBackend {
         self.written_slot(on_device(pool).unwrap(), slot, &row);
     }
 
-    fn experts_on_host(&mut self, quantized: &Quantized) -> Option<&mut ExpertsOnHost> {
+    fn experts_on_host(&mut self, quantized: &Quantized, pool: &Any<WebGpuBackend>) -> Option<&mut ExpertsOnHost> {
         if !computes_on_host(quantized) {
             return null;
         }
-        return Option::Some(&mut self.experts_on_host);
+        let buffer = on_device(pool).unwrap().slot;
+        if !self.experts_on_host_at.contains_key(buffer) {
+            self.experts_on_host_at[buffer] = self.experts_on_host.len();
+            self.experts_on_host.push(ExpertsOnHost::new());
+        }
+        return Option::Some(&mut self.experts_on_host[self.experts_on_host_at[buffer]]);
     }
 }
 
@@ -966,8 +971,10 @@ fn by_picks<E: Float>(
         g.flush();
         let up_at = ProjectionNode::of(&ffn.0).places(0);
         let down_at = ProjectionNode::of(&ffn.1).places(up_at.end);
-        let host_up = host_projection(&g.experts_on_host, &up_at, up.shape, experts.step);
-        let host_down = host_projection(&g.experts_on_host, &down_at, down.shape, experts.step);
+        // The layer's first pool, as `HeldExperts` hands `experts_on_host`.
+        let host = &g.experts_on_host[g.experts_on_host_at[up.packed.slot]];
+        let host_up = host_projection(host, &up_at, up.shape, experts.step);
+        let host_down = host_projection(host, &down_at, down.shape, experts.step);
         let hidden = x.extents[1];
         for let t of 0..<tokens {
             let mut sum = List::<f32>::filled(hidden, 0.0);

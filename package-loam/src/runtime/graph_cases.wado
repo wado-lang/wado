@@ -569,8 +569,8 @@ pub fn mixing<affine G: Graph, E: Float = f32>(
 
 /// `experts_case`'s experts as two layers a checkpoint stores, the second
 /// holding them in reverse: a file per weight, each layer's experts back to
-/// back.
-fn stacked_experts() -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
+/// back. `swapped` reads each layer from where the other is stored.
+fn stacked_experts(swapped: bool) -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
     let c = experts_case(1);
     let weights: List<HostWeight> = [
         HostWeight::of(&c.up.0),
@@ -597,7 +597,7 @@ fn stacked_experts() -> [HashMap<String, ByteList>, List<List<StoredExperts>>] {
         files[file] = stored;
         for let layer of 0..<2 {
             layers[layer].push(StoredExperts {
-                bytes: ExpertBytes::File([file, layer * size]),
+                bytes: ExpertBytes::File([file, if swapped { 1 - layer } else { layer } * size]),
                 kind: w.kind,
                 extents: w.extents[1..<w.extents.len()].to_list(),
             });
@@ -685,28 +685,15 @@ pub fn stacked_runs<affine G: Backend>(
     stacking: Stacking,
     runs: List<[i32, i64]>,
 ) -> [List<Any<G>>, ExpertCounts] with _ {
-    let [files, layers] = stacked_experts();
-    let expert_bytes = layers[0].into_iter().map(|w| stored_bytes(w.kind, &w.extents)).sum().unwrap();
-    let mut store = HeldExperts::within(
-        [
-            ExpertLayout {
-                weights: [
-                    (0..<6).collect(),
-                    (6..<12).collect(),
-                ],
-                layers,
-                steps: [0, 1],
-                experts: 4,
-                quantized: Quantized { bits: 4, block: 32 },
-            },
-        ],
-        (slots * expert_bytes) as i64,
-        g,
-    ).unwrap();
+    let [files, layers] = stacked_experts(false);
+    let mut store = stacked_store(g, slots, layers);
     // Below the 2 experts a token picks, so that a cold step of one token
     // both fills a slot and leaves an expert to the host.
     store.limit_step_fills(1);
     let pools = store.pools(g, &files);
+    // A second model on the same backend, at the same host steps, whose
+    // experts must not stand in for the first's.
+    let _rival = stacked_store(g, slots, stacked_experts(true).1).pools(g, &files);
     let mut programs = Programs::<G>::new();
     let mut results: List<Any<G>> = [];
     for let [tokens, count] of runs {
@@ -723,6 +710,28 @@ pub fn stacked_runs<affine G: Backend>(
         results.push(got[0]);
     }
     return [results, *store.counts()];
+}
+
+/// The experts of `layers`, laid out as `stacked_pass` reads them, within a
+/// budget of `slots` experts.
+fn stacked_store<affine G: Backend>(g: &mut G, slots: i32, layers: List<List<StoredExperts>>) -> HeldExperts with _ {
+    let expert_bytes = layers[0].into_iter().map(|w| stored_bytes(w.kind, &w.extents)).sum().unwrap();
+    return HeldExperts::within(
+        [
+            ExpertLayout {
+                weights: [
+                    (0..<6).collect(),
+                    (6..<12).collect(),
+                ],
+                layers,
+                steps: [0, 1],
+                experts: 4,
+                quantized: Quantized { bits: 4, block: 32 },
+            },
+        ],
+        (slots * expert_bytes) as i64,
+        g,
+    ).unwrap();
 }
 
 /// `mixing` of `experts_case(tokens)` recorded, its input and router then its

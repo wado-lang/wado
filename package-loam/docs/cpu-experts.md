@@ -87,10 +87,12 @@ host computes 0.7% of them, and the writes take most of a token's time: the
 ## The budget
 
 The target is 1/1.5 of llama.cpp's 40.38 tokens/s, which is 26.9 tokens/s. At
-5 GB the GPU lacks 19.2% of 96 picks, 18.4 experts. One core computes them in
-65% of a token's budget at that target. The GPU's own work overlaps that, so a
-token takes the longer of the two plus one round trip per layer. One core fits
-only if the GPU's part and 24 round trips together take under the other 35%.
+5 GB the GPU lacks 19.2% of 96 picks, 18.4 experts. At the 4.68 GB/s a whole
+expert runs at, one core computing them all takes 148% of a token's budget at
+that target, so one core cannot compute every miss: a step writes most of them
+into slots, as the choice per expert below does. The GPU's own work overlaps
+what the host computes, so a token takes the longer of the two plus one round
+trip per layer.
 
 ## Constraints
 

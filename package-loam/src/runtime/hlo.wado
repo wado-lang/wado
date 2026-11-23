@@ -162,11 +162,12 @@ pub affine trait Backend: Graph with _ {
     /// `pool`, which [`Self::pool`] made, with its slot `slot` holding `row`:
     /// one slice along the first axis, as a checkpoint stores it.
     fn written(&mut self, pool: &mut Any<Self>, slot: i32, row: HostWeight);
-    /// Where the host holds the experts of the shared layers quantized as
-    /// `quantized`, if a decode step's expert the pools lack may run on the
-    /// host rather than be written into a slot: [`Graph::expert_mixture`] then
-    /// finds its slot -1, and computes it from what this holds.
-    fn experts_on_host(&mut self, _quantized: &Quantized) -> Option<&mut ExpertsOnHost> with () {
+    /// Where the host holds the experts of the layers that share `pool`, the
+    /// first of their pools, quantized as `quantized`, if a decode step's
+    /// expert the pools lack may run on the host rather than be written into a
+    /// slot: [`Graph::expert_mixture`] then finds its slot -1, and computes it
+    /// from what this holds.
+    fn experts_on_host(&mut self, _quantized: &Quantized, _pool: &Any<Self>) -> Option<&mut ExpertsOnHost> with () {
         return null;
     }
     /// The `count` weights a pass reads, `load(at)` the `at`th on the host,
