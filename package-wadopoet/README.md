@@ -1,7 +1,7 @@
 # Wadopoet
 
-Wadopoet builds Wado source text for a code generator. Grog and Loam emit through
-it. A package names it under `[dependencies]` and imports it from
+Wadopoet builds Wado source text for a code generator. Gale, Grog and Loam emit
+through it, and so do the tools that write Jade's and Gale's generated tests. A package names it under `[dependencies]` and imports it from
 `lib:wadopoet`.
 
 ## Building Source
