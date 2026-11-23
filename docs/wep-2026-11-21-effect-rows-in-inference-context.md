@@ -104,3 +104,7 @@ Each step keeps every fixture passing and deletes what it replaces.
   elaborating it, so the effect variables it mints are never solved. A
   selection over a synthesized argument reads them as the empty row, and
   nothing closes them (`closure_row_in_synthesized_argument.wado`).
+- An effect parameter is identified by its name (`EffectRef::Param`), not by
+  its binder, so two declarations' parameters of one spelling are one effect
+  wherever both reach one question. The solver keys its head for one the same
+  way (`DeclKey::EffectParam`).

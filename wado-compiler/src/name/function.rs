@@ -311,10 +311,14 @@ impl Receiver {
         )
     }
 
-    /// Whether this receiver is a function type, whose one position is itself.
+    /// Whether this receiver is a function type or a reference to one, whose
+    /// one position is the function type.
     #[must_use]
     pub fn is_function(&self) -> bool {
-        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Function { .. }))
+        matches!(
+            self,
+            Receiver::Type(fq) | Receiver::RefTo(_, fq) if matches!(fq.head(), TypeHead::Function { .. })
+        )
     }
 
     /// Whether this receiver is one of the binders `names` declares — how a

@@ -2462,7 +2462,9 @@ fn dispatch_effects(
     };
     let effects = index.method_effects(func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
-        index.brought_by_dispatch(func_ref, rows)
+        let receiver_expr = if self_in_args { args.first() } else { receiver };
+        let receiver_type = receiver_expr.and_then(|r| sem.expr_types(r).first().copied());
+        index.brought_by_dispatch(func_ref, receiver_type, rows)
     } else {
         Brought::default()
     };
@@ -2624,7 +2626,13 @@ impl EffectIndex<'_> {
     /// What a dispatch's type arguments bring to the callee's open effect
     /// parameter: the impl of a trait method's receiver, and each bounded
     /// parameter of the method's impl and of the method itself.
-    fn brought_by_dispatch(&self, func_ref: &FunctionRef, rows: &Rows) -> Brought {
+    /// `receiver_type` is the call's receiver, where it has one.
+    fn brought_by_dispatch(
+        &self,
+        func_ref: &FunctionRef,
+        receiver_type: Option<TypeId>,
+        rows: &Rows,
+    ) -> Brought {
         let mut brought = Brought::default();
         let Some(method_info) = func_ref.method_info.as_ref() else {
             return brought;
@@ -2659,7 +2667,10 @@ impl EffectIndex<'_> {
                     .iter()
                     .map(|&arg| self.spelled_solved(arg, rows))
                     .collect(),
-                _ => method_info.struct_type_args.clone(),
+                _ => match receiver_type.and_then(|r| self.types.function_position(r)) {
+                    Some(function) => vec![self.spelled_solved(function, rows)],
+                    None => method_info.struct_type_args.clone(),
+                },
             };
             if let Some((method, block)) = impl_method {
                 let declared = self
@@ -2780,12 +2791,7 @@ impl EffectIndex<'_> {
     /// what `rows` solved it to: an impl names no variable. One left unsolved
     /// stands for the empty row, as it does once the check is done.
     fn spelled_solved(&self, id: TypeId, rows: &Rows) -> FqTypeName {
-        self.types.fq_type_name(id).map_rows(&|row| {
-            rows.row(row)
-                .into_iter()
-                .filter(|effect| !effect.is_var())
-                .collect()
-        })
+        rows.spelled(&self.types.fq_type_name(id))
     }
 
     /// Adds what the type argument `arg` of a parameter bounded by `traits`
@@ -3680,6 +3686,17 @@ impl Rows {
                 .borrow_mut()
                 .entry(var.to_string())
                 .or_insert_with(|| self.solved.get(var).map(Vec::len));
+        })
+    }
+
+    /// `name` with each row as [`Self::row`] solves it, a variable still
+    /// unsolved left out.
+    fn spelled(&self, name: &FqTypeName) -> FqTypeName {
+        name.map_rows(&|row| {
+            self.row(row)
+                .into_iter()
+                .filter(|effect| !effect.is_var())
+                .collect()
         })
     }
 

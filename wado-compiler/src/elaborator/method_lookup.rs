@@ -364,13 +364,12 @@ impl TypeSystem {
     /// reference read through to its pointee's (WEP 2026-08-12). A function
     /// type fills its one position itself.
     pub(crate) fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
-        let pointee = self.through_ref(receiver);
         let tt = self.type_table.borrow();
-        let head = tt.representation_head(pointee);
-        if matches!(tt.get(head), ResolvedType::Function { .. }) {
-            return Some(vec![head]);
+        if let Some(function) = tt.function_position(receiver) {
+            return Some(vec![function]);
         }
-        tt.nominal_type_args(head).filter(|args| !args.is_empty())
+        tt.nominal_type_args(tt.representation_head(self.through_ref(receiver)))
+            .filter(|args| !args.is_empty())
     }
 
     /// Whether an implicit `&mut self` of a local receiver has to box

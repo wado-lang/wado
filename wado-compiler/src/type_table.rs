@@ -5622,6 +5622,14 @@ impl TypeTable {
         current
     }
 
+    /// The function type `receiver` is, read through references and newtypes:
+    /// what fills the one position a function-type impl target writes, which
+    /// is itself. `None` for a receiver of any other shape.
+    pub fn function_position(&self, receiver: TypeId) -> Option<TypeId> {
+        let head = self.representation_head(self.peel_refs(receiver));
+        matches!(self.get(head), ResolvedType::Function { .. }).then_some(head)
+    }
+
     /// The type one link down the chain [`Self::representation_head`] walks:
     /// a newtype's base, and `u32` under a `flags`.
     pub fn link_below(&self, id: TypeId) -> Option<TypeId> {
