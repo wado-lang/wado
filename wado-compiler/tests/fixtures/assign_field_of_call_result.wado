@@ -1,24 +1,50 @@
-// An assignment into a field of a by-value call's result writes a temporary:
-// the call still runs, once per write, and nothing else changes.
+// A by-value call's result is a temporary, so a write into it is discarded
+// with it and changes nothing the writer can see, whether the callee returns
+// a value of its own or storage the caller holds. It is refused, as a write
+// through a by-value index is. A call returning a `&mut` is written through.
 
-global mut CALLS: i32 = 0;
-
-struct Obj {
-    field: i32,
+struct Pair {
+    a: i32,
+    s: List<i32>,
 }
 
-fn get_obj() -> Obj {
-    CALLS += 1;
-    return Obj { field: builtin::black_box(1) };
+struct Box {
+    pair: Pair,
+}
+
+global mut GD: Pair = Pair { a: 1, s: [] };
+
+fn shared() -> Pair {
+    return GD;
+}
+
+fn list() -> List<Pair> {
+    return [GD];
+}
+
+impl Box {
+    fn get(&self) -> Pair {
+        return self.pair;
+    }
+
+    fn get_mut(&mut self) -> &mut Pair {
+        return &mut self.pair;
+    }
 }
 
 export fn run() {
-    get_obj().field = 3;
-    get_obj().field += 1;
-    assert CALLS == 2;
+    shared().a = 1001;
+    shared().a += 1000;
+    shared().s[0] = 1;
+    list()[0].a = 1001;
+    let mut b = Box { pair: Pair { a: 1, s: [] } };
+    b.get().a = 1001;
+    Pair { a: 1, s: [] }.a = 2;
+    b.get_mut().a = 1001;
 }
 
 __DATA__
 {
-    "stdout": ""
+    "compile_error": "cannot assign into a temporary",
+    "compile_error_count": 6
 }

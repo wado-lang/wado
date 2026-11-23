@@ -1870,6 +1870,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Reject &T assigned where non-ref T expected
         self.typecheck(value_type, place.value_type(), value_span);
+        if self.writes_into_temporary(target_ast) {
+            let _ = self.emit(TypeError::CannotMutate {
+                message: "cannot assign into a temporary; the write would be discarded".to_string(),
+                span: target_ast.span(),
+            });
+            return TypeTable::ERROR;
+        }
         // Reify rebuilds `arr.index_assign(idx, value)` from the recorded
         // `index_assign_dispatch` and the AST.
         if let WritePlace::IndexAssign { .. } = place {

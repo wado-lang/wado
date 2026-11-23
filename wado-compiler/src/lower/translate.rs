@@ -1223,37 +1223,6 @@ impl FunctionTranslator<'_, '_> {
         place::names_storage(value, &self.base.type_table.borrow())
     }
 
-    /// The place an assignment writes. A projection of a value that names no
-    /// storage, such as a call's result, writes a value of its own, so its base
-    /// is copied where a `let` binding it would be: `shared().a = v` must not
-    /// write into the global `shared` hands back.
-    fn convert_written_place(&self, place: &TirExpr) -> ExprId {
-        let written_base = |base: &TirExpr| {
-            if self.base.type_table.borrow().is_reference(base.type_id) {
-                self.convert_operand(base)
-            } else {
-                self.referent_operand(base)
-            }
-        };
-        let kind = match &place.kind {
-            TirExprKind::FieldAccess {
-                expr,
-                field_index,
-                field_name,
-            } => ExprKind::FieldAccess {
-                expr: written_base(expr),
-                field_index: *field_index,
-                field_name: field_name.clone(),
-            },
-            TirExprKind::Index { expr, index } => ExprKind::Index {
-                expr: written_base(expr),
-                index: self.convert_operand(index),
-            },
-            _ => return self.convert_expr(place),
-        };
-        self.alloc_expr(kind, place.type_id, place.span)
-    }
-
     /// What `&mut value` refers to. A value that names no storage, such as a
     /// call's result, is the reference's own, so it is copied where a `let`
     /// binding it would be: `&mut n.get(0)` must not write into `n`.
@@ -2450,7 +2419,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Assign { target, value } => {
                 let value = self.convert_stored_operand(value);
                 ExprKind::Assign {
-                    target: self.convert_written_place(target),
+                    target: self.convert_expr(target),
                     value,
                 }
             }

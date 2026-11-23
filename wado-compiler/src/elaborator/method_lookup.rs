@@ -2281,6 +2281,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether a write into `target` lands in a temporary: a projection whose
+    /// walk to storage meets no reference and ends at a value no variable
+    /// holds, such as a by-value call's result. The write is discarded with it.
+    pub(super) fn writes_into_temporary(&self, target: &ast::Expr) -> bool {
+        let base = match target {
+            ast::Expr::FieldAccess(fa) => &fa.expr,
+            ast::Expr::Index(ix) => &ix.expr,
+            _ => return false,
+        };
+        if let Some(ty) = self.sem.types.expression_types.get(&base.id()).copied()
+            && self.reference_mutability(ty).is_some()
+        {
+            return false;
+        }
+        match base {
+            ast::Expr::Ident(_) | ast::Expr::Error(_) => false,
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => false,
+            ast::Expr::FieldAccess(_) | ast::Expr::Index(_) => self.writes_into_temporary(base),
+            _ => true,
+        }
+    }
+
     /// Record that `place` is taken `&mut` here. One rooted at a binding of an
     /// enclosing frame is written through, so the closure must capture it `&mut`.
     pub(super) fn record_mut_ref(&self, place: &ast::Expr, ctx: &mut FunctionContext) {
