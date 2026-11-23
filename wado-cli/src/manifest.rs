@@ -525,6 +525,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "test-app"
 version = "0.1.0"
 command = "src/main.wado"
@@ -542,6 +543,7 @@ command = "src/main.wado"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "parent-app"
 version = "0.1.0"
 command = "src/main.wado"
@@ -581,6 +583,7 @@ command = "src/main.wado"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -606,6 +609,7 @@ version = "0.1.0"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -645,6 +649,7 @@ version = "0.1.0"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -709,23 +714,6 @@ lib = "src/lib.wado"
     }
 
     #[test]
-    fn lib_world_fq_requires_namespace() {
-        let toml = r#"
-[package]
-name = "no-ns"
-version = "0.1.0"
-lib = "src/lib.wado"
-"#;
-        let m = toml.parse::<Manifest>().unwrap();
-        let err = lib_world_fq(m.package.as_ref().unwrap()).unwrap_err();
-        assert!(
-            err.message.contains("[package].namespace"),
-            "{}",
-            err.message
-        );
-    }
-
-    #[test]
     fn resolve_lib_input_resolves_entry_and_world() {
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
@@ -780,6 +768,7 @@ version = "0.2.0"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -877,7 +866,7 @@ authors = ["Alice"]
         let tmp = tempfile::tempdir().unwrap();
         write(
             &tmp.path().join("wado.toml"),
-            "[package]\nname = \"solo\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"solo\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
         );
         assert!(governing_workspace_root_dir(tmp.path()).is_none());
     }
@@ -919,7 +908,7 @@ authors = ["Alice"]
         let tmp = tempfile::tempdir().unwrap();
         write(
             &tmp.path().join("wado.toml"),
-            "[package]\nname = \"solo\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"solo\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n",
         );
         assert_eq!(license_file_base_dir(tmp.path()), tmp.path());
     }

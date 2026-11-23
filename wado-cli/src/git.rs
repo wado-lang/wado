@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use wado_lsp::host::discovery::{Disk, package_lib_entry};
+use wado_lsp::host::discovery::{Disk, keyed_lib_entry};
 use wado_manifest::{GitTagInfo, Manifest, ProviderError};
 
 use crate::cache::{hold, root};
@@ -197,12 +197,11 @@ fn ensure_commit(url: &str, repo: &Path, sha: &str) -> Result<(), ProviderError>
     })
 }
 
-/// Materialize a worktree and return its absolute `[package].lib` entry path —
-/// the shared spine both the manifest build-tier materializer and the
-/// single-file inline resolver end at, so a git dependency's source entry is
-/// located identically however it was declared. `directory` selects a monorepo
-/// subdirectory within the worktree.
+/// Materialize a worktree and return the absolute `[package].lib` entry path of
+/// the dependency `key` names. `directory` selects a monorepo subdirectory
+/// within the worktree.
 pub fn materialize_entry(
+    key: &str,
     url: &str,
     version: &str,
     sha: &str,
@@ -213,11 +212,12 @@ pub fn materialize_entry(
         Some(dir) => worktree.join(dir),
         None => worktree,
     };
-    let entry =
-        package_lib_entry(&pkg_dir, &Disk).map_err(|message| ProviderError::InvalidManifest {
+    let entry = keyed_lib_entry(key, &pkg_dir, &Disk).map_err(|message| {
+        ProviderError::InvalidManifest {
             source: pkg_dir.display().to_string(),
             message,
-        })?;
+        }
+    })?;
     Ok(entry.display().to_string())
 }
 
@@ -363,7 +363,7 @@ mod tests {
         init_repo(&origin);
         fs::write(
             origin.join("wado.toml"),
-            "[package]\nname=\"router\"\nversion=\"1.0.0\"\n",
+            "[package]\nnamespace = \"acme\"\nname=\"router\"\nversion=\"1.0.0\"\n",
         )
         .unwrap();
         let sha_10 = commit_all(&origin, "v1.0.0");
@@ -391,7 +391,7 @@ mod tests {
         init_repo(&origin);
         fs::write(
             origin.join("wado.toml"),
-            "[package]\nname=\"lib\"\nversion=\"0.3.0\"\nlib=\"src/lib.wado\"\n",
+            "[package]\nnamespace = \"acme\"\nname=\"lib\"\nversion=\"0.3.0\"\nlib=\"src/lib.wado\"\n",
         )
         .unwrap();
         fs::create_dir(origin.join("src")).unwrap();

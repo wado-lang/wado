@@ -383,6 +383,7 @@ mod tests {
     fn registry_without_default_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -397,6 +398,7 @@ regex = { package = "docs:regex", version = "^0.1.0" }
     fn registry_with_default_ok() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -413,6 +415,7 @@ regex = { package = "docs:regex", version = "^0.1.0" }
     fn registry_with_explicit_alias_ok() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -429,6 +432,7 @@ lib = { registry = "custom", package = "ns:lib", version = "^1.0.0" }
     fn invalid_package_name_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "my app"
 version = "0.1.0"
 "#;
@@ -440,6 +444,7 @@ version = "0.1.0"
     fn invalid_package_version_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "not-a-version"
 "#;

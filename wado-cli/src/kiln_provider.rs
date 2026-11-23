@@ -1316,7 +1316,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         std::fs::create_dir_all(&pkg).unwrap();
         std::fs::write(
             pkg.join("wado.toml"),
-            "[package]\nname = \"plain\"\nversion = \"0.1.0\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"plain\"\nversion = \"0.1.0\"\n",
         )
         .unwrap();
 
@@ -1572,7 +1572,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         let helper = tmp.path().join("helper");
         std::fs::create_dir(&helper).unwrap();
         let manifest = |lib: &str| {
-            format!("[package]\nname = \"helper\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n")
+            format!("[package]\nnamespace = \"acme\"\nname = \"helper\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n")
         };
         std::fs::write(helper.join("wado.toml"), manifest("a.wado")).unwrap();
         std::fs::write(helper.join("a.wado"), "pub fn n() -> i32 { return 1; }\n").unwrap();
@@ -1581,7 +1581,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         std::fs::create_dir(&generator).unwrap();
         std::fs::write(
             generator.join("wado.toml"),
-            "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n[dependencies]\nhelper = { path = \"../helper\" }\n",
+            "[package]\nnamespace = \"acme\"\nname = \"gen\"\nversion = \"0.1.0\"\n\n[dependencies]\nhelper = { path = \"../helper\" }\n",
         )
         .unwrap();
         std::fs::write(

@@ -90,6 +90,18 @@ pub fn registry_component_need(
     })
 }
 
+/// The coordinate `namespace:name` a dependency key or specifier names, without
+/// its `@version`. `None` for a `lib:` alias and a bare name, which name no
+/// coordinate of their own.
+#[must_use]
+pub fn key_coordinate(key: &str) -> Option<&str> {
+    let (namespace, _) = key.split_once(':')?;
+    if namespace == "lib" {
+        return None;
+    }
+    Some(key.split_once('@').map_or(key, |(coordinate, _)| coordinate))
+}
+
 /// The lock id a registry dependency pins under. One implementation, so a pin
 /// derived from the cache lands where a lock-derived one would.
 #[must_use]
@@ -136,11 +148,21 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
 
-    use super::{RegistryComponentNeed, best_matching_version, registry_component_need};
+    use super::{
+        RegistryComponentNeed, best_matching_version, key_coordinate, registry_component_need,
+    };
     use crate::Manifest;
 
+    #[test]
+    fn a_key_names_a_coordinate_unless_it_is_an_alias() {
+        assert_eq!(key_coordinate("acme:geo"), Some("acme:geo"));
+        assert_eq!(key_coordinate("acme:geo@1.0.0"), Some("acme:geo"));
+        assert_eq!(key_coordinate("lib:geo"), None);
+        assert_eq!(key_coordinate("geo"), None);
+    }
+
     fn manifest_with_registry_dep() -> Manifest {
-        "[package]\nname=\"app\"\nversion=\"0.1.0\"\n\n\
+        "[package]\nnamespace=\"acme\"\nname=\"app\"\nversion=\"0.1.0\"\n\n\
          [registries]\ndefault=\"oci://ghcr.io\"\n\n\
          [dependencies]\n\"wado-lang:cm-catalog\" = { version = \"^0.1\" }\n"
             .parse()

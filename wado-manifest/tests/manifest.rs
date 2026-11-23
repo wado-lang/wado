@@ -5,6 +5,7 @@ use wado_manifest::{DependencySource, GitPin, Manifest, ManifestError, Workspace
 fn package_lib_entry_parsed() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "greet"
 version = "0.1.0"
 lib = "src/lib.wado"
@@ -17,6 +18,7 @@ lib = "src/lib.wado"
 fn package_lib_absent_is_none() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 "#;
@@ -126,6 +128,7 @@ fn a_workspace_has_no_package() {
 members = ["packages/*"]
 
 [package]
+namespace = "acme"
 name = "monorepo-root"
 version = "0.1.0"
 "#;
@@ -150,6 +153,7 @@ members = ["packages/*"]
 fn generator_world_absent_default() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -164,6 +168,7 @@ version = "0.1.0"
 fn generator_world_accepted() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "gen"
 version = "0.1.0"
 
@@ -181,6 +186,7 @@ version = "0.1.0"
 fn generator_and_command_coexist() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "dual"
 version = "0.1.0"
 
@@ -216,6 +222,7 @@ version = "0.1.0"
 fn missing_package_version() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 "#;
     let err = toml.parse::<Manifest>().unwrap_err();
@@ -232,6 +239,7 @@ name = "app"
 fn no_source_specified() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 command = "main.wado"
@@ -247,6 +255,7 @@ oops = {}
 fn git_and_package_conflict() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 command = "main.wado"
@@ -262,6 +271,7 @@ x = { git = "https://example.com/x.git", package = "ns:x", version = "^1.0.0" }
 fn workspace_combined_with_path_rejected() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 command = "main.wado"
@@ -277,6 +287,7 @@ x = { workspace = true, path = "../x" }
 fn git_neither_version_nor_ref() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 command = "main.wado"
@@ -292,6 +303,7 @@ x = { git = "https://example.com/x.git" }
 fn version_specifier_types() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 command = "main.wado"
@@ -323,6 +335,7 @@ c = { package = "ns:c", version = "=0.5.1" }
 fn path_with_git_publish_source() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 command = "main.wado"
@@ -350,6 +363,7 @@ shared = { path = "../shared", git = "https://github.com/org/shared.git", versio
 fn registry_with_named_registry() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 command = "main.wado"
@@ -375,6 +389,7 @@ special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }
 fn multiple_entry_points() {
     let toml = r#"
 [package]
+namespace = "acme"
 name = "devtool"
 version = "0.1.0"
 

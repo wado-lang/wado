@@ -178,6 +178,7 @@ authors = ["Alice <alice@example.com>", "Bob"]
         let pkg = package(
             r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 repository = "https://github.com/myorg/app"
@@ -196,7 +197,7 @@ repository = "https://github.com/myorg/app"
 
     #[test]
     fn absent_optional_fields_are_skipped() {
-        let pkg = package("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
+        let pkg = package("[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n");
         let sections = metadata_sections(&pkg, None, None);
         assert!(value_of(&sections, "description").is_none());
         assert!(value_of(&sections, "homepage").is_none());
@@ -207,7 +208,7 @@ repository = "https://github.com/myorg/app"
 
     #[test]
     fn revision_is_included_when_supplied() {
-        let pkg = package("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
+        let pkg = package("[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n");
         let sections = metadata_sections(&pkg, Some("abc1234def5678"), None);
         assert_eq!(value_of(&sections, "revision"), Some("abc1234def5678"));
     }
@@ -217,6 +218,7 @@ repository = "https://github.com/myorg/app"
         let pkg = package(
             r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 repository-directory = "packages/app"
@@ -234,6 +236,7 @@ repository-directory = "packages/app"
         let pkg = package(
             r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 license-file = "licenses/LICENSE-COMMERCIAL.txt"
@@ -251,6 +254,7 @@ license-file = "licenses/LICENSE-COMMERCIAL.txt"
         let pkg = package(
             r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 license-file = "LICENSE-COMMERCIAL"
@@ -269,7 +273,7 @@ license-file = "LICENSE-COMMERCIAL"
 
     #[test]
     fn spdx_license_has_no_license_text_section() {
-        let pkg = package("[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\n");
+        let pkg = package("[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"MIT\"\n");
         // Even if text is (spuriously) supplied, an SPDX license embeds no text.
         let sections = metadata_sections(&pkg, None, Some("should be ignored"));
         assert_eq!(value_of(&sections, "licenses"), Some("MIT"));

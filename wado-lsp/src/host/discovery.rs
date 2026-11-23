@@ -209,7 +209,8 @@ pub fn resolve_all(
         .filter_map(|(name, dep)| {
             let entry = match &dep.source {
                 DependencySource::Path { path, .. } => {
-                    package_lib_entry(&manifest_dir.join(path), files).map(DependencyEntry::Source)
+                    keyed_lib_entry(name, &manifest_dir.join(path), files)
+                        .map(DependencyEntry::Source)
                 }
                 DependencySource::Git { url, directory, .. } => {
                     git_dependency_entry(&git, name, url, directory.as_deref(), files)
@@ -349,7 +350,7 @@ fn git_dependency_entry(
         Some(dir) => worktree_root.join(dir),
         None => worktree_root,
     };
-    package_lib_entry(&pkg_dir, files)
+    keyed_lib_entry(name, &pkg_dir, files)
 }
 
 /// Parse `manifest_dir`'s `wado.lock`, or `None` when it is absent or
@@ -403,10 +404,44 @@ pub fn home_dir() -> Option<PathBuf> {
 /// a file, otherwise the directory's `[package].lib`. Shared by the path, git,
 /// and inline-git resolution paths so all three locate an entry the same way.
 pub fn package_lib_entry(dep_path: &Path, files: &dyn PackageFiles) -> Result<PathBuf, String> {
+    package_lib(dep_path, files).map(|(entry, _)| entry)
+}
+
+/// [`package_lib_entry`] for the dependency `key` names. A coordinate key names
+/// the package whose `[package]` declares that coordinate, so it cannot name a
+/// single file, which declares none.
+pub fn keyed_lib_entry(
+    key: &str,
+    dep_path: &Path,
+    files: &dyn PackageFiles,
+) -> Result<PathBuf, String> {
+    let (entry, package) = package_lib(dep_path, files)?;
+    let Some(coordinate) = wado_manifest::dependency::key_coordinate(key) else {
+        return Ok(entry);
+    };
+    match package {
+        None => Err(format!(
+            "the dependency key `{key}` names a single file, which has no coordinate; \
+             name it with a `lib:` key"
+        )),
+        Some(package) if package.unversioned_coordinate() != coordinate => Err(format!(
+            "the dependency key `{key}` names a package whose coordinate is `{}`",
+            package.unversioned_coordinate()
+        )),
+        Some(_) => Ok(entry),
+    }
+}
+
+/// The entry module of a source dependency, and its `[package]`: `None` for a
+/// path naming a single file.
+fn package_lib(
+    dep_path: &Path,
+    files: &dyn PackageFiles,
+) -> Result<(PathBuf, Option<wado_manifest::Package>), String> {
     let metadata = std::fs::metadata(dep_path)
         .map_err(|e| format!("cannot read {}: {e}", dep_path.display()))?;
     if metadata.is_file() {
-        return Ok(dep_path.to_path_buf());
+        return Ok((dep_path.to_path_buf(), None));
     }
     let manifest_path = dep_path.join(MANIFEST_FILENAME);
     let text = files
@@ -416,13 +451,14 @@ pub fn package_lib_entry(dep_path: &Path, files: &dyn PackageFiles) -> Result<Pa
     // member force-inherits `version` and fails a standalone parse.
     let manifest = resolve_member_manifest(dep_path, &text, files)
         .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
-    let lib = manifest.package.and_then(|p| p.lib).ok_or_else(|| {
+    let package = manifest.package.filter(|p| p.lib.is_some()).ok_or_else(|| {
         format!(
             "{} declares no [package].lib entry",
             manifest_path.display()
         )
     })?;
-    Ok(dep_path.join(lib))
+    let entry = dep_path.join(package.lib.as_ref().expect("filtered on `lib`"));
+    Ok((entry, Some(package)))
 }
 
 /// The root and manifest of the package whose `[package].lib` is `entry`, a
@@ -448,7 +484,7 @@ mod tests {
         std::fs::write(
             tmp.path().join(WORKSPACE_FILENAME),
             format!(
-                "[workspace]\nmembers = [\"{member}\"]\n\n[workspace.package]\nversion = \"0.4.0\"\n"
+                "[workspace]\nmembers = [\"{member}\"]\n\n[workspace.package]\nversion = \"0.4.0\"\nnamespace = \"acme\"\n"
             ),
         )
         .unwrap();
@@ -518,7 +554,7 @@ mod tests {
     #[test]
     fn standalone_manifest_parses_without_a_workspace() {
         let tmp = tempfile::tempdir().unwrap();
-        let toml = "[package]\nname = \"solo\"\nversion = \"1.0.0\"\n";
+        let toml = "[package]\nnamespace = \"acme\"\nname = \"solo\"\nversion = \"1.0.0\"\n";
         let manifest = resolve_member_manifest(tmp.path(), toml, &Disk).unwrap();
         assert_eq!(manifest.package.unwrap().name, "solo");
     }
@@ -573,17 +609,63 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(
             tmp.path().join(MANIFEST_FILENAME),
-            "[package]\nname = \"nolib\"\nversion = \"1.0.0\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"nolib\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
         let err = package_lib_entry(tmp.path(), &Disk).unwrap_err();
         assert!(err.contains("[package].lib"), "{err}");
     }
 
+    /// A package `acme:geo` with a `lib`, in a temporary directory.
+    fn geo_package() -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(MANIFEST_FILENAME),
+            "[package]\nnamespace = \"acme\"\nname = \"geo\"\nversion = \"1.0.0\"\nlib = \"lib.wado\"\n",
+        )
+        .unwrap();
+        tmp
+    }
+
+    #[test]
+    fn a_coordinate_key_reaches_the_package_declaring_it() {
+        let geo = geo_package();
+        for key in ["acme:geo", "lib:anything", "geo"] {
+            assert_eq!(
+                keyed_lib_entry(key, geo.path(), &Disk).unwrap(),
+                geo.path().join("lib.wado"),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_coordinate_key_naming_another_package_is_refused() {
+        let geo = geo_package();
+        let err = keyed_lib_entry("acme:shapes", geo.path(), &Disk).unwrap_err();
+        assert_eq!(
+            err,
+            "the dependency key `acme:shapes` names a package whose coordinate is `acme:geo`"
+        );
+    }
+
+    #[test]
+    fn a_coordinate_key_naming_a_single_file_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let solo = tmp.path().join("solo.wado");
+        std::fs::write(&solo, "pub fn f() {}\n").unwrap();
+        assert_eq!(keyed_lib_entry("lib:solo", &solo, &Disk).unwrap(), solo);
+        let err = keyed_lib_entry("acme:solo", &solo, &Disk).unwrap_err();
+        assert_eq!(
+            err,
+            "the dependency key `acme:solo` names a single file, which has no coordinate; name it with a `lib:` key"
+        );
+    }
+
     /// A manifest with one registry dependency on `wado-lang:marl`.
     fn manifest_with_registry_dep(specifier: &str) -> Manifest {
         format!(
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
              [registries]\ndefault = \"oci://ghcr.io\"\n\n\
              [dependencies]\n\"wado-lang:marl\" = {{ version = \"{specifier}\" }}\n"
         )
@@ -675,7 +757,7 @@ mod tests {
     #[test]
     fn a_manifest_beside_a_workspace_is_refused() {
         let (tmp, _member_dir) = workspace_with_member("member");
-        let toml = "[package]\nname = \"root\"\nversion = \"1.0.0\"\n";
+        let toml = "[package]\nnamespace = \"acme\"\nname = \"root\"\nversion = \"1.0.0\"\n";
         assert_eq!(
             resolve_member_manifest(tmp.path(), toml, &Disk).unwrap_err(),
             ManifestError::PackageInWorkspace

@@ -546,6 +546,7 @@ mod tests {
         format!(
             r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -562,7 +563,7 @@ default = "https://wa.dev"
 
     fn leaf_info(name: &str, version: &str, integrity: &str) -> RegistryPackageInfo {
         RegistryPackageInfo {
-            manifest: format!("[package]\nname = \"{name}\"\nversion = \"{version}\"\n")
+            manifest: format!("[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"{version}\"\n")
                 .parse()
                 .unwrap(),
             integrity: integrity.to_string(),
@@ -570,7 +571,7 @@ default = "https://wa.dev"
     }
 
     fn leaf_manifest(name: &str, version: &str) -> Manifest {
-        format!("[package]\nname = \"{name}\"\nversion = \"{version}\"\n")
+        format!("[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"{version}\"\n")
             .parse()
             .unwrap()
     }
@@ -628,7 +629,7 @@ default = "https://wa.dev"
             );
             let dep_manifest = |name: &str, dep: &str| -> Manifest {
                 format!(
-                    "[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n\n[registries]\ndefault = \"https://wa.dev\"\n\n[dependencies]\n{dep}\n"
+                    "[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"1.0.0\"\n\n[registries]\ndefault = \"https://wa.dev\"\n\n[dependencies]\n{dep}\n"
                 )
                 .parse()
                 .unwrap()
@@ -676,6 +677,7 @@ default = "https://wa.dev"
             let mut provider = InMemoryDependencyProvider::new();
             let a_manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "a"
 version = "1.0.0"
 
@@ -722,7 +724,7 @@ default = "https://wa.dev"
             );
             let dep_manifest = |name: &str, dep: &str| -> Manifest {
                 format!(
-                    "[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n\n[registries]\ndefault = \"https://wa.dev\"\n\n[dependencies]\n{dep}\n"
+                    "[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"1.0.0\"\n\n[registries]\ndefault = \"https://wa.dev\"\n\n[dependencies]\n{dep}\n"
                 )
                 .parse()
                 .unwrap()
@@ -764,6 +766,7 @@ default = "https://wa.dev"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -796,6 +799,7 @@ default = "https://wa.dev"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -825,6 +829,7 @@ default = "https://wa.dev"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -835,6 +840,7 @@ version = "0.1.0"
             .unwrap();
             let a: Manifest = r#"
 [package]
+namespace = "acme"
 name = "a"
 version = "0.1.0"
 
@@ -845,6 +851,7 @@ version = "0.1.0"
             .unwrap();
             let b: Manifest = r#"
 [package]
+namespace = "acme"
 name = "b"
 version = "0.1.0"
 
@@ -893,6 +900,7 @@ default = "https://wa.dev"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -903,6 +911,7 @@ version = "0.1.0"
             .unwrap();
             let shared: Manifest = r#"
 [package]
+namespace = "acme"
 name = "shared"
 version = "0.1.0"
 
@@ -934,6 +943,7 @@ default = "https://wa.dev"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -955,6 +965,7 @@ version = "0.1.0"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -980,6 +991,7 @@ json = { workspace = true }
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1029,6 +1041,7 @@ version = "0.1.0"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1057,6 +1070,7 @@ version = "0.1.0"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1067,6 +1081,7 @@ version = "0.1.0"
             .unwrap();
             let router: Manifest = r#"
 [package]
+namespace = "acme"
 name = "router"
 version = "1.0.0"
 
@@ -1103,6 +1118,7 @@ default = "https://wa.dev"
         block_on(async {
             let manifest: Manifest = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 

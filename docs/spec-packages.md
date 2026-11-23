@@ -200,13 +200,15 @@ file.
 
 ```toml
 [dependencies]
-"lib:geo" = { path = "../geo" }          # a directory with its own wado.toml
+"acme:geo" = { path = "../geo" }             # a directory with its own wado.toml
 "lib:shared" = { path = "../shared.wado" }   # one file
+"acme:shared" = { path = "../shared.wado" }  # error: a single file has no coordinate
 ```
 
 A directory must hold a `wado.toml` whose `[package].lib` names the entry module
 ([The Library World](#the-library-world)). A single `.wado` file is its own
-entry module. A path dependency is read from disk on every build and is never
+entry module. It has no manifest, so it has no coordinate, and only a `lib:` key
+names it. A path dependency is read from disk on every build and is never
 locked.
 
 A path source may also carry a git or registry source. The build uses the path,
@@ -339,7 +341,10 @@ resolved from the `[dependencies]` entry whose key is byte-identical to the
 specifier, or from an inline source on the `use`. An undeclared coordinate or
 alias is an error.
 
-A key under an open namespace is the dependency's own coordinate. `lib` is the
+A key under an open namespace is the dependency's own coordinate. A `path` or
+`git` source under such a key must hold the package whose `[package]` declares
+that coordinate, and a `use` of a key whose source holds another package is an
+error. `lib` is the
 one place an alias lives. An alias renames a dependency, shortens its name, or
 tells two major versions apart. A `lib:` key names the coordinate it stands for with its `package`
 field ([Registry Sources](#registry-sources)).
@@ -572,6 +577,12 @@ test {
     assert area(Square { side: 2 }) == 4;   // one package, so one `Square`
 }
 ```
+
+A package is one coordinate in one compatibility range
+([Version Requirements](#version-requirements)), so two directories that
+declare it are one package claimed twice. A `use` that reaches the second one
+is an error, wherever in the dependency graph it sits. Versions in two
+compatibility ranges are two packages.
 
 A `use` resolves against the manifest of the package its module belongs to. A
 `use` inside a dependency resolves against that dependency's own

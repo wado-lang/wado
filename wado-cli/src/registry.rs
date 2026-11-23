@@ -197,6 +197,7 @@ mod tests {
             tmp.path().join("wado.toml"),
             r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -208,7 +209,7 @@ version = "0.1.0"
         std::fs::create_dir(tmp.path().join("shared")).unwrap();
         std::fs::write(
             tmp.path().join("shared/wado.toml"),
-            "[package]\nname = \"shared\"\nversion = \"0.1.0\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"shared\"\nversion = \"0.1.0\"\n",
         )
         .unwrap();
 
@@ -236,6 +237,7 @@ members = ["app", "member"]
 
 [workspace.package]
 version = "0.3.0"
+namespace = "acme"
 "#,
         )
         .unwrap();
