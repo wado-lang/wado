@@ -2994,8 +2994,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param: param.name.clone(),
                     span,
                 });
-            }
-            if !param.is_affine && settled {
+            } else if !param.is_affine {
                 let affine_params = self.annotate_ctx.trait_ctx.affine_params();
                 if let Some(&affine) = subjects
                     .iter()

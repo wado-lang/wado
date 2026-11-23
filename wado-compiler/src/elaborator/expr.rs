@@ -1920,11 +1920,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let decl_return = self.instantiate_type(decl_return, &inst);
         self.equate(decl_return, expected_return);
-        let inferred = self.apply_infer_holes_each(&inst.vars);
-        if inferred.iter().zip(&inst.vars).any(|(answer, var)| answer == var) {
-            return FuncRefInference::NotApplicable;
+        match self.answered_slots(&inst) {
+            Some(inferred) => FuncRefInference::Ok(inferred),
+            None => FuncRefInference::NotApplicable,
         }
-        FuncRefInference::Ok(inferred)
     }
 
     fn resolve_field_access(
@@ -5168,9 +5167,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-        for (&value, &declared) in values.iter().zip(&declared) {
-            self.equate_with_never(value, declared);
-        }
+        self.answer_open_params_with_never(&declared, &values);
 
         let mut inferred = self.solved_with_packs(&inst.vars, &declared, &values);
         // A phantom parameter — one no field mentions — is not an inference

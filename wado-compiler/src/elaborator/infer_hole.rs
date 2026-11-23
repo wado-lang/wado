@@ -88,7 +88,11 @@ pub(super) enum Obligation {
     },
     /// `ty`, which a slot not declared `affine` was given, answers no affine
     /// type once its variables settle.
-    Copyable { ty: TypeId, param: String, span: Span },
+    Copyable {
+        ty: TypeId,
+        param: String,
+        span: Span,
+    },
     /// An associated-type equality of a bound on a slot a variable fills.
     Projection(ProjectionLink),
     /// An impl a call committed to while its receiver held variables. Asked
@@ -754,7 +758,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             owner,
         });
     }
-
 
     /// Whether the type argument `t` is a slot nothing answers: a bare
     /// parameter or variable, neither one of the enclosing declaration's

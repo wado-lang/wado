@@ -3911,9 +3911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.equate(arg, param);
             }
         }
-        for (_, (&param, &arg)) in pairs {
-            self.equate_with_never(arg, param);
-        }
+        self.answer_open_params_with_never(param_types, args);
         // The expected return answers a pack after every argument does.
         let (declared, actual): (Vec<TypeId>, Vec<TypeId>) = param_types
             .iter()
@@ -3938,7 +3936,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut solved = self.apply_infer_holes_each(slots);
         for &(slot, pack) in &packs {
             if let Some(&tuple) = pack_answers.get(&pack) {
-                let i = slots.iter().position(|&s| s == slot).expect("a pack is a slot");
+                let i = slots
+                    .iter()
+                    .position(|&s| s == slot)
+                    .expect("a pack is a slot");
                 solved[i] = tuple;
             }
         }
@@ -4124,7 +4125,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let impl_unresolved =
-            self.receiver_slots_where(&sig, impl_type_args, |this, slot| unresolved(this, slot));        let method_unresolved: Vec<(usize, String)> = method_slots
+            self.receiver_slots_where(&sig, impl_type_args, |this, slot| unresolved(this, slot));
+        let method_unresolved: Vec<(usize, String)> = method_slots
             .iter()
             .enumerate()
             .filter(|&(i, _)| unresolved(self, method_type_args.get(i)))
@@ -5322,7 +5324,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let newtype = self.apply_infer_holes(newtype);
         for ty in types {
             let answered = self.apply_infer_holes(*ty);
-            *ty = self.tysys.substitute_newtype_in_type(answered, base, newtype);
+            *ty = self
+                .tysys
+                .substitute_newtype_in_type(answered, base, newtype);
         }
     }
 
@@ -5446,12 +5450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let param_type = self.instantiate_type(param_type, &inst);
             self.equate(arg, param_type);
         }
-        let inferred = self.apply_infer_holes_each(&inst.vars);
-        if inferred.iter().zip(&inst.vars).any(|(answer, var)| answer == var) {
-            Vec::new()
-        } else {
-            inferred
-        }
+        self.answered_slots(&inst).unwrap_or_default()
     }
 
     /// The slot a declared type parameter's `TypeId` holds in its own frame's

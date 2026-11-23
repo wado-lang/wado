@@ -273,6 +273,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.answer_frame_projections(substituted)
     }
 
+    /// `inst`'s variables as the context answers them, or `None` while any is
+    /// still open.
+    pub(super) fn answered_slots(&self, inst: &Instantiated) -> Option<Vec<TypeId>> {
+        let answers = self.apply_infer_holes_each(&inst.vars);
+        let all = answers
+            .iter()
+            .zip(&inst.vars)
+            .all(|(answer, var)| answer != var);
+        all.then_some(answers)
+    }
+
     /// [`Self::instantiate_type`] over a signature's parameter list.
     pub(super) fn instantiate_types(&mut self, tys: &[TypeId], inst: &Instantiated) -> Vec<TypeId> {
         if inst.subst.is_empty() {
