@@ -131,9 +131,9 @@ assert names.claim_all(&wants) == Ok(["Point__", "Point_"] as List<String>);
 `IdGen` hands out 0, 1, 2, …, for the locals a generator suffixes so two never
 meet.
 
-`hoist_fn(key, prefix, |w, name| …)` defines a top-level function once per
+`intern_fn(key, prefix, |w, name| …)` defines a top-level function once per
 distinct `key`. The closure writes it under the name it is handed, and
-`write_hoisted` places what every closure wrote.
+`write_interned` places what every closure wrote.
 
 ## Escaping with the `wado` Tag
 

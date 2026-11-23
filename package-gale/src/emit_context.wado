@@ -743,7 +743,7 @@ impl EmitContext {
     {
         let canonical = self.analysis.canonical_ids(*tokens);
         let analysis = &self.analysis;
-        let helper = self.kind_set_fns.hoist_fn(`${canonical:?}`, "_kind_set_", |w, name| {
+        let helper = self.kind_set_fns.intern_fn(`${canonical:?}`, "_kind_set_", |w, name| {
             let mut f = FnSpec::new(name);
             f.add_param({ name: "k", type: "i32" });
             f.set_return_type("bool");
@@ -758,7 +758,7 @@ impl EmitContext {
     /// may name a new one after.
     pub fn take_kind_set_fns(&mut self) -> CodeWriter {
         self.kind_set_fns_taken = true;
-        self.kind_set_fns.write_hoisted();
+        self.kind_set_fns.write_interned();
         return builtin::replace(&mut self.kind_set_fns, CodeWriter::with_capacity(0));
     }
 

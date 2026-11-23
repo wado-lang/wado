@@ -135,56 +135,56 @@ test "raw bypasses indentation" {
     assert w.to_string() == expected;
 }
 
-test "hoist_fn defines each distinct key once, where write_hoisted is" {
+test "intern_fn defines each distinct key once, where write_interned is" {
     let mut w = CodeWriter::new();
     let mut defined = 0;
     let mut define = |w: &mut CodeWriter, name: String| {
         defined += 1;
         FnSpec::new(name).emit(w, |w| w.line("return;"));
     };
-    let a = w.hoist_fn("x", "f", define);
-    let b = w.hoist_fn("y", "f", define);
-    let again = w.hoist_fn("x", "f", define);
+    let a = w.intern_fn("x", "f", define);
+    let b = w.intern_fn("y", "f", define);
+    let again = w.intern_fn("x", "f", define);
     w.line("// body");
-    w.write_hoisted();
+    w.write_interned();
     assert a == "f0" && b == "f1" && again == "f0";
     assert defined == 2;
     assert w.to_string() == "// body\nfn f0() {\n    return;\n}\nfn f1() {\n    return;\n}\n";
 }
 
-test "a hoisted function prunable and never called is pruned" {
+test "an interned function prunable and never called is pruned" {
     let mut w = CodeWriter::new();
-    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).set_prunable().emit(w, |w| w.line("work();")));
-    w.write_hoisted();
+    w.intern_fn("x", "f", |w, name| FnSpec::new(name).set_prunable().emit(w, |w| w.line("work();")));
+    w.write_interned();
     w.prune();
     assert w.to_string() == "";
 }
 
 #[expect_trap]
-test "hoist_fn after prune traps, as prune may have dropped what a key names" {
+test "intern_fn after prune traps, as prune may have dropped what a key names" {
     let mut w = CodeWriter::new();
     w.prune();
-    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |w| w.line("work();")));
+    w.intern_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |w| w.line("work();")));
 }
 
-test "a function hoisted while another is defined is queued beside it, under a name of its own" {
+test "a function interned while another is defined is queued beside it, under a name of its own" {
     let mut w = CodeWriter::new();
-    let outer = w.hoist_fn("outer", "f", |w, name| {
-        let inner = w.hoist_fn("inner", "f", |w, name| FnSpec::new(name).emit(w, |w| w.line("return;")));
+    let outer = w.intern_fn("outer", "f", |w, name| {
+        let inner = w.intern_fn("inner", "f", |w, name| FnSpec::new(name).emit(w, |w| w.line("return;")));
         FnSpec::new(name).emit(w, |w| w.line(`${inner}();`));
     });
-    w.write_hoisted();
+    w.write_interned();
     assert outer == "f0";
     assert w.to_string() == "fn f1() {\n    return;\n}\nfn f0() {\n    f1();\n}\n";
 }
 
-test "hoisted names stay distinct where one prefix extends another" {
+test "interned names stay distinct where one prefix extends another" {
     let mut w = CodeWriter::new();
     let mut names: List<String> = [];
-    names.push(w.hoist_fn("y", "f1", |w, name| FnSpec::new(name).emit(w, |_| {
+    names.push(w.intern_fn("y", "f1", |w, name| FnSpec::new(name).emit(w, |_| {
     })));
     for let i of 0..<11 {
-        names.push(w.hoist_fn(`k${i}`, "f", |w, name| FnSpec::new(name).emit(w, |_| {
+        names.push(w.intern_fn(`k${i}`, "f", |w, name| FnSpec::new(name).emit(w, |_| {
         })));
     }
     for let i of 0..<names.len() {
@@ -192,22 +192,22 @@ test "hoisted names stay distinct where one prefix extends another" {
             assert names[i] != names[j];
         }
     }
-    w.write_hoisted();
+    w.write_interned();
 }
 
 #[expect_trap]
-test "write_hoisted refuses an open block" {
+test "write_interned refuses an open block" {
     let mut w = CodeWriter::new();
-    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |_| {
+    w.intern_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |_| {
     }));
     w.begin("impl T");
-    w.write_hoisted();
+    w.write_interned();
 }
 
 #[expect_trap]
-test "to_string refuses a hoisted definition never written" {
+test "to_string refuses an interned definition never written" {
     let mut w = CodeWriter::new();
-    w.hoist_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |_| {
+    w.intern_fn("x", "f", |w, name| FnSpec::new(name).emit(w, |_| {
     }));
     w.to_string();
 }
