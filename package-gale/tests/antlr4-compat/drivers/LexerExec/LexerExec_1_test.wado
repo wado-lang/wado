@@ -91,13 +91,7 @@ use t_CharSetWithQuote2 from "../../grammars/LexerExec/CharSetWithQuote2.g4"
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/ActionPlacement" {
     let input = "ab";
-    let expected = "stuff0:
-stuff1: a
-stuff2: ab
-ab
-[@0,0:1='ab',<1>,1:0]
-[@1,2:1='<EOF>',<-1>,1:2]
-";
+    let expected = "stuff0:\nstuff1: a\nstuff2: ab\nab\n[@0,0:1='ab',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n";
     let tokens = t_ActionPlacement::tokenize(&input);
     let actual = t_ActionPlacement::to_lexer_string(&tokens, t_ActionPlacement::TK_EOF);
     assert actual == expected;
@@ -109,14 +103,8 @@ ab
 // Stage A claim (d): tokenize(&input) renders to the same ANTLR4-format
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSet" {
-    let input = "34
- 34";
-    let expected = "I
-I
-[@0,0:1='34',<1>,1:0]
-[@1,4:5='34',<1>,2:1]
-[@2,6:5='<EOF>',<-1>,2:3]
-";
+    let input = "34\n 34";
+    let expected = "I\nI\n[@0,0:1='34',<1>,1:0]\n[@1,4:5='34',<1>,2:1]\n[@2,6:5='<EOF>',<-1>,2:3]\n";
     let tokens = t_CharSet::tokenize(&input);
     let actual = t_CharSet::to_lexer_string(&tokens, t_CharSet::TK_EOF);
     assert actual == expected;
@@ -129,12 +117,7 @@ I
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSetInSet" {
     let input = "a x";
-    let expected = "I
-I
-[@0,0:0='a',<1>,1:0]
-[@1,2:2='x',<1>,1:2]
-[@2,3:2='<EOF>',<-1>,1:3]
-";
+    let expected = "I\nI\n[@0,0:0='a',<1>,1:0]\n[@1,2:2='x',<1>,1:2]\n[@2,3:2='<EOF>',<-1>,1:3]\n";
     let tokens = t_CharSetInSet::tokenize(&input);
     let actual = t_CharSetInSet::to_lexer_string(&tokens, t_CharSetInSet::TK_EOF);
     assert actual == expected;
@@ -147,10 +130,7 @@ I
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSetNot" {
     let input = "xaf";
-    let expected = "I
-[@0,0:2='xaf',<1>,1:0]
-[@1,3:2='<EOF>',<-1>,1:3]
-";
+    let expected = "I\n[@0,0:2='xaf',<1>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n";
     let tokens = t_CharSetNot::tokenize(&input);
     let actual = t_CharSetNot::to_lexer_string(&tokens, t_CharSetNot::TK_EOF);
     assert actual == expected;
@@ -162,14 +142,8 @@ test "stage_a_tokens: LexerExec/CharSetNot" {
 // Stage A claim (d): tokenize(&input) renders to the same ANTLR4-format
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSetPlus" {
-    let input = "34
- 34";
-    let expected = "I
-I
-[@0,0:1='34',<1>,1:0]
-[@1,4:5='34',<1>,2:1]
-[@2,6:5='<EOF>',<-1>,2:3]
-";
+    let input = "34\n 34";
+    let expected = "I\nI\n[@0,0:1='34',<1>,1:0]\n[@1,4:5='34',<1>,2:1]\n[@2,6:5='<EOF>',<-1>,2:3]\n";
     let tokens = t_CharSetPlus::tokenize(&input);
     let actual = t_CharSetPlus::to_lexer_string(&tokens, t_CharSetPlus::TK_EOF);
     assert actual == expected;
@@ -181,19 +155,8 @@ I
 // Stage A claim (d): tokenize(&input) renders to the same ANTLR4-format
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSetRange" {
-    let input = "34
- 34 a2 abc 
-   ";
-    let expected = "I
-I
-ID
-ID
-[@0,0:1='34',<1>,1:0]
-[@1,4:5='34',<1>,2:1]
-[@2,7:8='a2',<2>,2:4]
-[@3,10:12='abc',<2>,2:7]
-[@4,18:17='<EOF>',<-1>,3:3]
-";
+    let input = "34\n 34 a2 abc \n   ";
+    let expected = "I\nI\nID\nID\n[@0,0:1='34',<1>,1:0]\n[@1,4:5='34',<1>,2:1]\n[@2,7:8='a2',<2>,2:4]\n[@3,10:12='abc',<2>,2:7]\n[@4,18:17='<EOF>',<-1>,3:3]\n";
     let tokens = t_CharSetRange::tokenize(&input);
     let actual = t_CharSetRange::to_lexer_string(&tokens, t_CharSetRange::TK_EOF);
     assert actual == expected;
@@ -206,12 +169,7 @@ ID
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSetWithEscapedChar" {
     let input = "- ] ";
-    let expected = "DASHBRACK
-DASHBRACK
-[@0,0:0='-',<1>,1:0]
-[@1,2:2=']',<1>,1:2]
-[@2,4:3='<EOF>',<-1>,1:4]
-";
+    let expected = "DASHBRACK\nDASHBRACK\n[@0,0:0='-',<1>,1:0]\n[@1,2:2=']',<1>,1:2]\n[@2,4:3='<EOF>',<-1>,1:4]\n";
     let tokens = t_CharSetWithEscapedChar::tokenize(&input);
     let actual = t_CharSetWithEscapedChar::to_lexer_string(&tokens, t_CharSetWithEscapedChar::TK_EOF);
     assert actual == expected;
@@ -224,10 +182,7 @@ DASHBRACK
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSetWithMissingEscapeChar" {
     let input = "34 ";
-    let expected = "I
-[@0,0:1='34',<1>,1:0]
-[@1,3:2='<EOF>',<-1>,1:3]
-";
+    let expected = "I\n[@0,0:1='34',<1>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n";
     let tokens = t_CharSetWithMissingEscapeChar::tokenize(&input);
     let actual = t_CharSetWithMissingEscapeChar::to_lexer_string(&tokens, t_CharSetWithMissingEscapeChar::TK_EOF);
     assert actual == expected;
@@ -240,10 +195,7 @@ test "stage_a_tokens: LexerExec/CharSetWithMissingEscapeChar" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSetWithQuote1" {
     let input = "b\"a";
-    let expected = "A
-[@0,0:2='b\"a',<1>,1:0]
-[@1,3:2='<EOF>',<-1>,1:3]
-";
+    let expected = "A\n[@0,0:2='b\"a',<1>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n";
     let tokens = t_CharSetWithQuote1::tokenize(&input);
     let actual = t_CharSetWithQuote1::to_lexer_string(&tokens, t_CharSetWithQuote1::TK_EOF);
     assert actual == expected;
@@ -256,10 +208,7 @@ test "stage_a_tokens: LexerExec/CharSetWithQuote1" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/CharSetWithQuote2" {
     let input = "b\"\\a";
-    let expected = "A
-[@0,0:3='b\"\\a',<1>,1:0]
-[@1,4:3='<EOF>',<-1>,1:4]
-";
+    let expected = "A\n[@0,0:3='b\"\\a',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n";
     let tokens = t_CharSetWithQuote2::tokenize(&input);
     let actual = t_CharSetWithQuote2::to_lexer_string(&tokens, t_CharSetWithQuote2::TK_EOF);
     assert actual == expected;

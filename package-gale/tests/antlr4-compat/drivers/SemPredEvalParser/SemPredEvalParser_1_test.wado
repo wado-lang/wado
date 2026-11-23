@@ -107,10 +107,7 @@ test "stage_a_parse: SemPredEvalParser/ActionHidesPreds" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/ActionHidesPreds" {
     let input = "x x y";
-    let expected = "alt 1
-alt 1
-alt 1
-";
+    let expected = "alt 1\nalt 1\nalt 1\n";
     let result = t_ActionHidesPreds::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -148,9 +145,7 @@ test "stage_a_parse: SemPredEvalParser/ActionsHidePredsInGlobalFOLLOW" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/ActionsHidePredsInGlobalFOLLOW" {
     let input = "a!";
-    let expected = "eval=true
-parse
-";
+    let expected = "eval=true\nparse\n";
     let result = t_ActionsHidePredsInGlobalFOLLOW::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -202,9 +197,7 @@ test "stage_a_parse: SemPredEvalParser/DepedentPredsInGlobalFOLLOW" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/DepedentPredsInGlobalFOLLOW" {
     let input = "a!";
-    let expected = "eval=true
-parse
-";
+    let expected = "eval=true\nparse\n";
     let result = t_DepedentPredsInGlobalFOLLOW::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -242,8 +235,7 @@ test "stage_a_parse: SemPredEvalParser/DependentPredNotInOuterCtxShouldBeIgnored
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/DependentPredNotInOuterCtxShouldBeIgnored" {
     let input = "a;";
-    let expected = "alt 2
-";
+    let expected = "alt 2\n";
     let result = t_DependentPredNotInOuterCtxShouldBeIgnored::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -295,8 +287,7 @@ test "stage_a_parse: SemPredEvalParser/IndependentPredNotPassedOuterCtxToAvoidCa
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/IndependentPredNotPassedOuterCtxToAvoidCastException" {
     let input = "a;";
-    let expected = "alt 2
-";
+    let expected = "alt 2\n";
     let result = t_IndependentPredNotPassedOuterCtxToAvoidCastException::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -334,9 +325,7 @@ test "stage_a_parse: SemPredEvalParser/Order" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/Order" {
     let input = "x y";
-    let expected = "alt 1
-alt 1
-";
+    let expected = "alt 1\nalt 1\n";
     let result = t_Order::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -360,11 +349,7 @@ test "stage_b_oracle: SemPredEvalParser/Order" {
 // Gale wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the
 // token) so the compare is over the recovery decision, not the marker.
 test "stage_b: SemPredEvalParser/PredFromAltTestedInLoopBack_1" {
-    let input = "s
-
-
-x
-";
+    let input = "s\n\n\nx\n";
     let expected = "(file_ (para (paraContent s) \\n \\n) (para (paraContent \\n x \\n)))";
     let result = t_PredFromAltTestedInLoopBack_1::parse_file_(&input);
     let actual = strip_skip_markers(&t_PredFromAltTestedInLoopBack_1::to_string_tree(&result));
@@ -378,12 +363,7 @@ x
 // Stage A claim (b): the generated parser must accept the descriptor's
 // [input] without returning an error. No parse-tree shape comparison.
 test "stage_a_parse: SemPredEvalParser/PredFromAltTestedInLoopBack_2" {
-    let input = "s
-
-
-x
-
-";
+    let input = "s\n\n\nx\n\n";
     let result = t_PredFromAltTestedInLoopBack_1::parse_file_(&input);
     if !result.ok() {
         let d = &result.diagnostics[0];
@@ -394,12 +374,7 @@ x
 // Source descriptor: SemPredEvalParser/PredFromAltTestedInLoopBack_2 (ANTLR4 runtime-testsuite).
 // Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).
 test "stage_b: SemPredEvalParser/PredFromAltTestedInLoopBack_2" {
-    let input = "s
-
-
-x
-
-";
+    let input = "s\n\n\nx\n\n";
     let expected = "(file_ (para (paraContent s) \\n \\n) (para (paraContent \\n x) \\n \\n))";
     let result = t_PredFromAltTestedInLoopBack_1::parse_file_(&input);
     let actual = t_PredFromAltTestedInLoopBack_1::to_string_tree(&result);
@@ -428,8 +403,7 @@ test "stage_a_parse: SemPredEvalParser/PredTestedEvenWhenUnAmbig_1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: SemPredEvalParser/PredTestedEvenWhenUnAmbig_1" {
     let input = "abc";
-    let expected = "ID abc
-";
+    let expected = "ID abc\n";
     let result = t_PredTestedEvenWhenUnAmbig_1::parse_primary(&input);
     let actual = result.output;
     assert actual == expected;

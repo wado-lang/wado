@@ -105,9 +105,7 @@ test "stage_a_parse: ParserExec/LabelAliasingAcrossLabeledAlternatives" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/LabelAliasingAcrossLabeledAlternatives" {
     let input = "xy";
-    let expected = "x
-y
-";
+    let expected = "x\ny\n";
     let result = t_LabelAliasingAcrossLabeledAlternatives::parse_start(&input);
     let actual = result.output;
     assert actual == expected;
@@ -215,8 +213,7 @@ test "stage_a_parse: ParserExec/OpenDeviceStatement_Case1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/OpenDeviceStatement_Case1" {
     let input = "OPEN DEVICE DEVICE";
-    let expected = "OPEN DEVICE DEVICE
-";
+    let expected = "OPEN DEVICE DEVICE\n";
     let result = t_OpenDeviceStatement_Case1::parse_statement(&input);
     let actual = result.output;
     assert actual == expected;
@@ -254,8 +251,7 @@ test "stage_a_parse: ParserExec/OpenDeviceStatement_Case2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/OpenDeviceStatement_Case2" {
     let input = "OPEN DEVICE DEVICE";
-    let expected = "OPEN DEVICE DEVICE
-";
+    let expected = "OPEN DEVICE DEVICE\n";
     let result = t_OpenDeviceStatement_Case2::parse_statement(&input);
     let actual = result.output;
     assert actual == expected;
@@ -282,8 +278,7 @@ test "stage_a_parse: ParserExec/OpenDeviceStatement_Case3" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: ParserExec/OpenDeviceStatement_Case3" {
     let input = "OPEN DEVICE DEVICE.";
-    let expected = "OPEN DEVICE DEVICE
-";
+    let expected = "OPEN DEVICE DEVICE\n";
     let result = t_OpenDeviceStatement_Case2::parse_statement(&input);
     let actual = result.output;
     assert actual == expected;

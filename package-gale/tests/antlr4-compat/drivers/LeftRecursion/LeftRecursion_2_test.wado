@@ -157,8 +157,7 @@ test "stage_a_parse: LeftRecursion/PrefixOpWithActionAndLabel_1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/PrefixOpWithActionAndLabel_1" {
     let input = "a";
-    let expected = "a
-";
+    let expected = "a\n";
     let result = t_PrefixOpWithActionAndLabel_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -185,8 +184,7 @@ test "stage_a_parse: LeftRecursion/PrefixOpWithActionAndLabel_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/PrefixOpWithActionAndLabel_2" {
     let input = "a+b";
-    let expected = "(a+b)
-";
+    let expected = "(a+b)\n";
     let result = t_PrefixOpWithActionAndLabel_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -213,8 +211,7 @@ test "stage_a_parse: LeftRecursion/PrefixOpWithActionAndLabel_3" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/PrefixOpWithActionAndLabel_3" {
     let input = "a=b+c";
-    let expected = "((a=b)+c)
-";
+    let expected = "((a=b)+c)\n";
     let result = t_PrefixOpWithActionAndLabel_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -274,8 +271,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActionsAndLabels_1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsAndLabels_1" {
     let input = "4";
-    let expected = "4
-";
+    let expected = "4\n";
     let result = t_ReturnValueAndActionsAndLabels_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -302,8 +298,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActionsAndLabels_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsAndLabels_2" {
     let input = "1+2";
-    let expected = "3
-";
+    let expected = "3\n";
     let result = t_ReturnValueAndActionsAndLabels_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -330,8 +325,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActionsAndLabels_3" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsAndLabels_3" {
     let input = "1+2*3";
-    let expected = "7
-";
+    let expected = "7\n";
     let result = t_ReturnValueAndActionsAndLabels_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -358,8 +352,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActionsAndLabels_4" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsAndLabels_4" {
     let input = "i++*3";
-    let expected = "12
-";
+    let expected = "12\n";
     let result = t_ReturnValueAndActionsAndLabels_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -455,8 +448,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActionsList1_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsList1_2" {
     let input = "a,c>>x";
-    let expected = "(s (expr (expr a) , (expr c) >> (expr x)))
-";
+    let expected = "(s (expr (expr a) , (expr c) >> (expr x)))\n";
     let result = t_ReturnValueAndActionsList1_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -508,8 +500,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActionsList1_4" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsList1_4" {
     let input = "a*b,c,x*y>>r";
-    let expected = "(s (expr (expr (expr a) * (expr b)) , (expr c) , (expr (expr x) * (expr y)) >> (expr r)))
-";
+    let expected = "(s (expr (expr (expr a) * (expr b)) , (expr c) , (expr (expr x) * (expr y)) >> (expr r)))\n";
     let result = t_ReturnValueAndActionsList1_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -583,8 +574,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActionsList2_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsList2_2" {
     let input = "a,c>>x";
-    let expected = "(s (expr (expr (expr a) , (expr c)) >> (expr x)))
-";
+    let expected = "(s (expr (expr (expr a) , (expr c)) >> (expr x)))\n";
     let result = t_ReturnValueAndActionsList2_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -636,8 +626,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActionsList2_4" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActionsList2_4" {
     let input = "a*b,c,x*y>>r";
-    let expected = "(s (expr (expr (expr (expr (expr a) * (expr b)) , (expr c)) , (expr (expr x) * (expr y))) >> (expr r)))
-";
+    let expected = "(s (expr (expr (expr (expr (expr a) * (expr b)) , (expr c)) , (expr (expr x) * (expr y))) >> (expr r)))\n";
     let result = t_ReturnValueAndActionsList2_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -686,8 +675,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActions_1" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActions_1" {
     let input = "4";
-    let expected = "4
-";
+    let expected = "4\n";
     let result = t_ReturnValueAndActions_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -714,8 +702,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActions_2" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActions_2" {
     let input = "1+2";
-    let expected = "3
-";
+    let expected = "3\n";
     let result = t_ReturnValueAndActions_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -742,8 +729,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActions_3" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActions_3" {
     let input = "1+2*3";
-    let expected = "7
-";
+    let expected = "7\n";
     let result = t_ReturnValueAndActions_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;
@@ -770,8 +756,7 @@ test "stage_a_parse: LeftRecursion/ReturnValueAndActions_4" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: LeftRecursion/ReturnValueAndActions_4" {
     let input = "(1+2)*3";
-    let expected = "9
-";
+    let expected = "9\n";
     let result = t_ReturnValueAndActions_1::parse_s(&input);
     let actual = result.output;
     assert actual == expected;

@@ -105,11 +105,7 @@ test "stage_a_parse: Sets/CharSetLiteral" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/CharSetLiteral" {
     let input = "A a B b";
-    let expected = "A
-a
-B
-b
-";
+    let expected = "A\na\nB\nb\n";
     let result = t_CharSetLiteral::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -147,8 +143,7 @@ test "stage_a_parse: Sets/LexerOptionalSet" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/LexerOptionalSet" {
     let input = "ac";
-    let expected = "ac
-";
+    let expected = "ac\n";
     let result = t_LexerOptionalSet::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -186,8 +181,7 @@ test "stage_a_parse: Sets/LexerPlusSet" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/LexerPlusSet" {
     let input = "abaac";
-    let expected = "abaac
-";
+    let expected = "abaac\n";
     let result = t_LexerPlusSet::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -225,8 +219,7 @@ test "stage_a_parse: Sets/LexerStarSet" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/LexerStarSet" {
     let input = "abaac";
-    let expected = "abaac
-";
+    let expected = "abaac\n";
     let result = t_LexerStarSet::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -264,8 +257,7 @@ test "stage_a_parse: Sets/NotChar" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/NotChar" {
     let input = "x";
-    let expected = "x
-";
+    let expected = "x\n";
     let result = t_NotChar::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -303,8 +295,7 @@ test "stage_a_parse: Sets/NotCharSet" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/NotCharSet" {
     let input = "x";
-    let expected = "x
-";
+    let expected = "x\n";
     let result = t_NotCharSet::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -342,8 +333,7 @@ test "stage_a_parse: Sets/NotCharSetWithRuleRef3" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/NotCharSetWithRuleRef3" {
     let input = "x";
-    let expected = "x
-";
+    let expected = "x\n";
     let result = t_NotCharSetWithRuleRef3::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -381,8 +371,7 @@ test "stage_a_parse: Sets/OptionalLexerSingleElement" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/OptionalLexerSingleElement" {
     let input = "bc";
-    let expected = "bc
-";
+    let expected = "bc\n";
     let result = t_OptionalLexerSingleElement::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -420,8 +409,7 @@ test "stage_a_parse: Sets/OptionalSet" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/OptionalSet" {
     let input = "ac";
-    let expected = "ac
-";
+    let expected = "ac\n";
     let result = t_OptionalSet::parse_a(&input);
     let actual = result.output;
     assert actual == expected;
@@ -459,8 +447,7 @@ test "stage_a_parse: Sets/OptionalSingleElement" {
 // (result.output, the p.emit buffer) equals the descriptor's [output].
 test "stage_c_output: Sets/OptionalSingleElement" {
     let input = "bc";
-    let expected = "bc
-";
+    let expected = "bc\n";
     let result = t_OptionalSingleElement::parse_a(&input);
     let actual = result.output;
     assert actual == expected;

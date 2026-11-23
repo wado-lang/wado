@@ -59,9 +59,7 @@ use t_ZeroLengthToken from "../../grammars/LexerExec/ZeroLengthToken.g4"
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/ReservedWordsEscaping_NULL" {
     let input = "NULL";
-    let expected = "[@0,0:3='NULL',<1>,1:0]
-[@1,4:3='<EOF>',<-1>,1:4]
-";
+    let expected = "[@0,0:3='NULL',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n";
     let tokens = t_ReservedWordsEscaping_NULL::tokenize(&input);
     let actual = t_ReservedWordsEscaping_NULL::to_lexer_string(&tokens, t_ReservedWordsEscaping_NULL::TK_EOF);
     assert actual == expected;
@@ -74,12 +72,7 @@ test "stage_a_tokens: LexerExec/ReservedWordsEscaping_NULL" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/Slashes" {
     let input = "\\ / \\/ /\\";
-    let expected = "[@0,0:0='\\',<1>,1:0]
-[@1,2:2='/',<2>,1:2]
-[@2,4:5='\\/',<3>,1:4]
-[@3,7:8='/\\',<4>,1:7]
-[@4,9:8='<EOF>',<-1>,1:9]
-";
+    let expected = "[@0,0:0='\\',<1>,1:0]\n[@1,2:2='/',<2>,1:2]\n[@2,4:5='\\/',<3>,1:4]\n[@3,7:8='/\\',<4>,1:7]\n[@4,9:8='<EOF>',<-1>,1:9]\n";
     let tokens = t_Slashes::tokenize(&input);
     let actual = t_Slashes::to_lexer_string(&tokens, t_Slashes::TK_EOF);
     assert actual == expected;
@@ -92,9 +85,7 @@ test "stage_a_tokens: LexerExec/Slashes" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/StackoverflowDueToNotEscapedHyphen" {
     let input = "word";
-    let expected = "[@0,0:3='word',<1>,1:0]
-[@1,4:3='<EOF>',<-1>,1:4]
-";
+    let expected = "[@0,0:3='word',<1>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n";
     let tokens = t_StackoverflowDueToNotEscapedHyphen::tokenize(&input);
     let actual = t_StackoverflowDueToNotEscapedHyphen::to_lexer_string(&tokens, t_StackoverflowDueToNotEscapedHyphen::TK_EOF);
     assert actual == expected;
@@ -107,9 +98,7 @@ test "stage_a_tokens: LexerExec/StackoverflowDueToNotEscapedHyphen" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/TokenType0xFFFF" {
     let input = "FFFF";
-    let expected = "[@0,0:3='FFFF',<65535>,1:0]
-[@1,4:3='<EOF>',<-1>,1:4]
-";
+    let expected = "[@0,0:3='FFFF',<65535>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n";
     let tokens = t_TokenType0xFFFF::tokenize(&input);
     let actual = t_TokenType0xFFFF::to_lexer_string(&tokens, t_TokenType0xFFFF::TK_EOF);
     assert actual == expected;
@@ -122,9 +111,7 @@ test "stage_a_tokens: LexerExec/TokenType0xFFFF" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/UnicodeCharSet" {
     let input = "均";
-    let expected = "[@0,0:0='均',<1>,1:0]
-[@1,1:0='<EOF>',<-1>,1:1]
-";
+    let expected = "[@0,0:0='均',<1>,1:0]\n[@1,1:0='<EOF>',<-1>,1:1]\n";
     let tokens = t_UnicodeCharSet::tokenize(&input);
     let actual = t_UnicodeCharSet::to_lexer_string(&tokens, t_UnicodeCharSet::TK_EOF);
     assert actual == expected;
@@ -137,9 +124,7 @@ test "stage_a_tokens: LexerExec/UnicodeCharSet" {
 // dump as the descriptor's [output] block.
 test "stage_a_tokens: LexerExec/ZeroLengthToken" {
     let input = "'xxx'";
-    let expected = "[@0,0:4=''xxx'',<1>,1:0]
-[@1,5:4='<EOF>',<-1>,1:5]
-";
+    let expected = "[@0,0:4=''xxx'',<1>,1:0]\n[@1,5:4='<EOF>',<-1>,1:5]\n";
     let tokens = t_ZeroLengthToken::tokenize(&input);
     let actual = t_ZeroLengthToken::to_lexer_string(&tokens, t_ZeroLengthToken::TK_EOF);
     assert actual == expected;
