@@ -633,6 +633,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys
                         .impl_answers_trait_args(block, receiver.ty, query.required_args)
                 });
+                // The one block a `_` admits answers it.
+                if let [only] = candidates.as_slice() {
+                    let block = only.supply.as_ref().expect("kept by its trait").impl_def;
+                    let held =
+                        self.tysys
+                            .impl_trait_args_asked(block, receiver.ty, query.required_args);
+                    for (held, &asked) in held.into_iter().zip(query.required_args) {
+                        self.equate(held, asked);
+                    }
+                }
             }
             return (candidates, Vec::new());
         }
@@ -1870,17 +1880,34 @@ impl TypeSystem {
     /// Whether block `impl_def` implements its trait at `asked` for
     /// `receiver`: its parameters bound from those arguments and the receiver,
     /// as a method call's qualified spelling binds them, its trait arguments
-    /// are `asked`.
+    /// are `asked`, a `_` in them standing for any type.
     pub(super) fn impl_answers_trait_args(
         &self,
         impl_def: DefId,
         receiver: Option<TypeId>,
         asked: &[TypeId],
     ) -> bool {
+        let held = self.impl_trait_args_asked(impl_def, receiver, asked);
+        let table = self.type_table.borrow();
+        held.len() == asked.len()
+            && held
+                .iter()
+                .zip(asked)
+                .all(|(&held, &want)| table.fits_written(held, want))
+    }
+
+    /// Block `impl_def`'s trait arguments, its parameters bound as
+    /// [`Self::impl_answers_trait_args`] binds them.
+    pub(super) fn impl_trait_args_asked(
+        &self,
+        impl_def: DefId,
+        receiver: Option<TypeId>,
+        asked: &[TypeId],
+    ) -> Vec<TypeId> {
         let mut table = self.type_table.borrow_mut();
         let written = table.impl_trait_args(impl_def).to_vec();
         if written.len() != asked.len() {
-            return false;
+            return written;
         }
         let mut slots = TypeArgMap::default();
         match receiver {
@@ -1889,8 +1916,8 @@ impl TypeSystem {
         }
         written
             .iter()
-            .zip(asked)
-            .all(|(&arg, &want)| table.substitute_type_params(arg, &slots) == want)
+            .map(|&arg| table.substitute_type_params(arg, &slots))
+            .collect()
     }
 
     /// `ty`, written in block `impl_def`, with each slot the block's target

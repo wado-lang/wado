@@ -4666,6 +4666,7 @@ impl Parser {
                             // outer postfix loop continue (so `foo::<T>(x)` after a
                             // method-call chain still parses as a call below).
                             ident.type_args = type_args;
+                            ident.span = callee_span.merge(&self.previous().span);
                         } else {
                             // Turbofish on a non-identifier expression with no call
                             // following — there is no expression form for this yet.

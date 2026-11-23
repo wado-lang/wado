@@ -1,0 +1,22 @@
+// A `_` whose surroundings already part from the expected type reports the
+// mismatch, not the `_`: whatever it becomes, `List<_>` is no `String`.
+
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+export fn run() {
+    let _o: Option<String> = Option::<List<_>>::None;
+    let _p: Option<String> = none::<List<_>>();
+    let _f: fn(i32) -> i32 = id::<List<_>>;
+}
+
+__DATA__
+{
+    "compile_error": ":13:30: analysis error: type mismatch: expected 'Option<String>', found 'Option<List<_>>'; 14:30: type mismatch: expected 'Option<String>', found 'Option<List<_>>'; 15:30: type mismatch: expected 'fn(i32) -> i32', found 'fn(List<_>) -> List<_>'",
+    "compile_error_count": 3
+}

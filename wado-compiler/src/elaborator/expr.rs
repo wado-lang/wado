@@ -2,6 +2,7 @@
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
 use super::sig::AssocConstSig;
+use super::trait_env::written_arg_nodes;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
@@ -24,7 +25,6 @@ use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_
 use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
-use super::orchestration::first_infer_span;
 use super::pending_selection::{PendingOp, PendingOperator};
 use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
@@ -134,6 +134,17 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 /// it.
 fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
+}
+
+/// Whether `expr` writes type arguments a `_` may stand in: a turbofish on a
+/// call, a path or a struct literal, or a static call's receiver.
+fn writes_turbofish(expr: &Expr) -> bool {
+    matches!(expr, Expr::Call(call) if !call.type_args.is_empty())
+        || matches!(expr, Expr::MethodCall(call) if !call.type_args.is_empty())
+        || matches!(expr, Expr::Ident(ident) if !ident.type_args.is_empty())
+        || matches!(expr, Expr::StructLiteral(lit) if !lit.type_args.is_empty())
+        || matches!(expr, Expr::StaticMethodCall(call)
+            if !call.type_args.is_empty() || !written_arg_nodes(&call.target_type).is_empty())
 }
 
 /// The literal `-NUM` negates, which both range checks read as one literal so
@@ -645,7 +656,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "a node written in another module reached a travelled walk"
         );
         let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
-        let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
+        let type_id = if writes_turbofish(expr) {
+            self.closing_holes_on_error(|e| e.resolve_expr_inner(expr, ctx, expected_type))
+        } else {
+            self.resolve_expr_inner(expr, ctx, expected_type)
+        };
         self.record_expression_type(ast_id, type_id);
         type_id
     }
@@ -1660,13 +1675,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let real_type_param_count = sig.decl.type_params.len();
 
-        // (a) Turbofish on the identifier: `name::<T, ...>`. A function value
-        // has no call to infer from, so a `_` slot is unanswerable.
-        if !ident.type_args.is_empty() {
-            if let Some(span) = ident.type_args.iter().find_map(first_infer_span) {
-                let _ = self.emit(TypeError::InferPlaceholderNotAllowed { span });
-                return TypeTable::ERROR;
+        // (a) Turbofish on the identifier: `name::<T, ...>`.
+        let written = if ident.type_args.is_empty() {
+            if real_type_param_count == 0 {
+                return self.func_ref_instance(ident, &sig, &[], expected_type);
             }
+            None
+        } else {
             if ident.type_args.len() != real_type_param_count {
                 let _ = self.emit(TypeError::TypeArgumentCount {
                     name: ident.name.clone(),
@@ -1676,23 +1691,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 return TypeTable::ERROR;
             }
-            let resolved_args: Vec<TypeId> = ident
-                .type_args
-                .iter()
-                .map(|t| self.resolve_type(t))
-                .collect();
-            return self.func_ref_instance(ident, &sig, &resolved_args, expected_type);
-        }
+            let written = self.resolve_turbofish_args(&ident.type_args);
+            if !written.iter().any(|&arg| self.holds_written_hole(arg)) {
+                return self.func_ref_instance(ident, &sig, &written, expected_type);
+            }
+            Some(written)
+        };
 
-        if real_type_param_count == 0 {
-            return self.func_ref_instance(ident, &sig, &[], expected_type);
-        }
-
-        // (b) Generic without turbofish: try to infer from `expected_type`.
+        // (b) Generic with type arguments left to inference: a function value
+        // has no call to infer from, so only `expected_type` settles them.
         if let Some(expected) = expected_type {
             match self.infer_func_ref_type_args(&sig, expected) {
                 FuncRefInference::Ok(inferred) => {
-                    return self.func_ref_instance(ident, &sig, &inferred, Some(expected));
+                    let args = match written {
+                        Some(written) => {
+                            for (&arg, &answer) in written.iter().zip(&inferred) {
+                                self.equate(arg, answer);
+                            }
+                            written
+                                .iter()
+                                .map(|&arg| self.apply_infer_holes(arg))
+                                .collect()
+                        }
+                        None => inferred,
+                    };
+                    return self.func_ref_instance(ident, &sig, &args, Some(expected));
                 }
                 FuncRefInference::ArityMismatch {
                     expected_params,

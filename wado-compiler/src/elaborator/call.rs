@@ -1265,8 +1265,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.reject_surplus_turbofish(prefix, holes.len(), args.len(), span) {
                     return None;
                 }
+                // A `_` for a whole slot is the newtype's own variable there,
+                // which reports itself.
                 for (&hole, &arg) in holes.iter().zip(&args) {
+                    let bare = self.is_bare_written_hole(arg);
                     self.settle_as_written(hole, arg);
+                    if bare {
+                        self.unwrite_holes_in(arg);
+                    }
                 }
                 // An argument the turbofish left open is the construction's to infer.
                 Some(
@@ -5666,13 +5672,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if answer != slot || !self.tysys.type_table.borrow().is_type_pack(slot) {
                     return answer;
                 }
-                let name = case.variant.type_params[i].name.clone();
-                self.mint_infer_hole(
-                    case.span,
-                    uninferable_type_param("variant", case.owner),
-                    name,
-                    Vec::new(),
-                )
+                let owner = InstanceKind::Variant.slot_owner(case.owner);
+                self.mint_slot_hole(case.span, &case.variant.type_params[i].name, &owner)
             })
             .collect()
     }
@@ -5732,7 +5733,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .type_id_of_decl(variant.defined_at)
         } else if all_written {
-            // A `_` inside one is a variable a later use settles.
+            // A `_` inside one is a variable a later use settles, and reports
+            // as its slot would.
+            let owner = InstanceKind::Variant.slot_owner(case.owner);
+            for (param, &arg) in variant.type_params.iter().zip(case.written) {
+                self.blame_holes_as_slot(arg, case.span, &param.name, &owner);
+            }
             let def = self.tysys.def_at(variant.defined_at);
             self.tysys
                 .type_table

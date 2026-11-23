@@ -15,6 +15,7 @@ use crate::type_table::TypeTable;
 use super::Elaborator;
 use super::call::assoc_target_slot;
 use super::infer::unify;
+use super::instantiate::InstanceKind;
 use super::pending_selection::{
     ElementHome, PendingSelection, SelectedDispatch, Undecided, Waiting,
 };
@@ -522,16 +523,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         blamed
     }
 
-    /// Run `resolve`, and let the `_`s it wrote go unreported where it answers
-    /// `error`: the error it reported is the whole fault.
-    pub(super) fn unwriting_holes_on_error(
+    /// Run `resolve`, and close each `_` it wrote that is still open where it
+    /// reported an error: that error is the whole fault, so neither the `_`
+    /// nor the slot it fills asks for itself as well.
+    pub(super) fn closing_holes_on_error(
         &mut self,
         resolve: impl FnOnce(&mut Self) -> TypeId,
     ) -> TypeId {
-        let before = self.infer_holes.written.len();
+        let holes_before = self.infer_holes.written.len();
+        let errors_before = self.logger.offered_error_count();
         let resolved = resolve(self);
-        if resolved == TypeTable::ERROR {
-            self.infer_holes.written.truncate(before);
+        if self.logger.offered_error_count() != errors_before {
+            let written: Vec<TypeId> = self.infer_holes.written[holes_before..]
+                .iter()
+                .map(|&(_, hole)| hole)
+                .collect();
+            for hole in written {
+                self.close_infer_var(hole);
+            }
         }
         resolved
     }
@@ -696,6 +705,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
     /// parameter, so unsolved siblings of one use site coalesce.
+    /// A variable for the slot `param`, blamed as one of `owner`.
+    pub(super) fn mint_slot_hole(&mut self, span: Span, param: &str, owner: &str) -> TypeId {
+        let hole = self.mint_infer_var_named(param);
+        self.attach_infer_var_blame(hole, span, param.to_string(), owner.to_string());
+        hole
+    }
+
+    /// Blame each open `_` `arg` holds as the slot `param` it fills would be.
+    pub(super) fn blame_holes_as_slot(&mut self, arg: TypeId, span: Span, param: &str, owner: &str) {
+        for hole in self.written_holes_in(arg) {
+            self.attach_infer_var_blame(hole, span, param.to_string(), owner.to_string());
+        }
+    }
+
     pub(super) fn attach_infer_var_blame(
         &mut self,
         var: TypeId,
@@ -737,13 +760,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !is_bare_decl {
             return type_id;
         }
-        let message = uninferable_type_param("variant", variant_name);
+        let owner = InstanceKind::Variant.slot_owner(variant_name);
         let holes: Vec<TypeId> = variant_info
             .type_params
             .iter()
-            .map(|param| {
-                self.mint_infer_hole(span, message.clone(), param.name.clone(), Vec::new())
-            })
+            .map(|param| self.mint_slot_hole(span, &param.name, &owner))
             .collect();
         assert_eq!(
             holes.len(),

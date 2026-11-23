@@ -195,9 +195,14 @@ Each step keeps every fixture passing and deletes what it replaces.
   newtype's inherited static read at the base) and a case path meet the
   expected type before their arguments are typed, so a literal under a `_`
   waits for it. A case path's `_` for a whole slot is that slot omitted
-  (`omit_bare_written_holes`), which the construction infers and reports. An
-  associated constant's prefix reads no argument, so its `_`s ask for nothing.
-  A call that reports its own error leaves its `_`s unreported.
+  (`omit_bare_written_holes`), which the construction infers and reports, and
+  so is a trait turbofish of nothing but `_`. A function value's `_` is
+  settled by the expected `fn` type, as an omitted turbofish is. A `_` in a
+  trait turbofish admits every impl it fits, and the one it admits answers it.
+  An associated constant's prefix reads no argument, so its `_`s ask for
+  nothing. Wherever it sits, an unsettled `_` reports as its slot would, and
+  an expression that reports its own error leaves its `_`s unreported. A check
+  whose types part around a `_` reports the mismatch at once.
 - [ ] A `_` in a `let` annotation and after `as` is a variable.
 - [ ] The context is per body rather than per module.
 

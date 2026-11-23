@@ -43,8 +43,18 @@ impl InstanceKind {
     fn turbofish_tail(self) -> &'static str {
         match self {
             Self::Struct => " { … }",
-            Self::Builtin | Self::Function | Self::Method | Self::Variant => "()",
+            Self::Variant => "::…",
+            Self::Builtin | Self::Function | Self::Method => "()",
         }
+    }
+
+    /// What follows a slot's name where `name`'s use site leaves it unsettled.
+    pub(super) fn slot_owner(self, name: &str) -> String {
+        format!(
+            "of {} `{name}`; add a turbofish (`{name}::<...>{}`) or a type annotation",
+            self.noun(),
+            self.turbofish_tail(),
+        )
     }
 }
 
@@ -152,19 +162,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The parameter and the rest of the sentence stay apart so
             // `finalize_infer_holes` can name every unsolved slot of this use
             // site in one message.
-            let owner = format!(
-                "of {} `{}`; add a turbofish (`{}::<...>{}`) or a type annotation",
-                of.kind.noun(),
-                of.name,
-                of.name,
-                of.kind.turbofish_tail(),
-            );
+            let owner = of.kind.slot_owner(of.name);
             // Answered here, so an argument meets what the source wrote. A `_`
             // in it reports as this slot would.
             if let Some(named) = named {
-                for hole in self.written_holes_in(named) {
-                    self.attach_infer_var_blame(hole, of.span, name.clone(), owner.clone());
-                }
+                self.blame_holes_as_slot(named, of.span, &name, &owner);
                 self.settle_as_written(var, named);
                 // A `_` standing for the whole slot leaves it to inference, as
                 // an omitted argument does.

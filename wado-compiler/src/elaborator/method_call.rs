@@ -1772,11 +1772,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
         let vars = self.vars_holding_written_holes(&args);
-        let omitted: Vec<usize> = (0..args.len())
-            .filter(|&i| self.is_bare_written_hole(args[i]))
+        let holding: Vec<usize> = (0..args.len())
+            .filter(|&i| self.holds_written_hole(args[i]))
             .collect();
-        if !omitted.is_empty() {
-            self.blame_receiver_holes(&mut args, &omitted, *target, [head, method], span);
+        if !holding.is_empty() {
+            self.blame_receiver_holes(&mut args, &holding, *target, [head, method], span);
             *target = self.with_written_args(*target, &args);
         }
         vars.into_iter()
@@ -1784,12 +1784,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Replace each of `args` at `omitted`, a `_` for a whole argument of
-    /// `target`, by a variable blamed on the call `head::method(…)`.
+    /// Blame each `_` in `args` at `holding` on the call `head::method(…)`, as
+    /// the argument of `target` it fills. One for a whole argument is replaced
+    /// by the blamed variable.
     fn blame_receiver_holes(
         &mut self,
         args: &mut [TypeId],
-        omitted: &[usize],
+        holding: &[usize],
         target: TypeId,
         [head, method]: [&str; 2],
         span: Span,
@@ -1798,10 +1799,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_decl_key(target)
             .and_then(|def| self.type_lookup().declared_generic_params(def))
             .expect("a `_` fills a parameter its declaration writes");
-        let names: Vec<String> = omitted.iter().map(|&i| params[i].name.clone()).collect();
+        let names: Vec<String> = holding.iter().map(|&i| params[i].name.clone()).collect();
         let message = TypeError::receiver_args_uninferred_message(&names, head, method);
-        for (&i, name) in omitted.iter().zip(names) {
-            args[i] = self.blamed_in_place_of(args[i], span, message.clone(), name);
+        for (&i, name) in holding.iter().zip(names) {
+            if self.is_bare_written_hole(args[i]) {
+                args[i] = self.blamed_in_place_of(args[i], span, message.clone(), name);
+            } else {
+                for hole in self.written_holes_in(args[i]) {
+                    self.attach_infer_var_diag(hole, span, message.clone());
+                }
+            }
         }
     }
 
@@ -2010,12 +2017,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut pointee = self.tysys.type_table.borrow().peel_refs(receiver_type);
         let spelled = &match spelled.ty() {
-            Some(ty) if self.holds_written_hole(ty) => {
+            Some(ty) => {
                 self.equate(pointee, ty);
                 pointee = self.apply_infer_holes(pointee);
                 spelled.at_type(Some(self.apply_infer_holes(ty)))
             }
-            Some(_) | None => spelled.clone(),
+            None => spelled.clone(),
         };
         let table = self.tysys.type_table.borrow();
         if let (Some(sub), Some(sup)) = (table.nominal_def(pointee), spelled.key().decl()) {
@@ -2421,22 +2428,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
-    /// which is what a `Trait::<T>::method(…)` spelling names. A call that
-    /// reported its error leaves the `_`s it wrote unreported, since no answer
-    /// to one could make it resolve.
+    /// which is what a `Trait::<T>::method(…)` spelling names.
     pub(super) fn resolve_static_method_call_of_trait(
-        &mut self,
-        static_call: &ast::StaticMethodCallExpr,
-        required: (Option<DefId>, &[TypeId]),
-        ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
-    ) -> TypeId {
-        self.unwriting_holes_on_error(|e| {
-            e.resolve_static_method_call_reporting(static_call, required, ctx, expected_type)
-        })
-    }
-
-    fn resolve_static_method_call_reporting(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
         // The trait a qualified spelling names, and the arguments it writes
@@ -2534,13 +2527,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             if takes_receiver && (writes_trait_args || self_type.is_some()) {
                 let declared_head = self.declared_trait_name(Some(head.site), &head.name);
-                let trait_args = self.resolve_trait_turbofish(
-                    head.args,
-                    &trait_params,
-                    &declared_head,
-                    &static_call.method,
-                    static_call.span,
-                );
+                // A `_` for every argument writes none of them, and the
+                // receiver selects the impl as an unqualified call's does.
+                let writes_trait_args = writes_trait_args
+                    && !head.args.iter().all(|arg| matches!(arg, ast::Type::Infer(_)));
+                let trait_args = if writes_trait_args {
+                    self.resolve_trait_turbofish(
+                        head.args,
+                        &trait_params,
+                        &declared_head,
+                        &static_call.method,
+                        static_call.span,
+                    )
+                } else {
+                    Vec::new()
+                };
                 let args_spelled: Vec<String> = head
                     .args
                     .iter()

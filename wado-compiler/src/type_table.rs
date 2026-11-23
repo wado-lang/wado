@@ -7518,6 +7518,16 @@ impl TypeTable {
         }
     }
 
+    /// Whether `held` is what `asked` spells, an inference variable in `asked`
+    /// standing for any type there.
+    pub fn fits_written(&self, held: TypeId, asked: TypeId) -> bool {
+        held == asked
+            || matches!(self.get(asked), ResolvedType::InferVar(_))
+            || self
+                .zip_shapes(held, asked, |h, a| self.fits_written(h, a))
+                .unwrap_or(false)
+    }
+
     /// Whether some type instantiates both targets `a` and `b`, their type
     /// parameters kept apart even where they share an id.
     pub fn targets_overlap(&self, a: TypeId, b: TypeId) -> bool {

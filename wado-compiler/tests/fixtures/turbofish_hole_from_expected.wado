@@ -58,7 +58,32 @@ test "a newtype's inherited static" {
 test "a qualified call's receiver holding a variable" {
     let b = Bx::make(none());
     let g: Option<i32> = Bx::<Option<_>>::get(&b);
-    assert g == null;
+    let h: Option<i32> = Bx::<Option<i32>>::get(&b);
+    assert g == null && h == null;
+}
+
+trait Mk<T> {
+    fn mk() -> T;
+}
+
+struct S {}
+
+impl Mk<List<i32>> for S {
+    fn mk() -> List<i32> {
+        return [1];
+    }
+}
+
+test "a trait's turbofish beside `Self`" {
+    let x: List<i32> = Mk::<List<_>, Self = S>::mk();
+    let y: List<i32> = Mk::<_, Self = S>::mk();
+    assert x[0] == 1 && y[0] == 1;
+}
+
+test "a function value" {
+    let f: fn(List<i64>) -> List<i64> = id::<List<_>>;
+    let g: fn(i64) -> i64 = id::<_>;
+    assert f([5_000_000_000])[0] == 5_000_000_000 && g(5_000_000_000) == 5_000_000_000;
 }
 
 test "a path" {

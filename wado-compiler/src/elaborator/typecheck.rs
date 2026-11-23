@@ -134,9 +134,10 @@ fn check_at(
     // the expected packs are in scope, which this layer cannot see;
     // `Elaborator::typecheck` adds that rule.
     if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
-        // A hole inside decides nothing where the outermost types already
-        // part: `Result<i32, ?E>` is no `i32` whatever `?E` becomes.
-        if heads_apart(actual, expected, type_table) {
+        // A hole decides nothing where the types already part around it:
+        // `Result<i32, ?E>` is no `i32`, and `Option<List<?T>>` no
+        // `Option<String>`, whatever the hole becomes.
+        if apart_around_holes(actual, expected, type_table) {
             return TypeCheckResult::Incompatible;
         }
         return TypeCheckResult::Deferred;
@@ -399,6 +400,40 @@ pub(super) fn meetings(
 /// type. A reference, a resource and `!` are not judged here, since a rule
 /// relates one to another of a different outermost type, and a hole or a
 /// parameter is no outermost type at all.
+/// Whether `actual` and `expected` part at some position: their heads, or
+/// the heads of a pair of arguments one constructor holds in both.
+fn apart_around_holes(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
+    let any_apart = |a_args: &[TypeId], e_args: &[TypeId]| {
+        a_args.len() == e_args.len()
+            && a_args
+                .iter()
+                .zip(e_args)
+                .any(|(&a, &e)| apart_around_holes(a, e, type_table))
+    };
+    if heads_apart(actual, expected, type_table) {
+        return true;
+    }
+    if let (
+        ResolvedType::Function {
+            params: a_params,
+            return_type: a_ret,
+            ..
+        },
+        ResolvedType::Function {
+            params: e_params,
+            return_type: e_ret,
+            ..
+        },
+    ) = (type_table.get(actual), type_table.get(expected))
+    {
+        return a_params.len() != e_params.len()
+            || any_apart(a_params, e_params)
+            || apart_around_holes(*a_ret, *e_ret, type_table);
+    }
+    same_constructor_args(actual, expected, type_table)
+        .is_some_and(|(a_args, e_args)| any_apart(a_args, e_args))
+}
+
 fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
     let head = |id: TypeId| match type_table.get(id) {
         ResolvedType::Primitive(_)
