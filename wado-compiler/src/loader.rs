@@ -72,7 +72,8 @@ pub enum LoadError {
     IoError { path: String, message: String },
     /// A file an `#include_str` or `#include_bytes` names is not there.
     IncludeNotFound { path: String },
-    /// An `#include_*` path that is not `./` or `../` relative.
+    /// An `#include_*` path that is neither `./` or `../` relative nor a
+    /// `"<package>/<file>"` reference.
     InvalidIncludePath { path: String },
     /// A remote include where no lock governs the module: no `use` names an
     /// include, so nothing else can pin it.
@@ -188,7 +189,8 @@ impl std::fmt::Display for LoadError {
             LoadError::InvalidIncludePath { path } => {
                 write!(
                     f,
-                    "invalid include path '{path}'; an include path starts with './' or '../'"
+                    "invalid include path '{path}'; an include path starts with './' or '../', \
+                     or names a file a dependency exports as '<package>/<file>'"
                 )
             }
             LoadError::UnpinnedInclude { url } => write!(
@@ -2291,44 +2293,64 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             });
         }
         let name = exported_file.map_or(import_source, |(package, _)| package);
-
-        // Declared but unresolvable (e.g. missing `[package].lib`): report
-        // why, instead of a generic "invalid module path".
-        if let Some(reason) = self
-            .interner
-            .unresolved_dependency(from_module_source, name)
-        {
-            return Err(LoadError::DependencyUnresolved {
-                name: name.to_string(),
-                reason: reason.to_string(),
-            });
-        }
-        let manifest = self.interner.dependency_manifest(from_module_source);
-        if let Some(DependencyManifest {
-            path,
-            error: Some(error),
-        }) = manifest
-        {
-            return Err(LoadError::DependencyUnresolved {
-                name: name.to_string(),
-                reason: format!("{path} is invalid: {error}"),
-            });
-        }
-
-        // A namespaced import (xxx:yyy) names a dependency
-        if let Some((namespace, _)) = name.split_once(':')
-            && is_package_namespace(namespace)
-        {
-            return Err(LoadError::UndeclaredDependency {
-                name: name.to_string(),
-                manifest: manifest.map(|m| m.path.clone()),
-            });
+        if let Some(missing) = self.missing_dependency(from_module_source, name) {
+            return Err(missing);
         }
 
         // Invalid module path (no recognized prefix)
         Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
         })
+    }
+
+    /// Why `name` reaches no dependency of `importer`'s package: declared but
+    /// unresolvable (say, no `[package].lib`), its manifest invalid, or a
+    /// namespaced name it does not declare. `None` for a name with no
+    /// namespace, which names no dependency at all.
+    fn missing_dependency(&self, importer: &ModuleSource, name: &str) -> Option<LoadError> {
+        if let Some(reason) = self.interner.unresolved_dependency(importer, name) {
+            return Some(LoadError::DependencyUnresolved {
+                name: name.to_string(),
+                reason: reason.to_string(),
+            });
+        }
+        let manifest = self.interner.dependency_manifest(importer);
+        if let Some(DependencyManifest {
+            path,
+            error: Some(error),
+        }) = manifest
+        {
+            return Some(LoadError::DependencyUnresolved {
+                name: name.to_string(),
+                reason: format!("{path} is invalid: {error}"),
+            });
+        }
+        let (namespace, _) = name.split_once(':')?;
+        is_package_namespace(namespace).then(|| LoadError::UndeclaredDependency {
+            name: name.to_string(),
+            manifest: manifest.map(|m| m.path.clone()),
+        })
+    }
+
+    /// Where the file a `"<package>/<file>"` include names lies, relative to
+    /// the host base, or why `importer` reaches none.
+    fn exported_include(
+        &self,
+        importer: &ModuleSource,
+        package: &str,
+        file: &str,
+    ) -> Result<String, LoadError> {
+        match self.interner.exported_file(importer, package, file) {
+            Some(Ok(exported)) => Ok(exported.path),
+            Some(Err(refusal)) => Err(LoadError::UnexportedFile {
+                package: package.to_string(),
+                file: file.to_string(),
+                refusal,
+            }),
+            None => Err(self
+                .missing_dependency(importer, package)
+                .expect("a package specifier carries a namespace")),
+        }
     }
 
     /// Get source code for a module
@@ -2544,7 +2566,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // filename via `source_path`: an entry point's `Display` is its
         // stable base name for symbol identity, which drops the directory a
         // relative include needs.
-        let mut pairs: IndexMap<[String; 2], DiagnosticSpan> = IndexMap::default();
+        let mut pairs: IndexMap<[String; 2], (DiagnosticSpan, &ModuleSource)> =
+            IndexMap::default();
         let mut resolve_path: IndexMap<String, String> = IndexMap::default();
         for (module_source, module) in &self.loaded {
             let ms_str = module_source.to_string();
@@ -2554,7 +2577,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     .or_insert_with(|| module_source.source_path());
                 pairs
                     .entry([ms_str.clone(), include_path.clone()])
-                    .or_insert_with(|| DiagnosticSpan::from_span(span, Some(module_path)));
+                    .or_insert_with(|| {
+                        (
+                            DiagnosticSpan::from_span(span, Some(module_path)),
+                            module_source,
+                        )
+                    });
             }
         }
         // Format the entry module source once so the per-include elaborator
@@ -2564,25 +2592,25 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             .as_ref()
             .map(ModuleSource::source_path);
         let mut included = IndexMap::default();
-        for (pair, at) in pairs {
+        for (pair, (at, module_source)) in pairs {
             let [ref ms_str, ref include_path] = pair;
-            // Only a relative path names the file beside the module, which is
-            // also what keeps a remote module off this machine.
-            if !is_cwd_relative(include_path) {
+            let resolved = if let Some((package, file)) = split_exported_file(include_path) {
+                self.exported_include(module_source, package, file)
+                    .map_err(|e| e.at_path(at.clone()))?
+            } else if is_cwd_relative(include_path) {
+                // Resolve path relative to the module source's real directory.
+                let module_path = resolve_path
+                    .get(ms_str)
+                    .map_or(ms_str.as_str(), String::as_str);
+                resolve_include_path_impl(entry_module_source.as_deref(), module_path, include_path)
+            } else {
+                // Only a relative path names the file beside the module, which
+                // is also what keeps a remote module off this machine.
                 return Err(LoadError::InvalidIncludePath {
                     path: include_path.clone(),
                 }
                 .at_path(at));
-            }
-            // Resolve path relative to the module source's real directory.
-            let module_path = resolve_path
-                .get(ms_str)
-                .map_or(ms_str.as_str(), String::as_str);
-            let resolved = resolve_include_path_impl(
-                entry_module_source.as_deref(),
-                module_path,
-                include_path,
-            );
+            };
             let bytes = self
                 .host
                 .load_file(&resolved, None, None)

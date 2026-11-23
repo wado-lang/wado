@@ -508,7 +508,8 @@ exports = ["src/shapes.wado"]
 A consumer names an exported file as `"<specifier>/<path>"`, such as
 `"lib:geo/src/shapes.wado"`, and may import every `pub` item in it. A file that
 `lib` and `exports` both reach is one module, so its types are the same types
-either way.
+either way. `#include_str` and `#include_bytes` name an exported file the same
+way ([Literals](./spec-literals.md#include_str-and-include_bytes)).
 
 - An entry is a relative path with an extension. It has no empty, `.` or `..`
   segment, no `\` and no leading `/`, and no entry is listed twice.

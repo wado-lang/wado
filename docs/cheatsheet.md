@@ -1814,7 +1814,7 @@ let icon = #include_bytes("./icon.png");   // include file as ByteList
 let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s
 ```
 
-Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [the spec](./spec-literals.md#include_str-and-include_bytes).
+Paths in `#include_str` and `#include_bytes` are resolved relative to the source file, or name a file a dependency exports (`"lib:pkg/assets/a.txt"`). See [the spec](./spec-literals.md#include_str-and-include_bytes).
 
 ## Compile-Time Parameters
 

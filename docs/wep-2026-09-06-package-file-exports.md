@@ -221,8 +221,8 @@ without the exception.
 
 ## Roadmap
 
-Items 1 and 2 are done. Items 4 and 6 are done except for the parts each one
-names as left.
+Items 1, 2 and 7 are done. Items 4 and 6 are done except for the parts each
+one names as left.
 
 1. `[package].exports` in `wado-manifest`: parse, and validate each entry as a
    package-root-relative path with an extension and no `..`, NFC-normalized.
@@ -256,8 +256,8 @@ names as left.
    build-dependency ([Kiln](./wep-2026-04-12-kiln.md) Roadmap 1). Until item 5,
    a dependency's clause runs even where its output is committed.
 7. `#include_str` / `#include_bytes`: the same reference, resolved through the
-   same path. The loader takes only a `./` or `../` include path today
-   (`LoadError::InvalidIncludePath`), so this item admits a specifier there.
+   same path. Done when an include of an exported file reads it, and an
+   unlisted one is refused at the package as an import is.
 8. Registry distribution: assets and recorded Kiln outputs travel in the
    `wado:package` section and are extracted into the shared cache on fetch, so
    `CompilerHost::load_source` serves them like any other file.

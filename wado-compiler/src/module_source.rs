@@ -512,6 +512,20 @@ impl ModuleSourceInterner {
         name: &str,
         file: &str,
     ) -> Option<Result<ModuleSource, ExportRefusal>> {
+        let resolved = self.exported_file(importer, name, file)?;
+        Some(resolved.map(|ExportedFile { lib, path }| self.dependency_module(&lib, &path)))
+    }
+
+    /// Where the file `file` of the source dependency `name` lies, as
+    /// [`Self::resolve_exported_file`] finds it, for a reader of its bytes
+    /// rather than of its module.
+    #[must_use]
+    pub fn exported_file(
+        &self,
+        importer: &ModuleSource,
+        name: &str,
+        file: &str,
+    ) -> Option<Result<ExportedFile, ExportRefusal>> {
         let dependencies = self.dependencies_of(importer);
         let Some(lib) = dependencies.resolved.get(name).cloned() else {
             return dependencies
@@ -528,7 +542,7 @@ impl ModuleSourceInterner {
                 spelled_alike: spelled_alike.cloned(),
             }));
         };
-        Some(Ok(self.dependency_module(&lib, &path)))
+        Some(Ok(ExportedFile { lib, path }))
     }
 
     /// Resolve a coordinate imported by `importer` to a *prebuilt component*
@@ -676,6 +690,15 @@ impl WasmAssetKind {
             Self::Wasm => "wasm",
         }
     }
+}
+
+/// A file a source dependency exports: the dependency's entry module, as
+/// [`DependencyIndex::resolved`] names it, and the file's path relative to the
+/// host base.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportedFile {
+    pub lib: String,
+    pub path: String,
 }
 
 /// Why a `"<package>/<file>"` reference names no module.
