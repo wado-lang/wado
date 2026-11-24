@@ -2532,11 +2532,8 @@ impl<'a> Analyzer<'a> {
                 self.walk_ref(*op, place, &kept, live, record);
             }
             _ if alias_root(stripped).is_some() => self.walk_expr(value, live, record),
-            TirExprKind::Closure { .. } => {
-                let kept = self.held_in(local);
-                self.walk_kept(value, &kept, false, live, record);
-            }
-            _ if is_call(value) => {
+            // A closure holds its captures as a call's result holds what it keeps.
+            _ if is_call(value) || matches!(stripped.kind, TirExprKind::Closure { .. }) => {
                 let kept = self.held_in(local);
                 self.walk_kept(value, &kept, false, live, record);
             }
@@ -3609,26 +3606,23 @@ impl<'a> Analyzer<'a> {
             // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
                 let kept = self.result_kept.take().unwrap_or(Kept::Frame);
-                for capture in captures {
-                    let Some(index) = capture.source.local() else {
-                        continue;
-                    };
+                for index in capture_source_locals(captures) {
                     self.mark_read(index, None, live);
                     if !record {
                         continue;
                     }
-                    // The closure holds an immutable binding's storage, or a
-                    // reference to it, as a loan: nothing writes it through
-                    // the binding, and it lasts as long as whatever keeps the
-                    // closure.
-                    if !self.mutable_locals.contains(&index) {
-                        self.pin(index, None, &kept);
-                    } else {
+                    if self.mutable_locals.contains(&index) {
                         self.mark_escaped(index, None);
                         self.mark_local_mutated(index, false, live);
                         let at = self.consumed.entry(index).or_default();
                         at.extend(live.iter().copied());
                         self.taken_unreturned.insert(index);
+                    } else {
+                        // The closure holds an immutable binding's storage, or
+                        // a reference to it, as a loan: nothing writes it
+                        // through the binding, and it lasts as long as
+                        // whatever keeps the closure.
+                        self.pin(index, None, &kept);
                     }
                 }
             }

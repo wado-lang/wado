@@ -20,8 +20,8 @@ use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
-    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, LetStorage, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, LetStorage, TirExpr, TirExprKind,
+    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::TypeTable;
@@ -173,15 +173,18 @@ pub fn compute_receiver_alias(
             oracle,
             type_table,
         );
-        let returns = ReceiverReturns {
+        let mut returns = ReceiverReturns {
             set: &set,
             builtins,
             type_table,
             oracle,
             fresh: &fresh,
             hands_out_payload: hands_out_payload(&func, return_paths),
+            every_alias_or_owned: true,
+            saw_alias: false,
         };
-        if returns.alias_receiver(body) {
+        returns.visit_block(body);
+        if returns.saw_alias && returns.every_alias_or_owned {
             set.insert(func.module_source.clone(), func.name.clone());
             true
         } else {
@@ -191,6 +194,7 @@ pub fn compute_receiver_alias(
     set
 }
 
+/// Classifies a body's returns for [`compute_receiver_alias`].
 struct ReceiverReturns<'a> {
     set: &'a FuncKeySet,
     builtins: &'a BuiltinDeclarations,
@@ -198,40 +202,26 @@ struct ReceiverReturns<'a> {
     oracle: &'a OwnedCalls<'a>,
     fresh: &'a IndexSet<u32>,
     hands_out_payload: bool,
+    every_alias_or_owned: bool,
+    saw_alias: bool,
 }
 
-impl ReceiverReturns<'_> {
-    fn alias_receiver(&self, body: &TirBlock) -> bool {
-        struct W<'r, 'a> {
-            returns: &'r ReceiverReturns<'a>,
-            every_alias_or_owned: bool,
-            saw_alias: bool,
-        }
-        impl TirRefVisitor for W<'_, '_> {
-            fn visit_stmt(&mut self, stmt: &TirStmt) {
-                if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
-                    let r = self.returns;
-                    let v = returned_value(v, r.hands_out_payload, r.type_table);
-                    if is_receiver_projection(v, 0, r.set, r.builtins) {
-                        self.saw_alias = true;
-                    } else if !is_owned_value(v, r.fresh, r.oracle, r.type_table) {
-                        self.every_alias_or_owned = false;
-                    }
-                }
-                self.walk_stmt(stmt);
+impl TirRefVisitor for ReceiverReturns<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
+            let v = returned_value(v, self.hands_out_payload, self.type_table);
+            if is_receiver_projection(v, 0, self.set, self.builtins) {
+                self.saw_alias = true;
+            } else if !is_owned_value(v, self.fresh, self.oracle, self.type_table) {
+                self.every_alias_or_owned = false;
             }
+        }
+        self.walk_stmt(stmt);
+    }
 
-            fn visit_expr(&mut self, expr: &TirExpr) {
-                self.walk_expr_in_frame(expr);
-            }
-        }
-        let mut w = W {
-            returns: self,
-            every_alias_or_owned: true,
-            saw_alias: false,
-        };
-        w.visit_block(body);
-        w.saw_alias && w.every_alias_or_owned
+    /// A closure's `return`s deliver its own result, not this function's.
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        self.walk_expr_in_frame(expr);
     }
 }
 
