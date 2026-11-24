@@ -169,13 +169,14 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `package-eddy/` — a code review bot in Wado, on the Anthropic API for now; later, models of several providers review a change by exchanging opinions. Its docs and research live in this repository.
 - `package-gale/` — a parser generator compatible with ANTLR4 (`.g4`) in Wado.
 - `package-gale-highlight-html/` — a syntax highlighter for HTML that highlights embedded CSS and JavaScript as those languages, built with `package-gale` on the grammars-v4 grammars.
-- `package-gale-highlight-wado/` — a complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.
+- `package-gale-highlight-wado/` — a syntax highlighter for Wado source code, built with `package-gale` from `package-wado`'s grammar.
 - `package-grog/` — a Protocol Buffers compiler in Wado: a `.proto` becomes Wado declarations, and the runtime library encodes them.
 - `package-jade/` — a JSON Schema 2020-12 validator in Wado.
 - `package-marl/` — a CommonMark subset in Wado.
 - `package-re/` — linear-time regular expressions in ECMA-262's syntax.
 - `package-rill/` — fine-grained reactivity: signals, and the DOM bound to them, on `package-web`.
 - `package-loam/` — a tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
+- `package-wado/` — the Wado language as a package: `Wado.g4`, the grammar of Wado's whole syntax, and the parser Gale builds from it; the seed of a self-hosted compiler.
 - `package-wadopoet/` — builders for generated Wado source, and the reserved vocabulary a minted name must avoid.
 - `package-web/` — `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
 - `package-cm-catalog/` — a catalog of Wasm Component Model modules for demo and testing purposes.

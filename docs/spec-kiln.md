@@ -74,13 +74,14 @@ use calc from "./Calc.g4"
     };
 ```
 
-A path dependency is named by its coordinate too. This clause also hands the
-generator a supplementary input, typed as a highlight query:
+A path dependency is named by its coordinate too. This clause reads the grammar
+another package exports, and hands the generator a supplementary input of its
+own, typed as a highlight query:
 
 <!-- {"source": "package-gale-highlight-wado/src/lib.wado"} -->
 
 ```wado
-use { highlight as highlight_impl } from "../assets/grammar/Wado.g4"
+use { highlight as highlight_impl } from "wado-lang:wado/assets/grammar/Wado.g4"
     with {
         generator: {
             module: "wado-lang:gale",

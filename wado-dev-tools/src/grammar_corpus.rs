@@ -1,4 +1,4 @@
-//! `grammar-corpus`: hold `package-gale-highlight-wado/assets/grammar/Wado.g4` to the
+//! `grammar-corpus`: hold `package-wado/assets/grammar/Wado.g4` to the
 //! compiler's own parser over the stdlib + fixture corpus.
 //!
 //! With no argument it checks the invariants below: the compiler's parser runs
@@ -76,13 +76,9 @@ pub fn run(mut parser: lexopt::Parser) {
     }
 
     if !named {
-        let dir = Path::new("package-gale-highlight-wado/build/check-grammar");
+        let dir = Path::new("package-wado/build/check-grammar");
         let corpus = collect_corpus();
-        let gale_tsv = run_gale_side(
-            dir,
-            &corpus,
-            "package-gale-highlight-wado/tools/corpus_check.wado",
-        );
+        let gale_tsv = run_gale_side(dir, &corpus, "package-wado/tools/corpus_check.wado");
         compare_with_gale(&corpus, &gale_tsv, &dir.join("divergences.tsv"));
         return;
     }

@@ -1,0 +1,22 @@
+use { diagnose, parse } from "../src/lib.wado";
+
+test "a well-formed program parses with no diagnostic" {
+    let result = parse("fn main() -> i32 { let x = 1; return x + 1; }\n");
+    assert result.ok();
+    assert result.diagnostics.len() == 0;
+}
+
+test "a syntax error is a diagnostic" {
+    let result = parse("fn main( { let = ; }\n");
+    assert !result.ok();
+    assert result.diagnostics.len() > 0;
+}
+
+test "diagnose renders each diagnostic, and nothing for a well-formed program" {
+    assert diagnose("fn main() -> i32 { return 1; }\n").len() == 0;
+    let source = "fn main( { let = ; }\n";
+    let messages = diagnose(source);
+    let result = parse(source);
+    assert messages.len() == result.diagnostics.len();
+    assert messages[0] == `${result.diagnostics[0]}`;
+}
