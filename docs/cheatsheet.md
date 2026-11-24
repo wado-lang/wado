@@ -2073,6 +2073,9 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
   model (`Instant`, `ZonedDateTime`, `Duration`, `Plain*`)
 - [`core:log`](./stdlib-core-log.md) — structured logging and tracing (levels, fields, spans, sinks)
 - [`core:router`](./stdlib-core-router.md) — HTTP path router
+- [`core:http_client`](./stdlib-core-http_client.md) — HTTP client over
+  `wasi:http`: an `HttpClient` per origin, streamed bodies, trailers, and
+  Server-Sent Events
 - [`core:icu`](./stdlib-core-icu.md) — Unicode character properties, as code
   point ranges or per character; `Locale`, whose methods map case
   (`tr.uppercase(s)`); `Collator`, which compares strings the way a locale

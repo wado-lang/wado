@@ -240,6 +240,7 @@
 - [core:eval](./stdlib-core-eval.md)
 - [core:fs](./stdlib-core-fs.md)
 - [core:fuel](./stdlib-core-fuel.md)
+- [core:http_client](./stdlib-core-http_client.md)
 - [core:icu](./stdlib-core-icu.md)
 - [core:json](./stdlib-core-json.md)
 - [core:jsonc](./stdlib-core-jsonc.md)

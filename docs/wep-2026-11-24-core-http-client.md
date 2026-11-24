@@ -6,8 +6,8 @@
 request is a resource assembled field by field. Its body is a stream that must
 be written only after the send has started, or the two sides deadlock. The
 response body is a stream whose close does not say whether the body arrived
-whole: a future resolved after the close says that. Eddy wraps all of this in
-`package-eddy/src/http.wado`, and every other client would write it again.
+whole: a future resolved after the close says that. Eddy wrapped all of this in
+a module of its own, and every other client would have written it again.
 
 Eddy is the first user. The next is an OpenAPI client generator, so the module
 serves an API described per origin, not one call site. LLM APIs often stream
@@ -25,18 +25,18 @@ generated OpenAPI client would build the struct anyway. `HttpClient` holds
 them, and `request` is its method.
 
 ```wado
-use { HttpClient, ClientInit, RequestInit, Body, HttpError } from "core:http_client";
+use { HttpClient, ClientInit, RequestInit, HttpError } from "core:http_client";
 use { Method, Client } from "wasi:http";
 
 struct Message { id: String }
 
-fn create(key: String, payload: ByteList) -> Result<Option<Message>, HttpError> with Client {
+fn create(key: String, payload: ByteSlice) -> Result<Option<Message>, HttpError> with Client {
     let client = HttpClient::new("https://api.anthropic.com", ClientInit {
         headers: [["x-api-key", key], ["anthropic-version", "2023-06-01"]],
     })?;
     let mut res = client.request("/v1/messages", RequestInit {
         method: Method::Post,
-        body: Body::bytes(payload),
+        body: Some(payload),
     })?;
     if !res.ok() { return Ok(null); }
     return Ok(Some(res.json::<Message>()?));
@@ -97,6 +97,7 @@ endpoint, which is another `HttpClient`. That is policy above the client.
 `HttpError` is one variant:
 
 - An invalid URL, from `HttpClient::new` or from a path or query that makes one.
+- A header the host refuses, or a timeout it cannot apply.
 - A transport failure, with the `wasi:http` `ErrorCode` and the stage it
   happened in: before the response headers, or while reading the response
   body. Before the headers, no part of the response was seen; during the body,
@@ -107,20 +108,24 @@ endpoint, which is another `HttpClient`. That is policy above the client.
 
 ### Streaming bodies
 
-The request body is one of: none, bytes, or a writer. A writer is a function
-that `request` calls with the body stream's writable end once the send has
-started, and the body ends when the function returns. The caller cannot write
-too early, and the deadlock above cannot happen.
+`RequestInit.body` is a `ByteSlice`, so what a serializer such as
+`core:json`'s `to_bytes` produced is sent without a copy. A streamed body goes
+through `request_streaming` instead, which takes a writer: a function called
+with the body stream's writable end once the send has started. The body ends
+when the function returns. The caller cannot write too early, and the deadlock
+above cannot happen.
 
 The response body is read in one of three ways:
 
-- whole: `bytes()`, `text()`, `json()`;
+- whole: `bytes()`, `text()`, `json()`, each taking `&mut self`;
 - as chunks: `body()`, an iterator of `Result<ByteList, HttpError>`;
 - as events: `events()`, an iterator of `Result<SseEvent, HttpError>`.
 
-Each takes `&mut self` and uses up the body, not the response, as Fetch's
-`bodyUsed` does. A second read is a contract violation. The response stays, so
-it can hand out the trailers once the body is done.
+A whole read uses up the body, not the response, as Fetch's `bodyUsed` does,
+and a second read is a contract violation. `body()` and `events()` take the
+response by value: an iterator that borrowed it could not be held beside the
+response, since an affine value and a reference into it cannot be used in turn.
+The iterator hands it back as `.response()`.
 
 A body cut short by the connection ends the stream just as a complete one does;
 only the future resolved after it tells them apart. So every way of reading
@@ -128,24 +133,25 @@ awaits that future at the end. A whole read returns its error. An iterator
 yields it as its last item, so a caller cannot see the end without seeing the
 failure.
 
-Whatever holds the body tells the host when it is dropped before the end,
-through the `res` future `consume-body` takes: the response before any read
-starts, the iterator after `body()` or `events()`.
+The reader that holds the body stream tells the host how reading ended,
+through the `res` future `consume-body` takes: `Ok` once the body was read to
+its end, and an error when the reader is dropped before that, along with the
+response or iterator holding it.
 
 ### Trailers
 
 Trailers are supported in both directions.
 
 The response's trailers arrive in the future that ends the body. Whatever read
-the body to the end stores them in the response; an iterator holds a reference
-to the response for this. `res.trailers()` then gives them, read like headers:
-`header`, `header_bytes` and `headers_all`, with the same views and the same
-joining. Its contract is that the body was read to the end, so a call made too
-early fails where it is made rather than reading as "no trailers".
+the body to the end stores them in the response. `res.trailers()` then gives
+them as an `HttpFields`, the type `res.headers()` gives, read with `header`,
+`header_bytes` and `headers_all`. Its contract is that the body was read to the
+end, so a call made too early fails where it is made rather than reading as "no
+trailers".
 
-A request sends trailers from `RequestInit.trailers`, or from the writer: the
-function returns them when it ends, so a trailer can carry what only writing
-the body computes, such as a checksum.
+A request sends trailers from `RequestInit.trailers`, followed by those the
+writer of `request_streaming` returns when it ends, so a trailer can carry what
+only writing the body computes, such as a checksum.
 
 ### Server-Sent Events
 
@@ -163,16 +169,22 @@ The event parser is built into `core:http_client` and follows the
   by an LF that starts the next.
 - An event not closed by an empty line when the stream ends is discarded.
 
-`SseEvent` gives `event`, `data` and `id` as `StrSlice`, and `retry` as a
-number. Reconnecting with `Last-Event-ID` is EventSource behavior, not
+`SseEvent` gives `event`, `data` and `id` as `StrSlice`. `retry` belongs to the
+stream rather than to an event, so `EventStream::retry()` gives the last one
+set, in milliseconds. Reconnecting with `Last-Event-ID` is EventSource behavior, not
 parsing, and it belongs to the caller. Protocols layered on the events (a
 `[DONE]` sentinel, a JSON schema per event type) belong to the application.
 
 ### Copies
 
 Each stream read hands over a fresh `List<u8>`, and the parser never writes to
-memory a view it handed out can see. So a view stays valid for as long as the
-caller holds it, and the parser copies only in these cases:
+memory a view it handed out can see. So a view's bytes never change under it.
+The compiler still treats an event as rooted in the stream it came from: once
+`next()` has been called again, an earlier event cannot be used, as with a
+lending iterator. A caller that keeps an event past that copies out the fields
+it needs with `to_string()`.
+
+The parser copies only in these cases:
 
 - A line split across chunks is copied once, to join it.
 - An event with more than one `data` line is copied once, to join the lines
@@ -197,20 +209,22 @@ not a view. RFC 9110 reads its values as one, joined with `, `, and both
 `header` and `header_bytes` answer that joined value, which is a copy.
 
 `Set-Cookie` cannot be joined, since a cookie's `Expires` holds a comma; RFC
-9110 § 5.3 names it as the exception. `header("set-cookie")` is an error that
-points to `headers_all(name)`, which gives every value as a view, as Fetch's
-`getSetCookie()` does.
+9110 § 5.3 names it as the exception. `header` and `header_bytes` take it as a
+contract violation, and `headers_all(name)` gives every value as a view, as
+Fetch's `getSetCookie()` does.
 
 ## Roadmap
 
-- [ ] `HttpClient`, `RequestInit`, `Body`, `HttpError`, and the whole-body
-  reads, tested against a local `wasi:http/service` server.
-- [ ] Streaming request and response bodies, with a test that cuts a body short
+The tests run the client against effect handlers standing in for the
+`wasi:http` host, so they need no server.
+
+- [x] `HttpClient`, `RequestInit`, `HttpError`, and the whole-body reads.
+- [x] Streaming request and response bodies, with a test that cuts a body short
   and expects `Err`.
-- [ ] Trailers both ways, with a test that sends a checksum trailer from a
-  writer and reads it back after each way of reading the body.
-- [ ] `events()`, with parser tests that split the input at every byte.
-- [ ] Eddy uses `core:http_client`, and `package-eddy/src/http.wado` goes away.
+- [x] Trailers both ways, with a test that sends a trailer from a writer and
+  reads trailers back after each way of reading the body.
+- [x] `events()`, with parser tests that split the input at every byte.
+- [x] Eddy uses `core:http_client`, and `package-eddy/src/http.wado` goes away.
 
 ## Known gaps
 
