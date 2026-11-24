@@ -183,15 +183,6 @@ impl Access {
         }
     }
 
-    fn record_meet(&mut self, prov: Prov, a: &ObjectTypes, b: &ObjectTypes) {
-        for (i, depth) in prov.sources() {
-            self.through_mut(i, depth).union_meet(a, b);
-        }
-        if prov.elsewhere {
-            self.elsewhere.union_meet(a, b);
-        }
-    }
-
     fn union(&mut self, other: &Access) {
         for (i, depths) in other.through_params.iter().enumerate() {
             for (depth, keys) in depths.iter().enumerate() {
@@ -199,6 +190,29 @@ impl Access {
             }
         }
         self.elsewhere.union(&other.elsewhere);
+    }
+}
+
+/// An [`Access`] being gathered, its keys held per origin: a summary records
+/// many accesses from one origin, and each reaches every parameter and depth
+/// the origin names, so their keys join once per origin.
+#[derive(Default)]
+struct PendingAccess(Vec<(Prov, ObjectTypes)>);
+
+impl PendingAccess {
+    fn record(&mut self, prov: Prov, keys: &ObjectTypes) {
+        match self.0.iter_mut().find(|(p, _)| *p == prov) {
+            Some((_, held)) => held.union(keys),
+            None => self.0.push((prov, keys.clone())),
+        }
+    }
+
+    fn into_access(self) -> Access {
+        let mut access = Access::default();
+        for (prov, keys) in self.0 {
+            access.record(prov, &keys);
+        }
+        access
     }
 }
 
@@ -2141,6 +2155,8 @@ impl HeapFrame {
             into_elsewhere: classes.prov_of(ELSEWHERE),
             ..Summary::default()
         };
+        let mut reads = PendingAccess::default();
+        let mut writes = PendingAccess::default();
         for AccessSite {
             effect,
             node,
@@ -2157,8 +2173,8 @@ impl HeapFrame {
                 }
             }
             let access = match effect {
-                Effect::Read => &mut s.reads,
-                Effect::Write => &mut s.writes,
+                Effect::Read => &mut reads,
+                Effect::Write => &mut writes,
             };
             match keys {
                 Keys::One(k) => access.record(prov, &ObjectTypes::one(*k)),
@@ -2167,8 +2183,17 @@ impl HeapFrame {
         }
         for (&call, (_, span)) in self.calls.iter().zip(&self.call_nodes) {
             let args = &self.call_args[span.clone()];
-            call_summary(classes, effects, body, call, args, &mut s);
+            call_summary(
+                classes,
+                effects,
+                body,
+                call,
+                args,
+                (&mut reads, &mut writes, &mut s.field_writes),
+            );
         }
+        s.reads = reads.into_access();
+        s.writes = writes.into_access();
         s
     }
 
@@ -2436,8 +2461,8 @@ impl HeapFrame {
         self.classes.chain(RET).iter().position(|&c| c == h)
     }
 
-    /// Each parameter and depth below it the objects of the operand `op` may
-    /// come from.
+    /// Each parameter and depth below it the objects of the operand `op`, or
+    /// any they reach, may come from.
     pub(super) fn operand_sources(
         &self,
         effects: &HeapEffects,
@@ -2445,7 +2470,12 @@ impl HeapFrame {
         op: Operand,
     ) -> Vec<(usize, usize)> {
         match self.lookup(effects, body, op) {
-            OperandNode::Node(h) => self.classes.prov_of(h).sources().collect(),
+            OperandNode::Node(h) => self
+                .classes
+                .chain(h)
+                .into_iter()
+                .flat_map(|c| self.classes.prov_of(c).sources())
+                .collect(),
             OperandNode::None | OperandNode::Unknown => Vec::new(),
         }
     }
@@ -2487,6 +2517,7 @@ impl HeapFrame {
         effects: &HeapEffects,
         body: &Body,
         op: Operand,
+        holders: &WrittenHolders,
     ) -> bool {
         let h = match self.lookup(effects, body, op) {
             OperandNode::None => return false,
@@ -2499,26 +2530,33 @@ impl HeapFrame {
         let held = self.classes.chain(h);
         let mut outside = self.classes.chain(RET);
         outside.extend(self.classes.chain(ELSEWHERE));
-        if held.iter().any(|c| outside.contains(c)) {
-            return true;
-        }
+        held.iter().any(|c| outside.contains(c))
+            || holders
+                .0
+                .iter()
+                .any(|&x| self.classes.chain(x).iter().any(|c| held.contains(c)))
+    }
+
+    /// The classes outside the body that something in it writes, for
+    /// [`Self::operand_stored_outside`]: which they are does not depend on
+    /// what is asked about.
+    pub(super) fn written_holders(&self, effects: &HeapEffects, body: &Body) -> WrittenHolders {
         let everything = Arc::new(ObjectTypes::everything());
-        (0..self.classes.loads.len() as u32)
-            .filter(|&x| {
-                self.classes.root(x) == x
-                    && !self.classes.prov_of(x).is_fresh()
-                    && self.classes.chain(x).iter().any(|c| held.contains(c))
-            })
-            .any(|x| {
-                let holder = Reach {
-                    chain: vec![x],
-                    tail: None,
-                    foreign: false,
-                    anything: false,
-                    elsewhere: None,
-                };
-                self.written_in(effects, body, &everything, Some(&holder), &|_| false)
-            })
+        WrittenHolders(
+            (0..self.classes.loads.len() as u32)
+                .filter(|&x| self.classes.root(x) == x && !self.classes.prov_of(x).is_fresh())
+                .filter(|&x| {
+                    let holder = Reach {
+                        chain: vec![x],
+                        tail: None,
+                        foreign: false,
+                        anything: false,
+                        elsewhere: None,
+                    };
+                    self.written_in(effects, body, &everything, Some(&holder), &|_| false)
+                })
+                .collect(),
+        )
     }
 
     /// Whether no object operand `op` holds or reaches may come from a global.
@@ -2622,6 +2660,9 @@ impl HeapFrame {
         })
     }
 }
+
+/// See [`HeapFrame::written_holders`].
+pub(super) struct WrittenHolders(Vec<u32>);
 
 /// The classes one class's objects are in or reach.
 struct Reach {
@@ -2810,25 +2851,19 @@ fn call_summary(
     body: &Body,
     call: ExprId,
     args: &[(Operand, OperandNode)],
-    s: &mut Summary,
+    (reads, writes, field_writes): (&mut PendingAccess, &mut PendingAccess, &mut FieldWrites),
 ) {
     let target = call_target(effects, body, call);
-    let mut unobserved = Access::default();
+    let mut unobserved = PendingAccess::default();
     let mut unobserved_fields = FieldWrites::default();
-    let Summary {
-        reads,
-        writes,
-        field_writes,
-        ..
-    } = s;
     let (writes, field_writes) = if effects.returns(body, call) {
         (writes, field_writes)
     } else {
         (&mut unobserved, &mut unobserved_fields)
     };
-    reads.elsewhere.union(&target.elsewhere(Effect::Read));
+    reads.record(Prov::ELSEWHERE, &target.elsewhere(Effect::Read));
     let written_elsewhere = target.elsewhere(Effect::Write);
-    writes.elsewhere.union(&written_elsewhere);
+    writes.record(Prov::ELSEWHERE, &written_elsewhere);
     match target {
         Target::Summary(t) => field_writes.union(&t.field_writes),
         Target::Builtin(_) | Target::Opaque { .. } => field_writes.record_types(&written_elsewhere),
@@ -2850,9 +2885,16 @@ fn call_summary(
                 let reach = effects.reach(ty);
                 for (theirs, mine) in [(&t.reads, &mut *reads), (&t.writes, &mut *writes)] {
                     for (depth, types) in theirs.depths(j) {
-                        for prov in foreign(depth, depth == DEEPEST) {
-                            mine.record_meet(prov, types, &reach);
+                        let mut prov = Prov::default();
+                        for p in foreign(depth, depth == DEEPEST) {
+                            prov.join(p);
                         }
+                        if prov.is_fresh() {
+                            continue;
+                        }
+                        let mut met = ObjectTypes::default();
+                        met.union_meet(types, &reach);
+                        mine.record(prov, &met);
                     }
                 }
             }

@@ -1,0 +1,25 @@
+// A lent part may sit below the copied value, where an earlier elision left a
+// parameter's part inside a local: the caller that writes that parameter keeps
+// the copy.
+struct W { inner: List<i32> }
+struct O { w: W }
+
+#[inline("never")]
+fn wrapped(p: &W) -> O {
+    let s = W { inner: p.inner };
+    let r = O { w: s };
+    assert s.inner.len() > 0;
+    return r;
+}
+
+#[inline("never")]
+fn read_after_write(q: &mut W) -> i32 {
+    let r = wrapped(q);
+    q.inner[0] = 9;
+    return r.w.inner[0];
+}
+
+test "the result keeps the parameter's part as it was" {
+    let mut q = W { inner: [builtin::black_box(1)] };
+    assert read_after_write(&mut q) == 1;
+}

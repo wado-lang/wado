@@ -407,22 +407,24 @@ fn "condition_implication_sibling_field_lengths.wado/$initialize_modules$cold0"(
 fn "condition_implication_sibling_field_lengths.wado/second_input$lend"($mv$node$outputs, $mv$node$inputs) {
     let map: ref "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>";
     let end: i32;
-    let item: ref "core:prelude/string.wado//String";
     let value_32: ref "core:prelude/string.wado//String";
     let $sroa_$iter_0_repr_47: ref "Array<core:prelude/string.wado/String>";
     let $sroa_$iter_0_index_48: i32;
-    let v: ref "core:collections/hashmap.wado//HashSeed";
-    v = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v.k1 };
-    map = struct.new "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<ref "core:prelude/string.wado//String">(0), alive: builtin::array_new<bool>(0), count: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v };
+    let v_50: ref "core:collections/hashmap.wado//HashSeed";
+    let v_51: ref "core:prelude/string.wado//String";
+    let $av_54: i32;
+    v_50 = struct.new "core:collections/hashmap.wado//HashSeed" { k0: local.tee v_50(global:core:collections/hashmap.wado::DEFAULT_HASH_SEED).k0, k1: v_50.k1 };
+    map = struct.new "core:collections/hashmap.wado//HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<ref "core:prelude/string.wado//String">(0), alive: builtin::array_new<bool>(0), count: 0 }, fps: builtin::array_new<i32>(0), table: builtin::array_new<i32>(0), shift: 32, seed: v_50 };
     end = $mv$node$inputs.used;
     $sroa_$iter_0_repr_47 = $mv$node$inputs.repr;
     $sroa_$iter_0_index_48 = 0;
     b9: block {
         l10: loop {
             break_if b9 $sroa_$iter_0_index_48 >= end;
-            item = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_47, $sroa_$iter_0_index_48);
+            $av_54 = local.tee v_51(builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_47, $sroa_$iter_0_index_48)).used;
+            v_51 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_51.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_54)), 0, $array_clone_src_1, 0, $av_54); $array_clone_dst_2, used: $av_54 };
             $sroa_$iter_0_index_48 = $sroa_$iter_0_index_48 + 1;
-            "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(map, item, item);
+            "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(map, v_51, v_51);
             continue l10;
         };
     };
@@ -432,7 +434,7 @@ fn "condition_implication_sibling_field_lengths.wado/second_input$lend"($mv$node
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, end, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("condition_implication_sibling_field_lengths.wado:19"), used: 51 });
         unreachable;
     }
-    item = builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$node$outputs.repr, 0);
+    v_51 = builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$node$outputs.repr, 0);
     end = $mv$node$inputs.used;
     if @unlikely(1 >= end) {
         cold_path;
@@ -440,7 +442,7 @@ fn "condition_implication_sibling_field_lengths.wado/second_input$lend"($mv$node
         unreachable;
     }
     value_32 = builtin::array_get_value<ref "core:prelude/string.wado//String">($mv$node$inputs.repr, 1);
-    "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(map, item, value_32);
+    "core:collections/hashmap.wado/core:collections/hashmap.wado/HashMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(map, v_51, value_32);
     return map;
 }
 

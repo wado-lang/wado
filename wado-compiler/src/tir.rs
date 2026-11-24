@@ -423,11 +423,13 @@ impl std::fmt::Display for TypeId {
 }
 
 /// A set of heap object types, keyed by [`TypeTable::heap_object_key`]; `any`
-/// stands for every type.
+/// stands for every type. The keys are sorted, so a union or a meet merges two
+/// lists rather than hashing every key: the heap-effect summaries do one per
+/// parameter and depth a call reaches.
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
 pub struct ObjectTypes {
     any: bool,
-    keys: IndexSet<TypeId>,
+    keys: Vec<TypeId>,
 }
 
 impl ObjectTypes {
@@ -435,7 +437,7 @@ impl ObjectTypes {
     pub fn everything() -> Self {
         Self {
             any: true,
-            keys: IndexSet::default(),
+            keys: Vec::new(),
         }
     }
 
@@ -443,7 +445,7 @@ impl ObjectTypes {
     pub fn one(key: TypeId) -> Self {
         Self {
             any: false,
-            keys: std::iter::once(key).collect(),
+            keys: vec![key],
         }
     }
 
@@ -452,7 +454,7 @@ impl ObjectTypes {
         self.any
     }
 
-    /// The keys of a set that is not [`Self::is_any`].
+    /// The keys of a set that is not [`Self::is_any`], in ascending order.
     pub fn keys(&self) -> impl Iterator<Item = TypeId> + '_ {
         assert!(!self.any, "an `any` set has no key list");
         self.keys.iter().copied()
@@ -460,7 +462,7 @@ impl ObjectTypes {
 
     /// Whether `key` is in the set.
     pub fn contains(&self, key: TypeId) -> bool {
-        self.any || self.keys.contains(&key)
+        self.any || self.keys.binary_search(&key).is_ok()
     }
 
     /// Whether the set has no type.
@@ -470,8 +472,10 @@ impl ObjectTypes {
 
     /// Add `key`.
     pub fn insert(&mut self, key: TypeId) {
-        if !self.any {
-            self.keys.insert(key);
+        if !self.any
+            && let Err(at) = self.keys.binary_search(&key)
+        {
+            self.keys.insert(at, key);
         }
     }
 
@@ -486,7 +490,7 @@ impl ObjectTypes {
         if other.any {
             self.set_any();
         } else if !self.any {
-            self.keys.extend(other.keys.iter().copied());
+            self.merge(&other.keys);
         }
     }
 
@@ -496,7 +500,7 @@ impl ObjectTypes {
             (true, true) => true,
             (true, false) => !other.keys.is_empty(),
             (false, true) => !self.keys.is_empty(),
-            (false, false) => self.keys.iter().any(|k| other.keys.contains(k)),
+            (false, false) => intersection(&self.keys, &other.keys).next().is_some(),
         }
     }
 
@@ -512,15 +516,82 @@ impl ObjectTypes {
             (false, true) => {
                 self.union(a);
             }
-            (false, false) => {
-                for &k in &a.keys {
-                    if b.keys.contains(&k) {
-                        self.insert(k);
-                    }
+            (false, false) if !self.any => {
+                let met: Vec<TypeId> = intersection(&a.keys, &b.keys).collect();
+                self.merge(&met);
+            }
+            (false, false) => {}
+        }
+    }
+
+    /// Add the sorted `other` to the sorted keys.
+    fn merge(&mut self, other: &[TypeId]) {
+        if other.is_empty() {
+            return;
+        }
+        if self.keys.is_empty() {
+            self.keys.extend_from_slice(other);
+            return;
+        }
+        // Most unions add nothing: find the first key `other` adds before
+        // building a new list.
+        let (mut i, mut j) = (0, 0);
+        while j < other.len() {
+            match self.keys.get(i).map(|k| k.cmp(&other[j])) {
+                Some(std::cmp::Ordering::Less) => i += 1,
+                Some(std::cmp::Ordering::Equal) => {
+                    i += 1;
+                    j += 1;
+                }
+                Some(std::cmp::Ordering::Greater) | None => break,
+            }
+        }
+        if j == other.len() {
+            return;
+        }
+        let mut merged = Vec::with_capacity(self.keys.len() + other.len() - j);
+        merged.extend_from_slice(&self.keys[..i]);
+        while i < self.keys.len() && j < other.len() {
+            match self.keys[i].cmp(&other[j]) {
+                std::cmp::Ordering::Less => {
+                    merged.push(self.keys[i]);
+                    i += 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    merged.push(other[j]);
+                    j += 1;
+                }
+                std::cmp::Ordering::Equal => {
+                    merged.push(self.keys[i]);
+                    i += 1;
+                    j += 1;
                 }
             }
         }
+        merged.extend_from_slice(&self.keys[i..]);
+        merged.extend_from_slice(&other[j..]);
+        self.keys = merged;
     }
+}
+
+/// The keys two sorted lists share, in order.
+fn intersection<'a>(a: &'a [TypeId], b: &'a [TypeId]) -> impl Iterator<Item = TypeId> + 'a {
+    let (mut i, mut j) = (0, 0);
+    std::iter::from_fn(move || {
+        while i < a.len() && j < b.len() {
+            match a[i].cmp(&b[j]) {
+                std::cmp::Ordering::Less => i += 1,
+                std::cmp::Ordering::Greater => j += 1,
+                std::cmp::Ordering::Equal => {
+                    let k = a[i];
+                    i += 1;
+                    j += 1;
+                    return Some(k);
+                }
+            }
+        }
+        None
+    })
 }
 
 /// Identity of an inference variable — see [`ResolvedType::InferVar`].

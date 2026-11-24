@@ -234,32 +234,34 @@ fn lend_returned_parts(
         });
         (lenders, lent)
     };
+    // Every clone is minted before any call moves: one minted from a body
+    // whose calls had moved would lend what those calls lend, which its
+    // parts, read off the body as it was, do not say.
     let mut clones: IndexMap<FuncId, FuncId> = IndexMap::default();
+    for &(_, callee) in lent.iter().flatten() {
+        if !clones.contains_key(&callee) {
+            let clone = match &lenders[callee.index()] {
+                Some(Lender::Minted(id, _)) => *id,
+                Some(Lender::Sites(sites, parts)) => {
+                    mint_lending_clone(project, callee, sites, parts.clone())
+                }
+                None => unreachable!("a lent call's callee lends"),
+            };
+            clones.insert(callee, clone);
+        }
+    }
     let mut changed = false;
     for (fi, calls) in lent.into_iter().enumerate() {
         if calls.is_empty() {
             continue;
         }
-        let mut retargets = Vec::with_capacity(calls.len());
-        for (call, callee) in calls {
-            let clone = *clones
-                .entry(callee)
-                .or_insert_with(|| match &lenders[callee.index()] {
-                    Some(Lender::Minted(id, _)) => *id,
-                    Some(Lender::Sites(sites, parts)) => {
-                        mint_lending_clone(project, callee, sites, parts.clone())
-                    }
-                    None => unreachable!("a lent call's callee lends"),
-                });
-            retargets.push((call, clone));
-        }
         let mut f = project.functions[fi].borrow_mut();
         let body = f.body.as_mut().expect("a caller has a body");
-        for (call, clone) in retargets {
+        for (call, callee) in calls {
             let ExprKind::Call { func_id, .. } = &mut body.exprs[call].kind else {
                 unreachable!("a lent call is a call");
             };
-            *func_id = clone;
+            *func_id = clones[&callee];
         }
         drop(f);
         gate.mark_changed(FuncId::new(fi));
@@ -290,6 +292,7 @@ fn lent_calls(
         return calls;
     }
     let frame = HeapFrame::new(effects, body, params);
+    let holders = frame.written_holders(effects, body);
     calls.retain(|&(call, callee)| {
         let ExprKind::Call { args, .. } = &body.exprs[call].kind else {
             unreachable!("a lent call is a call");
@@ -302,7 +305,7 @@ fn lent_calls(
         let result = Operand::Expr(call);
         let keys = effects.reach(body.exprs[call].type_id);
         let written = |op, depth| frame.operand_written_below(effects, body, &keys, op, depth);
-        !frame.operand_stored_outside(effects, body, result)
+        !frame.operand_stored_outside(effects, body, result, &holders)
             && !written(result, parts.result_depth)
             && parts.param_depths.iter().all(|&(bit, depth)| {
                 params_of_bit(bit, args.len()).all(|j| !written(args[j], depth))

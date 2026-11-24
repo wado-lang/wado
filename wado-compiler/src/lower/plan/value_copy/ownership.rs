@@ -156,6 +156,9 @@ pub fn compute_receiver_alias(
     confined: &ConfinedParams,
 ) -> FuncKeySet {
     let mut set = FuncKeySet::default();
+    // A body's fresh locals do not depend on `set`: one revisited until its
+    // cycle settles computes them once.
+    let mut fresh_of: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
         if set.contains(&func.module_source, &func.name) {
@@ -166,19 +169,16 @@ pub fn compute_receiver_alias(
             return false;
         }
         let Some(body) = &func.body else { return false };
-        let bindings = BindingCollector::collect(&func, type_table);
-        let fresh = compute_fresh_locals(
-            &bindings,
-            &confined.shared_locals(&func),
-            oracle,
-            type_table,
-        );
+        let fresh = fresh_of.entry(id).or_insert_with(|| {
+            let bindings = BindingCollector::collect(&func, type_table);
+            compute_fresh_locals(&bindings, &confined.shared_locals(&func), oracle, type_table)
+        });
         let mut returns = ReceiverReturns {
             set: &set,
             builtins,
             type_table,
             oracle,
-            fresh: &fresh,
+            fresh,
             hands_out_payload: hands_out_payload(&func, return_paths),
             every_alias_or_owned: true,
             saw_alias: false,

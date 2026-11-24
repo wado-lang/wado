@@ -453,11 +453,14 @@ fn rvalue_is_fresh(body: &Body, type_table: &TypeTable, op: Operand) -> bool {
             | ExprKind::TupleLiteral { .. }
             | ExprKind::VariantConstruct { .. }
     );
+    if !literal {
+        return false;
+    }
     let mut parts_fresh = true;
     body.for_each_operand(NodeRef::Expr(e), |part| {
         parts_fresh &= rvalue_is_fresh(body, type_table, part);
     });
-    literal && parts_fresh
+    parts_fresh
 }
 
 /// True when the binding `target_idx` and the source `value` reads from are
