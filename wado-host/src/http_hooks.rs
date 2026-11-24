@@ -350,7 +350,7 @@ where
             }
             Poll::Pending => match self.deadline.as_mut().poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(_) => Poll::Ready(Some(Err(HttpError::ConnectionReadTimeout))),
+                Poll::Ready(()) => Poll::Ready(Some(Err(HttpError::ConnectionReadTimeout))),
             },
         }
     }
