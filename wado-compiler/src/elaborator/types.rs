@@ -1793,15 +1793,18 @@ impl TypeError {
     /// [`Self::cannot_infer`]'s sentence, for a variable to raise if it is
     /// never answered.
     pub(super) fn cannot_infer_message(names: &[String], owner: &str, turbofish: &str) -> String {
+        Self::cannot_infer_naming(names, &Self::cannot_infer_owner(owner, turbofish))
+    }
+
+    /// The sentence naming `names` before `owner`, a
+    /// [`Self::cannot_infer_owner`].
+    pub(super) fn cannot_infer_naming<S: AsRef<str>>(names: &[S], owner: &str) -> String {
         let named = names
             .iter()
-            .map(|n| format!("`{}`", written_param_name(n)))
+            .map(|n| format!("`{}`", written_param_name(n.as_ref())))
             .collect::<Vec<_>>()
             .join(", ");
-        format!(
-            "cannot infer type parameter {named} {}",
-            Self::cannot_infer_owner(owner, turbofish)
-        )
+        format!("cannot infer type parameter {named} {owner}")
     }
 
     /// [`Self::cannot_infer_message`] past the parameters it names, which a

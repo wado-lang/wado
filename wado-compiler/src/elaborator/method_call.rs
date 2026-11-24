@@ -2972,14 +2972,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect();
             let solved = self.answer_receiver_vars(vars, &callee_args, &answers);
-            let mut unanswered = Vec::new();
             for (&var, answer) in vars.iter().zip(solved) {
-                if answer == var {
-                    let now = self.apply_infer_holes(var);
-                    if self.tysys.type_table.borrow().is_infer_var(now) {
-                        unanswered.push(var);
-                    }
-                } else {
+                if answer != var {
                     self.equate(var, answer);
                 }
             }

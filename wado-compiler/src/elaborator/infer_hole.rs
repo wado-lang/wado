@@ -34,7 +34,7 @@ use crate::elaborator::sem::types::{
 use crate::elaborator::typecheck::{
     MeetRules, Meetings, NeverMeets, TypeMismatchPayload, meetings,
 };
-use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name, written_param_name};
+use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name};
 use crate::tir;
 
 /// One body's inference variables and what is owed once they settle.
@@ -303,12 +303,7 @@ impl Blame {
         if params.is_empty() {
             return self.owner.clone();
         }
-        let named = params
-            .iter()
-            .map(|p| format!("`{}`", written_param_name(p)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("cannot infer type parameter {named} {}", self.owner)
+        TypeError::cannot_infer_naming(params, &self.owner)
     }
 }
 
@@ -460,22 +455,6 @@ impl VarStore {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Mint a fresh inference hole, remembering the diagnostic to raise if it
-    /// is never solved (mirrors the immediate "cannot infer" error so the
-    /// user-facing message is unchanged, only deferred).
-    pub(super) fn mint_infer_hole(
-        &mut self,
-        span: Span,
-        message: String,
-        param_name: String,
-        bounds: Vec<DeclaredBound>,
-    ) -> TypeId {
-        let hole = self.mint_infer_var_named(&param_name);
-        self.attach_infer_var_diag(hole, span, message);
-        self.attach_infer_var_bounds(hole, param_name, bounds, span);
-        hole
-    }
-
     /// A variable for a call's type argument `slot` nothing answered yet,
     /// reported at the end of the body as `param_name` [`owner`](
     /// TypeError::cannot_infer_owner) if nothing does. A variable inference
@@ -650,8 +629,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Blame each `_` `arg` holds with `message`, the sentence for the slot
-    /// `param` it fills. One for the whole slot is replaced by a variable
-    /// blamed as [`Self::mint_infer_hole`] blames, joined with it.
+    /// `param` it fills. One for the whole slot is replaced by a variable named
+    /// for `param` and blamed alike, joined with it.
     pub(super) fn blame_in_slot(
         &mut self,
         arg: &mut TypeId,
@@ -660,7 +639,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param: String,
     ) {
         if self.is_bare_written_hole(*arg) {
-            let blamed = self.mint_infer_hole(span, message.to_string(), param, Vec::new());
+            let blamed = self.mint_infer_var_named(&param);
+            self.attach_infer_var_diag(blamed, span, message.to_string());
             self.equate(*arg, blamed);
             self.unwrite_holes_in(*arg);
             *arg = blamed;
