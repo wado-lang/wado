@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795499437021,
+  "lastUpdate": 1795512770605,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81897,6 +81897,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c9d948fe6e3c143043fe5afafc0310bca6d8c0f"
         },
         "date": 1795499435784,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6f0262bd19e2441acd0e06860909521d7cea751e",
+          "message": "Merge pull request #2746 from wado-lang/gfx/blissful-lamport-v9tvx0\n\nchore: keep the root's maintenance programs in tools/, as every package does",
+          "timestamp": "2026-11-24T18:08:52+09:00",
+          "tree_id": "e521c42f69eb70ad301a170c755971e6d7d1a742",
+          "url": "https://github.com/wado-lang/wado/commit/6f0262bd19e2441acd0e06860909521d7cea751e"
+        },
+        "date": 1795512769575,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
