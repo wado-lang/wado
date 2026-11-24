@@ -33,8 +33,8 @@ use super::trait_env::{
 };
 use super::type_resolution::ParamSpace;
 use super::types::{
-    MethodInfo, MethodOwner, OperatorImpl, ParamList, ResolvedTraitMethod, SigPosition,
-    TraitMethodMatch, TypeError, TypeLookup,
+    MethodInfo, MethodOwner, OperatorImpl, OverloadedCallForm, ParamList, ResolvedTraitMethod,
+    SigPosition, TraitMethodMatch, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 use super::util;
@@ -2255,8 +2255,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// One bound per trait declaration. Several bounds on one trait are one
-    /// method at several instantiations, which the call's arguments choose.
     /// The arguments `candidate` reaches its trait at on `self_type_id`.
     fn candidate_trait_args(
         &mut self,
@@ -2297,12 +2295,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         reaching
     }
 
+    /// One bound per trait declaration. Several bounds on one trait are one
+    /// method at several instantiations, which the call's arguments choose.
     fn one_bound_per_trait(
         &mut self,
         candidates: Vec<BoundCandidate>,
         method_name: &str,
         self_type_id: TypeId,
         args: ArgSource<'_, '_>,
+        span: Span,
     ) -> Vec<BoundCandidate> {
         let mut groups: Vec<Vec<BoundCandidate>> = Vec::new();
         for candidate in candidates {
@@ -2318,25 +2319,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         groups
             .into_iter()
             .map(|group| {
-                self.select_instantiation(group, method_name, self_type_id, args.reborrow())
+                self.select_instantiation(group, method_name, self_type_id, args.reborrow(), span)
             })
             .collect()
     }
 
     /// The instantiation of one trait that the call's arguments admit. The
-    /// bound writing arguments wins where nothing selects, a bare one beside it
-    /// naming only the declared default.
+    /// written bounds are an overload set, unique-or-error as impls are; a
+    /// bare one beside them names only the declared default, and loses to
+    /// them where nothing selects.
     fn select_instantiation(
         &mut self,
         group: Vec<BoundCandidate>,
         method_name: &str,
         self_type_id: TypeId,
         args: ArgSource<'_, '_>,
+        span: Span,
     ) -> BoundCandidate {
-        let written = group.iter().any(|c| !c.bound.type_args.is_empty());
+        let group = self.distinct_instantiations(group, self_type_id);
+        let written: Vec<usize> = (0..group.len())
+            .filter(|&i| !group[i].bound.type_args.is_empty())
+            .collect();
         let mut args = args;
         let expected = args.expected();
-        if group.len() > 1 && written && (!args.is_empty() || expected.is_some()) {
+        if written.len() > 1
+            || (group.len() > 1 && !written.is_empty() && (!args.is_empty() || expected.is_some()))
+        {
             // Classification costs something, so it waits for an overload set,
             // as `select_trait_match` makes it wait (WEP 2026-07-31).
             let classes: Vec<ArgClass> = (0..args.len()).map(|i| args.class(self, i)).collect();
@@ -2363,6 +2371,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .return_type
                 });
             }
+            self.narrow_by_function_rows(&mut admitted, &classes, |&i, position| {
+                sigs[i]
+                    .as_ref()
+                    .and_then(|sig| sig.param_types.get(position).copied())
+            });
             // One exact answer decides on its own. A parameter that is the
             // caller’s own type parameter is a bare slot to `class_admits`,
             // which admits every argument, so without this tier an exactly
@@ -2389,19 +2402,102 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut group = group;
                 return group.swap_remove(*winner);
             }
-            // Unique-or-nothing, as among impls: several admitted candidates
-            // select none, and the written bound answers below.
             if let [winner] = admitted.as_slice() {
                 let mut group = group;
                 return group.swap_remove(*winner);
             }
+            admitted.retain(|i| written.contains(i));
+            if let [winner] = admitted.as_slice() {
+                let mut group = group;
+                return group.swap_remove(*winner);
+            }
+            if let [first, _, ..] = admitted.as_slice() {
+                let first = *first;
+                self.report_bounds_tied_at_call(
+                    &group,
+                    &admitted,
+                    self_type_id,
+                    method_name,
+                    &classes,
+                    span,
+                );
+                let mut group = group;
+                return group.swap_remove(first);
+            }
         }
-        let first_written = group
-            .iter()
-            .position(|c| !c.bound.type_args.is_empty())
-            .unwrap_or(0);
+        let first_written = written.first().copied().unwrap_or(0);
         let mut group = group;
         group.swap_remove(first_written)
+    }
+
+    /// `group` with each instantiation once: two bounds asking for one
+    /// argument list, as a bound and a supertrait's can, are one candidate.
+    fn distinct_instantiations(
+        &mut self,
+        group: Vec<BoundCandidate>,
+        self_type_id: TypeId,
+    ) -> Vec<BoundCandidate> {
+        if group.len() < 2 {
+            return group;
+        }
+        // A written bound outranks a bare one, so the one kept of a pair is
+        // the written one wherever either stands.
+        let mut seen: Vec<(Vec<TypeId>, usize)> = Vec::with_capacity(group.len());
+        let mut distinct: Vec<BoundCandidate> = Vec::with_capacity(group.len());
+        for candidate in group {
+            if let Some(at) = self.candidate_trait_args(&candidate, self_type_id) {
+                if let Some(&(_, kept)) = seen.iter().find(|(args, _)| *args == at) {
+                    if distinct[kept].bound.type_args.is_empty() {
+                        distinct[kept] = candidate;
+                    }
+                    continue;
+                }
+                seen.push((at, distinct.len()));
+            }
+            distinct.push(candidate);
+        }
+        distinct
+    }
+
+    /// Two written bounds the call's arguments both admit: reported as two
+    /// impls tied on the arguments are.
+    fn report_bounds_tied_at_call(
+        &mut self,
+        group: &[BoundCandidate],
+        admitted: &[usize],
+        self_type_id: TypeId,
+        method_name: &str,
+        classes: &[ArgClass],
+        span: Span,
+    ) {
+        let traits: Vec<String> = admitted
+            .iter()
+            .filter_map(|&i| {
+                let candidate = &group[i];
+                let args = self.candidate_trait_args(candidate, self_type_id)?;
+                let tt = self.tysys.type_table.borrow();
+                let args: Vec<String> = args.iter().map(|&arg| tt.name(arg)).collect();
+                Some(format!(
+                    "{}<{}>",
+                    candidate.bound.written_name(),
+                    args.join(", ")
+                ))
+            })
+            .collect();
+        if traits.len() < admitted.len() {
+            assert!(
+                self.logger.has_errors(),
+                "a bound whose argument names no type is reported where it is written"
+            );
+            return;
+        }
+        let _ = self.emit(TypeError::AmbiguousTraitArguments {
+            method: method_name.to_string(),
+            traits,
+            arguments: self.tysys.describe_arg_classes(classes),
+            form: OverloadedCallForm::Receiver,
+            span,
+        });
     }
 
     /// What `method_name` takes and returns under `candidate`, its value
@@ -2478,7 +2574,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(wanted) = required_trait.and_then(|w| w.args.as_deref()) {
             candidates = self.reaching_at(candidates, self_type_id, wanted);
         }
-        let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
+        let mut candidates =
+            self.one_bound_per_trait(candidates, method_name, self_type_id, args, span);
         // Two traits declaring the method select neither.
         let selects_one_trait = candidates.len() == 1;
         // A reserved name answers only where no method of its kind does.

@@ -3490,6 +3490,20 @@ impl TypeTable {
     /// `id` with each variable solved so far replaced by its solution, noted
     /// as read as [`Self::read_effect_row`] notes it.
     pub fn read_effect_rows_in(&mut self, id: TypeId) -> TypeId {
+        self.effect_rows_in(id, Self::read_effect_row)
+    }
+
+    /// [`Self::read_effect_rows_in`] for a reader whose answer nothing
+    /// decides on, so it closes no row.
+    pub fn peek_effect_rows_in(&mut self, id: TypeId) -> TypeId {
+        self.effect_rows_in(id, Self::peek_effect_row)
+    }
+
+    fn effect_rows_in(
+        &mut self,
+        id: TypeId,
+        row_of: fn(&Self, &[EffectRef]) -> Vec<EffectRef>,
+    ) -> TypeId {
         let mut vars: IndexSet<EffectRef> = IndexSet::default();
         self.zip_rows(id, id, true, &mut |row, _| {
             vars.extend(row.iter().filter(|e| e.is_var()).cloned());
@@ -3497,7 +3511,7 @@ impl TypeTable {
         let rows: EffectRows = vars
             .into_iter()
             .map(|effect| {
-                let row = self.read_effect_row(std::slice::from_ref(&effect));
+                let row = row_of(self, std::slice::from_ref(&effect));
                 (effect.as_var().expect("a variable"), row)
             })
             .collect();

@@ -1,0 +1,41 @@
+// A literal admits the bare bound's `Take<i64>` and the written `Take<i32>`,
+// but not `Take<String>`. The bare bound loses to the written one the literal
+// admits, wherever the bounds are written.
+
+trait Take<A = i64> with () {
+    fn take(&self, a: A) -> i32;
+}
+
+struct S {}
+
+impl Take<i64> for S {
+    fn take(&self, a: i64) -> i32 {
+        return 64;
+    }
+}
+
+impl Take<String> for S {
+    fn take(&self, a: String) -> i32 {
+        return 0;
+    }
+}
+
+impl Take<i32> for S {
+    fn take(&self, a: i32) -> i32 {
+        return 32;
+    }
+}
+
+fn string_first<T: Take + Take<String> + Take<i32>>(t: &T) -> i32 {
+    return t.take(42);
+}
+
+fn string_last<T: Take + Take<i32> + Take<String>>(t: &T) -> i32 {
+    return t.take(42);
+}
+
+test {
+    let s = S {};
+    assert string_first(&s) == 32;
+    assert string_last(&s) == 32;
+}
