@@ -2255,8 +2255,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// One bound per trait declaration. Several bounds on one trait are one
-    /// method at several instantiations, which the call's arguments choose.
     /// The arguments `candidate` reaches its trait at on `self_type_id`.
     fn candidate_trait_args(
         &mut self,
@@ -2297,6 +2295,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         reaching
     }
 
+    /// One bound per trait declaration. Several bounds on one trait are one
+    /// method at several instantiations, which the call's arguments choose.
     fn one_bound_per_trait(
         &mut self,
         candidates: Vec<BoundCandidate>,
@@ -2461,18 +2461,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         classes: &[ArgClass],
         span: Span,
     ) {
-        let traits = admitted
+        // A bound whose argument names no type was reported where it is written.
+        let traits: Vec<String> = admitted
             .iter()
-            .map(|&i| {
+            .filter_map(|&i| {
                 let candidate = &group[i];
-                let args = self
-                    .candidate_trait_args(candidate, self_type_id)
-                    .expect("an admitted bound reads its arguments");
+                let args = self.candidate_trait_args(candidate, self_type_id)?;
                 let tt = self.tysys.type_table.borrow();
                 let args: Vec<String> = args.iter().map(|&arg| tt.name(arg)).collect();
-                format!("{}<{}>", candidate.bound.written_name(), args.join(", "))
+                Some(format!(
+                    "{}<{}>",
+                    candidate.bound.written_name(),
+                    args.join(", ")
+                ))
             })
             .collect();
+        if traits.len() < admitted.len() {
+            return;
+        }
         let _ = self.emit(TypeError::AmbiguousTraitArguments {
             method: method_name.to_string(),
             traits,
