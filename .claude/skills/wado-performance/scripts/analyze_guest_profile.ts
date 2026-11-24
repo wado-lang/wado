@@ -20,7 +20,8 @@
  * load from its generation loop).
  *
  * `--callers NAME` adds a CALLERS report: for each sample whose leaf contains
- * NAME, the nearest frame up the stack whose name does not. A helper the
+ * NAME, the nearest frame up the stack whose name does not, under the share of
+ * all samples whose leaf contains NAME. A helper the
  * compiler calls from many places, such as `$value_copy$`, reads as one hot
  * leaf; this names the call sites that pay for it.
  *
@@ -63,6 +64,7 @@ const data = JSON.parse(readFileSync(path, "utf8")) as { threads: Thread[] };
 const self = new Map<string, number>();
 const inclusive = new Map<string, number>();
 const callers = new Map<string, number>();
+let calleeTotal = 0;
 let total = 0;
 
 const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
@@ -86,8 +88,9 @@ for (const t of data.threads) {
       bump(inclusive, nm);
     }
     if (callee != null && stack[0].includes(callee)) {
+      calleeTotal++;
       const caller = stack.find((nm) => !nm.includes(callee));
-      if (caller != null) bump(callers, `${caller}  ->  ${stack[0]}`);
+      if (caller != null) bump(callers, caller);
     }
   }
 }
@@ -104,4 +107,7 @@ const report = (title: string, m: Map<string, number>) => {
 console.log(`total samples: ${total}`);
 report("SELF (leaf)", self);
 report("INCLUSIVE", inclusive);
-if (callee != null) report("CALLERS", callers);
+if (callee != null) {
+  const pct = ((100 * calleeTotal) / total).toFixed(1);
+  report(`CALLERS (${calleeTotal} samples, ${pct}%, in ${callee})`, callers);
+}
