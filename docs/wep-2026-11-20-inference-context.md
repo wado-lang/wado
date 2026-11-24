@@ -207,7 +207,7 @@ Each step keeps every fixture passing and deletes what it replaces.
 - [x] A `_` in a `let` annotation and after `as` is a variable. A cast's is
   settled by the expected type and the operand at the cast, and reported
   there where they leave it open, since the cast judges its conversion then.
-- [ ] A call's type arguments are solved in the context, not apart from it.
+- [x] A call's type arguments are solved in the context, not apart from it.
   The call instantiates the callee's slots once, as the context's variables.
   The turbofish is equated with them where it is read. The expected type
   reaches the declared return before the arguments are typed, and each
@@ -217,7 +217,7 @@ Each step keeps every fixture passing and deletes what it replaces.
   was inferred, and every second solve of the same call are deleted. Free
   functions, builtins, static calls, methods, struct literals and variant
   cases all take this one path.
-- [ ] A pack slot is instantiated as a pack variable, answered by a list of
+- [x] A pack slot is instantiated as a pack variable, answered by a list of
   types, so nothing patches a pack the instantiation left rigid.
 - [ ] A variable carries its origin: the slot it stands for, the declaration
   that owns it, or the `_` the source wrote, and where. Its report is read

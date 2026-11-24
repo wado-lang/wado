@@ -20,8 +20,8 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
-    StructDef, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId,
-    impl_args_in_slot_order, positional_substitution, slots_from_impl_args,
+    StructDef, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId, impl_args_in_slot_order,
+    positional_substitution, slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -1943,7 +1943,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         merged
     }
 
-
     /// [`Self::resolve_method_type_args`], then what every caller does with the
     /// answer: check the declared bounds, and bind the slots for substitution.
     /// Both read the method's bounds, so both see the impl's parameters at the
@@ -2011,7 +2010,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .packs_args_reach(input.param_types, input.args.len());
         let mut type_args = self.resolve_method_type_args(explicit, input);
         self.settle_unreached_packs(own_params, slots, &mut type_args, &reached);
-        let subst = self.tysys.type_table.borrow().bind_params(slots, &type_args);
+        let subst = self
+            .tysys
+            .type_table
+            .borrow()
+            .bind_params(slots, &type_args);
         if !type_args.is_empty() {
             self.enforce_type_arg_bounds(
                 own_params,
@@ -4405,7 +4408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
         if !subst.is_empty() {
-            return_type = self.substitute_ctx_in_frame(&subst, return_type);
+            return_type = self.substitute_map_in_frame(&subst, return_type);
         }
         if let Some(block) = impl_block {
             self.settle_trait_arg_slots(

@@ -150,17 +150,10 @@ impl Monomorphizer {
                                 type_table.name(e)
                             )
                         });
-                    // A use site's variable for the pack, which its answer
-                    // splices once there is one.
-                    if type_table.is_infer_var(pack_type) {
-                        let mapped_elem = mapped_elem.map(|elem| {
-                            let mut elem_substitution = substitution.clone();
-                            elem_substitution.insert(pack, pack_type);
-                            self.substitute_type(elem, &elem_substitution, type_table)
-                        });
-                        new_elems.push(type_table.make_pack_var(pack_type, mapped_elem));
-                        continue;
-                    }
+                    assert!(
+                        !type_table.is_infer_var(pack_type),
+                        "finalize answers every pack variable before monomorphization"
+                    );
                     match mapped_elem {
                         // Mapped pack: substitute `elem` once per source
                         // element with the pack param bound to it —

@@ -244,12 +244,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         param_types
             .iter()
-            .map(|&t| self.substitute_ctx_in_frame(&subst, t))
+            .map(|&t| self.substitute_map_in_frame(&subst, t))
             .collect()
     }
 
     /// `subst` over `type_id`, then the projections that answers.
-    pub(super) fn substitute_ctx_in_frame(
+    pub(super) fn substitute_map_in_frame(
         &mut self,
         subst: &TypeArgMap,
         type_id: TypeId,

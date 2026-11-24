@@ -474,6 +474,7 @@ pub(super) struct PackRun {
     pub(super) var: TypeId,
     pub(super) elems: Vec<TypeId>,
 }
+
 /// What two tuples meet at whatever their packs expand to.
 struct AroundPacks {
     /// The elements at one position: all of them where neither holds a pack,
@@ -577,7 +578,8 @@ fn fixed_around_packs(a: &[TypeId], e: &[TypeId], type_table: &TypeTable) -> Aro
             }
             PackRun { var, elems }
         }),
-        _ => None,
+        [_, _, ..] => None,
+        [] => unreachable!("one side holds a pack"),
     };
     AroundPacks { fixed, run }
 }

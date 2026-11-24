@@ -1606,13 +1606,6 @@ impl TypeTable {
         self.compiler_item_def(item) == Some(def)
     }
 
-    /// Whether `def` declares a resource, whose instances are handles rather
-    /// than GC objects.
-    #[must_use]
-    pub fn is_resource_def(&self, def: DefId) -> bool {
-        self.defs.kind(def) == DefKind::Resource
-    }
-
     /// The resource `ty` itself is a handle to, generic or not.
     #[must_use]
     pub fn resource_def_of(&self, ty: TypeId) -> Option<DefId> {
@@ -2218,26 +2211,6 @@ impl TypeTable {
             .is_some_and(|def| self.is_compiler_item(def, item))
     }
 
-    pub fn compiler_enum_name(&self, item: CompilerItem) -> &str {
-        self.compiler_items.enum_name(item)
-    }
-
-    /// Owned `(module, name)` for a registered struct / enum item — forwards
-    /// the registry's `CompilerItems::struct_owned` so single-expression
-    /// callers query the table directly instead of through `compiler_items()`.
-    pub fn compiler_struct_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
-        self.compiler_items.struct_owned(item)
-    }
-
-    pub fn compiler_enum_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
-        self.compiler_items.enum_owned(item)
-    }
-
-    /// Module source of a registered struct item, if present.
-    pub fn compiler_struct_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
-        self.compiler_items.struct_module(item)
-    }
-
     /// Case name of a registered variant-case item (e.g. `Option::Some`).
     pub fn compiler_variant_case_name(&self, item: CompilerItem) -> &str {
         self.compiler_items.variant_case_name(item)
@@ -2247,18 +2220,6 @@ impl TypeTable {
     /// variant-case item.
     pub fn compiler_variant_case(&self, item: CompilerItem) -> (&ModuleSource, &str, &str, u32) {
         self.compiler_items.require_variant_case(item)
-    }
-
-    /// Module + owner-type name + method name of a registered method item.
-    pub fn compiler_method(&self, item: CompilerItem) -> (&ModuleSource, &str, &str) {
-        self.compiler_items.require_method(item)
-    }
-
-    /// Get the module source where the `Default` trait is defined, if
-    /// the stdlib has registered it. Thin wrapper around
-    /// `CompilerItems::trait_module`.
-    pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
-        self.compiler_items.trait_module(CompilerItem::Default)
     }
 
     /// Make the struct type for a registered `CompilerItem` variant
@@ -4757,28 +4718,6 @@ impl TypeTable {
         )
     }
 
-    /// The tuples `id` is built over that hold one of `packs` as an element,
-    /// the outermost where one holds another.
-    pub fn tuples_holding(&self, id: TypeId, packs: &[TypeId]) -> IndexSet<TypeId> {
-        let mut found = IndexSet::default();
-        self.collect_tuples_holding(id, packs, &mut found);
-        found
-    }
-
-    fn collect_tuples_holding(&self, id: TypeId, packs: &[TypeId], found: &mut IndexSet<TypeId>) {
-        if self
-            .as_tuple(id)
-            .is_some_and(|elems| elems.iter().any(|e| packs.contains(e)))
-        {
-            found.insert(id);
-            return;
-        }
-        self.any_constituent(id, &mut |t| {
-            self.collect_tuples_holding(t, packs, found);
-            false
-        });
-    }
-
     /// `type_id` with each effect parameter or variable `rows` names replaced
     /// by its row, wherever a function type in it carries one.
     pub fn substitute_effect_rows(&mut self, type_id: TypeId, rows: &EffectRows) -> TypeId {
@@ -5089,10 +5028,6 @@ impl TypeTable {
         if self.is_infer_var(answer) {
             let mapped_elem = mapped_elem.map(|_| each(self, answer));
             out.push(self.make_pack_var(answer, mapped_elem));
-            return;
-        }
-        if mapped_elem.is_some() && answer == Self::UNKNOWN {
-            out.push(Self::UNKNOWN);
             return;
         }
         for element in self.elem_types_or_self(answer) {
@@ -6379,7 +6314,8 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::InferVar(_) => pred(id),
             ResolvedType::PackVar { var, .. } => {
-                pred(self.infer_var_type(*var)) || self.any_constituent(id, &mut |t| self.any_infer_var(t, pred))
+                pred(self.infer_var_type(*var))
+                    || self.any_constituent(id, &mut |t| self.any_infer_var(t, pred))
             }
             ResolvedType::AssocTypeProjection {
                 param_id,

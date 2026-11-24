@@ -2443,13 +2443,6 @@ impl CompilerItems {
         }
     }
 
-    /// Owned `(module, name)` for a struct item — the borrow-then-clone the
-    /// callers of [`Self::require_struct`] would otherwise repeat inline.
-    pub fn struct_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
-        let (module, name) = self.require_struct(item);
-        (module.clone(), name.to_string())
-    }
-
     /// Module + variant name of a [`CompilerItemKind::Variant`] item
     /// (`Option`, `Result`).
     pub fn require_variant(&self, item: CompilerItem) -> (&ModuleSource, &str) {
@@ -2461,25 +2454,6 @@ impl CompilerItems {
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Variant", other),
         }
-    }
-
-    /// Module + enum name of a [`CompilerItemKind::Enum`] item
-    /// (`Ordering`).
-    pub fn require_enum(&self, item: CompilerItem) -> (&ModuleSource, &str) {
-        match self.require(item) {
-            Resolved::Enum {
-                module_source,
-                name,
-                ..
-            } => (module_source, name.as_str()),
-            other => kind_mismatch_ice(item, "Enum", other),
-        }
-    }
-
-    /// Owned `(module, name)` for an enum item — see [`Self::struct_owned`].
-    pub fn enum_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
-        let (module, name) = self.require_enum(item);
-        (module.clone(), name.to_string())
     }
 
     /// Module + trait name of a [`CompilerItemKind::Trait`] item.
@@ -2659,31 +2633,10 @@ impl CompilerItems {
         self.require_variant(item).1
     }
 
-    /// Name-only convenience for a [`CompilerItemKind::Enum`] item.
-    pub fn enum_name(&self, item: CompilerItem) -> &str {
-        self.require_enum(item).1
-    }
-
     /// Name-only convenience for a [`CompilerItemKind::Method`] item.
     /// Returns the unmangled method name (e.g. `"push_str"`).
     pub fn method_name(&self, item: CompilerItem) -> &str {
         self.require_method(item).2
-    }
-
-    /// Module-only accessor for a trait.
-    pub fn trait_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
-        match self.get(item)? {
-            Resolved::Trait { module_source, .. } => Some(module_source),
-            _ => None,
-        }
-    }
-
-    /// Module-only accessor for a struct.
-    pub fn struct_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
-        match self.get(item)? {
-            Resolved::Struct { module_source, .. } => Some(module_source),
-            _ => None,
-        }
     }
 
     /// The template a synthesised call to a [`CompilerItemKind::Method`] or

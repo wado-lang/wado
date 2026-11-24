@@ -13,8 +13,8 @@ use crate::cut_memo::CutWalk;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
-    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing,
-    TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
+    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing, TirLiteralPattern,
+    TirStruct, TypeArgMap, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -27,8 +27,7 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::pending_selection::{PendingOp, PendingOperator};
 use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{
-    MeetRules, Meetings, SlotFrame, TypeCheckResult, admits_condition, check_assignable,
-    meetings,
+    MeetRules, Meetings, SlotFrame, TypeCheckResult, admits_condition, check_assignable, meetings,
 };
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -4518,7 +4517,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .struct_fields_of_written_decl(struct_decl)
                 .map(|info| info.type_param_type_ids.clone())
                 .unwrap_or_default();
-            let subst = self.tysys.type_table.borrow().bind_params(&slots, &type_args);
+            let subst = self
+                .tysys
+                .type_table
+                .borrow()
+                .bind_params(&slots, &type_args);
             let mut fields: Vec<ResolvedField> = fields
                 .into_iter()
                 .map(|mut field| {
@@ -4542,7 +4545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(concrete_type) = struct_field_types
                     .iter()
                     .find(|(name, _)| name == &ast_field.name)
-                    .map(|(_, type_id)| self.substitute_ctx_in_frame(&subst, *type_id))
+                    .map(|(_, type_id)| self.substitute_map_in_frame(&subst, *type_id))
                 else {
                     continue;
                 };

@@ -13,9 +13,7 @@ use crate::name::{
     unalias_namespace_member,
 };
 use crate::resolve::Resolution;
-use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId, TypeParamId,
-};
+use crate::tir::{FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId, TypeParamId};
 use crate::type_table::TypeTable;
 
 use super::callee::{CalleeRef, StaticMethodRef};
@@ -6167,13 +6165,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             let param_types: Vec<TypeId> = param_types
                 .iter()
-                .map(|&t| self.substitute_ctx_in_frame(&subst, t))
+                .map(|&t| self.substitute_map_in_frame(&subst, t))
                 .collect();
             self.recoerce_literal_args(&call.args, &mut args, &param_types);
             for (i, (&arg, &param)) in args.iter().zip(&param_types).enumerate() {
                 self.typecheck_arg(arg, param, ArgSite::of(&call.args, i, call.span));
             }
-            let final_return_type = self.substitute_ctx_in_frame(&subst, declared_return);
+            let final_return_type = self.substitute_map_in_frame(&subst, declared_return);
 
             let method_type_arg_names: Vec<FqTypeName> = method_type_args
                 .iter()

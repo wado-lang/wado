@@ -15,8 +15,8 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId,
-    TupleSlot, TypeArgMap, TypeId, slots_from_impl_args,
+    FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TupleSlot, TypeArgMap, TypeId,
+    slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -1098,7 +1098,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if !subst_ctx.is_empty() {
-            return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
+            return_type = self.substitute_map_in_frame(&subst_ctx, return_type);
         }
         if let Some(frame) = inherited {
             return_type = frame.to_newtype(&self.tysys, return_type);
@@ -1132,7 +1132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             let mut solved: Vec<TypeId> = expected_param_types
                 .iter()
-                .map(|&t| self.substitute_ctx_in_frame(&subst_ctx, t))
+                .map(|&t| self.substitute_map_in_frame(&subst_ctx, t))
                 .collect();
             if let Some(frame) = inherited {
                 frame.to_newtype_in(&self.tysys, &mut solved);
@@ -3491,7 +3491,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .bind_params(&[blanket_slot], &[receiver_type_id]);
-        let return_type = self.substitute_ctx_in_frame(&receiver_slot, template_return);
+        let return_type = self.substitute_map_in_frame(&receiver_slot, template_return);
         let param_types = self.blanket_static_param_types(
             blanket_def,
             &template_params,
@@ -3535,9 +3535,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let param_types: Vec<TypeId> = param_types
             .iter()
-            .map(|&t| self.substitute_ctx_in_frame(&subst, t))
+            .map(|&t| self.substitute_map_in_frame(&subst, t))
             .collect();
-        let return_type = self.substitute_ctx_in_frame(&subst, return_type);
+        let return_type = self.substitute_map_in_frame(&subst, return_type);
 
         // The arguments were resolved before the blanket was found, so a
         // literal among them takes its parameter's type only now.
@@ -3641,7 +3641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .bind_params(&[blanket_slot], &[receiver_type_id]);
         template
             .iter()
-            .map(|&pt| self.substitute_ctx_in_frame(&receiver_slot, pt))
+            .map(|&pt| self.substitute_map_in_frame(&receiver_slot, pt))
             .collect()
     }
 
