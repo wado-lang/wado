@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795519762598,
+  "lastUpdate": 1795557274059,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82029,6 +82029,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cb4f66e2ce986b3ddb7f112e4b50cddbd18f1e37"
         },
         "date": 1795519761605,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64806562b4ee9fa74b7f60dd106eb8d1210774ad",
+          "message": "Merge pull request #2748 from wado-lang/ccr-5a053762-2x7vni\n\nfix(compiler): select an overload by a function argument's effect row",
+          "timestamp": "2026-11-25T06:39:34+09:00",
+          "tree_id": "c10f673c3e2770ae8015459a910431bdbb96b339",
+          "url": "https://github.com/wado-lang/wado/commit/64806562b4ee9fa74b7f60dd106eb8d1210774ad"
+        },
+        "date": 1795557272935,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
