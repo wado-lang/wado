@@ -2,6 +2,7 @@
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
 use super::sig::AssocConstSig;
+use super::trait_env::written_arg_nodes;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
@@ -24,7 +25,6 @@ use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_
 use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
-use super::orchestration::first_infer_span;
 use super::pending_selection::{PendingOp, PendingOperator};
 use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
@@ -134,6 +134,18 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 /// it.
 fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
+}
+
+/// Whether `expr` writes a type a `_` may stand in: a turbofish on a call, a
+/// path or a struct literal, a static call's receiver, or an `as` target.
+fn writes_inferable_type(expr: &Expr) -> bool {
+    matches!(expr, Expr::Cast(_))
+        || matches!(expr, Expr::Call(call) if !call.type_args.is_empty())
+        || matches!(expr, Expr::MethodCall(call) if !call.type_args.is_empty())
+        || matches!(expr, Expr::Ident(ident) if !ident.type_args.is_empty())
+        || matches!(expr, Expr::StructLiteral(lit) if !lit.type_args.is_empty())
+        || matches!(expr, Expr::StaticMethodCall(call)
+            if !call.type_args.is_empty() || !written_arg_nodes(&call.target_type).is_empty())
 }
 
 /// The literal `-NUM` negates, which both range checks read as one literal so
@@ -646,7 +658,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
         let reads = self.tysys.type_table.borrow().effect_vars_read();
-        let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
+        let type_id = if writes_inferable_type(expr) {
+            self.closing_holes_on_error(|e| e.resolve_expr_inner(expr, ctx, expected_type))
+        } else {
+            self.resolve_expr_inner(expr, ctx, expected_type)
+        };
         if self.tysys.type_table.borrow().effect_vars_read() > reads {
             let closing = RowClosing {
                 span: expr.span(),
@@ -775,7 +791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::TaggedTemplate(tagged) => {
                 self.resolve_tagged_template(tagged, ctx, expected_type)
             }
-            Expr::Cast(cast) => self.resolve_cast(cast, ctx),
+            Expr::Cast(cast) => self.resolve_cast(cast, ctx, expected_type),
             Expr::StructLiteral(struct_lit) => {
                 self.resolve_struct_literal(struct_lit, ctx, expected_type)
             }
@@ -1278,8 +1294,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.value_without_turbofish(ident, assoc.ty);
             }
             self.reject_unresolved_args(&ident.type_args);
-            let owner_type =
-                self.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span);
+            // The constant reads no argument, so a `_` among them asks for
+            // nothing, as an omitted one does.
+            let owner_type = self.with_writable_holes(|e| {
+                e.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span)
+            });
+            self.unwrite_holes_in(owner_type);
             return if owner_type == TypeTable::ERROR {
                 TypeTable::ERROR
             } else {
@@ -1510,7 +1530,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(written) = self.case_written(
                 &owner,
                 [prefix, case_name],
-                (&ident.type_args, Self::resolve_path_args),
+                (&ident.type_args, Self::resolve_turbofish_args),
                 ident.span,
             ) else {
                 return Some(TypeTable::ERROR);
@@ -1553,7 +1573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .case_written(
                 &owner,
                 [prefix, case_name],
-                (&ident.type_args, Self::resolve_path_args),
+                (&ident.type_args, Self::resolve_turbofish_args),
                 ident.span,
             )
             .is_some_and(|written| {
@@ -1676,13 +1696,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let real_type_param_count = sig.decl.type_params.len();
 
-        // (a) Turbofish on the identifier: `name::<T, ...>`. A function value
-        // has no call to infer from, so a `_` slot is unanswerable.
+        if real_type_param_count == 0 && ident.type_args.is_empty() {
+            return self.func_ref_instance(ident, &sig, &[], expected_type);
+        }
+
+        // (a) Turbofish on the identifier: `name::<T, ...>`.
         if !ident.type_args.is_empty() {
-            if let Some(span) = ident.type_args.iter().find_map(first_infer_span) {
-                let _ = self.emit(TypeError::InferPlaceholderNotAllowed { span });
-                return TypeTable::ERROR;
-            }
             if ident.type_args.len() != real_type_param_count {
                 let _ = self.emit(TypeError::TypeArgumentCount {
                     name: ident.name.clone(),
@@ -1692,19 +1711,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 return TypeTable::ERROR;
             }
-            let resolved_args: Vec<TypeId> = ident
-                .type_args
-                .iter()
-                .map(|t| self.resolve_type(t))
-                .collect();
-            return self.func_ref_instance(ident, &sig, &resolved_args, expected_type);
+            let written = self.resolve_turbofish_args(&ident.type_args);
+            if written.iter().any(|&arg| self.holds_written_hole(arg)) {
+                return self.func_ref_with_holes(ident, &sig, &written, expected_type);
+            }
+            return self.func_ref_instance(ident, &sig, &written, expected_type);
         }
 
-        if real_type_param_count == 0 {
-            return self.func_ref_instance(ident, &sig, &[], expected_type);
-        }
-
-        // (b) Generic without turbofish: try to infer from `expected_type`.
+        // (b) Generic without turbofish: a function value has no call to infer
+        // from, so only `expected_type` settles its type arguments.
         if let Some(expected) = expected_type {
             match self.infer_func_ref_type_args(&sig, expected) {
                 FuncRefInference::Ok(inferred) => {
@@ -1732,6 +1747,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: ident.span,
         });
         TypeTable::ERROR
+    }
+
+    /// [`Self::func_ref_instance`] at `written`, whose `_`s only the expected
+    /// `fn` type can settle: a function value has no call to infer from. One
+    /// it leaves open reports as its slot.
+    fn func_ref_with_holes(
+        &mut self,
+        ident: &ast::IdentExpr,
+        sig: &FunctionSig,
+        written: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        let owner = InstanceKind::Function.slot_owner(&ident.name);
+        for ((param, _), &arg) in sig.decl.type_params.iter().zip(written) {
+            self.blame_holes_as_slot(arg, ident.span, param, &owner);
+        }
+        if let Some(expected) = expected_type
+            && let Some(instance) = self.compute_func_ref_type_from_sig(sig, written)
+        {
+            let expected = self.tysys.type_table.borrow().peel_refs(expected);
+            self.equate(instance, expected);
+        }
+        let args: Vec<TypeId> = written
+            .iter()
+            .map(|&arg| self.apply_infer_holes(arg))
+            .collect();
+        self.func_ref_instance(ident, sig, &args, expected_type)
     }
 
     /// The type of `ident` naming `sig` instantiated at `type_args`, recorded
@@ -2354,6 +2396,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn report_not_indexable(&mut self, receiver: TypeId, span: Span) -> TypeId {
+        if receiver == TypeTable::ERROR {
+            return TypeTable::ERROR;
+        }
         let type_name = self.tysys.type_table.borrow().name(receiver);
         let _ = self.emit(TypeError::MissingTraitImpl {
             type_name,
@@ -3809,6 +3854,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         cast: &ast::CastExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
         // A cast names its own result type, so nothing downstream reports an
         // unresolved target: reify's `ann_expression_types` filters the
@@ -3816,7 +3862,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.reject_unresolved_annotation(&cast.target_type) {
             return TypeTable::ERROR;
         }
-        let target_type = self.resolve_type(&cast.target_type);
+        let target_type = self.with_writable_holes(|e| e.resolve_type(&cast.target_type));
         if target_type == TypeTable::UNKNOWN {
             let _ = self.emit(TypeError::UnknownType {
                 name: self.get_type_name_full(&cast.target_type),
@@ -3824,7 +3870,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return TypeTable::ERROR;
         }
+        if !self.holds_written_hole(target_type) {
+            return self.resolve_cast_to(cast, ctx, target_type);
+        }
+        // The expected type answers a `_` before the operand reads the target,
+        // and what the cast leaves open is reported here: a cast names its
+        // own type, and judges the conversion to it now.
+        if let Some(expected) = expected_type {
+            self.equate(target_type, expected);
+        }
+        let errors_before = self.logger.offered_error_count();
+        let resolved = if self.is_bare_written_hole(target_type) {
+            self.resolve_expr(&cast.expr, ctx, None);
+            TypeTable::ERROR
+        } else {
+            let target_type = self.apply_infer_holes(target_type);
+            self.resolve_cast_to(cast, ctx, target_type)
+        };
+        let open = self.written_holes_in(target_type);
+        if open.is_empty() {
+            return self.apply_infer_holes(resolved);
+        }
+        // An operand that reported its own error is the whole fault, and
+        // `resolve_expr` closes what it leaves open.
+        if self.logger.offered_error_count() == errors_before {
+            self.close_uninferred(&open);
+        }
+        TypeTable::ERROR
+    }
 
+    /// [`Self::resolve_cast`] to `target_type`, whose `_`s the operand
+    /// settles.
+    fn resolve_cast_to(
+        &mut self,
+        cast: &ast::CastExpr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> TypeId {
         // `[1, 2, 3] as List<i32>`, `[1, 2, 3] as SeqVec<i32>`
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
             return coerced;
@@ -3913,6 +3995,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;
         }
+        // A `_` the expected type left in the target takes what the operand
+        // has there, at the target or across a newtype at its base.
+        let target_type = if self.holds_written_hole(target_type) {
+            let base = self
+                .tysys
+                .type_table
+                .borrow()
+                .representation_head(target_type);
+            self.equate(target_type, source_type);
+            self.equate(base, source_type);
+            self.apply_infer_holes(target_type)
+        } else {
+            target_type
+        };
         let source_type = self
             .tysys
             .type_table

@@ -1,0 +1,23 @@
+// A qualified call whose receiver is not the spelled type reports that alone,
+// with each `_` shown as written.
+
+struct Bx<T> {
+    v: T,
+}
+
+impl<T> Bx<T> {
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let b = Bx { v: "s" };
+    let _s = Bx::<List<_>>::get(&b);
+}
+
+__DATA__
+{
+    "compile_error": ":16:33: analysis error: type mismatch: expected 'Bx<List<_>>', found 'Bx<String>'",
+    "compile_error_count": 1
+}

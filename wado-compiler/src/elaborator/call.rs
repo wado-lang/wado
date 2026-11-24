@@ -284,10 +284,12 @@ pub(super) fn arg_sites_of(raw_args: &[Expr], resolved: usize, call_span: Span) 
         .collect()
 }
 
-/// Whether `slot_count` slots leave anything for inference: a `_` among the
-/// written args, or fewer written than there are slots.
-pub(super) fn turbofish_leaves_slot(type_args: &[TypeId], slot_count: usize) -> bool {
-    type_args.len() < slot_count || type_args.contains(&TypeTable::UNKNOWN)
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Whether `slot_count` slots leave anything for inference: a `_` among
+    /// the written args, at any depth, or fewer written than there are slots.
+    pub(super) fn turbofish_leaves_slot(&self, type_args: &[TypeId], slot_count: usize) -> bool {
+        type_args.len() < slot_count || type_args.iter().any(|&arg| self.holds_written_hole(arg))
+    }
 }
 
 /// Group flat turbofish args written for `slots` slots, one of them the pack
@@ -309,14 +311,24 @@ fn absorb_into_pack(
     type_args.insert(pack_pos, tuple);
 }
 
-/// Fill the `_` and unwritten slots of `explicit` from `inferred`, in place.
-/// Every other slot keeps what the source wrote, so an explicit type wins.
-pub(super) fn merge_turbofish_type_args(explicit: &mut Vec<TypeId>, inferred: &[TypeId]) {
-    for (i, &filled) in inferred.iter().enumerate() {
-        match explicit.get_mut(i) {
-            Some(slot) if *slot == TypeTable::UNKNOWN => *slot = filled,
-            Some(_) => {}
-            None => explicit.push(filled),
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Fill the `_` and unwritten slots of `explicit` from `inferred`, in
+    /// place: an unwritten slot takes its answer, and one holding a `_` meets
+    /// it. Every other slot keeps what the source wrote.
+    pub(super) fn merge_turbofish_type_args(
+        &mut self,
+        explicit: &mut Vec<TypeId>,
+        inferred: &[TypeId],
+    ) {
+        for (i, &filled) in inferred.iter().enumerate() {
+            match explicit.get(i).copied() {
+                Some(written) if self.holds_written_hole(written) => {
+                    self.equate(written, filled);
+                    explicit[i] = self.apply_infer_holes(written);
+                }
+                Some(_) => {}
+                None => explicit.push(filled),
+            }
         }
     }
 }
@@ -1232,6 +1244,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type arguments a case path writes: those its prefix carries, which
     /// leave no room for a turbofish, else the turbofish's, read by `resolve`.
+    /// A `_` standing for a whole slot omits it, which the construction then
+    /// infers and reports as its own.
     pub(super) fn case_written(
         &mut self,
         owner: &CaseOwner,
@@ -1240,7 +1254,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Option<Vec<TypeId>> {
         match &owner.carried {
-            None => Some(resolve(self, turbofish)),
+            None => {
+                let args = resolve(self, turbofish);
+                Some(self.omit_bare_written_holes(args))
+            }
             Some(carried) if !owner.newtype_holes.is_empty() => {
                 let carried = carried.clone();
                 let args = resolve(self, turbofish);
@@ -1248,8 +1265,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.reject_surplus_turbofish(prefix, holes.len(), args.len(), span) {
                     return None;
                 }
+                // A `_` for a whole slot is the newtype's own variable there,
+                // which reports itself.
                 for (&hole, &arg) in holes.iter().zip(&args) {
+                    let bare = self.is_bare_written_hole(arg);
                     self.settle_as_written(hole, arg);
+                    if bare {
+                        self.unwrite_holes_in(arg);
+                    }
                 }
                 // An argument the turbofish left open is the construction's to infer.
                 Some(
@@ -1904,7 +1927,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declared_param_types = param_types.clone();
 
         // Read before the instantiation below, which answers a named slot with
-        // it. A `_` resolves to UNKNOWN.
+        // it.
         let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
         // The turbofish names the method's own slots, after the declaring
         // block's, which the arguments answer.
@@ -2764,10 +2787,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             type_args =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-        } else if turbofish_leaves_slot(&type_args, RealTypeParams::borrowed(&declared).len()) {
+        } else if self.turbofish_leaves_slot(&type_args, RealTypeParams::borrowed(&declared).len())
+        {
             let inferred =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-            merge_turbofish_type_args(&mut type_args, &inferred);
+            self.merge_turbofish_type_args(&mut type_args, &inferred);
         }
 
         // Before the bound check and defer/report below, so the bound check
@@ -3798,7 +3822,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             raw_args,
             ret,
         } = solve;
-        let mut infer = InferCtx::new(&self.tysys.type_table, slots.to_vec());
+        // A `_` the turbofish wrote stands in a parameter type where its slot
+        // would, and is solved with the slots.
+        let holes = self.vars_holding_written_holes(param_types);
+        let mut infer = InferCtx::new(
+            &self.tysys.type_table,
+            slots.iter().copied().chain(holes.iter().copied()).collect(),
+        );
         for (i, (&param_type, &arg)) in param_types.iter().zip(args).enumerate() {
             if answers_last(raw_args.get(i)) {
                 infer.add_deferred(param_type, arg);
@@ -3809,7 +3839,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some((declared, expected)) = ret {
             infer.add_expected_return(declared, expected);
         }
-        infer.solve_with_bindings()
+        let (mut inferred, bindings) = infer.solve_with_bindings();
+        inferred.truncate(slots.len());
+        for hole in holes {
+            if let Some(&answer) = bindings.get(&hole) {
+                self.equate(hole, answer);
+            }
+        }
+        (inferred, bindings)
     }
 
     /// Resolve a type parameter appearing only inside another's
@@ -4755,7 +4792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ],
                 )
             });
-        let names_own = !written.is_empty() && !turbofish_leaves_slot(&written, own_slots);
+        let names_own = !written.is_empty() && !self.turbofish_leaves_slot(&written, own_slots);
         // A turbofish names only the method's own slots, so the receiver's are
         // inferred wherever it declares any.
         let (impl_args, mut method_args) = if names_own && declaring_slots == 0 {
@@ -4770,7 +4807,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             );
             if !names_own {
-                merge_turbofish_type_args(&mut written, &inferred);
+                self.merge_turbofish_type_args(&mut written, &inferred);
             }
             (impl_args, written)
         };
@@ -5538,6 +5575,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        self.meet_case_holes(case, expected_type);
         let slots = &case.variant.type_param_type_ids;
         let hints = self
             .tysys
@@ -5634,15 +5672,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if answer != slot || !self.tysys.type_table.borrow().is_type_pack(slot) {
                     return answer;
                 }
-                let name = case.variant.type_params[i].name.clone();
-                self.mint_infer_hole(
-                    case.span,
-                    uninferable_type_param("variant", case.owner),
-                    name,
-                    Vec::new(),
-                )
+                let owner = InstanceKind::Variant.slot_owner(case.owner);
+                self.mint_slot_hole(case.span, &case.variant.type_params[i].name, &owner)
             })
             .collect()
+    }
+
+    /// Meet each `_` inside a case's written arguments with what the expected
+    /// type has there, before anything under it is typed.
+    fn meet_case_holes(&mut self, case: &CaseSite<'_>, expected: Option<TypeId>) {
+        let Some(from_expected) = self.tysys.expected_variant_args(case.variant, expected) else {
+            return;
+        };
+        for (&written, &want) in case.written.iter().zip(&from_expected) {
+            if self.holds_written_hole(written) {
+                self.equate(written, want);
+            }
+        }
     }
 
     /// [`Self::construct_variant_case`] at the type arguments the site settled.
@@ -5677,12 +5723,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.check_case_site(case, args.len()) {
             return TypeTable::ERROR;
         }
+        self.meet_case_holes(case, expected_type);
         let variant = case.variant;
+        let all_written = case.written.len() == variant.type_params.len()
+            && case.written.iter().all(|&t| t != TypeTable::UNKNOWN);
         let variant_type = if variant.type_params.is_empty() {
             self.tysys
                 .type_table
                 .borrow()
                 .type_id_of_decl(variant.defined_at)
+        } else if all_written {
+            // A `_` inside one is a variable a later use settles, and reports
+            // as its slot would.
+            let owner = InstanceKind::Variant.slot_owner(case.owner);
+            for (param, &arg) in variant.type_params.iter().zip(case.written) {
+                self.blame_holes_as_slot(arg, case.span, &param.name, &owner);
+            }
+            let def = self.tysys.def_at(variant.defined_at);
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, case.written.to_vec())
         } else {
             let inferred = self.tysys.infer_variant_type_args(
                 &self.annotate_ctx,
@@ -5954,7 +6015,7 @@ impl TypeSystem {
 
     /// The declaration and type arguments of `expected`, where it is an
     /// instance of `variant_info`.
-    fn expected_variant_args(
+    pub(super) fn expected_variant_args(
         &self,
         variant_info: &VariantInfo,
         expected: Option<TypeId>,

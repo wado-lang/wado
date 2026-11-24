@@ -599,17 +599,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `_` inference placeholder used outside a turbofish type argument.
+    /// `_` inference placeholder outside a type an expression writes.
     InferPlaceholderNotAllowed {
-        span: Span,
-    },
-
-    /// `_` below the top of a type argument a path segment writes.
-    InferInPathArg {
-        span: Span,
-    },
-
-    InferInLetAnnotation {
         span: Span,
     },
 
@@ -1947,20 +1938,8 @@ impl TypeError {
             ),
             TypeError::InferPlaceholderNotAllowed { span } => (
                 Code::UnknownType,
-                "`_` type placeholder is not allowed here; only a turbofish takes one".to_string(),
-                *span,
-            ),
-            TypeError::InferInPathArg { span } => (
-                Code::UnknownType,
-                "a path's type argument takes `_` only for the whole argument; \
-                 write the type around it"
-                    .to_string(),
-                *span,
-            ),
-            TypeError::InferInLetAnnotation { span } => (
-                Code::UnknownType,
-                "type inference placeholder `_` in a `let` annotation is not yet supported; \
-                 write the type explicitly (e.g. `Option<u32>`) or omit the annotation"
+                "`_` type placeholder is not allowed here; only a turbofish, a `let` \
+                 annotation or an `as` target takes one"
                     .to_string(),
                 *span,
             ),

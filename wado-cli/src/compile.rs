@@ -1663,6 +1663,7 @@ mod kiln_dir_module_tests {
             from: InvocationPath::normalize("grammar.g4"),
             integrity: None,
             inputs: Vec::new(),
+            located: wado_compiler::hashmap::IndexMap::default(),
             output_dir: InvocationPath::normalize("build"),
             options: wado_compiler::kiln::CanonicalOptions::default(),
             raw_options: None,

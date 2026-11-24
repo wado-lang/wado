@@ -402,6 +402,177 @@ export fn generate(req: Request) -> Result<Response, Error> {{
     .unwrap();
 }
 
+/// A clause names a file a dependency exports as its primary and as an input.
+/// The generator, the header and the cache record see the file by its package
+/// coordinate, never by where it sits on this machine, and an unlisted file is
+/// refused at the package.
+#[test]
+fn a_clause_generates_from_files_a_dependency_exports() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    let gen_pkg = root.join("gen");
+    fs::create_dir_all(gen_pkg.join("src")).unwrap();
+    fs::write(
+        gen_pkg.join("wado.toml"),
+        "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        gen_pkg.join("src/generator.wado"),
+        r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
+    let origin = req.origin();
+    let mut text = read_text(req.primary.content).unwrap();
+    for let input of req.inputs {
+        text.push_str(&read_text(input.content).unwrap());
+    }
+    return Result::Ok(Response {
+        files: [OutputFile { path: "out.wado", content: `${origin.header()}${text}`, is_entry: true }],
+    });
+}
+"#,
+    )
+    .unwrap();
+
+    let schemas = root.join("schemas");
+    fs::create_dir_all(schemas.join("assets")).unwrap();
+    fs::write(
+        schemas.join("wado.toml"),
+        "[package]\nname = \"schemas\"\nnamespace = \"acme\"\nversion = \"0.2.0\"\n\
+         lib = \"lib.wado\"\nexports = [\"assets/a.idl\", \"assets/b.idl\"]\n",
+    )
+    .unwrap();
+    fs::write(schemas.join("lib.wado"), "").unwrap();
+    fs::write(
+        schemas.join("assets/a.idl"),
+        "pub fn a() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    fs::write(
+        schemas.join("assets/b.idl"),
+        "pub fn b() -> i32 { return 2; }\n",
+    )
+    .unwrap();
+    fs::write(schemas.join("assets/hidden.idl"), "\n").unwrap();
+    // A package nested where the files lie does not rename them.
+    fs::write(
+        schemas.join("assets/wado.toml"),
+        "[package]\nname = \"nested\"\nnamespace = \"acme\"\nversion = \"9.9.9\"\n\
+         lib = \"nested.wado\"\n",
+    )
+    .unwrap();
+    fs::write(schemas.join("assets/nested.wado"), "").unwrap();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
+         [dependencies]\n\"lib:schemas\" = { path = \"../schemas\" }\n\n\
+         [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    let main = |primary: &str| {
+        fs::write(
+            app.join("src/main.wado"),
+            format!(
+                r#"use {{ println, Stdout }} from "core:cli";
+use {{ a, b }} from "lib:schemas/{primary}" with {{
+    generator: {{ module: "lib:gen", inputs: ["lib:schemas/assets/b.idl"] }},
+}};
+
+export fn run() with Stdout {{
+    println(`${{a() + b()}}`);
+}}
+"#
+            ),
+        )
+        .unwrap();
+        wado_in(&app).args(["run", "src/main.wado"]).assert()
+    };
+
+    main("assets/a.idl").success().stdout("3\n");
+    let [generated, record] = ["out.wado", "a.idl.kiln.json"].map(|file| {
+        let found = fs::read_dir(app.join("build/kiln"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join(file))
+            .find(|path| path.exists())
+            .unwrap_or_else(|| panic!("no {file} under build/kiln"));
+        fs::read_to_string(found).unwrap()
+    });
+    assert!(
+        generated.starts_with(
+            "#![generated(by = \"lib:gen\", sources = \
+             [\"acme:schemas@0.2.0/assets/a.idl\", \"acme:schemas@0.2.0/assets/b.idl\"])]\n"
+        ),
+        "{generated}"
+    );
+    assert!(
+        record.contains("\"acme:schemas@0.2.0/assets/a.idl\"")
+            && !record.contains(root.to_str().unwrap()),
+        "{record}"
+    );
+    assert!(
+        !schemas.join("build").exists(),
+        "the dependency's tree is not written"
+    );
+
+    // Moved elsewhere, the tree still hits the cache: nothing it records names
+    // where a dependency lies.
+    let generated_at = |app: &Path| {
+        fs::read_dir(app.join("build/kiln"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join("out.wado"))
+            .find(|path| path.exists())
+            .unwrap()
+    };
+    let written = fs::metadata(generated_at(&app))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let moved = tmp.path().join("moved");
+    fs::create_dir(&moved).unwrap();
+    for package in ["gen", "schemas", "app"] {
+        fs::rename(root.join(package), moved.join(package)).unwrap();
+    }
+    wado_in(&moved.join("app"))
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("3\n");
+    let rewritten = generated_at(&moved.join("app"));
+    assert_eq!(
+        fs::metadata(rewritten).unwrap().modified().unwrap(),
+        written,
+        "a warm cache leaves the output as it was"
+    );
+    for package in ["gen", "schemas", "app"] {
+        fs::rename(moved.join(package), root.join(package)).unwrap();
+    }
+
+    // Run from outside the package, the exported file is still found.
+    fs::write(
+        schemas.join("assets/b.idl"),
+        "pub fn b() -> i32 { return 3; }\n",
+    )
+    .unwrap();
+    wado_in(root)
+        .args(["run", "app/src/main.wado"])
+        .assert()
+        .success()
+        .stdout("4\n");
+
+    main("assets/hidden.idl")
+        .failure()
+        .stderr(predicate::str::contains(
+            "package `lib:schemas` exports no file `assets/hidden.idl`",
+        ));
+}
+
 /// A clause in a file no `wado.toml` governs has no `[build-dependencies]` to
 /// name its generator through, whatever its importer declares.
 #[test]

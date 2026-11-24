@@ -1,0 +1,25 @@
+// A subscript on a value whose own expression reported an error adds no
+// report of its own: the error type stands for whatever the value was meant to be.
+
+struct Bx<T> {
+    v: T,
+}
+
+impl<T> Bx<T> {
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let b = Bx { v: "s" };
+    let g = Bx::<List<i64>>::get(&b);
+    let _x = g[0];
+    let _y = nope[0];
+}
+
+__DATA__
+{
+    "compile_error": ":16:34: analysis error: type mismatch: expected 'Bx<List<i64>>', found 'Bx<String>'; 18:14: unknown identifier 'nope'",
+    "compile_error_count": 1
+}

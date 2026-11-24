@@ -29,7 +29,6 @@
 
 use std::path::Path;
 
-use wado_compiler::hashmap::IndexMap;
 use wado_compiler::kiln::metadata::{
     FileHash, METADATA_VERSION, Metadata, OutputEntry, metadata_filename,
 };
@@ -245,8 +244,11 @@ fn another_packages_clause_reads_the_consumers_build() {
         std::fs::write(dep.join("grammars/calc.g4"), SCHEMA_BODY).unwrap();
         std::fs::write(dep.join("lib.wado"), format!("pub {CLAUSE}")).unwrap();
         let lib = wado_compiler::parse(&format!("pub {CLAUSE}")).ast;
-        let (invocations, _) =
-            collect_inline_invocations([("dep/lib.wado", &lib)], &IndexMap::default(), "");
+        let (invocations, _) = collect_inline_invocations(
+            [("dep/lib.wado", &lib)],
+            &|_, _, _| unreachable!("the clause names a local file"),
+            "",
+        );
         let out_dir = format!("build/kiln/{}", invocations[0].decl_site().synthetic_id);
         write_artifact(
             &fixture.root.path().join(&out_dir),

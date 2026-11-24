@@ -414,7 +414,7 @@ impl MethodSig {
                 .flatten()
                 .chain(self.own_type_params().iter().zip(method_args));
             for ((_, slot), &arg) in pairs {
-                // A `_` resolves to UNKNOWN, which answers nothing.
+                // A slot the call names nothing for answers nothing.
                 if arg == TypeTable::UNKNOWN {
                     continue;
                 }

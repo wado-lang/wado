@@ -420,7 +420,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(owner) = owner.filter(|_| !params.is_empty()) else {
             return Some(Vec::new());
         };
-        let args = self.resolve_path_args(&namespaced.args);
+        self.reject_unresolved_args(&namespaced.args);
+        let args: Vec<TypeId> = namespaced
+            .args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
         let owed = self.param_bounds_at(owner, &namespaced.name, site, &args);
         for (((param, &arg), written), refs) in
             params.iter().zip(&args).zip(&namespaced.args).zip(owed)
@@ -657,29 +662,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
-    /// The types a turbofish supplies. One naming what is not a type here, an
-    /// `interface`, a `trait` or a type this module never imported, is rejected
-    /// as an annotation's is, since `unknown` would satisfy every bound in
-    /// silence.
+    /// The types a turbofish supplies, on a call or on a path segment
+    /// (`Option::<i32>::None`, `Bx::<_>::make`). One naming what is not a type
+    /// here, an `interface`, a `trait` or a type this module never imported,
+    /// is rejected as an annotation's is, since `unknown` would satisfy every
+    /// bound in silence.
     pub(super) fn resolve_turbofish_args(&mut self, args: &[Type]) -> Vec<TypeId> {
         self.reject_unresolved_args(args);
-        // A `_` standing for a whole slot still reaches the call as `unknown`,
-        // which the call paths read as a slot left to inference.
-        self.with_writable_holes(|e| {
-            args.iter()
-                .map(|ty| match ty {
-                    Type::Infer(_) => TypeTable::UNKNOWN,
-                    written => e.resolve_type(written),
-                })
-                .collect()
-        })
-    }
-
-    /// The types a path segment's arguments supply (`Option::<i32>::None`,
-    /// `Bx::<_>::make`), where a `_` stands only for a whole argument.
-    pub(super) fn resolve_path_args(&mut self, args: &[Type]) -> Vec<TypeId> {
-        self.reject_unresolved_args(args);
-        args.iter().map(|ty| self.resolve_type(ty)).collect()
+        self.with_writable_holes(|e| args.iter().map(|ty| e.resolve_type(ty)).collect())
     }
 
     /// Run `resolve` where a `_` the source wrote is a variable.

@@ -1,0 +1,52 @@
+// A `_` in a `let` annotation or after `as` is a variable: the value, the
+// expected type or a later use settles it, and what is written around it wins.
+
+struct Bx<T> {
+    v: T,
+}
+
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn take64(xs: List<i64>) -> i32 {
+    return xs.len();
+}
+
+test "a let annotation" {
+    let xs: List<_> = [1, 2];
+    let b: Bx<_> = Bx { v: "s" };
+    let o: Option<_> = none::<i64>();
+    let p: Option<_> = Option::Some(42);
+    assert xs.len() == 2 && b.v == "s" && o == null && p == Option::Some(42);
+}
+
+test "a let annotation settled by a later use" {
+    let mut xs: List<_> = [];
+    xs.push(5_000_000_000 as i64);
+    let ys: List<_> = [];
+    let mut zs: Array<_> = Array::new(3);
+    zs[0] = 1;
+    assert xs[0] == 5_000_000_000 && take64(ys) == 0 && zs[0] == 1;
+}
+
+test "a destructuring let" {
+    let [a, b]: [_, i64] = [1, 5_000_000_000];
+    assert a == 1 && b == 5_000_000_000;
+}
+
+test "a cast" {
+    let v: List<i64> = [1, 5_000_000_000] as List<_>;
+    let n: i64 = 3 as _;
+    let w = [1, 2] as List<_>;
+    assert v[1] == 5_000_000_000 && n == 3 && w.len() == 2;
+}
+
+type Tag<T> = List<T>;
+
+test "a cast settled by its operand" {
+    let xs: List<i64> = [5_000_000_000];
+    let ys = xs as List<_>;
+    let t = xs as Tag<_>;
+    assert ys[0] == 5_000_000_000 && t.len() == 1;
+}
