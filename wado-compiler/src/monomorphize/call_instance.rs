@@ -108,7 +108,7 @@ impl Monomorphizer {
                 args
             };
         let method_type_args = method_args_at(&template, &site, type_table)?;
-        let effect_args = effect_args_at(&template, expr, &site, type_table)?;
+        let effect_args = effect_args_at(&template, expr, &site, type_table);
         Some(InstantiationKey {
             def: None,
             name: generic_function_name(
@@ -325,18 +325,17 @@ fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -
 
 /// The row each of `template`'s own effect parameters stands for at the call
 /// or function reference `expr`: what the arguments' rows, or the reference's
-/// type, meet them with. `None` where a row still holds a variable. A
-/// parameter left in a row is one no frame binds, which a call that
-/// determines nothing of a callee's `_` hands its caller: it keys the instance
-/// as it is.
+/// type, meet them with. A parameter left in a row is one no frame binds,
+/// which a call that determines nothing of a callee's `_` hands its caller: it
+/// keys the instance as it is.
 fn effect_args_at(
     template: &TirFunction,
     expr: &TirExpr,
     site: &CallSite<'_>,
     type_table: &mut TypeTable,
-) -> Option<Vec<Vec<EffectRef>>> {
+) -> Vec<Vec<EffectRef>> {
     if template.effect_params.is_empty() {
-        return Some(Vec::new());
+        return Vec::new();
     }
     let rows = if let TirExprKind::Call { .. } = &expr.kind {
         let receiver_slots = usize::from(site.receiver.is_some());
@@ -367,7 +366,11 @@ fn effect_args_at(
                 .cloned()
                 .unwrap_or_default();
             canonicalize_row(&mut row);
-            (!row.iter().any(EffectRef::is_var)).then_some(row)
+            assert!(
+                !row.iter().any(EffectRef::is_var),
+                "the effect check's write-back leaves no row variable in the TIR"
+            );
+            row
         })
         .collect()
 }
