@@ -2,9 +2,9 @@
 //!
 //! `wado` carries Marl as source and compiles it on first use, keeping the
 //! component under a key of the compiler and the sources, never beside the
-//! files it documents. A release build keeps it in the user cache. A dev build
-//! keeps it in cargo's profile directory: every rebuild changes the key, and
-//! `cargo clean` takes what the old ones left.
+//! files it documents. A distributed build (the `dist` feature) keeps it in the
+//! user cache. Any other keeps it in cargo's profile directory: every rebuild
+//! changes the key, and `cargo clean` takes what the old ones left.
 
 use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
@@ -172,17 +172,17 @@ fn cache_path() -> Option<PathBuf> {
         hash_field(&mut hasher, source.as_bytes());
     }
     let key: [u8; 32] = hasher.finalize().into();
-    let dir = if cfg!(debug_assertions) {
-        cargo_profile_dir().or_else(user_cache_dir)
-    } else {
+    let dir = if cfg!(feature = "dist") {
         user_cache_dir()
+    } else {
+        cargo_profile_dir().or_else(user_cache_dir)
     };
     dir.map(|dir| dir.join(CACHE_KIND).join(format!("{}.cwasm", hex32(&key))))
 }
 
 /// The cargo profile directory (`target/debug`) the running binary was built
 /// into, which cargo marks with its `.cargo-lock`; `None` for a binary copied
-/// out of it, which caches as a release build does.
+/// out of it, which caches as a distributed one does.
 fn cargo_profile_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     exe.ancestors()
@@ -245,9 +245,9 @@ mod tests {
         assert_eq!(format("# Title\n* a\n* b\n"), "# Title\n\n- a\n- b\n");
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(not(feature = "dist"))]
     #[test]
-    fn a_dev_build_caches_in_its_profile_directory() {
+    fn a_build_from_cargo_caches_in_its_profile_directory() {
         assert_eq!(format("x\n"), "x\n");
         let path = cache_path().expect("a test binary has somewhere to cache");
         assert!(path.is_file(), "{} was not written", path.display());
