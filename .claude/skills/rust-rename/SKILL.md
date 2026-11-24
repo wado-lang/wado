@@ -9,7 +9,7 @@ description: Rename a Rust symbol across the workspace (an item, a method, a fie
 the edit it returns, moving a renamed module's file and directory too.
 
 ```sh
-scripts/dev-bin.sh wado-dev-tools rust-rename [--workspace DIR] [--dry-run] LOCATOR NEW_NAME
+tools/dev-bin.sh wado-dev-tools rust-rename [--workspace DIR] [--dry-run] LOCATOR NEW_NAME
 ```
 
 - `--workspace DIR` is the Cargo workspace to load, the current directory by

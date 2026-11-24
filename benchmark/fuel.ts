@@ -8,7 +8,7 @@
 //   write   rewrites benchmark/fuel.json
 //
 // Each mode first measures, under `wado test --report-fuel` (the dev build,
-// through scripts/dev-bin.sh). Only `-O2` is held to a baseline: it is the
+// through tools/dev-bin.sh). Only `-O2` is held to a baseline: it is the
 // level a performance change answers for, and the others are for reference. A series is named
 // `<region label> (<level>)`, the label a `<category>/…` path, and holds the region's
 // fuel, in github-action-benchmark's `customSmallerIsBetter` form. Fuel does
@@ -31,7 +31,7 @@ type Series = { name: string; unit: string; value: number };
 // default, `debug`, never reuses memory, and its cost is not the program's.
 function measure(level: string): Series[] {
   execFileSync(
-    "scripts/dev-bin.sh",
+    "tools/dev-bin.sh",
     ["wado", "test", level, "--allocator", "freelist", "--report-fuel", "--test-name", "fuel", "benchmark"],
     { stdio: ["ignore", process.stderr, "inherit"] },
   );

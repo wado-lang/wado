@@ -13,7 +13,7 @@ import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 
 const WEB = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(join(WEB, "..", "..", "scripts", "jco") + "/");
+const require = createRequire(join(WEB, "..", "..", "tools", "jco") + "/");
 const { chromium } = require("playwright-core");
 
 function chromePath() {
