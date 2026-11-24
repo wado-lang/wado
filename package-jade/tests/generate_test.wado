@@ -1,10 +1,10 @@
 use { GenerateError, GenerateOptions, Schema, SchemaSet, generate, generate_in } from "../src/lib.wado";
 use { Uri } from "core:uri";
 use { eval, EvalHost } from "core:eval";
-use { ModuleSpec, wado } from "lib:wadopoet";
+use { ModuleSpec, wado } from "wado-lang:wadopoet";
 
 fn module() -> ModuleSpec {
-    return ModuleSpec::new("lib:jade", ["api.schema.json"]);
+    return ModuleSpec::new("wado-lang:jade", ["api.schema.json"]);
 }
 
 fn generated(schema: String, options: GenerateOptions = GenerateOptions {}) -> String {
@@ -58,7 +58,7 @@ test "a struct is declared under its definition's name, with the root only a ref
             }
         }
     }"##;
-    assert generated(schema) == "#![generated(by = \"lib:jade\", sources = [\"api.schema.json\"])]
+    assert generated(schema) == "#![generated(by = \"wado-lang:jade\", sources = [\"api.schema.json\"])]
 
 pub struct Point {
     pub x: i32,

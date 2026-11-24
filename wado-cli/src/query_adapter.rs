@@ -1086,7 +1086,7 @@ mod tests {
         let root = tmp.path();
         fs::write(
             root.join("wado.toml"),
-            "[package]\nname = \"p\"\nversion = \"0.0.0\"\n\n[test]\nexclude = [\"fixtures/**\"]\n\n[format]\nexclude = [\"fixtures/**\"]\n",
+            "[package]\nnamespace = \"acme\"\nname = \"p\"\nversion = \"0.0.0\"\n\n[test]\nexclude = [\"fixtures/**\"]\n\n[format]\nexclude = [\"fixtures/**\"]\n",
         )
         .unwrap();
         touch(&root.join("fixtures/x.wado"));

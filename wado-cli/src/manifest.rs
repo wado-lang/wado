@@ -28,6 +28,8 @@ pub struct ProjectManifest {
 pub enum DiscoveryError {
     Io(io::Error),
     Parse(ManifestError),
+    /// A dependency's source holds another package than its entry names.
+    Source(String),
 }
 
 impl std::fmt::Display for DiscoveryError {
@@ -35,6 +37,7 @@ impl std::fmt::Display for DiscoveryError {
         match self {
             DiscoveryError::Io(e) => write!(f, "failed to read wado.toml: {e}"),
             DiscoveryError::Parse(e) => write!(f, "invalid wado.toml: {e}"),
+            DiscoveryError::Source(reason) => write!(f, "invalid wado.toml: {reason}"),
         }
     }
 }
@@ -255,10 +258,6 @@ pub const LIB_WORLD_NAME: &str = wado_compiler::wit_emit::LIB_WORLD_NAME;
 /// A library FQ `namespace:name/<segment>@version`, rejecting a package name
 /// that (case-insensitively) equals the reserved [`LIB_WORLD_NAME`].
 fn lib_fq(pkg: &wado_manifest::Package, segment: &str) -> Result<String, CliExit> {
-    let namespace = pkg
-        .namespace
-        .as_deref()
-        .ok_or_else(|| CliExit::error("`--lib` requires `[package].namespace` in wado.toml"))?;
     if pkg.name.eq_ignore_ascii_case(LIB_WORLD_NAME) {
         return Err(CliExit::error(format!(
             "[package].name {name:?} is reserved: a library's world is named \
@@ -268,6 +267,7 @@ fn lib_fq(pkg: &wado_manifest::Package, segment: &str) -> Result<String, CliExit
     }
     Ok(format!(
         "{namespace}:{name}/{segment}@{version}",
+        namespace = pkg.namespace,
         name = pkg.name,
         version = pkg.version,
     ))
@@ -528,6 +528,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "test-app"
 version = "0.1.0"
 command = "src/main.wado"
@@ -545,6 +546,7 @@ command = "src/main.wado"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "parent-app"
 version = "0.1.0"
 command = "src/main.wado"
@@ -584,6 +586,7 @@ command = "src/main.wado"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -609,6 +612,7 @@ version = "0.1.0"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -648,6 +652,7 @@ version = "0.1.0"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -712,23 +717,6 @@ lib = "src/lib.wado"
     }
 
     #[test]
-    fn lib_world_fq_requires_namespace() {
-        let toml = r#"
-[package]
-name = "no-ns"
-version = "0.1.0"
-lib = "src/lib.wado"
-"#;
-        let m = toml.parse::<Manifest>().unwrap();
-        let err = lib_world_fq(m.package.as_ref().unwrap()).unwrap_err();
-        assert!(
-            err.message.contains("[package].namespace"),
-            "{}",
-            err.message
-        );
-    }
-
-    #[test]
     fn resolve_lib_input_resolves_entry_and_world() {
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
@@ -783,6 +771,7 @@ version = "0.2.0"
         let tmp = tempfile::tempdir().unwrap();
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -825,7 +814,7 @@ authors = ["Alice"]
         let pkg = project.manifest.package.unwrap();
         assert_eq!(pkg.name, "core");
         assert_eq!(pkg.version, "0.1.0");
-        assert_eq!(pkg.namespace.as_deref(), Some("org"));
+        assert_eq!(pkg.namespace, "org");
         assert_eq!(pkg.license.as_deref(), Some("MIT"));
     }
 
@@ -880,7 +869,7 @@ authors = ["Alice"]
         let tmp = tempfile::tempdir().unwrap();
         write(
             &tmp.path().join("wado.toml"),
-            "[package]\nname = \"solo\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"solo\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
         );
         assert!(governing_workspace_root_dir(tmp.path()).is_none());
     }
@@ -922,7 +911,7 @@ authors = ["Alice"]
         let tmp = tempfile::tempdir().unwrap();
         write(
             &tmp.path().join("wado.toml"),
-            "[package]\nname = \"solo\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"solo\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n",
         );
         assert_eq!(license_file_base_dir(tmp.path()), tmp.path());
     }

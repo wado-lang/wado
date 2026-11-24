@@ -135,7 +135,7 @@ fn test_build_to_stdout_takes_its_entry_from_the_manifest() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(
         tmp.path().join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [world]\n\"wasi:cli/command\" = \"main.wado\"\n",
     )
     .unwrap();
@@ -180,7 +180,7 @@ fn test_run_of_an_undeclared_file_leaves_the_worlds_artifact_alone() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(
         tmp.path().join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [world]\n\"wasi:cli/command\" = \"main.wado\"\n",
     )
     .unwrap();
@@ -1110,7 +1110,7 @@ fn test_a_relative_import_into_a_path_dependency_is_the_dependency() {
     std::fs::create_dir_all(&other).unwrap();
     std::fs::write(
         other.join("wado.toml"),
-        "[package]\nname = \"other\"\nversion = \"0.1.0\"\nlib = \"o.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"other\"\nversion = \"0.1.0\"\nlib = \"o.wado\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -1122,7 +1122,7 @@ fn test_a_relative_import_into_a_path_dependency_is_the_dependency() {
     std::fs::create_dir_all(&app).unwrap();
     std::fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [dependencies]\n\"lib:other\" = { path = \"../other\" }\n",
     )
     .unwrap();
@@ -1787,7 +1787,7 @@ fn test_test_compiles_again_once_a_workspace_governs_the_package() {
     std::fs::create_dir(&pkg).unwrap();
     std::fs::write(
         pkg.join("wado.toml"),
-        "[package]\nname = \"p\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"p\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     let main = pkg.join("main_test.wado");
@@ -1916,7 +1916,7 @@ fn test_run_rebuilds_a_cached_component_once_its_license_file_changes() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(
         tmp.path().join("wado.toml"),
-        "[package]\nname = \"lic\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"lic\"\nversion = \"0.1.0\"\nlicense-file = \"LICENSE\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
     )
     .unwrap();
     std::fs::create_dir_all(tmp.path().join("src")).unwrap();
@@ -1986,8 +1986,11 @@ fn test_test_reruns_a_passed_file_once_a_transitive_path_dependency_names_anothe
     let tmp = tempfile::tempdir().unwrap();
     let greet = tmp.path().join("greet");
     std::fs::create_dir_all(&greet).unwrap();
-    let manifest =
-        |lib: &str| format!("[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n");
+    let manifest = |lib: &str| {
+        format!(
+            "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n"
+        )
+    };
     std::fs::write(greet.join("wado.toml"), manifest("a.wado")).unwrap();
     std::fs::write(greet.join("a.wado"), "pub fn n() -> i32 { return 1; }\n").unwrap();
     std::fs::write(greet.join("b.wado"), "pub fn n() -> i32 { return 2; }\n").unwrap();
@@ -1995,7 +1998,7 @@ fn test_test_reruns_a_passed_file_once_a_transitive_path_dependency_names_anothe
     std::fs::create_dir_all(&mid).unwrap();
     std::fs::write(
         mid.join("wado.toml"),
-        "[package]\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"mid.wado\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
+        "[package]\nnamespace = \"acme\"\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"mid.wado\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
     )
     .unwrap();
     std::fs::write(mid.join("mid.wado"), "pub use { n } from \"greet\";\n").unwrap();
@@ -2003,7 +2006,7 @@ fn test_test_reruns_a_passed_file_once_a_transitive_path_dependency_names_anothe
     std::fs::create_dir_all(&app).unwrap();
     std::fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nmid = { path = \"../mid\" }\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nmid = { path = \"../mid\" }\n",
     )
     .unwrap();
     std::fs::write(
@@ -2032,7 +2035,7 @@ fn test_test_reruns_a_passed_file_once_a_package_boundary_moves() {
     std::fs::create_dir_all(&other).unwrap();
     std::fs::write(
         other.join("wado.toml"),
-        "[package]\nname = \"other\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"other\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -2050,7 +2053,7 @@ fn test_test_reruns_a_passed_file_once_a_package_boundary_moves() {
     std::fs::create_dir_all(&app).unwrap();
     std::fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -2066,7 +2069,7 @@ fn test_test_reruns_a_passed_file_once_a_package_boundary_moves() {
         .stdout(predicate::str::contains("cached:  1 files"));
     std::fs::write(
         other.join("inner/wado.toml"),
-        "[package]\nname = \"inner\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"inner\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     run()
@@ -2085,7 +2088,7 @@ fn test_a_package_root_is_found_where_the_module_is_read() {
     std::fs::create_dir_all(pkgs.join("other")).unwrap();
     std::fs::write(
         pkgs.join("other/wado.toml"),
-        "[package]\nname = \"other\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"other\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -2100,7 +2103,7 @@ fn test_a_package_root_is_found_where_the_module_is_read() {
     .unwrap();
     std::fs::write(
         pkgs.join("app/wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     std::fs::write(

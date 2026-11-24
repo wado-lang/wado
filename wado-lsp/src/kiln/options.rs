@@ -86,11 +86,20 @@ async fn generator_entry<H: CompilerHost>(
         GeneratorModule::Spec(spec) => {
             let root = declared_in?;
             let manifest = read_manifest(root, host).await?;
-            let dep = manifest.build_dependencies.get(spec_key(&spec.spec))?;
+            let key = spec_key(&spec.spec);
+            let dep = manifest.build_dependencies.get(key)?;
             let DependencySource::Path { path, .. } = &dep.source else {
                 return None;
             };
-            package_generator_entry(&root.join(path), host).await
+            let pkg_dir = root.join(path);
+            let generator = read_manifest(&pkg_dir, host).await?;
+            wado_manifest::dependency::check_source_package(
+                key,
+                Some(&dep.source),
+                generator.package.as_ref(),
+            )
+            .ok()?;
+            Some(pkg_dir.join(generator.world_entry(GENERATOR_WORLD_FQ)?))
         }
     }
 }

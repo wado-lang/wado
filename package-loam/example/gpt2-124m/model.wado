@@ -1,12 +1,12 @@
 //! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
 //! token greedily, keeping the attention cache between calls.
 
-use { Backend, LoadError, Tensor, WeightSource } from "lib:loam";
+use { Backend, LoadError, Tensor, WeightSource } from "wado-lang:loam";
 /// GPT-2's byte-level BPE, with `<|endoftext|>` as its one special token.
 pub use { Tokenizer } from "./tokenizer.json"
     with {
         type: "hf-tokenizer",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 /// One graph that branches on whether it is given a past, so one set of weights
 /// runs both the prompt and each token after it.
@@ -15,7 +15,7 @@ use gpt2 from "https://huggingface.co/openai-community/gpt2/resolve/607a30d783df
         type: "onnx",
         integrity: "sha256:e6fc046fe5a7cfeeb8bb3c7d4c1b6a8bd90ced7339a75d5567957e3bc9d48abe",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { batch_size: 1 },
                 // Only the last position ranks the next token, and only its

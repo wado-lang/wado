@@ -147,23 +147,12 @@ pub async fn run(opts: PublishOptions) -> Result<(), CliExit> {
 enum Verdict {
     /// No `[package]` — not a publishable unit; ignored.
     NotAPackage,
-    /// Intentionally not published (`publish = false` or no `namespace`).
+    /// Intentionally not published (`publish = false`).
     Skipped(String),
     /// Ready: the `namespace:name@version` coordinate.
     Ready(String),
     /// Has unmet publish requirements.
     Failed(Vec<PublishError>),
-}
-
-/// The reason a package with a `[package]` is not published, if it is not.
-fn skip_reason(pkg: &Package) -> Option<&'static str> {
-    if !pkg.publish {
-        return Some("publish = false");
-    }
-    if pkg.namespace.is_none() {
-        return Some("no namespace");
-    }
-    None
 }
 
 /// The verdict on the package whose `wado.toml` in `root` parsed to `manifest`.
@@ -173,8 +162,8 @@ fn classify(manifest: &Manifest, root: &Path, published_members: &[PathBuf]) -> 
     let Some(pkg) = manifest.package.as_ref() else {
         return Verdict::NotAPackage;
     };
-    if let Some(reason) = skip_reason(pkg) {
-        return Verdict::Skipped(reason.to_string());
+    if !pkg.publish {
+        return Verdict::Skipped("publish = false".to_string());
     }
     let mut problems = validate_for_publish(manifest, |path| {
         root.join(path)
@@ -264,7 +253,7 @@ async fn publish_workspace(
                 .manifest
                 .package
                 .as_ref()
-                .is_some_and(|pkg| skip_reason(pkg).is_none())
+                .is_some_and(|pkg| pkg.publish)
         })
         .map(|(_, project)| {
             project
@@ -452,10 +441,7 @@ fn resolve_push_target(
         ))
     })?;
     let base = base.trim_end_matches('/');
-    let namespace = pkg
-        .namespace
-        .as_deref()
-        .ok_or_else(|| CliExit::error("[package].namespace is required to publish"))?;
+    let namespace = &pkg.namespace;
     // OCI repository components must be lowercase; Wado names allow uppercase, so
     // catch a non-pushable coordinate here with a clear message rather than a
     // cryptic `wkg` failure.
@@ -619,9 +605,7 @@ mod tests {
     }
 
     #[test]
-    fn classify_skips_publish_false_and_no_namespace() {
-        let no_ns = manifest("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert_matches!(classify(&no_ns, Path::new("."), &[]), Verdict::Skipped(r) if r == "no namespace");
+    fn classify_skips_publish_false() {
         let opted_out = manifest(
             "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\npublish = false\n",
         );

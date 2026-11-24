@@ -15,10 +15,10 @@ generated module imports.
 
 ```toml
 [build-dependencies]
-"lib:loam" = { package = "wado-lang:loam", version = "^0.0.39" }
+"wado-lang:loam" = { version = "^0.0.39" }
 
 [dependencies]
-"lib:loam" = { package = "wado-lang:loam", version = "^0.0.39" }
+"wado-lang:loam" = { version = "^0.0.39" }
 ```
 
 A `use` names the model and what to import from it. `type` is `onnx` for a
@@ -26,11 +26,11 @@ binary model and `onnxtext` for ONNX's text form, and `generator.options`
 fixes what the graph leaves open, such as a batch size:
 
 ```wado
-use { Cpu, Tensor } from "lib:loam";
+use { Cpu, Tensor } from "wado-lang:loam";
 use { Model, N as Batch, X1 as In, Y1 as Out, Weights, compute } from "./mlp.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 
 fn infer(weights: Weights, x: &Tensor<f32, [Batch, In]>) -> Tensor<f32, [Batch, Out]> {
