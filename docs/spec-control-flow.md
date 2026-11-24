@@ -313,15 +313,35 @@ before the first iteration. Each iteration then calls `next()` on the result,
 binds the element to `item` and runs the body. The loop ends when `next()`
 returns `None`.
 
+An operand that is an `Iterator` is walked itself, with no `into_iter()`. The
+loop consumes it, copyable or not, so a read of it after the loop is a compile
+error rather than a look at an unadvanced copy. `for let x of &mut it` walks
+`it` in place instead: a loop that stops early leaves the rest in `it`. A shared
+reference cannot advance an iterator, so `for let x of &it` is a compile error.
+
+<!-- {"fixture":"for_of_iterator_mut_ref_in_place.wado"} -->
+
+```wado
+let mut it = Count { n: 0, end: 5 };
+let mut seen: List<i32> = [];
+for let x of &mut it {
+    seen.push(x);
+    if x == 2 {
+        break;
+    }
+}
+assert seen == [1, 2];
+assert it.next() == Option::Some(3);
+```
+
 An [affine](./spec-affine.md) operand whose type implements the
 prelude trait `ForOf` is walked through it instead. The loop passes the operand
 by value to `ForOf::start` once, then calls `next()` on the state it returns.
 So the loop owns what it walks: the operand moves into the loop, each element
 moves into the binding, and leaving the loop early drops the elements it did not
-reach. `List<T>` and `Array<T>` implement `ForOf` for an affine `T`, and so
-does every affine `Iterator`, which is its own state. `for let x of &xs` and
-`for let x of &mut xs` walk an affine list by reference and leave it with its
-owner.
+reach. `List<T>` and `Array<T>` implement `ForOf` for an affine `T`.
+`for let x of &xs` and `for let x of &mut xs` walk an affine list by reference
+and leave it with its owner.
 
 The binding is a copy of each element
 ([Value Semantics](./spec-memory.md#value-semantics)), so changing it does not

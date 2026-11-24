@@ -770,6 +770,12 @@ for let item of items {
     println(`${item}`);
 }
 
+// An iterator is walked itself: by value the loop consumes it (a later read is
+// an error), and through `&mut` it advances in place
+let mut it = "abc".chars();
+for let c of &mut it { break; }
+it.next();                                   // Some('b')
+
 // Range for-of
 for let i of 0..<10 { println(`${i}`); }    // 0 to 9
 for let i of 1..=10 { println(`${i}`); }    // 1 to 10

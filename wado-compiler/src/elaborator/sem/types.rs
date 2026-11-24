@@ -590,10 +590,13 @@ impl BodyFacts {
             .chain(&self.index_swap_dispatch)
             .filter_map(|(id, op)| Some((*id, op.method_def?)));
         let iterators = self.for_of_iterator.iter().flat_map(|(id, info)| {
-            [info.start.as_ref().and_then(|start| start.def), info.next_def]
-                .into_iter()
-                .flatten()
-                .map(move |def| (*id, def))
+            [
+                info.start.as_ref().and_then(|start| start.def),
+                info.next_def,
+            ]
+            .into_iter()
+            .flatten()
+            .map(move |def| (*id, def))
         });
         let literals = self
             .literal_conversions

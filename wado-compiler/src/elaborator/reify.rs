@@ -3570,9 +3570,15 @@ impl<'a> Reify<'a> {
         let iter_type = info.iter_type;
         let iter_value = match &info.start {
             Some(start) => {
-                let receiver =
-                    self.adjust_receiver_for(operand, start.self_kind, &start.func, ctx);
-                build_tir_method_call(receiver, start.func.clone(), vec![], vec![], iter_type, span)
+                let receiver = self.adjust_receiver_for(operand, start.self_kind, &start.func, ctx);
+                build_tir_method_call(
+                    receiver,
+                    start.func.clone(),
+                    vec![],
+                    vec![],
+                    iter_type,
+                    span,
+                )
             }
             None => operand,
         };

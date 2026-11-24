@@ -1725,8 +1725,8 @@ pub affine trait IntoIterator with _ {
     fn into_iter(&self) -> Self::Iter;
 }
 
-/// Every Iterator is also an IntoIterator (returns a copy of itself).
-/// This allows `for let x of iter` to work directly on any iterator.
+/// Every Iterator is also an IntoIterator, returning a copy of itself, so a
+/// generic `T: IntoIterator` takes one. A `for-of` walks an iterator itself.
 impl<I: Iterator> IntoIterator for I {
     type Item = I::Item;
     type Iter = I;

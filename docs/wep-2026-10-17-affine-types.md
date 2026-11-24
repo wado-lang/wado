@@ -576,9 +576,10 @@ cursor's drop drops the list, and the list drops the slots that are not null.
 
 `next` is the state's own method rather than a member of the trait, so that
 `ListCursor<T>` need not implement `Iterator`, whose `Item` is copyable, with
-an affine `Item`. `Array<T>` walks through a `ListCursor<T>` as well, and an
-affine iterator through `impl<affine I: Iterator> ForOf for I`, as its own
-state. No blanket impl over `IntoIterator` exists. It would only forward to
+an affine `Item`. `Array<T>` walks through a `ListCursor<T>` as well. An
+iterator, affine or not, needs no `ForOf`: the loop walks it as its own state
+([WEP: For-Of Walks an Iterator Itself](./wep-2026-11-24-for-of-iterator.md)).
+No blanket impl over `IntoIterator` exists. It would only forward to
 `into_iter`, and resolving through it leaves the item type of a generic
 iterator as an unnormalized projection.
 

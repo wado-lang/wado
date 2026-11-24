@@ -3009,8 +3009,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(iterator) = self.tysys.compiler_trait(CompilerItem::Iterator) else {
             return IteratorOperand::Not;
         };
-        let is_iterator =
-            |ty| self.tysys.type_implements_trait(&self.annotate_ctx, ty, &iterator);
+        let is_iterator = |ty| {
+            self.tysys
+                .type_implements_trait(&self.annotate_ctx, ty, &iterator)
+        };
         let resolved = self.tysys.type_table.borrow().get(operand).clone();
         match resolved {
             ResolvedType::Unknown | ResolvedType::Error => IteratorOperand::Not,
@@ -3026,15 +3028,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn require_iterator(&mut self, iter_type: TypeId, span: Span) {
         let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
         if !iterator.is_some_and(|trait_| {
-                self.tysys
-                    .type_implements_trait(&self.annotate_ctx, iter_type, &trait_)
-            })
-            && !matches!(
-                self.tysys.type_table.borrow().get(iter_type),
-                ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
-            )
-            && !self.report_unmet_trait_impl_bound(iter_type, &[CompilerItem::Iterator], None, span)
-        {
+            self.tysys
+                .type_implements_trait(&self.annotate_ctx, iter_type, &trait_)
+        }) && !matches!(
+            self.tysys.type_table.borrow().get(iter_type),
+            ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
+        ) && !self.report_unmet_trait_impl_bound(
+            iter_type,
+            &[CompilerItem::Iterator],
+            None,
+            span,
+        ) {
             let type_name = self.tysys.type_table.borrow().name(iter_type);
             let _ = self.emit(TypeError::MissingTraitImpl {
                 type_name,
