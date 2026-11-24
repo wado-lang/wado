@@ -207,39 +207,39 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "ref_elim_handle_call_arg.wado/fill"(n) {
     let current: i32;
-    let $sroa_out_repr_31: ref Array<i32>;
-    let $sroa_out_used_32: i32;
-    let $sroa_$iter_0_start_35: i32;
-    let $sroa_write_back_37: ref "core:prelude/list.wado//List<i32>";
-    $sroa_out_repr_31 = array.new_fixed<i32>();
-    $sroa_out_used_32 = 0;
-    $sroa_$iter_0_start_35 = 0;
+    let $sroa_out_repr_28: ref Array<i32>;
+    let $sroa_out_used_29: i32;
+    let $sroa_$iter_0_start_30: i32;
+    let $sroa_write_back_32: ref "core:prelude/list.wado//List<i32>";
+    $sroa_out_repr_28 = array.new_fixed<i32>();
+    $sroa_out_used_29 = 0;
+    $sroa_$iter_0_start_30 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_35 >= n;
-            $sroa_$iter_0_start_35 = local.tee current($sroa_$iter_0_start_35) + 1;
+            break_if b0 $sroa_$iter_0_start_30 >= n;
+            $sroa_$iter_0_start_30 = local.tee current($sroa_$iter_0_start_30) + 1;
             if (current % 3) == 0 {
-                if @unlikely($sroa_out_used_32 >= builtin::array_len($sroa_out_repr_31)) {
+                if @unlikely($sroa_out_used_29 >= builtin::array_len($sroa_out_repr_28)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_37(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_31, used: $sroa_out_used_32 }));
-                    $sroa_out_repr_31 = $sroa_write_back_37.repr;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_32(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_28, used: $sroa_out_used_29 }));
+                    $sroa_out_repr_28 = $sroa_write_back_32.repr;
                 }
-                builtin::array_set<i32>($sroa_out_repr_31, $sroa_out_used_32, current);
-                $sroa_out_used_32 = $sroa_out_used_32 + 1;
+                builtin::array_set<i32>($sroa_out_repr_28, $sroa_out_used_29, current);
+                $sroa_out_used_29 = $sroa_out_used_29 + 1;
             } else {
                 current = current * 2;
-                if @unlikely($sroa_out_used_32 >= builtin::array_len($sroa_out_repr_31)) {
+                if @unlikely($sroa_out_used_29 >= builtin::array_len($sroa_out_repr_28)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_37(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_31, used: $sroa_out_used_32 }));
-                    $sroa_out_repr_31 = $sroa_write_back_37.repr;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_32(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_28, used: $sroa_out_used_29 }));
+                    $sroa_out_repr_28 = $sroa_write_back_32.repr;
                 }
-                builtin::array_set<i32>($sroa_out_repr_31, $sroa_out_used_32, current);
-                $sroa_out_used_32 = $sroa_out_used_32 + 1;
+                builtin::array_set<i32>($sroa_out_repr_28, $sroa_out_used_29, current);
+                $sroa_out_used_29 = $sroa_out_used_29 + 1;
             }
             continue l1;
         };
     };
-    return $sroa_out_repr_31, $sroa_out_used_32;
+    return $sroa_out_repr_28, $sroa_out_used_29;
 }
 
 fn "ref_elim_handle_call_arg.wado/run"() with Stdout {

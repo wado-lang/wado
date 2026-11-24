@@ -127,47 +127,47 @@ fn "closure_param_devirtualized.wado/$cm_export__run"() {
 }
 
 fn "closure_param_devirtualized.wado/table$$Closure_1$sroa[at.$capture_0]"(rows, cols, at) {
-    let current_16: i32;
-    let current_23: i32;
-    let $sroa_out_repr_48: ref Array<i32>;
-    let $sroa_out_used_49: i32;
-    let $sroa_$iter_0_start_52: i32;
-    let $sroa_$iter_1_start_56: i32;
-    let $sroa_write_back_62: ref "core:prelude/list.wado//List<i32>";
-    let $cse_63: i32;
-    let $cse_64: i32;
-    let $cse_65: i32;
-    $sroa_out_repr_48 = array.new_fixed<i32>();
-    $sroa_out_used_49 = 0;
-    $sroa_$iter_0_start_52 = 0;
+    let current_14: i32;
+    let current_19: i32;
+    let $sroa_out_repr_42: ref Array<i32>;
+    let $sroa_out_used_43: i32;
+    let $sroa_$iter_0_start_44: i32;
+    let $sroa_$iter_1_start_46: i32;
+    let $sroa_write_back_52: ref "core:prelude/list.wado//List<i32>";
+    let $cse_53: i32;
+    let $cse_54: i32;
+    let $cse_55: i32;
+    $sroa_out_repr_42 = array.new_fixed<i32>();
+    $sroa_out_used_43 = 0;
+    $sroa_$iter_0_start_44 = 0;
     b5: block {
         l6: loop {
-            break_if b5 $sroa_$iter_0_start_52 >= rows;
-            $sroa_$iter_0_start_52 = local.tee current_16($sroa_$iter_0_start_52) + 1;
-            $sroa_$iter_1_start_56 = 0;
-            current_16 = current_16 * at;
+            break_if b5 $sroa_$iter_0_start_44 >= rows;
+            $sroa_$iter_0_start_44 = local.tee current_14($sroa_$iter_0_start_44) + 1;
+            $sroa_$iter_1_start_46 = 0;
+            current_14 = current_14 * at;
             b7: block {
                 l8: loop {
-                    break_if b7 $sroa_$iter_1_start_56 >= cols;
-                    $sroa_$iter_1_start_56 = local.tee current_23($sroa_$iter_1_start_56) + 1;
-                    $cse_63 = current_23 + 1;
-                    $cse_64 = current_23 + 2;
-                    $cse_65 = current_23 + 3;
-                    current_23 = ((select i32(current_23 < cols, current_16 + current_23, 0) + (select i32($cse_63 < cols, current_16 + $cse_63, 0) * 2)) + (select i32($cse_64 < cols, current_16 + $cse_64, 0) * 3)) + (select i32($cse_65 < cols, current_16 + $cse_65, 0) * 4);
-                    if @unlikely($sroa_out_used_49 >= builtin::array_len($sroa_out_repr_48)) {
+                    break_if b7 $sroa_$iter_1_start_46 >= cols;
+                    $sroa_$iter_1_start_46 = local.tee current_19($sroa_$iter_1_start_46) + 1;
+                    $cse_53 = current_19 + 1;
+                    $cse_54 = current_19 + 2;
+                    $cse_55 = current_19 + 3;
+                    current_19 = ((select i32(current_19 < cols, current_14 + current_19, 0) + (select i32($cse_53 < cols, current_14 + $cse_53, 0) * 2)) + (select i32($cse_54 < cols, current_14 + $cse_54, 0) * 3)) + (select i32($cse_55 < cols, current_14 + $cse_55, 0) * 4);
+                    if @unlikely($sroa_out_used_43 >= builtin::array_len($sroa_out_repr_42)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_62(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_48, used: $sroa_out_used_49 }));
-                        $sroa_out_repr_48 = $sroa_write_back_62.repr;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_52(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_42, used: $sroa_out_used_43 }));
+                        $sroa_out_repr_42 = $sroa_write_back_52.repr;
                     }
-                    builtin::array_set<i32>($sroa_out_repr_48, $sroa_out_used_49, current_23);
-                    $sroa_out_used_49 = $sroa_out_used_49 + 1;
+                    builtin::array_set<i32>($sroa_out_repr_42, $sroa_out_used_43, current_19);
+                    $sroa_out_used_43 = $sroa_out_used_43 + 1;
                     continue l8;
                 };
             };
             continue l6;
         };
     };
-    return struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_48, used: $sroa_out_used_49 };
+    return struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_42, used: $sroa_out_used_43 };
 }
 
 fn "core:rt/unreachable"() {

@@ -441,33 +441,33 @@ fn "opt_field_pin_forwarded_read_overwritten.wado/$test_0_a_node_keeps_the_index
     let $load_11: ref "core:prelude/list.wado//List<i32>";
     let root: ref "opt_field_pin_forwarded_read_overwritten.wado//Node";
     let kinds: ref "core:prelude/list.wado//List<i32>";
-    let self_13: ref "opt_field_pin_forwarded_read_overwritten.wado//Cursor";
-    let $licm_repr_47: ref Array<i32>;
-    let self_61: i32;
-    let $licm_ends_63: ref "core:prelude/list.wado//List<i32>";
+    let $iter_0: ref "opt_field_pin_forwarded_read_overwritten.wado//Cursor";
+    let $licm_repr_46: ref Array<i32>;
+    let self_60: i32;
+    let $licm_ends_62: ref "core:prelude/list.wado//List<i32>";
     root = struct.new "opt_field_pin_forwarded_read_overwritten.wado//Node" { doc: struct.new "opt_field_pin_forwarded_read_overwritten.wado//Doc" { kinds: global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_2, ends: global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_3 }, at: 0 };
     kinds = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     let $mv_doc_1: ref "opt_field_pin_forwarded_read_overwritten.wado//Doc";
     let $mv_next_2: i32;
     let $mv_left_3: i32;
     multivalue_bind [$mv_doc_1, $mv_next_2, $mv_left_3] = "opt_field_pin_forwarded_read_overwritten.wado/opt_field_pin_forwarded_read_overwritten.wado/Node::items"(root.doc, 0);
-    self_13 = struct.new "opt_field_pin_forwarded_read_overwritten.wado//Cursor" { doc: $mv_doc_1, next: $mv_next_2, left: $mv_left_3 };
-    $licm_repr_47 = kinds.repr;
-    $licm_ends_63 = local.tee $mv_doc_1(self_13.doc).ends;
+    $iter_0 = struct.new "opt_field_pin_forwarded_read_overwritten.wado//Cursor" { doc: $mv_doc_1, next: $mv_next_2, left: $mv_left_3 };
+    $licm_repr_46 = kinds.repr;
+    $licm_ends_62 = local.tee $mv_doc_1($iter_0.doc).ends;
     b0: block {
         l1: loop {
-            break_if b0 local.tee $mv_next_2(self_13.left) == 0;
-            $mv_left_3 = self_13.next;
-            self_13.next = self_61 = $licm_ends_63.used; if @unlikely($mv_left_3 >=u self_61) {
+            break_if b0 local.tee $mv_next_2($iter_0.left) == 0;
+            $mv_left_3 = $iter_0.next;
+            $iter_0.next = self_60 = $licm_ends_62.used; if @unlikely($mv_left_3 >=u self_60) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv_left_3, self_61, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_field_pin_forwarded_read_overwritten.wado:42"), used: 48 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($mv_left_3, self_60, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_field_pin_forwarded_read_overwritten.wado:42"), used: 48 });
                 unreachable;
-            }; builtin::array_get_value<i32>($licm_ends_63.repr, $mv_left_3);
-            self_13.left = $mv_next_2 - 1;
+            }; builtin::array_get_value<i32>($licm_ends_62.repr, $mv_left_3);
+            $iter_0.left = $mv_next_2 - 1;
             root = struct.new "opt_field_pin_forwarded_read_overwritten.wado//Node" { doc: $mv_doc_1, at: $mv_left_3 };
             if black_box(0) {
                 drop(black_box(root));
-                $licm_ends_63 = $mv_doc_1.ends;
+                $licm_ends_62 = $mv_doc_1.ends;
             }
             $mv_next_2 = local.tee $load_11(root.doc.kinds).used;
             if @unlikely($mv_left_3 >=u $mv_next_2) {
@@ -476,39 +476,39 @@ fn "opt_field_pin_forwarded_read_overwritten.wado/$test_0_a_node_keeps_the_index
                 unreachable;
             }
             $mv_next_2 = builtin::array_get_value<i32>($load_11.repr, $mv_left_3);
-            if @unlikely(local.tee $mv_left_3(kinds.used) >= builtin::array_len($licm_repr_47)) {
+            if @unlikely(local.tee $mv_left_3(kinds.used) >= builtin::array_len($licm_repr_46)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(kinds);
-                $licm_repr_47 = kinds.repr;
+                $licm_repr_46 = kinds.repr;
             }
-            builtin::array_set<i32>($licm_repr_47, $mv_left_3, $mv_next_2);
+            builtin::array_set<i32>($licm_repr_46, $mv_left_3, $mv_next_2);
             kinds.used = $mv_left_3 + 1;
             continue l1;
         };
     };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__12: block -> bool {
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__11: block -> bool {
         if local.tee $mv_next_2(kinds.used) != 2 {
-            break $inline_core_prelude_array_wado_seq_eq_i32__12: 0;
+            break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
         }
         $mv_left_3 = 0;
-        $licm_repr_47 = kinds.repr;
+        $licm_repr_46 = kinds.repr;
         b8: block {
             l9: loop {
                 break_if b8 (builtin::i64_extend_i32_s($mv_left_3) + 3_i64) >= builtin::i64_extend_i32_s($mv_next_2);
-                if builtin::array_get_value<i32>($licm_repr_47, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
-                    break $inline_core_prelude_array_wado_seq_eq_i32__12: 0;
+                if builtin::array_get_value<i32>($licm_repr_46, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
+                    break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 $mv_left_3 = $mv_left_3 + 1;
-                if builtin::array_get_value<i32>($licm_repr_47, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
-                    break $inline_core_prelude_array_wado_seq_eq_i32__12: 0;
+                if builtin::array_get_value<i32>($licm_repr_46, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
+                    break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 $mv_left_3 = $mv_left_3 + 1;
-                if builtin::array_get_value<i32>($licm_repr_47, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
-                    break $inline_core_prelude_array_wado_seq_eq_i32__12: 0;
+                if builtin::array_get_value<i32>($licm_repr_46, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
+                    break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 $mv_left_3 = $mv_left_3 + 1;
-                if builtin::array_get_value<i32>($licm_repr_47, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
-                    break $inline_core_prelude_array_wado_seq_eq_i32__12: 0;
+                if builtin::array_get_value<i32>($licm_repr_46, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
+                    break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 $mv_left_3 = $mv_left_3 + 1;
                 continue l9;
@@ -517,14 +517,14 @@ fn "opt_field_pin_forwarded_read_overwritten.wado/$test_0_a_node_keeps_the_index
         b14: block {
             l15: loop {
                 break_if b14 $mv_left_3 >= $mv_next_2;
-                if builtin::array_get_value<i32>($licm_repr_47, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
-                    break $inline_core_prelude_array_wado_seq_eq_i32__12: 0;
+                if builtin::array_get_value<i32>($licm_repr_46, $mv_left_3) != builtin::array_get_value<i32>(global:opt_field_pin_forwarded_read_overwritten.wado::$const_obj_1, $mv_left_3) {
+                    break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 $mv_left_3 = $mv_left_3 + 1;
                 continue l15;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_i32__12: 1;
+        break $inline_core_prelude_array_wado_seq_eq_i32__11: 1;
     } == 0) {
         cold_path;
         let $mv_arg_4: ref "core:prelude/string.wado//String";

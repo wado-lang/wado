@@ -362,31 +362,31 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     let base: f32;
     let $v_5: f32;
     let $v_3: f32;
-    let current_28: i32;
-    let value_33: f32;
+    let current_26: i32;
+    let value_31: f32;
     let $cm_pair_7: i64;
-    let $sroa_before_repr_74: ref Array<f32>;
-    let $sroa_before_used_75: i32;
-    let $sroa_$iter_0_start_78: i32;
-    let $sroa_write_back_86: ref "core:prelude/list.wado//List<f32>";
+    let $sroa_before_repr_68: ref Array<f32>;
+    let $sroa_before_used_69: i32;
+    let $sroa_$iter_0_start_70: i32;
+    let $sroa_write_back_76: ref "core:prelude/list.wado//List<f32>";
     let new_repr: ref Array<u8>;
     ptr = "mem/realloc"(0, 0, 1, 4194304);
     base = black_box(-1_f32);
-    $sroa_before_repr_74 = array.new_fixed<f32>();
-    $sroa_before_used_75 = 0;
-    $sroa_$iter_0_start_78 = 0;
+    $sroa_before_repr_68 = array.new_fixed<f32>();
+    $sroa_before_used_69 = 0;
+    $sroa_$iter_0_start_70 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_78 >= 64;
-            $sroa_$iter_0_start_78 = local.tee current_28($sroa_$iter_0_start_78) + 1;
-            value_33 = "wasm:core:libm.wat/libm_expf"(base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32));
-            if @unlikely($sroa_before_used_75 >= builtin::array_len($sroa_before_repr_74)) {
+            break_if b0 $sroa_$iter_0_start_70 >= 64;
+            $sroa_$iter_0_start_70 = local.tee current_26($sroa_$iter_0_start_70) + 1;
+            value_31 = "wasm:core:libm.wat/libm_expf"(base - (builtin::f32_convert_i32_s(current_26) * 0.25_f32));
+            if @unlikely($sroa_before_used_69 >= builtin::array_len($sroa_before_repr_68)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(local.tee $sroa_write_back_86(struct.new "core:prelude/list.wado//List<f32>" { repr: $sroa_before_repr_74, used: $sroa_before_used_75 }));
-                $sroa_before_repr_74 = $sroa_write_back_86.repr;
+                "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(local.tee $sroa_write_back_76(struct.new "core:prelude/list.wado//List<f32>" { repr: $sroa_before_repr_68, used: $sroa_before_used_69 }));
+                $sroa_before_repr_68 = $sroa_write_back_76.repr;
             }
-            builtin::array_set<f32>($sroa_before_repr_74, $sroa_before_used_75, value_33);
-            $sroa_before_used_75 = $sroa_before_used_75 + 1;
+            builtin::array_set<f32>($sroa_before_repr_68, $sroa_before_used_69, value_31);
+            $sroa_before_used_69 = $sroa_before_used_69 + 1;
             continue l1;
         };
     };
@@ -395,33 +395,33 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     b3: block {
         l4: loop {
             break_if b3 ptr >= 64;
-            ptr = local.tee $sroa_$iter_0_start_78(ptr) + 1;
-            $v_3 = "wasm:core:libm.wat/libm_expf"(local.tee value_33(base - (builtin::f32_convert_i32_s($sroa_$iter_0_start_78) * 0.25_f32)));
-            if @unlikely($sroa_$iter_0_start_78 >= $sroa_before_used_75) {
+            ptr = local.tee $sroa_$iter_0_start_70(ptr) + 1;
+            $v_3 = "wasm:core:libm.wat/libm_expf"(local.tee value_31(base - (builtin::f32_convert_i32_s($sroa_$iter_0_start_70) * 0.25_f32)));
+            if @unlikely($sroa_$iter_0_start_70 >= $sroa_before_used_69) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($sroa_$iter_0_start_78, $sroa_before_used_75, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("allocator_asset_memory.wado:17"), used: 30 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($sroa_$iter_0_start_70, $sroa_before_used_69, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("allocator_asset_memory.wado:17"), used: 30 });
                 unreachable;
             }
-            $v_5 = builtin::array_get_value<f32>($sroa_before_repr_74, $sroa_$iter_0_start_78);
+            $v_5 = builtin::array_get_value<f32>($sroa_before_repr_68, $sroa_$iter_0_start_70);
             if @unlikely((($v_3 == $v_5) | (($v_3 != $v_3) & ($v_5 != $v_5))) == 0) {
                 cold_path;
-                "allocator_asset_memory.wado/run$cold0"($sroa_before_repr_74, $sroa_before_used_75, $sroa_$iter_0_start_78, value_33, $v_5, $v_3);
+                "allocator_asset_memory.wado/run$cold0"($sroa_before_repr_68, $sroa_before_used_69, $sroa_$iter_0_start_70, value_31, $v_5, $v_3);
                 unreachable;
             }
             continue l4;
         };
     };
     ptr = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_before_used_75 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_before_used_69 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     ptr = "allocator_asset_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(ptr);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:allocator_asset_memory.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; $sroa_before_used_75, new_repr);
+    }; $sroa_before_used_69, new_repr);
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_before_used_75);
+        "wasi/stream-drop-writable"($sroa_before_used_69);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {

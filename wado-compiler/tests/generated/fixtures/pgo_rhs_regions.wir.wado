@@ -100,13 +100,13 @@ fn "pgo_rhs_regions.wado/run"() with Stdout {
     let current: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
-    let $sroa_$iter_0_start_46: i32;
+    let $sroa_$iter_0_start_41: i32;
     n = 0;
-    $sroa_$iter_0_start_46 = 0;
+    $sroa_$iter_0_start_41 = 0;
     b3: block {
         l4: loop {
-            break_if b3 $sroa_$iter_0_start_46 >= 1000;
-            $sroa_$iter_0_start_46 = local.tee current($sroa_$iter_0_start_46) + 1;
+            break_if b3 $sroa_$iter_0_start_41 >= 1000;
+            $sroa_$iter_0_start_41 = local.tee current($sroa_$iter_0_start_41) + 1;
             if @unlikely("pgo_rhs_regions.wado/rare"(black_box(0), current)) {
                 cold_path;
                 n = n + 1;
@@ -119,12 +119,12 @@ fn "pgo_rhs_regions.wado/run"() with Stdout {
             continue l4;
         };
     };
-    let $mv$message_15$repr: ref Array<u8>;
-    multivalue_bind [$mv$message_15$repr, n] = "core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_rhs_regions.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(n);
-    $sroa_$iter_0_start_46 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    let $mv$message_10$repr: ref Array<u8>;
+    multivalue_bind [$mv$message_10$repr, n] = "core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_rhs_regions.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(n);
+    $sroa_$iter_0_start_41 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     current = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$iter_0_start_46 = "pgo_rhs_regions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_46);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(n + 1)), 0, $mv$message_15$repr, 0, n);
+    $sroa_$iter_0_start_41 = "pgo_rhs_regions.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_41);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(n + 1)), 0, $mv$message_10$repr, 0, n);
     builtin::array_set_u8(new_repr, n, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
@@ -139,7 +139,7 @@ fn "pgo_rhs_regions.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_46);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$iter_0_start_41);
     }
 }
 

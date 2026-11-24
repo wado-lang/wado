@@ -201,22 +201,22 @@ global global:value_copy_return_after_closure_capture.wado::$const_obj_0: ref Ar
 fn "value_copy_return_after_closure_capture.wado/collect"(n) {
     let out: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
     let current: i32;
-    let $sroa_$iter_0_start_21: i32;
-    let value_27: ref "core:prelude/list.wado//List<i32>";
-    let elements_29: ref Array<i32>;
+    let $sroa_$iter_0_start_16: i32;
+    let value_22: ref "core:prelude/list.wado//List<i32>";
+    let elements_24: ref Array<i32>;
     out = struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude/list.wado//List<i32>">(), used: 0 };
-    $sroa_$iter_0_start_21 = 0;
+    $sroa_$iter_0_start_16 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_21 >= n;
-            $sroa_$iter_0_start_21 = local.tee current($sroa_$iter_0_start_21) + 1;
-            current = builtin::array_len(local.tee elements_29(array.new_fixed<i32>(current)));
-            value_27 = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_29, used: current };
+            break_if b0 $sroa_$iter_0_start_16 >= n;
+            $sroa_$iter_0_start_16 = local.tee current($sroa_$iter_0_start_16) + 1;
+            current = builtin::array_len(local.tee elements_24(array.new_fixed<i32>(current)));
+            value_22 = struct.new "core:prelude/list.wado//List<i32>" { repr: elements_24, used: current };
             if @unlikely(local.tee current(out.used) >= builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::grow"(out);
             }
-            builtin::array_set<ref "core:prelude/list.wado//List<i32>">(out.repr, current, value_27);
+            builtin::array_set<ref "core:prelude/list.wado//List<i32>">(out.repr, current, value_22);
             out.used = current + 1;
             continue l1;
         };
