@@ -219,7 +219,7 @@ Each step keeps every fixture passing and deletes what it replaces.
   cases all take this one path.
 - [x] A pack slot is instantiated as a pack variable, answered by a list of
   types, so nothing patches a pack the instantiation left rigid.
-- [ ] A variable carries its origin: the slot it stands for, the declaration
+- [x] A variable carries its origin: the slot it stands for, the declaration
   that owns it, or the `_` the source wrote, and where. Its report is read
   from the origin, not from a side table. A report equates every variable it
   covers with the error type, which settles them without a word. What
