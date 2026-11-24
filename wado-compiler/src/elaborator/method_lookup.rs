@@ -3371,7 +3371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     found_traits[i].method_info.return_type
                 });
             }
-            self.narrow_to_exact_rows(&mut admitted, &classes, |&i, position| {
+            self.narrow_by_function_rows(&mut admitted, &classes, |&i, position| {
                 found_traits[i]
                     .method_info
                     .param_types

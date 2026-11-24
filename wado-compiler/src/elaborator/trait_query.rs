@@ -2371,7 +2371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .return_type
                 });
             }
-            self.narrow_to_exact_rows(&mut admitted, &classes, |&i, position| {
+            self.narrow_by_function_rows(&mut admitted, &classes, |&i, position| {
                 sigs[i]
                     .as_ref()
                     .and_then(|sig| sig.param_types.get(position).copied())

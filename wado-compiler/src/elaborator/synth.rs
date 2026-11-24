@@ -356,7 +356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Narrow `candidates` by a function argument's solved row: to those
     /// taking it exactly where any does, else to those whose row holds it. A
     /// closure's row is its body's solution, closed only where it selects.
-    pub(super) fn narrow_to_exact_rows<C>(
+    pub(super) fn narrow_by_function_rows<C>(
         &self,
         candidates: &mut Vec<C>,
         classes: &[ArgClass],
