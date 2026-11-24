@@ -24,8 +24,9 @@ struct Item {
     id: i32,
 }
 
-// Nothing listens on port 9, so this request fails before any response.
-let client = HttpClient::new("http://127.0.0.1:9/api", ClientInit {
+// RFC 6761 reserves `.invalid` never to resolve, so this request fails
+// before any response.
+let client = HttpClient::new("https://api.example.invalid/v1", ClientInit {
     headers: [
         ["accept", "application/json"],
     ],
