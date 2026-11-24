@@ -78,8 +78,10 @@ A `lib:` key that only shortened a sibling's coordinate (`"lib:gale"` for
 1. [x] `wado-manifest` refuses a `[package]` with no `namespace`, and
    `wado init` requires `--namespace` unless the workspace sets one.
 2. [x] Every manifest in this repository declares a namespace or inherits one.
-3. [x] A coordinate key is checked against the `[package]` its source holds,
-   and a single file under one is refused.
+3. [x] A coordinate key, in `[dependencies]` and `[build-dependencies]`, and
+   the `package` a path source publishes as, are checked against the
+   `[package]` the source holds, and a single file under a coordinate key is
+   refused.
 4. [x] A second directory claiming a package already held is refused at the
    `use` that reaches it.
 5. [x] This repository's manifests and `use`s name sibling packages by

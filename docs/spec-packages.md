@@ -344,10 +344,12 @@ alias is an error.
 A key under an open namespace is the dependency's own coordinate. A `path` or
 `git` source under such a key must hold the package whose `[package]` declares
 that coordinate, and a `use` of a key whose source holds another package is an
-error. `lib` is the
-one place an alias lives. An alias renames a dependency, shortens its name, or
-tells two major versions apart. A `lib:` key names the coordinate it stands for with its `package`
-field ([Registry Sources](#registry-sources)).
+error. So must a `path` source whose `package` names the coordinate it is
+published as. A build dependency's key and source follow the same rule.
+
+`lib` is the one place an alias lives. An alias renames a dependency, shortens
+its name, or tells two major versions apart. A `lib:` key names the coordinate
+it stands for with its `package` field ([Registry Sources](#registry-sources)).
 
 ```toml
 [dependencies]
@@ -580,8 +582,9 @@ test {
 
 A package is one coordinate in one compatibility range
 ([Version Requirements](#version-requirements)), so two directories that
-declare it are one package claimed twice. A `use` that reaches the second one
-is an error, wherever in the dependency graph it sits. Versions in two
+declare it are one package claimed twice. The first one the build reaches holds
+the package, the entry's own package first, and a `use` that reaches the second
+one is an error, wherever in the dependency graph it sits. Versions in two
 compatibility ranges are two packages.
 
 A `use` resolves against the manifest of the package its module belongs to. A

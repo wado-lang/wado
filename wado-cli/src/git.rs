@@ -107,11 +107,9 @@ fn manifest_at(
             });
         }
     };
-    resolve_member_manifest(&member_dir, &text, &tree).map_err(|e| {
-        ProviderError::InvalidManifest {
-            source,
-            message: e.to_string(),
-        }
+    resolve_member_manifest(&member_dir, &text, &tree).map_err(|e| ProviderError::InvalidManifest {
+        source,
+        message: e.to_string(),
     })
 }
 
@@ -131,8 +129,11 @@ impl PackageFiles for Commit<'_> {
         );
         let rel = rel.as_str();
         let git_err = |e: ProviderError| std::io::Error::other(e.to_string());
-        let listed = run_git(Some(self.repo), &["ls-tree", "--name-only", self.sha, "--", rel])
-            .map_err(git_err)?;
+        let listed = run_git(
+            Some(self.repo),
+            &["ls-tree", "--name-only", self.sha, "--", rel],
+        )
+        .map_err(git_err)?;
         if listed.is_empty() {
             return Err(std::io::ErrorKind::NotFound.into());
         }

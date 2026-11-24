@@ -232,13 +232,23 @@ mod tests {
     #[test]
     fn a_source_must_hold_the_package_its_key_names() {
         assert_eq!(
-            checked(r#""acme:geo" = { path = "../geo" }"#, "acme:geo", Some("acme:geo")),
+            checked(
+                r#""acme:geo" = { path = "../geo" }"#,
+                "acme:geo",
+                Some("acme:geo")
+            ),
             Ok(())
         );
         assert_eq!(
-            checked(r#""acme:geo" = { path = "../geo" }"#, "acme:geo", Some("acme:map")),
-            Err("`acme:geo` names the package `acme:geo`, but its source declares `acme:map`"
-                .to_string())
+            checked(
+                r#""acme:geo" = { path = "../geo" }"#,
+                "acme:geo",
+                Some("acme:map")
+            ),
+            Err(
+                "`acme:geo` names the package `acme:geo`, but its source declares `acme:map`"
+                    .to_string()
+            )
         );
         assert_eq!(
             checked(r#""lib:geo" = { path = "../geo.wado" }"#, "lib:geo", None),
@@ -246,21 +256,28 @@ mod tests {
         );
         assert_eq!(
             checked(r#""acme:geo" = { path = "../geo.wado" }"#, "acme:geo", None),
-            Err("`acme:geo` names the package `acme:geo`, but its source is a single file, \
+            Err(
+                "`acme:geo` names the package `acme:geo`, but its source is a single file, \
                  which declares none; name it with a `lib:` key"
-                .to_string())
+                    .to_string()
+            )
         );
     }
 
     #[test]
     fn a_source_must_hold_the_package_it_publishes_as() {
         let entry = r#""lib:shared" = { path = "../shared", package = "wado-lang:shared", version = "^1.2.0" }"#;
-        assert_eq!(checked(entry, "lib:shared", Some("wado-lang:shared")), Ok(()));
+        assert_eq!(
+            checked(entry, "lib:shared", Some("wado-lang:shared")),
+            Ok(())
+        );
         assert_eq!(
             checked(entry, "lib:shared", Some("acme:other")),
-            Err("`lib:shared` names the package `wado-lang:shared`, but its source declares \
+            Err(
+                "`lib:shared` names the package `wado-lang:shared`, but its source declares \
                  `acme:other`"
-                .to_string())
+                    .to_string()
+            )
         );
     }
 

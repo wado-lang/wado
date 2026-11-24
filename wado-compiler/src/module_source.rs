@@ -322,17 +322,15 @@ impl ModuleSourceInterner {
         let Some(file) = source.file() else {
             return Ok(());
         };
-        match self.dir_of(&file, host).package {
-            Some(PackageDir {
-                root,
-                coordinate: Some(coordinate),
-                ..
-            }) => self.claim_package(&coordinate, &root),
-            Some(PackageDir {
-                coordinate: None, ..
-            })
-            | None => Ok(()),
-        }
+        let Some(PackageDir {
+            root,
+            coordinate: Some(coordinate),
+            ..
+        }) = self.dir_of(&file, host).package
+        else {
+            return Ok(());
+        };
+        self.claim_package(&coordinate, &root)
     }
 
     /// Record that the root `root` holds the package `coordinate` declares, or
@@ -1809,9 +1807,11 @@ mod tests {
         assert_eq!(interner.claim(&dep, &host), Ok(()));
         assert_eq!(
             interner.claim(&fork, &host),
-            Err("`fork` declares `acme:dep@0.2.5`, the package `acme:dep@0.2.0` in `dep` \
+            Err(
+                "`fork` declares `acme:dep@0.2.5`, the package `acme:dep@0.2.0` in `dep` \
                  already is; one coordinate is one package"
-                .to_string())
+                    .to_string()
+            )
         );
     }
 

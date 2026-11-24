@@ -136,7 +136,11 @@ pub fn run(opts: InitOptions) -> Result<(), CliExit> {
         (namespace, _) => namespace,
     };
     let inherits_version = inherited.as_ref().is_some_and(|p| p.version.is_some());
-    let content = generate_manifest(&opts.name, namespace, (!inherits_version).then_some("0.1.0"));
+    let content = generate_manifest(
+        &opts.name,
+        namespace,
+        (!inherits_version).then_some("0.1.0"),
+    );
     resolve_member_manifest(&dir, &content, &Disk)
         .map_err(|e| CliExit::error(format!("the manifest would not be valid: {e}")))?;
 

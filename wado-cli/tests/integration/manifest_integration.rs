@@ -52,7 +52,9 @@ fn init_in_a_workspace_member_leaves_out_what_it_inherits() {
         .args(["init", "--name", "app", "--namespace", "myorg"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("the workspace sets the namespace `acme`"));
+        .stderr(predicate::str::contains(
+            "the workspace sets the namespace `acme`",
+        ));
     wado_in(&member)
         .args(["init", "--name", "app"])
         .assert()

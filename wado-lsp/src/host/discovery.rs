@@ -570,7 +570,8 @@ mod tests {
         )
         .unwrap();
 
-        let entry = keyed_lib_entry("lib:member", None, &member_dir, &Disk).expect("member resolves");
+        let entry =
+            keyed_lib_entry("lib:member", None, &member_dir, &Disk).expect("member resolves");
         assert_eq!(entry, member_dir.join("src/lib.wado"));
     }
 
@@ -579,7 +580,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let solo = tmp.path().join("solo.g4");
         std::fs::write(&solo, "pub fn f() {}\n").unwrap();
-        assert_eq!(keyed_lib_entry("lib:solo", None, &solo, &Disk).unwrap(), solo);
+        assert_eq!(
+            keyed_lib_entry("lib:solo", None, &solo, &Disk).unwrap(),
+            solo
+        );
     }
 
     #[test]
