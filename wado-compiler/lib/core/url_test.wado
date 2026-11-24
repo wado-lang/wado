@@ -1028,6 +1028,13 @@ test "a malformed authority is refused" {
     assert Url::from_str("http://[::1]/").unwrap().host == "::1";
 }
 
+test "a host holding a forbidden domain code point is invalid" {
+    for let host of ["bad host", "a^b", "a|b", "a<b", "a>b", "a:b:80", "a[b", "nul\u{0}", "del\u{7f}"] as List<String> {
+        assert Url::from_str(`http://${host}/`).unwrap_err() == ParseError::InvalidHost;
+    }
+    assert Url::from_str("http://ex-ample_1.com:80/").unwrap().host == "ex-ample_1.com";
+}
+
 test "a path keeps encoded reserved bytes and stray percent signs" {
     assert Url::from_str("http://h/a%2Fb%zz").unwrap().path == "/a%2Fb%zz";
     assert Url::from_str("http://h/../a").unwrap().path == "/a";

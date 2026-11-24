@@ -34,7 +34,7 @@ affine struct MockHost {
     /// or why the body did not arrive whole; `None` where it never resolves.
     outcome: Option<Result<List<[String, String]>, ErrorCode>> = Some(Ok([])),
     send_error: Option<ErrorCode> = null,
-    /// Why sending the request body failed, reported after the response.
+    /// Why sending the request body failed, reported after the response body.
     body_error: Option<ErrorCode> = null,
     /// The timeouts the client set, connect first, in nanoseconds.
     timeouts: List<Option<u64>> = [],
@@ -172,6 +172,9 @@ impl RequestOptions for MockHost {
 
 impl Future<Result<(), ErrorCode>> for MockHost {
     fn read(&mut self, this: &Future<Result<(), ErrorCode>>) -> Option<Result<(), ErrorCode>> {
+        // As wasmtime's does, it resolves once the connection is done with,
+        // which a response holds open until its body is.
+        assert self.send_error matches { Some(_) } || self.done matches { Some(_) }, "a send ends after the response body";
         if let Some(code) = self.body_error {
             resume Option::Some(Err(code));
         } else {
@@ -517,27 +520,41 @@ test "a body cut short ends with an error, not with its end" {
     host.end_writes();
 }
 
-test "a whole read of a body cut short is an error, however it decodes" {
-    let mut host = MockHost {
-        chunks: [b"par"],
+/// A response whose body `1` is cut short: whole, it would decode as text and
+/// as JSON alike.
+fn cut_short() -> MockHost {
+    return MockHost {
+        chunks: [b"1"],
         outcome: Some(Err(ErrorCode::ConnectionTerminated)),
     };
-    let results = with &mut host do {
-        let mut bytes = client().request("/").unwrap();
-        let mut text = client().request("/").unwrap();
-        let mut json = client().request("/").unwrap();
-        let results = [
-            bytes.bytes().is_err(),
-            text.text().is_err(),
-            json.json::<i32>().is_err(),
-        ];
-        builtin::drop(bytes);
-        builtin::drop(text);
-        builtin::drop(json);
-        results;
+}
+
+test "a whole read of a body cut short is an error, however it decodes" {
+    let mut host = cut_short();
+    let bytes = with &mut host do {
+        let mut res = client().request("/").unwrap();
+        let result = res.bytes();
+        builtin::drop(res);
+        result matches { Err(Transport([_::ResponseBody, _::ConnectionTerminated])) };
     };
     host.end_writes();
-    assert results == [true, true, true];
+    host = cut_short();
+    let text = with &mut host do {
+        let mut res = client().request("/").unwrap();
+        let result = res.text();
+        builtin::drop(res);
+        result matches { Err(Transport([_::ResponseBody, _::ConnectionTerminated])) };
+    };
+    host.end_writes();
+    host = cut_short();
+    let json = with &mut host do {
+        let mut res = client().request("/").unwrap();
+        let result = res.json::<i32>();
+        builtin::drop(res);
+        result matches { Err(Transport([_::ResponseBody, _::ConnectionTerminated])) };
+    };
+    host.end_writes();
+    assert [bytes, text, json] == [true, true, true];
 }
 
 test "a body that never says how it ended is cut short" {
@@ -668,22 +685,26 @@ test "a body is read once" {
     };
 }
 
-test "a method or path the host refuses fails the request rather than going out changed" {
+test "a method, authority or path the host refuses fails the request rather than going out changed" {
     let mut host = MockHost {};
-    let [path, method] = with &mut host do {
+    let [path, method, authority] = with &mut host do {
         let path = client().request("/users/John Smith");
         let method = client().request("/", { method: Method::Other("BAD METHOD") });
-        let refused = [path matches { Err(InvalidUrl(_)) }, method matches { Err(InvalidMethod(_)) }];
-        if let Ok(res) = path {
-            builtin::drop(res);
-        }
-        if let Ok(res) = method {
-            builtin::drop(res);
+        // `core:url` keeps an internationalized domain name as written.
+        let authority = HttpClient::new("https://例え.jp").unwrap().request("/");
+        let refused = [
+            path matches { Err(InvalidUrl(_)) }, method matches { Err(InvalidMethod(_)) },
+            authority matches { Err(InvalidUrl(_)) },
+        ];
+        for let result of [path, method, authority] {
+            if let Ok(res) = result {
+                builtin::drop(res);
+            }
         }
         refused;
     };
     host.end_writes();
-    assert path && method;
+    assert path && method && authority;
     assert host.target == "";
 }
 
@@ -799,15 +820,13 @@ test "a header or trailer the host refuses fails the request" {
 test "a request body the host failed to take is a transport error" {
     let mut host = MockHost { body_error: Option::Some(ErrorCode::HttpRequestBodySize(null)) };
     let result = with &mut host do {
-        let result = client().request("/", { body: Option::Some(b"x".as_byte_slice()) });
-        let failed = result matches { Err(Transport([_::Request, _::HttpRequestBodySize(_)])) };
-        if let Ok(res) = result {
-            builtin::drop(res);
-        }
-        failed;
+        let mut res = client().request("/", { body: Option::Some(b"x".as_byte_slice()) }).unwrap();
+        let result = res.bytes();
+        builtin::drop(res);
+        result;
     };
     host.end_writes();
-    assert result;
+    assert result matches { Err(Transport([_::Request, _::HttpRequestBodySize(_)])) };
 }
 
 test "a streamed request checks its path before writing" {

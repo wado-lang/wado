@@ -266,7 +266,9 @@ Where a transport failure happened.
 
 #### `Request`
 
-Before the response headers: no part of the response was seen.
+While sending the request. Before the response headers, no part of the
+response was seen; a request body the host failed to send is reported
+once the response body ends.
 
 #### `ResponseBody`
 

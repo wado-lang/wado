@@ -85,7 +85,9 @@ pub struct RequestInit {
 
 /// Where a transport failure happened.
 pub enum Stage {
-    /// Before the response headers: no part of the response was seen.
+    /// While sending the request. Before the response headers, no part of the
+    /// response was seen; a request body the host failed to send is reported
+    /// once the response body ends.
     Request,
     /// While the response body was read: part of it may have been handed out.
     ResponseBody,
@@ -253,7 +255,9 @@ impl HttpClient {
     fn address(&self, req: &Request, method: Method, target: String) -> Result<(), HttpError> with Client {
         req.set_method(method).map_err(|_| HttpError::InvalidMethod(method))?;
         req.set_scheme(Option::Some(self.scheme)).unwrap();
-        req.set_authority(Option::Some(self.authority)).unwrap();
+        req
+            .set_authority(Option::Some(self.authority))
+            .map_err(|_| HttpError::InvalidUrl(`not a valid authority: ${self.authority}`))?;
         req
             .set_path_with_query(Option::Some(target))
             .map_err(|_| HttpError::InvalidUrl(`not a valid request target: ${target}`))?;
@@ -327,7 +331,7 @@ impl PendingRequest {
                 Err(e) => {
                     trailers_tx.write(Err(ErrorCode::InternalError(Option::Some(`${e}`))));
                     let _ = call.wait();
-                    let _ = sent.read();
+                    sent.drop();
                     return Err(e);
                 },
             }
@@ -340,10 +344,9 @@ impl PendingRequest {
                 return Err(HttpError::Transport([Stage::Request, code]));
             },
         };
-        if let Some(Err(code)) = sent.read() {
-            return Err(HttpError::Transport([Stage::Request, code]));
-        }
-        return Ok(HttpResponse::received(response));
+        // The host resolves `sent` only once the connection is done with, which
+        // takes the response body drained, so it is read after the body.
+        return Ok(HttpResponse::received(response, sent));
     }
 }
 
@@ -444,10 +447,12 @@ pub affine struct HttpResponse {
     reader: Option<BodyReader>,
     /// The trailers, once the body was read to its end.
     trailers: Option<HttpFields>,
+    /// How sending the request ended.
+    sent: Option<Future<Result<(), ErrorCode>>>,
 }
 
 impl HttpResponse {
-    fn received(response: Response) -> HttpResponse with Client {
+    fn received(response: Response, sent: Future<Result<(), ErrorCode>>) -> HttpResponse with Client {
         return HttpResponse {
             status: response.get_status_code() as u16,
             headers: HttpFields::of(&(response.get_headers() as Fields)),
@@ -455,6 +460,7 @@ impl HttpResponse {
             unread: Option::Some(response),
             reader: null,
             trailers: null,
+            sent: Option::Some(sent),
         };
     }
 
@@ -533,6 +539,9 @@ impl HttpResponse {
             return Ok(Option::Some(chunk));
         }
         self.trailers = Option::Some(self.reader.take().unwrap().finish()?);
+        if let Some(Err(code)) = self.sent.take().unwrap().read() {
+            return Err(HttpError::Transport([Stage::Request, code]));
+        }
         return Ok(null);
     }
 }

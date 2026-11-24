@@ -428,12 +428,23 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
             return Result::Err(ParseError::MissingHost);
         }
         apply_port_suffix(url, &port_str)?;
-        url.host = host_part.to_ascii_lowercase();
+        url.host = domain(host_part)?;
         return Result::Ok(());
     }
 
-    url.host = rest.to_ascii_lowercase();
+    url.host = domain(rest)?;
     return Result::Ok(());
+}
+
+/// The host a domain names, lowercased, or `InvalidHost` where it holds one of
+/// WHATWG URL's forbidden domain code points. `%` is the one let through, since
+/// the host is not percent-decoded.
+fn domain(host: StrSlice) -> Result<String, ParseError> {
+    let forbidden = host.find_char(|c| c <= '\u{20}' || c == '\u{7f}' || "#/:<>?@[\\]^|".contains_char(c));
+    if forbidden matches { Some(_) } {
+        return Result::Err(ParseError::InvalidHost);
+    }
+    return Result::Ok(host.to_ascii_lowercase());
 }
 
 /// Reads an absolute URL. Only special schemes (http, https, ws, wss) are

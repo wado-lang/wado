@@ -111,7 +111,10 @@ endpoint, which is another `HttpClient`. That is policy above the client.
   happened in: before the response headers, or while reading the response
   body. Before the headers, no part of the response was seen; during the body,
   part of it was already handed to the caller. A caller deciding whether to
-  retry needs the difference.
+  retry needs the difference. A request body the host failed to send is
+  reported once the response body ends: the future that reports it resolves
+  only when the connection is done with, which the response holds open until
+  its body is read.
 - A body, header value or event that could not be decoded: not UTF-8 for
   `text()`, `header()` or `events()`, or not the type for `json()`.
 
@@ -241,3 +244,5 @@ The tests run the client against effect handlers standing in for the
 
 - Cookies, multipart form bodies, and compression on the guest side.
 - Writing Server-Sent Events from a `wasi:http/service` handler.
+- Nothing bounds what a server makes the client hold: a whole read, a line of
+  an event stream, and the data of one event grow as long as the server sends.
