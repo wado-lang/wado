@@ -526,8 +526,8 @@ fn elements_exposed(
             .and_then(|e| storage_root(body, e))
             .is_some_and(|l| l == target || l == root)
     };
-    frame.written(heap.effects, body, &keys, root, &own)
-        || frame.written(heap.effects, body, &keys, target, &own)
+    frame.written(heap.effects, body, &keys, root, own)
+        || frame.written(heap.effects, body, &keys, target, own)
         || frame.outlives_sharing(target, root)
 }
 

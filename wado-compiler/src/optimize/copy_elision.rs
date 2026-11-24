@@ -23,11 +23,7 @@ pub fn elide_value_copies(
     gate: &mut FunctionGate,
     heap: &mut HeapEffectsCache,
 ) -> bool {
-    let value_copies: Vec<bool> = project
-        .functions
-        .iter()
-        .map(|f| f.borrow().is_value_copy())
-        .collect();
+    let value_copies = project.value_copy_functions();
     let type_table = project.type_table.borrow();
     let effects = heap.effects(project, &type_table, gate.exec());
     let functions = &project.functions;

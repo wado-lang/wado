@@ -76,6 +76,9 @@ It drops the call where three things hold:
   copy or the aggregate holding it;
 - nothing in the body writes such an object through the source.
 
+It runs ahead of `nir/value_copy_demote`, which would otherwise turn a copy the
+pass can drop whole into a copy of the list's spine.
+
 ### A call lends what it returns
 
 A function whose returned value holds a part of a parameter lends that part

@@ -25,8 +25,8 @@ use crate::tir::{
 use crate::type_table::TypeTable;
 
 use super::arena_query::holds_reference;
-use crate::lower::plan::value_copy::needs_value_copy;
 use super::body_memo::BodyMemo;
+use crate::lower::plan::value_copy::needs_value_copy;
 use crate::parallel::{Executor, lock};
 
 /// Where a class's objects may come from: a bit per parameter (the last one
@@ -548,9 +548,8 @@ pub(super) struct HeapEffects<'t> {
 
 impl HeapEffects<'_> {
     /// Whether what `ty` holds may be a reference: an array's elements, or
-    /// anything else's contents.
-    /// Whether the elements of an array of type `ty` hand on references when
-    /// they move, or when `copied`, when they are value-copied.
+    /// anything else's contents. When `copied`, the elements are value-copied,
+    /// which hands on only what such a copy shares.
     fn elements_hold_reference(&self, ty: TypeId, copied: bool) -> bool {
         let tt = self.type_table;
         let ResolvedType::BuiltinArray(element) = tt.get(tt.strip_handles(ty)) else {
@@ -1879,15 +1878,7 @@ impl HeapFrame {
                 && a.keys.meets(keys)
                 && self.shares(h, OperandNode::Node(self.classes.root(a.node)))
         }) || self.calls.iter().any(|&call| {
-            self.call_may_keys(
-                effects,
-                body,
-                call,
-                Effect::Write,
-                &wanted,
-                h,
-                answered,
-            )
+            self.call_may_keys(effects, body, call, Effect::Write, &wanted, h, answered)
         })
     }
 

@@ -2842,11 +2842,7 @@ fn inline_round(
         .zip(&fn_effects)
         .map(|(&eligible, e)| eligible && e.is_pure())
         .collect();
-    let value_copies: Vec<bool> = project
-        .functions
-        .iter()
-        .map(|f| f.borrow().is_value_copy())
-        .collect();
+    let value_copies = project.value_copy_functions();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
     let spins: Vec<bool> = scans.iter().map(|s| s.spins).collect();
 
@@ -3961,59 +3957,59 @@ fn try_inline_call_expr(
     let refusal = left_to_copy_elision
         .then_some(Refusal::LeftToCopyElision)
         .or_else(|| match (site.admission(), reach) {
-        (Site::UnlikelyPlain | Site::UnlikelyLoop, _) => {
-            unreachable!("admission reads no unlikely site")
-        }
-        (Site::Cold(_), _) => (candidate.inline_hint != InlineHint::Always
-            && !candidates.shrinking.contains(&func_id))
-        .then_some(Refusal::Cold),
-        (Site::Plain | Site::Loop, Reach::Everywhere) => None,
-        (Site::Plain | Site::Loop, Reach::Sole) => sole_site(frame),
-        // A call the compile-time engine may run to its value is left to it
-        // until the loop converges: spliced, it becomes statements
-        // `let_block_flatten` lays into the caller before the fold reaches
-        // them. One still standing then is one the engine could not fold.
-        (Site::Plain, Reach::SoleOutsideLoops) => sole_site(frame).or_else(|| {
-            let left = candidates.fold_pending
-                && folds_to_constant(
-                    caller,
-                    Operand::Expr(call_id),
-                    &IndexSet::default(),
-                    Some(candidates.ctfe_eligible),
-                );
-            frame.deferred |= left;
-            left.then_some(Refusal::LeftToEngine)
-        }),
-        (Site::Loop, Reach::SoleOutsideLoops) => Some(Refusal::InLoop),
-        (Site::Loop, Reach::Loops) => {
-            if frame.glue {
-                Some(Refusal::Glue)
-            } else if !frame.sole_loop_site(func_id) {
-                Some(Refusal::SeveralLoopSites)
-            } else {
-                None
+            (Site::UnlikelyPlain | Site::UnlikelyLoop, _) => {
+                unreachable!("admission reads no unlikely site")
             }
-        }
-        (Site::Plain, Reach::Loops) => Some(Refusal::OutsideLoop),
-        (Site::Plain | Site::Loop, Reach::Nowhere) => Some(Refusal::OtherHeat),
-    })
-    .or_else(|| {
-        // Like a call left to the engine, a wait lapses when the loop
-        // converges.
-        let awaits = candidates.fold_pending
-            && candidates.awaiting.get(&func_id).is_some_and(|numbers| {
-                Caller {
-                    body: caller,
-                    written: frame.written,
-                    bindings: frame.bindings,
-                    opens: candidates.opens,
+            (Site::Cold(_), _) => (candidate.inline_hint != InlineHint::Always
+                && !candidates.shrinking.contains(&func_id))
+            .then_some(Refusal::Cold),
+            (Site::Plain | Site::Loop, Reach::Everywhere) => None,
+            (Site::Plain | Site::Loop, Reach::Sole) => sole_site(frame),
+            // A call the compile-time engine may run to its value is left to it
+            // until the loop converges: spliced, it becomes statements
+            // `let_block_flatten` lays into the caller before the fold reaches
+            // them. One still standing then is one the engine could not fold.
+            (Site::Plain, Reach::SoleOutsideLoops) => sole_site(frame).or_else(|| {
+                let left = candidates.fold_pending
+                    && folds_to_constant(
+                        caller,
+                        Operand::Expr(call_id),
+                        &IndexSet::default(),
+                        Some(candidates.ctfe_eligible),
+                    );
+                frame.deferred |= left;
+                left.then_some(Refusal::LeftToEngine)
+            }),
+            (Site::Loop, Reach::SoleOutsideLoops) => Some(Refusal::InLoop),
+            (Site::Loop, Reach::Loops) => {
+                if frame.glue {
+                    Some(Refusal::Glue)
+                } else if !frame.sole_loop_site(func_id) {
+                    Some(Refusal::SeveralLoopSites)
+                } else {
+                    None
                 }
-                .may_still_hand_constant(call_id, numbers, frame.hopeful)
-            });
-        frame.deferred |= awaits;
-        awaits.then_some(Refusal::AwaitingConstant)
-    })
-    .or_else(|| (!candidates.charge(func_id, heat)).then_some(Refusal::RescanSpent));
+            }
+            (Site::Plain, Reach::Loops) => Some(Refusal::OutsideLoop),
+            (Site::Plain | Site::Loop, Reach::Nowhere) => Some(Refusal::OtherHeat),
+        })
+        .or_else(|| {
+            // Like a call left to the engine, a wait lapses when the loop
+            // converges.
+            let awaits = candidates.fold_pending
+                && candidates.awaiting.get(&func_id).is_some_and(|numbers| {
+                    Caller {
+                        body: caller,
+                        written: frame.written,
+                        bindings: frame.bindings,
+                        opens: candidates.opens,
+                    }
+                    .may_still_hand_constant(call_id, numbers, frame.hopeful)
+                });
+            frame.deferred |= awaits;
+            awaits.then_some(Refusal::AwaitingConstant)
+        })
+        .or_else(|| (!candidates.charge(func_id, heat)).then_some(Refusal::RescanSpent));
     let call_span = caller.exprs[call_id].span;
     if let Some(decisions) = frame.decisions.as_mut() {
         decisions.record(candidate, call_span, site, heat, refusal);

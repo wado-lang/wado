@@ -610,6 +610,14 @@ impl NirPackage {
         })
     }
 
+    /// Per function, in store order, whether it is a `$value_copy$T` helper.
+    pub fn value_copy_functions(&self) -> Vec<bool> {
+        self.functions
+            .iter()
+            .map(|f| f.borrow().is_value_copy())
+            .collect()
+    }
+
     /// The [`FuncId`]s of the calls that write no struct field: a builtin whose
     /// declared storage reaches nothing it could write but array elements, a
     /// value-copy helper, or a function that never returns. The value-graph
