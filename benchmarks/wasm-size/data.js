@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795487397202,
+  "lastUpdate": 1795491670393,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81809,6 +81809,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/df631a396bc7cd3cb0e065228b7ce318055804d7"
         },
         "date": 1795487396425,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "059072c6695c5b08ed7d8ccec322a43254531e63",
+          "message": "Merge pull request #2743 from wado-lang/perf/json-bench\n\nperf(inline): stop splicing a hot looping callee into every field site",
+          "timestamp": "2026-11-24T12:23:01+09:00",
+          "tree_id": "b6297708fa461668777e586f14b9a5ac8d7b0d6d",
+          "url": "https://github.com/wado-lang/wado/commit/059072c6695c5b08ed7d8ccec322a43254531e63"
+        },
+        "date": 1795491669442,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
