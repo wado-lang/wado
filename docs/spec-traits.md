@@ -848,6 +848,14 @@ as well as `impl Pick<String>`. A method call on such a parameter reads the
 bound that writes arguments. The trait is one either way, so naming it selects
 nothing.
 
+Bounds writing several argument lists of one trait are an overload set, and a
+call selects among them as among impls (see
+[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)). Under
+`T: Take<i64> + Take<i32>`, `t.take(n)` with `n: i32` reads `Take<i32>`, and
+`t.take(42)` is ambiguous: neither bound comes first for being written first.
+A closure argument is read as at a call that cannot wait, so a pair differing
+only in a function type's row leaves it ambiguous.
+
 An impl and a bound already in scope read a written argument differently.
 
 An impl answers a bound only where every position agrees, each side counting the

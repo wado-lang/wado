@@ -315,6 +315,11 @@ walked, so a method call whose candidates differ only in the rows a closure
 argument could meet waits for it, typed by the trait's declaration, as a call
 on an unsettled receiver does (issue #2719).
 
+Bounds writing one trait at several argument lists (`T: Take<i64> + Take<i32>`)
+are the same overload set seen from inside a generic body, so they select by
+the same rule: unique-or-error, the exact row first. Reading the first bound
+written would make the order of a `+` list change which function a call names.
+
 Classes exist only to filter. After selection the winning signature drives
 ordinary argument elaboration, so a literal still coerces to the chosen
 parameter type, and value-range checks run there — selection never depends on a
@@ -669,11 +674,10 @@ Trade-offs:
   element (`xs[0].take(|| {})`) never wait for their selection, so one whose
   candidates differ only in a closure argument's row is rejected; the same
   call written as a plain method call selects.
-- Two bounds of one trait at different argument lists
-  (`T: Take<i64> + Take<i32>`) are not an overload set: a call through them
-  that the arguments do not select takes the first bound written, where the
-  impls would report an ambiguity. A function argument's row selects there,
-  but a closure argument does not wait for its body.
+- A call through bounds of one trait at several argument lists
+  (`T: Take<fn()> + Take<fn() with Stdout>`) never waits for a closure
+  argument's body, so a pair differing only in the closure's row is reported
+  ambiguous.
 
 ## See Also
 
