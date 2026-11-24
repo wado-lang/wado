@@ -13,7 +13,7 @@ use crate::common::wado_in;
 fn write_package(root: &Path) {
     fs::write(
         root.join("wado.toml"),
-        "[package]\nname = \"cov\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"cov\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     fs::write(
@@ -81,7 +81,7 @@ fn a_module_tested_as_an_entry_and_imported_is_one_file() {
     fs::create_dir(tmp.path().join("elsewhere")).unwrap();
     fs::write(
         tmp.path().join("pkg/wado.toml"),
-        "[package]\nname = \"cov\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"cov\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     fs::write(

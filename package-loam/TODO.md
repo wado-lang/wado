@@ -34,7 +34,7 @@ Work no roadmap item holds yet. It is unordered.
   a data file's first 2 GiB loads on every device.
 
 - [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
-  shape class and compiled for each device: StableHLO through `lib:pjrt` for
+  shape class and compiled for each device: StableHLO through `wado-lang:pjrt` for
   a TPU, Loam's own compiler for WebGPU. See
   [Loam on TPU and WebGPU](./docs/devices.md), whose plan lists the steps, a TPU
   run and many requests at once among them. Finished when every step of that

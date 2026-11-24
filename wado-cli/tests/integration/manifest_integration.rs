@@ -10,12 +10,13 @@ fn test_init_creates_manifest() {
     let tmp = tempfile::tempdir().unwrap();
 
     wado_in(tmp.path())
-        .args(["init", "--name", "my-app"])
+        .args(["init", "--name", "my-app", "--namespace", "myorg"])
         .assert()
         .success()
         .stderr(predicate::str::contains("Created wado.toml"));
 
     let content = fs::read_to_string(tmp.path().join("wado.toml")).unwrap();
+    assert!(content.contains("namespace = \"myorg\""));
     assert!(content.contains("name = \"my-app\""));
     assert!(content.contains("version = \"0.1.0\""));
     assert!(content.contains("[world]"));
@@ -23,17 +24,45 @@ fn test_init_creates_manifest() {
 }
 
 #[test]
-fn test_init_with_namespace() {
+fn test_init_requires_namespace() {
     let tmp = tempfile::tempdir().unwrap();
 
     wado_in(tmp.path())
-        .args(["init", "--name", "my-app", "--namespace", "myorg"])
+        .args(["init", "--name", "my-app"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--namespace is required"));
+}
+
+/// A workspace member takes the fields `[workspace.package]` sets from the
+/// workspace, so `init` there writes neither them nor asks for them.
+#[test]
+fn init_in_a_workspace_member_leaves_out_what_it_inherits() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("wado-workspace.toml"),
+        "[workspace]\nmembers = [\"pkgs/*\"]\n\n\
+         [workspace.package]\nnamespace = \"acme\"\nversion = \"0.4.0\"\n",
+    )
+    .unwrap();
+    let member = tmp.path().join("pkgs/app");
+    fs::create_dir_all(&member).unwrap();
+
+    wado_in(&member)
+        .args(["init", "--name", "app", "--namespace", "myorg"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "the workspace sets the namespace `acme`",
+        ));
+    wado_in(&member)
+        .args(["init", "--name", "app"])
         .assert()
         .success();
 
-    let content = fs::read_to_string(tmp.path().join("wado.toml")).unwrap();
-    assert!(content.contains("namespace = \"myorg\""));
-    assert!(content.contains("name = \"my-app\""));
+    let content = fs::read_to_string(member.join("wado.toml")).unwrap();
+    assert!(!content.contains("namespace"), "{content}");
+    assert!(!content.contains("version"), "{content}");
 }
 
 #[test]
@@ -41,12 +70,12 @@ fn test_init_fails_when_manifest_exists() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(
         tmp.path().join("wado.toml"),
-        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"x\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
 
     wado_in(tmp.path())
-        .args(["init", "--name", "my-app"])
+        .args(["init", "--name", "my-app", "--namespace", "myorg"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("already exists"))
@@ -58,12 +87,19 @@ fn test_init_force_overwrites() {
     let tmp = tempfile::tempdir().unwrap();
     fs::write(
         tmp.path().join("wado.toml"),
-        "[package]\nname = \"old\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"old\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
 
     wado_in(tmp.path())
-        .args(["init", "--name", "new-app", "--force"])
+        .args([
+            "init",
+            "--name",
+            "new-app",
+            "--namespace",
+            "myorg",
+            "--force",
+        ])
         .assert()
         .success()
         .stderr(predicate::str::contains("Created wado.toml"));
@@ -103,6 +139,7 @@ fn test_build_with_manifest() {
     fs::create_dir_all(&src_dir).unwrap();
 
     let toml = r#"[package]
+namespace = "acme"
 name = "test-app"
 version = "0.1.0"
 
@@ -143,6 +180,7 @@ fn test_compile_file_arg_overrides_manifest() {
 
     // Create a wado.toml pointing to a nonexistent file
     let toml = r#"[package]
+namespace = "acme"
 name = "test-app"
 version = "0.1.0"
 
@@ -185,6 +223,7 @@ fn test_run_with_manifest() {
     fs::create_dir_all(&src_dir).unwrap();
 
     let toml = r#"[package]
+namespace = "acme"
 name = "test-app"
 version = "0.1.0"
 
@@ -236,6 +275,7 @@ fn test_build_no_world_declared() {
 
     // Manifest with no [package].lib and no [world] entry — nothing to build.
     let toml = r#"[package]
+namespace = "acme"
 name = "lib-only"
 version = "0.1.0"
 "#;
@@ -253,6 +293,7 @@ fn test_serve_manifest_missing_service() {
     let tmp = tempfile::tempdir().unwrap();
 
     let toml = r#"[package]
+namespace = "acme"
 name = "cli-only"
 version = "0.1.0"
 
@@ -276,6 +317,7 @@ version = "0.1.0"
 fn an_invalid_manifest_fails_every_subcommand_that_reads_it() {
     let tmp = tempfile::tempdir().unwrap();
     let toml = r#"[package]
+namespace = "acme"
 name = "p"
 version = "0.1.0"
 
@@ -315,6 +357,7 @@ fn test_build_from_subdirectory() {
     fs::create_dir_all(&src_dir).unwrap();
 
     let toml = r#"[package]
+namespace = "acme"
 name = "test-app"
 version = "0.1.0"
 
@@ -352,7 +395,7 @@ fn a_directory_below_the_package_is_walked_from_below_it() {
     fs::create_dir_all(src_dir.join("sub")).unwrap();
     fs::write(
         tmp.path().join("wado.toml"),
-        "[package]\nname = \"p\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"p\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     fs::write(
@@ -385,12 +428,12 @@ fn a_test_reads_paths_from_its_package_root_unless_dir_is_given() {
     fs::create_dir_all(pkg.join("src")).unwrap();
     fs::write(
         tmp.path().join("wado.toml"),
-        "[package]\nname = \"outer\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"outer\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     fs::write(
         pkg.join("wado.toml"),
-        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"pkg\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     fs::write(pkg.join("data.txt"), "inside").unwrap();
@@ -434,7 +477,7 @@ fn packages_run_at_once() {
         fs::create_dir_all(&dir).unwrap();
         fs::write(
             dir.join("wado.toml"),
-            format!("[package]\nname = \"{pkg}\"\nversion = \"0.1.0\"\n"),
+            format!("[package]\nnamespace = \"acme\"\nname = \"{pkg}\"\nversion = \"0.1.0\"\n"),
         )
         .unwrap();
         fs::write(dir.join("t_test.wado"), body).unwrap();

@@ -4,6 +4,9 @@ use std::path::Path;
 
 use lexopt::Arg::Value;
 
+use wado_lsp::host::discovery::{Disk, governing_workspace, resolve_member_manifest};
+use wado_manifest::WorkspaceManifest;
+
 use crate::args::{self, CliExit};
 
 #[derive(Debug)]
@@ -36,7 +39,7 @@ impl Opt {
                 long: Some("namespace"),
                 short: None,
                 value: Some("<ns>"),
-                desc: "Package namespace (optional, required for publishing)",
+                desc: "Package namespace (required unless the workspace sets one)",
             },
             Self::Force => args::OptSpec {
                 long: Some("force"),
@@ -106,7 +109,40 @@ pub fn run(opts: InitOptions) -> Result<(), CliExit> {
         ));
     }
 
-    let content = generate_manifest(&opts.name, opts.namespace.as_deref());
+    let dir = std::env::current_dir()
+        .map_err(|e| CliExit::error(format!("reading the current directory: {e}")))?;
+    let inherited = match governing_workspace(&dir, &Disk) {
+        Some((_, text)) => {
+            let workspace = text
+                .parse::<WorkspaceManifest>()
+                .map_err(|e| CliExit::error(format!("invalid wado-workspace.toml: {e}")))?;
+            workspace.workspace.package
+        }
+        None => None,
+    };
+    let inherited_namespace = inherited.as_ref().and_then(|p| p.namespace.as_deref());
+    let namespace = match (opts.namespace.as_deref(), inherited_namespace) {
+        (Some(_), Some(namespace)) => {
+            return Err(CliExit::error(format!(
+                "the workspace sets the namespace `{namespace}`; leave out --namespace"
+            )));
+        }
+        (None, None) => {
+            return Err(CliExit::error(format!(
+                "--namespace is required: no workspace sets one\n\n{}",
+                format_usage()
+            )));
+        }
+        (namespace, _) => namespace,
+    };
+    let inherits_version = inherited.as_ref().is_some_and(|p| p.version.is_some());
+    let content = generate_manifest(
+        &opts.name,
+        namespace,
+        (!inherits_version).then_some("0.1.0"),
+    );
+    resolve_member_manifest(&dir, &content, &Disk)
+        .map_err(|e| CliExit::error(format!("the manifest would not be valid: {e}")))?;
 
     fs::write(manifest_path, &content)
         .map_err(|e| CliExit::error(format!("writing wado.toml: {e}")))?;
@@ -114,14 +150,18 @@ pub fn run(opts: InitOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
-fn generate_manifest(name: &str, namespace: Option<&str>) -> String {
+/// A manifest leaving out each field `None` stands for, which the governing
+/// workspace sets.
+fn generate_manifest(name: &str, namespace: Option<&str>, version: Option<&str>) -> String {
     let mut buf = String::new();
     buf.push_str("[package]\n");
-    if let Some(ns) = namespace {
-        writeln!(buf, "namespace = \"{ns}\"").unwrap();
+    if let Some(namespace) = namespace {
+        writeln!(buf, "namespace = \"{namespace}\"").unwrap();
     }
     writeln!(buf, "name = \"{name}\"").unwrap();
-    writeln!(buf, "version = \"0.1.0\"").unwrap();
+    if let Some(version) = version {
+        writeln!(buf, "version = \"{version}\"").unwrap();
+    }
     buf.push_str("\n[world]\n");
     writeln!(buf, "\"wasi:cli/command\" = \"src/main.wado\"").unwrap();
     buf
@@ -132,36 +172,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generate_manifest_minimal() {
-        let result = generate_manifest("my-app", None);
-        assert!(result.contains("name = \"my-app\""));
-        assert!(result.contains("version = \"0.1.0\""));
-        assert!(result.contains("[world]"));
-        assert!(result.contains("\"wasi:cli/command\" = \"src/main.wado\""));
-        assert!(!result.contains("namespace"));
-    }
-
-    #[test]
-    fn generate_manifest_with_namespace() {
-        let result = generate_manifest("my-app", Some("myorg"));
-        assert!(result.contains("namespace = \"myorg\""));
-        assert!(result.contains("name = \"my-app\""));
+    fn generated_manifest_parses() {
+        let result = generate_manifest("my-app", Some("myorg"), Some("0.1.0"));
+        let manifest: wado_manifest::Manifest = result.parse().unwrap();
+        assert_eq!(
+            manifest.package.as_ref().unwrap().coordinate(),
+            "myorg:my-app@0.1.0"
+        );
+        assert_eq!(
+            manifest.world_entry("wasi:cli/command"),
+            Some("src/main.wado")
+        );
     }
 
     #[test]
     fn parse_args_requires_name() {
-        let parser = lexopt::Parser::from_args(Vec::<String>::new());
+        let parser = lexopt::Parser::from_args(vec!["--namespace", "myorg"]);
         let err = parse_args(parser).unwrap_err();
         assert_eq!(err.exit_code, 1);
         assert!(err.message.contains("--name is required"));
-    }
-
-    #[test]
-    fn parse_args_with_name() {
-        let parser = lexopt::Parser::from_args(vec!["--name", "my-app"]);
-        let opts = parse_args(parser).unwrap();
-        assert_eq!(opts.name, "my-app");
-        assert!(opts.namespace.is_none());
     }
 
     #[test]

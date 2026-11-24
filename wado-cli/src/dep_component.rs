@@ -209,9 +209,10 @@ pub async fn resolve_inline_git_dependencies(
             ));
             continue;
         }
+        let key = name.clone();
         let entry = joined(
             tokio::task::spawn_blocking(move || {
-                resolve_inline_git(&url, &git_ref, directory.as_deref())
+                resolve_inline_git(&key, &url, &git_ref, directory.as_deref())
             })
             .await,
         )?;
@@ -226,7 +227,12 @@ pub async fn resolve_inline_git_dependencies(
 /// with the manifest path; only the version source differs — no lock, so the
 /// git package's own `[package].version` at the resolved commit keys the
 /// worktree (matching what a manifest ref-pin would lock).
-fn resolve_inline_git(url: &str, git_ref: &str, directory: Option<&str>) -> Result<String, String> {
+fn resolve_inline_git(
+    key: &str,
+    url: &str,
+    git_ref: &str,
+    directory: Option<&str>,
+) -> Result<String, String> {
     let sha = resolve_ref(url, git_ref).map_err(|e| e.to_string())?;
     let manifest = fetch_manifest(url, &sha, directory).map_err(|e| e.to_string())?;
     let version = manifest
@@ -234,7 +240,7 @@ fn resolve_inline_git(url: &str, git_ref: &str, directory: Option<&str>) -> Resu
         .as_ref()
         .map(|p| p.version.clone())
         .unwrap_or_else(|| sha.clone());
-    materialize_entry(url, &version, &sha, directory).map_err(|e| e.to_string())
+    materialize_entry(key, url, &version, &sha, directory).map_err(|e| e.to_string())
 }
 
 /// An inline registry component source declared on a `use … from` clause.
@@ -522,7 +528,7 @@ mod tests {
     #[test]
     fn inline_and_manifest_entry_are_exclusive() {
         let m = manifest(
-            "[package]\nname=\"a\"\nversion=\"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname=\"a\"\nversion=\"0.1.0\"\n\n\
              [registries]\ndefault=\"oci://ghcr.io\"\n\n\
              [dependencies]\n\"ns:pkg\" = { version = \"^1.0\" }\n",
         );
@@ -537,7 +543,7 @@ mod tests {
     #[test]
     fn registry_falls_back_to_manifest_default() {
         let m = manifest(
-            "[package]\nname=\"a\"\nversion=\"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname=\"a\"\nversion=\"0.1.0\"\n\n\
              [registries]\ndefault=\"oci://ghcr.io/acme\"\n",
         );
         let dep = only(r#"use { X } from "ns:pkg@1.2.3";"#, Some(&m))

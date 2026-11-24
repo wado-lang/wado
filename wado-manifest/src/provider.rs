@@ -341,6 +341,7 @@ mod tests {
         format!(
             r#"
 [package]
+namespace = "acme"
 name = "{name}"
 version = "{version}"
 "#,

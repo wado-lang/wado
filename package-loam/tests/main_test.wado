@@ -83,7 +83,7 @@ fn kiln(primary: [String, ByteList, String], options: Options) -> String with (S
     let request = Request {
         primary: InputFile { path, content: stream, type: Option::Some(type) },
         inputs: [],
-        module: "lib:loam",
+        module: "wado-lang:loam",
         options,
     };
     let result: Result<Response, KilnError> = with &mut inputs do {
@@ -102,7 +102,7 @@ test "gen prints the module the Kiln generator builds for the same graph and opt
         kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { embed: true }),
     );
     assert gen_header == `#![generated(by = "loam", sources = ["${path}"])]`;
-    assert kiln_header == `#![generated(by = "lib:loam", sources = ["${path}"])]`;
+    assert kiln_header == `#![generated(by = "wado-lang:loam", sources = ["${path}"])]`;
     assert gen_body == kiln_body;
 }
 
@@ -113,7 +113,7 @@ test "gen prints the tokenizer the Kiln generator builds" {
         kiln([path, fs::read(path).unwrap(), "hf-tokenizer"], Options {}),
     );
     assert gen_header == `#![generated(by = "loam", sources = ["${path}"])]`;
-    assert kiln_header == `#![generated(by = "lib:loam", sources = ["${path}"])]`;
+    assert kiln_header == `#![generated(by = "wado-lang:loam", sources = ["${path}"])]`;
     assert gen_body == kiln_body;
 }
 

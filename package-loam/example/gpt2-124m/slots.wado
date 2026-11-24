@@ -7,11 +7,11 @@
 use { eprintln, println, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
-use { Backend, FileSource, Sampling, Tensor } from "lib:loam";
+use { Backend, FileSource, Sampling, Tensor } from "wado-lang:loam";
 use { Tokenizer } from "./tokenizer.json"
     with {
         type: "hf-tokenizer",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 /// `model.wado`'s graph at any number of rows, each row holding its lengths
 /// apart, and the logits a sampler reads rather than their greatest index.
@@ -20,7 +20,7 @@ use gpt2 from "https://huggingface.co/openai-community/gpt2/resolve/607a30d783df
         type: "onnx",
         integrity: "sha256:e6fc046fe5a7cfeeb8bb3c7d4c1b6a8bd90ced7339a75d5567957e3bc9d48abe",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 last: { logits: 1 },
                 decode: { ids: "input_ids", mask: "attention_mask", logits: "logits" },

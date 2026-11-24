@@ -144,7 +144,7 @@ shards as inputs, the index under `type: "safetensors-index"`:
 use { Model, Params, compute } from "./model.onnxtext" with {
     type: "onnxtext",
     generator: {
-        module: "lib:loam",
+        module: "wado-lang:loam",
         inputs: [
             { path: "./model.safetensors.index.json", type: "safetensors-index" },
             { path: "./model-00001-of-00002.safetensors", type: "safetensors" },
@@ -186,7 +186,7 @@ consumer the split into a checkpoint. The graph alone is the use site's file:
 ```wado
 use { Model, Params, compute } from "./model.onnx" with {
     type: "onnx",
-    generator: { module: "lib:loam" },
+    generator: { module: "wado-lang:loam" },
 };
 ```
 
