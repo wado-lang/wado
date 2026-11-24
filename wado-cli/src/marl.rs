@@ -4,8 +4,8 @@
 //! one file, keyed by the compiler and the sources, never beside the files it
 //! documents. A self-contained build (the `dist` feature) embeds the sources
 //! and caches in the user cache. Any other reads the checkout's sources, as it
-//! does the stdlib, and caches in cargo's profile directory, which every
-//! rebuild would otherwise fill.
+//! does the stdlib, and caches in cargo's profile directory, so each profile
+//! keeps its own and `cargo clean` removes it.
 
 use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
