@@ -87,8 +87,8 @@ means sending the body again, and a streamed body cannot be sent twice.
   body. Before the headers, no part of the response was seen; during the body,
   part of it was already handed to the caller. A retry policy needs the
   difference.
-- A body or header value that could not be decoded: not UTF-8 for `text()` or
-  `header()`, or not the type for `json()`.
+- A body, header value or event that could not be decoded: not UTF-8 for
+  `text()`, `header()` or `events()`, or not the type for `json()`.
 
 ### Streaming bodies
 
@@ -144,8 +144,11 @@ caller holds it, and the parser copies only in these cases:
 - An event with more than one `data` line is copied once, to join the lines
   with LF. The common case in LLM APIs, one JSON document on one `data` line, is
   a view into the chunk.
-- A line that is not valid UTF-8 is decoded with U+FFFD in place of each bad
-  sequence, as the standard requires, and that needs a copy.
+
+A line that is not valid UTF-8 is an error, the stream's last item. WHATWG
+decodes it with U+FFFD in place of each bad sequence, which is a copy for some
+lines only. This departs from the standard on purpose, for the reason the
+header values below give.
 
 A response header value is always a view over the bytes the host handed over,
 never a copy. `header(name)` gives it as a `StrSlice`, and a value that is not
