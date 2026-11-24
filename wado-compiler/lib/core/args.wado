@@ -392,7 +392,7 @@ impl DeserializeStruct for ArgvStructAccess {
 }
 
 impl DeserializeSeq for ArgvSeqAccess {
-    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+    fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         if self.is_option_list {
             // Force each pre-gathered value through `T`'s scalar conversion.
             if self.cursor >= self.vals.len() {
