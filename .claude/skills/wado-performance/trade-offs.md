@@ -43,19 +43,18 @@ cbor_twitter de lost the hot price for `is_null` and `deserialize_bool` at a few
 more sites. Neither has a loop, so the rule did not demote them; the splices
 around them changed which sites stay hot.
 
-Each clause cost a row when it was missing:
+Each clause cost a row when it was missing or replaced:
 
-| Without                  | Row that lost                                                                    |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| any of the three clauses | cbor_canada 30% slower                                                           |
-| the constant exception   | cbor_canada de 10%: `read_be` in `read_float`                                    |
-| the size bound           | zlib compress 2–2.6%: `Matcher::insert_run`                                      |
-| `spins`                  | zlib compress 3.2%: `BitWriter::write_bits`, whose loop runs 0.19 times per call |
+| Rule variant                                            | What it cost                                                                      |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| without any of the three clauses                        | cbor_canada 30% slower                                                            |
+| without the constant exception                          | cbor_canada de 10%: `read_be` in `read_float`                                     |
+| without the size bound                                  | zlib compress 2–2.6%: `Matcher::insert_run`                                       |
+| without `spins`                                         | zlib compress 3.2%: `BitWriter::write_bits`, whose loop runs 0.19 times per call  |
+| a trip-count bound in place of the size bound           | demotes `insert_run` (20 iterations per call) before `write_escaped_string` (6.7) |
+| more than one hot site, counting those a splice carries | json_catalog ser 5.2%                                                             |
 
-A trip-count bound in place of the size bound fails: `write_escaped_string`
-spins 6.7 times per call and `insert_run` 20. Requiring more than one hot
-site, counting those a splice carries, lost json_catalog ser 5.2%. The user
-chose to keep the rule.
+The user chose to keep the rule.
 
 ## `param_spec`'s clone cap raised from 128 to 4096 (2026-10-28)
 

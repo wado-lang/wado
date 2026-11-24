@@ -37,9 +37,10 @@ doublings zero about twice the output in total.
 
 The second row starts each buffer at the previous call's output length, held in
 a global. It wins every row, but only because a benchmark serializes one value
-repeatedly. The returned `ByteSlice` keeps the whole buffer alive, so a large
-output followed by many small ones leaves each small one holding the large
-capacity, and zero-filling it. A cap low enough to bound that loses the gain.
+repeatedly. The returned `ByteSlice` keeps the whole buffer alive, so the
+first small output after a large one holds the large capacity, and zero-fills
+it. Where large and small outputs alternate, every small one does. A cap low
+enough to bound that loses the gain.
 The user declined it.
 
 Generalizes: the growth is not the cost a profile charges to `String::grow`.
