@@ -1,0 +1,37 @@
+// A part of a recursive type a body stores into a local list it only reads
+// shares its source: the push writes the list's spine, which holds no object
+// of the part, though the part's type reaches the spine's.
+struct Tree { label: i32, kids: List<Tree> }
+
+fn size(t: &Tree) -> i32 {
+    let mut n = 1;
+    for let k of &t.kids { n += size(k); }
+    return n;
+}
+
+#[inline("never")]
+fn suffix_size(src: &List<Tree>, from: i32) -> i32 {
+    let mut rest: List<Tree> = [];
+    for let mut j = from; j < src.len(); j += 1 {
+        rest.push(src[j]);
+    }
+    let mut n = 0;
+    for let t of &rest { n += size(t); }
+    return n;
+}
+
+test "the parts read as their sources" {
+    let src: List<Tree> = [
+        Tree { label: 1, kids: [] },
+        Tree { label: 2, kids: [Tree { label: 3, kids: [] }] },
+        Tree { label: 4, kids: [] },
+    ];
+    assert suffix_size(&src, builtin::black_box(1)) == 3;
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["nir/copy_elision"]},
+    "test": {},
+    "wir_not_expect:O2": ["$value_copy$"]
+}

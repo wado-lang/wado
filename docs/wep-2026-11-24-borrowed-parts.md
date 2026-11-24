@@ -79,6 +79,12 @@ It drops the call where three things hold:
 It runs ahead of `nir/value_copy_demote`, which would otherwise turn a copy the
 pass can drop whole into a copy of the list's spine.
 
+The heap analysis keeps objects apart by depth: what a load from an object
+reads, a field, an element or a payload, is one depth below it, and a call's
+summary says how deep below each parameter it writes. So a `push` into a local
+`List<Tree>` writes the list and its array, not the `Tree` parts it holds,
+though a `Tree` reaches both types.
+
 ### A call lends what it returns
 
 A function whose returned value holds a part of a parameter lends that part
@@ -96,12 +102,6 @@ argument outright already works this way.
   copy.
 
 ## Known gaps
-
-### Recursive types
-
-The heap analysis keys a write by the type of the object it writes. A `push`
-into a local `List<Tree>` writes an `Array<Tree>`, a type a `Tree` reaches, so
-it counts as a write to every `Tree` copy that list holds.
 
 ### Long-lived heap storage
 
