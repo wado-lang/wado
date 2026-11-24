@@ -969,8 +969,11 @@ if [ ! -x "$bin" ]; then
     trap 'git worktree remove --force "$tmp/tree" 2>/dev/null || true; rm -rf "$tmp" "$bin.$$"' EXIT
     git worktree prune  # a wiped temp dir leaves the registration behind
     git worktree add -q --detach "$tmp/tree" "$want"
-    # `dist` embeds the stdlib, which the worktree removed below would hold.
-    (cd "$tmp/tree" && cargo build --release -q -p wado-cli --features dist)
+    # The binary must embed the stdlib, which the worktree removed below would
+    # hold: `dist` does where the tree declares it; before that, any release did.
+    features=
+    if grep -q '^dist = ' "$tmp/tree/wado-cli/Cargo.toml"; then features='--features dist'; fi
+    (cd "$tmp/tree" && cargo build --release -q -p wado-cli $features)
     mkdir -p "$(dirname "$bin")"
     # Published by rename from a path this invocation alone writes, so no
     # interrupted or racing copy leaves a truncated compiler for the `-x` above.

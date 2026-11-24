@@ -462,18 +462,44 @@ fn print_emphasis(em: &EmphasisNode, out: &mut String) {
 }
 
 fn print_code_span<S: AsStrSlice>(s: S, out: &mut String) {
-    let has_backtick = s.contains("`");
-    let backtick_text = if has_backtick { "``" } else { "`" };
-    let needs_space = has_backtick && (s.starts_with("`") || s.ends_with("`"));
-    out.push_str(&backtick_text);
-    if needs_space {
+    let s = s.as_str_slice();
+    let mut delimiter = String::new();
+    for let _ of 0..<shortest_absent_backtick_run(s) {
+        delimiter.push('`');
+    }
+    // The parser strips one space from each end when both ends hold one, and
+    // a backtick at an end would join the delimiter.
+    let space_padded = s.starts_with(" ") && s.ends_with(" ") && s.chars().any(|c| c != ' ');
+    let padded = s.starts_with("`") || s.ends_with("`") || space_padded;
+    out.push_str(&delimiter);
+    if padded {
         out.push(' ');
     }
     out.push_str(s);
-    if needs_space {
+    if padded {
         out.push(' ');
     }
-    out.push_str(&backtick_text);
+    out.push_str(&delimiter);
+}
+
+/// A run of backticks closes a code span only at its exact length.
+fn shortest_absent_backtick_run(s: StrSlice) -> i32 {
+    let mut runs: List<i32> = [];
+    let mut run = 0;
+    for let c of s.chars() {
+        if c == '`' {
+            run += 1;
+        } else if run > 0 {
+            runs.push(run);
+            run = 0;
+        }
+    }
+    runs.push(run);
+    let mut n = 1;
+    while runs.contains(&n) {
+        n += 1;
+    }
+    return n;
 }
 
 fn print_dest_and_title<S: AsStrSlice, S1: AsStrSlice>(url: S, title: S1, out: &mut String) {
