@@ -26,11 +26,11 @@ them, and `request` is its method.
 
 ```wado
 use { HttpClient, ClientInit, RequestInit, Body, HttpError } from "core:http_client";
-use { Method } from "wasi:http";
+use { Method, Client } from "wasi:http";
 
 struct Message { id: String }
 
-fn create(key: String, payload: ByteList) -> Result<Message, HttpError> with _ {
+fn create(key: String, payload: ByteList) -> Result<Option<Message>, HttpError> with Client {
     let client = HttpClient::new("https://api.anthropic.com", ClientInit {
         headers: [["x-api-key", key], ["anthropic-version", "2023-06-01"]],
     })?;
@@ -38,7 +38,8 @@ fn create(key: String, payload: ByteList) -> Result<Message, HttpError> with _ {
         method: Method::Post,
         body: Body::bytes(payload),
     })?;
-    return res.json::<Message>();
+    if !res.ok() { return Ok(null); }
+    return Ok(Some(res.json::<Message>()?));
 }
 ```
 
@@ -116,8 +117,9 @@ yields it as its last item, so a caller cannot see the end without seeing the
 failure. The trailers arrive in the same future, and the response offers them
 once the body has been read to the end.
 
-A response dropped before its body is read to the end tells the host so through
-the `res` future `consume-body` takes.
+Whatever holds the body tells the host when it is dropped before the end,
+through the `res` future `consume-body` takes: the response before any read
+starts, the iterator after `body()` or `events()`.
 
 ### Server-Sent Events
 
@@ -151,9 +153,9 @@ caller holds it, and the parser copies only in these cases:
   with LF. The common case in LLM APIs, one JSON document on one `data` line, is
   a view into the chunk.
 
-Text is never decoded into a copy, so the cost does not depend on what the
-server sent. Input that is not UTF-8 is an error instead, departing from both
-standards on purpose:
+Text is never decoded into a copy, so whether a value is copied does not depend
+on whether its bytes are valid text. Input that is not UTF-8 is an error
+instead, departing from both standards on purpose:
 
 - An event line that is not UTF-8 ends the stream with an error. WHATWG
   decodes it with U+FFFD in place of each bad sequence.
