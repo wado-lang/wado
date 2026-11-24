@@ -2564,8 +2564,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)
     }
 
-    /// `lookup`, with an undecided selection reported at `span` as needing an
-    /// annotation, for a site that cannot wait for the receiver to settle.
+    /// `lookup`, with an undecided selection reported at `span`, for a site
+    /// that cannot wait for the receiver or a closure argument to settle it.
     pub(super) fn decide_now(
         &mut self,
         lookup: TraitLookup,
