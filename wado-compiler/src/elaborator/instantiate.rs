@@ -281,7 +281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Record what the use site's solver determined for each slot, so the
-    /// module-end sweep substitutes the variables out of every recorded fact.
+    /// body's sweep substitutes the variables out of every recorded fact.
     /// A slot still open is reported by the blame it was minted with.
     pub(super) fn record_instantiation(&mut self, inst: &Instantiated, solved: &[TypeId]) {
         for (&var, &answer) in inst.vars.iter().zip(solved.iter()) {

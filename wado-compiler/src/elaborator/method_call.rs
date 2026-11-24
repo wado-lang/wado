@@ -1120,7 +1120,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A hole may still ride the receiver (a deep chain's intermediate call,
         // `gen().keep().unwrap()`): the recorded name embeds `Type<?hole>`, but
         // the monomorphizer rebuilds names from the receiver type, which the
-        // module-end sweep concretises once the hole is solved further out.
+        // body's sweep concretises once the hole is solved further out.
 
         // The one place arguments are checked: against the parameter types with
         // this call's type arguments substituted in. Doing it here rather than

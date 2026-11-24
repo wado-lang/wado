@@ -2103,7 +2103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let names = slot_names(&method_type_params, &self.tysys.resolutions);
         // A slot the solver left as its own variable is unconstrained. The
         // variable already carries the "cannot infer" diagnostic and the
-        // module-end sweep, so nothing needs classifying here: what an
+        // body's sweep, so nothing needs classifying here: what an
         // enclosing generic happens to be named cannot be confused with it.
         self.record_instantiation(inst, &inferred);
         self.link_deferred_assoc_equalities(

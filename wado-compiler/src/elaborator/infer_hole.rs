@@ -2,8 +2,8 @@
 //! `p.get()` in `p.get().unwrap()` — is an [`ResolvedType::InferVar`] that flows
 //! on until a check [`Elaborator::equate`]s it with a type. What a variable
 //! leaves undecided (a bound, a projection, a selection, a check) waits as an
-//! [`Obligation`], asked again as variables settle. The module-end sweep reports
-//! what nothing settled and substitutes the rest.
+//! [`Obligation`], asked again as variables settle. The sweep at each body's
+//! end reports what nothing settled and substitutes the rest.
 
 use crate::compiler_host::{CompilerHost, DiagnosticSpan};
 use crate::defs::DefId;
@@ -27,9 +27,9 @@ use super::tysys::TypeSystem;
 use crate::ast::{AssocTypeBound, AstId, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
-    BodyFacts, BodyFactsLens,ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
-    LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch, SequenceCoercionFacts,
-    StaticMethodDispatch,
+    BodyFacts, BodyFactsLens, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation,
+    KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch,
+    SequenceCoercionFacts, StaticMethodDispatch,
 };
 use crate::elaborator::typecheck::{
     MeetRules, Meetings, NeverMeets, TypeMismatchPayload, meetings,
@@ -1076,7 +1076,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut seen: IndexSet<&str> = IndexSet::default();
             let unique: Vec<&str> = named.into_iter().filter(|p| seen.insert(p)).collect();
             let blame = &owners[&key];
-            // The module being resolved owns every hole in the table.
             let _ = self.emit(TypeError::CannotInferType {
                 message: blame.message(&unique),
                 span: blame.span,
@@ -1160,6 +1159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn facts_mark(&self) -> FactsMark {
         FactsMark {
             body: self.sem.types.body.lens(),
+            decls: DeclFactsLens::of(&self.sem.types),
             tuple_overlays: self.sem.types.tuple_overlays.len(),
             default_methods: self.sem.default_method_facts.len(),
         }
@@ -1534,7 +1534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let mut tt = self.tysys.type_table.borrow_mut();
         let types = &mut self.sem.types;
-        Self::sweep_decl_facts(&mut tt, types, subst);
+        Self::sweep_decl_facts(&mut tt, types, since.decls, subst);
         let mut body = types.body.split_off(since.body);
         Self::sweep_body_facts(&mut tt, &mut body, &sweep);
         types.body.append(body);
@@ -1545,24 +1545,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .values_mut()
             .skip(since.default_methods)
         {
-            Self::sweep_decl_facts(&mut tt, &mut facts.types, subst);
+            Self::sweep_decl_facts(&mut tt, &mut facts.types, DeclFactsLens::default(), subst);
             Self::sweep_body_facts(&mut tt, &mut facts.types.body, &sweep);
             Self::sweep_tuple_overlays(&mut tt, &mut facts.types, 0, &sweep);
         }
     }
 
-    /// Substitute `subst` through the facts a declaration records once.
+    /// Substitute `subst` through the facts a declaration records once, past
+    /// `since`.
     fn sweep_decl_facts(
         tt: &mut TypeTable,
         types: &mut TypeAnnotations,
+        since: DeclFactsLens,
         subst: &IndexMap<InferVarId, TypeId>,
     ) {
-        sub_map(tt, &mut types.fn_return_types, subst);
-        sub_map(tt, &mut types.function_task_returns, subst);
-        sub_vec_map(tt, &mut types.fn_param_types, subst);
-        sub_vec_map(tt, &mut types.fn_affine_params, subst);
-        sub_vec_map(tt, &mut types.struct_field_types, subst);
-        for i in types.impl_facts.values_mut() {
+        for (map, since) in [
+            (&mut types.fn_return_types, since.fn_return_types),
+            (
+                &mut types.function_task_returns,
+                since.function_task_returns,
+            ),
+        ] {
+            for t in map.values_mut().skip(since) {
+                *t = sub(tt, *t, subst);
+            }
+        }
+        for (map, since) in [
+            (&mut types.fn_param_types, since.fn_param_types),
+            (&mut types.fn_affine_params, since.fn_affine_params),
+            (&mut types.struct_field_types, since.struct_field_types),
+        ] {
+            for v in map.values_mut().skip(since) {
+                sub_vec(tt, v, subst);
+            }
+        }
+        for i in types.impl_facts.values_mut().skip(since.impl_facts) {
             sub_vec(tt, &mut i.trait_type_args, subst);
         }
     }
@@ -1660,8 +1677,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 #[derive(Clone, Copy)]
 pub(super) struct FactsMark {
     body: BodyFactsLens,
+    decls: DeclFactsLens,
     tuple_overlays: usize,
     default_methods: usize,
+}
+
+/// The length of each map of the facts a declaration records once.
+#[derive(Clone, Copy, Default)]
+struct DeclFactsLens {
+    fn_return_types: usize,
+    function_task_returns: usize,
+    fn_param_types: usize,
+    fn_affine_params: usize,
+    struct_field_types: usize,
+    impl_facts: usize,
+}
+
+impl DeclFactsLens {
+    fn of(types: &TypeAnnotations) -> Self {
+        Self {
+            fn_return_types: types.fn_return_types.len(),
+            function_task_returns: types.function_task_returns.len(),
+            fn_param_types: types.fn_param_types.len(),
+            fn_affine_params: types.fn_affine_params.len(),
+            struct_field_types: types.struct_field_types.len(),
+            impl_facts: types.impl_facts.len(),
+        }
+    }
 }
 
 /// What a body's sweep writes into the recorded facts: each variable's
