@@ -873,6 +873,18 @@ test "only the timeouts asked for are set" {
     };
     host.end_writes();
     assert host.timeouts == [Option::Some(2)] as List<Option<u64>>;
+
+    host = MockHost {};
+    with &mut host do {
+        let client = HttpClient::new("https://example.com", {
+            connect_timeout: Option::Some(1),
+            between_bytes_timeout: Option::Some(3),
+        }).unwrap();
+        let res = client.request("/").unwrap();
+        builtin::drop(res);
+    };
+    host.end_writes();
+    assert host.timeouts == [Option::Some(1), Option::Some(3)] as List<Option<u64>>;
 }
 
 test "a timeout the host refuses fails the request before it is sent" {
