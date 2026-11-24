@@ -14,7 +14,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-// jco-transpile + esbuild live under scripts/jco/node_modules.
+// jco-transpile + esbuild live under tools/jco/node_modules.
 const jcoDir = join(here, "..", "..", "scripts", "jco");
 const { build } = await import(
   pathToFileURL(join(jcoDir, "node_modules", "esbuild", "lib", "main.js")).href

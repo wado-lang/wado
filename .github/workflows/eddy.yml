@@ -78,7 +78,7 @@ jobs:
           set -euo pipefail
           run_from() {
             gh api "repos/$REPO/contents?ref=$1" \
-              --jq '.[] | select(.name | IN("package-eddy", "mise.toml", "scripts")) | "\(.name) \(.sha)"'
+              --jq '.[] | select(.name | IN("package-eddy", "mise.toml", "tools")) | "\(.name) \(.sha)"'
             gh api "repos/$REPO/contents/.github?ref=$1" --jq '.[] | select(.name == "actions") | .sha'
           }
           wanted="$(run_from "$GITHUB_SHA")"

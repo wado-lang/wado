@@ -89,8 +89,8 @@ jobs:
       # own: a job waits for the whole of the one it needs, queue included.
       - if: steps.filter.outputs.code == 'true'
         run: |
-          node scripts/prebuilt.ts build wado
-          node scripts/prebuilt.ts build e2e
+          node tools/prebuilt.ts build wado
+          node tools/prebuilt.ts build e2e
       - if: steps.filter.outputs.code == 'true'
         uses: actions/upload-artifact@v7
         with:
@@ -144,7 +144,7 @@ jobs:
       # the crates under it again.
       - run: cargo check --locked -p wado-compiler -p wado-lsp -p wado-manifest --target wasm32-unknown-unknown
 
-      - run: node scripts/prebuilt.ts build test
+      - run: node tools/prebuilt.ts build test
       - run: cargo test --locked --workspace -- --skip fixture_test_
       # The plugins are fetched from GitHub and PyPI, whose outages should not
       # fail a change that has nothing to do with them.
@@ -153,7 +153,7 @@ jobs:
           path: |
             ~/.cache/wado/pjrt
             ~/.cache/wado/pinned
-          key: pjrt-plugins-${{ hashFiles('scripts/fetch-pjrt-plugin.sh', 'wado-run-pjrt/src/main.rs') }}
+          key: pjrt-plugins-${{ hashFiles('tools/fetch-pjrt-plugin.sh', 'wado-run-pjrt/src/main.rs') }}
           # Each plugin is kept under its pin, so an older cache holds no
           # stale one.
           restore-keys: pjrt-plugins-
@@ -373,8 +373,8 @@ jobs:
       - parallel:
           - run: |
               mise run test-fuel
-              scripts/dev-bin.sh wado test -O2 --format tap benchmark
-          - run: scripts/dev-bin.sh wado publish --dry-run
+              tools/dev-bin.sh wado test -O2 --format tap benchmark
+          - run: tools/dev-bin.sh wado publish --dry-run
 
   test:
     name: Test
