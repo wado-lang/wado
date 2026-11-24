@@ -171,7 +171,12 @@ pub fn compute_receiver_alias(
         let Some(body) = &func.body else { return false };
         let fresh = fresh_of.entry(id).or_insert_with(|| {
             let bindings = BindingCollector::collect(&func, type_table);
-            compute_fresh_locals(&bindings, &confined.shared_locals(&func), oracle, type_table)
+            compute_fresh_locals(
+                &bindings,
+                &confined.shared_locals(&func),
+                oracle,
+                type_table,
+            )
         });
         let mut returns = ReceiverReturns {
             set: &set,

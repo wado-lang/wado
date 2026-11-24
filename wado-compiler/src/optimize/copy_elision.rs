@@ -204,9 +204,13 @@ fn lend_returned_parts(
                 && f.body.is_some()
                 && !project.lending_clones.contains_key(&FuncId::new(fi))
                 && holds_reference(&type_table, f.return_type);
-            let mut clone = FunctionRef::from_resolved(&f, f.module_source.clone());
-            rename_for_lending(&mut clone.name, &mut clone.method_info);
-            let minted = may_lend.then(|| project.func_id_of(&clone)).flatten();
+            let minted = may_lend
+                .then(|| {
+                    let mut clone = FunctionRef::from_resolved(&f, f.module_source.clone());
+                    rename_for_lending(&mut clone.name, &mut clone.method_info);
+                    project.func_id_of(&clone)
+                })
+                .flatten();
             lenders.push(minted.map(|id| Lender::Minted(id, project.lending_clones[&id].clone())));
             if may_lend && minted.is_none() {
                 candidates.push(fi);
