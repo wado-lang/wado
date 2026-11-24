@@ -190,7 +190,11 @@ fn lend_returned_parts(
         // caller uncovers a call lending would move to the clone again, a round
         // at a time.
         let recursive = effects.recursive_functions();
-        assert_eq!(recursive.len(), functions.len(), "the call graph covers every function");
+        assert_eq!(
+            recursive.len(),
+            functions.len(),
+            "the call graph covers every function"
+        );
         let mut lenders: Vec<Option<Lender>> = Vec::with_capacity(indices.len());
         let mut candidates = Vec::new();
         for &fi in &indices {

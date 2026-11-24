@@ -125,6 +125,14 @@ reads as fresh.
 
 ## Known gaps
 
+### A recursive function lends nothing
+
+A function on a call cycle keeps its copies. Its `$lend` clone would still call
+the original, so the inliner splicing the clone into a caller uncovers a call
+that lending moves to the clone again, one level per round, and the optimizer
+never converges. A recursive walk that returns a copy of a part of its argument,
+such as Gale's `ctx_cast_class`, pays for the copy.
+
 ### Long-lived heap storage
 
 A value read from or written to storage that outlives the body, such as a cache
