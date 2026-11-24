@@ -1,0 +1,16 @@
+// A generic body is checked at its definition: a by-value `self` of an affine
+// parameter cannot be reached through a reference to it.
+
+fn first_of<affine I: Iterator>(it: &mut I) -> Option<I::Item> with _ {
+    let mut head = it.take(1);
+    return head.next();
+}
+
+export fn run() {
+    let xs: List<i32> = [1, 2];
+    let mut it = xs.iter_value();
+    let _ = first_of(&mut it);
+}
+
+__DATA__
+{"compile_error": ":5:20: error: cannot move affine type `I` out of a reference"}

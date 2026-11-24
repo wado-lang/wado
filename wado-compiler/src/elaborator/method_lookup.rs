@@ -4588,6 +4588,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type,
             type_args,
             false,
+            false,
         );
         self.record_desugar(method_call.id, DesugarKind::IndexMutMethodCall);
 

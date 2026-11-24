@@ -1245,6 +1245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
                 method_type_args,
                 consumes_self,
+                consumes_self && is_ref && !is_ref_impl,
             );
             if waits_for_selection {
                 self.wait_for_selection(PendingCall {

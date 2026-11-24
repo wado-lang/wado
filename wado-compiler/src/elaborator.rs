@@ -967,6 +967,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         return_type: TypeId,
         method_type_args: Vec<TypeId>,
         consumes_self: bool,
+        self_out_of_reference: bool,
     ) {
         let Some(ast_id) = ast_id else { return };
         let key = ast_id;
@@ -984,6 +985,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 return_type,
                 method_type_args,
                 consumes_self,
+                self_out_of_reference,
                 selection: None,
             },
         );

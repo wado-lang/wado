@@ -861,6 +861,14 @@ impl Semantics {
             .any(|dispatch| dispatch.consumes_self)
     }
 
+    /// Whether the method call at `id` reads its by-value `self` out of what
+    /// its receiver, a reference, points to.
+    #[must_use]
+    pub fn method_call_reads_self_out_of_reference(&self, id: AstId) -> bool {
+        self.method_dispatches_at(id)
+            .any(|dispatch| dispatch.self_out_of_reference)
+    }
+
     /// Iterate every recorded method-dispatch decision keyed by the
     /// `MethodCallExpr`'s `(module, AstId)`. Pair with
     /// [`Self::method_dispatch_view`] for the stable public view onto

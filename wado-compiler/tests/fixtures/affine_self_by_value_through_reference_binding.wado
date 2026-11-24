@@ -1,0 +1,24 @@
+// A by-value `self` called on a reference would move the referent out of it.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+impl Tok {
+    fn eat(self) -> i32 {
+        return self.id;
+    }
+}
+
+export fn run() {
+    let mut t = Tok { id: 1 };
+    let r = &mut t;
+    let _ = r.eat();
+}
+
+__DATA__
+{"compile_error": ":20:13: error: cannot move affine type `Tok` out of a reference"}

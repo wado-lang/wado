@@ -1539,6 +1539,9 @@ impl MoveWalker<'_, '_> {
                 }
             }
             Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
+                if let Expr::MethodCall(mc) = expr {
+                    self.refuse_self_out_of_reference(mc);
+                }
                 self.visit_operands(expr);
                 self.store_through_call(expr);
             }
@@ -1573,6 +1576,26 @@ impl MoveWalker<'_, '_> {
             | Expr::Ident(_)
             | Expr::Literal(_)
             | Expr::Error(_) => self.visit_operands(expr),
+        }
+    }
+
+    /// Refuse a by-value `self` that `call` reads out of the reference its
+    /// receiver is, where the referent is affine.
+    fn refuse_self_out_of_reference(&mut self, call: &ast::MethodCallExpr) {
+        if !self.sem().method_call_reads_self_out_of_reference(call.id) {
+            return;
+        }
+        let receiver = self
+            .sem()
+            .expression_type(call.receiver.id())
+            .expect("a dispatched call's receiver has a type");
+        let referent = self.sem().types.peel_refs(receiver);
+        if self.is_affine(referent) {
+            let type_name = self.sem().types.name(referent);
+            self.report(
+                MoveError::MoveOutOfReference { type_name },
+                call.receiver.span(),
+            );
         }
     }
 
