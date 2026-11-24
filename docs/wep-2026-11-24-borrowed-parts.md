@@ -87,18 +87,40 @@ though a `Tree` reaches both types.
 
 ### A call lends what it returns
 
-A function whose returned value holds a part of a parameter lends that part
-rather than copying it, and its return convention says which parameter and
-which part. The caller decides the copy at the call, as it does for a binding of
-any other place it does not own: shared where nothing writes the parameter's
-storage while the result is live, copied otherwise. A function that returns its
+A function whose returned value holds a copy of a part of a parameter lends that
+part rather than copying it. The caller decides the copy at the call, as it does
+for a binding of any other place it does not own. A function that returns its
 argument outright already works this way.
+
+`nir/copy_elision` gives such a function a `$lend` clone without those copies.
+The clone records how deep below the result the lent parts sit, and how deep
+below each parameter they come from. A call moves to the clone where three
+things hold in the caller:
+
+- nothing writes the result at or below the lent depth;
+- nothing writes an argument at or below the depth its parts are lent from;
+- no object the result holds is returned, held by a global, or stored into an
+  object the caller did not allocate.
+
+The caller may still grow the list it was handed, or extend it with a
+parameter's elements: those write the spine above the lent parts, and the
+store's direction is into the result, not out of it.
+
+A copy whose source is local to the function and reaches the result only
+through the copy is lent too, not dropped in place. The function cannot tell
+whether one source object reaches the result through more than one copy, as in
+a loop pushing the same value each turn. Dropping those copies would make the
+result's parts alias each other, while the caller's check keeps them unwritten.
+
+A `$value_copy$T` hands a unit case of a variant on as it is, since the case
+holds nothing. Its summary takes what it shares from `T`, so such a copy still
+reads as fresh.
 
 ## Roadmap
 
 - [x] A frame-local aggregate holds a shared part: a struct, tuple or list
   literal element, and a value a `List` method stores into a local list.
-- [ ] A returned value lends a part of a parameter, and the caller decides its
+- [x] A returned value lends a part of a parameter, and the caller decides its
   copy.
 
 ## Known gaps

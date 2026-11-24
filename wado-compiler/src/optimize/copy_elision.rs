@@ -12,8 +12,8 @@
 //! A copy that leaves only through the result is the caller's to judge. Such a
 //! function gets a `$lend` clone without those copies, and a call moves to the
 //! clone where its result holds what a copy would: its objects stay in the
-//! caller, and nothing there writes an object of a type the result reaches,
-//! through the result or an argument.
+//! caller, and nothing there writes the lent parts, through the result or the
+//! argument they came from.
 
 use cranelift_entity::EntityRef;
 
@@ -259,8 +259,8 @@ fn lend_returned_parts(
 }
 
 /// Each call in `body` whose callee lends, and whose result the body may take
-/// lent: its objects stay in the body, and nothing in the body writes an object
-/// of a type the result reaches, through the result or an argument.
+/// lent: its objects stay in the body, and nothing in the body writes the lent
+/// parts, through the result or the argument they came from.
 fn lent_calls(
     body: &Body,
     effects: &HeapEffects,
@@ -336,7 +336,11 @@ fn mint_lending_clone(
     project.func_index.insert(key, id);
     project.lending_clones.insert(id, parts);
     project.copy_function_strings(&from, (clone.module_source.clone(), clone.name.clone()));
-    assert_eq!(id.index(), project.functions.len(), "a FuncId is its position");
+    assert_eq!(
+        id.index(),
+        project.functions.len(),
+        "a FuncId is its position"
+    );
     project.functions.push(FuncCell::new(clone));
     id
 }

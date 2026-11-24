@@ -653,7 +653,9 @@ impl HeapEffectsCache {
                 // A copy hands its input's unit-case objects on as they are,
                 // which the frame cannot tell from a part: they hold nothing
                 // a write reaches, so the type says what the copy shares.
-                if f.value_copy_type().is_some_and(|ty| !effects.copy_shares(ty)) {
+                if f.value_copy_type()
+                    .is_some_and(|ty| !effects.copy_shares(ty))
+                {
                     summary.ret = Levels::default();
                 }
                 summary
@@ -2412,7 +2414,12 @@ impl HeapFrame {
 
     /// The depth below the result the objects of the operand `op` sit at,
     /// where the result reaches them.
-    pub(super) fn returned_at(&self, effects: &HeapEffects, body: &Body, op: Operand) -> Option<usize> {
+    pub(super) fn returned_at(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+    ) -> Option<usize> {
         let OperandNode::Node(h) = self.lookup(effects, body, op) else {
             return None;
         };
@@ -2422,7 +2429,12 @@ impl HeapFrame {
 
     /// Each parameter and depth below it the objects of the operand `op` may
     /// come from.
-    pub(super) fn operand_sources(&self, effects: &HeapEffects, body: &Body, op: Operand) -> Vec<(usize, usize)> {
+    pub(super) fn operand_sources(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+    ) -> Vec<(usize, usize)> {
         match self.lookup(effects, body, op) {
             OperandNode::Node(h) => self.classes.prov_of(h).sources().collect(),
             OperandNode::None | OperandNode::Unknown => Vec::new(),
@@ -2461,7 +2473,12 @@ impl HeapFrame {
     /// `extend` copies a parameter's elements in, stays where it was. A store
     /// joins what a load from its target reaches with what it stores, so the
     /// target's class reaches `op`'s: no alias of it is asked about.
-    pub(super) fn operand_stored_outside(&self, effects: &HeapEffects, body: &Body, op: Operand) -> bool {
+    pub(super) fn operand_stored_outside(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+    ) -> bool {
         let h = match self.lookup(effects, body, op) {
             OperandNode::None => return false,
             OperandNode::Unknown => return true,
@@ -2496,7 +2513,12 @@ impl HeapFrame {
     }
 
     /// Whether no object operand `op` holds or reaches may come from a global.
-    pub(super) fn operand_off_globals(&self, effects: &HeapEffects, body: &Body, op: Operand) -> bool {
+    pub(super) fn operand_off_globals(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+    ) -> bool {
         match self.lookup(effects, body, op) {
             OperandNode::None => true,
             OperandNode::Unknown => false,
