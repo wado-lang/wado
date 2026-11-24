@@ -137,8 +137,8 @@ The event parser is built into `core:http_client` and follows the
 
 `SseEvent` gives `event`, `data` and `id` as `StrSlice`, and `retry` as a
 number. Reconnecting with `Last-Event-ID` is EventSource behavior, not
-parsing, and it belongs to the caller. Protocols layered on the events (a `[DONE]`
-sentinel, a JSON schema per event type) belong to the application.
+parsing, and it belongs to the caller. Protocols layered on the events (a
+`[DONE]` sentinel, a JSON schema per event type) belong to the application.
 
 ### Copies
 
@@ -164,8 +164,8 @@ standards on purpose:
   that must read the rest asks for the octets with `header_bytes(name)`, a
   `ByteSlice`.
 
-A header name the response carries more than once is the one exception to
-views. RFC 9110 reads its values as one, joined with `, `, and both `header`
+A header name the response carries more than once is the one header that is
+not a view. RFC 9110 reads its values as one, joined with `, `, and both `header`
 and `header_bytes` answer that joined value, which is a copy.
 
 ## Roadmap
