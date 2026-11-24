@@ -16,7 +16,6 @@ use wado_lsp::host::discovery::Disk;
 use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::markdown::{FenceMarker, fence_open, matches_fence_close};
 use crate::marl;
 use crate::search::{self, Query};
 
@@ -1032,6 +1031,19 @@ mod format_contract_tests {
     }
 
     #[test]
+    fn doc_text_keeps_every_bullet_list() {
+        for marker in ["-", "*", "+"] {
+            let out = markdown_of(&format!(
+                "//! Notes:\n//! {marker} first\n//!   continued\n//!   {marker} nested\n"
+            ));
+            assert!(
+                out.contains("Notes:\n\n- first\n  continued\n  - nested\n"),
+                "{marker}: {out}"
+            );
+        }
+    }
+
+    #[test]
     fn doc_text_keeps_a_lone_asterisk() {
         let out = markdown_of("//! Scales a * b.\n");
         assert!(out.contains("Scales a * b."), "{out}");
@@ -1500,134 +1512,8 @@ fn sig_name_part(sig: &str) -> &str {
 }
 
 fn render_md_doc(out: &mut String, doc: &str) {
-    let mut prev_blank = true;
-    let mut in_list = false;
-    let mut in_blockquote = false;
-    let mut prev_heading = false;
-    let mut fence: Option<FenceMarker> = None;
-
-    for line in doc.lines() {
-        // Inside a fenced code block: detect the closing fence and emit
-        // every other line verbatim. CommonMark heading / list / emphasis
-        // rules do not apply inside the block.
-        if let Some(open) = fence {
-            let trimmed_start = line.trim_start();
-            if matches_fence_close(trimmed_start, &open) {
-                out.push_str(trimmed_start);
-                out.push('\n');
-                fence = None;
-                prev_blank = false;
-                prev_heading = false;
-                in_list = false;
-                in_blockquote = false;
-                continue;
-            }
-            out.push_str(line);
-            out.push('\n');
-            prev_blank = false;
-            continue;
-        }
-
-        // Detect an opening fence before any other markdown processing.
-        if let Some(open) = fence_open(line.trim_start()) {
-            if !prev_blank {
-                out.push('\n');
-            }
-            out.push_str(line.trim_start());
-            out.push('\n');
-            fence = Some(open);
-            prev_blank = false;
-            prev_heading = false;
-            in_list = false;
-            in_blockquote = false;
-            continue;
-        }
-
-        let normalized = normalize_md_line(line);
-        let trimmed = normalized.trim();
-
-        if trimmed.is_empty() {
-            if !prev_blank {
-                out.push('\n');
-                prev_blank = true;
-            }
-            in_list = false;
-            in_blockquote = false;
-            prev_heading = false;
-            continue;
-        }
-
-        let is_list_item = trimmed.starts_with("- ") || is_ordered_list_item(trimmed);
-        let blockquote_line = trimmed.starts_with("> ");
-        let is_heading = trimmed.starts_with('#');
-
-        // Insert blank line before block elements or after headings
-        if !prev_blank
-            && ((is_list_item && !in_list) || (blockquote_line && !in_blockquote) || prev_heading)
-        {
-            out.push('\n');
-        }
-
-        // Write line with appropriate continuation prefix
-        if in_blockquote && !blockquote_line && !is_heading {
-            out.push_str("> ");
-            out.push_str(&normalized);
-        } else if in_list && !is_list_item && !is_heading && !blockquote_line {
-            out.push_str("  ");
-            out.push_str(&normalized);
-        } else {
-            out.push_str(&normalized);
-        }
-        out.push('\n');
-
-        prev_blank = false;
-        prev_heading = is_heading;
-        if is_list_item {
-            in_list = true;
-            in_blockquote = false;
-        } else if blockquote_line {
-            in_blockquote = true;
-            in_list = false;
-        } else if is_heading {
-            in_list = false;
-            in_blockquote = false;
-        }
-    }
-}
-
-fn normalize_md_line(line: &str) -> String {
-    let stripped = line.trim_start();
-    collapse_md_spaces(stripped)
-}
-
-/// Collapse multiple consecutive spaces to single space, preserving code spans.
-fn collapse_md_spaces(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut in_code = false;
-    let mut prev_space = false;
-
-    for c in s.chars() {
-        if c == '`' {
-            in_code.toggle();
-            result.push(c);
-            prev_space = false;
-        } else if c == ' ' && !in_code {
-            if !prev_space {
-                result.push(' ');
-            }
-            prev_space = true;
-        } else {
-            result.push(c);
-            prev_space = false;
-        }
-    }
-
-    result
-}
-
-fn is_ordered_list_item(s: &str) -> bool {
-    let rest = s.trim_start_matches(|c: char| c.is_ascii_digit());
-    rest != s && rest.starts_with(". ")
+    out.push_str(doc);
+    out.push('\n');
 }
 
 fn render_simple(doc: &DocModule, h_offset: usize) -> String {
@@ -1891,7 +1777,7 @@ mod tests {
     fn render(input: &str) -> String {
         let mut out = String::new();
         render_md_doc(&mut out, input);
-        out
+        format_markdown(&out)
     }
 
     /// `{module}` fills a filename, so the stem must be one path component.
@@ -1943,10 +1829,7 @@ mod tests {
     fn tilde_fenced_block_is_recognized() {
         let input = "~~~wado\n#[serde(default)]\nport: i32 = 0,\n~~~";
         let out = render(input);
-        assert!(
-            out.contains("~~~wado\n#[serde(default)]\nport: i32 = 0,\n~~~\n"),
-            "tilde fence should pass through content verbatim:\n{out}"
-        );
+        assert_eq!(out, "```wado\n#[serde(default)]\nport: i32 = 0,\n```\n");
     }
 
     #[test]
@@ -1954,7 +1837,7 @@ mod tests {
         // Opening of length 4 must be matched by 4+ closing chars.
         let input = "````wado\nlet x = 1;\n`````";
         let out = render(input);
-        assert!(out.contains("````wado\nlet x = 1;\n`````\n"), "got:\n{out}");
+        assert_eq!(out, "```wado\nlet x = 1;\n```\n");
     }
 
     #[test]
@@ -1981,7 +1864,7 @@ mod tests {
         // Closing fences disallow info strings per CommonMark — `````wado` is content.
         let input = "```wado\n```rust\nstill code\n```";
         let out = render(input);
-        assert!(out.contains("```rust\nstill code\n```\n"), "got:\n{out}");
+        assert_eq!(out, "````wado\n```rust\nstill code\n````\n");
     }
 
     #[test]

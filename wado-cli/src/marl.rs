@@ -173,7 +173,7 @@ fn cache_path() -> Option<PathBuf> {
     }
     let key: [u8; 32] = hasher.finalize().into();
     let dir = if cfg!(debug_assertions) {
-        cargo_profile_dir()
+        cargo_profile_dir().or_else(user_cache_dir)
     } else {
         user_cache_dir()
     };
@@ -182,7 +182,7 @@ fn cache_path() -> Option<PathBuf> {
 
 /// The cargo profile directory (`target/debug`) the running binary was built
 /// into, which cargo marks with its `.cargo-lock`; `None` for a binary copied
-/// out of it.
+/// out of it, which caches as a release build does.
 fn cargo_profile_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     exe.ancestors()
@@ -245,13 +245,14 @@ mod tests {
         assert_eq!(format("# Title\n* a\n* b\n"), "# Title\n\n- a\n- b\n");
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn a_dev_build_caches_in_its_profile_directory() {
         assert_eq!(format("x\n"), "x\n");
-        let path = cache_path().expect("a test binary runs from cargo's target directory");
+        let path = cache_path().expect("a test binary has somewhere to cache");
         assert!(path.is_file(), "{} was not written", path.display());
-        let profile = cargo_profile_dir().expect("the test binary lies in a profile directory");
-        assert!(profile.ends_with("debug"), "{}", profile.display());
+        let profile = cargo_profile_dir().expect("a test binary runs from its profile directory");
+        assert!(path.starts_with(&profile), "{}", path.display());
     }
 
     #[test]
