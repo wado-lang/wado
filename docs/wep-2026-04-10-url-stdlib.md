@@ -403,6 +403,7 @@ Key implementation details:
 
 - **No opaque URIs**: `mailto:`, `urn:`, `data:` URLs cannot be represented. A separate `core:uri` module could be added later for RFC 3986 URI-references
 - **No IDNA**: Internationalized domain names are not normalized to Punycode. The host is stored as-is. This could be added as a separate utility without changing the `Url` type
+- **No host percent-decoding**: A host is checked for the forbidden domain code points as written, so `%` passes and a code point it encodes is not checked
 - **Eq field comparison**: Comparing two URLs compares all fields individually, which is slightly more expensive than a single string comparison. For hot-path comparisons, users can compare `to_string()` results
 
 ### Future Extensions
