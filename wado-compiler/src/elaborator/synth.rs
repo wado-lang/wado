@@ -392,18 +392,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !matches!(tt.get(arg), ResolvedType::Function { .. }) {
                     continue;
                 }
-                tt.read_effect_rows_in(arg)
-            };
-            let open = {
-                let tt = self.tysys.type_table.borrow();
-                let ResolvedType::Function { effects, .. } = tt.get(arg) else {
+                let read = tt.read_effect_rows_in(arg);
+                let ResolvedType::Function { effects, .. } = tt.get(read) else {
                     unreachable!("reading a row keeps a function a function")
                 };
-                effects.iter().any(EffectRef::is_var)
+                if effects.iter().any(EffectRef::is_var) {
+                    continue;
+                }
+                read
             };
-            if open {
-                continue;
-            }
             let exact = |c: &C| param_at(c, position) == Some(arg);
             if candidates.iter().any(exact) {
                 candidates.retain(exact);

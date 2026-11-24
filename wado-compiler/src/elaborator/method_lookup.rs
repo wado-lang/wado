@@ -3434,7 +3434,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (position, class) in classes.iter().enumerate() {
             let params: Vec<Option<TypeId>> = admitted
                 .iter()
-                .map(|&i| found_traits[i].method_info.param_types.get(position).copied())
+                .map(|&i| {
+                    found_traits[i]
+                        .method_info
+                        .param_types
+                        .get(position)
+                        .copied()
+                })
                 .collect();
             if params.iter().all(|&param| param == params[0]) {
                 continue;
