@@ -75,7 +75,7 @@ copying either.
 Every one of the 24 sites resolves against the first preopened directory, so
 that is the default and the descriptor leaves the signatures. The host resolves
 a path from that descriptor, and a path may name several components;
-`scripts/rust-inline-paths.json` is a call the repository already makes. A
+`tools/rust-inline-paths.json` is a call the repository already makes. A
 recursive walk therefore needs no descriptor either: `read_dir("a/b")` replaces
 `open_dir` followed by `read_directory`.
 

@@ -9,9 +9,9 @@ description: "Cut the branch down to what the code cannot say: reuse what exists
 
 ```sh
 B=$(git merge-base origin/main HEAD)
-scripts/changed-sources.sh              # the files, one per line
-git diff "$B" --stat -- $(scripts/changed-sources.sh)
-git diff "$B" -- $(scripts/changed-sources.sh)
+tools/changed-sources.sh              # the files, one per line
+git diff "$B" --stat -- $(tools/changed-sources.sh)
+git diff "$B" -- $(tools/changed-sources.sh)
 ```
 
 Every file that reports, whatever its type, plus any doc it made stale. Whatever

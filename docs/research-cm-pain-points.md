@@ -14,7 +14,7 @@ Checked against:
 - `vendor/component-model` at `d1daf82` (2026-09-24)
 - `vendor/wasm` at `6087111` (2026-09-22)
 - wasmtime v49.0.0, the version `Cargo.lock` pins
-- jco 1.30.0, the version `scripts/jco` installs
+- jco 1.30.0, the version `tools/jco` installs
 
 ## A host object has no handle a GC guest can let go of
 
@@ -187,7 +187,7 @@ export fn run() with Dom {
   removed from the transpiled output, the program above runs its listener
   during the import call and returns.
 
-`scripts/jco/package-lock.json` keeps 1.30.0 until the 1.35.0 defect is fixed.
+`tools/jco/package-lock.json` keeps 1.30.0 until the 1.35.0 defect is fixed.
 
 ### wasmtime
 

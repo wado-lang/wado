@@ -23,6 +23,6 @@ Generates Wado binding modules from IDL files: the stdlib from WIT, and
   `package-web/idl/dom.webidl.json`. Regenerate with
   `mise run update-package-web`; `tests/web_dom_is_fresh.rs` fails when
   either is stale. The snapshot is the webidl2 AST of the slice
-  `scripts/webidl/snapshot.mjs` takes from `@webref/idl`; widen the slice
+  `tools/webidl/snapshot.mjs` takes from `@webref/idl`; widen the slice
   there and run `mise run update-webidl-snapshot`. See
   `docs/wep-2026-04-01-web.md`.

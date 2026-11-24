@@ -13,8 +13,8 @@ FIXTURES_DIR="wado-compiler/tests/format.fixtures"
 GOLDEN_DIR="wado-compiler/tests/generated/format.fixtures"
 mkdir -p "$GOLDEN_DIR"
 
-WADO=$(scripts/dev-bin.sh --path wado)
-DUMP=$(scripts/dev-bin.sh --path wado-dev-tools)
+WADO=$(tools/dev-bin.sh --path wado)
+DUMP=$(tools/dev-bin.sh --path wado-dev-tools)
 
 # Generate formatted (clean) versions, collecting the live fixture names.
 # Handwritten inputs use a `_dirty.wado` suffix so they are visually distinct

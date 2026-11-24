@@ -75,10 +75,10 @@ pub fn run(mut parser: lexopt::Parser) {
 
 /// The dev `wado`, built first so the census never reads an older compiler.
 fn dev_wado() -> String {
-    let output = Command::new("scripts/dev-bin.sh")
+    let output = Command::new("tools/dev-bin.sh")
         .args(["--path", "wado"])
         .output()
-        .unwrap_or_else(|e| panic!("running 'scripts/dev-bin.sh': {e}"));
+        .unwrap_or_else(|e| panic!("running 'tools/dev-bin.sh': {e}"));
     assert!(
         output.status.success(),
         "building wado failed: {}",

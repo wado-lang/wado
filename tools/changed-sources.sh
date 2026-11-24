@@ -4,9 +4,9 @@
 # line, for a review that reads sources: the rest is regenerated or fetched.
 # Run the `git diff` from the root.
 #
-#   scripts/changed-sources.sh                       # list them
-#   scripts/changed-sources.sh <base>                # against another base
-#   git diff $(git merge-base origin/main HEAD) -- $(scripts/changed-sources.sh)
+#   tools/changed-sources.sh                         # list them
+#   tools/changed-sources.sh <base>                  # against another base
+#   git diff $(git merge-base origin/main HEAD) -- $(tools/changed-sources.sh)
 set -e -o pipefail
 
 cd "$(dirname "$0")/.."

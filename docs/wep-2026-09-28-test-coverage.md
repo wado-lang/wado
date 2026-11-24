@@ -46,7 +46,7 @@ what could have run cannot come from the compiled program.
 wado test --coverage                  # summary on stdout, LCOV in build/coverage/
 wado test --coverage=lcov,json        # choose the files written
 wado test --coverage --coverage-include=deps
-wado test --coverage --coverage-baseline scripts/stdlib-coverage.json
+wado test --coverage --coverage-baseline tools/stdlib-coverage.json
 ```
 
 After the run, the summary lists each file and the totals. Under
@@ -320,7 +320,7 @@ either. A name repeated within a file takes `#2`, `#3`, … in source order.
 `--coverage=baseline` writes the file.
 
 `mise run test-stdlib-coverage <level>` runs the stdlib tests with `--coverage`
-and `scripts/stdlib-coverage.json`. CI runs it in the `O0` and `O3` jobs in
+and `tools/stdlib-coverage.json`. CI runs it in the `O0` and `O3` jobs in
 place of their plain stdlib run, since a coverage run is a stdlib run too.
 `mise run update-baselines` rewrites the file.
 The baseline starts as whatever the first run leaves uncovered, and the work

@@ -21,7 +21,7 @@ pub enum Producer {
     TupleElement,
     /// `let t = h.tok;`, moved out of a struct without a `Drop`.
     Field,
-    /// `let t = match Option::Some(…) { Some(v) => v, None => … };`.
+    /// `let t = match Option::Some(…) { Some(v) => v, null => … };`.
     MatchArm,
     /// `let Some(t) = Option::Some(…) else { … };`.
     LetElse,
@@ -162,7 +162,7 @@ impl Producer {
             _::MatchArm => {
                 w.begin(`let t = match Option::Some(${tok})`);
                 w.line("Some(v) => v,");
-                w.line("None => unreachable(),");
+                w.line("null => unreachable(),");
                 w.end_with(";");
             },
             _::LetElse => {
