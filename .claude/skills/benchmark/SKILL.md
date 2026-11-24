@@ -13,9 +13,7 @@ Run the benchmarks and update `benchmark/README.md` (and `wasm-size/README.md`).
 mise run on-task-started
 ```
 
-- The host must be idle. Check `ps` and `uptime` before each run, and stop at
-  any other CPU-heavy process: a build, a test suite, or another session's
-  job. Best-of-three absorbs drift, not a core that stays busy.
+- Measure on an idle host: check `ps` first.
 - `vendor/wasmtime` submodule must exist (the SessionStart hook handles it;
   otherwise `git submodule update --init --recommend-shallow vendor/wasmtime`).
 - http-routing needs `oha` (`cargo install oha`); `bun` is mise-managed.
