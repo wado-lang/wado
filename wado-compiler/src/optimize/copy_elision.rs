@@ -185,12 +185,18 @@ fn lend_returned_parts(
         let functions = &project.functions;
         let indices: Vec<usize> = (0..functions.len()).collect();
         // A function may lend where it has a body returning storage, and is
-        // neither a copy helper nor a clone that lends already.
+        // neither a copy helper nor a clone that lends already. A recursive one
+        // lends nothing: its clone still calls it, so splicing the clone into a
+        // caller uncovers a call lending would move to the clone again, a round
+        // at a time.
+        let recursive = effects.recursive_functions();
+        assert_eq!(recursive.len(), functions.len(), "the call graph covers every function");
         let mut lenders: Vec<Option<Lender>> = Vec::with_capacity(indices.len());
         let mut candidates = Vec::new();
         for &fi in &indices {
             let f = functions[fi].borrow();
             let may_lend = !value_copies[fi]
+                && !recursive[fi]
                 && f.body.is_some()
                 && !project.lending_clones.contains_key(&FuncId::new(fi))
                 && holds_reference(&type_table, f.return_type);

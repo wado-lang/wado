@@ -26,6 +26,7 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::holds_reference;
 use super::body_memo::BodyMemo;
+use super::inline::recursive_scc_members;
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::parallel::{Executor, lock};
 
@@ -785,6 +786,14 @@ impl HeapEffects<'_> {
             }
         }
         out
+    }
+
+    /// Per function, in store order, whether it lies on a call cycle, an
+    /// indirect call reaching every closure.
+    pub(super) fn recursive_functions(&self) -> Vec<bool> {
+        let mut recursive = recursive_scc_members(&self.cache.successors());
+        recursive.truncate(self.cache.functions.facts().len());
+        recursive
     }
 
     /// Whether the function at `index` may write an object of type `ty` it did
