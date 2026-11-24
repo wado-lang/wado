@@ -1,0 +1,33 @@
+// A closure capturing an immutable binding holds a reference to it, and that
+// reference lasts as long as the closure does, as a call result holding one
+// would. A binding shared with its source therefore stays shared when only a
+// closure reads it.
+struct Range { lo: i32, hi: i32 }
+struct Class { ranges: List<Range>, neg: bool }
+
+fn holds(c: &Class, x: i32) -> bool {
+    for let r of &c.ranges {
+        if r.lo <= x && x <= r.hi { return !c.neg; }
+    }
+    return c.neg;
+}
+
+#[inline("never")]
+fn count(c: &Class, xs: &List<i32>) -> i32 {
+    let f = *c;
+    let admits = |x: i32| holds(&f, x);
+    return xs.iter_ref().filter(|x| admits(*x)).count();
+}
+
+test "a closure reads the shared binding" {
+    let c = Class { ranges: [Range { lo: 1, hi: 3 }, Range { lo: 7, hi: 9 }], neg: false };
+    let xs: List<i32> = [0, 2, 5, 8, 10];
+    assert count(&c, &xs) == 2;
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["lower/value_copy/share"]},
+    "test": {},
+    "wir_not_expect:O2": ["$array_clone_src"]
+}

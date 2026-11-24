@@ -127,6 +127,13 @@ pub fn analyze_ownership(
                     .is_some_and(|local| type_table.is_reference(local.type_id))
             })
             .collect(),
+        mutable_locals: func
+            .locals
+            .iter()
+            .enumerate()
+            .filter(|(_, local)| local.is_mut)
+            .map(|(i, _)| u32::try_from(i).unwrap())
+            .collect(),
         field_slots: FieldSlots {
             first: u32::try_from(all_locals.len()).unwrap(),
             ids: IndexMap::default(),
@@ -1635,6 +1642,8 @@ struct Analyzer<'a> {
     /// Each loop's head as last solved, by its body.
     loop_seeds: IndexMap<*const TirBlock, LoopSeed>,
     reference_locals: IndexSet<u32>,
+    /// Locals declared `mut`: only these may a closure capturing them write.
+    mutable_locals: IndexSet<u32>,
     all_locals: IndexSet<u32>,
     field_slots: FieldSlots,
     /// Place-level move sites found at literals, filtered after the walk.
@@ -2523,6 +2532,10 @@ impl<'a> Analyzer<'a> {
                 self.walk_ref(*op, place, &kept, live, record);
             }
             _ if alias_root(stripped).is_some() => self.walk_expr(value, live, record),
+            TirExprKind::Closure { .. } => {
+                let kept = self.held_in(local);
+                self.walk_kept(value, &kept, false, live, record);
+            }
             _ if is_call(value) => {
                 let kept = self.held_in(local);
                 self.walk_kept(value, &kept, false, live, record);
@@ -3595,10 +3608,22 @@ impl<'a> Analyzer<'a> {
             }
             // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
-                let sources: Vec<u32> = capture_source_locals(captures).collect();
-                for index in sources {
+                let kept = self.result_kept.take().unwrap_or(Kept::Frame);
+                for capture in captures {
+                    let Some(index) = capture.source.local() else {
+                        continue;
+                    };
                     self.mark_read(index, None, live);
-                    if record {
+                    if !record {
+                        continue;
+                    }
+                    // The closure holds an immutable binding's storage, or a
+                    // reference to it, as a loan: nothing writes it through
+                    // the binding, and it lasts as long as whatever keeps the
+                    // closure.
+                    if !self.mutable_locals.contains(&index) {
+                        self.pin(index, None, &kept);
+                    } else {
                         self.mark_escaped(index, None);
                         self.mark_local_mutated(index, false, live);
                         let at = self.consumed.entry(index).or_default();
@@ -3930,12 +3955,14 @@ fn is_call(expr: &TirExpr) -> bool {
     )
 }
 
+/// A closure counts: lowering builds it as a functor struct of its captures.
 fn is_aggregate_literal(expr: &TirExpr) -> bool {
     matches!(
         expr.kind,
         TirExprKind::StructLiteral { .. }
             | TirExprKind::TupleLiteral { .. }
             | TirExprKind::ArrayLiteral { .. }
+            | TirExprKind::Closure { .. }
     )
 }
 
