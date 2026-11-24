@@ -1,0 +1,75 @@
+// A hot site keeps its price for a looping callee called from several sites of
+// one loop when the copies cost little all the same: `drain`'s loop rarely
+// runs, so its time is outside the loop, and the copies of `tiny` together fit
+// one hot splice. Both are spliced into `fields`.
+use { println, Stdout } from "core:cli";
+
+fn drain(x: i32) -> i32 {
+    let mut s = x;
+    s = s * 11 + builtin::black_box(2);
+    s = s ^ (s >> 11);
+    s = s * 7 + builtin::black_box(1);
+    s = s ^ (s >> 13);
+    s = s * 5 + builtin::black_box(9);
+    s = s ^ (s >> 2);
+    s = s * 3 + builtin::black_box(4);
+    s = s ^ (s >> 9);
+    s = s * 19 + builtin::black_box(6);
+    s = s ^ (s >> 6);
+    s = s * 23 + builtin::black_box(8);
+    s = s ^ (s >> 4);
+    while s > 2_000_000_000 {
+        s = s / 7;
+    }
+    return s;
+}
+
+fn tiny(x: i32, n: i32) -> i32 {
+    let mut s = x;
+    s = s * 11 + builtin::black_box(2);
+    s = s ^ (s >> 11);
+    s = s * 7 + builtin::black_box(1);
+    s = s ^ (s >> 13);
+    s = s * 5 + builtin::black_box(9);
+    s = s ^ (s >> 2);
+    s = s * 3 + builtin::black_box(4);
+    s = s ^ (s >> 9);
+    s = s * 19 + builtin::black_box(6);
+    s = s ^ (s >> 6);
+    let mut k = 0;
+    while k < n {
+        s = s * 3 + k;
+        k += 1;
+    }
+    return s;
+}
+
+#[inline("never")]
+fn fields(a: i32, b: i32, c: i32, n: i32) -> i32 {
+    return drain(a) + drain(b) + drain(c) + tiny(a, n) + tiny(b, n);
+}
+
+#[inline("never")]
+fn driver(n: i32) -> i32 {
+    let mut s = 0;
+    for let i of 0..<n {
+        s += fields(i, i + 1, i + 2, builtin::black_box(4));
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    println(`${driver(builtin::black_box(10000))}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_hot_loop_callee_spliced.pgo",
+  "wir_scope": "pgo_hot_loop_callee_spliced.wado/fields",
+  "wir_pass": {"O2": ["nir/inline"]},
+  "wir_not_expect:O2": [
+    "\"pgo_hot_loop_callee_spliced.wado/drain\"(",
+    "\"pgo_hot_loop_callee_spliced.wado/tiny\"("
+  ],
+  "stdout": "562916632\n"
+}

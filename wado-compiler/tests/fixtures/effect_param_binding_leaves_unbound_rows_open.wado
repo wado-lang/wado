@@ -1,0 +1,20 @@
+// A call binds its callee's effect parameters by reading the arguments' rows
+// where the parameter types name one. A row meeting no parameter is not read,
+// so it stays open: `f` moves into `a`, whose row names none, and a later
+// assignment still widens it.
+use { println, Stdout } from "core:cli";
+
+fn both<effect E>(a: fn() with Stdout, b: fn() with E) with (Stdout, E) {
+    a();
+    b();
+}
+
+export fn run() with Stdout {
+    let mut f = || {};
+    both(f, || {});
+    f = || { println("widened"); };
+    f();
+}
+
+__DATA__
+{"stdout": "widened\n"}

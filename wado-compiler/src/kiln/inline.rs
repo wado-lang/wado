@@ -967,10 +967,9 @@ mod tests {
 
     #[test]
     fn a_local_path_spelled_as_a_package_reference_is_rejected() {
-        // A package with no namespace names its files with no `:`.
         let schemas = |_: &str, _: &str, file: &str| {
             Ok(ExportedInput {
-                reference: format!("schemas@0.2.0/{file}"),
+                reference: format!("acme:schemas@0.2.0/{file}"),
                 path: format!("/dep/{file}"),
             })
         };
@@ -984,7 +983,7 @@ mod tests {
                 }]),
             ),
         ]);
-        let module = module_with_use("./schemas@0.2.0/a.idl", attrs);
+        let module = module_with_use("./acme:schemas@0.2.0/a.idl", attrs);
         let errs = expect_errors(collect_inline_invocations(
             [("main.wado", &module)],
             &schemas,

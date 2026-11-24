@@ -105,9 +105,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Both an effect and a resource are installable as handlers (see WEP
         // 2026-04-11); a polymorphic effect parameter is not.
-        if let Some(EffectRef::Param { name }) = &effect {
+        if let Some(EffectRef::Param(param)) = &effect {
             let _ = self.emit(TypeError::GenericEffectParamNotInstallable {
-                name: name.clone(),
+                name: param.name.clone(),
                 span: effect_ty.span(),
             });
         }

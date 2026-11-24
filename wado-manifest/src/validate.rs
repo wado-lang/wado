@@ -50,9 +50,7 @@ pub(crate) fn validate_workspace_package(p: &WorkspacePackage) -> Result<(), Man
 
 fn validate_package(pkg: &Package) -> Result<(), ManifestError> {
     validate_name("package.name", &pkg.name)?;
-    if let Some(ns) = &pkg.namespace {
-        validate_name("package.namespace", ns)?;
-    }
+    validate_name("package.namespace", &pkg.namespace)?;
     // Validate version is valid semver
     Version::parse(&pkg.version).map_err(|e| ManifestError::InvalidVersion {
         context: "package.version".to_string(),
@@ -121,8 +119,6 @@ fn validate_exports(exports: &[String]) -> Result<(), ManifestError> {
 pub enum PublishError {
     /// No `[package]` section.
     NoPackage,
-    /// `namespace` is absent, so the package has no registry identity.
-    MissingNamespace,
     /// `publish = false` opts the package out.
     PublishDisabled,
     /// A required descriptive field (`description`, `repository`, `authors`) is
@@ -145,9 +141,6 @@ impl std::fmt::Display for PublishError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PublishError::NoPackage => write!(f, "no [package] section to publish"),
-            PublishError::MissingNamespace => {
-                write!(f, "[package].namespace is required to publish")
-            }
             PublishError::PublishDisabled => {
                 write!(f, "[package].publish = false opts out of publishing")
             }
@@ -198,9 +191,6 @@ pub fn validate_for_publish(
     };
     if !pkg.publish {
         errors.push(PublishError::PublishDisabled);
-    }
-    if pkg.namespace.is_none() {
-        errors.push(PublishError::MissingNamespace);
     }
     if pkg.description.is_none() {
         errors.push(PublishError::MissingMetadata {
@@ -393,6 +383,7 @@ mod tests {
     fn registry_without_default_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -407,6 +398,7 @@ regex = { package = "docs:regex", version = "^0.1.0" }
     fn registry_with_default_ok() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -423,6 +415,7 @@ regex = { package = "docs:regex", version = "^0.1.0" }
     fn registry_with_explicit_alias_ok() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -439,6 +432,7 @@ lib = { registry = "custom", package = "ns:lib", version = "^1.0.0" }
     fn invalid_package_name_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "my app"
 version = "0.1.0"
 "#;
@@ -450,6 +444,7 @@ version = "0.1.0"
     fn invalid_package_version_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "not-a-version"
 "#;
@@ -476,10 +471,9 @@ authors = ["Alice"]
 
     #[test]
     fn publish_collects_all_missing_requirements() {
-        let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
+        let toml = "[package]\nnamespace = \"myorg\"\nname = \"app\"\nversion = \"0.1.0\"\n";
         let m = toml.parse::<Manifest>().unwrap();
         let errs = validate_for_publish(&m, |_| false);
-        assert!(errs.contains(&PublishError::MissingNamespace), "{errs:?}");
         assert!(errs.contains(&PublishError::MissingLicense), "{errs:?}");
         for field in ["description", "repository", "authors"] {
             assert!(

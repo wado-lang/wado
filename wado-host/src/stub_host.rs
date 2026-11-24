@@ -308,13 +308,20 @@ fn manifest_generators(dir: &Path, base: &Path) -> IndexMap<String, String> {
         .build_dependencies
         .iter()
         .filter_map(|(nickname, dependency)| match &dependency.source {
-            DependencySource::Path { path, .. } => Some((nickname, dir.join(path))),
+            DependencySource::Path { path, .. } => Some((nickname, dependency, dir.join(path))),
             DependencySource::Git { .. }
             | DependencySource::Registry { .. }
             | DependencySource::Workspace => None,
         })
-        .map(|(nickname, root)| {
-            let entry = read_manifest(&root)
+        .map(|(nickname, dependency, root)| {
+            let generator = read_manifest(&root);
+            wado_manifest::dependency::check_source_package(
+                nickname,
+                Some(&dependency.source),
+                generator.package.as_ref(),
+            )
+            .unwrap_or_else(|reason| panic!("{}: {reason}", dir.display()));
+            let entry = generator
                 .world_entry(GENERATOR_WORLD_FQ)
                 .unwrap_or_else(|| {
                     panic!(

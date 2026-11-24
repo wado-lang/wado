@@ -3,7 +3,7 @@
 //! TIR-shaping decision is already recorded on `ModuleSemantics`, so this walker
 //! only reads them — never re-running inference, resolution, or dispatch.
 
-use super::sig::AssocConstSig;
+use super::sig::{AssocConstSig, own_effect_params};
 use std::rc::Rc;
 
 use crate::ast::{
@@ -1512,6 +1512,7 @@ impl<'a> Reify<'a> {
             is_export: func.is_export,
             is_async: func.is_async,
             type_params,
+            effect_params: own_effect_params(&func.type_params),
             impl_type_params: vec![],
             impl_effect_params: Vec::new(),
             impl_origin: None,
@@ -1794,6 +1795,7 @@ impl<'a> Reify<'a> {
             is_export: false,
             is_async: false,
             type_params: vec![],
+            effect_params: Vec::new(),
             impl_type_params: vec![],
             impl_effect_params: Vec::new(),
             impl_origin: None,
@@ -6243,12 +6245,18 @@ impl<'a> Reify<'a> {
         let mut params = closure_ctx.locals;
         let body_locals = params.split_off(closure.params.len());
         let param_types: Vec<TypeId> = params.iter().map(|p| p.type_id).collect();
-        let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
+        // Solved where the body walk solved it: a template shape keeps the
+        // rows of its holes, so a variable there would part each closure's
+        // shape from every other's.
+        let mut table = self.tysys.type_table.borrow_mut();
+        let effects = table.peek_effect_row(&cap_info.effects);
+        let func_type = table.make_function_with_mut(
             cap_info.is_mutating,
             param_types,
             cap_info.return_type,
-            Vec::new(),
+            effects,
         );
+        drop(table);
         let address_taken_locals = closure_ctx.address_taken_locals;
 
         let closure_tir = TirExpr::new(

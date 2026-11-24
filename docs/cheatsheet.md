@@ -38,7 +38,7 @@ use { greet } from "https://example.com/lib/greet.wado"
 
 // A Kiln input may be a URL too; the pin covers what the generator reads.
 use { Model } from "https://huggingface.co/<repo>/resolve/<sha>/model.onnx"
-    with { generator: { module: "lib:loam" } };
+    with { generator: { module: "wado-lang:loam" } };
 ```
 
 Namespace imports make all pub symbols from the source module directly available:
@@ -67,8 +67,8 @@ lists `wado-lang:grog` under `[dependencies]` as well. See
 [the spec](./spec-kiln.md#manifest).
 
 ```wado
-use grog from "lib:grog";
-use { Account } from "./account.proto" with { generator: { module: "lib:grog" } };
+use grog from "wado-lang:grog";
+use { Account } from "./account.proto" with { generator: { module: "wado-lang:grog" } };
 
 let bytes = grog::encode(&Account { id: 150 });       // [0x08, 0x96, 0x01]
 let back = grog::decode::<Account, ByteList>(bytes)?;

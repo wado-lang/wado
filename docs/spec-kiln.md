@@ -74,8 +74,8 @@ use calc from "./Calc.g4"
     };
 ```
 
-A `lib:` alias names a generator the package lists under a nickname. This clause
-also hands the generator a supplementary input, typed as a highlight query:
+A path dependency is named by its coordinate too. This clause also hands the
+generator a supplementary input, typed as a highlight query:
 
 <!-- {"source": "package-gale-highlight-wado/src/lib.wado"} -->
 
@@ -83,7 +83,7 @@ also hands the generator a supplementary input, typed as a highlight query:
 use { highlight as highlight_impl } from "../assets/grammar/Wado.g4"
     with {
         generator: {
-            module: "lib:gale",
+            module: "wado-lang:gale",
             inputs: [
                 { path: "../assets/grammar/Wado.highlights.scm", type: "tree-sitter-highlights" },
             ],
@@ -276,7 +276,7 @@ use { Model, N, Params, X1, X2, compute } from "./specialize.onnxtext"
     with {
         type: "onnxtext",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { N: 2 },
                 outputs: ["Y"],
@@ -804,7 +804,7 @@ use { answer } from "./value.txt"
 
 - The inner invocation runs first, since the outer generator is built from its
   output.
-- An inner clause names a generator the way an outer one does. A `lib:` name is
+- An inner clause names a generator the way an outer one does. Its name is
   resolved against the `[build-dependencies]` of the generator's own package.
 - An invocation is placed relative to its package root, however it is reached.
   One schema has one output directory, whether a program or a generator imports
@@ -818,7 +818,7 @@ generates from `onnx.proto`:
 ```wado
 use onnx from "./onnx.proto"
     with {
-        generator: { module: "lib:grog" },
+        generator: { module: "wado-lang:grog" },
     };
 ```
 
@@ -830,7 +830,7 @@ and ONNX's text format through the parser Gale builds from a grammar:
 use onnx from "../assets/grammar/Onnx.g4"
     with {
         generator: {
-            module: "lib:gale",
+            module: "wado-lang:gale",
             options: { prediction: "longest" },
         },
     };
@@ -840,8 +840,8 @@ Its own manifest lists both:
 
 ```toml
 [build-dependencies]
-"lib:gale" = { path = "../package-gale" }
-"lib:grog" = { path = "../package-grog" }
+"wado-lang:gale" = { path = "../package-gale" }
+"wado-lang:grog" = { path = "../package-grog" }
 ```
 
 An invocation whose generator is built from its own output, directly or through
@@ -866,10 +866,10 @@ generated types are encoded by Grog's runtime:
 
 ```toml
 [build-dependencies]
-"lib:grog" = { path = "../.." }
+"wado-lang:grog" = { path = "../.." }
 
 [dependencies]
-"lib:grog" = { path = "../.." }
+"wado-lang:grog" = { path = "../.." }
 ```
 
 The consumer imports the runtime and the generated types side by side:
@@ -877,10 +877,10 @@ The consumer imports the runtime and the generated types side by side:
 <!-- {"source": "package-grog/tests/roundtrip/roundtrip_test.wado"} -->
 
 ```wado
-use grog from "lib:grog";
+use grog from "wado-lang:grog";
 use { Account, AccountAddress, AccountContact, Spread, SpreadPick, Status } from "./demo.proto"
     with {
-        generator: { module: "lib:grog" },
+        generator: { module: "wado-lang:grog" },
     };
 ```
 

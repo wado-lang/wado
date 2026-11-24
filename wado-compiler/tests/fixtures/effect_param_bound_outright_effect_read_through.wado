@@ -1,0 +1,31 @@
+// A call binds an effect parameter to what the argument's row adds to the
+// effects the parameter's type names outright. The argument's row is read
+// through its variable first: the closure's row is solved to `Stdout`, which
+// `pick` names outright, so `E` binds to the empty row and `Quiet`, a
+// `Tr<fn()>`, meets the bound.
+use { println, Stdout } from "core:cli";
+
+trait Tr<A> with () {
+    fn go(&self) -> String;
+}
+
+struct Quiet {}
+
+impl Tr<fn()> for Quiet {
+    fn go(&self) -> String {
+        return "quiet";
+    }
+}
+
+fn pick<T: Tr<fn() with E>, effect E>(t: &T, f: fn() with (Stdout, E)) -> String with (Stdout, E) {
+    f();
+    return t.go();
+}
+
+export fn run() with Stdout {
+    let f = || { println("called"); };
+    println(pick(&Quiet {}, f));
+}
+
+__DATA__
+{"stdout": "called\nquiet\n"}

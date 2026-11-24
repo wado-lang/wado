@@ -91,7 +91,7 @@ pub fn write_kiln_project(root: &Path, package: &str, generator: &str, schema: &
     std::fs::write(
         root.join("wado.toml"),
         format!(
-            "[package]\nname = \"{package}\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n"
+            "[package]\nnamespace = \"acme\"\nname = \"{package}\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n"
         ),
     )
     .unwrap();

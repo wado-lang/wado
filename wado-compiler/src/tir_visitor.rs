@@ -48,6 +48,7 @@ pub trait TirMutVisitor {
             is_async: _,
             type_params,
             impl_type_params,
+            effect_params: _,
             impl_effect_params: _,
             impl_origin: _,
             monomorph_info,

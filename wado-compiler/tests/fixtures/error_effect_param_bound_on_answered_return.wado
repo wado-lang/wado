@@ -1,0 +1,47 @@
+// A bound naming the callee's own effect parameter, on a type parameter only
+// the return answers, is checked once the return is answered, at the row the
+// call binds the effect parameter to. `Plain` is no `Tr<fn() with Stdout>`, so
+// a free function, a method, and a static method each reject it.
+use { println, Stdout } from "core:cli";
+
+trait Tr<A> with () {
+    fn go(&self) -> String;
+}
+
+struct Plain {}
+impl Default for Plain;
+
+fn make<T: Default + Tr<fn() with E>, effect E>(f: fn() with E) -> T with E {
+    f();
+    return T::default();
+}
+
+struct Maker {}
+
+impl Maker {
+    fn make<T: Default + Tr<fn() with E>, effect E>(&self, f: fn() with E) -> T with E {
+        f();
+        return T::default();
+    }
+
+    fn build<T: Default + Tr<fn() with E>, effect E>(f: fn() with E) -> T with E {
+        f();
+        return T::default();
+    }
+}
+
+export fn run() with Stdout {
+    let a = make(|| { println("free"); });
+    let _a: Plain = a;
+    let m = Maker {};
+    let b = m.make(|| { println("method"); });
+    let _b: Plain = b;
+    let c = Maker::build(|| { println("static"); });
+    let _c: Plain = c;
+}
+
+__DATA__
+{
+  "compile_error": "type 'Plain' does not implement trait 'Tr<fn() -> () with Stdout>' required by bound on 'T'",
+  "compile_error_count": 3
+}

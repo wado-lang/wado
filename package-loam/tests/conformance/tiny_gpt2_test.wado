@@ -4,16 +4,16 @@
 //! runtime again, and Kiln reads each model file once per file, so the other
 //! forms of these models live in the other `tiny_gpt2_*_test` files.
 
-use { Cpu, CpuTensor, Holds, Slots, Tensor, capacity_of, resized } from "lib:loam";
+use { Cpu, CpuTensor, Holds, Slots, Tensor, capacity_of, resized } from "wado-lang:loam";
 use { HashMap } from "core:collections";
 use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
-use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
+use { StoredTensor, write_safetensors } from "wado-lang:loam/src/safetensors.wado";
 use gpt2 from "./tiny_gpt2.wado";
 use external from "../models/tiny-gpt2/external/model.onnx"
     with {
         type: "onnx",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { batch_size: 1 },
                 outputs: ["logits"],
@@ -24,7 +24,7 @@ use in_place from "../models/tiny-gpt2/model.onnx"
     with {
         type: "onnx",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { batch_size: 1 },
                 outputs: ["logits"],
@@ -35,12 +35,12 @@ use in_place from "../models/tiny-gpt2/model.onnx"
 use open_step from "../models/tiny-gpt2/with-past/model.onnx"
     with {
         type: "onnx",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use batched from "../models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 
 // The decoder of `tiny_gpt2.wado`, run from the checkpoint holding its weights

@@ -256,7 +256,7 @@ pub struct TestSettings {
 /// The `[package]` section of `wado.toml`.
 #[derive(Debug, Clone)]
 pub struct Package {
-    pub namespace: Option<String>,
+    pub namespace: String,
     pub name: String,
     pub version: String,
     /// Entry-point module exposed when the package is consumed as a
@@ -292,21 +292,23 @@ pub struct Package {
     /// Minimum Wado compiler version required to build (a semver requirement,
     /// e.g. `">=0.5"`).
     pub wado_version: Option<String>,
-    /// Whether the package may be published. `false` opts out even when a
-    /// `namespace` is present. Defaults to `true`.
+    /// Whether the package may be published. Defaults to `true`.
     pub publish: bool,
     /// Unknown `[package]` keys (typos, unsupported). Reported as warnings.
     pub unknown_fields: Vec<String>,
 }
 
 impl Package {
-    /// `namespace:name@version`, or `name@version` with no namespace.
+    /// `namespace:name@version`.
     #[must_use]
     pub fn coordinate(&self) -> String {
-        match &self.namespace {
-            Some(namespace) => format!("{namespace}:{}@{}", self.name, self.version),
-            None => format!("{}@{}", self.name, self.version),
-        }
+        format!("{}@{}", self.unversioned_coordinate(), self.version)
+    }
+
+    /// `namespace:name`, the coordinate a dependency key names the package by.
+    #[must_use]
+    pub fn unversioned_coordinate(&self) -> String {
+        format!("{}:{}", self.namespace, self.name)
     }
 
     /// Homepage, falling back to the repository URL when unset.
@@ -832,8 +834,12 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         section: "package".to_string(),
         field: "version".to_string(),
     })?;
+    let namespace = raw.namespace.ok_or_else(|| ManifestError::MissingField {
+        section: "package".to_string(),
+        field: "namespace".to_string(),
+    })?;
     Ok(Package {
-        namespace: raw.namespace,
+        namespace,
         name,
         version,
         lib: raw.lib,
@@ -1114,6 +1120,7 @@ mod tests {
     fn parse_minimal() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "my-app"
 version = "0.1.0"
 
@@ -1122,16 +1129,25 @@ version = "0.1.0"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         let pkg = m.package.as_ref().unwrap();
-        assert_eq!(pkg.name, "my-app");
-        assert_eq!(pkg.version, "0.1.0");
+        assert_eq!(pkg.coordinate(), "acme:my-app@0.1.0");
         assert_eq!(m.world_entry("wasi:cli/command"), Some("src/main.wado"));
-        assert!(pkg.namespace.is_none());
+    }
+
+    #[test]
+    fn a_package_without_a_namespace_is_refused() {
+        let toml = "[package]\nname = \"my-app\"\nversion = \"0.1.0\"\n";
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "missing required field `namespace` in [package]"
+        );
     }
 
     #[test]
     fn world_entry_publish_defaults_true_and_opts_out_via_table() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "tool"
 version = "0.1.0"
 
@@ -1154,6 +1170,7 @@ version = "0.1.0"
     fn unknown_key_in_world_table_warns_instead_of_silently_dropping() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1174,7 +1191,7 @@ version = "0.1.0"
 
     #[test]
     fn world_table_with_non_string_entry_is_a_clear_error() {
-        let toml = "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = { entry = 123 }\n";
+        let toml = "[package]\nnamespace = \"acme\"\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = { entry = 123 }\n";
         let err = toml.parse::<Manifest>().unwrap_err();
         let msg = err.to_string();
         assert!(
@@ -1185,7 +1202,7 @@ version = "0.1.0"
 
     #[test]
     fn world_entry_with_empty_path_is_rejected() {
-        let toml = "[package]\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"\"\n";
+        let toml = "[package]\nnamespace = \"acme\"\nname = \"a\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"\"\n";
         let err = toml.parse::<Manifest>().unwrap_err();
         assert!(err.to_string().contains("empty"), "{err}");
     }
@@ -1194,6 +1211,7 @@ version = "0.1.0"
     fn parse_git_dep_with_version() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1219,6 +1237,7 @@ router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
     fn parse_git_dep_with_directory() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1240,6 +1259,7 @@ version = "0.1.0"
     fn directory_without_git_is_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1257,7 +1277,7 @@ version = "0.1.0"
     fn deps_hash_changes_with_git_directory() {
         let mk = |dir: &str| -> Manifest {
             format!(
-                "[package]\nname=\"a\"\nversion=\"0.1.0\"\n\n[dependencies]\n\"org:foo\" = {{ git = \"https://x/r.git\", version = \"^1.0.0\", directory = \"{dir}\" }}\n"
+                "[package]\nnamespace=\"acme\"\nname=\"a\"\nversion=\"0.1.0\"\n\n[dependencies]\n\"org:foo\" = {{ git = \"https://x/r.git\", version = \"^1.0.0\", directory = \"{dir}\" }}\n"
             )
             .parse()
             .unwrap()
@@ -1269,6 +1289,7 @@ version = "0.1.0"
     fn parse_open_coordinate_registry_dep() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1297,6 +1318,7 @@ default = "https://wa.dev"
     fn bare_dependency_key_warns_but_parses() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1321,6 +1343,7 @@ default = "https://wa.dev"
     fn deps_hash_normalizes_default_registry() {
         let implicit = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1334,6 +1357,7 @@ default = "oci://ghcr.io/acme"
         .unwrap();
         let explicit = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1353,7 +1377,7 @@ default = "oci://ghcr.io/acme"
     fn deps_hash_changes_with_version() {
         let mk = |ver: &str| -> Manifest {
             format!(
-                "[package]\nname=\"a\"\nversion=\"0.1.0\"\n\n[registries]\ndefault=\"oci://ghcr.io/acme\"\n\n[dependencies]\n\"ns:pkg\" = {{ version = \"{ver}\" }}\n"
+                "[package]\nnamespace=\"acme\"\nname=\"a\"\nversion=\"0.1.0\"\n\n[registries]\ndefault=\"oci://ghcr.io/acme\"\n\n[dependencies]\n\"ns:pkg\" = {{ version = \"{ver}\" }}\n"
             )
             .parse()
             .unwrap()
@@ -1365,6 +1389,7 @@ default = "oci://ghcr.io/acme"
     fn parse_lib_nickname_path_dep() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1383,6 +1408,7 @@ version = "0.1.0"
     fn parse_open_coordinate_with_explicit_registry() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1408,6 +1434,7 @@ custom = "https://registry.example.com"
     fn open_coordinate_missing_version_reports_missing_field() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1425,6 +1452,7 @@ default = "oci://ghcr.io/acme"
     fn registry_shaped_bare_key_reports_helpful_error() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1445,6 +1473,7 @@ foo = { version = "^1.0.0" }
     fn open_coordinate_without_default_registry_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1459,6 +1488,7 @@ version = "0.1.0"
     fn parse_git_dep_with_ref() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1483,6 +1513,7 @@ router = { git = "https://github.com/user/router.git", ref = "main" }
     fn git_both_version_and_ref_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1500,6 +1531,7 @@ router = { git = "https://example.com/r.git", version = "^1.0.0", ref = "main" }
     fn bare_version_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1517,6 +1549,7 @@ regex = { package = "docs:regex", version = "1.0.0" }
     fn path_with_publish_source() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1548,6 +1581,7 @@ shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
     fn parse_test_exclude() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1565,6 +1599,7 @@ exclude = ["wado-compiler/tests/**", "vendor/**"]
     fn test_section_defaults_when_omitted() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1580,6 +1615,7 @@ version = "0.1.0"
     fn parse_test_include() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1599,6 +1635,7 @@ include = ["lib/**/*_test.wado"]
     fn parse_format_exclude_include() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1621,6 +1658,7 @@ include = ["wado-compiler/tests/fixtures/keepme.wado"]
     fn format_section_defaults_when_omitted() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1636,6 +1674,7 @@ version = "0.1.0"
     fn workspace_dep() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "member"
 version = "0.1.0"
 lib = "src/lib.wado"
@@ -1684,7 +1723,7 @@ publish = false
 
     #[test]
     fn metadata_defaults_when_omitted() {
-        let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
+        let toml = "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n";
         let pkg = toml.parse::<Manifest>().unwrap().package.unwrap();
         assert!(pkg.description.is_none());
         assert!(pkg.authors.is_empty(), "{:?}", pkg.authors);
@@ -1697,6 +1736,7 @@ publish = false
     fn homepage_and_documentation_fall_back_to_repository() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 repository = "https://github.com/org/app"
@@ -1713,6 +1753,7 @@ repository = "https://github.com/org/app"
     fn explicit_homepage_overrides_repository_fallback() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 homepage = "https://app.example"
@@ -1726,6 +1767,7 @@ repository = "https://github.com/org/app"
     fn unknown_package_field_warns_but_parses() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 descshunption = "typo"
@@ -1746,6 +1788,7 @@ descshunption = "typo"
     fn unknown_top_level_section_warns_but_parses() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -1767,6 +1810,7 @@ version = "0.1.0"
     fn license_and_license_file_conflict_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 license = "MIT"
@@ -1780,6 +1824,7 @@ license-file = "LICENSE"
     fn invalid_wado_version_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 wado-version = "not a req"
@@ -1789,7 +1834,7 @@ wado-version = "not a req"
     }
 
     fn with_exports(exports: &str) -> Result<Manifest, ManifestError> {
-        format!("[package]\nname = \"app\"\nversion = \"0.1.0\"\nexports = [{exports}]\n").parse()
+        format!("[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\nexports = [{exports}]\n").parse()
     }
 
     #[test]
@@ -1828,7 +1873,7 @@ wado-version = "not a req"
     fn valid_spdx_license_accepted() {
         for license in ["MIT", "MIT OR Apache-2.0", "Apache-2.0 WITH LLVM-exception"] {
             let toml = format!(
-                "[package]\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"{license}\"\n"
+                "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\nlicense = \"{license}\"\n"
             );
             assert!(
                 toml.parse::<Manifest>().is_ok(),
@@ -1841,6 +1886,7 @@ wado-version = "not a req"
     fn license_ref_for_nonstandard_license_accepted() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 license = "LicenseRef-Commercial"
@@ -1852,6 +1898,7 @@ license = "LicenseRef-Commercial"
     fn invalid_spdx_license_rejected() {
         let toml = r#"
 [package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 license = "Definitely Not A License"
@@ -1886,7 +1933,7 @@ lib = "src/lib.wado"
             pkg.repository.as_deref(),
             Some("https://github.com/org/monorepo")
         );
-        assert_eq!(pkg.namespace.as_deref(), Some("org"));
+        assert_eq!(pkg.namespace, "org");
         assert_eq!(pkg.license.as_deref(), Some("MIT"));
         assert_eq!(pkg.authors, vec!["Alice <a@example.com>"]);
         assert_eq!(pkg.name, "core");
@@ -1969,6 +2016,7 @@ members = ["packages/*"]
 
 [workspace.package]
 version = "0.1.0"
+namespace = "org"
 licence = "MIT"
 "#;
         let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";

@@ -1,0 +1,42 @@
+// A call that determines nothing of its callee's `_` hands that parameter to
+// its caller's row as it is. A closure performing such a call carries it into
+// the argument it becomes, and the instance of `run` it binds is keyed by that
+// parameter: no frame binds it, so no later instance will.
+
+trait Source with () {
+    fn base(&self) -> i32;
+}
+
+struct Fixed {}
+
+impl Source for Fixed {
+    fn base(&self) -> i32 {
+        return 40;
+    }
+}
+
+struct Store {}
+
+impl Store {
+    fn fetched<S: Source>(&mut self, source: &S, step: i32) -> i32 with _ {
+        return source.base() + step;
+    }
+}
+
+struct Programs {}
+
+impl Programs {
+    fn run(&mut self, mut host: fn mut(i32) -> i32 with _) -> i32 with _ {
+        return host(2);
+    }
+}
+
+fn compute<S: Source>(programs: &mut Programs, store: &mut Store, source: &S) -> i32 with _ {
+    return programs.run(|step| store.fetched(source, step));
+}
+
+test {
+    let mut programs = Programs {};
+    let mut store = Store {};
+    assert compute(&mut programs, &mut store, &Fixed {}) == 42;
+}

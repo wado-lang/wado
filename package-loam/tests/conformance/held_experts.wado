@@ -2,13 +2,13 @@
 //! device computes as it does with every expert held. `operators_test.wado`
 //! holds the same model to the operator's definition on `Cpu`.
 
-use { Backend, Tensor } from "lib:loam";
-use { deviation } from "lib:loam/example/webgpu/compare.wado";
+use { Backend, Tensor } from "wado-lang:loam";
+use { deviation } from "wado-lang:loam/example/webgpu/compare.wado";
 use { QMOE_LAYERS_EXPERT_BYTES } from "./oracle.wado";
 use layers from "./operators/QMoeLayers.onnx"
     with {
         type: "onnx",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 
 /// How far each of `passes` passes on `device`, its pools holding 6 of the 8

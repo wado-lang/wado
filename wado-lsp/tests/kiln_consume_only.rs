@@ -103,7 +103,7 @@ fn build_fixture(spec: FixtureSpec<'_>) -> Fixture {
 
     std::fs::write(
         root.join("wado.toml"),
-        "[package]\nname = \"kiln-lsp-test\"\nversion = \"0.0.0\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"kiln-lsp-test\"\nversion = \"0.0.0\"\n",
     )
     .unwrap();
 
@@ -238,7 +238,7 @@ fn another_packages_clause_reads_the_consumers_build() {
         std::fs::create_dir_all(dep.join("grammars")).unwrap();
         std::fs::write(
             dep.join("wado.toml"),
-            "[package]\nname = \"dep\"\nversion = \"0.0.0\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"dep\"\nversion = \"0.0.0\"\n",
         )
         .unwrap();
         std::fs::write(dep.join("grammars/calc.g4"), SCHEMA_BODY).unwrap();

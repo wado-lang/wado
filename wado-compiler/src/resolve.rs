@@ -20,7 +20,7 @@ use crate::name::{
     split_namespace_member,
 };
 use crate::symbol::{GlobalSymbol, Symbol, SymbolKind, SymbolTable};
-use crate::tir::EffectRef;
+use crate::tir::{EffectParam, EffectRef};
 use crate::token::Span;
 
 /// What a reference site refers to. [`Self::Unresolved`] is never read as a
@@ -526,24 +526,25 @@ impl Resolutions {
     #[must_use]
     pub fn effect_at(&self, site: AstId, name: &str) -> Option<EffectRef> {
         match self.get(site) {
-            Resolution::Binder(binder) => {
-                self.effect_binders
-                    .contains_key(&binder)
-                    .then(|| EffectRef::Param {
-                        name: name.to_string(),
-                    })
-            }
+            Resolution::Binder(binder) => self.effect_binders.contains_key(&binder).then(|| {
+                EffectRef::Param(EffectParam {
+                    binder,
+                    name: name.to_string(),
+                })
+            }),
             Resolution::Def(def) => self.effect_decl(def),
             Resolution::Projection(_) | Resolution::Unresolved => None,
         }
     }
 
-    /// Every effect parameter the program declares, as [`Self::effect_at`]
-    /// spells it.
-    pub fn effect_params(&self) -> impl Iterator<Item = EffectRef> + '_ {
+    /// Every effect parameter the program declares.
+    pub fn effect_params(&self) -> impl Iterator<Item = EffectParam> + '_ {
         self.effect_binders
-            .values()
-            .map(|name| EffectRef::Param { name: name.clone() })
+            .iter()
+            .map(|(&binder, name)| EffectParam {
+                binder,
+                name: name.clone(),
+            })
     }
 
     /// The effect a `with`-clause name written in `module` refers to. Elaboration
