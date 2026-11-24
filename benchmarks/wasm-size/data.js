@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795518224545,
+  "lastUpdate": 1795519762598,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81985,6 +81985,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7b4b7ac6014f5dcd07747002248a9c38e88c61b7"
         },
         "date": 1795518223541,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cb4f66e2ce986b3ddb7f112e4b50cddbd18f1e37",
+          "message": "Merge pull request #2745 from wado-lang/ccr-a3ad3447-vrlvia\n\nfeat(stdlib): `core:http_client`, an HTTP client with streaming, trailers and SSE",
+          "timestamp": "2026-11-24T20:14:04+09:00",
+          "tree_id": "b5c7c1560450c07dc47b8bd85520a34f2d168f37",
+          "url": "https://github.com/wado-lang/wado/commit/cb4f66e2ce986b3ddb7f112e4b50cddbd18f1e37"
+        },
+        "date": 1795519761605,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
