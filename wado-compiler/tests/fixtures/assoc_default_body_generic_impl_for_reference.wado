@@ -11,6 +11,31 @@ trait Pull with () {
         let second = self.pull();
         return [first, second];
     }
+
+    fn pull_or<D: Fallback<Value = Self::Item>>(&mut self, fallback: D) -> Self::Item {
+        return match self.pull() {
+            Some(item) => item,
+            null => fallback.value(),
+        };
+    }
+}
+
+trait Fallback with () {
+    type Value;
+
+    fn value(&self) -> Self::Value;
+}
+
+struct Fixed {
+    n: i32,
+}
+
+impl Fallback for Fixed {
+    type Value = i32;
+
+    fn value(&self) -> i32 {
+        return self.n;
+    }
 }
 
 struct Counter {
@@ -45,4 +70,11 @@ test "the default method through the reference impl advances the referent" {
     let mut r = &mut c;
     assert Pull::pull_twice(&mut r) == [Option::Some(0), Option::Some(1)];
     assert c.pull() == Option::Some(2);
+}
+
+test "a default method's own parameter bound names Self::Item" {
+    let mut c = Counter { n: 0 };
+    let mut r = &mut c;
+    assert Pull::pull_or(&mut r, Fixed { n: 9 }) == 0;
+    assert c.pull() == Option::Some(1);
 }

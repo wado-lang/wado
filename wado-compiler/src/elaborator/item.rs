@@ -2925,15 +2925,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
         let impl_type_params = frame.impl_type_params;
         let type_param_list = frame.method_type_params;
-        // The impl in hand answers `Self::X` in its bodies as in its
-        // signatures. A target that is no declaration (`&mut P`, a bare
-        // parameter) registers no definition for a type lookup to find.
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.resolved = scope
-            .tysys
-            .signatures
-            .impl_sig(impl_def)
-            .associated_types
-            .clone();
 
         // Keyed by the method's globally-unique `AstId`; per-impl
         // `ModuleSemantics` snapshots disambiguate one trait default body

@@ -503,6 +503,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     owner,
                 });
             }
+            // `Self` implements the trait its frame stands in, whatever its
+            // shape: `&mut P` is no declaration to register a definition
+            // under, and carries no bound of its own.
+            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
+                && let Some(owner) = declared
+                && self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(self_type)
+            {
+                return Some(AssocTarget::Projection {
+                    base: self_type,
+                    owner,
+                });
+            }
             let _ = self.unknown_namespaced_type("Self", &namespaced.name, namespaced.span);
             return None;
         }
