@@ -58,7 +58,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # One compile serves every binary-dependent step below. WADO_PREBUILT
-      # keeps scripts/dev-bin.sh from building again, so no step after this
+      # keeps tools/dev-bin.sh from building again, so no step after this
       # one takes the cargo lock until clippy.
       - name: Build wado binaries
         if: steps.precheck.outputs.should-run == 'true'
@@ -77,7 +77,7 @@ jobs:
             run: mise run update-golden-format-fixtures
           - name: Refresh Gale kiln caches
             if: steps.precheck.outputs.should-run == 'true'
-            run: scripts/dev-bin.sh wado test -O0 --no-run package-gale
+            run: tools/dev-bin.sh wado test -O0 --no-run package-gale
           - name: Regenerate stdlib docs
             if: steps.precheck.outputs.should-run == 'true'
             run: mise run doc-stdlib
@@ -96,7 +96,7 @@ jobs:
             run: mise run format-md
           - name: Format Wado sources
             if: steps.precheck.outputs.should-run == 'true'
-            run: scripts/dev-bin.sh wado format -w .
+            run: tools/dev-bin.sh wado format -w .
 
       # Last: a second compile, and rustfmt has to follow clippy-fix's rewrites.
       - name: Clippy autofix and rustfmt

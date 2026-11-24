@@ -7,7 +7,7 @@
 //
 // Unpacking these is what makes a session warm: cargo then compiles only the
 // workspace crates. Workspace artifacts are deliberately absent — see
-// scripts/pack-target-deps.sh.
+// tools/pack-target-deps.sh.
 //
 // The manifest check below enforces the path parity cargo-cache.yml explains,
 // and fails closed: artifacts built under other paths get replayed rather than

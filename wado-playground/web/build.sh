@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WEB="$ROOT/wado-playground/web"
-JCO="$ROOT/scripts/jco"
+JCO="$ROOT/tools/jco"
 WASM_OPT="$JCO/node_modules/binaryen/bin/wasm-opt"
 JCO_VENDOR="$JCO/node_modules/@bytecodealliance/jco-transpile/vendor"
 

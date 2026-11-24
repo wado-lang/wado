@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 
-const { JSDOM } = createRequire(new URL("../../scripts/jco/package.json", import.meta.url))("jsdom");
+const { JSDOM } = createRequire(new URL("../../tools/jco/package.json", import.meta.url))("jsdom");
 const component = process.env.WEB_BROWSER_JS;
 assert.ok(component, "WEB_BROWSER_JS names the transpiled example/web-browser");
 const glue = new URL("./dom.js", import.meta.url);

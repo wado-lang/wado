@@ -119,12 +119,12 @@ pub fn run_gale_side(dir: &Path, corpus: &[String], tool: &str) -> PathBuf {
         .unwrap_or_else(|e| panic!("creating '{}': {e}", gale_tsv.display()));
     // dev-bin.sh builds `wado` first, so the Gale side never runs a compiler
     // older than the parser this binary links.
-    let status = Command::new("scripts/dev-bin.sh")
+    let status = Command::new("tools/dev-bin.sh")
         .args(["wado", "run", tool, "--", "--paths-from"])
         .arg(&list)
         .stdout(stdout)
         .status()
-        .unwrap_or_else(|e| panic!("running 'scripts/dev-bin.sh wado': {e}"));
+        .unwrap_or_else(|e| panic!("running 'tools/dev-bin.sh wado': {e}"));
     assert!(status.success(), "the Gale side, {tool}, failed: {status}");
     gale_tsv
 }

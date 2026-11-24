@@ -44,7 +44,7 @@ that layer, so record with a budget below every expert:
 
 `analyzed.wado` compiles the model for a `v5e:1x1` through `libtpu.so`, with
 every expert held, and prints what the plugin reports of each program
-(`scripts/fetch-pjrt-plugin.sh` prints its path):
+(`tools/fetch-pjrt-plugin.sh` prints its path):
 
     TPU_SKIP_MDS_QUERY=1 wado run-pjrt --plugin libtpu.so analyzed.wado
 

@@ -155,7 +155,7 @@ block directly before it. Marl's document tree stays `internal`.
 
 During the migration a baseline, `scripts/spec-examples.json`, counted the
 blocks of each file that had no reference yet, and CI failed when a count grew.
-It only shrank, as `scripts/rust-inline-paths.json` does, and was deleted once
+It only shrank, as `tools/rust-inline-paths.json` does, and was deleted once
 empty.
 
 Migrating a block is triage. Each one is exactly one of:

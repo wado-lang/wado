@@ -44,7 +44,7 @@ fn require_path(parser: &mut lexopt::Parser) -> PathBuf {
 
 struct Cli {
     wit_dir: Option<PathBuf>,
-    /// A `WebIDL` snapshot (`scripts/webidl/snapshot.mjs`) to generate from.
+    /// A `WebIDL` snapshot (`tools/webidl/snapshot.mjs`) to generate from.
     webidl: Option<PathBuf>,
     /// Where `--webidl` writes the JavaScript glue.
     glue_dir: Option<PathBuf>,
@@ -74,7 +74,7 @@ fn print_usage() {
         "  --wit-dir <DIR>           Directory containing WIT files (enables directory mode)"
     );
     eprintln!(
-        "  --webidl <FILE>           WebIDL snapshot JSON written by scripts/webidl/snapshot.mjs"
+        "  --webidl <FILE>           WebIDL snapshot JSON written by tools/webidl/snapshot.mjs"
     );
     eprintln!(
         "  --output-dir <DIR>        Output directory for generated Wado files (required with --wit-dir / --webidl)"

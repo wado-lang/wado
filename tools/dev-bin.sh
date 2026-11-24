@@ -4,9 +4,9 @@
 # runs at the root, since cargo reads `.cargo/config.toml` from the directory it
 # runs in, and `wado-bundled-icu/`'s targets wasm32.
 #
-#   scripts/dev-bin.sh wado test -O2 package-gale
-#   WADO=$(scripts/dev-bin.sh --path wado)    # build once, then run "$WADO" in a loop
-#   scripts/dev-bin.sh --workspace wado-run-webgpu wado-run-webgpu app.wado
+#   tools/dev-bin.sh wado test -O2 package-gale
+#   WADO=$(tools/dev-bin.sh --path wado)    # build once, then run "$WADO" in a loop
+#   tools/dev-bin.sh --workspace wado-run-webgpu wado-run-webgpu app.wado
 #
 # `--workspace` names a workspace of its own under the root, which builds into
 # its own `target/` unless CARGO_TARGET_DIR says otherwise.

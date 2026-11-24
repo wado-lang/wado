@@ -71,12 +71,12 @@ mise run format          # format Rust, Markdown, and Wado files
 
 - Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change. The one exception is renaming a Rust symbol with `wado-dev-tools rust-rename` (the `rust-rename` skill), which edits where rust-analyzer resolves the name rather than where the text matches.
 - Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation. Run one heavy job at a time; two starve each other.
-- `test`, `test-wado`, `test-stdlib`, `test-gale-o2` and `test-fuel` refuse to start while another of the same is running (`test-e2e` counts as `test`, and `update-baselines` as `test-fuel`), naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
+- `test`, `test-wado`, `test-stdlib`, `test-gale-o2` and `test-fuel` refuse to start while another of the same is running (`test-e2e` counts as `test`, and `update-baselines` as `test-fuel`), naming the holder's pid — where `flock` exists; `tools/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
 - On an internal pull request, CI's `tidy` job regenerates the generated files, applies clippy and format, and pushes `chore: tidy` onto the branch. Pull before pushing.
 - A wasm-tools CLI feature a task or skill needs is a `wado-dev-tools` subcommand, built on the wasm-tools crates the workspace pins. Nothing installs the CLI.
 - Never edit a generated file: change its generator or source and regenerate. A generated file carries `-diff` in `.gitattributes`, so `git diff`, `git show` and `git log -p` report it as changed without printing it, and the sources stay readable. Regenerate and commit those; do not read them. `--text` prints one where you do want it. `rg` reads them like any other file; `git grep` calls them binary.
-- `git diff <base> -- $(scripts/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated or vendored file is gone too.
+- `git diff <base> -- $(tools/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated or vendored file is gone too.
 
 ## General Rules
 
@@ -138,7 +138,7 @@ say) states that module's signatures; read it rather than guess.
 ## The CLI
 
 The `wado` binary is implemented in `wado-cli/`. `mise.toml` puts
-`scripts/bin` on `PATH`. Its `wado`, `wado-run-webgpu` and `wado-run-pjrt` each
+`tools/bin` on `PATH`. Its `wado`, `wado-run-webgpu` and `wado-run-pjrt` each
 build the dev binary before running it, so none of them runs a stale build.
 `wado-run-pjrt` runs on XLA's CPU plugin unless `--plugin` names another. The
 `wado-cli` skill covers every subcommand; read it before invoking `wado`.
