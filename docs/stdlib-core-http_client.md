@@ -17,6 +17,35 @@ redirect and retries nothing.
 
 See `docs/wep-2026-11-24-core-http-client.md` for the design.
 
+## Synopsis
+
+```wado
+struct Item {
+    id: i32,
+}
+
+// Nothing listens on port 9, so this request fails before any response.
+let client = HttpClient::new("http://127.0.0.1:9/api", ClientInit {
+    headers: [
+        ["accept", "application/json"],
+    ],
+}).unwrap();
+let result = client.request("/items", RequestInit {
+    query: [
+        ["limit", "10"],
+    ],
+});
+match result {
+    Ok(mut res) => {
+        let items = res.json::<List<Item>>();
+        assert res.ok() && items.is_ok();
+    },
+    Err(e) => {
+        assert e matches { Transport([_::Request, _]) };
+    },
+}
+```
+
 ## Structs
 
 ### `pub struct ClientInit`
