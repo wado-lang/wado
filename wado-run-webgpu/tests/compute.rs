@@ -112,7 +112,7 @@ fn with_no_input_the_entry_comes_from_the_manifest() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     std::fs::write(
         dir.path().join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"main.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"main.wado\"\n",
     )
     .expect("writing the manifest");
     std::fs::copy(served(), dir.path().join("main.wado")).expect("copying the program");

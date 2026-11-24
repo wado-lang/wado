@@ -1,0 +1,57 @@
+// A dense `match` becomes a `Switch` in its own function before the inliner
+// runs, so the constant a call site passes reaches the scrutinee only after the
+// splice. The fold then takes the arm that value selects, as it does for a
+// `match`, leaving no `br_table`. Keys hit the table, fall below and past it
+// to the default, and come as an enum case, a `char`, and a `u64` too wide for
+// any table.
+use { println, Stdout } from "core:cli";
+
+enum Tone { C, D, E, F, G, A, B, C2, D2, E2, F2, G2, A2 }
+
+fn pick(i: i32, x: i32) -> i32 {
+    return match i {
+        1 => x + 11, 2 => x * 3, 3 => x - 7, 4 => x ^ 5, 5 => x | 9, 6 => x & 3, 7 => x << 2,
+        8 => x >> 1, 9 => x % 7, 10 => x / 3, 11 => x + 100, 12 => x * 17, 13 => x - 50,
+        _ => x + 1000,
+    };
+}
+
+fn pitch(t: Tone, x: i32) -> i32 {
+    return match t {
+        _::C => x + 1, _::D => x + 2, _::E => x + 3, _::F => x + 4, _::G => x + 5,
+        _::A => x + 6, _::B => x + 7, _::C2 => x + 8, _::D2 => x + 9, _::E2 => x + 10,
+        _::F2 => x + 11, _::G2 => x + 12, _::A2 => x + 13,
+    };
+}
+
+fn letter(c: char, x: i32) -> i32 {
+    return match c {
+        'a' => x + 1, 'b' => x * 2, 'c' => x - 3, 'd' => x ^ 4, 'e' => x | 5, 'f' => x & 6,
+        'g' => x << 1, 'h' => x >> 1, 'i' => x % 9, 'j' => x / 2, 'k' => x + 11, 'l' => x * 12,
+        'm' => x - 13,
+        _ => x + 2000,
+    };
+}
+
+fn wide(v: u64, x: i32) -> i32 {
+    return match v {
+        1 => x + 1, 2 => x * 2, 3 => x - 3, 4 => x ^ 4, 5 => x | 5, 6 => x & 6, 7 => x << 1,
+        8 => x >> 1, 9 => x % 9, 10 => x / 2, 11 => x + 11, 12 => x * 12, 13 => x - 13,
+        _ => x + 3000,
+    };
+}
+
+export fn run() with Stdout {
+    let x = builtin::black_box(4);
+    println(`${pick(3, x)} ${pick(12, x)} ${pick(0, x)} ${pick(99, x)}`);
+    println(`${pitch(Tone::E2, x)} ${pitch(Tone::C, x)}`);
+    println(`${letter('c', x)} ${letter('Z', x)}`);
+    println(`${wide(12, x)} ${wide(u64::MAX, x)}`);
+}
+
+__DATA__
+{
+    "stdout": "-3 68 1004 1004\n14 5\n1 2004\n48 3004\n",
+    "wir_pass": {"O2": ["nir/const_fold", "nir/peephole/const_fold", "nir/param_spec", "nir/store_load_forward_post_scalarize", "nir/const_fold_post_global"]},
+    "wir_not_expect:O2": ["br_table"]
+}

@@ -25,18 +25,20 @@ Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 ### The `generator` Fields
 
 The literal after `from` is the primary input. It is a `./` or `../` path
-resolved against the declaring file, like a local module import, or the URL of
-a [remote file](#remote-inputs). The `generator` object holds the rest of the
-invocation.
+resolved against the declaring file, like a local module import, the URL of a
+[remote file](#remote-inputs), or a file a dependency exports, named
+`"<specifier>/<path>"` as an import names it
+([Exported Files](./spec-packages.md#exported-files)). The `generator` object
+holds the rest of the invocation.
 
-| Field        | Required | Meaning                                                                                                                                                                                                                                          |
-| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                                                       |
-| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                                                            |
-| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                                                           |
-| `options`    | no       | Record literal whose shape matches the generator's `export struct Options`. See [Options](#options).                                                                                                                                             |
-| `inputs`     | no       | Supplementary inputs the generator cannot discover from the primary alone, such as a sibling lexer grammar: each a `./` / `../` path or a URL, or `{ path, type, integrity }`. A schema that refers to other files lists every one of them here. |
-| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                                                 |
+| Field        | Required | Meaning                                                                                                                                                                                                                                                            |
+| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                                                                         |
+| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                                                                              |
+| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                                                                             |
+| `options`    | no       | Record literal whose shape matches the generator's `export struct Options`. See [Options](#options).                                                                                                                                                               |
+| `inputs`     | no       | Supplementary inputs the generator cannot discover from the primary alone, such as a sibling lexer grammar: each a `./` / `../` path, a URL or an exported file, or `{ path, type, integrity }`. A schema that refers to other files lists every one of them here. |
+| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                                                                   |
 
 Each field has one type, and any other key or type is an error at the use site.
 
@@ -72,16 +74,17 @@ use calc from "./Calc.g4"
     };
 ```
 
-A `lib:` alias names a generator the package lists under a nickname. This clause
-also hands the generator a supplementary input, typed as a highlight query:
+A path dependency is named by its coordinate too. This clause reads the grammar
+another package exports, and hands the generator a supplementary input of its
+own, typed as a highlight query:
 
 <!-- {"source": "package-gale-highlight-wado/src/lib.wado"} -->
 
 ```wado
-use { highlight as highlight_impl } from "../assets/grammar/Wado.g4"
+use { highlight as highlight_impl } from "wado-lang:wado/assets/grammar/Wado.g4"
     with {
         generator: {
-            module: "lib:gale",
+            module: "wado-lang:gale",
             inputs: [
                 { path: "../assets/grammar/Wado.highlights.scm", type: "tree-sitter-highlights" },
             ],
@@ -274,7 +277,7 @@ use { Model, N, Params, X1, X2, compute } from "./specialize.onnxtext"
     with {
         type: "onnxtext",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { N: 2 },
                 outputs: ["Y"],
@@ -474,7 +477,10 @@ pub affine struct Request<T = NoOptions> {
 
 An input file carries its path from the package root, normalized, the content
 as a byte stream, and the `type` the use site gave it. So `./sub/../sub/v.txt`
-written in `src/main.wado` arrives as `src/sub/v.txt`:
+written in `src/main.wado` arrives as `src/sub/v.txt`. A file a dependency
+exports arrives as the dependency's coordinate and the exported path,
+`acme:schemas@0.2.0/assets/a.idl`, never where the dependency lies on this
+machine, and the cache records it the same way:
 
 ```wit
 record input-file {
@@ -799,7 +805,7 @@ use { answer } from "./value.txt"
 
 - The inner invocation runs first, since the outer generator is built from its
   output.
-- An inner clause names a generator the way an outer one does. A `lib:` name is
+- An inner clause names a generator the way an outer one does. Its name is
   resolved against the `[build-dependencies]` of the generator's own package.
 - An invocation is placed relative to its package root, however it is reached.
   One schema has one output directory, whether a program or a generator imports
@@ -813,7 +819,7 @@ generates from `onnx.proto`:
 ```wado
 use onnx from "./onnx.proto"
     with {
-        generator: { module: "lib:grog" },
+        generator: { module: "wado-lang:grog" },
     };
 ```
 
@@ -825,7 +831,7 @@ and ONNX's text format through the parser Gale builds from a grammar:
 use onnx from "../assets/grammar/Onnx.g4"
     with {
         generator: {
-            module: "lib:gale",
+            module: "wado-lang:gale",
             options: { prediction: "longest" },
         },
     };
@@ -835,8 +841,8 @@ Its own manifest lists both:
 
 ```toml
 [build-dependencies]
-"lib:gale" = { path = "../package-gale" }
-"lib:grog" = { path = "../package-grog" }
+"wado-lang:gale" = { path = "../package-gale" }
+"wado-lang:grog" = { path = "../package-grog" }
 ```
 
 An invocation whose generator is built from its own output, directly or through
@@ -861,10 +867,10 @@ generated types are encoded by Grog's runtime:
 
 ```toml
 [build-dependencies]
-"lib:grog" = { path = "../.." }
+"wado-lang:grog" = { path = "../.." }
 
 [dependencies]
-"lib:grog" = { path = "../.." }
+"wado-lang:grog" = { path = "../.." }
 ```
 
 The consumer imports the runtime and the generated types side by side:
@@ -872,10 +878,10 @@ The consumer imports the runtime and the generated types side by side:
 <!-- {"source": "package-grog/tests/roundtrip/roundtrip_test.wado"} -->
 
 ```wado
-use grog from "lib:grog";
+use grog from "wado-lang:grog";
 use { Account, AccountAddress, AccountContact, Spread, SpreadPick, Status } from "./demo.proto"
     with {
-        generator: { module: "lib:grog" },
+        generator: { module: "wado-lang:grog" },
     };
 ```
 

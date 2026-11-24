@@ -144,7 +144,7 @@ fn a_dependency_is_named_by_its_package() {
     fs::create_dir_all(&app).unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [dependencies]\n\"lib:dep\" = { path = \"../dep\" }\n",
     )
     .unwrap();
@@ -161,7 +161,7 @@ fn a_dependency_is_named_by_its_package() {
         "{profile}"
     );
     assert!(
-        profile.contains("\nmodule app@0.1.0/bench_test.wado\n"),
+        profile.contains("\nmodule acme:app@0.1.0/bench_test.wado\n"),
         "{profile}"
     );
 }

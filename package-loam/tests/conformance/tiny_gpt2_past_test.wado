@@ -3,13 +3,13 @@
 //! taking it back, and one graph that branches on whether it is given a past.
 //! Each pass reproduces the logits onnxruntime computes for it.
 
-use { Cpu, CpuTensor, Holds, Tensor, capacity_of } from "lib:loam";
+use { Cpu, CpuTensor, Holds, Tensor, capacity_of } from "wado-lang:loam";
 use { assert_close, ints_of, one_file, tensor_of } from "./oracle.wado";
 use prompt from "../models/tiny-gpt2/model.onnxtext"
     with {
         type: "onnxtext",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             inputs: [
                 { path: "../models/tiny-gpt2/model.safetensors", type: "safetensors" },
             ],
@@ -22,7 +22,7 @@ use step from "../models/tiny-gpt2/with-past/model.onnx"
     with {
         type: "onnx",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { batch_size: 1 },
             },
@@ -32,7 +32,7 @@ use merged from "../models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { batch_size: 1 },
             },

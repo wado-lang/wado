@@ -15,7 +15,7 @@ fn write_packages(root: &Path, greeting: &str, expected: &str) {
     fs::create_dir_all(greet.join("src")).unwrap();
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -33,7 +33,7 @@ fn write_packages(root: &Path, greeting: &str, expected: &str) {
     fs::create_dir_all(&app).unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
     )
     .unwrap();
     fs::write(
@@ -73,7 +73,7 @@ fn an_evaluated_program_reaches_a_dependencys_dependency() {
     fs::create_dir_all(leaf.join("src")).unwrap();
     fs::write(
         leaf.join("wado.toml"),
-        "[package]\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -84,7 +84,7 @@ fn an_evaluated_program_reaches_a_dependencys_dependency() {
     let greet = tmp.path().join("greet");
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
          [dependencies]\n\"lib:leaf\" = { path = \"../leaf\" }\n",
     )
     .unwrap();
@@ -156,7 +156,7 @@ fn a_dependencys_generated_module_compiles_on_its_snapshot() {
     let greet = tmp.path().join("greet");
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
          [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
     )
     .unwrap();
@@ -286,7 +286,7 @@ fn an_evaluated_program_imports_a_registry_dependency() {
     fs::create_dir_all(lib.join("src")).unwrap();
     fs::write(
         lib.join("wado.toml"),
-        "[package]\nname = \"demo-lib\"\nnamespace = \"acme\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"demo-lib\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -303,7 +303,7 @@ fn an_evaluated_program_imports_a_registry_dependency() {
     fs::create_dir_all(&app).unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[registries]\ndefault = \"oci://ghcr.io\"\n\n[dependencies]\n\"acme:demo-lib\" = { version = \"^0.1\" }\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n[registries]\ndefault = \"oci://ghcr.io\"\n\n[dependencies]\n\"acme:demo-lib\" = { version = \"^0.1\" }\n",
     )
     .unwrap();
     fs::write(
@@ -335,7 +335,7 @@ fn an_evaluated_program_reaches_a_dependencys_registry_dependency() {
     fs::create_dir_all(lib.join("src")).unwrap();
     fs::write(
         lib.join("wado.toml"),
-        "[package]\nname = \"demo-lib\"\nnamespace = \"acme\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"demo-lib\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -352,7 +352,7 @@ fn an_evaluated_program_reaches_a_dependencys_registry_dependency() {
     let greet = tmp.path().join("greet");
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
          [registries]\ndefault = \"oci://ghcr.io\"\n\n\
          [dependencies]\n\"acme:demo-lib\" = { version = \"^0.1\" }\n",
     )
@@ -381,7 +381,7 @@ fn rebinding_a_dependencys_dependency_misses_the_cache() {
         fs::create_dir_all(leaf.join("src")).unwrap();
         fs::write(
             leaf.join("wado.toml"),
-            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
+            format!("[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
         )
         .unwrap();
         fs::write(
@@ -395,7 +395,7 @@ fn rebinding_a_dependencys_dependency_misses_the_cache() {
         fs::write(
             greet.join("wado.toml"),
             format!(
-                "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+                "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
                  [dependencies]\n\"lib:leaf\" = {{ path = \"../{leaf}\" }}\n"
             ),
         )
@@ -429,7 +429,7 @@ fn write_exporting_packages(root: &Path, exports: &str, program: &str, check: &s
     fs::create_dir_all(leaf.join("src")).unwrap();
     fs::write(
         leaf.join("wado.toml"),
-        "[package]\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -442,7 +442,7 @@ fn write_exporting_packages(root: &Path, exports: &str, program: &str, check: &s
     fs::write(
         greet.join("wado.toml"),
         format!(
-            "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\
+            "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\
              exports = [{exports}]\n\n[dependencies]\n\"lib:leaf\" = {{ path = \"../leaf\" }}\n"
         ),
     )
@@ -457,7 +457,7 @@ fn write_exporting_packages(root: &Path, exports: &str, program: &str, check: &s
     fs::create_dir_all(&app).unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [dependencies]\n\"lib:greet\" = { path = \"../greet\" }\n",
     )
     .unwrap();
@@ -524,7 +524,7 @@ fn a_caller_inside_its_dependency_reads_none_of_its_own_files() {
     fs::create_dir_all(&app).unwrap();
     fs::write(
         lib.join("wado.toml"),
-        "[package]\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -534,7 +534,7 @@ fn a_caller_inside_its_dependency_reads_none_of_its_own_files() {
     .unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"..\" }\n",
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"..\" }\n",
     )
     .unwrap();
     fs::write(app.join("own.wado"), "pub fn two() -> i32 { return 2; }\n").unwrap();

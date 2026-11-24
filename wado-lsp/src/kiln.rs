@@ -57,13 +57,12 @@ pub async fn prepare_invocations<H: CompilerHost>(
     )
     .await;
 
-    let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
     // Emitting the clause diagnostics here is what reaches the editor: no later
     // phase re-runs this collector, and each snapshot builds once.
     let (mut invocations, diagnostics) = collect_inline_invocations(
         harvest.modules.iter().map(|(k, ast)| (k.as_str(), ast)),
-        &descriptors,
+        &|module, package, file| harvest.exported_file(host, module, package, file),
         &manifest_root_str,
     );
     for diagnostic in diagnostics {

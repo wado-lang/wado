@@ -7,7 +7,7 @@
 
 use { eprintln, Stderr, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
-use { Backend, FileSource, LoadError, Sampling, Tensor } from "lib:loam";
+use { Backend, FileSource, LoadError, Sampling, Tensor } from "wado-lang:loam";
 use { deviation, recorded, reported } from "../checks.wado";
 /// The graph alone: its weights are external data in `model_q4.onnx_data`.
 use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model_q4.onnx"
@@ -15,7 +15,7 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
         type: "onnx",
         integrity: "sha256:cb3615746a988839308507933d4e0501ff695e747a0a0ce15c0ef53083f8ec54",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { batch_size: 1 },
                 // Only the last position ranks the next token.

@@ -221,23 +221,24 @@ without the exception.
 
 ## Roadmap
 
-Items 1 and 2 are done. Items 4 and 6 are done except for the parts each one
-names as left.
+Items 1, 2, 3 and 7 are done. Items 4 and 6 are done except for the parts each
+one names as left.
 
 1. `[package].exports` in `wado-manifest`: parse, and validate each entry as a
    package-root-relative path with an extension and no `..`, NFC-normalized.
    Done when a manifest round-trips it and `wado publish` refuses a list naming
    a file the package does not carry.
-2. Specifier resolution: split `<coordinate>/<path.ext>` once (`kiln::parse_spec`
-   already separates the segment), resolve the package through the dependency
-   index, check the allowlist under NFC with case compared exactly, and refuse
-   at package granularity. Done when `use { … } from "lib:x/src/y.wado"`
+2. Specifier resolution: split `<coordinate>/<path.ext>` once, resolve the
+   package through the dependency index, check the allowlist under NFC with
+   case compared exactly, and refuse at package granularity. Done when
+   `use { … } from "lib:x/src/y.wado"`
    compiles against a path dependency, and an unlisted path produces the
    package-level diagnostic, a case-only mismatch among them.
 3. Kiln `from` / `inputs`: accept the reference, key the cache and the header on
    the logical form, write outputs into the consumer's tree. Done when
    `assets/grammar/Wado.g4` can be consumed from a second package with a warm,
-   machine-independent cache.
+   machine-independent cache. The logical form is the dependency's coordinate
+   as its `[package]` spells it.
 4. Harvest across the dependency edge: walk a dependency's modules, anchor each
    clause's paths on that dependency's package root as `ns:pkg@ver/path`, and
    key its redirect by the identity the loader gives that module. Done when a
@@ -256,8 +257,8 @@ names as left.
    build-dependency ([Kiln](./wep-2026-04-12-kiln.md) Roadmap 1). Until item 5,
    a dependency's clause runs even where its output is committed.
 7. `#include_str` / `#include_bytes`: the same reference, resolved through the
-   same path. The loader takes only a `./` or `../` include path today
-   (`LoadError::InvalidIncludePath`), so this item admits a specifier there.
+   same path. Done when an include of an exported file reads it, and an
+   unlisted one is refused at the package as an import is.
 8. Registry distribution: assets and recorded Kiln outputs travel in the
    `wado:package` section and are extracted into the shared cache on fetch, so
    `CompilerHost::load_source` serves them like any other file.

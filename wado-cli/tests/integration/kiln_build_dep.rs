@@ -24,6 +24,7 @@ fn generator_resolved_by_build_dependency_nickname() {
     fs::write(
         gen_pkg.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "gen"
 version = "0.1.0"
 
@@ -60,6 +61,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     fs::write(
         app.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 
@@ -120,6 +122,45 @@ export fn run() with Stdout {
         metadata.contains("\"path\": \"src/schema.idl\""),
         "primary is recorded package-relative:\n{metadata}"
     );
+}
+
+/// A coordinate key names the generator package its path holds; one naming
+/// another package is refused before the generator runs.
+#[test]
+fn a_build_dependency_key_names_the_package_its_path_holds() {
+    let tmp = tempfile::tempdir().unwrap();
+    let gen_pkg = tmp.path().join("gen");
+    fs::create_dir_all(gen_pkg.join("src")).unwrap();
+    fs::write(
+        gen_pkg.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
+    )
+    .unwrap();
+    fs::write(gen_pkg.join("src/generator.wado"), "").unwrap();
+    let app = tmp.path().join("app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [build-dependencies]\n\"acme:other\" = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    fs::write(app.join("schema.idl"), "anything\n").unwrap();
+    fs::write(
+        app.join("main.wado"),
+        "use { greeting } from \"./schema.idl\" with { generator: { module: \"acme:other\" } };\n\
+         export fn run() { let _ = greeting(); }\n",
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["check", "main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "`acme:other` names the package `acme:other`, but its source declares `acme:gen`",
+        ));
 }
 
 /// A path `[build-dependencies]` generator whose package is a **workspace
@@ -236,7 +277,7 @@ fn a_dependency_clause_resolves_through_the_dependency_manifest() {
     fs::create_dir_all(gen_pkg.join("src")).unwrap();
     fs::write(
         gen_pkg.join("wado.toml"),
-        "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
          [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
     )
     .unwrap();
@@ -262,7 +303,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     fs::create_dir_all(leaf.join("src")).unwrap();
     fs::write(
         leaf.join("wado.toml"),
-        "[package]\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -275,7 +316,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     fs::create_dir_all(lib.join("src")).unwrap();
     fs::write(
         lib.join("wado.toml"),
-        "[package]\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
          [dependencies]\n\"lib:leaf\" = { path = \"../leaf\" }\n\n\
          [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
     )
@@ -296,7 +337,7 @@ pub fn hello() -> String {
     fs::create_dir_all(app.join("src")).unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
          [dependencies]\n\"lib:lib\" = { path = \"../lib\" }\n",
     )
@@ -355,7 +396,7 @@ export fn run() with Stdout {
     fs::remove_dir_all(app.join("build")).unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
     )
     .unwrap();
@@ -377,7 +418,7 @@ pub(crate) fn greeting_generator(dir: &Path, greeting: &str) {
     fs::write(
         dir.join("wado.toml"),
         format!(
-            "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"0.1.0\"\n\n\
              [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n"
         ),
     )
@@ -400,6 +441,177 @@ export fn generate(req: Request) -> Result<Response, Error> {{
         ),
     )
     .unwrap();
+}
+
+/// A clause names a file a dependency exports as its primary and as an input.
+/// The generator, the header and the cache record see the file by its package
+/// coordinate, never by where it sits on this machine, and an unlisted file is
+/// refused at the package.
+#[test]
+fn a_clause_generates_from_files_a_dependency_exports() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    let gen_pkg = root.join("gen");
+    fs::create_dir_all(gen_pkg.join("src")).unwrap();
+    fs::write(
+        gen_pkg.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        gen_pkg.join("src/generator.wado"),
+        r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> with Stream {
+    let origin = req.origin();
+    let mut text = read_text(req.primary.content).unwrap();
+    for let input of req.inputs {
+        text.push_str(&read_text(input.content).unwrap());
+    }
+    return Result::Ok(Response {
+        files: [OutputFile { path: "out.wado", content: `${origin.header()}${text}`, is_entry: true }],
+    });
+}
+"#,
+    )
+    .unwrap();
+
+    let schemas = root.join("schemas");
+    fs::create_dir_all(schemas.join("assets")).unwrap();
+    fs::write(
+        schemas.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"schemas\"\nversion = \"0.2.0\"\n\
+         lib = \"lib.wado\"\nexports = [\"assets/a.idl\", \"assets/b.idl\"]\n",
+    )
+    .unwrap();
+    fs::write(schemas.join("lib.wado"), "").unwrap();
+    fs::write(
+        schemas.join("assets/a.idl"),
+        "pub fn a() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    fs::write(
+        schemas.join("assets/b.idl"),
+        "pub fn b() -> i32 { return 2; }\n",
+    )
+    .unwrap();
+    fs::write(schemas.join("assets/hidden.idl"), "\n").unwrap();
+    // A package nested where the files lie does not rename them.
+    fs::write(
+        schemas.join("assets/wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"nested\"\nversion = \"9.9.9\"\n\
+         lib = \"nested.wado\"\n",
+    )
+    .unwrap();
+    fs::write(schemas.join("assets/nested.wado"), "").unwrap();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
+         [dependencies]\n\"lib:schemas\" = { path = \"../schemas\" }\n\n\
+         [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    let main = |primary: &str| {
+        fs::write(
+            app.join("src/main.wado"),
+            format!(
+                r#"use {{ println, Stdout }} from "core:cli";
+use {{ a, b }} from "lib:schemas/{primary}" with {{
+    generator: {{ module: "lib:gen", inputs: ["lib:schemas/assets/b.idl"] }},
+}};
+
+export fn run() with Stdout {{
+    println(`${{a() + b()}}`);
+}}
+"#
+            ),
+        )
+        .unwrap();
+        wado_in(&app).args(["run", "src/main.wado"]).assert()
+    };
+
+    main("assets/a.idl").success().stdout("3\n");
+    let [generated, record] = ["out.wado", "a.idl.kiln.json"].map(|file| {
+        let found = fs::read_dir(app.join("build/kiln"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join(file))
+            .find(|path| path.exists())
+            .unwrap_or_else(|| panic!("no {file} under build/kiln"));
+        fs::read_to_string(found).unwrap()
+    });
+    assert!(
+        generated.starts_with(
+            "#![generated(by = \"lib:gen\", sources = \
+             [\"acme:schemas@0.2.0/assets/a.idl\", \"acme:schemas@0.2.0/assets/b.idl\"])]\n"
+        ),
+        "{generated}"
+    );
+    assert!(
+        record.contains("\"acme:schemas@0.2.0/assets/a.idl\"")
+            && !record.contains(root.to_str().unwrap()),
+        "{record}"
+    );
+    assert!(
+        !schemas.join("build").exists(),
+        "the dependency's tree is not written"
+    );
+
+    // Moved elsewhere, the tree still hits the cache: nothing it records names
+    // where a dependency lies.
+    let generated_at = |app: &Path| {
+        fs::read_dir(app.join("build/kiln"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join("out.wado"))
+            .find(|path| path.exists())
+            .unwrap()
+    };
+    let written = fs::metadata(generated_at(&app))
+        .unwrap()
+        .modified()
+        .unwrap();
+    let moved = tmp.path().join("moved");
+    fs::create_dir(&moved).unwrap();
+    for package in ["gen", "schemas", "app"] {
+        fs::rename(root.join(package), moved.join(package)).unwrap();
+    }
+    wado_in(&moved.join("app"))
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("3\n");
+    let rewritten = generated_at(&moved.join("app"));
+    assert_eq!(
+        fs::metadata(rewritten).unwrap().modified().unwrap(),
+        written,
+        "a warm cache leaves the output as it was"
+    );
+    for package in ["gen", "schemas", "app"] {
+        fs::rename(moved.join(package), root.join(package)).unwrap();
+    }
+
+    // Run from outside the package, the exported file is still found.
+    fs::write(
+        schemas.join("assets/b.idl"),
+        "pub fn b() -> i32 { return 3; }\n",
+    )
+    .unwrap();
+    wado_in(root)
+        .args(["run", "app/src/main.wado"])
+        .assert()
+        .success()
+        .stdout("4\n");
+
+    main("assets/hidden.idl")
+        .failure()
+        .stderr(predicate::str::contains(
+            "package `lib:schemas` exports no file `assets/hidden.idl`",
+        ));
 }
 
 /// A clause in a file no `wado.toml` governs has no `[build-dependencies]` to
@@ -425,7 +637,7 @@ pub fn part() -> String {
     fs::create_dir_all(app.join("src")).unwrap();
     fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
          [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
     )
@@ -465,7 +677,7 @@ fn two_packages_clauses_on_one_schema_merge_only_when_they_resolve_alike() {
     fs::create_dir_all(lib.join("src")).unwrap();
     fs::write(
         lib.join("wado.toml"),
-        "[package]\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
          [build-dependencies]\n\"lib:gen\" = { path = \"../gen_b\" }\n",
     )
     .unwrap();
@@ -485,7 +697,7 @@ pub fn hello() -> String {
     fs::create_dir_all(app.join("src")).unwrap();
     let app_manifest = |generator: &str| {
         format!(
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
              [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
              [build-dependencies]\n\"lib:gen\" = {{ path = \"../{generator}\" }}\n"
         )

@@ -1,7 +1,7 @@
 //! D applied to the schema B derives, and B applied to what D generates, give
 //! that schema back, for each row of B's mapping table.
 
-use { Document, JsonSchema, generate, schema_for } from "lib:jade";
+use { Document, JsonSchema, generate, schema_for } from "wado-lang:jade";
 use { HashMap, HashSet, TreeMap, TreeSet } from "core:collections";
 use { eval, EvalHost } from "core:eval";
 use { to_string } from "core:json";
@@ -10,15 +10,15 @@ use { Uri, UriReference } from "core:uri";
 use { Url } from "core:url";
 use { Uuid } from "core:uuid";
 use { Value } from "core:value";
-use { ModuleSpec } from "lib:wadopoet";
+use { ModuleSpec } from "wado-lang:wadopoet";
 
 /// Fails unless the schema B derives for `T` comes back from B applied to the
 /// type D generates for it under the name `name`.
 fn round_trips<T: JsonSchema>(name: String) with EvalHost {
     let schema = schema_for::<T>();
-    let source = generate(&schema, &ModuleSpec::new("lib:jade", ["roundtrip.schema.json"])).unwrap();
+    let source = generate(&schema, &ModuleSpec::new("wado-lang:jade", ["roundtrip.schema.json"])).unwrap();
     let out = eval(`${source}
-use { schema_for } from "lib:jade";
+use { schema_for } from "wado-lang:jade";
 use { print, Stdout } from "core:cli";
 use { to_string } from "core:json";
 

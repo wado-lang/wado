@@ -10,8 +10,8 @@ use crate::compiler_host::{
 };
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
-use crate::loader::strip_kiln_scheme;
-use crate::module_path::{canonicalize_entry_point, module_parent_dir};
+use crate::loader::{LoadError, strip_kiln_scheme};
+use crate::module_path::{canonicalize_entry_point, is_package_namespace, module_parent_dir};
 use crate::name::{DeclaredHead, effect_namespace, packaged_module_name};
 use crate::parallel::lock;
 use crate::path::{normalize, relative_path};
@@ -199,6 +199,10 @@ pub struct ModuleSourceInterner {
     root_dir: Option<String>,
     /// Each path dependency's package root → its entry module.
     dependency_roots: hashmap::IndexMap<String, String>,
+    /// Each package a root holds, by the coordinate's name and the
+    /// compatibility range of its version: the coordinate as the root declares
+    /// it, and the root.
+    claimed_packages: hashmap::IndexMap<String, (String, String)>,
     /// The package of each path dependency that already has an identity, by
     /// lib: the entry's own package, reached back through a package it
     /// reaches, or one a path reached before any manifest declared it. Its
@@ -233,6 +237,7 @@ impl ModuleSourceInterner {
             root_package: PackageId::Root,
             root_dir: None,
             dependency_roots: hashmap::IndexMap::default(),
+            claimed_packages: hashmap::IndexMap::default(),
             placed_libs: hashmap::IndexMap::default(),
             local_packages: hashmap::IndexMap::default(),
             undeclared_packages: hashmap::IndexMap::default(),
@@ -270,6 +275,15 @@ impl ModuleSourceInterner {
             Some(package) => climb(&path, &package.dir),
             None => path,
         };
+        if let Some(PackageDir {
+            root,
+            coordinate: Some(coordinate),
+            ..
+        }) = &package
+        {
+            let claimed = self.claim_package(coordinate, root);
+            assert!(claimed.is_ok(), "the entry's package is claimed first");
+        }
         self.root_dir = package.map(|package| package.root);
         let libs: Vec<String> = self.dependency_libs().map(str::to_string).collect();
         self.bound_dependency_roots(libs, host);
@@ -295,6 +309,46 @@ impl ModuleSourceInterner {
                 self.dependency_roots.insert(root, lib);
             }
         }
+    }
+
+    /// Claim the package of `source`, a module the build reached, for the root
+    /// its file lies in, or say why it cannot: another root the build reached
+    /// first holds that package. A module in no package claims nothing.
+    ///
+    /// # Errors
+    ///
+    /// The reason, naming both roots.
+    pub fn claim(&mut self, source: &ModuleSource, host: &impl PackageHost) -> Result<(), String> {
+        let Some(file) = source.file() else {
+            return Ok(());
+        };
+        let Some(PackageDir {
+            root,
+            coordinate: Some(coordinate),
+            ..
+        }) = self.dir_of(&file, host).package
+        else {
+            return Ok(());
+        };
+        self.claim_package(&coordinate, &root)
+    }
+
+    /// Record that the root `root` holds the package `coordinate` declares, or
+    /// say why it cannot: another root holds that package already. A version in
+    /// another compatibility range is another package.
+    fn claim_package(&mut self, coordinate: &str, root: &str) -> Result<(), String> {
+        let held = self
+            .claimed_packages
+            .entry(compatibility_key(coordinate))
+            .or_insert_with(|| (coordinate.to_string(), root.to_string()));
+        let (first, first_root) = &*held;
+        if first_root == root {
+            return Ok(());
+        }
+        Err(format!(
+            "`{root}` declares `{coordinate}`, the package `{first}` in `{first_root}` \
+             already is; one coordinate is one package"
+        ))
     }
 
     /// The local module at `path`, placed in its package first if it waits on
@@ -512,6 +566,19 @@ impl ModuleSourceInterner {
         name: &str,
         file: &str,
     ) -> Option<Result<ModuleSource, ExportRefusal>> {
+        let resolved = self.exported_file(importer, name, file)?;
+        Some(resolved.map(|ExportedFile { lib, path, .. }| self.dependency_module(&lib, &path)))
+    }
+
+    /// Where the file `file` of the source dependency `name` lies, as
+    /// [`Self::resolve_exported_file`] finds it, for a reader of its bytes
+    /// rather than of its module.
+    fn exported_file(
+        &self,
+        importer: &ModuleSource,
+        name: &str,
+        file: &str,
+    ) -> Option<Result<ExportedFile, ExportRefusal>> {
         let dependencies = self.dependencies_of(importer);
         let Some(lib) = dependencies.resolved.get(name).cloned() else {
             return dependencies
@@ -528,7 +595,61 @@ impl ModuleSourceInterner {
                 spelled_alike: spelled_alike.cloned(),
             }));
         };
-        Some(Ok(self.dependency_module(&lib, &path)))
+        Some(Ok(ExportedFile {
+            lib,
+            entry: file,
+            path,
+        }))
+    }
+
+    /// [`Self::exported_file`], or why `importer` reaches no such file.
+    pub fn locate_exported_file(
+        &self,
+        importer: &ModuleSource,
+        package: &str,
+        file: &str,
+    ) -> Result<ExportedFile, LoadError> {
+        match self.exported_file(importer, package, file) {
+            Some(Ok(exported)) => Ok(exported),
+            Some(Err(refusal)) => Err(LoadError::UnexportedFile {
+                package: package.to_string(),
+                file: file.to_string(),
+                refusal,
+            }),
+            None => Err(self
+                .missing_dependency(importer, package)
+                .expect("a package specifier carries a namespace")),
+        }
+    }
+
+    /// Why `name` reaches no dependency of `importer`'s package: declared but
+    /// unresolvable (say, no `[package].lib`), its manifest invalid, or a
+    /// namespaced name it does not declare. `None` for a name with no
+    /// namespace, which names no dependency at all.
+    #[must_use]
+    pub fn missing_dependency(&self, importer: &ModuleSource, name: &str) -> Option<LoadError> {
+        if let Some(reason) = self.unresolved_dependency(importer, name) {
+            return Some(LoadError::DependencyUnresolved {
+                name: name.to_string(),
+                reason: reason.to_string(),
+            });
+        }
+        let manifest = self.dependency_manifest(importer);
+        if let Some(DependencyManifest {
+            path,
+            error: Some(error),
+        }) = manifest
+        {
+            return Some(LoadError::DependencyUnresolved {
+                name: name.to_string(),
+                reason: format!("{path} is invalid: {error}"),
+            });
+        }
+        let (namespace, _) = name.split_once(':')?;
+        is_package_namespace(namespace).then(|| LoadError::UndeclaredDependency {
+            name: name.to_string(),
+            manifest: manifest.map(|m| m.path.clone()),
+        })
     }
 
     /// Resolve a coordinate imported by `importer` to a *prebuilt component*
@@ -676,6 +797,16 @@ impl WasmAssetKind {
             Self::Wasm => "wasm",
         }
     }
+}
+
+/// A file a source dependency exports: the dependency's entry module, as
+/// [`DependencyIndex::resolved`] names it, the `[package].exports` entry naming
+/// the file, and its path relative to the host base.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportedFile {
+    pub lib: String,
+    pub entry: String,
+    pub path: String,
 }
 
 /// Why a `"<package>/<file>"` reference names no module.
@@ -1307,6 +1438,29 @@ impl ModuleSource {
     }
 }
 
+/// The package `coordinate` (`ns:name@version`) is one version of: its name
+/// and the compatibility range `^` reads from its version, which ends at the
+/// first component that is not zero (`1`, `0.2`, `0.0.3`).
+fn compatibility_key(coordinate: &str) -> String {
+    let (name, version) = coordinate
+        .split_once('@')
+        .expect("a package's coordinate carries its version");
+    let version =
+        semver::Version::parse(version).expect("a manifest's version is validated as semver");
+    match version {
+        semver::Version {
+            major: 0,
+            minor: 0,
+            patch,
+            ..
+        } => format!("{name}@0.0.{patch}"),
+        semver::Version {
+            major: 0, minor, ..
+        } => format!("{name}@0.{minor}"),
+        semver::Version { major, .. } => format!("{name}@{major}"),
+    }
+}
+
 /// How many leading directory components `path` and `root` share. Comparing
 /// whole components keeps `deps/xpkg2/` from counting as a prefix of
 /// `deps/xpkg/`.
@@ -1574,7 +1728,8 @@ mod tests {
     }
 
     /// The tree `app/` (the package `acme:app@0.1.0`), `dep/`
-    /// (`acme:dep@0.2.0`), `bare/` (a package with no `[package]`) and
+    /// (`acme:dep@0.2.0`), `fork/` (another `acme:dep@0.2.5`), `next/`
+    /// (`acme:dep@0.3.0`), `bare/` (a package with no `[package]`) and
     /// `loose/` (in none), read from a host based at `base`.
     struct Tree {
         base: &'static str,
@@ -1586,6 +1741,8 @@ mod tests {
             let packages = [
                 ("app", Some("acme:app@0.1.0")),
                 ("dep", Some("acme:dep@0.2.0")),
+                ("fork", Some("acme:dep@0.2.5")),
+                ("next", Some("acme:dep@0.3.0")),
                 ("bare", None),
             ];
             let package = packages.iter().find_map(|&(root, coordinate)| {
@@ -1607,6 +1764,99 @@ mod tests {
 
         fn package_index(&self, _root: &str) -> DependencyIndex {
             DependencyIndex::default()
+        }
+    }
+
+    /// An interner for an entry in `app/` whose `[dependencies]` resolve each
+    /// of `deps` (a key and the entry module it names) as `Tree` lays it out.
+    fn interner_with(host: &Tree, deps: &[(&str, &str)]) -> ModuleSourceInterner {
+        let mut index = DependencyIndex::default();
+        for &(key, lib) in deps {
+            index.resolved.insert(key.to_string(), lib.to_string());
+            index.packages.insert(
+                lib.to_string(),
+                DependencyIndex {
+                    manifest: Some(DependencyManifest {
+                        path: format!("{lib}/wado.toml"),
+                        error: None,
+                    }),
+                    ..DependencyIndex::default()
+                },
+            );
+        }
+        let mut interner = ModuleSourceInterner::new();
+        interner.set_dependencies(index);
+        interner.bound_packages("./main.wado", host);
+        interner
+    }
+
+    #[test]
+    fn two_checkouts_of_one_coordinate_are_refused() {
+        let host = Tree { base: "app/src" };
+        let mut interner = interner_with(
+            &host,
+            &[
+                ("acme:dep", "../../dep/src/lib.wado"),
+                ("lib:fork", "../../fork/src/lib.wado"),
+            ],
+        );
+        let entry = interner.entry_point("./main.wado");
+        let dep = interner.resolve_dependency(&entry, "acme:dep").unwrap();
+        let fork = interner.resolve_dependency(&entry, "lib:fork").unwrap();
+        assert_eq!(interner.claim(&dep, &host), Ok(()));
+        assert_eq!(interner.claim(&dep, &host), Ok(()));
+        assert_eq!(
+            interner.claim(&fork, &host),
+            Err(
+                "`fork` declares `acme:dep@0.2.5`, the package `acme:dep@0.2.0` in `dep` \
+                 already is; one coordinate is one package"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn the_checkout_the_build_reaches_first_holds_the_package() {
+        let host = Tree { base: "app/src" };
+        let mut interner = interner_with(
+            &host,
+            &[
+                ("acme:dep", "../../dep/src/lib.wado"),
+                ("lib:fork", "../../fork/src/lib.wado"),
+            ],
+        );
+        let entry = interner.entry_point("./main.wado");
+        let fork = interner.resolve_dependency(&entry, "lib:fork").unwrap();
+        assert_eq!(interner.claim(&fork, &host), Ok(()));
+        let dep = interner.resolve_dependency(&entry, "acme:dep").unwrap();
+        assert!(interner.claim(&dep, &host).is_err());
+    }
+
+    #[test]
+    fn a_checkout_reached_by_a_path_claims_its_package_too() {
+        let host = Tree { base: "app/src" };
+        let mut interner = interner_with(&host, &[("acme:dep", "../../dep/src/lib.wado")]);
+        let entry = interner.entry_point("./main.wado");
+        let dep = interner.resolve_dependency(&entry, "acme:dep").unwrap();
+        assert_eq!(interner.claim(&dep, &host), Ok(()));
+        let fork = interner.place("../../fork/src/lib.wado", &host);
+        assert!(interner.claim(&fork, &host).is_err());
+    }
+
+    #[test]
+    fn two_compatibility_ranges_of_one_coordinate_are_two_packages() {
+        let host = Tree { base: "app/src" };
+        let mut interner = interner_with(
+            &host,
+            &[
+                ("lib:dep2", "../../dep/src/lib.wado"),
+                ("lib:dep3", "../../next/src/lib.wado"),
+            ],
+        );
+        let entry = interner.entry_point("./main.wado");
+        for key in ["lib:dep2", "lib:dep3"] {
+            let source = interner.resolve_dependency(&entry, key).unwrap();
+            assert_eq!(interner.claim(&source, &host), Ok(()), "{key}");
         }
     }
 

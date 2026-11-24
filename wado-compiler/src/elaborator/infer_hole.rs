@@ -8,7 +8,7 @@
 use crate::compiler_host::{CompilerHost, DiagnosticSpan};
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{InferVarId, ResolvedType, StructDef, TypeId};
+use crate::tir::{EffectRef, EffectRows, InferVarId, ResolvedType, StructDef, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -208,6 +208,27 @@ pub(crate) struct DeclaredBound {
     /// A pack's bound (`..F: Make`), which binds each element of the tuple
     /// the pack is answered with rather than the tuple.
     pub(crate) each_element: bool,
+}
+
+/// Which of a declaration's bounds a call asks, by what it knows of the
+/// declaration's own effect parameters: only the call's arguments say what
+/// one stands for.
+#[derive(Clone, Copy)]
+pub(crate) enum BoundRows<'r> {
+    /// Before the arguments: a bound naming an effect parameter is left out,
+    /// for the call to ask once they are known.
+    Unbound,
+    /// Every bound, at what the call binds the parameters to.
+    All(&'r EffectRows),
+    /// Only the bounds [`Self::Unbound`] left out.
+    Left(&'r EffectRows),
+}
+
+/// Whether a row in `ty` names an effect parameter.
+fn names_effect_param(ty: &FqTypeName) -> bool {
+    ty.mentions(&|head| {
+        matches!(head, TypeHead::Function { effects, .. } if effects.iter().any(EffectRef::is_param))
+    })
 }
 
 /// What an unsolved variable reports.
@@ -434,11 +455,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A bound whose site reaches no declaration is dropped: it is diagnosed
     /// where it was written, and there is nothing to enforce a solution
     /// against.
+    ///
+    /// `rows` says which bounds a call asks, by what it knows of the
+    /// declaration's own effect parameters.
     pub(super) fn declared_bounds(
         &mut self,
         param: &GenericParam,
         self_binding: Option<SelfBinding>,
         impl_args: &[(ParamRef, TypeId)],
+        rows: BoundRows<'_>,
     ) -> Vec<DeclaredBound> {
         // A variable stays named, for the re-check to read its answer; a
         // parameter is the frame's, and only that frame spells it.
@@ -457,6 +482,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|b| {
                 let trait_ = self.tysys.bound_written(&b)?;
                 let trait_ = self.bound_trait_at_args(trait_, &b, &[], &[], self_binding);
+                let names = trait_.args().iter().any(names_effect_param);
+                let bound_at = match rows {
+                    BoundRows::Unbound if names => return None,
+                    BoundRows::Unbound => None,
+                    BoundRows::Left(_) if !names => return None,
+                    BoundRows::All(at) | BoundRows::Left(at) => Some(at),
+                };
+                let trait_ = match bound_at {
+                    Some(at) => TypeTable::trait_at_rows(&trait_, at),
+                    None => trait_,
+                };
                 Some(DeclaredBound {
                     trait_: spelled_at(&trait_, &at_impl),
                     written: b.name,
@@ -670,9 +706,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_arg: TypeId,
         self_binding: Option<SelfBinding>,
         impl_args: &[(ParamRef, TypeId)],
+        rows: BoundRows<'_>,
         span: Span,
     ) {
-        let bounds = self.declared_bounds(param, self_binding, impl_args);
+        let bounds = self.declared_bounds(param, self_binding, impl_args, rows);
         self.defer_declared_bounds(param, type_arg, bounds, span);
     }
 

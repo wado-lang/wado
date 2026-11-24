@@ -11,17 +11,17 @@
 
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use { from_string } from "core:json";
-use { Cpu, Tensor } from "lib:loam";
+use { Cpu, Tensor } from "wado-lang:loam";
 use { Tokenizer } from "../tests/models/tiny-gpt2/tokenizer.json"
     with {
         type: "hf-tokenizer",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use gpt2 from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { batch_size: 1 },
             },

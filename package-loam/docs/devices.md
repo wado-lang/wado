@@ -234,7 +234,7 @@ does not.
 #### PJRT
 
 The compiler writes the graph as StableHLO text and compiles it through
-`lib:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
+`wado-lang:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
 fuses them again. The prepared weights and the cache are parameters, the cache
 donated. A product's `precision_config` is an option of the backend, and
 `DEFAULT` unless the caller sets it, which on a TPU is faster than `HIGHEST`
@@ -242,7 +242,7 @@ and holds less of f32's precision. A compiled executable is serialized and kept
 on disk, keyed by the program's text, the plugin and the topology, so a second
 process compiles nothing.
 
-`lib:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
+`wado-lang:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
 execution with donated inputs, and the compiled program's memory and cost. It
 is the package `wado-lang:pjrt`, not `wasi:`, which is reserved for WASI, nor
 `core:`, since only its own host serves it. The package and its host are both

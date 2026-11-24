@@ -6,11 +6,12 @@ use std::collections::VecDeque;
 use crate::ast::{ImportAttributes, Item, Module, UseDecl};
 use crate::compiler_host::{Code, DependencyIndex, Diagnostic, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::kiln::inline::InvocationIndex;
+use crate::kiln::inline::{ExportedInput, InvocationIndex};
 use crate::module_path::{
     canonicalize_entry_point, decl_file_of, resolve_import_with_entry, resolve_module_path,
 };
 use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageHost};
+use crate::name::packaged_module_name;
 use crate::parse;
 use crate::path::is_cwd_relative;
 use crate::remote::{Integrity, next_in_pin_order, pin_of};
@@ -25,6 +26,40 @@ pub struct Harvest {
     /// Module path → the `wado.toml` of the package it belongs to, `None` for
     /// a module in no package. A module of the walk's own package is absent.
     pub packages: IndexMap<String, Option<String>>,
+    /// Module path → the module the loader resolves it as.
+    sources: IndexMap<String, ModuleSource>,
+    interner: ModuleSourceInterner,
+}
+
+impl Harvest {
+    /// The file `file` of the package `package` that the module keyed `module`
+    /// names in a clause, with `host` naming that package's coordinate, or why
+    /// the module reaches no such file. The path is relative to the host base.
+    ///
+    /// # Errors
+    /// The loader's wording of a dependency the module does not declare, or a
+    /// file the package does not export.
+    pub fn exported_file(
+        &self,
+        host: &impl PackageHost,
+        module: &str,
+        package: &str,
+        file: &str,
+    ) -> Result<ExportedInput, String> {
+        let exported = self
+            .interner
+            .locate_exported_file(&self.sources[module], package, file)
+            .map_err(|e| e.to_string())?;
+        let coordinate = host
+            .module_dir(&exported.lib)
+            .package
+            .and_then(|p| p.coordinate)
+            .ok_or_else(|| format!("package `{package}` has no `[package]` to name it by"))?;
+        Ok(ExportedInput {
+            reference: packaged_module_name(&coordinate, &exported.entry),
+            path: exported.path,
+        })
+    }
 }
 
 /// Walk the module graph from `entry_key` and `entry_ast`, parsing every Wado
@@ -72,6 +107,7 @@ where
     // resolve time — do not normalize it here.
     let entry = interner.entry_point(entry_identity);
     identities.insert(entry_key.to_string(), entry_identity.to_string());
+    let mut sources = IndexMap::<String, ModuleSource>::default();
 
     // The first pin any import of a remote module wrote, the one the loader
     // asks the host for it with.
@@ -140,6 +176,7 @@ where
             identities.insert(child_key.clone(), decl_file_of(&child).to_string());
             queue.push_back((child_key, child, None));
         }
+        sources.insert(key.clone(), source);
         modules.insert(key, ast);
     }
 
@@ -147,6 +184,8 @@ where
         modules,
         identities,
         packages,
+        sources,
+        interner,
     }
 }
 

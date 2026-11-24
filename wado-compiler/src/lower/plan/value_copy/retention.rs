@@ -27,9 +27,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
-    RetainInto, RetainSpec, ReturnConvention, StructDef, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    capture_source_locals,
+    RetainInto, RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -869,7 +868,7 @@ pub fn compute_retention(
         }
     }
 
-    let carrying = RefCarrying::new(project, &type_table, closure_captures);
+    let carrying = RefCarrying::new(&type_table, closure_captures);
     let functor_params: Vec<FunctorParams> = project
         .functions
         .iter()
@@ -1043,8 +1042,6 @@ fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
 /// `List::push` takes `Sink { r: &Item }` by value: a parameter carries a
 /// reference when its type holds one, not only when it is one.
 pub struct RefCarrying<'a> {
-    /// The field types of each struct the plan phase sees, by instance.
-    struct_fields: IndexMap<(StructDef, &'a [TypeId]), Vec<TypeId>>,
     type_table: &'a TypeTable,
     captures: &'a ClosureCaptures,
     memo: RefCell<IndexMap<TypeId, bool>>,
@@ -1052,20 +1049,8 @@ pub struct RefCarrying<'a> {
 
 impl<'a> RefCarrying<'a> {
     #[must_use]
-    pub fn new(
-        flat: &'a FlatPackage,
-        type_table: &'a TypeTable,
-        captures: &'a ClosureCaptures,
-    ) -> Self {
+    pub fn new(type_table: &'a TypeTable, captures: &'a ClosureCaptures) -> Self {
         Self {
-            struct_fields: flat
-                .structs
-                .iter()
-                .map(|s| {
-                    let fields = s.fields.iter().map(|f| f.type_id).collect();
-                    ((s.def, s.type_args.as_slice()), fields)
-                })
-                .collect(),
             type_table,
             captures,
             memo: RefCell::new(IndexMap::default()),
@@ -1118,10 +1103,11 @@ impl RefCarrying<'_> {
                 self.walk(base, walk)
             }
             ResolvedType::Struct { .. } => {
-                match self.field_types(type_id) {
-                    Some(fields) => self.any(fields, walk),
-                    // A declaration the plan phase cannot see is read as
-                    // holding one, which only widens the carrier set.
+                match self.type_table.struct_field_types(type_id) {
+                    Some(fields) => self.any(fields.to_vec(), walk),
+                    // A type can name a struct instance no lowered code holds,
+                    // whose fields nothing registered. Reading it as holding
+                    // one only widens the carrier set.
                     None => true,
                 }
             }
@@ -1167,17 +1153,6 @@ impl RefCarrying<'_> {
         }
     }
 
-    /// The field types of the struct `ty`, where the plan phase sees its
-    /// declaration.
-    fn field_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
-        let ResolvedType::Struct { def, type_args } = self.type_table.get(ty) else {
-            unreachable!("a struct type")
-        };
-        self.struct_fields
-            .get(&(*def, type_args.as_slice()))
-            .cloned()
-    }
-
     /// Each binding of `pattern` over `source`, with the type of what it
     /// carries. That is the binding's own, except where match ergonomics binds
     /// `&` of a slot the reference copies into a new cell: it carries what the
@@ -1208,7 +1183,11 @@ impl RefCarrying<'_> {
 
 impl SlotTypes for RefCarrying<'_> {
     fn struct_fields(&self, struct_type: TypeId) -> Option<Vec<TypeId>> {
-        self.field_types(field_owner(struct_type, self.type_table))
+        let fields = self
+            .type_table
+            .struct_field_types(field_owner(struct_type, self.type_table))
+            .expect("a struct pattern matches a registered struct");
+        Some(fields.to_vec())
     }
 
     fn tuple_elements(&self, tuple: TypeId) -> Option<Vec<TypeId>> {

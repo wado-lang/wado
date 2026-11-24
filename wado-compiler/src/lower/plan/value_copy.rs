@@ -27,8 +27,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-    BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
-    TypeId, TypeParamId,
+    BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
+    TypeParamId,
 };
 use crate::type_table::{TypeMemo, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
@@ -332,8 +332,7 @@ pub fn plan(
 }
 
 /// Publish every variant declaration's case templates, and every struct's
-/// field types, to the type table, so [`needs_value_copy`] can classify
-/// variants and WIR can tell an affine type from a `&TypeTable`.
+/// field types, to the type table, which answers for them from then on.
 pub(super) fn register_type_templates(flat: &FlatPackage) {
     let mut type_table = flat.type_table.borrow_mut();
     for variant in &flat.variants {
@@ -345,10 +344,8 @@ pub(super) fn register_type_templates(flat: &FlatPackage) {
         type_table.register_variant_cases(variant.def, cases);
     }
     for s in &flat.structs {
-        if let StructDef::Decl(def) = s.def {
-            let fields = s.fields.iter().map(|f| f.type_id).collect();
-            type_table.register_struct_fields(def, s.type_args.clone(), fields);
-        }
+        let fields = s.fields.iter().map(|f| f.type_id).collect();
+        type_table.register_struct_fields(s.def, s.type_args.clone(), fields);
     }
 }
 

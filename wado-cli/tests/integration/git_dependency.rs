@@ -35,7 +35,7 @@ fn git_dependency_resolves_fetches_and_runs() {
     fs::create_dir_all(greet.join("src")).unwrap();
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -55,7 +55,7 @@ fn git_dependency_resolves_fetches_and_runs() {
     fs::write(
         app.join("wado.toml"),
         format!(
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
              [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
              [dependencies]\ngreet = {{ git = \"{url}\", ref = \"main\" }}\n"
         ),
@@ -138,7 +138,7 @@ fn run_through_mid(dependencies: &str, specifier: &str) {
     fs::create_dir_all(greet.join("src")).unwrap();
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -156,7 +156,7 @@ fn run_through_mid(dependencies: &str, specifier: &str) {
     fs::write(
         mid.join("wado.toml"),
         format!(
-            "[package]\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
              [dependencies]\n\"lib:greet\" = {{ git = \"{url}\", ref = \"main\" }}\n"
         ),
     )
@@ -177,7 +177,7 @@ fn run_through_mid(dependencies: &str, specifier: &str) {
     fs::write(
         app.join("wado.toml"),
         format!(
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
              [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n{dependencies}"
         ),
     )
@@ -218,7 +218,7 @@ fn git_dependency_with_directory_selects_a_monorepo_subpackage() {
         fs::create_dir_all(repo.join(dir).join("src")).unwrap();
         fs::write(
             repo.join(dir).join("wado.toml"),
-            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
+            format!("[package]\nnamespace = \"org\"\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
         )
         .unwrap();
         fs::write(
@@ -237,7 +237,7 @@ fn git_dependency_with_directory_selects_a_monorepo_subpackage() {
     fs::write(
         app.join("wado.toml"),
         format!(
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
              [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
              [dependencies]\n\
              \"org:foo\" = {{ git = \"{url}\", ref = \"main\", directory = \"packages/foo\" }}\n"
@@ -309,7 +309,7 @@ fn git_dependency_materializes_submodules_by_default() {
     git_cfg(&greet, &["init", "-q", "-b", "main"]);
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -335,7 +335,7 @@ fn git_dependency_materializes_submodules_by_default() {
     fs::write(
         app.join("wado.toml"),
         format!(
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
              [dependencies]\ngreet = {{ git = \"{url}\", ref = \"main\" }}\n"
         ),
     )
@@ -385,7 +385,7 @@ fn inline_git_source_in_a_single_file_script() {
     fs::create_dir_all(greet.join("src")).unwrap();
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -440,7 +440,7 @@ fn an_inline_git_sources_git_dependency_is_materialized() {
     let greet = root.join("greet");
     repo(
         &greet,
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
         "pub fn hello() -> String {\n    return \"hello through inline mid\";\n}\n",
     );
     commit(&greet);
@@ -448,7 +448,7 @@ fn an_inline_git_sources_git_dependency_is_materialized() {
     repo(
         &mid,
         &format!(
-            "[package]\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
              [dependencies]\n\"lib:greet\" = {{ git = \"file://{}\", ref = \"main\" }}\n",
             greet.display()
         ),
@@ -495,7 +495,7 @@ fn inline_git_source_in_a_package_member_after_a_data_section() {
     fs::create_dir_all(greet.join("src")).unwrap();
     fs::write(
         greet.join("wado.toml"),
-        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
     )
     .unwrap();
     fs::write(
@@ -556,7 +556,7 @@ fn inline_git_specifier_at_two_refs_across_members_is_an_error() {
         fs::write(
             greet.join("wado.toml"),
             format!(
-                "[package]\nname = \"greet\"\nversion = \"{version}\"\nlib = \"src/lib.wado\"\n"
+                "[package]\nnamespace = \"acme\"\nname = \"greet\"\nversion = \"{version}\"\nlib = \"src/lib.wado\"\n"
             ),
         )
         .unwrap();

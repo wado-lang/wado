@@ -11,16 +11,16 @@ use crate::ast::{
 };
 use crate::compiler_host::Diagnostic;
 use crate::hashmap::IndexMap;
-use crate::module_path::{is_package_namespace, resolve_module_path};
+use crate::module_path::{is_package_namespace, resolve_module_path, split_exported_file};
 use crate::path::{is_cwd_relative, relative_path};
 use crate::remote::{Integrity, is_remote, pin_of, url_fault};
 
 use super::cache::{encode_written_options, hex_digest};
 use super::invocation::{
     DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationInput, InvocationPath,
+    SpecParts, parse_spec,
 };
-use super::options::OptionsDescriptor;
-use super::options_check::{CanonicalOptions, OptionsAnchor, clause_error, validate};
+use super::options_check::{CanonicalOptions, clause_error};
 
 /// Default output-directory prefix for inline invocations: each clause lands
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
@@ -121,17 +121,29 @@ impl InvocationIndex {
     }
 }
 
+/// A file a dependency exports, as a clause names it: the package reference
+/// the invocation's identity holds (`ns:pkg@ver/path`), and where it is read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportedInput {
+    pub reference: String,
+    pub path: String,
+}
+
+/// Resolves a clause's `"<package>/<file>"` path, given the module declaring
+/// the clause as `modules` keys it, the package and the file, or says why the
+/// module reaches no such file.
+pub type ExportedFiles<'a> = &'a dyn Fn(&str, &str, &str) -> Result<ExportedInput, String>;
+
 /// Scan every `UseDecl` in `modules` for an inline `with { generator: { … } }`
-/// clause and lower it to a canonical [`Invocation`]. A present `descriptors`
-/// entry validates and encodes the clause's `options` through the typed
-/// pipeline; a missing one yields an empty canonical blob.
+/// clause and lower it to a canonical [`Invocation`], with `options` left for
+/// the driver to type once the generator is known.
 ///
 /// Returns what lowered alongside the diagnostics, so one malformed clause
 /// costs its own invocation and no other. A batch build refuses to proceed on
 /// an `Error`; an editor keeps the redirects it has.
 pub fn collect_inline_invocations<'a, I>(
     modules: I,
-    descriptors: &IndexMap<String, OptionsDescriptor>,
+    exported: ExportedFiles<'_>,
     manifest_root: &str,
 ) -> (Vec<Invocation>, Vec<Diagnostic>)
 where
@@ -149,10 +161,24 @@ where
                 continue;
             };
 
-            match lower_inline(module_path, use_decl, attrs, descriptors, manifest_root) {
+            let clause = Clause {
+                module_path,
+                manifest_root,
+                use_decl,
+                exported,
+            };
+            match lower_inline(&clause, attrs) {
                 Ok(invocation) => {
                     let tuple_key = identity_key(&invocation);
                     if let Some(existing) = by_tuple.get_mut(&tuple_key) {
+                        if let Some(reference) = existing.located_apart(&invocation) {
+                            diagnostics.push(use_error(
+                                module_path,
+                                use_decl,
+                                located_apart_message(reference, existing, &invocation),
+                            ));
+                            continue;
+                        }
                         let site = invocation.decl_site().clone();
                         if !existing.decl_sites.contains(&site) {
                             existing.decl_sites.push(site);
@@ -187,6 +213,24 @@ where
     (by_tuple.into_iter().map(|(_, v)| v).collect(), diagnostics)
 }
 
+/// The refusal of two clauses naming one package reference that lies in two
+/// places.
+#[must_use]
+pub fn located_apart_message(
+    reference: &InvocationPath,
+    first: &Invocation,
+    second: &Invocation,
+) -> String {
+    format!(
+        "kiln: `{reference}` names two files, `{}` (first in {}) and `{}` (second in {}): \
+         two checkouts claim one package",
+        first.read_path(reference),
+        first.decl_site().module,
+        second.read_path(reference),
+        second.decl_site().module,
+    )
+}
+
 fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
     module.items.iter().filter_map(|it| match it {
         Item::Use(u) => Some(u),
@@ -194,16 +238,29 @@ fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
     })
 }
 
+/// One generated import: the module declaring it, the manifest root its paths
+/// are re-anchored on, the `use`, and how a `"<package>/<file>"` path resolves.
+struct Clause<'a> {
+    module_path: &'a str,
+    manifest_root: &'a str,
+    use_decl: &'a UseDecl,
+    exported: ExportedFiles<'a>,
+}
+
 /// Lower the clause of one generated import (`attrs` names a `generator`) to
 /// its invocation, or every error the clause carries.
 fn lower_inline(
-    module_path: &str,
-    use_decl: &UseDecl,
+    clause: &Clause<'_>,
     attrs: &ImportAttributes,
-    descriptors: &IndexMap<String, OptionsDescriptor>,
-    manifest_root: &str,
 ) -> Result<Invocation, Vec<Diagnostic>> {
+    let Clause {
+        module_path,
+        manifest_root,
+        use_decl,
+        ..
+    } = *clause;
     let mut errors: Vec<Diagnostic> = Vec::new();
+    let mut located = IndexMap::default();
 
     for (key, entry) in &attrs.entries {
         if ![
@@ -329,14 +386,7 @@ fn lower_inline(
     // The literal source string keys the loader redirect (frame-independent);
     // `from` is the same path resolved relative to the declaring file.
     let source = InvocationPath::normalize(&use_decl.source);
-    let from = resolve_source(
-        module_path,
-        &use_decl.source,
-        manifest_root,
-        "from",
-        use_decl,
-        &mut errors,
-    );
+    let from = resolve_source(clause, &use_decl.source, "from", &mut located, &mut errors);
     let integrity = lower_pin(
         attrs
             .entries
@@ -353,8 +403,7 @@ fn lower_inline(
             .enumerate()
             .filter_map(|(i, item)| {
                 let field = format!("generator.inputs[{i}]");
-                let anchor = (module_path, manifest_root, use_decl);
-                lower_input(&field, &item.value, anchor, &mut errors)
+                lower_input(clause, &field, &item.value, &mut located, &mut errors)
             })
             .collect(),
         Some(other) => {
@@ -372,20 +421,6 @@ fn lower_inline(
 
     let options_entry = cfg.get("options");
     let options_span = options_entry.map_or(use_decl.span, |entry| entry.key_span);
-    let options = if let Some(module) = module.as_ref() {
-        validate_inline_options(
-            module,
-            options_entry.map(|entry| &entry.value),
-            OptionsAnchor {
-                file: module_path,
-                span: options_span,
-            },
-            descriptors,
-            &mut errors,
-        )
-    } else {
-        CanonicalOptions::default()
-    };
 
     let output_dir_override = match attr_value(cfg, "output_dir") {
         None => None,
@@ -450,22 +485,28 @@ fn lower_inline(
         from,
         integrity,
         inputs,
+        located,
         output_dir,
-        options,
+        options: CanonicalOptions::default(),
         raw_options: options_entry.map(|entry| entry.value.clone()),
         options_span,
     })
 }
 
 /// One `generator.inputs` element: a path, or `{ path, type, integrity }`
-/// naming how the generator reads it and pinning a remote one. `anchor` is the
-/// declaring file, the manifest root, and the `use`.
+/// naming how the generator reads it and pinning a remote one.
 fn lower_input(
+    clause: &Clause<'_>,
     field: &str,
     value: &AttrValue,
-    (module_path, manifest_root, use_decl): (&str, &str, &UseDecl),
+    located: &mut IndexMap<InvocationPath, String>,
     errors: &mut Vec<Diagnostic>,
 ) -> Option<InvocationInput> {
+    let Clause {
+        module_path,
+        use_decl,
+        ..
+    } = *clause;
     let mut error = |message: String| errors.push(use_error(module_path, use_decl, message));
     let (path, use_type, pin) = match value {
         AttrValue::String(path) => (path, None, None),
@@ -518,7 +559,7 @@ fn lower_input(
             return None;
         }
     };
-    let path = resolve_source(module_path, path, manifest_root, field, use_decl, errors);
+    let path = resolve_source(clause, path, field, located, errors);
     let integrity = lower_pin(pin, &path, &format!("{field}.integrity"), &mut |message| {
         errors.push(use_error(module_path, use_decl, message));
     });
@@ -530,15 +571,51 @@ fn lower_input(
 }
 
 /// A `from` or `inputs` path: a URL as written, a path relative to the remote
-/// module declaring it, or a `./` / `../` path relative to the declaring file.
+/// module declaring it, a file a dependency exports by its package reference,
+/// or a `./` / `../` path relative to the declaring file. A reference and a
+/// local path are recorded in `located` with where each lies, and a path that
+/// names two places is refused: a local directory can be spelled as a
+/// reference.
 fn resolve_source(
-    module_path: &str,
+    clause: &Clause<'_>,
     raw: &str,
-    manifest_root: &str,
     field: &str,
-    use_decl: &UseDecl,
+    located: &mut IndexMap<InvocationPath, String>,
     errors: &mut Vec<Diagnostic>,
 ) -> InvocationPath {
+    let Clause {
+        module_path,
+        manifest_root,
+        use_decl,
+        exported,
+    } = *clause;
+    let mut place = |path: &InvocationPath, at: String, errors: &mut Vec<Diagnostic>| {
+        let known = located.entry(path.clone()).or_insert_with(|| at.clone());
+        if *known != at {
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                format!("kiln: `{field}`: `{path}` names both `{known}` and `{at}`"),
+            ));
+        }
+    };
+    if let Some((package, file)) = split_exported_file(raw) {
+        return match exported(module_path, package, file) {
+            Ok(ExportedInput { reference, path }) => {
+                let reference = InvocationPath(reference);
+                place(&reference, path, errors);
+                reference
+            }
+            Err(reason) => {
+                errors.push(use_error(
+                    module_path,
+                    use_decl,
+                    format!("kiln: `{field}`: {reason}"),
+                ));
+                InvocationPath::normalize(raw)
+            }
+        };
+    }
     if is_remote(raw) {
         if let Some(reason) = url_fault(raw) {
             errors.push(use_error(
@@ -552,7 +629,9 @@ fn resolve_source(
     if is_remote(module_path) && is_cwd_relative(raw) {
         return InvocationPath::normalize(&resolve_module_path(module_path, raw));
     }
-    resolve_or_reject(module_path, raw, manifest_root, field, use_decl, errors)
+    let local = resolve_or_reject(module_path, raw, manifest_root, field, use_decl, errors);
+    place(&local, local.as_str().to_string(), errors);
+    local
 }
 
 /// The pin `value` writes for `path`, reporting through `error` a value that
@@ -676,11 +755,19 @@ fn lower_module_specifier(
         )));
     }
     // A `[build-dependencies]` specifier: an open coordinate (`ns:name[@ver]`)
-    // or a `lib:nickname` indirection. Both carry a `<segment>:` prefix; the
-    // compiler does not interpret the body here — the host resolves it against
-    // `[build-dependencies]`, dispatching on the matched entry's source.
-    if let Some((namespace, _)) = spec.split_once(':')
+    // or a `lib:nickname` indirection, which the host resolves against
+    // `[build-dependencies]`, dispatching on the matched entry's source. The
+    // host reads the version; only its characters are held here.
+    let SpecParts { key, version } = parse_spec(spec);
+    let version_chars = |v: &str| {
+        !v.is_empty()
+            && v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
+    };
+    if let Some((namespace, name)) = key.split_once(':')
         && is_package_namespace(namespace)
+        && is_package_namespace(name)
+        && version.is_none_or(version_chars)
     {
         return Some(GeneratorModule::Spec(GeneratorSpec {
             spec: spec.to_string(),
@@ -688,40 +775,16 @@ fn lower_module_specifier(
             registry: None,
         }));
     }
-    // A bare name (no `:`) is not a valid specifier — the same rule that rejects
-    // bare `[dependencies]` keys, applied at the reference site.
     errors.push(use_error(
         module_path,
         use_decl,
         format!(
             "kiln: `generator.module` must be a relative path (\"./generator.wado\") \
              or a `[build-dependencies]` specifier — an open coordinate (\"ns:name@ver\") \
-             or a `lib:` nickname (\"lib:gale\"); a bare name is not allowed, got `{spec}`"
+             or a `lib:` nickname (\"lib:gale\") — got `{spec}`"
         ),
     ));
     None
-}
-
-fn validate_inline_options(
-    module: &GeneratorModule,
-    options_value: Option<&AttrValue>,
-    anchor: OptionsAnchor<'_>,
-    descriptors: &IndexMap<String, OptionsDescriptor>,
-    errors: &mut Vec<Diagnostic>,
-) -> CanonicalOptions {
-    let key = module_key(module);
-    let Some(descriptor) = descriptors.get(&key) else {
-        // The descriptor is filled in later by the CLI provider.
-        return CanonicalOptions::default();
-    };
-
-    match validate(descriptor, options_value, anchor) {
-        Ok(c) => c,
-        Err(mut errs) => {
-            errors.append(&mut errs);
-            CanonicalOptions::default()
-        }
-    }
 }
 
 fn module_key(module: &GeneratorModule) -> String {
@@ -797,6 +860,11 @@ mod tests {
         Span::new(0, 0, 1, 1)
     }
 
+    /// A dependency graph with nothing in it.
+    fn no_exports(_: &str, package: &str, _: &str) -> Result<ExportedInput, String> {
+        Err(format!("no package `{package}`"))
+    }
+
     /// The invocations of a collect that was meant to succeed.
     fn expect_ok(collected: (Vec<Invocation>, Vec<Diagnostic>)) -> Vec<Invocation> {
         let (invocations, diagnostics) = collected;
@@ -867,7 +935,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_eq!(result.len(), 1);
@@ -890,7 +958,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "lib:gen");
@@ -898,24 +966,62 @@ mod tests {
     }
 
     #[test]
-    fn bare_name_module_is_rejected() {
-        // A bare name (no `:`) is not a valid specifier — only relative paths and
-        // `[build-dependencies]` specifiers (coordinate / `lib:` nickname).
-        let attrs = attr_with_generator(&[("module", AttrValue::string("gen".to_string()))]);
-        let module = module_with_use("./schema.proto", attrs);
-        let mut mods: IndexMap<String, Module> = IndexMap::default();
-        mods.insert("src/main.wado".to_string(), module);
-
+    fn a_local_path_spelled_as_a_package_reference_is_rejected() {
+        let schemas = |_: &str, _: &str, file: &str| {
+            Ok(ExportedInput {
+                reference: format!("acme:schemas@0.2.0/{file}"),
+                path: format!("/dep/{file}"),
+            })
+        };
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::string("lib:gen".to_string())),
+            (
+                "inputs",
+                AttrValue::Array(vec![AttrItem {
+                    span: span(),
+                    value: AttrValue::string("lib:schemas/a.idl".to_string()),
+                }]),
+            ),
+        ]);
+        let module = module_with_use("./acme:schemas@0.2.0/a.idl", attrs);
         let errs = expect_errors(collect_inline_invocations(
-            mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            [("main.wado", &module)],
+            &schemas,
             "",
         ));
         assert!(
-            errs.iter()
-                .any(|d| d.message.contains("bare name is not allowed")),
+            errs.iter().any(|d| d.message.contains("names both")),
             "{errs:?}"
         );
+    }
+
+    #[test]
+    fn a_module_that_is_no_specifier_is_rejected() {
+        // Only relative paths and `[build-dependencies]` specifiers (coordinate
+        // / `lib:` nickname) name a generator.
+        for spec in [
+            "gen",
+            "ns:gen/sub",
+            "lib:gen/sub",
+            "ns:gen@1.0/sub",
+            "ns:gen@",
+        ] {
+            let attrs = attr_with_generator(&[("module", AttrValue::string(spec.to_string()))]);
+            let module = module_with_use("./schema.proto", attrs);
+            let mut mods: IndexMap<String, Module> = IndexMap::default();
+            mods.insert("src/main.wado".to_string(), module);
+
+            let errs = expect_errors(collect_inline_invocations(
+                mods.iter().map(|(k, v)| (k.as_str(), v)),
+                &no_exports,
+                "",
+            ));
+            assert!(
+                errs.iter()
+                    .any(|d| d.message.contains("must be a relative path")),
+                "{spec}: {errs:?}"
+            );
+        }
     }
 
     #[test]
@@ -933,7 +1039,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         match &result[0].module {
@@ -959,7 +1065,7 @@ mod tests {
 
         let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert!(
@@ -979,7 +1085,7 @@ mod tests {
 
         let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert!(
@@ -1004,7 +1110,7 @@ mod tests {
         let module = module_with_use("./value.txt", attrs);
         let errs = expect_errors(collect_inline_invocations(
             [("src/main.wado", &module)],
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_eq!(errs.len(), 1, "{errs:#?}");
@@ -1075,7 +1181,7 @@ mod tests {
         let module = module_with_use("./model.onnx", attrs);
         let mut result = expect_ok(collect_inline_invocations(
             [("src/main.wado", &module)],
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_eq!(result.len(), 1);
@@ -1108,7 +1214,7 @@ mod tests {
         let module = module_with_use("./Calc.g4", attrs);
         let mut result = expect_ok(collect_inline_invocations(
             [("src/main.wado", &module)],
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         result.remove(0).inputs
@@ -1172,7 +1278,7 @@ mod tests {
         let module = module_with_use(url, attrs);
         let invocation = expect_ok(collect_inline_invocations(
             [("src/main.wado", &module)],
-            &IndexMap::default(),
+            &no_exports,
             "",
         ))
         .remove(0);
@@ -1194,7 +1300,7 @@ mod tests {
         ]);
         let errors = expect_errors(collect_inline_invocations(
             [("src/main.wado", &module_with_use("./Calc.g4", attrs))],
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_eq!(
@@ -1213,7 +1319,7 @@ mod tests {
                     attr_with_generator(&[("module", AttrValue::string("lib:gen".to_string()))]),
                 ),
             )],
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert!(
@@ -1243,7 +1349,7 @@ mod tests {
             let module = module_with_use("./Calc.g4", attrs_with(input));
             expect_errors(collect_inline_invocations(
                 [("src/main.wado", &module)],
-                &IndexMap::default(),
+                &no_exports,
                 "",
             ))
             .into_iter()
@@ -1279,7 +1385,7 @@ mod tests {
             let module = module_with_use("./Calc.g4", attrs);
             expect_ok(collect_inline_invocations(
                 [("src/main.wado", &module)],
-                &IndexMap::default(),
+                &no_exports,
                 "",
             ))
             .remove(0)
@@ -1323,7 +1429,7 @@ mod tests {
             }
             expect_ok(collect_inline_invocations(
                 [("src/main.wado", &module_with_use(url, attrs))],
-                &IndexMap::default(),
+                &no_exports,
                 "",
             ))
             .remove(0)
@@ -1399,7 +1505,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_eq!(result.len(), 1);
@@ -1421,7 +1527,7 @@ mod tests {
 
         let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert!(errs.iter().any(|d| d.message.contains("disagree")));
@@ -1449,7 +1555,7 @@ mod tests {
         let output_dir = |module: Module| {
             let result = expect_ok(collect_inline_invocations(
                 [("src/a.wado", &module)],
-                &IndexMap::default(),
+                &no_exports,
                 "",
             ));
             result[0].output_dir.clone()
@@ -1467,7 +1573,7 @@ mod tests {
 
             let errs = expect_errors(collect_inline_invocations(
                 mods.iter().map(|(k, v)| (k.as_str(), v)),
-                &IndexMap::default(),
+                &no_exports,
                 "",
             ));
             assert!(errs.iter().any(|d| d.message.contains("disagree")));
@@ -1485,7 +1591,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_eq!(result[0].decl_site().synthetic_id, "kiln-96bda7baff150822");
@@ -1507,18 +1613,15 @@ mod tests {
         mods.insert("src/good.wado".to_string(), good);
         mods.insert("src/bad.wado".to_string(), bad);
 
-        let (invocations, diagnostics) = collect_inline_invocations(
-            mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
-            "",
-        );
+        let (invocations, diagnostics) =
+            collect_inline_invocations(mods.iter().map(|(k, v)| (k.as_str(), v)), &no_exports, "");
 
         assert_eq!(invocations.len(), 1, "the sound clause still lowers");
         assert_eq!(invocations[0].decl_site().module, "src/good.wado");
         assert!(
             diagnostics
                 .iter()
-                .any(|d| d.message.contains("bare name is not allowed")),
+                .any(|d| d.message.contains("must be a relative path")),
             "{diagnostics:#?}"
         );
     }
@@ -1542,7 +1645,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
 
@@ -1571,7 +1674,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_eq!(result.len(), 1);
@@ -1595,7 +1698,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert_eq!(result.len(), 1);
@@ -1620,7 +1723,7 @@ mod tests {
 
         let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert!(errs.iter().any(|d| {
@@ -1641,7 +1744,7 @@ mod tests {
 
         let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert!(
@@ -1662,7 +1765,7 @@ mod tests {
 
         let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             "",
         ));
         assert!(errs.iter().any(|d| {
@@ -1770,7 +1873,7 @@ mod tests {
 
         let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
-            &IndexMap::default(),
+            &no_exports,
             ".",
         ));
         assert_eq!(result.len(), 1);

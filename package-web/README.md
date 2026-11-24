@@ -17,7 +17,7 @@ A DOM object reaches the program as a reference the collector follows, which the
 Component Model cannot carry. The DOM calls are therefore imports of the
 component's main module, not of the component, and the component fills them
 with traps. In a browser, `glue/dom.js` answers them from the page's own DOM:
-the released-jco transpile (`scripts/jco/transpile-released.mjs`) writes a
+the released-jco transpile (`tools/jco/transpile-released.mjs`) writes a
 loader that puts the glue in the traps' place. `example/web-browser` runs one
 program that way.
 

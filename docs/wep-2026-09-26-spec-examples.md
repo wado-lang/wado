@@ -135,7 +135,7 @@ example names the test that holds it.
 
 ### The checker
 
-The checker is `package-gale-highlight-wado/tools/spec_examples.wado`, beside
+The checker is `package-wado/tools/spec_examples.wado`, beside
 the `Wado.g4` grammar it lexes with, so it counts an `assert` keyword only where
 the lexer finds one, not in a comment or a string. It reads the Markdown with
 Marl. `mise run check-spec-examples` runs it with `wado run`, as
@@ -155,7 +155,7 @@ block directly before it. Marl's document tree stays `internal`.
 
 During the migration a baseline, `scripts/spec-examples.json`, counted the
 blocks of each file that had no reference yet, and CI failed when a count grew.
-It only shrank, as `scripts/rust-inline-paths.json` does, and was deleted once
+It only shrank, as `tools/rust-inline-paths.json` does, and was deleted once
 empty.
 
 Migrating a block is triage. Each one is exactly one of:

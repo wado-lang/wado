@@ -178,7 +178,7 @@ RUSTFLAGS="-C link-arg=--emit-relocs" CARGO_PROFILE_RELEASE_STRIP=none cargo bui
 # 2. Wrap it into a validated component using the component-type section
 #    wit-bindgen embedded, printed as WAT. No WASI adapter is needed because
 #    there are no imports.
-../scripts/dev-bin.sh wado-dev-tools bundled-asset --component \
+../tools/dev-bin.sh wado-dev-tools bundled-asset --component \
   target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm \
   > target/wado_bundled_icu.component.wat
 ```

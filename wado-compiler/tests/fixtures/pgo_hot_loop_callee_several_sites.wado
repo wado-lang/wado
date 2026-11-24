@@ -1,0 +1,57 @@
+// A callee that carries a loop spends its time in the loop, so a splice saves
+// one call per run of it, while each site copies the whole body. Where a loop
+// holds several sites of one such callee, and their copies together outgrow
+// one hot splice, a hot site keeps the plain price: `mix` stays a call in
+// `fields`, though all three of its sites ran hot.
+use { println, Stdout } from "core:cli";
+
+fn mix(x: i32, n: i32) -> i32 {
+    let mut s = x;
+    s = s * 11 + builtin::black_box(2);
+    s = s ^ (s >> 11);
+    s = s * 7 + builtin::black_box(1);
+    s = s ^ (s >> 13);
+    s = s * 5 + builtin::black_box(9);
+    s = s ^ (s >> 2);
+    s = s * 3 + builtin::black_box(4);
+    s = s ^ (s >> 9);
+    s = s * 19 + builtin::black_box(6);
+    s = s ^ (s >> 6);
+    s = s * 23 + builtin::black_box(8);
+    s = s ^ (s >> 4);
+    for let i of 0..<n {
+        s = s * 31 + i;
+    }
+    return s;
+}
+
+#[inline("never")]
+fn fields(a: i32, b: i32, c: i32, n: i32) -> i32 {
+    return mix(a, n) + mix(b, n) + mix(c, n);
+}
+
+#[inline("never")]
+fn driver(n: i32) -> i32 {
+    let mut s = 0;
+    for let i of 0..<n {
+        s += fields(i, i + 1, i + 2, builtin::black_box(4));
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    println(`${driver(builtin::black_box(10000))}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_hot_loop_callee_several_sites.pgo",
+  "wir_scope": "pgo_hot_loop_callee_several_sites.wado/fields",
+  "wir_expect:O2": [
+    "\"pgo_hot_loop_callee_several_sites.wado/mix\"("
+  ],
+  "wir_contrast": {"O2": [
+    {"    for let i of 0..<n {\n        s = s * 31 + i;\n    }\n": "    s = s * 31 + n;\n"}
+  ]},
+  "stdout": "-958216723\n"
+}

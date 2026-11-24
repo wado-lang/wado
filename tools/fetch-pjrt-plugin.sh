@@ -8,7 +8,7 @@ set -euo pipefail
 # so it stays out of the repository and of Cargo. It is cached outside
 # `target/`, which CI hands between jobs and every worktree has its own of.
 #
-# Usage: WADO_PJRT_TPU_PLUGIN=$(scripts/fetch-pjrt-plugin.sh)
+# Usage: WADO_PJRT_TPU_PLUGIN=$(tools/fetch-pjrt-plugin.sh)
 
 ARCHIVE=libtpu-0.0.51-cp312-cp312-manylinux_2_31_x86_64.whl
 SHA256=aeb662a3174a89fd9a94ac64c965a72f43c65436f5546abbcb8968c9d9552631

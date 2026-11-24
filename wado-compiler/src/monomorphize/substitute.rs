@@ -56,6 +56,7 @@ impl Monomorphizer {
                     module_source: type_table.def_module(def).clone(),
                     impl_type_args: type_args.to_vec(),
                     method_type_args: vec![],
+                    effect_args: Vec::new(),
                     method_info: None,
                     template: None,
                 };

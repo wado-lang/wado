@@ -42,11 +42,11 @@ If conflicting, resolve with the `git-upstream-sync` skill.
 Read the branch's own changes, generated files left out:
 
 ```sh
-git diff origin/main...HEAD -- $(scripts/changed-sources.sh)
+git diff origin/main...HEAD -- $(tools/changed-sources.sh)
 ```
 
 The title and description come from that diff, not from the session that
-produced it. `scripts/changed-sources.sh` drops what `.gitattributes` marks
+produced it. `tools/changed-sources.sh` drops what `.gitattributes` marks
 `linguist-generated` or `linguist-vendored`, which is where a regenerated corpus
 or a fetched one would otherwise bury the change the PR is actually about. Say
 in the description that the generated output was regenerated, not what moved

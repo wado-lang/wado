@@ -502,7 +502,9 @@ pub(crate) mod fixture {
     pub(crate) fn write_manifest(dir: &Path, section: &str) {
         fs::write(
             dir.join("wado.toml"),
-            format!("[package]\nname = \"p\"\nversion = \"0.0.0\"\n\n{section}"),
+            format!(
+                "[package]\nnamespace = \"acme\"\nname = \"p\"\nversion = \"0.0.0\"\n\n{section}"
+            ),
         )
         .unwrap();
     }
@@ -795,7 +797,7 @@ pathology = should-not-match\n\
         touch(&root.join("subpkg/main.wado"));
         fs::write(
             root.join("subpkg/wado.toml"),
-            "[package]\nname=\"sub\"\nversion=\"0.1.0\"\ncommand=\"main.wado\"\n",
+            "[package]\nnamespace = \"acme\"\nname=\"sub\"\nversion=\"0.1.0\"\ncommand=\"main.wado\"\n",
         )
         .unwrap();
 
@@ -861,7 +863,7 @@ pathology = should-not-match\n\
         touch(&root.join("subpkg/main.wado"));
         fs::write(
             root.join("subpkg/wado.toml"),
-            "[package]\nname=\"sub\"\nversion=\"0.1.0\"\ncommand=\"main.wado\"\n",
+            "[package]\nnamespace = \"acme\"\nname=\"sub\"\nversion=\"0.1.0\"\ncommand=\"main.wado\"\n",
         )
         .unwrap();
 

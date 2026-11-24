@@ -1,0 +1,48 @@
+// A bound naming the callee's own effect parameter is checked at what the
+// call binds that parameter to: here `Stdout`, which `Loud` implements the
+// trait at. A free function, a method, a static method, and a generic caller
+// forwarding its own parameter all take it.
+use { println, Stdout } from "core:cli";
+
+trait Tr<A> with () {
+    fn go(&self) -> String;
+}
+
+struct Loud {}
+
+impl Tr<fn() with Stdout> for Loud {
+    fn go(&self) -> String {
+        return "loud";
+    }
+}
+
+fn need<T: Tr<fn() with G>, effect G>(_t: &T, f: fn() with G) with G {
+    f();
+}
+
+fn ask<T: Tr<fn() with E>, effect E>(t: &T, f: fn() with E) with E {
+    need(t, f);
+}
+
+struct Holder {}
+
+impl Holder {
+    fn need<T: Tr<fn() with G>, effect G>(&self, _t: &T, f: fn() with G) with G {
+        f();
+    }
+
+    fn make<T: Tr<fn() with G>, effect G>(_t: &T, f: fn() with G) with G {
+        f();
+    }
+}
+
+export fn run() with Stdout {
+    need(&Loud {}, || { println("free"); });
+    ask(&Loud {}, || { println("forwarded"); });
+    let h = Holder {};
+    h.need(&Loud {}, || { println("method"); });
+    Holder::make(&Loud {}, || { println("static"); });
+}
+
+__DATA__
+{"stdout": "free\nforwarded\nmethod\nstatic\n"}

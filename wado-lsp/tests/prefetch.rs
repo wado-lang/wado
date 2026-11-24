@@ -19,7 +19,7 @@ fn a_cold_pin_is_handed_to_the_prefetcher_and_still_reads_unresolved() {
     std::fs::create_dir_all(&project).unwrap();
     std::fs::write(
         project.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
          [registries]\ndefault = \"oci://ghcr.io\"\n\n\
          [dependencies]\n\"wado-lang:marl\" = { version = \"^0.1\" }\n",
     )
