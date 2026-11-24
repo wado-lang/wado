@@ -5190,7 +5190,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.report_uninferred_struct_type_args(&struct_info, &mut inferred, span);
         self.record_instantiation(&inst, &inferred);
-        self.blame_unsolved(&inst, &inferred);
         inferred
     }
 

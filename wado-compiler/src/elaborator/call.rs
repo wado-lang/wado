@@ -2715,9 +2715,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let generic = !self.lookup_function_type_params(&callee).is_empty();
-        if !(generic
-            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span))
+        if generic
+            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span)
         {
+            // The missing `&` is why a slot went unanswered, and is reported.
+            for arg in &mut type_args {
+                if self.tysys.type_table.borrow().is_infer_var(*arg) {
+                    *arg = TypeTable::ERROR;
+                }
+            }
+        } else {
             self.defer_or_report_uninferred_fn_type_args(
                 &callee,
                 &mut type_args,
@@ -2725,6 +2732,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected_type,
                 call.span,
             );
+        }
+        // The arguments were typed by the call's own variables, which what the
+        // call settled answers: a projection or a default among them included.
+        if let Some(inst) = &arg_inst
+            && inst.vars.len() == type_args.len()
+            && callee_slots == self.tysys.callee_slots(&callee)
+        {
+            self.record_instantiation(inst, &type_args);
         }
 
         // Look up function return type
@@ -3698,6 +3713,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn solve_instance(&mut self, inst: &Instantiated, solve: CallSolve<'_>) -> Vec<TypeId> {
         let inferred = self.solve_call_in_context(solve);
         if inferred == inst.vars {
+            for &var in &inst.vars {
+                self.waive_blame(var);
+            }
             return vec![];
         }
         self.record_instantiation(inst, &inferred);
@@ -4831,6 +4849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args,
                 expected_type,
                 span,
+                given,
             );
         }
         let Some(sig) =
@@ -4888,6 +4907,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .zip(&all_param_ids)
                 .map(|(answer, &param)| {
                     if self.tysys.type_table.borrow().is_infer_var(answer) {
+                        // The site reports the slot the parameter stands for.
+                        self.waive_blame(answer);
                         param
                     } else {
                         answer
@@ -4912,6 +4933,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // block's own `impl<T: Tr<Out = U>, U>`) is projected off the owner
         // the arguments did settle.
         self.resolve_assoc_bounds_in(&owners, 0, &names, &mut inferred);
+        // The arguments were typed by the given variables, which a default or
+        // a projection above answers too.
+        if given.is_some() {
+            self.record_instantiation(inst, &inferred);
+        }
         (
             self.declaring_slot_values(&sig, &inferred[..split]),
             inferred[split..].to_vec(),
@@ -5053,6 +5079,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         expected_type: Option<TypeId>,
         span: token::Span,
+        given: Option<GivenSlots<'_>>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         let newtype = key
             .decl()
@@ -5067,10 +5094,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &base_args,
             expected_at_base,
             span,
-            None,
+            given,
         );
         match self.newtype_at_base_args(key, base_key.decl(), &inferred) {
-            Some((_, shaped)) => (shaped, method_args),
+            Some((_, shaped)) => {
+                // The base's slots are the call's own variables, which the
+                // arguments were typed by: a shape the newtype fixes answers
+                // them. One it leaves open is reported as the newtype's.
+                for (&slot, &answer) in inferred.iter().zip(&shaped) {
+                    if !self.tysys.type_table.borrow().contains_infer_var(answer) {
+                        self.equate(slot, answer);
+                    }
+                }
+                (shaped, method_args)
+            }
             None => (inferred, method_args),
         }
     }
@@ -5543,7 +5580,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if !slots.is_empty() {
             let solved = self.case_type_args(case, &inst, args.first().copied());
-            self.blame_unsolved(&inst, &solved);
             return self.construct_variant_case_at(case, &args, raw_args, solved);
         }
         self.construct_variant_case(case, &args, raw_args, expected_type)
@@ -5683,7 +5719,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.equate(payload, declared);
             }
             let solved = self.case_type_args(case, &inst, args.first().copied());
-            self.blame_unsolved(&inst, &solved);
             return self.construct_variant_case_at(case, args, raw_args, solved);
         };
         let type_args = self

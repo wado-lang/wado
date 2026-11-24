@@ -302,6 +302,18 @@ impl VarStore {
         &mut self.origins[self.index[&hole]]
     }
 
+    /// `blame` as the one report `hole`'s class makes, in place of any its
+    /// members were minted with.
+    fn reword_class(&mut self, hole: TypeId, blame: Blame) {
+        let root = self.root(self.index[&hole]);
+        for i in 0..self.len() {
+            if self.root(i) == root {
+                self.origins[i].blame = None;
+            }
+        }
+        self.origin_mut(hole).blame = Some(blame);
+    }
+
     /// Each variable with its origin, in mint order.
     fn with_origins(&self) -> impl Iterator<Item = (TypeId, &Origin)> {
         self.holes.iter().copied().zip(&self.origins)
@@ -398,7 +410,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(var) = existing else {
             return self.mint_infer_hole(span, message, param_name, bounds);
         };
-        self.attach_infer_var_diag(var, span, message);
+        // The site words the report: the blame the variable was minted with
+        // knows only the declaration.
+        self.infer_holes.vars.reword_class(
+            var,
+            Blame {
+                span,
+                param: None,
+                owner: message,
+            },
+        );
         self.attach_infer_var_bounds(var, param_name, bounds, span);
         var
     }
@@ -682,6 +703,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 owner: message,
             },
         );
+    }
+
+    /// Leave `var` unreported: a variable nothing holds any more, whose slot
+    /// the site reports as it hands it on.
+    pub(super) fn waive_blame(&mut self, var: TypeId) {
+        self.infer_holes.vars.origin_mut(var).blame = None;
     }
 
     fn blame_once(&mut self, var: TypeId, blame: Blame) {
