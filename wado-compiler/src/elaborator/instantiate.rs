@@ -293,7 +293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // An answer the equation does not bind, such as an inferred `!`,
             // still stands for the slot: the site settled it.
             if self.apply_infer_holes(var) != self.apply_infer_holes(answer) {
-                self.waive_blame(var);
+                self.waive_open(var);
             }
         }
     }

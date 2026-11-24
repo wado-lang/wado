@@ -707,16 +707,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// Leave `var` unreported: a variable nothing holds any more, whose slot
-    /// the site reports as it hands it on.
-    pub(super) fn waive_blame(&mut self, var: TypeId) {
-        self.infer_holes.vars.origin_mut(var).blame = None;
-    }
-
-    /// [`Self::waive_blame`] where `var` is a variable nothing answered.
+    /// Leave `var` unreported where nothing answered it: the site settled its
+    /// slot otherwise, or reports it as it hands it on.
     pub(super) fn waive_open(&mut self, var: TypeId) {
         if self.infer_holes.vars.is_unanswered(var) {
-            self.waive_blame(var);
+            self.infer_holes.vars.origin_mut(var).blame = None;
         }
     }
 
