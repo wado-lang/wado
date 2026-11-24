@@ -1286,11 +1286,7 @@ impl MoveWalker<'_, '_> {
             self.report(MoveError::GuardMove { name }, place.root.span);
             return;
         }
-        if self
-            .closure_locals
-            .as_ref()
-            .is_some_and(|locals| !locals.contains(&def))
-        {
+        if self.is_captured(def) {
             self.report(MoveError::CapturedMove { name }, place.root.span);
             return;
         }
@@ -1305,12 +1301,7 @@ impl MoveWalker<'_, '_> {
             return;
         }
         self.refuse_move_out_of_drop(expr);
-        let moved = self.event(place.root.span);
-        self.flow
-            .moved
-            .entry((def, place.owned_fields()))
-            .or_default()
-            .push(moved);
+        self.record_move(def, place);
     }
 
     /// A for-of consuming the copyable iterator the place `expr` names. Only a
@@ -1320,11 +1311,10 @@ impl MoveWalker<'_, '_> {
         let Some(def) = self.local_use(place.root) else {
             return;
         };
-        let captured = self
-            .closure_locals
-            .as_ref()
-            .is_some_and(|locals| !locals.contains(&def));
-        if self.global_name(def).is_some() || self.path_through_reference(expr) || captured {
+        if self.global_name(def).is_some()
+            || self.path_through_reference(expr)
+            || self.is_captured(def)
+        {
             let place = std::iter::once(place.root.name.as_str())
                 .chain(place.fields.iter().copied())
                 .collect::<Vec<_>>()
@@ -1337,13 +1327,28 @@ impl MoveWalker<'_, '_> {
             self.report(error, place.root.span);
             return;
         }
+        let moved_at = self.record_move(def, place);
+        self.checker.iterator_moves.insert(moved_at);
+    }
+
+    /// Record that the place `place` of `def` moved here, and return where.
+    fn record_move(&mut self, def: AstId, place: &PlacePath<'_>) -> Span {
         let moved = self.event(place.root.span);
-        self.checker.iterator_moves.insert(moved.span);
+        let at = moved.span;
         self.flow
             .moved
             .entry((def, place.owned_fields()))
             .or_default()
             .push(moved);
+        at
+    }
+
+    /// Whether `def` is a local outside the closure being walked, which its
+    /// body sees by reference.
+    fn is_captured(&self, def: AstId) -> bool {
+        self.closure_locals
+            .as_ref()
+            .is_some_and(|locals| !locals.contains(&def))
     }
 
     /// The error for reading `name` after the move at `moved_at`.

@@ -1,0 +1,37 @@
+// `for-of` consumes an iterator it walks by value, and a field read through a
+// reference is not the body's to give up: the loop would walk a copy and leave
+// the field unadvanced.
+
+struct Count {
+    n: i32,
+}
+
+impl Iterator for Count {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        self.n += 1;
+        return Option::Some(self.n);
+    }
+}
+
+struct Reader {
+    count: Count,
+}
+
+impl Reader {
+    fn first(&mut self) -> i32 {
+        for let x of self.count {
+            return x;
+        }
+        return 0;
+    }
+}
+
+export fn run() {
+    let mut r = Reader { count: Count { n: 0 } };
+    assert r.first() == 1;
+}
+
+__DATA__
+{"compile_error": ":24:22: analysis error: `for-of` consumes the iterator it walks by value, and `self.count` is not a local it can take: walk `&mut self.count` to advance it in place"}
