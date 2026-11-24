@@ -1002,6 +1002,9 @@ struct BodyScan {
     warm_sites: IndexMap<FuncId, ByHeat<Spots>>,
     /// Whether the body holds a `loop`.
     loopy: bool,
+    /// Whether it holds a `loop` the profile does not show spinning less than
+    /// once per arrival, so the body's time is in the loop.
+    spins: bool,
 }
 
 /// Whether one callee has sites of one heat inside a loop of the body, and
@@ -1067,6 +1070,33 @@ fn revisit_moved_reads(
     }
 }
 
+/// Whether the loop `st`, whose body is `inner`, runs its body at least as
+/// often as the code around it reaches it. A `while` that only drains a buffer
+/// now and then (`BitWriter::write_bits`) does not: its function's time is
+/// outside the loop. With no counts, the loop is taken to spin.
+///
+/// Only the loop's own source is read: a splice brings code counted wherever
+/// its callee is written. Of that, a node still in the region around the loop,
+/// such as the condition a `while` lowers into the body, counts arrivals rather
+/// than iterations.
+fn spins(body: &Body, st: StmtId, inner: BlockId, heat_map: &HeatMap) -> bool {
+    let written = body.stmts[st].span;
+    let Some((around, arrivals)) = heat_map.runs(written) else {
+        return true;
+    };
+    let mut most = None;
+    body.for_each_node_under(NodeRef::Block(inner), |node| {
+        let span = body.span_of(node);
+        if written.encloses(&span)
+            && let Some((region, runs)) = heat_map.runs(span)
+            && region != around
+        {
+            most = most.max(Some(runs));
+        }
+    });
+    most.is_none_or(|runs| runs >= arrivals)
+}
+
 fn scan_body(
     func: &NirFunction,
     markers: MarkerBuiltins,
@@ -1098,7 +1128,10 @@ fn scan_body(
                 scan.lets.push((*local_index, *value));
                 copies.extend(value.map(|value| (*local_index, value)));
             }
-            StmtKind::Loop { .. } => scan.loopy = true,
+            StmtKind::Loop { body: inner } => {
+                scan.loopy = true;
+                scan.spins |= spins(body, st, *inner, heat_map);
+            }
             _ => {}
         },
         NodeRef::Expr(e) => match &body.exprs[e].kind {
@@ -2593,6 +2626,10 @@ struct Candidates<'a> {
     awaiting: &'a IndexMap<FuncId, IndexSet<u32>>,
     /// [`Caller::opens`].
     opens: &'a [bool],
+    /// Per function, [`BodyScan::spins`].
+    spins: &'a [bool],
+    /// What one hot splice may cost.
+    hot_threshold: usize,
     /// What the re-scan of a splice may add, by the heat of the site that
     /// started it: a hot site's own callee may spend a plain cap by itself.
     rescan_cap: ByHeat<usize>,
@@ -2802,6 +2839,7 @@ fn inline_round(
         .map(|(&eligible, e)| eligible && e.is_pure())
         .collect();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
+    let spins: Vec<bool> = scans.iter().map(|s| s.spins).collect();
 
     // What the unit holds right now, and what each admitted candidate would add
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
@@ -3117,6 +3155,8 @@ fn inline_round(
             fold_pending,
             awaiting: &awaiting,
             opens: &opens,
+            spins: &spins,
+            hot_threshold: thresholds.hot,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels. A cold site
             // splices less, but what it spliced recurses as far as a plain one.
@@ -3335,9 +3375,15 @@ impl CallerFrame<'_> {
     /// iterations only, so the per-iteration saving a [`Site::Loop`] price
     /// counts on is not there, while the growth is paid at every site.
     fn sole_loop_site(&self, callee: FuncId) -> bool {
+        self.loop_sites(callee) <= 1
+    }
+
+    /// How many sites of the innermost loop call `callee`; `0` outside a loop.
+    fn loop_sites(&self, callee: FuncId) -> usize {
         self.loop_calls
             .last()
-            .is_none_or(|calls| calls.get(&callee).is_none_or(|&n| n <= 1))
+            .and_then(|calls| calls.get(&callee).copied())
+            .unwrap_or(0)
     }
 }
 
@@ -3857,14 +3903,37 @@ fn try_inline_call_expr(
     labels: &mut InlineLabels,
     site: Site,
 ) -> Option<(ExprId, FuncId, Heat)> {
-    let ExprKind::Call { func_id, .. } = caller.exprs[call_id].kind else {
+    let ExprKind::Call {
+        func_id, ref args, ..
+    } = caller.exprs[call_id].kind
+    else {
         return None;
     };
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
     let landing = call_heat(candidates.heat_map, &caller.exprs[call_id]);
-    let heat = landing.plain_where(!site.heats() || frame.movable);
+    // A looping callee spends its time in its loop, so a splice saves one call
+    // per run while copying the loop to every site. A loop calling it from
+    // several sites takes the hot price only while all those copies together
+    // fit one hot splice. A constant argument may fold the loop once spliced,
+    // which is worth the hot price; `CostWalk::call_price` asks the same
+    // question.
+    let loop_copies_overrun = || {
+        candidates.net_price[&func_id]
+            .hot
+            .is_some_and(|price| frame.loop_sites(func_id) * price > candidates.hot_threshold)
+    };
+    let heat = landing.plain_where(
+        !site.heats()
+            || frame.movable
+            || (candidates.spins[func_id.index()]
+                && !frame.sole_loop_site(func_id)
+                && loop_copies_overrun()
+                && !args
+                    .iter()
+                    .any(|a| is_constant_arg(caller, a.expr, &IndexSet::default()))),
+    );
     let reach = *candidates.reach[&func_id].at(heat);
     let sole_site = |frame: &CallerFrame<'_>| {
         if frame.glue {

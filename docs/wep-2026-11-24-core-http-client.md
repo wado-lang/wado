@@ -1,0 +1,248 @@
+# WEP: HTTP Client (`core:http_client`)
+
+## Context
+
+`wasi:http` is the only way out to an HTTP server, and it is low-level. A
+request is a resource assembled field by field. Its body is a stream that must
+be written only after the send has started, or the two sides deadlock. The
+response body is a stream whose close does not say whether the body arrived
+whole: a future resolved after the close says that. Eddy wrapped all of this in
+a module of its own, and every other client would have written it again.
+
+Eddy is the first user. The next is an OpenAPI client generator, so the module
+serves an API described per origin, not one call site. LLM APIs often stream
+their answers as Server-Sent Events, so streaming is part of the first version,
+not a later addition.
+
+## Decision
+
+### A client per origin, not a global `fetch`
+
+An API is used through settings that belong to its origin: the base URL, the
+headers every request carries (authentication, version), and the timeouts. A
+global `fetch` has nowhere to keep them, so each call would repeat them, and a
+generated OpenAPI client would build the struct anyway. `HttpClient` holds
+them, and `request` is its method.
+
+```wado
+use { HttpClient, HttpError } from "core:http_client";
+use { Method, Client } from "wasi:http";
+
+struct Message { id: String }
+
+fn create(key: String, payload: ByteSlice) -> Result<Option<Message>, HttpError> with Client {
+    let client = HttpClient::new("https://api.anthropic.com", {
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+    })?;
+    let mut res = client.request("/v1/messages", {
+        method: Method::Post,
+        body: Some(payload),
+    })?;
+    if !res.ok() { return Ok(null); }
+    return Ok(Some(res.json::<Message>()?));
+}
+```
+
+`HttpClient` holds settings only. The host owns connections, pooling, the
+protocol version (HTTP/1.1, 2 or 3) and TLS, and `wasi:http` exposes none of
+them. So the client offers no field for them, since one would be a setting that
+does nothing. A client is cheap to make and to drop.
+
+The rest borrows Node's `fetch` where the meaning is the same: `RequestInit`
+with defaults, `res.ok()`, `text()`, `bytes()`, and `json()`, which here decodes
+into a type through `core:serde`. It differs where Wado has its own way:
+failure is a `Result`, not an exception or a rejected promise; the method is
+`wasi:http`'s `Method`; a timeout is a `Duration`, not an `AbortSignal`.
+
+### The request target
+
+`HttpClient::new` parses the base URL with `core:url` and accepts only `http`
+and `https` with no query or fragment, and drops one trailing `/` from the base
+path. `request` appends its path to the base path as text. The path must start
+with `/` and hold no `?` or `#`, or the request fails with an invalid URL; the
+query comes only from `RequestInit.query`.
+
+RFC 3986 resolution would let `/v1/messages` drop the base path `/api`, which
+is never what a client of one API means. OpenAPI appends a path to its server
+URL without resolution too. RFC 9110 does not join paths at all, and no
+normalization it or RFC 3986 defines removes an empty segment, so `/api//v1`
+names a different resource from `/api/v1`. Dropping the trailing `/` keeps a
+base of `/api/` from producing one.
+
+`RequestInit.query` takes name-value pairs, and the client percent-encodes
+them. Building a query by hand is where an OpenAPI client would most often get
+encoding wrong.
+
+Headers, trailers and the query are a list of name-value pairs, written as an
+object literal, which coerces to one in order. A literal cannot repeat a key,
+so a name sent more than once is written as a list of pairs or built with
+`push`. A value type that holds several values would spare that, but an object
+literal converts only a literal to it, never a variable such as an API key.
+
+Headers in `RequestInit` are appended after the client's. A name in both keeps
+both values, as `Fields::append` does; replacing would need the client to know
+which headers are single-valued.
+
+### Status is not failure
+
+A response with status 4xx or 5xx is `Ok`. An OpenAPI operation declares a
+body type per status, so the caller needs the response, not an error. `Err`
+means no response, or a body that did not arrive whole.
+
+The client does not follow redirects; a 3xx comes back as it is. Following one
+means sending the body again, and a streamed body cannot be sent twice.
+
+### No automatic retry
+
+The client never retries. A request that can be repeated exactly is rarer than
+it looks. A retry that matters often widens to POST or moves to another
+endpoint, which is another `HttpClient`. That is policy above the client.
+
+### Errors
+
+`HttpError` is one variant:
+
+- An invalid URL, from `HttpClient::new` or from a path or query that makes one.
+  The client does not percent-encode a path, so a path the host refuses, such
+  as one holding a space, is this error rather than a request sent elsewhere.
+- A method the host refuses.
+- A header the host refuses, or a timeout it cannot apply.
+- A transport failure, with the `wasi:http` `ErrorCode` and the stage it
+  happened in: before the response headers, or while reading the response
+  body. Before the headers, no part of the response was seen; during the body,
+  part of it was already handed to the caller. A caller deciding whether to
+  retry needs the difference. A request body the host failed to send is
+  reported once the response body ends: the future that reports it resolves
+  only when the connection is done with, which the response holds open until
+  its body is read.
+- A body, header value or event that could not be decoded: not UTF-8 for
+  `text()`, `header()` or `events()`, or not the type for `json()`.
+
+### Streaming bodies
+
+`RequestInit.body` is a `ByteSlice`, so what a serializer such as
+`core:json`'s `to_bytes` produced is sent without a copy. A streamed body goes
+through `request_streaming` instead, which takes a writer: a function called
+with the body stream's writable end once the send has started. The body ends
+when the function returns. The caller cannot write too early, and the deadlock
+above cannot happen.
+
+The response body is read in one of three ways:
+
+- whole: `bytes()`, `text()`, `json()`, each taking `&mut self`;
+- as chunks: `body()`, an iterator of `Result<ByteList, HttpError>`;
+- as events: `events()`, an iterator of `Result<SseEvent, HttpError>`.
+
+A whole read uses up the body, not the response, as Fetch's `bodyUsed` does,
+and a second read is a contract violation. `body()` and `events()` take the
+response by value: an iterator that borrowed it could not be held beside the
+response, since an affine value and a reference into it cannot be used in turn.
+The iterator hands it back as `.response()`. `for let x of &mut it` walks the
+iterator in place, through `IterRefMut`, so `it.response()` and
+`EventStream::retry()` are read after the loop.
+
+A body cut short by the connection ends the stream just as a complete one does;
+only the future resolved after it tells them apart. So every way of reading
+awaits that future at the end. A whole read returns its error. An iterator
+yields it as its last item, so a caller cannot see the end without seeing the
+failure.
+
+The reader that holds the body stream tells the host how reading ended,
+through the `res` future `consume-body` takes: `Ok` once the body was read to
+its end, and an error when the reader is dropped before that, along with the
+response or iterator holding it.
+
+### Trailers
+
+Trailers are supported in both directions.
+
+The response's trailers arrive in the future that ends the body. Whatever read
+the body to the end stores them in the response. `res.trailers()` then gives
+them as an `HttpFields`, the type `res.headers()` gives, read with `header`,
+`header_bytes` and `headers_all`. Its contract is that the body was read to the
+end, so a call made too early fails where it is made rather than reading as "no
+trailers".
+
+A request sends trailers from `RequestInit.trailers`, followed by those the
+writer of `request_streaming` returns when it ends, so a trailer can carry what
+only writing the body computes, such as a checksum.
+
+### Server-Sent Events
+
+The event parser is built into `core:http_client` and follows the
+`text/event-stream` interpretation in WHATWG HTML § Server-sent events:
+
+- An empty line dispatches the event. A line starting with `:` is a comment.
+  A line with no colon is a field name with an empty value. One space after the
+  colon is removed.
+- `data` lines are joined with LF. An event with no data is not dispatched.
+  `event` defaults to `message`. `id` carries over to later events and is
+  ignored when it contains NUL. `retry` is taken only when it is all digits.
+  Other fields are ignored.
+- CR, LF and CRLF each end a line, including a CR that ends one chunk followed
+  by an LF that starts the next.
+- An event not closed by an empty line when the stream ends is discarded.
+
+`SseEvent` gives `event`, `data` and `id` as `StrSlice`. `retry` belongs to the
+stream rather than to an event, so `EventStream::retry()` gives the last one
+set, in milliseconds. Reconnecting with `Last-Event-ID` is EventSource behavior, not
+parsing, and it belongs to the caller. Protocols layered on the events (a
+`[DONE]` sentinel, a JSON schema per event type) belong to the application.
+
+### Copies
+
+Each stream read hands over a fresh `List<u8>`, and the parser never writes to
+memory a view it handed out can see. So a view's bytes never change under it.
+The compiler still treats an event as rooted in the stream it came from: once
+`next()` has been called again, an earlier event cannot be used, as with a
+lending iterator. A caller that keeps an event past that copies out the fields
+it needs with `to_string()`.
+
+The parser copies only in these cases:
+
+- A line split across chunks is copied once, to join it.
+- An event with more than one `data` line is copied once, to join the lines
+  with LF. The common case in LLM APIs, one JSON document on one `data` line, is
+  a view into the chunk.
+
+Text is never decoded into a copy, so whether a value is copied does not depend
+on whether its bytes are valid text. Input that is not UTF-8 is an error
+instead, departing from both standards on purpose:
+
+- An event line that is not UTF-8 ends the stream with an error. WHATWG
+  decodes it with U+FFFD in place of each bad sequence.
+- A response header value is a view over the bytes the host handed over.
+  `header(name)` gives it as a `StrSlice`, or an error when it is not UTF-8.
+  RFC 9110 lets a value hold any octet from 0x80 up (`obs-text`), and Fetch
+  decodes those as Latin-1. Values in practice are ASCII or UTF-8, so a client
+  that must read the rest asks for the octets with `header_bytes(name)`, a
+  `ByteSlice`.
+
+A header name the response carries more than once is the one header that is
+not a view. RFC 9110 reads its values as one, joined with `, `, and both
+`header` and `header_bytes` answer that joined value, which is a copy.
+
+`Set-Cookie` cannot be joined, since a cookie's `Expires` holds a comma; RFC
+9110 § 5.3 names it as the exception. `header` and `header_bytes` take it as a
+contract violation, and `headers_all(name)` gives every value as a view, as
+Fetch's `getSetCookie()` does.
+
+## Roadmap
+
+The tests run the client against effect handlers standing in for the
+`wasi:http` host, so they need no server.
+
+- [x] `HttpClient`, `RequestInit`, `HttpError`, and the whole-body reads.
+- [x] Streaming request and response bodies, with a test that cuts a body short
+  and expects `Err`.
+- [x] Trailers both ways, with a test that sends a trailer from a writer and
+  reads trailers back after each way of reading the body.
+- [x] `events()`, with parser tests that split the input at every byte.
+- [x] Eddy uses `core:http_client`, and `package-eddy/src/http.wado` goes away.
+
+## Known gaps
+
+- Cookies, multipart form bodies, and compression on the guest side.
+- Writing Server-Sent Events from a `wasi:http/service` handler.
+- Nothing bounds what a server makes the client hold: a whole read, a line of
+  an event stream, and the data of one event grow as long as the server sends.

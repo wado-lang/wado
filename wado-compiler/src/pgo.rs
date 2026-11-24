@@ -444,6 +444,8 @@ struct MeasuredRegion {
     start: Pos,
     end: Pos,
     heat: Heat,
+    /// How many times the workloads ran it.
+    runs: i64,
     /// The index of the innermost region holding this one.
     enclosing: Option<usize>,
 }
@@ -481,20 +483,31 @@ impl HeatMap {
     /// holds its start, [`Heat::Plain`] where none does.
     #[must_use]
     pub fn heat(&self, span: Span) -> Heat {
-        let Some(regions) = self.regions.get(&span.space) else {
-            return Heat::Plain;
-        };
+        self.innermost(span)
+            .map_or(Heat::Plain, |i| self.regions[&span.space][i].heat)
+    }
+
+    /// The innermost measured region holding `span`, as an index that tells
+    /// two regions apart, and how many times the workloads ran it.
+    #[must_use]
+    pub fn runs(&self, span: Span) -> Option<(usize, i64)> {
+        self.innermost(span)
+            .map(|i| (i, self.regions[&span.space][i].runs))
+    }
+
+    fn innermost(&self, span: Span) -> Option<usize> {
+        let regions = self.regions.get(&span.space)?;
         let at = Pos::start(span);
         // The last region to start before `at` either holds it or is held by
         // every region that does.
         let mut next = regions.partition_point(|r| r.start <= at).checked_sub(1);
         while let Some(i) = next {
             if at < regions[i].end {
-                return regions[i].heat;
+                return Some(i);
             }
             next = regions[i].enclosing;
         }
-        Heat::Plain
+        None
     }
 }
 
@@ -605,6 +618,7 @@ impl MarkMap {
                     start: region.start,
                     end: region.end,
                     heat: reading.heat(runs).plain_where(under_unlikely(id)),
+                    runs,
                     enclosing: None,
                 })
             }),
@@ -917,6 +931,7 @@ mod tests {
                 column: end[1],
             },
             heat,
+            runs: 0,
             enclosing: None,
         };
         let mut map = HeatMap::default();

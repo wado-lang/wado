@@ -67,7 +67,7 @@ fn workspace(package: bool) -> (tempfile::TempDir, PathBuf) {
         std::fs::create_dir_all(gen_pkg.join("src")).unwrap();
         std::fs::write(
             gen_pkg.join("wado.toml"),
-            "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
              [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
         )
         .unwrap();
@@ -81,7 +81,7 @@ fn workspace(package: bool) -> (tempfile::TempDir, PathBuf) {
     std::fs::write(
         app.join("wado.toml"),
         format!(
-            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+            "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
              [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n{build_deps}"
         ),
     )

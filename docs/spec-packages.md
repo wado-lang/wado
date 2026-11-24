@@ -47,13 +47,15 @@ lib = "src/lib.wado"
 [world]
 "wasi:cli/command" = "src/main.wado"
 
-# gale is used in two roles: the Kiln generator that turns the bundled grammar
-# into a parser at build time, and the `gale-highlight` runtime lib (`run_cli`).
+# gale is used in two roles: the Kiln generator that turns `wado-lang:wado`'s
+# grammar into a parser at build time, and the `gale-highlight` runtime lib
+# (`run_cli`).
 [build-dependencies]
-"lib:gale" = { path = "../package-gale" }
+"wado-lang:gale" = { path = "../package-gale" }
 
 [dependencies]
-"lib:gale" = { path = "../package-gale" }
+"wado-lang:gale" = { path = "../package-gale" }
+"wado-lang:wado" = { path = "../package-wado" }
 
 [test]
 # `build/` holds Kiln intermediates; not source (see package-gale's note).
@@ -81,6 +83,7 @@ other mistake in a manifest is an error. `[workspace]` is one: it belongs in a
 
 ```toml
 [package]
+namespace = "acme"
 name = "geo"
 version = "0.2.0"
 descripton = "Plane geometry"   # warning: unknown field "descripton" in [package] (ignored)
@@ -114,7 +117,7 @@ wado-version = ">=0.5"
 | ---------------------- | -------- | -------- | --------------------------------------------------------------------------- |
 | `name`                 | string   | yes      | The package's name                                                          |
 | `version`              | string   | yes      | The package's version, in semantic versioning (`0.2.0`)                     |
-| `namespace`            | string   | no       | The organization or person the package belongs to                           |
+| `namespace`            | string   | yes      | The organization or person the package belongs to                           |
 | `lib`                  | string   | no       | The entry module of the package's library world                             |
 | `exports`              | string[] | no       | Further files other packages may import ([Exported Files](#exported-files)) |
 | `description`          | string   | no       | A short summary                                                             |
@@ -138,9 +141,8 @@ namespace = "acme"   # coordinate: acme:geo
 name = "geo"
 ```
 
-A package with no `namespace` has no coordinate. It cannot be published, which
-suits an application or an internal tool. Other packages can still depend on it
-through a `path` or `git` source and a `lib:` key.
+Every package has a coordinate, published or not. An application or an internal
+tool takes one too, and `publish = false` keeps it out of a registry.
 
 `version` is a full semantic version, so `0.1` is an error. `wado-version` is a
 semantic-versioning requirement, such as `>=0.5`.
@@ -150,6 +152,7 @@ error. `license` and `license-file` exclude each other.
 
 ```toml
 [package]
+namespace = "acme"
 name = "geo"
 version = "0.2.0"
 license = "MIT"
@@ -199,13 +202,15 @@ file.
 
 ```toml
 [dependencies]
-"lib:geo" = { path = "../geo" }          # a directory with its own wado.toml
+"acme:geo" = { path = "../geo" }             # a directory with its own wado.toml
 "lib:shared" = { path = "../shared.wado" }   # one file
+"acme:shared" = { path = "../shared.wado" }  # error: a single file has no coordinate
 ```
 
 A directory must hold a `wado.toml` whose `[package].lib` names the entry module
 ([The Library World](#the-library-world)). A single `.wado` file is its own
-entry module. A path dependency is read from disk on every build and is never
+entry module. It has no manifest, so it has no coordinate, and only a `lib:` key
+names it. A path dependency is read from disk on every build and is never
 locked.
 
 A path source may also carry a git or registry source. The build uses the path,
@@ -338,11 +343,15 @@ resolved from the `[dependencies]` entry whose key is byte-identical to the
 specifier, or from an inline source on the `use`. An undeclared coordinate or
 alias is an error.
 
-A key under an open namespace is the dependency's own coordinate. `lib` is the
-one place an alias lives. An alias renames a dependency, shortens its name,
-tells two major versions apart, or names a dependency with no public
-coordinate. A `lib:` key names the coordinate it stands for with its `package`
-field ([Registry Sources](#registry-sources)).
+A key under an open namespace is the dependency's own coordinate. A `path` or
+`git` source under such a key must hold the package whose `[package]` declares
+that coordinate, and a `use` of a key whose source holds another package is an
+error. So must a `path` source whose `package` names the coordinate it is
+published as. A build dependency's key and source follow the same rule.
+
+`lib` is the one place an alias lives. An alias renames a dependency, shortens
+its name, or tells two major versions apart. A `lib:` key names the coordinate
+it stands for with its `package` field ([Registry Sources](#registry-sources)).
 
 ```toml
 [dependencies]
@@ -507,9 +516,11 @@ from the package root:
 
 ```toml
 [package]
+namespace = "acme"
 name = "geo"
+version = "0.1.0"
 lib = "src/lib.wado"
-exports = ["src/shapes.wado"]
+exports = ["src/shapes.wado", "assets/geo.g4"]
 ```
 
 A consumer names an exported file as `"<specifier>/<path>"`, such as
@@ -531,13 +542,13 @@ A `path` or `git` dependency is Wado source. It is compiled into the consuming
 program, and its `pub` items cross as Wado declarations. A `pub` signature may
 therefore take a closure, a generic or a trait, which no component interface can
 carry. `map_sides` above is one. So is the `run_cli` that
-`package-gale-highlight-wado` imports from its `lib:gale` path dependency:
+`package-gale-highlight-wado` imports from its `wado-lang:gale` path dependency:
 
 <!-- {"source": "package-gale-highlight-wado/src/main.wado"} -->
 
 ```wado
 use { highlight } from "./lib.wado";
-use { run_cli } from "lib:gale";
+use { run_cli } from "wado-lang:gale";
 ```
 
 <!-- {"source": "package-gale-highlight-wado/src/main.wado"} -->
@@ -573,6 +584,13 @@ test {
 }
 ```
 
+A package is one coordinate in one compatibility range
+([Version Requirements](#version-requirements)), so two directories that
+declare it are one package claimed twice. The first one the build reaches holds
+the package, the entry's own package first, and a `use` that reaches the second
+one is an error, wherever in the dependency graph it sits. Versions in two
+compatibility ranges are two packages.
+
 A `use` resolves against the manifest of the package its module belongs to. A
 `use` inside a dependency resolves against that dependency's own
 `[dependencies]`, never the consumer's. A consumer cannot import a dependency's
@@ -588,8 +606,7 @@ Built on its own, the library world is a component. It exports one interface,
 the package's default interface, which carries every `export` item of the entry
 module and no `pub`-only item. Its functions never become world-level exports,
 whatever their signatures name. The interface is named after the package,
-`<namespace>:<name>/<name>@<version>`, so building it needs
-`[package].namespace`. The world itself is named `root`, so no package may take
+`<namespace>:<name>/<name>@<version>`. The world itself is named `root`, so no package may take
 that name, in any letter case. An entry module that exports nothing gives the
 component no interface, and building it is an error.
 
@@ -725,7 +742,6 @@ workspace resolves every member against.
 Publishing puts a package in a registry, under its coordinate. A package is
 publishable when all of these hold:
 
-- `[package]` has a `namespace`, so the package has a coordinate.
 - `[package].publish` is not `false`.
 - `[package]` has a `description`, a `repository` and at least one entry in
   `authors`.

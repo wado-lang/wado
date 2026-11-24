@@ -434,7 +434,7 @@ impl CheckWorld {
     }
 }
 
-/// The library FQ a check falls back to when `[package]` names no namespace.
+/// The library FQ a check falls back to when no `[package]` names one.
 /// Never emitted — `check` discards the component it builds.
 const CHECK_LIB_WORLD: &str = "wado:check/check@0.0.0";
 

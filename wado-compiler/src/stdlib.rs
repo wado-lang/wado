@@ -155,6 +155,7 @@ stdlib_table! {
     "core:simd" => "core/simd.wado",
     "core:url" => "core/url.wado",
     "core:router" => "core/router.wado",
+    "core:http_client" => "core/http_client.wado",
     "core:digest" => "core/digest.wado",
     "core:prng" => "core/prng.wado",
     "core:linear" => "core/linear.wado",

@@ -12,7 +12,7 @@ log() {
 }
 
 # A local session has mise installed already; it only needs mise.toml's
-# environment, `scripts/bin` among it, on every Bash command.
+# environment, `tools/bin` among it, on every Bash command.
 if [ "$CLAUDE_CODE_REMOTE" != "true" ]; then
     # mise's installer puts it in ~/.local/bin, which a hook's PATH may lack.
     mise_exe=$(PATH="$PATH:$HOME/.local/bin" command -v mise || true)

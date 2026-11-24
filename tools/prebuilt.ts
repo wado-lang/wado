@@ -1,8 +1,8 @@
 // The builds CI compiles and hands between jobs and runs, and the check that
 // keeps each reusable by the next.
 //
-// Usage (from the repository root): node scripts/prebuilt.ts build <BUILDS key>
-//                                    node scripts/prebuilt.ts check
+// Usage (from the repository root): node tools/prebuilt.ts build <BUILDS key>
+//                                    node tools/prebuilt.ts check
 //
 //   build  compiles one of BUILDS; `e2e` also copies the test binary, whose
 //          name carries a hash, to target/debug/e2e
@@ -254,6 +254,6 @@ if (mode === "build" && name !== undefined && isBuild(name)) {
     process.exit(1);
   }
 } else {
-  console.error(`usage: node scripts/prebuilt.ts build ${Object.keys(BUILDS).join("|")} | check`);
+  console.error(`usage: node tools/prebuilt.ts build ${Object.keys(BUILDS).join("|")} | check`);
   process.exit(2);
 }

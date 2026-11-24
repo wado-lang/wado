@@ -6,7 +6,7 @@ description: Check the branch marks its generated files, review it with /code-re
 # Code Review and Response
 
 1. Check that the branch marks what it generates, so the review reads sources
-   alone. Among the files `scripts/changed-sources.sh` lists, find each one a
+   alone. Among the files `tools/changed-sources.sh` lists, find each one a
    script, a generator or a `mise` task writes. Mark it in `.gitattributes`
    (`linguist-generated=true -diff`) and in `.coderabbit.yaml`'s `path_filters`,
    by a glob where its siblings are generated too. Then run

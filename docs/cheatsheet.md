@@ -38,7 +38,7 @@ use { greet } from "https://example.com/lib/greet.wado"
 
 // A Kiln input may be a URL too; the pin covers what the generator reads.
 use { Model } from "https://huggingface.co/<repo>/resolve/<sha>/model.onnx"
-    with { generator: { module: "lib:loam" } };
+    with { generator: { module: "wado-lang:loam" } };
 ```
 
 Namespace imports make all pub symbols from the source module directly available:
@@ -67,8 +67,8 @@ lists `wado-lang:grog` under `[dependencies]` as well. See
 [the spec](./spec-kiln.md#manifest).
 
 ```wado
-use grog from "lib:grog";
-use { Account } from "./account.proto" with { generator: { module: "lib:grog" } };
+use grog from "wado-lang:grog";
+use { Account } from "./account.proto" with { generator: { module: "wado-lang:grog" } };
 
 let bytes = grog::encode(&Account { id: 150 });       // [0x08, 0x96, 0x01]
 let back = grog::decode::<Account, ByteList>(bytes)?;
@@ -2073,6 +2073,9 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
   model (`Instant`, `ZonedDateTime`, `Duration`, `Plain*`)
 - [`core:log`](./stdlib-core-log.md) — structured logging and tracing (levels, fields, spans, sinks)
 - [`core:router`](./stdlib-core-router.md) — HTTP path router
+- [`core:http_client`](./stdlib-core-http_client.md) — HTTP client over
+  `wasi:http`: an `HttpClient` per origin, streamed bodies, trailers, and
+  Server-Sent Events
 - [`core:icu`](./stdlib-core-icu.md) — Unicode character properties, as code
   point ranges or per character; `Locale`, whose methods map case
   (`tr.uppercase(s)`); `Collator`, which compares strings the way a locale

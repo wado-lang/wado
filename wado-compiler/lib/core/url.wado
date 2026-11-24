@@ -408,7 +408,7 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
 
     if rest.starts_with("[") {
         if let Some(bracket_end) = rest.find("]") {
-            url.host = rest.substr_bytes(1, bracket_end);
+            url.host = ipv6_literal(rest.substr_bytes(1, bracket_end))?;
             let after = rest.substr_bytes(bracket_end + 1, rest.len());
             if !after.is_empty() {
                 if after.starts_with(":") {
@@ -428,12 +428,36 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
             return Result::Err(ParseError::MissingHost);
         }
         apply_port_suffix(url, &port_str)?;
-        url.host = host_part.to_ascii_lowercase();
+        url.host = domain(host_part)?;
         return Result::Ok(());
     }
 
-    url.host = rest.to_ascii_lowercase();
+    url.host = domain(rest)?;
     return Result::Ok(());
+}
+
+/// The host a domain names, lowercased, or `InvalidHost` where it holds one of
+/// WHATWG URL's forbidden domain code points. `%` is the one let through, since
+/// the host is not percent-decoded.
+fn domain(host: StrSlice) -> Result<String, ParseError> {
+    if host.find_char(|c| c <= '\u{20}' || c == '\u{7f}' || "#/:<>?@[\\]^|".contains_char(c)) matches { Some(_) } {
+        return Result::Err(ParseError::InvalidHost);
+    }
+    return Result::Ok(host.to_ascii_lowercase());
+}
+
+/// What a pair of brackets holds, or `InvalidHost` where it is not made of an
+/// IPv6 literal's characters: the host is written back in brackets only when it
+/// holds a `:`, so anything else would not parse again.
+fn ipv6_literal<S: AsStrSlice>(host: S) -> Result<String, ParseError> {
+    let host = host.as_str_slice();
+    if host.is_empty() {
+        return Result::Err(ParseError::MissingHost);
+    }
+    if !host.contains(":") || host.find_char(|c| !c.is_hexdigit() && c != ':' && c != '.') matches { Some(_) } {
+        return Result::Err(ParseError::InvalidHost);
+    }
+    return Result::Ok(host.to_ascii_lowercase());
 }
 
 /// Reads an absolute URL. Only special schemes (http, https, ws, wss) are
@@ -481,11 +505,6 @@ impl FromStr for Url {
         };
 
         parse_authority(&authority_str, &mut url)?;
-
-        if url.host.is_empty() {
-            return Result::Err(ParseError::MissingHost);
-        }
-
         return Result::Ok(url);
     }
 }
@@ -514,7 +533,11 @@ impl Url {
             fragment: fragment,
         };
         if !authority.is_empty() {
-            if parse_authority(&authority, &mut url).is_err() {
+            // A failed parse may have set the userinfo or the port already.
+            let mut parsed = url;
+            if parse_authority(&authority, &mut parsed).is_ok() {
+                url = parsed;
+            } else {
                 url.host = authority.to_string();
             }
         }

@@ -21,7 +21,7 @@ use { parse, parse_checked } from "../src/g4/parser.wado";
 use { count_occurrences } from "./support/text.wado";
 use { lexer_dump } from "./support/fixtures.wado";
 use { eval, EvalHost, Output } from "core:eval";
-use { ModuleSpec, wado } from "lib:wadopoet";
+use { ModuleSpec, wado } from "wado-lang:wadopoet";
 
 global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions {};
 
@@ -6757,7 +6757,7 @@ fn kiln(
     let request = Request {
         primary: InputFile { path: primary.0, content: inputs.serve(primary.1), type: primary_type },
         inputs: files,
-        module: "lib:gale",
+        module: "wado-lang:gale",
         options,
     };
     let mut console = Console {};
@@ -6788,7 +6788,7 @@ test "gen prints the parser the Kiln generator builds for the same grammar" {
     let [gen_header, gen_body] = split_header(outcome.stdout());
     let [kiln_header, kiln_body] = split_header(built.source());
     assert gen_header == "#![generated(by = \"gale\", sources = [\"Expr.g4\"])]";
-    assert kiln_header == "#![generated(by = \"lib:gale\", sources = [\"Expr.g4\"])]";
+    assert kiln_header == "#![generated(by = \"wado-lang:gale\", sources = [\"Expr.g4\"])]";
     assert gen_body == kiln_body;
     assert outcome.console.stderr() == "";
 }

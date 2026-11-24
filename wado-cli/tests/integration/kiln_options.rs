@@ -34,6 +34,7 @@ fn write_project(root: &std::path::Path, options_table: &str) -> std::path::Path
     fs::write(
         gen_pkg.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "gen"
 version = "0.1.0"
 
@@ -49,6 +50,7 @@ version = "0.1.0"
     fs::write(
         app.join("wado.toml"),
         r#"[package]
+namespace = "acme"
 name = "app"
 version = "0.1.0"
 

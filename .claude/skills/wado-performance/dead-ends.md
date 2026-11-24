@@ -18,6 +18,34 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Sizing the JSON output buffer up front (2026-11-23)
+
+`String::grow` and the zero-fill it pays read as about 13% of json-twitter
+serialize, where the output buffer doubles from `SERIALIZE_BUFFER_CAPACITY`'s
+128 bytes. Starting it at 2 MiB removes every growth, so it prices the growth
+from above. Release binaries, three alternating rounds, functions aligned to
+64 bytes, against 128 bytes:
+
+| Starting capacity            | twitter ser | canada ser | catalog ser |
+| ---------------------------- | ----------- | ---------- | ----------- |
+| 2 MiB                        | +10%        | **−3.7%**  | +9%         |
+| The last output's length + 8 | +10.1%      | +4.2%      | +8.3%       |
+
+On canada, one 2 MiB `array.new_default` costs more than the doublings it
+replaces. The zero-fill is paid on capacity, not on what is written, and the
+doublings zero about twice the output in total.
+
+The second row starts each buffer at the previous call's output length, held in
+a global. It wins every row, but only because a benchmark serializes one value
+repeatedly. The returned `ByteSlice` keeps the whole buffer alive, so the
+first small output after a large one holds the large capacity, and zero-fills
+it. Where large and small outputs alternate, every small one does. A cap low
+enough to bound that loses the gain.
+The user declined it.
+
+Generalizes: the growth is not the cost a profile charges to `String::grow`.
+The zero-fill is, and it scales with the capacity asked for.
+
 ## `array.new_fixed` of zeros in place of a short `array.new_default` (2026-10-28)
 
 wasmtime zero-fills every `array.new_default` through the `memory_fill`

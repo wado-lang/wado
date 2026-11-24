@@ -481,7 +481,7 @@ mod tests {
         std::fs::create_dir_all(&package).unwrap();
         std::fs::write(
             package.join("wado.toml"),
-            "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n",
+            "[package]\nnamespace = \"acme\"\nname = \"pkg\"\nversion = \"0.1.0\"\n",
         )
         .unwrap();
         let root = package.display().to_string();

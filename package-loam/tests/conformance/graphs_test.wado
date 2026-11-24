@@ -2,59 +2,59 @@
 //! through `Cpu`. They share one file because each file compiles the runtime
 //! again.
 
-use { Cpu, Holds, Sampling, Tensor } from "lib:loam";
+use { Cpu, Holds, Sampling, Tensor } from "wado-lang:loam";
 use { assert_close } from "./oracle.wado";
 use { decoded_tokens, requested_tokens, requests_apart, samplers, stepped_tokens, steps_taken } from "./decoded.wado";
 use folded from "./folded.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use embedding from "./embedding.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use masked from "./mask.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use renamed from "./renamed_unit.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use spelled from "./spelled.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use branch from "./branch.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use joined from "./joined.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use grown from "./cached.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use state from "./state.onnxtext"
     with {
         type: "onnxtext",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 use last from "./last.onnxtext"
     with {
         type: "onnxtext",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 last: { Y: 1 },
             },
@@ -64,7 +64,7 @@ use ranked from "./ranked.onnxtext"
     with {
         type: "onnxtext",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 last: { Y: 1 },
                 arg_max: { Y: 2 },

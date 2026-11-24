@@ -1,7 +1,7 @@
 //! Gemma 3 (270M, instruction-tuned) as a library: its tokenizer, and the model
 //! that picks the next tokens, keeping the attention cache between calls.
 
-use { Backend, LoadError, Sampling, Tensor, WeightSource } from "lib:loam";
+use { Backend, LoadError, Sampling, Tensor, WeightSource } from "wado-lang:loam";
 /// Gemma's SentencePiece-spelled BPE, which puts `<bos>` first.
 pub use {
     Tokenizer,
@@ -9,7 +9,7 @@ pub use {
     with {
         type: "hf-tokenizer",
         integrity: "sha256:55da1312bdf1d7d8fe8d9d1b3eed04086261149e6034e0ac3f8c633b67f5aac8",
-        generator: { module: "lib:loam" },
+        generator: { module: "wado-lang:loam" },
     };
 /// The graph alone: its weights are external data in `model.onnx_data`.
 use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model.onnx"
@@ -17,7 +17,7 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
         type: "onnx",
         integrity: "sha256:56adf096be205ed53d9a1c59180ab2bdd47649a385705c7ab6a64f12d93e06b4",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 dims: { batch_size: 1 },
                 // Only the last position ranks the next token.

@@ -10,13 +10,13 @@ command -v node >/dev/null || exec mise exec -- "$0" "$@"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 PROGRAM="${1:-$ROOT/example/http_bin.wado}"
-JCO="$ROOT/scripts/jco/node_modules/.bin/jco"
+JCO="$ROOT/tools/jco/node_modules/.bin/jco"
 
 [ -x "$JCO" ] || { echo "jco missing. Run: mise run jco-deps" >&2; exit 1; }
 
 WASM="$(mktemp -d)/service.wasm"
 # V8 has no wide-arithmetic, which float formatting emits.
-"$ROOT/scripts/dev-bin.sh" wado compile --world wasi:http/service -f no-wide-arithmetic -Os -o "$WASM" "$PROGRAM"
+"$ROOT/tools/dev-bin.sh" wado compile --world wasi:http/service -f no-wide-arithmetic -Os -o "$WASM" "$PROGRAM"
 
 rm -rf "$HERE/gen"
 # `--instantiation` because a Worker rejects the top-level await jco's default

@@ -32,7 +32,7 @@ use wado_compiler::syntax::{
     CONTEXTUAL_KEYWORDS, KEYWORDS, KeywordCategory, NAME_KEYWORDS, OPERATORS,
 };
 
-const GRAMMAR: &str = "../package-gale-highlight-wado/assets/grammar/Wado.g4";
+const GRAMMAR: &str = "../package-wado/assets/grammar/Wado.g4";
 const QUERY: &str = "../package-gale-highlight-wado/assets/grammar/Wado.highlights.scm";
 
 /// Highlight operators `Wado.g4` cannot spell as a literal, with the spelling

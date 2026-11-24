@@ -5,7 +5,10 @@
 //! not sufficient when the host sits behind a TLS-inspecting proxy that signs
 //! outgoing HTTPS with a private CA (e.g. a sandboxed dev environment).
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -14,6 +17,7 @@ use http::uri::Scheme;
 use http_body_util::BodyExt;
 use rustls::pki_types::ServerName;
 use tokio::net::TcpStream;
+use tokio::time::{Instant, Sleep, sleep, timeout};
 use tokio_rustls::TlsConnector;
 use wasmtime_wasi_http::{Error as HttpError, RequestOptions, WasiBody, WasiHttpHooks};
 
@@ -82,13 +86,13 @@ impl WasiHttpHooks for WadoHttpHooks {
         &mut self,
         request: http::Request<WasiBody>,
         options: Option<RequestOptions>,
-        _fut: Box<dyn core::future::Future<Output = Result<(), HttpError>> + Send>,
+        _fut: Box<dyn Future<Output = Result<(), HttpError>> + Send>,
     ) -> Box<
-        dyn core::future::Future<
+        dyn Future<
                 Output = Result<
                     (
                         http::Response<WasiBody>,
-                        Box<dyn core::future::Future<Output = Result<(), HttpError>> + Send>,
+                        Box<dyn Future<Output = Result<(), HttpError>> + Send>,
                     ),
                     HttpError,
                 >,
@@ -97,8 +101,7 @@ impl WasiHttpHooks for WadoHttpHooks {
         let config = Arc::clone(&self.client_config);
         Box::new(async move {
             let (res, driver) = send_request(config, request, options).await?;
-            let driver: Box<dyn core::future::Future<Output = Result<(), HttpError>> + Send> =
-                Box::new(driver);
+            let driver: Box<dyn Future<Output = Result<(), HttpError>> + Send> = Box::new(driver);
             Ok((res.map(BodyExt::boxed_unsync), driver))
         })
     }
@@ -139,7 +142,7 @@ async fn send_request(
         .and_then(|o| o.between_bytes_timeout)
         .unwrap_or(Duration::from_mins(10));
 
-    let tcp = match tokio::time::timeout(connect_timeout, TcpStream::connect(&connect_addr)).await {
+    let tcp = match timeout(connect_timeout, TcpStream::connect(&connect_addr)).await {
         Ok(Ok(s)) => s,
         Ok(Err(err)) if err.kind() == std::io::ErrorKind::AddrNotAvailable => {
             return Err(dns_error("address not available".to_string(), 0));
@@ -170,19 +173,12 @@ async fn send_request(
         *req.uri_mut() = origin_form(req.uri());
     }
 
-    let res = tokio::time::timeout(first_byte_timeout, sender.send_request(req))
+    let res = timeout(first_byte_timeout, sender.send_request(req))
         .await
         .map_err(|_| HttpError::ConnectionReadTimeout)?
         .map_err(HttpError::from)?;
 
-    let res = res.map(|incoming| IncomingResponseBody {
-        incoming,
-        timeout: {
-            let mut t = tokio::time::interval(between_bytes_timeout);
-            t.reset();
-            t
-        },
-    });
+    let res = res.map(|incoming| IncomingResponseBody::new(incoming, between_bytes_timeout));
 
     Ok((res, conn_driver))
 }
@@ -202,7 +198,7 @@ async fn tls_connect(
         })?
         .to_owned();
     let connector = TlsConnector::from(client_config);
-    tokio::time::timeout(connect_timeout, connector.connect(domain, tcp))
+    timeout(connect_timeout, connector.connect(domain, tcp))
         .await
         .map_err(|_| HttpError::ConnectionTimeout)?
         .map_err(|e| {
@@ -282,7 +278,7 @@ async fn await_handshake<F, T>(connect_timeout: Duration, handshake: F) -> Resul
 where
     F: Future<Output = hyper::Result<T>>,
 {
-    tokio::time::timeout(connect_timeout, handshake)
+    timeout(connect_timeout, handshake)
         .await
         .map_err(|_| HttpError::ConnectionTimeout)?
         .map_err(HttpError::from)
@@ -316,30 +312,46 @@ fn dns_error(rcode: String, info_code: u16) -> HttpError {
     }
 }
 
-struct IncomingResponseBody {
-    incoming: hyper::body::Incoming,
-    timeout: tokio::time::Interval,
+/// A response body that fails once `between_bytes` passes with no frame. A
+/// `Sleep` rather than an `Interval`, which panics on the zero a guest may set.
+struct IncomingResponseBody<B = hyper::body::Incoming> {
+    incoming: B,
+    between_bytes: Duration,
+    deadline: Pin<Box<Sleep>>,
 }
 
-impl http_body::Body for IncomingResponseBody {
-    type Data = <hyper::body::Incoming as http_body::Body>::Data;
+impl<B> IncomingResponseBody<B> {
+    fn new(incoming: B, between_bytes: Duration) -> Self {
+        Self {
+            incoming,
+            between_bytes,
+            deadline: Box::pin(sleep(between_bytes)),
+        }
+    }
+}
+
+impl<B> http_body::Body for IncomingResponseBody<B>
+where
+    B: http_body::Body<Error = hyper::Error> + Unpin,
+{
+    type Data = B::Data;
     type Error = HttpError;
 
     fn poll_frame(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
-        use core::task::Poll;
-        match std::pin::Pin::new(&mut self.as_mut().incoming).poll_frame(cx) {
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        match Pin::new(&mut self.as_mut().incoming).poll_frame(cx) {
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(from_hyper_response_error(err)))),
             Poll::Ready(Some(Ok(frame))) => {
-                self.timeout.reset();
+                let next = Instant::now() + self.between_bytes;
+                self.deadline.as_mut().reset(next);
                 Poll::Ready(Some(Ok(frame)))
             }
-            Poll::Pending => match self.timeout.poll_tick(cx) {
+            Poll::Pending => match self.deadline.as_mut().poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(_) => Poll::Ready(Some(Err(HttpError::ConnectionReadTimeout))),
+                Poll::Ready(()) => Poll::Ready(Some(Err(HttpError::ConnectionReadTimeout))),
             },
         }
     }
@@ -401,6 +413,25 @@ mod tests {
             )
             .await;
             assert!(matches!(outcome, Err(HttpError::ConnectionTimeout)));
+        });
+    }
+
+    #[test]
+    fn a_zero_between_bytes_timeout_fails_the_first_wait() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let silent = http_body_util::StreamBody::new(futures::stream::pending::<
+                Result<http_body::Frame<Bytes>, hyper::Error>,
+            >());
+            let mut body = IncomingResponseBody::new(silent, Duration::ZERO);
+            let outcome = body.frame().await;
+            assert!(matches!(
+                outcome,
+                Some(Err(HttpError::ConnectionReadTimeout))
+            ));
         });
     }
 

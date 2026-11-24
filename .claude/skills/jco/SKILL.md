@@ -12,7 +12,7 @@ Wado today and what is still blocked.
 
 ## TL;DR
 
-- Use the **released npm jco as a library** (`scripts/jco`, `mise run jco-*`).
+- Use the **released npm jco as a library** (`tools/jco`, `mise run jco-*`).
 - Compile Wado with **`-f no-wide-arithmetic`** — V8 has no wide-arithmetic
   proposal, and float formatting / `i128` emit it.
 - Run on **Node 26+** — stable JSPI, no flag.
@@ -33,7 +33,7 @@ Wado today and what is still blocked.
 - **V8 has no wide-arithmetic** in any version (no flag exists). This is a V8
   gap, not a jco one — handled by `-f no-wide-arithmetic` (see below).
 
-## Vendor-free pipeline (`scripts/jco`)
+## Vendor-free pipeline (`tools/jco`)
 
 Released `@bytecodealliance/jco` as a library. `transpile-released.mjs` is a
 plain `transpile()` — jco's own `preview3-shim` serves every import a Wado
@@ -73,7 +73,7 @@ reads.
 mise tasks:
 
 ```sh
-mise run jco-deps                       # npm install released jco under scripts/jco
+mise run jco-deps                       # npm install released jco under tools/jco
 mise run jco-transpile-released foo.wasm [out-dir]
 mise run jco-hello-released             # compile + transpile + run hello on Node
 mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transpile, self-time

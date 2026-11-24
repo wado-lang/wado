@@ -1,12 +1,12 @@
 //! A small decoder driven through `decode` and `Requests` and, for what that
 //! must equal, a pass at a time through `compute`, on any backend.
 
-use { Backend, Cpu, Sampling, Tensor } from "lib:loam";
+use { Backend, Cpu, Sampling, Tensor } from "wado-lang:loam";
 use { B, Cache, Model, Params, Requests, S, T, compute, decode } from "./decoder.onnxtext"
     with {
         type: "onnxtext",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 last: { logits: 1 },
                 decode: { ids: "input_ids", mask: "attention_mask", logits: "logits" },

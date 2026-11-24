@@ -1239,7 +1239,16 @@ fn build_dep_generator_local_path(
         return Ok(None);
     };
     let package_dir = absolute(package_root).join(path);
-    let Some(entry) = package_generator_entry(&package_dir, files)? else {
+    let Some(generator) = manifest_in(&package_dir, files)? else {
+        return Ok(None);
+    };
+    wado_manifest::dependency::check_source_package(
+        key,
+        Some(&dep.source),
+        generator.package.as_ref(),
+    )
+    .map_err(DiscoveryError::Source)?;
+    let Some(entry) = generator.world_entry(GENERATOR_WORLD_FQ) else {
         return Ok(None);
     };
     let entry = normalize_path(&package_dir.join(entry));
@@ -1674,7 +1683,8 @@ mod kiln_dir_module_tests {
     fn write_pkg(root: &Path, name: &str, world_entry: Option<&str>) -> PathBuf {
         let pkg = root.join(name);
         std::fs::create_dir_all(pkg.join("src")).unwrap();
-        let mut manifest = format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n");
+        let mut manifest =
+            format!("[package]\nnamespace = \"acme\"\nname = \"{name}\"\nversion = \"0.1.0\"\n");
         if let Some(entry) = world_entry {
             manifest.push_str(&format!(
                 "\n[world]\n\"core:kiln/generator\" = \"{entry}\"\n"
@@ -1769,7 +1779,7 @@ mod kiln_dir_module_tests {
             std::fs::write(
                 app.join("wado.toml"),
                 format!(
-                    "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+                    "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
                      [build-dependencies]\n\"lib:gen\" = {{ path = {path:?} }}\n"
                 ),
             )

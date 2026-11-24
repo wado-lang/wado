@@ -9,8 +9,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use wado_lsp::host::discovery::{Disk, package_lib_entry};
-use wado_manifest::{GitTagInfo, Manifest, ProviderError};
+use wado_lsp::host::discovery::{
+    Disk, PackageFiles, absolutize, keyed_lib_entry, resolve_member_manifest, slash_separated,
+};
+use wado_manifest::{GitTagInfo, MANIFEST_FILENAME, Manifest, ProviderError};
 
 use crate::cache::{hold, root};
 use crate::registry::parse_version_tag;
@@ -71,27 +73,72 @@ pub fn fetch_manifest(
     let _lock = lock_repo(&repo_rel)?;
     ensure_repo(url, &repo)?;
     ensure_commit(url, &repo, sha)?;
-    let manifest_path = match directory {
-        Some(dir) => format!("{}/wado.toml", dir.trim_matches('/')),
-        None => "wado.toml".to_string(),
+    manifest_at(&repo, url, sha, directory)
+}
+
+/// The manifest of the package in `directory` of the clone `repo` at `sha`,
+/// inheriting from the `wado-workspace.toml` that governs it at that commit.
+fn manifest_at(
+    repo: &Path,
+    url: &str,
+    sha: &str,
+    directory: Option<&str>,
+) -> Result<Manifest, ProviderError> {
+    let tree = Commit {
+        repo,
+        sha,
+        root: absolutize(Path::new(std::path::MAIN_SEPARATOR_STR)),
     };
+    let member_dir = tree.root.join(directory.unwrap_or("").trim_matches('/'));
+    let manifest_path = member_dir.join(MANIFEST_FILENAME);
+    let source = format!("{url}@{sha}");
     // A missing `wado.toml` (tag predating the manifest, or a wrong `directory`)
     // reads clearer than raw `git show` plumbing.
-    let text =
-        run_git(Some(&repo), &["show", &format!("{sha}:{manifest_path}")]).map_err(|_| {
-            ProviderError::NotFound {
-                source: format!("{url}@{sha}"),
+    let text = match tree.find(&manifest_path) {
+        Some(read) => read.map_err(|e| io_err(&manifest_path, &e))?,
+        None => {
+            return Err(ProviderError::NotFound {
+                source,
                 message: format!(
-                    "no {manifest_path} at this commit (the tag/ref may predate the \
-                 manifest, or `directory` is wrong)"
+                    "no {} at this commit (the tag/ref may predate the manifest, or \
+                     `directory` is wrong)",
+                    manifest_path.display()
                 ),
-            }
-        })?;
-    text.parse::<Manifest>()
-        .map_err(|e| ProviderError::InvalidManifest {
-            source: format!("{url}@{sha}"),
-            message: e.to_string(),
-        })
+            });
+        }
+    };
+    resolve_member_manifest(&member_dir, &text, &tree).map_err(|e| ProviderError::InvalidManifest {
+        source,
+        message: e.to_string(),
+    })
+}
+
+/// The files of a commit, each at its path from the repository root taken as
+/// `root`, a filesystem root: the workspace lookup walks up to it.
+struct Commit<'a> {
+    repo: &'a Path,
+    sha: &'a str,
+    root: PathBuf,
+}
+
+impl PackageFiles for Commit<'_> {
+    fn read(&self, path: &Path) -> std::io::Result<String> {
+        let rel = slash_separated(
+            path.strip_prefix(&self.root)
+                .expect("a commit's paths lie under its root"),
+        );
+        let rel = rel.as_str();
+        let git_err = |e: ProviderError| std::io::Error::other(e.to_string());
+        let listed = run_git(
+            Some(self.repo),
+            &["ls-tree", "--name-only", self.sha, "--", rel],
+        )
+        .map_err(git_err)?;
+        if listed.is_empty() {
+            return Err(std::io::ErrorKind::NotFound.into());
+        }
+        run_git(Some(self.repo), &["show", &format!("{}:{rel}", self.sha)]).map_err(git_err)
+    }
 }
 
 /// Materialize a per-version worktree at `sha` under the Wado root, returning its
@@ -197,12 +244,11 @@ fn ensure_commit(url: &str, repo: &Path, sha: &str) -> Result<(), ProviderError>
     })
 }
 
-/// Materialize a worktree and return its absolute `[package].lib` entry path —
-/// the shared spine both the manifest build-tier materializer and the
-/// single-file inline resolver end at, so a git dependency's source entry is
-/// located identically however it was declared. `directory` selects a monorepo
-/// subdirectory within the worktree.
+/// Materialize a worktree and return the absolute `[package].lib` entry path of
+/// the dependency `key` names. `directory` selects a monorepo subdirectory
+/// within the worktree.
 pub fn materialize_entry(
+    key: &str,
     url: &str,
     version: &str,
     sha: &str,
@@ -213,11 +259,12 @@ pub fn materialize_entry(
         Some(dir) => worktree.join(dir),
         None => worktree,
     };
-    let entry =
-        package_lib_entry(&pkg_dir, &Disk).map_err(|message| ProviderError::InvalidManifest {
+    let entry = keyed_lib_entry(key, None, &pkg_dir, &Disk).map_err(|message| {
+        ProviderError::InvalidManifest {
             source: pkg_dir.display().to_string(),
             message,
-        })?;
+        }
+    })?;
     Ok(entry.display().to_string())
 }
 
@@ -363,7 +410,7 @@ mod tests {
         init_repo(&origin);
         fs::write(
             origin.join("wado.toml"),
-            "[package]\nname=\"router\"\nversion=\"1.0.0\"\n",
+            "[package]\nnamespace = \"acme\"\nname=\"router\"\nversion=\"1.0.0\"\n",
         )
         .unwrap();
         let sha_10 = commit_all(&origin, "v1.0.0");
@@ -391,7 +438,7 @@ mod tests {
         init_repo(&origin);
         fs::write(
             origin.join("wado.toml"),
-            "[package]\nname=\"lib\"\nversion=\"0.3.0\"\nlib=\"src/lib.wado\"\n",
+            "[package]\nnamespace = \"acme\"\nname=\"lib\"\nversion=\"0.3.0\"\nlib=\"src/lib.wado\"\n",
         )
         .unwrap();
         fs::create_dir(origin.join("src")).unwrap();
@@ -420,5 +467,30 @@ mod tests {
         assert_eq!(materialize(&url, "0.3.0", &sha).unwrap(), worktree);
 
         unsafe { std::env::remove_var("WADO_ROOT") };
+    }
+
+    #[test]
+    fn a_member_manifest_inherits_from_its_workspace_at_the_commit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let origin = tmp.path().join("mono");
+        fs::create_dir_all(origin.join("pkgs/lib")).unwrap();
+        init_repo(&origin);
+        fs::write(
+            origin.join("wado-workspace.toml"),
+            "[workspace]\nmembers = [\"pkgs/*\"]\n\n\
+             [workspace.package]\nnamespace = \"acme\"\nversion = \"0.4.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            origin.join("pkgs/lib/wado.toml"),
+            "[package]\nname = \"lib\"\n",
+        )
+        .unwrap();
+        let sha = commit_all(&origin, "init");
+
+        let manifest = manifest_at(&origin, "origin", &sha, Some("pkgs/lib/")).unwrap();
+        let package = manifest.package.unwrap();
+        assert_eq!(package.namespace, "acme");
+        assert_eq!(package.version, "0.4.0");
     }
 }

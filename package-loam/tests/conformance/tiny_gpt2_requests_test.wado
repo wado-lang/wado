@@ -3,14 +3,14 @@
 //! file compiles the runtime again, and Kiln reads each model file once per
 //! file, so the other forms of these two models live in other files.
 
-use { Cpu, Sampling, Tensor } from "lib:loam";
+use { Cpu, Sampling, Tensor } from "wado-lang:loam";
 use { HashMap } from "core:collections";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use decoding from "../models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             options: {
                 last: { logits: 1 },
                 decode: { ids: "input_ids", mask: "attention_mask", logits: "logits" },
@@ -21,7 +21,7 @@ use sharded from "../models/tiny-gpt2/model.onnxtext"
     with {
         type: "onnxtext",
         generator: {
-            module: "lib:loam",
+            module: "wado-lang:loam",
             inputs: [
                 { path: "../models/tiny-gpt2/sharded/model.safetensors.index.json", type: "safetensors-index" },
                 { path: "../models/tiny-gpt2/sharded/model-00001-of-00003.safetensors", type: "safetensors" },

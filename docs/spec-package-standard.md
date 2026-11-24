@@ -77,7 +77,6 @@ directory of its own under `tests/`.
 
 `assets/` holds every file the package bundles that is not a Wado module: a
 grammar a Kiln import reads, a schema, a WIT file. A directory under it groups
-files of one kind, such as `assets/grammar/`.
-
-> Not yet implemented: bundling a file of `assets/` for a consumer to name.
-> `exports` lists Wado modules only ([Exported Files](./spec-packages.md#exported-files)).
+files of one kind, such as `assets/grammar/`. A file a consumer may name, such
+as a grammar its own Kiln clause reads, is listed in `exports`
+([Exported Files](./spec-packages.md#exported-files)).

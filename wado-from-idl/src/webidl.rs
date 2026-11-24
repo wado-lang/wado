@@ -1,4 +1,4 @@
-//! WebIDL-to-IR transformation, over the webidl2 AST `scripts/webidl/snapshot.mjs`
+//! WebIDL-to-IR transformation, over the webidl2 AST `tools/webidl/snapshot.mjs`
 //! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-web.md`.
 
 use anyhow::{Result, anyhow, bail};

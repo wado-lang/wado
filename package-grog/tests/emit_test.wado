@@ -1,9 +1,9 @@
-use { ModuleSpec } from "lib:wadopoet";
+use { ModuleSpec } from "wado-lang:wadopoet";
 use { emit } from "../src/emit.wado";
 use { read } from "../src/parse.wado";
 
 fn generate(source: String) -> String {
-    return match emit(&read(source).unwrap(), &ModuleSpec::new("lib:grog", ["point.proto"]), "lib:grog") {
+    return match emit(&read(source).unwrap(), &ModuleSpec::new("wado-lang:grog", ["point.proto"]), "wado-lang:grog") {
         Ok(text) => text,
         Err(e) => `error: ${e}`,
     };
@@ -212,9 +212,9 @@ message Point {
   Point next = 5;
   oneof choice { string label = 7; Point other = 8; }
 }
-") == "#![generated(by = \"lib:grog\", sources = [\"point.proto\"])]
+") == "#![generated(by = \"wado-lang:grog\", sources = [\"point.proto\"])]
 
-use grog from \"lib:grog\";
+use grog from \"wado-lang:grog\";
 
 pub struct Point {
     pub x: i32 = 0,

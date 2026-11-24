@@ -36,7 +36,7 @@ export fn generate(req: Request) -> Result<Response, Error> with Stream {
 fn write_project(root: &std::path::Path) {
     fs::write(
         root.join("wado.toml"),
-        "[package]\nname = \"multi\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"multi\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
     )
     .unwrap();
     fs::create_dir_all(root.join("src/feat1")).unwrap();
@@ -89,7 +89,7 @@ fn two_modules_sharing_one_schema_both_redirect() {
     let root = tmp.path();
     fs::write(
         root.join("wado.toml"),
-        "[package]\nname = \"shared\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+        "[package]\nnamespace = \"acme\"\nname = \"shared\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
     )
     .unwrap();
     fs::create_dir_all(root.join("src")).unwrap();

@@ -1,14 +1,14 @@
 //! Corpus check: parse every `.wado` path given on the command line with the
 //! Gale-generated parser and report each file's first diagnostic.
 //!
-//!     wado run package-gale-highlight-wado/tools/corpus_check.wado -- <paths...>
-//!     wado run package-gale-highlight-wado/tools/corpus_check.wado -- --paths-from list.txt
+//!     wado run package-wado/tools/corpus_check.wado -- <paths...>
+//!     wado run package-wado/tools/corpus_check.wado -- --paths-from list.txt
 //!
 //! One `ok` / `ng` line per file, plus a summary. `--paths-from` reads one
 //! path per line — the only form that survives a path containing a space.
 
 use { parse } from "../src/lib.wado";
-use { collect_paths, line_of } from "lib:gale";
+use { collect_paths, line_of } from "wado-lang:gale";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";

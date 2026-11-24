@@ -2,7 +2,7 @@
 
 Wadopoet builds Wado source text for a code generator. Gale, Grog and Loam emit
 through it, and so do the tools that write Jade's and Gale's generated tests. A
-package names it under `[dependencies]` and imports it from `lib:wadopoet`.
+package names it under `[dependencies]` and imports it from `wado-lang:wadopoet`.
 
 ## Building Source
 
@@ -33,7 +33,7 @@ returns nothing. Compute what may fail before the declaration, not inside the
 closure.
 
 ```wado
-use { CodeWriter, FnSpec, StructSpec, Vis } from "lib:wadopoet";
+use { CodeWriter, FnSpec, StructSpec, Vis } from "wado-lang:wadopoet";
 
 let mut w = CodeWriter::new();
 let mut s = StructSpec::new("Point", Vis::Pub);
