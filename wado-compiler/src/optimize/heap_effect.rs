@@ -226,7 +226,9 @@ impl Levels {
         }
         let mut provs: Vec<Prov> = (0..raw.len())
             .map(|d| {
-                let implied = d.checked_sub(1).map_or(Prov::default(), |up| raw[up].loaded());
+                let implied = d
+                    .checked_sub(1)
+                    .map_or(Prov::default(), |up| raw[up].loaded());
                 raw[d].without(implied)
             })
             .collect();
@@ -1053,6 +1055,15 @@ enum OperandNode {
     Unknown,
 }
 
+impl OperandNode {
+    fn node(self) -> Option<u32> {
+        match self {
+            OperandNode::Node(n) => Some(n),
+            OperandNode::None | OperandNode::Unknown => None,
+        }
+    }
+}
+
 enum Keys {
     One(TypeId),
     Set(Arc<ObjectTypes>),
@@ -1187,6 +1198,14 @@ impl Classes {
         }
     }
 
+    /// [`Self::load`] of an operand's node, where it has one.
+    fn load_operand(&mut self, n: OperandNode) -> OperandNode {
+        match n {
+            OperandNode::Node(n) => OperandNode::Node(self.load(n)),
+            other => other,
+        }
+    }
+
     /// The class `depth` loads from `n`'s objects reach, made where there is
     /// none.
     fn load_n(&mut self, n: u32, depth: usize) -> u32 {
@@ -1224,17 +1243,12 @@ impl Classes {
     fn levels(&self, n: u32, depth: usize, below: bool) -> Vec<Level> {
         let mut class = self.root(n);
         for reached in 0..depth {
-            match self.loaded_from(class) {
-                Some(loaded) => class = loaded,
-                None => {
-                    let prov = (reached..depth).fold(self.prov_of(class), |p, _| p.loaded());
-                    let prov = if below { deepened(prov) } else { prov };
-                    return vec![Level::Beyond {
-                        under: class,
-                        prov,
-                    }];
-                }
-            }
+            let Some(loaded) = self.loaded_from(class) else {
+                let prov = (reached..depth).fold(self.prov_of(class), |p, _| p.loaded());
+                let prov = if below { deepened(prov) } else { prov };
+                return vec![Level::Beyond { under: class, prov }];
+            };
+            class = loaded;
         }
         if !below {
             return vec![Level::Class(class)];
@@ -1517,10 +1531,8 @@ impl HeapFrame {
                 OperandNode::Node(self.local_node(body.values.promoted_opaque_local(oid)))
             }
             ValueKind::FieldAccess { receiver, .. } => {
-                match self.value_node(effects, body, receiver) {
-                    OperandNode::Node(r) => OperandNode::Node(self.classes.load(r)),
-                    other => other,
-                }
+                let receiver = self.value_node(effects, body, receiver);
+                self.classes.load_operand(receiver)
             }
             ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
                 self.value_node(effects, body, operand)
@@ -1541,10 +1553,8 @@ impl HeapFrame {
 
     /// The class a load from `op`'s objects reaches, where `op` has any.
     fn operand_load(&mut self, effects: &HeapEffects, body: &Body, op: Operand) -> OperandNode {
-        match self.operand_node(effects, body, op) {
-            OperandNode::Node(n) => OperandNode::Node(self.classes.load(n)),
-            other => other,
-        }
+        let n = self.operand_node(effects, body, op);
+        self.classes.load_operand(n)
     }
 
     /// Join `n` with what a load from `op` reaches.
@@ -1873,10 +1883,6 @@ impl HeapFrame {
                 });
             }
         };
-        let load = |frame: &mut Self, n: OperandNode| match n {
-            OperandNode::Node(n) => OperandNode::Node(frame.classes.load(n)),
-            other => other,
-        };
         match &body.pats[pat].kind {
             PatKind::Binding {
                 local_index,
@@ -1897,7 +1903,7 @@ impl HeapFrame {
             }
             PatKind::Tuple(elements, _) => {
                 read(self, ty);
-                let element = load(self, scrutinee);
+                let element = self.classes.load_operand(scrutinee);
                 for (i, &p) in elements.iter().enumerate() {
                     let sub = effects.tuple_element_type(ty, i);
                     self.pattern(effects, body, p, element, sub);
@@ -1909,7 +1915,7 @@ impl HeapFrame {
                 ..
             } => {
                 read(self, Some(*struct_type));
-                let field = load(self, scrutinee);
+                let field = self.classes.load_operand(scrutinee);
                 for f in fields {
                     let sub =
                         effects.pattern_field_type(Some(*struct_type), f.field_index as usize);
@@ -1922,11 +1928,11 @@ impl HeapFrame {
                 ..
             } => {
                 read(self, ty);
-                let payload = load(self, scrutinee);
+                let payload = self.classes.load_operand(scrutinee);
                 if let [one] = bindings.as_slice() {
                     self.pattern(effects, body, *one, payload, Some(*payload_type));
                 } else {
-                    let element = load(self, payload);
+                    let element = self.classes.load_operand(payload);
                     for (i, &p) in bindings.iter().enumerate() {
                         let sub = effects.tuple_element_type(Some(*payload_type), i);
                         self.pattern(effects, body, p, element, sub);
@@ -1956,10 +1962,8 @@ impl HeapFrame {
         result: OperandNode,
         args: &[(Operand, OperandNode)],
     ) {
-        let node = |j: usize| match args.get(j) {
-            Some(&(_, OperandNode::Node(n))) => Some(n),
-            _ => None,
-        };
+        let node = |j: usize| args.get(j).and_then(|&(_, n)| n.node());
+        let result = result.node();
         // The arguments a [`Prov`] parameter bit stands for.
         let nodes_of = |bit: usize| {
             let end = if bit == PARAM_SLOTS - 1 {
@@ -1997,10 +2001,6 @@ impl HeapFrame {
                         classes.collapse(deepest);
                     }
                 };
-                let result = match result {
-                    OperandNode::Node(n) => Some(n),
-                    OperandNode::None | OperandNode::Unknown => None,
-                };
                 held(classes, result, &s.ret);
                 for (k, levels) in s.into_params.iter().enumerate().take(args.len()) {
                     held(classes, node(k), levels);
@@ -2013,12 +2013,8 @@ impl HeapFrame {
                 }
             }
             Target::Builtin(declaration) => {
-                let result = match result {
-                    OperandNode::Node(n) => Some(n),
-                    OperandNode::None | OperandNode::Unknown => None,
-                };
                 for r in &declaration.retains {
-                    let Some(&(source, OperandNode::Node(n))) = args.get(r.source) else {
+                    let (Some(&(source, _)), Some(n)) = (args.get(r.source), node(r.source)) else {
                         continue;
                     };
                     if !effects.retains_reference(body, declaration, r, Some(source)) {
@@ -2031,8 +2027,8 @@ impl HeapFrame {
                     };
                     match r.into {
                         RetainInto::Param(q) => {
-                            if let Some(&(dst, OperandNode::Node(d))) = args.get(q) {
-                                let slot = contents(classes, tt, body.operand_type(dst), d);
+                            if let Some(d) = node(q) {
+                                let slot = contents(classes, tt, body.operand_type(args[q].0), d);
                                 classes.unify(slot, held);
                             }
                         }
@@ -2074,7 +2070,10 @@ impl HeapFrame {
                     // not `replace`, which hands back the referent itself.
                     let (holder, part) = (body.operand_type(args[j].0), body.exprs[e].type_id);
                     let is_cell = |t| tt.cell_payload(t).is_some();
-                    if declared && !is_cell(holder) && !is_cell(part) && effects.loads_as(holder, part)
+                    if declared
+                        && !is_cell(holder)
+                        && !is_cell(part)
+                        && effects.loads_as(holder, part)
                     {
                         let loaded = classes.load(n);
                         classes.unify(result, loaded);
@@ -2085,15 +2084,12 @@ impl HeapFrame {
                 }
             }
             Target::Opaque { .. } => {
-                for &(_, n) in args {
-                    if let OperandNode::Node(n) = n {
-                        classes.collapse(n);
-                    }
-                    classes.unify_nodes(result, n);
-                }
-                if let OperandNode::None | OperandNode::Unknown = result {
-                    for pair in args.windows(2) {
-                        classes.unify_nodes(pair[0].1, pair[1].1);
+                let mut joined = result;
+                for n in (0..args.len()).filter_map(node) {
+                    classes.collapse(n);
+                    match joined {
+                        Some(j) => classes.unify(j, n),
+                        None => joined = Some(n),
                     }
                 }
             }
@@ -2105,7 +2101,11 @@ impl HeapFrame {
     fn summary(&self, classes: &Classes, effects: &HeapEffects, body: &Body) -> Summary {
         let mut s = Summary {
             ret: Levels::of(classes, RET),
-            into_params: self.params.iter().map(|&n| Levels::of(classes, n)).collect(),
+            into_params: self
+                .params
+                .iter()
+                .map(|&n| Levels::of(classes, n))
+                .collect(),
             into_elsewhere: classes.prov_of(ELSEWHERE),
             ..Summary::default()
         };
@@ -2488,8 +2488,7 @@ fn meets(classes: &Classes, reach: Option<&Reach>, level: Level) -> bool {
             }
             // Below a class on the chain is reached through it.
             Level::Beyond { under, prov } => {
-                reach.chain.contains(&classes.root(under))
-                    || (reach.foreign && !prov.is_fresh())
+                reach.chain.contains(&classes.root(under)) || (reach.foreign && !prov.is_fresh())
             }
         }
 }
