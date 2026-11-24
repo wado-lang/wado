@@ -11,7 +11,9 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use sha2::{Digest, Sha256};
-use wasmtime::component::{Component, InstancePre, Linker, ResourceTable, TypedFunc};
+use wasmtime::component::{
+    Component, ComponentExportIndex, InstancePre, Linker, ResourceTable, TypedFunc,
+};
 use wasmtime::{Engine, OptLevel as CraneliftOptLevel};
 use wasmtime_wasi::cli::{WasiCli, WasiCliView};
 use wasmtime_wasi::p3::bindings::cli::stderr;
@@ -86,6 +88,7 @@ static FORMATTER: OnceLock<Formatter> = OnceLock::new();
 struct Formatter {
     engine: Engine,
     pre: InstancePre<Guest>,
+    format: ComponentExportIndex,
 }
 
 impl Formatter {
@@ -93,6 +96,12 @@ impl Formatter {
         let engine = Engine::new(&default_config(CraneliftOptLevel::Speed))
             .unwrap_or_else(|e| panic!("wasmtime rejected the default configuration: {e:#}"));
         let component = load_component(&engine);
+        let interface = component
+            .get_export_index(None, INTERFACE)
+            .expect("the bundled Marl exports its interface");
+        let format = component
+            .get_export_index(Some(&interface), "format")
+            .expect("the bundled Marl exports `format`");
         let mut linker = Linker::new(&engine);
         stderr::add_to_linker::<_, WasiCli>(&mut linker, Guest::cli)
             .expect("linking wasi:cli/stderr");
@@ -100,7 +109,11 @@ impl Formatter {
         let pre = linker
             .instantiate_pre(&component)
             .unwrap_or_else(|e| panic!("the bundled Marl imports what is linked: {e:#}"));
-        Self { engine, pre }
+        Self {
+            engine,
+            pre,
+            format,
+        }
     }
 
     async fn format(&self, markdown: &str) -> String {
@@ -119,14 +132,8 @@ impl Formatter {
             .instantiate_async(&mut store)
             .await
             .unwrap_or_else(|e| panic!("instantiating the bundled Marl: {e:#}"));
-        let interface = instance
-            .get_export_index(&mut store, None, INTERFACE)
-            .expect("the bundled Marl exports its interface");
-        let func = instance
-            .get_export_index(&mut store, Some(&interface), "format")
-            .expect("the bundled Marl exports `format`");
         let format: TypedFunc<(String,), (String,)> = instance
-            .get_typed_func(&mut store, func)
+            .get_typed_func(&mut store, self.format)
             .unwrap_or_else(|e| panic!("`format` takes and returns a string: {e:#}"));
         let (formatted,) = format
             .call_async(&mut store, (markdown.to_string(),))
