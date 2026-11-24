@@ -44,6 +44,16 @@ fn param_slot(index: usize) -> usize {
     index.min(PARAM_SLOTS - 1)
 }
 
+/// The parameters, of `count`, a [`Prov`] parameter bit stands for.
+pub(super) fn params_of_bit(bit: usize, count: usize) -> Range<usize> {
+    let end = if bit == PARAM_SLOTS - 1 {
+        count
+    } else {
+        bit + 1
+    };
+    bit..end.min(count)
+}
+
 /// Where a class's objects may come from: a parameter's objects, or what a
 /// chain of loads from them reaches, a bit per parameter at each depth; or a
 /// global. None means allocated here.
@@ -639,7 +649,14 @@ impl HeapEffectsCache {
                     &fresh
                 };
                 let classes = frame.link(frame.classes.clone(), &effects, body);
-                frame.summary(&classes, &effects, body)
+                let mut summary = frame.summary(&classes, &effects, body);
+                // A copy hands its input's unit-case objects on as they are,
+                // which the frame cannot tell from a part: they hold nothing
+                // a write reaches, so the type says what the copy shares.
+                if f.value_copy_type().is_some_and(|ty| !effects.copy_shares(ty)) {
+                    summary.ret = Levels::default();
+                }
+                summary
             }
             Callee::Builtin(_) | Callee::Opaque { .. } => Summary::default(),
         }
@@ -1127,13 +1144,18 @@ struct Classes {
     loads: Vec<u32>,
 }
 
-/// Some objects a call or a store reaches: a class, or objects below the
-/// deepest class `under` a chain of loads has in the frame, which come from
-/// where `prov` says.
+/// Some objects a call or a store reaches: a class, or objects `loads` loads
+/// below the deepest class `under` a chain has in the frame, and where `deep`,
+/// every one below them, which come from where `prov` says.
 #[derive(Clone, Copy)]
 enum Level {
     Class(u32),
-    Beyond { under: u32, prov: Prov },
+    Beyond {
+        under: u32,
+        loads: usize,
+        deep: bool,
+        prov: Prov,
+    },
 }
 
 impl Classes {
@@ -1246,7 +1268,12 @@ impl Classes {
             let Some(loaded) = self.loaded_from(class) else {
                 let prov = (reached..depth).fold(self.prov_of(class), |p, _| p.loaded());
                 let prov = if below { deepened(prov) } else { prov };
-                return vec![Level::Beyond { under: class, prov }];
+                return vec![Level::Beyond {
+                    under: class,
+                    loads: depth - reached,
+                    deep: below,
+                    prov,
+                }];
             };
             class = loaded;
         }
@@ -1259,6 +1286,8 @@ impl Classes {
         if self.loaded_from(last).is_none() {
             levels.push(Level::Beyond {
                 under: last,
+                loads: 1,
+                deep: true,
                 prov: deepened(self.prov_of(last).loaded()),
             });
         }
@@ -1964,15 +1993,7 @@ impl HeapFrame {
     ) {
         let node = |j: usize| args.get(j).and_then(|&(_, n)| n.node());
         let result = result.node();
-        // The arguments a [`Prov`] parameter bit stands for.
-        let nodes_of = |bit: usize| {
-            let end = if bit == PARAM_SLOTS - 1 {
-                args.len()
-            } else {
-                bit + 1
-            };
-            (bit..end).filter_map(node)
-        };
+        let nodes_of = |bit: usize| params_of_bit(bit, args.len()).filter_map(node);
         let tt = effects.type_table;
         match call_target(effects, body, e) {
             Target::Summary(s) => {
@@ -2216,9 +2237,31 @@ impl HeapFrame {
         Some(Reach {
             anything: self.partial && chain.contains(&elsewhere),
             chain,
+            tail: None,
             foreign,
             elsewhere: self.partial.then_some(elsewhere),
         })
+    }
+
+    /// What the objects `depth` loads below class `h`'s reach.
+    fn reach_below(&self, h: u32, depth: usize) -> Reach {
+        let mut class = self.classes.root(h);
+        for reached in 0..depth {
+            let Some(loaded) = self.classes.loaded_from(class) else {
+                let below = depth - reached;
+                let prov = (0..below).fold(self.classes.prov_of(class), |p, _| p.loaded());
+                return Reach {
+                    chain: Vec::new(),
+                    tail: Some((class, below)),
+                    foreign: !deepened(prov).is_fresh(),
+                    anything: false,
+                    elsewhere: self.partial.then(|| self.classes.root(ELSEWHERE)),
+                };
+            };
+            class = loaded;
+        }
+        self.reach_of(Some(class))
+            .expect("a class reaches what its chain does")
     }
 
     /// Whether locals `a` and `b` may hold one object.
@@ -2334,7 +2377,8 @@ impl HeapFrame {
         local: u32,
         answered: impl Fn(Operand) -> bool,
     ) -> bool {
-        self.written_in(effects, body, keys, self.local_root(local), &answered)
+        let reach = self.reach_of(self.local_root(local));
+        self.written_in(effects, body, keys, reach.as_ref(), &answered)
     }
 
     /// [`Self::written`] for the objects operand `op` holds or reaches.
@@ -2345,22 +2389,64 @@ impl HeapFrame {
         keys: &Arc<ObjectTypes>,
         op: Operand,
     ) -> bool {
-        let h = match self.lookup(effects, body, op) {
+        self.operand_written_below(effects, body, keys, op, 0)
+    }
+
+    /// [`Self::operand_written`] for the objects `depth` loads below `op`'s
+    /// and what they reach.
+    pub(super) fn operand_written_below(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        keys: &Arc<ObjectTypes>,
+        op: Operand,
+        depth: usize,
+    ) -> bool {
+        let reach = match self.lookup(effects, body, op) {
             OperandNode::None => return false,
             OperandNode::Unknown => None,
-            OperandNode::Node(n) => Some(n),
+            OperandNode::Node(n) => Some(self.reach_below(n, depth)),
         };
-        self.written_in(effects, body, keys, h, &|_| false)
+        self.written_in(effects, body, keys, reach.as_ref(), &|_| false)
+    }
+
+    /// The depth below the result the objects of the operand `op` sit at,
+    /// where the result reaches them.
+    pub(super) fn returned_at(&self, effects: &HeapEffects, body: &Body, op: Operand) -> Option<usize> {
+        let OperandNode::Node(h) = self.lookup(effects, body, op) else {
+            return None;
+        };
+        let h = self.classes.root(h);
+        self.classes.chain(RET).iter().position(|&c| c == h)
+    }
+
+    /// Each parameter and depth below it the objects of the operand `op` may
+    /// come from.
+    pub(super) fn operand_sources(&self, effects: &HeapEffects, body: &Body, op: Operand) -> Vec<(usize, usize)> {
+        match self.lookup(effects, body, op) {
+            OperandNode::Node(h) => self.classes.prov_of(h).sources().collect(),
+            OperandNode::None | OperandNode::Unknown => Vec::new(),
+        }
     }
 
     /// Whether every object operand `op` holds is allocated in this body and
     /// stays in it: none comes from a parameter or a global, and none reaches
-    /// the result or anything the body did not allocate.
-    pub(super) fn operand_confined(&self, effects: &HeapEffects, body: &Body, op: Operand) -> bool {
+    /// anything the body did not allocate, nor the result unless `or_returned`.
+    pub(super) fn operand_confined(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        op: Operand,
+        or_returned: bool,
+    ) -> bool {
         let OperandNode::Node(h) = self.lookup(effects, body, op) else {
             return false;
         };
-        let returned = self.classes.chain(RET);
+        let returned = if or_returned {
+            Vec::new()
+        } else {
+            self.classes.chain(RET)
+        };
         !self.partial
             && self
                 .classes
@@ -2369,30 +2455,77 @@ impl HeapFrame {
                 .all(|&c| self.classes.prov_of(c).is_fresh() && !returned.contains(&c))
     }
 
+    /// Whether an object operand `op` holds or reaches may stay reachable after
+    /// the body returns: returned, a global's, or stored into an object the
+    /// body did not allocate. One that only came from such an object, as
+    /// `extend` copies a parameter's elements in, stays where it was. A store
+    /// joins what a load from its target reaches with what it stores, so the
+    /// target's class reaches `op`'s: no alias of it is asked about.
+    pub(super) fn operand_stored_outside(&self, effects: &HeapEffects, body: &Body, op: Operand) -> bool {
+        let h = match self.lookup(effects, body, op) {
+            OperandNode::None => return false,
+            OperandNode::Unknown => return true,
+            OperandNode::Node(h) => h,
+        };
+        if self.partial {
+            return true;
+        }
+        let held = self.classes.chain(h);
+        let mut outside = self.classes.chain(RET);
+        outside.extend(self.classes.chain(ELSEWHERE));
+        if held.iter().any(|c| outside.contains(c)) {
+            return true;
+        }
+        let everything = Arc::new(ObjectTypes::everything());
+        (0..self.classes.loads.len() as u32)
+            .filter(|&x| {
+                self.classes.root(x) == x
+                    && !self.classes.prov_of(x).is_fresh()
+                    && self.classes.chain(x).iter().any(|c| held.contains(c))
+            })
+            .any(|x| {
+                let holder = Reach {
+                    chain: vec![x],
+                    tail: None,
+                    foreign: false,
+                    anything: false,
+                    elsewhere: None,
+                };
+                self.written_in(effects, body, &everything, Some(&holder), &|_| false)
+            })
+    }
+
+    /// Whether no object operand `op` holds or reaches may come from a global.
+    pub(super) fn operand_off_globals(&self, effects: &HeapEffects, body: &Body, op: Operand) -> bool {
+        match self.lookup(effects, body, op) {
+            OperandNode::None => true,
+            OperandNode::Unknown => false,
+            OperandNode::Node(h) => {
+                !self.partial
+                    && self
+                        .classes
+                        .chain(h)
+                        .iter()
+                        .all(|&c| !self.classes.prov_of(c).elsewhere)
+            }
+        }
+    }
+
     fn written_in(
         &self,
         effects: &HeapEffects,
         body: &Body,
         keys: &Arc<ObjectTypes>,
-        h: Option<u32>,
+        reach: Option<&Reach>,
         answered: &impl Fn(Operand) -> bool,
     ) -> bool {
         let wanted = Keys::Set(Arc::clone(keys));
-        let reach = self.reach_of(h);
         self.accesses.iter().any(|a| {
             a.effect == Effect::Write
                 && a.keys.meets(keys)
-                && meets(&self.classes, reach.as_ref(), Level::Class(a.node))
+                && meets(&self.classes, reach, Level::Class(a.node))
         }) || self.calls.iter().any(|&call| {
-            self.call_may_keys(
-                effects,
-                body,
-                call,
-                Effect::Write,
-                &wanted,
-                reach.as_ref(),
-                answered,
-            )
+            self.call_may_keys(effects, body, call, Effect::Write, &wanted, reach, answered)
         })
     }
 
@@ -2462,6 +2595,9 @@ impl HeapFrame {
 /// The classes one class's objects are in or reach.
 struct Reach {
     chain: Vec<u32>,
+    /// The objects past the frame's classes: those at least so many loads
+    /// below a class with no load of its own.
+    tail: Option<(u32, usize)>,
     /// Some class on the chain holds objects from outside the body.
     foreign: bool,
     /// The chain reaches the `ELSEWHERE` class of a partial frame, which may
@@ -2487,8 +2623,18 @@ fn meets(classes: &Classes, reach: Option<&Reach>, level: Level) -> bool {
                     || reach.elsewhere == Some(c)
             }
             // Below a class on the chain is reached through it.
-            Level::Beyond { under, prov } => {
-                reach.chain.contains(&classes.root(under)) || (reach.foreign && !prov.is_fresh())
+            Level::Beyond {
+                under,
+                loads,
+                deep,
+                prov,
+            } => {
+                let under = classes.root(under);
+                reach.chain.contains(&under)
+                    || reach.tail.is_some_and(|(tail, from)| {
+                        classes.root(tail) == under && (deep || loads >= from)
+                    })
+                    || (reach.foreign && !prov.is_fresh())
             }
         }
 }

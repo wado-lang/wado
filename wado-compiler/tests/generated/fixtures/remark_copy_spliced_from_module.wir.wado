@@ -72,7 +72,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" =
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude/list.wado//List<core:prelude/string.wado/String>");  // TypeId(26)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::nextwith()" = fn(ref "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>") -> ref null "core:prelude/string.wado//String";  // TypeId(27)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::nextwith()$lend" = fn(ref "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>") -> ref null "core:prelude/string.wado//String";  // TypeId(27)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
@@ -116,7 +116,7 @@ fn "remark_copy_spliced_from_module.wado/run"() with Stdout, Environment {
     $temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0 = struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: local.tee self_26("remark_copy_spliced_from_module.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"()).repr, index: 0, end: self_26.used }, remaining: 1 };
     used_31 = builtin::array_len(local.tee elements_30(array.new_fixed<i32>(local.tee $sroa_result_used_14($sroa_result_repr_13 = array.new_fixed<ref "core:prelude/string.wado//String">(); $sroa_result_used_14 = 0; b0: block {
         l1: loop {
-            if ref.is_null(local.tee $local_3("core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::nextwith()"($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0))) == 0 {
+            if ref.is_null(local.tee $local_3("core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::nextwith()$lend"($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___6_0))) == 0 {
                 item = ref.as_non_null($local_3);
                 if @unlikely($sroa_result_used_14 >= builtin::array_len($sroa_result_repr_13)) {
                     cold_path;
@@ -482,29 +482,29 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     self.repr = new_repr;
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::nextwith()"(self) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::nextwith()$lend"(self) {
     let $load_0: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>";
+    let item_5: ref "core:prelude/string.wado//String";
     let $licm_end_8: i32;
     let $licm_repr_9: ref "Array<core:prelude/string.wado/String>";
-    let v: ref "core:prelude/string.wado//String";
-    let $hfs_index_11: i32;
-    let $av_12: i32;
+    let $hfs_index_10: i32;
+    let $av_11: i32;
     $licm_end_8 = local.tee $load_0(self.inner).end;
     $licm_repr_9 = $load_0.repr;
-    $hfs_index_11 = $load_0.index;
+    $hfs_index_10 = $load_0.index;
     b61: block {
         l62: loop {
-            if local.tee $av_12(self.remaining) <= 0 {
-                $load_0.index = $hfs_index_11;
+            if local.tee $av_11(self.remaining) <= 0 {
+                $load_0.index = $hfs_index_10;
                 break b61;
             }
-            if $hfs_index_11 >= $licm_end_8 {
-                $load_0.index = $hfs_index_11;
+            if $hfs_index_10 >= $licm_end_8 {
+                $load_0.index = $hfs_index_10;
                 return ref.null none;
             }
-            drop(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_9, $hfs_index_11));
-            $hfs_index_11 = $hfs_index_11 + 1;
-            self.remaining = $av_12 - 1;
+            drop(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_9, $hfs_index_10));
+            $hfs_index_10 = $hfs_index_10 + 1;
+            self.remaining = $av_11 - 1;
             continue l62;
         };
     };
@@ -512,10 +512,9 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slic
         if local.tee $licm_end_8($load_0.index) >= $load_0.end {
             break $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_1: ref.null none;
         }
-        $hfs_index_11 = local.tee v(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0.repr, $licm_end_8)).used;
-        v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($hfs_index_11)), 0, $array_clone_src_1, 0, $hfs_index_11); $array_clone_dst_2, used: $hfs_index_11 };
+        item_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0.repr, $licm_end_8);
         $load_0.index = $licm_end_8 + 1;
-        break $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_1: v;
+        break $inline_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_1: item_5;
     };
 }
 

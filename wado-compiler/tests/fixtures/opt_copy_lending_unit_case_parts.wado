@@ -1,0 +1,45 @@
+// An element holding a variant still lends: a copy hands a unit case (`None`
+// here) on as it is, and that object holds nothing a write could reach, so
+// the copy shares no part of its source.
+struct Range { lo: i32, hi: i32 }
+struct Elem { name: String, extra: Option<Range>, ranges: List<Range> }
+
+fn width(e: &Elem) -> i32 {
+    let mut w = 0;
+    for let r of &e.ranges { w += r.hi - r.lo; }
+    if let Some(r) = &e.extra { w += r.hi - r.lo; }
+    return w;
+}
+
+#[inline("never")]
+fn suffix(src: &List<Elem>, from: i32) -> List<Elem> {
+    let mut out: List<Elem> = [];
+    for let mut j = from; j < src.len(); j += 1 {
+        out.push(src[j]);
+    }
+    return out;
+}
+
+#[inline("never")]
+fn suffix_width(src: &List<Elem>, from: i32) -> i32 {
+    let rest = suffix(src, from);
+    let mut t = 0;
+    for let e of &rest { t += width(e); }
+    return t;
+}
+
+test "the lent parts read as their sources" {
+    let src: List<Elem> = [
+        Elem { name: "a", extra: null, ranges: [Range { lo: 1, hi: 3 }] },
+        Elem { name: "b", extra: Some(Range { lo: 0, hi: 10 }), ranges: [Range { lo: 1, hi: 4 }] },
+        Elem { name: "c", extra: null, ranges: [Range { lo: 1, hi: 5 }] },
+    ];
+    assert suffix_width(&src, builtin::black_box(1)) == 17;
+}
+
+__DATA__
+{
+    "wir_pass": {"O2": ["nir/copy_elision"]},
+    "test": {},
+    "wir_expect:O2": ["suffix$lend"]
+}

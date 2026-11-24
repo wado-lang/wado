@@ -1,0 +1,23 @@
+// A copy of one value pushed on each turn of a loop gives each element its
+// own object, though the source is local, unwritten and handed to the
+// result only through the copies: without them the elements alias, and a
+// write to one shows in the rest.
+struct Range { lo: i32, hi: i32 }
+struct Elem { ranges: List<Range> }
+
+#[inline("never")]
+fn repeated(n: i32) -> List<Elem> {
+    let e = Elem { ranges: [Range { lo: 0, hi: builtin::black_box(1) }] };
+    let mut out: List<Elem> = [];
+    for let _ of 0..<n {
+        out.push(e);
+    }
+    return out;
+}
+
+test "each element of a repeated value is its own" {
+    let mut out = repeated(builtin::black_box(2));
+    out[0].ranges.push(Range { lo: 0, hi: 5 });
+    assert out[0].ranges.len() == 2;
+    assert out[1].ranges.len() == 1;
+}

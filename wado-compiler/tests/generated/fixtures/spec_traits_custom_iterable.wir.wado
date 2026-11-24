@@ -424,11 +424,9 @@ fn "spec_traits_custom_iterable.wado/$test_0"() {
     let $fused_slot_43: i32;
     let $sroa_$iter_0_index_46: i32;
     let $licm_repr_50: ref Array<i32>;
-    let $licm_repr_51: ref Array<i32>;
     seen = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $sroa_$iter_0_index_46 = 3;
-    $licm_repr_50 = global:spec_traits_custom_iterable.wado::$const_obj_2;
-    $licm_repr_51 = seen.repr;
+    $licm_repr_50 = seen.repr;
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_index_46 == 0;
@@ -437,13 +435,13 @@ fn "spec_traits_custom_iterable.wado/$test_0"() {
                 "spec_traits_custom_iterable.wado/spec_traits_custom_iterable.wado/StackIter<i32>^core:prelude/traits.wado/Iterator::next$cold0$sroa[self.index]"($sroa_$iter_0_index_46, 3);
                 unreachable;
             }
-            $fused_slot_43 = builtin::array_get_value<i32>($licm_repr_50, $sroa_$iter_0_index_46);
-            if @unlikely(local.tee used_26(seen.used) >= builtin::array_len($licm_repr_51)) {
+            $fused_slot_43 = builtin::array_get_value<i32>(global:spec_traits_custom_iterable.wado::$const_obj_2, $sroa_$iter_0_index_46);
+            if @unlikely(local.tee used_26(seen.used) >= builtin::array_len($licm_repr_50)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
-                $licm_repr_51 = seen.repr;
+                $licm_repr_50 = seen.repr;
             }
-            builtin::array_set<i32>($licm_repr_51, used_26, $fused_slot_43);
+            builtin::array_set<i32>($licm_repr_50, used_26, $fused_slot_43);
             seen.used = used_26 + 1;
             continue l1;
         };

@@ -509,8 +509,7 @@ fn "pattern_temp_no_alias.wado/$test_18_an_arm_binding_keeps_its_copy_past_a_wri
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = $vc_payload_1.repr;
     $load_1 = $vc_payload_1.used;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
+    builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_src_1, 0, $load_1);
     if ref.is_null($sroa_s_held_20) == 0 {
         if @unlikely(local.tee used_14(local.tee $vc_payload_1(ref.as_non_null($sroa_s_held_20)).used) >= builtin::array_len($vc_payload_1.repr)) {
             cold_path;
@@ -520,7 +519,6 @@ fn "pattern_temp_no_alias.wado/$test_18_an_arm_binding_keeps_its_copy_past_a_wri
         $vc_payload_1.used = used_14 + 1;
     } else {
     }
-    builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_dst_2, 0, $load_1);
     if @unlikely($load_1 != 1) {
         cold_path;
         "pattern_temp_no_alias.wado/$test_18_an_arm_binding_keeps_its_copy_past_a_write_to_the_same_storage$cold0"($load_1);

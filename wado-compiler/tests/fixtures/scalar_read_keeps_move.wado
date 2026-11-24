@@ -2,8 +2,8 @@
 //
 // `if it.tag == -1 { … } else { out.push(it) }` made the whole-value read
 // non-final, so the element the iterator had already copied was copied twice.
-// It moves into `out`; the one copy left is the iterator's own, which value
-// semantics requires.
+// It moves into `out`, and the iterator copies none: nothing else holds the
+// list `make` returns.
 struct Item { ids: List<i32>, tag: i32 }
 
 #[inline(never)]
@@ -30,12 +30,12 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_pass": {"O2": ["nir/inline"]},
-    "wir_scope": "keep",
+    "wir_pass": {"O2": ["nir/inline", "nir/copy_elision"]},
+    "wir_scope": "/keep",
     "wir_lines": {
         "O2": [
             {"contains": ["array_set<ref"], "not_contains": ["struct.new", "array_copy"], "count": 1},
-            {"contains": ["array_copy"], "count": 1}
+            {"contains": ["array_copy"], "count": 0}
         ]
     }
 }
