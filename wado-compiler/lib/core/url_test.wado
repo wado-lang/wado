@@ -1049,6 +1049,12 @@ test "from_parts keeps a malformed authority as the host" {
     assert Url::from_parts("http", "", null, null).host == "";
 }
 
+test "brackets hold an IPv6 literal only" {
+    assert Url::from_str("http://[bad host]/") matches { Err(_::InvalidHost) };
+    assert Url::from_str("http://[example.com]/") matches { Err(_::InvalidHost) };
+    assert Url::from_str("http://[::FFFF:1.2.3.4]/").unwrap().to_string() == "http://[::ffff:1.2.3.4]/";
+}
+
 test "from_parts keeps nothing a failed authority parse set" {
     let url = Url::from_parts("http", "u@bad host:8080", null, null);
     assert url.host == "u@bad host:8080";

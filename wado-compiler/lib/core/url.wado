@@ -408,7 +408,7 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
 
     if rest.starts_with("[") {
         if let Some(bracket_end) = rest.find("]") {
-            url.host = rest.substr_bytes(1, bracket_end);
+            url.host = ipv6_literal(rest.substr_bytes(1, bracket_end))?;
             let after = rest.substr_bytes(bracket_end + 1, rest.len());
             if !after.is_empty() {
                 if after.starts_with(":") {
@@ -441,6 +441,20 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
 /// the host is not percent-decoded.
 fn domain(host: StrSlice) -> Result<String, ParseError> {
     if host.find_char(|c| c <= '\u{20}' || c == '\u{7f}' || "#/:<>?@[\\]^|".contains_char(c)) matches { Some(_) } {
+        return Result::Err(ParseError::InvalidHost);
+    }
+    return Result::Ok(host.to_ascii_lowercase());
+}
+
+/// What a pair of brackets holds, or `InvalidHost` where it is not made of an
+/// IPv6 literal's characters: the host is written back in brackets only when it
+/// holds a `:`, so anything else would not parse again.
+fn ipv6_literal<S: AsStrSlice>(host: S) -> Result<String, ParseError> {
+    let host = host.as_str_slice();
+    if host.is_empty() {
+        return Result::Err(ParseError::MissingHost);
+    }
+    if !host.contains(":") || host.find_char(|c| !c.is_hexdigit() && c != ':' && c != '.') matches { Some(_) } {
         return Result::Err(ParseError::InvalidHost);
     }
     return Result::Ok(host.to_ascii_lowercase());
