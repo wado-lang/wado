@@ -4861,10 +4861,15 @@ impl TypeTable {
     }
 
     /// [`Self::call_effect_binding`] for one written type beside the type
-    /// that meets it. The actual row is read through its variables first, so
-    /// one solved to an effect `written` names outright adds nothing.
+    /// that meets it. Where `written` names a parameter, the actual row is read
+    /// through its variables first, so one solved to an effect `written` names
+    /// outright adds nothing; a row meeting no parameter is not read, which
+    /// would close it.
     fn bind_rows(&self, written: TypeId, actual: TypeId, rows: &mut EffectRows) {
         self.zip_rows(written, actual, true, &mut |we, ae| {
+            if !we.iter().any(EffectRef::is_param) {
+                return;
+            }
             let met: Vec<EffectRef> = self
                 .read_effect_row(ae)
                 .into_iter()

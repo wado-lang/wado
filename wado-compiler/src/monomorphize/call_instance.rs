@@ -325,8 +325,10 @@ fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -
 
 /// The row each of `template`'s own effect parameters stands for at the call
 /// or function reference `expr`: what the arguments' rows, or the reference's
-/// type, meet them with. `None` where a row is still open, a parameter or a
-/// variable of a frame not yet instantiated.
+/// type, meet them with. `None` where a row still holds a variable. A
+/// parameter left in a row is one no frame binds, which a call that
+/// determines nothing of a callee's `_` hands its caller: it keys the instance
+/// as it is.
 fn effect_args_at(
     template: &TirFunction,
     expr: &TirExpr,
@@ -365,7 +367,7 @@ fn effect_args_at(
                 .cloned()
                 .unwrap_or_default();
             canonicalize_row(&mut row);
-            (!row.iter().any(|e| e.is_param() || e.is_var())).then_some(row)
+            (!row.iter().any(EffectRef::is_var)).then_some(row)
         })
         .collect()
 }
