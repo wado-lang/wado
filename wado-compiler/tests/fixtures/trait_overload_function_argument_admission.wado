@@ -1,0 +1,96 @@
+// A function argument admits what its typecheck lets it fill: `fn` where
+// `fn mut` is taken, a row an effect parameter leaves open, and a row holding
+// its own. A closure admits only function types.
+use { println, Stdout, Stderr } from "core:cli";
+
+trait Wide<F> with _ {
+    fn wide(&self, f: F) -> i32;
+}
+
+struct S {}
+
+impl Wide<fn()> for S {
+    fn wide(&self, f: fn()) -> i32 {
+        return 1;
+    }
+}
+
+impl Wide<fn() with (Stdout, Stderr)> for S {
+    fn wide(&self, f: fn() with (Stdout, Stderr)) -> i32 {
+        return 2;
+    }
+}
+
+trait Shape<F> with _ {
+    fn shape(&self, f: F) -> i32;
+}
+
+impl Shape<i32> for S {
+    fn shape(&self, f: i32) -> i32 {
+        return 0;
+    }
+}
+
+impl Shape<fn()> for S {
+    fn shape(&self, f: fn()) -> i32 {
+        return 1;
+    }
+}
+
+impl Shape<fn() with Stdout> for S {
+    fn shape(&self, f: fn() with Stdout) -> i32 {
+        return 2;
+    }
+}
+
+trait Mutable<F> with _ {
+    fn mutable(&self, f: F) -> i32;
+}
+
+impl Mutable<fn mut()> for S {
+    fn mutable(&self, f: fn mut()) -> i32 {
+        return 1;
+    }
+}
+
+impl Mutable<i32> for S {
+    fn mutable(&self, f: i32) -> i32 {
+        return 0;
+    }
+}
+
+trait Open<F> with _ {
+    fn open(&self, f: F) -> i32;
+}
+
+impl<effect E> Open<fn() with E> for S {
+    fn open(&self, f: fn() with E) -> i32 with E {
+        f();
+        return 1;
+    }
+}
+
+impl Open<i32> for S {
+    fn open(&self, f: i32) -> i32 {
+        return 0;
+    }
+}
+
+fn quiet() {}
+
+fn loud() with Stdout {
+    println("loud");
+}
+
+export fn run() with (Stdout, Stderr) {
+    let s = S {};
+    // `Stdout` alone fits only the wider row.
+    assert s.wide(|| { println("wide"); }) == 2;
+    assert s.shape(|| {}) == 1;
+    assert s.shape(|| { println("shape"); }) == 2;
+    assert s.mutable(quiet) == 1;
+    assert s.open(loud) == 1;
+}
+
+__DATA__
+{"stdout": "loud\n"}

@@ -674,6 +674,10 @@ Trade-offs:
   element (`xs[0].take(|| {})`) never wait for their selection, so one whose
   candidates differ only in a closure argument's row is rejected; the same
   call written as a plain method call selects.
+- A method call waits for a closure's row only where the trait's declaration
+  types the call and the candidates agree on everything but the row. A method
+  whose signature reads an associated type, or that declares its own type
+  parameters, never waits, so such a call tied on a closure's row is rejected.
 - A call through bounds of one trait at several argument lists
   (`T: Take<fn()> + Take<fn() with Stdout>`) never waits for a closure
   argument's body, so a pair differing only in the closure's row is reported

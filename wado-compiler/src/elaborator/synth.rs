@@ -18,6 +18,7 @@ use super::callee::CalleeRef;
 use super::coercion::is_primitive_literal_target;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
+use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, KeyCandidate, MethodOwner, OverloadedCallForm, TypeError};
 use super::tysys::TypeSystem;
 use crate::elaborator::trait_env::ImplTargetKey;
@@ -289,38 +290,20 @@ fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
 
 /// Whether an argument of type `arg` answers a parameter of type `param`,
 /// the reference conversion included: a `&mut T` argument answers a `&T`
-/// parameter, as [`unify`] binds it. A closure whose effects are still a
-/// variable answers a function parameter of its shape, which settles them.
+/// parameter, as [`unify`] binds it. A function answers what the argument's
+/// typecheck lets it fill, `fn` for `fn mut` and an open row included; one
+/// whose effects are still a variable answers every row of its shape.
 pub(super) fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
     if param == arg {
         return true;
     }
-    if let (ResolvedType::Ref(p), ResolvedType::MutRef(a)) = (tt.get(param), tt.get(arg)) {
-        return p == a;
+    match (tt.get(param), tt.get(arg)) {
+        (ResolvedType::Ref(p), ResolvedType::MutRef(a)) => p == a,
+        (ResolvedType::Function { .. }, ResolvedType::Function { .. }) => {
+            check_assignable(arg, param, tt) != TypeCheckResult::Incompatible
+        }
+        _ => false,
     }
-    let (
-        ResolvedType::Function {
-            is_mut: param_mut,
-            params: param_params,
-            return_type: param_return,
-            effects: param_effects,
-        },
-        ResolvedType::Function {
-            is_mut: arg_mut,
-            params: arg_params,
-            return_type: arg_return,
-            effects: arg_effects,
-        },
-    ) = (tt.get(param), tt.get(arg))
-    else {
-        return false;
-    };
-    param_mut == arg_mut
-        && param_params == arg_params
-        && param_return == arg_return
-        && arg_effects
-            .iter()
-            .all(|effect| matches!(effect, EffectRef::Var { .. }) || param_effects.contains(effect))
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -370,10 +353,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Narrow `candidates` to those whose parameter is a function argument's
-    /// type exactly, its row included, where any is. A function admits every
-    /// parameter whose row holds its own, but only its own row selects: a
-    /// closure's is its body's solution, closed only where it selects.
+    /// Narrow `candidates` by a function argument's solved row: to those
+    /// taking it exactly where any does, else to those whose row holds it. A
+    /// closure's row is its body's solution, closed only where it selects.
     pub(super) fn narrow_to_exact_rows<C>(
         &self,
         candidates: &mut Vec<C>,
@@ -402,9 +384,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 solved
             };
             let exact = |c: &C| param_at(c, position) == Some(solved);
-            if candidates.iter().any(exact) {
+            let holds = |c: &C| {
+                param_at(c, position).is_some_and(|param| {
+                    param_takes(&self.tysys.type_table.borrow(), param, solved)
+                })
+            };
+            let keeps: &dyn Fn(&C) -> bool = if candidates.iter().any(exact) {
+                &exact
+            } else {
+                &holds
+            };
+            if !candidates.iter().all(keeps) {
                 self.tysys.type_table.borrow_mut().read_effect_rows_in(arg);
-                candidates.retain(exact);
+                candidates.retain(keeps);
             }
         }
     }
@@ -429,7 +421,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
         match class {
-            ArgClass::Opaque(_) => true,
+            ArgClass::Opaque(OpaqueReason::Closure) => matches!(
+                tt.get(tt.representation_head(param)),
+                ResolvedType::Function { .. }
+            ),
+            ArgClass::Opaque(
+                OpaqueReason::CompoundLiteral | OpaqueReason::Inference | OpaqueReason::Unresolved,
+            ) => true,
             ArgClass::Exact(t) => {
                 if param_takes(&tt, param, *t) {
                     return true;

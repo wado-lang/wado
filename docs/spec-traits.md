@@ -1151,8 +1151,9 @@ stay ambiguous for such an argument.
 
 A function argument selects by its type, row included. A function named as a
 value has the row its declaration states, and a closure the row its body
-performs. A function admits every parameter whose row holds its own, but where
-one candidate takes its row exactly, that candidate wins. A call whose
+performs. A function admits every parameter it could be passed to, so a
+closure admits only function types, and a row admits every row that holds it.
+Where one candidate takes the row exactly, that candidate wins. A call whose
 candidates differ only in the rows a closure argument could meet is selected
 once the closure's body is walked.
 

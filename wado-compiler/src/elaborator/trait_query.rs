@@ -2407,6 +2407,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return group.swap_remove(*winner);
             }
             admitted.retain(|i| written.contains(i));
+            if let [winner] = admitted.as_slice() {
+                let mut group = group;
+                return group.swap_remove(*winner);
+            }
             if let [first, _, ..] = admitted.as_slice() {
                 let first = *first;
                 self.report_bounds_tied_at_call(
@@ -2461,7 +2465,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         classes: &[ArgClass],
         span: Span,
     ) {
-        // A bound whose argument names no type was reported where it is written.
         let traits: Vec<String> = admitted
             .iter()
             .filter_map(|&i| {
@@ -2477,6 +2480,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         if traits.len() < admitted.len() {
+            assert!(
+                self.logger.has_errors(),
+                "a bound whose argument names no type is reported where it is written"
+            );
             return;
         }
         let _ = self.emit(TypeError::AmbiguousTraitArguments {
