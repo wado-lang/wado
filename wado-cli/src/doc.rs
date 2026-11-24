@@ -17,6 +17,7 @@ use crate::args::{self, CliExit};
 use crate::compile::{Settled, build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::markdown::{FenceMarker, fence_open, matches_fence_close};
+use crate::marl;
 use crate::search::{self, Query};
 
 const MODULE_PLACEHOLDER: &str = "{module}";
@@ -608,17 +609,11 @@ fn render_combined(
     format_markdown(&out)
 }
 
-/// Normalize Markdown via dprint. The contract for `wado doc --format markdown`
-/// and `--format simple` is that emitted output is always dprint-stable: re-running
-/// `dprint` over the output is a no-op. This lets downstream tooling avoid a
-/// post-format pass.
+/// `wado doc --format markdown` and `--format simple` emit what Marl formats,
+/// so `mise run format-md` over the output is a no-op and downstream tooling
+/// needs no post-format pass.
 fn format_markdown(content: &str) -> String {
-    let config = dprint_plugin_markdown::configuration::ConfigurationBuilder::new().build();
-    match dprint_plugin_markdown::format_text(content, &config, |_, _, _| Ok(None)) {
-        Ok(Some(formatted)) => formatted,
-        Ok(None) => content.to_string(),
-        Err(e) => panic!("wado doc: dprint failed to format generated markdown: {e}"),
-    }
+    marl::format(content)
 }
 
 #[cfg(test)]
@@ -667,26 +662,26 @@ mod format_contract_tests {
         );
     }
 
-    fn assert_dprint_stable(content: &str, label: &str) {
+    fn assert_marl_stable(content: &str, label: &str) {
         let reformatted = format_markdown(content);
         assert_eq!(
             content, reformatted,
-            "{label}: wado doc output must be dprint-stable but re-formatting changed it",
+            "{label}: wado doc output must be Marl-stable but re-formatting changed it",
         );
     }
 
     #[test]
-    fn markdown_output_is_dprint_stable() {
+    fn markdown_output_is_marl_stable() {
         let doc = stdlib_doc("core:cli");
         let out = render_single(&doc, "markdown", "core:cli", OutputFormat::Markdown);
-        assert_dprint_stable(&out, "markdown single");
+        assert_marl_stable(&out, "markdown single");
     }
 
     #[test]
-    fn simple_output_is_dprint_stable() {
+    fn simple_output_is_marl_stable() {
         let doc = stdlib_doc("core:cli");
         let out = render_single(&doc, "simple", "core:cli", OutputFormat::Simple);
-        assert_dprint_stable(&out, "simple single");
+        assert_marl_stable(&out, "simple single");
     }
 
     fn markdown_of(source: &str) -> String {
@@ -1029,15 +1024,15 @@ mod format_contract_tests {
     }
 
     #[test]
-    fn synopsis_output_is_dprint_stable() {
+    fn synopsis_output_is_marl_stable() {
         let out = markdown_of(
             "//! Demo.\n\n#[synopsis]\ntest {\n    let x = 1;\n    assert x == 1;\n}\n",
         );
-        assert_dprint_stable(&out, "markdown synopsis");
+        assert_marl_stable(&out, "markdown synopsis");
     }
 
     #[test]
-    fn combined_markdown_output_is_dprint_stable() {
+    fn combined_markdown_output_is_marl_stable() {
         let inputs = ["core:cli".to_string(), "core:base64".to_string()];
         let docs: Vec<(String, _)> = inputs.iter().map(|i| (i.clone(), stdlib_doc(i))).collect();
         let opts = DocOptions {
@@ -1049,7 +1044,7 @@ mod format_contract_tests {
             search: None,
         };
         let out = render_combined(&docs, opts.title.as_deref(), "markdown", &opts);
-        assert_dprint_stable(&out, "markdown combined");
+        assert_marl_stable(&out, "markdown combined");
     }
 
     #[test]
@@ -1625,7 +1620,7 @@ fn collapse_md_spaces(s: &str) -> String {
     result
 }
 
-/// Replace `*text*` emphasis with `_text_` (dprint preference), preserving
+/// Replace `*text*` emphasis with `_text_` (Marl's preference), preserving
 /// `**bold**` markers and code spans.
 fn replace_md_emphasis(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
