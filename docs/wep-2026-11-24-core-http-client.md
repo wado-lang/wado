@@ -11,8 +11,8 @@ whole: a future resolved after the close says that. Eddy wraps all of this in
 
 Eddy is the first user. The next is an OpenAPI client generator, so the module
 serves an API described per origin, not one call site. LLM APIs often stream
-their answers as Server-Sent Events, so streaming is part of the first version, not a later
-addition.
+their answers as Server-Sent Events, so streaming is part of the first version,
+not a later addition.
 
 ## Decision
 
@@ -137,8 +137,8 @@ starts, the iterator after `body()` or `events()`.
 Trailers are supported in both directions.
 
 The response's trailers arrive in the future that ends the body. Whatever read
-the body to the end stores them in the response, an iterator through the
-reference it holds to it. `res.trailers()` then gives them, read like headers:
+the body to the end stores them in the response; an iterator holds a reference
+to the response for this. `res.trailers()` then gives them, read like headers:
 `header`, `header_bytes` and `headers_all`, with the same views and the same
 joining. Its contract is that the body was read to the end, so a call made too
 early fails where it is made rather than reading as "no trailers".
@@ -193,8 +193,8 @@ instead, departing from both standards on purpose:
   `ByteSlice`.
 
 A header name the response carries more than once is the one header that is
-not a view. RFC 9110 reads its values as one, joined with `, `, and both `header`
-and `header_bytes` answer that joined value, which is a copy.
+not a view. RFC 9110 reads its values as one, joined with `, `, and both
+`header` and `header_bytes` answer that joined value, which is a copy.
 
 `Set-Cookie` cannot be joined, since a cookie's `Expires` holds a comma; RFC
 9110 § 5.3 names it as the exception. `header("set-cookie")` is an error that
