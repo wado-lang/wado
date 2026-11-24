@@ -66,7 +66,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
     }
 
     let mut events = res.events();
-    while let Some(event) = events.next() {
+    for let event of &mut events {
         let event = event.unwrap();
         if event.event == "error" {
             panic(`the stream failed: ${event.data}`);

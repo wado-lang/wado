@@ -457,7 +457,7 @@ test "trailers that follow the response body are read after its end" {
     with &mut host do {
         let mut body = client().request("/").unwrap().body();
         let mut chunks: List<ByteList> = [];
-        while let Some(chunk) = body.next() {
+        for let chunk of &mut body {
             chunks.push(chunk.unwrap());
         }
         assert chunks == [b"abc"] as List<ByteList>;
@@ -595,7 +595,7 @@ test "events arrive as the body does" {
     let [got, retry] = with &mut host do {
         let mut events = client().request("/stream").unwrap().events();
         let mut got: List<[String, String]> = [];
-        while let Some(event) = events.next() {
+        for let event of &mut events {
             let e = event.unwrap();
             got.push([
                 e.event.to_string(),

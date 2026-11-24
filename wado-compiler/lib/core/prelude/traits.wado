@@ -1736,6 +1736,20 @@ impl<I: Iterator> IntoIterator for I {
     }
 }
 
+/// An iterator walked through a reference, so what takes from it leaves the
+/// iterator itself advanced: what `for let x of &mut iter` walks.
+pub struct IterRefMut<affine I: Iterator> {
+    internal inner: &mut I,
+}
+
+impl<affine I: Iterator> Iterator for IterRefMut<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<I::Item> with _ {
+        return self.inner.next();
+    }
+}
+
 /// What `for let x of e` walks when `e` is a value of a type implementing it:
 /// the loop passes `e` to `start` and calls the state's
 /// `next(&mut self) -> Option<Item>` until it answers `None`. The loop owns
