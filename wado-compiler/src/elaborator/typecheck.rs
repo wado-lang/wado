@@ -372,6 +372,18 @@ pub(super) fn meetings(
         out.pairs.push((actual, expected));
         return;
     }
+    // A reported error absorbs whatever it meets: each variable the other
+    // side holds takes the error type, so nothing reports it again.
+    for (error, other) in [(actual, expected), (expected, actual)] {
+        if error == TypeTable::ERROR {
+            out.pairs.extend(
+                type_table
+                    .infer_vars_in(other)
+                    .into_iter()
+                    .map(|var| (error, var)),
+            );
+        }
+    }
     if actual == expected || says_nothing(actual) || says_nothing(expected) {
         return;
     }

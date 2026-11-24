@@ -2556,24 +2556,6 @@ pub(crate) fn fold_component_interfaces(
     Ok(())
 }
 
-/// The first `_` placeholder `ty` writes, at any depth.
-pub(super) fn first_infer_span(ty: &Type) -> Option<Span> {
-    struct FirstInfer(Option<Span>);
-    impl AstVisitor<'_> for FirstInfer {
-        fn visit_type(&mut self, ty: &Type) {
-            match ty {
-                Type::Infer(span) => {
-                    self.0.get_or_insert(*span);
-                }
-                _ => walk_type(self, ty),
-            }
-        }
-    }
-    let mut first = FirstInfer(None);
-    first.visit_type(ty);
-    first.0
-}
-
 fn param_names(params: &[GenericParam]) -> Vec<&str> {
     params.iter().map(|p| p.name.as_str()).collect()
 }

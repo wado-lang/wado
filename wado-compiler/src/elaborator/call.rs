@@ -3365,7 +3365,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if let Some(name) = &default.binds {
                             bind(ctx, name, resolved);
                         }
-                        resolved
+                        // A default that failed reports at its declaration,
+                        // and answers nothing at this site.
+                        if resolved == TypeTable::ERROR {
+                            expected
+                        } else {
+                            resolved
+                        }
                     })
                     .collect()
             })

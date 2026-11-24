@@ -2,7 +2,6 @@
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
 use super::sig::AssocConstSig;
-use super::trait_env::written_arg_nodes;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
@@ -134,18 +133,6 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 /// it.
 fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
-}
-
-/// Whether `expr` writes a type a `_` may stand in: a turbofish on a call, a
-/// path or a struct literal, a static call's receiver, or an `as` target.
-fn writes_inferable_type(expr: &Expr) -> bool {
-    matches!(expr, Expr::Cast(_))
-        || matches!(expr, Expr::Call(call) if !call.type_args.is_empty())
-        || matches!(expr, Expr::MethodCall(call) if !call.type_args.is_empty())
-        || matches!(expr, Expr::Ident(ident) if !ident.type_args.is_empty())
-        || matches!(expr, Expr::StructLiteral(lit) if !lit.type_args.is_empty())
-        || matches!(expr, Expr::StaticMethodCall(call)
-            if !call.type_args.is_empty() || !written_arg_nodes(&call.target_type).is_empty())
 }
 
 /// The literal `-NUM` negates, which both range checks read as one literal so
@@ -658,11 +645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
         let reads = self.tysys.type_table.borrow().effect_vars_read();
-        let type_id = if writes_inferable_type(expr) {
-            self.closing_holes_on_error(|e| e.resolve_expr_inner(expr, ctx, expected_type))
-        } else {
-            self.resolve_expr_inner(expr, ctx, expected_type)
-        };
+        let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
         if self.tysys.type_table.borrow().effect_vars_read() > reads {
             let closing = RowClosing {
                 span: expr.span(),

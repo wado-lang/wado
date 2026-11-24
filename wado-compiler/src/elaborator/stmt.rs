@@ -28,7 +28,6 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
-use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
@@ -546,15 +545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
-        if let_stmt
-            .ty
-            .as_ref()
-            .is_some_and(|ty| first_infer_span(ty).is_some())
-        {
-            self.closing_holes_on_error(|e| e.resolve_let_annotated(let_stmt, ctx));
-        } else {
-            self.resolve_let_annotated(let_stmt, ctx);
-        }
+        self.resolve_let_annotated(let_stmt, ctx);
     }
 
     fn resolve_let_annotated(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
