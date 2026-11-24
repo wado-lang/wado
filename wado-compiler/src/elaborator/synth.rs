@@ -464,7 +464,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for r in rowed {
             if !candidates.iter().all(|c| takes(c, r)) {
                 selects = true;
-                self.tysys.type_table.borrow_mut().read_effect_rows_in(r.arg);
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .read_effect_rows_in(r.arg);
             }
         }
         if selects {
