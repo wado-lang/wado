@@ -1868,6 +1868,8 @@ enum Refusal {
     NotTheSoleSite,
     /// The compile-time engine may fold the call to its value first.
     LeftToEngine,
+    /// A value copy, kept whole for copy elision until the loop converges.
+    LeftToCopyElision,
     /// The callee waits for the constants a site may still hand it.
     AwaitingConstant,
     /// A callee admitted outside loops only, at a site in one.
@@ -2621,6 +2623,8 @@ struct Candidates<'a> {
     /// Whether a call the engine may fold is still left to it: until the loop
     /// first converges ([`InlineHolds::release`]).
     fold_pending: bool,
+    /// Per function, whether it is a `$value_copy$T` helper.
+    value_copies: &'a [bool],
     /// The candidates [`Verdict::awaits`] keeps waiting, each with the numeric
     /// parameters it waits on.
     awaiting: &'a IndexMap<FuncId, IndexSet<u32>>,
@@ -2837,6 +2841,11 @@ fn inline_round(
         .iter()
         .zip(&fn_effects)
         .map(|(&eligible, e)| eligible && e.is_pure())
+        .collect();
+    let value_copies: Vec<bool> = project
+        .functions
+        .iter()
+        .map(|f| f.borrow().is_value_copy())
         .collect();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
     let spins: Vec<bool> = scans.iter().map(|s| s.spins).collect();
@@ -3153,6 +3162,7 @@ fn inline_round(
             shrinking: &shrinking,
             ctfe_eligible: &ctfe_eligible,
             fold_pending,
+            value_copies: &value_copies,
             awaiting: &awaiting,
             opens: &opens,
             spins: &spins,
@@ -3944,7 +3954,13 @@ fn try_inline_call_expr(
             None
         }
     };
-    let refusal = match (site.admission(), reach) {
+    // A value copy stays a call until the loop converges, so the copy elision
+    // that runs after inlining finds it whole in the caller it lands in.
+    let left_to_copy_elision = candidates.fold_pending && candidates.value_copies[func_id.index()];
+    frame.deferred |= left_to_copy_elision;
+    let refusal = left_to_copy_elision
+        .then_some(Refusal::LeftToCopyElision)
+        .or_else(|| match (site.admission(), reach) {
         (Site::UnlikelyPlain | Site::UnlikelyLoop, _) => {
             unreachable!("admission reads no unlikely site")
         }
@@ -3980,7 +3996,7 @@ fn try_inline_call_expr(
         }
         (Site::Plain, Reach::Loops) => Some(Refusal::OutsideLoop),
         (Site::Plain | Site::Loop, Reach::Nowhere) => Some(Refusal::OtherHeat),
-    }
+    })
     .or_else(|| {
         // Like a call left to the engine, a wait lapses when the loop
         // converges.

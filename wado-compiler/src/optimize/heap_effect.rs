@@ -25,6 +25,7 @@ use crate::tir::{
 use crate::type_table::TypeTable;
 
 use super::arena_query::holds_reference;
+use crate::lower::plan::value_copy::needs_value_copy;
 use super::body_memo::BodyMemo;
 use crate::parallel::{Executor, lock};
 
@@ -311,6 +312,8 @@ pub(super) struct HeapEffectsCache {
     /// Filled during a sweep by whichever visit asks first; its values depend
     /// only on the type, so the order changes nothing.
     reach_memo: Mutex<IndexMap<TypeId, Arc<ObjectTypes>>>,
+    /// [`HeapEffects::copy_shares`]'s answers, filled as `reach_memo` is.
+    copy_shares_memo: Mutex<IndexMap<TypeId, bool>>,
     /// Where `assert_one_settled` resumes its rotation.
     #[cfg(debug_assertions)]
     cursor: usize,
@@ -546,22 +549,74 @@ pub(super) struct HeapEffects<'t> {
 impl HeapEffects<'_> {
     /// Whether what `ty` holds may be a reference: an array's elements, or
     /// anything else's contents.
-    fn elements_hold_reference(&self, ty: TypeId) -> bool {
+    /// Whether the elements of an array of type `ty` hand on references when
+    /// they move, or when `copied`, when they are value-copied.
+    fn elements_hold_reference(&self, ty: TypeId, copied: bool) -> bool {
         let tt = self.type_table;
         let ResolvedType::BuiltinArray(element) = tt.get(tt.strip_handles(ty)) else {
             return true;
         };
-        holds_reference(tt, *element)
+        holds_reference(tt, *element) && (!copied || self.copy_shares(*element))
     }
 
-    /// Whether the retain `r` may carry a reference out of `args`.
+    /// Whether a value copy of `ty` may hold an object its source holds: one
+    /// it hands on as is, such as a reference's referent, a closure's
+    /// environment or an affine value.
+    fn copy_shares(&self, ty: TypeId) -> bool {
+        if let Some(&hit) = lock(&self.cache.copy_shares_memo).get(&ty) {
+            return hit;
+        }
+        let answer = self.copy_shares_walk(ty, &mut IndexSet::default());
+        lock(&self.cache.copy_shares_memo).insert(ty, answer);
+        answer
+    }
+
+    fn copy_shares_walk(&self, ty: TypeId, seen: &mut IndexSet<TypeId>) -> bool {
+        let tt = self.type_table;
+        let ty = tt.representation_head(ty);
+        if !holds_reference(tt, ty) {
+            return false;
+        }
+        if !needs_value_copy(ty, tt) {
+            return true;
+        }
+        if !seen.insert(ty) {
+            return false;
+        }
+        match tt.get(ty) {
+            ResolvedType::Tuple(elems) => elems.iter().any(|&e| self.copy_shares_walk(e, seen)),
+            ResolvedType::Struct { .. } => self
+                .struct_field_types(ty)
+                .is_none_or(|fields| fields.iter().any(|&f| self.copy_shares_walk(f, seen))),
+            ResolvedType::BuiltinArray(element) => self.copy_shares_walk(*element, seen),
+            ResolvedType::Variant { def, type_args } => {
+                tt.variant_template_cases(*def).is_none_or(|cases| {
+                    cases.iter().any(|&(_, _, payload)| {
+                        if !tt.contains_type_param(payload) {
+                            return self.copy_shares_walk(payload, seen);
+                        }
+                        tt.type_param_id(payload)
+                            .and_then(|id| type_args.get(id.index as usize))
+                            .is_none_or(|&arg| self.copy_shares_walk(arg, seen))
+                    })
+                })
+            }
+            _ => true,
+        }
+    }
+
+    /// Whether the retain `r` of `declaration` may carry a reference out of
+    /// `args`.
     fn retains_reference(
         &self,
         body: &Body,
+        declaration: &BuiltinDeclaration,
         r: &RetainSpec<usize>,
         source: Option<Operand>,
     ) -> bool {
-        !r.elements || source.is_none_or(|a| self.elements_hold_reference(body.operand_type(a)))
+        let copied = matches!(declaration.facts.storage, Storage::CopiesArgs);
+        !r.elements
+            || source.is_none_or(|a| self.elements_hold_reference(body.operand_type(a), copied))
     }
 
     /// Every object type `call` may write that its caller can reach: through
@@ -1556,7 +1611,7 @@ impl HeapFrame {
             Target::Builtin(declaration) => {
                 for r in &declaration.retains {
                     let source = args.get(r.source).map(|&(a, _)| a);
-                    if !effects.retains_reference(body, r, source) {
+                    if !effects.retains_reference(body, declaration, r, source) {
                         continue;
                     }
                     match r.into {
@@ -1727,7 +1782,7 @@ impl HeapFrame {
             call,
             effect,
             &Keys::One(key),
-            local,
+            self.local_root(local),
             &answered,
         )
     }
@@ -1739,13 +1794,12 @@ impl HeapFrame {
         call: ExprId,
         effect: Effect,
         keys: &Keys,
-        local: u32,
+        h: Option<u32>,
         answered: &impl Fn(Operand) -> bool,
     ) -> bool {
         if effect == Effect::Write && !effects.returns(body, call) {
             return false;
         }
-        let h = self.local_root(local);
         let h_escapes = h.is_none_or(|r| !self.classes.prov[r as usize].is_fresh());
         let (target, args) = call_parts(effects, body, call);
         if h_escapes && keys.meets(&target.elsewhere(effect)) {
@@ -1779,7 +1833,46 @@ impl HeapFrame {
         local: u32,
         answered: impl Fn(Operand) -> bool,
     ) -> bool {
-        let h = self.local_root(local);
+        self.written_in(effects, body, keys, self.local_root(local), &answered)
+    }
+
+    /// [`Self::written`] for the objects operand `op` holds or reaches.
+    pub(super) fn operand_written(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        keys: &Arc<ObjectTypes>,
+        op: Operand,
+    ) -> bool {
+        let h = match self.lookup(effects, body, op) {
+            OperandNode::None => return false,
+            OperandNode::Unknown => None,
+            OperandNode::Node(n) => Some(n),
+        };
+        self.written_in(effects, body, keys, h, &|_| false)
+    }
+
+    /// Whether every object operand `op` holds is allocated in this body and
+    /// stays in it: none comes from a parameter or a global, and none reaches
+    /// the result or anything the body did not allocate.
+    pub(super) fn operand_confined(&self, effects: &HeapEffects, body: &Body, op: Operand) -> bool {
+        let OperandNode::Node(h) = self.lookup(effects, body, op) else {
+            return false;
+        };
+        !self.partial
+            && self.classes.prov[h as usize].is_fresh()
+            && h != self.classes.root(RET)
+            && h != self.classes.root(ELSEWHERE)
+    }
+
+    fn written_in(
+        &self,
+        effects: &HeapEffects,
+        body: &Body,
+        keys: &Arc<ObjectTypes>,
+        h: Option<u32>,
+        answered: &impl Fn(Operand) -> bool,
+    ) -> bool {
         let wanted = Keys::Set(Arc::clone(keys));
         self.accesses.iter().any(|a| {
             a.effect == Effect::Write
@@ -1792,8 +1885,8 @@ impl HeapFrame {
                 call,
                 Effect::Write,
                 &wanted,
-                local,
-                &answered,
+                h,
+                answered,
             )
         })
     }

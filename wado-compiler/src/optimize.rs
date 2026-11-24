@@ -59,6 +59,7 @@ mod string_push;
 mod tuple_projection;
 mod unsigned_range_check;
 mod value_copy;
+mod copy_elision;
 mod value_copy_demote;
 
 #[cfg(debug_assertions)]
@@ -101,6 +102,7 @@ use sroa::scalar_replace_aggregates;
 use sroa_param::{SroaParamState, sroa_single_field_parameters};
 use sroa_variant_return::scalarize_variant_returns;
 use store_load_forward::forward_stores_to_loads;
+use copy_elision::elide_value_copies;
 use value_copy_demote::demote_value_copies;
 
 use gate::{FunctionGate, GatedPass};
@@ -996,6 +998,11 @@ fn run_optimization_passes(
                 &mut inline_scans,
                 &mut reachability,
             ));
+            // After `nir/inline`, which keeps every value copy a call until the
+            // loop first converges, so a copy is judged in the body it lands in.
+            gated!("nir/copy_elision", GatedPass::CopyElision, |p, g| {
+                elide_value_copies(p, g, &mut heap_effects)
+            });
             // Peephole engine, post-inline run. `elide_local` runs again over
             // inline's freshly dead bindings. No `MatchToSwitchRule` — the
             // pre-inline run lowered every reachable `Match` already.
