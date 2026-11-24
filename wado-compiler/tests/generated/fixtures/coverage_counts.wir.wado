@@ -405,27 +405,27 @@ fn "coverage_counts.wado/$cm_export__$test_0_a_loop"() {
     let runs: i64;
     let odd: i32;
     let current: i32;
-    let $sroa_$iter_0_start_18: i32;
+    let $sroa_$iter_0_start_19: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:coverage_counts.wado::$modules_initialized);
         cold_path;
         "coverage_counts.wado/$initialize_modules$cold0"();
     };
     odd = 0;
-    $sroa_$iter_0_start_18 = 0;
+    $sroa_$iter_0_start_19 = 0;
     b4: block {
         l5: loop {
-            break_if b4 $sroa_$iter_0_start_18 >= 5;
-            $sroa_$iter_0_start_18 = local.tee current($sroa_$iter_0_start_18) + 1;
-            odd = odd + $inline__test_0_a_loop_0__$inline_parity_4: block -> i32 {
+            break_if b4 $sroa_$iter_0_start_19 >= 5;
+            $sroa_$iter_0_start_19 = local.tee current($sroa_$iter_0_start_19) + 1;
+            odd = odd + $inline__test_0_a_loop_0__$inline_parity_3: block -> i32 {
                 if (current % 2) == 0 {
                     "core:rt/coverage_probe$spec0$dae[id]"();
-                    break $inline__test_0_a_loop_0__$inline_parity_4: 0;
+                    break $inline__test_0_a_loop_0__$inline_parity_3: 0;
                 } else {
                     "core:rt/coverage_probe$spec1$dae[id]"();
                 }
                 "core:rt/coverage_probe$spec2$dae[id]"();
-                break $inline__test_0_a_loop_0__$inline_parity_4: 1;
+                break $inline__test_0_a_loop_0__$inline_parity_3: 1;
             };
             continue l5;
         };
@@ -436,14 +436,14 @@ fn "coverage_counts.wado/$cm_export__$test_0_a_loop"() {
         unreachable;
     }
     odd = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
-    $sroa_$iter_0_start_18 = 0;
+    $sroa_$iter_0_start_19 = 0;
     b8: block {
         l9: loop {
-            break_if b8 $sroa_$iter_0_start_18 >= odd;
-            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, $sroa_$iter_0_start_18)) > 1_i64 {
-                "coverage_counts.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"($sroa_$iter_0_start_18, runs);
+            break_if b8 $sroa_$iter_0_start_19 >= odd;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, $sroa_$iter_0_start_19)) > 1_i64 {
+                "coverage_counts.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"($sroa_$iter_0_start_19, runs);
             }
-            $sroa_$iter_0_start_18 = $sroa_$iter_0_start_18 + 1;
+            $sroa_$iter_0_start_19 = $sroa_$iter_0_start_19 + 1;
             continue l9;
         };
     };

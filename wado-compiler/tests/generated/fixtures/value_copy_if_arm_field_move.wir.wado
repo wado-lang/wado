@@ -99,32 +99,32 @@ fn "value_copy_if_arm_field_move.wado/settle"(s) {
     let $load_2: i32;
     let $drop_spill_5: ref "value_copy_if_arm_field_move.wado//Chunk";
     let current: i32;
-    let $sroa_out_repr_24: ref Array<i32>;
-    let $sroa_out_used_25: i32;
-    let $sroa_$iter_0_start_28: i32;
-    let $sroa_write_back_30: ref "core:prelude/list.wado//List<i32>";
+    let $sroa_out_repr_23: ref Array<i32>;
+    let $sroa_out_used_24: i32;
+    let $sroa_write_back_25: ref "core:prelude/list.wado//List<i32>";
+    let $sroa_$iter_0_start_38: i32;
     local.tee $load_0(s.buffer).count = local.tee $load_2(black_box($load_0.count));
     $drop_spill_5 = struct.new "value_copy_if_arm_field_move.wado//Chunk" { items: (if $load_2 == 0 -> ref "core:prelude/list.wado//List<i32>" {
         s.items;
     } else {
-        $sroa_out_repr_24 = array.new_fixed<i32>();
-        $sroa_out_used_25 = 0;
-        $sroa_$iter_0_start_28 = 0;
+        $sroa_out_repr_23 = array.new_fixed<i32>();
+        $sroa_out_used_24 = 0;
+        $sroa_$iter_0_start_38 = 0;
         b1: block {
             l2: loop {
-                break_if b1 $sroa_$iter_0_start_28 >= $load_2;
-                $sroa_$iter_0_start_28 = local.tee current($sroa_$iter_0_start_28) + 1;
-                if @unlikely($sroa_out_used_25 >= builtin::array_len($sroa_out_repr_24)) {
+                break_if b1 $sroa_$iter_0_start_38 >= $load_2;
+                $sroa_$iter_0_start_38 = local.tee current($sroa_$iter_0_start_38) + 1;
+                if @unlikely($sroa_out_used_24 >= builtin::array_len($sroa_out_repr_23)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_30(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_24, used: $sroa_out_used_25 }));
-                    $sroa_out_repr_24 = $sroa_write_back_30.repr;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_25(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_23, used: $sroa_out_used_24 }));
+                    $sroa_out_repr_23 = $sroa_write_back_25.repr;
                 }
-                builtin::array_set<i32>($sroa_out_repr_24, $sroa_out_used_25, current);
-                $sroa_out_used_25 = $sroa_out_used_25 + 1;
+                builtin::array_set<i32>($sroa_out_repr_23, $sroa_out_used_24, current);
+                $sroa_out_used_24 = $sroa_out_used_24 + 1;
                 continue l2;
             };
         };
-        struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_24, used: $sroa_out_used_25 };
+        struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_out_repr_23, used: $sroa_out_used_24 };
     }), count: $load_2 };
     if ref.is_null(s) == 0 {
         if ref.is_null(local.tee $load_0(s.buffer)) == 0 {

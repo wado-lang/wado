@@ -216,21 +216,23 @@ global mut global:effect_handler_renamed_import.wado::$effect_wasi:random/random
 global global:effect_handler_renamed_import.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(44);
 
 fn "effect_handler_renamed_import.wado/run"() with Stdout {
-    let $load_5: i32;
+    let $load_4: i32;
     let fixed: ref "effect_handler_renamed_import.wado//FixedRandom";
     let $save_wasi:random/random.wado/Random: ref null "effect_handler_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_1: ref null "effect_handler_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_2: ref "effect_handler_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_3: ref "core:prelude/list.wado//List<u8>";
-    let is_negative_84: bool;
-    let x_88: i64;
-    let $sroa_t_h1_239: u8;
-    let start_309: i32;
-    let $sroa_out_used_628: i32;
-    let $sroa_write_back_629: ref "core:prelude/string.wado//String";
+    let is_negative_83: bool;
+    let x_87: i64;
+    let new_repr: ref Array<u8>;
+    let $sroa_t_h1_236: u8;
+    let start_306: i32;
+    let $sroa_out_repr_624: ref Array<u8>;
+    let $sroa_out_used_625: i32;
+    let $sroa_write_back_626: ref "core:prelude/string.wado//String";
     fixed = struct.new "effect_handler_renamed_import.wado//FixedRandom" { byte: 9 };
     global:effect_handler_renamed_import.wado::$effect_wasi:random/random.wado/Random = struct.new "effect_handler_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random(global:effect_handler_renamed_import.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_handler_renamed_import.wado/$closure_wrapper_0" } };
-    $local_3 = $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: block -> ref "core:prelude/list.wado//List<u8>" {
+    $load_4 = local.tee $local_3($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: block -> ref "core:prelude/list.wado//List<u8>" {
         if ref.is_null(local.tee $local_1(global:effect_handler_renamed_import.wado::$effect_wasi:random/random.wado/Random)) == 0 {
             global:effect_handler_renamed_import.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2(ref.as_non_null($local_1)).outer;
             $local_3 = block -> ref "core:prelude/list.wado//List<u8>" {
@@ -238,99 +240,94 @@ fn "effect_handler_renamed_import.wado/run"() with Stdout {
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1($local_2.op_get_random_bytes).env, 3_i64);
             };
             global:effect_handler_renamed_import.wado::$effect_wasi:random/random.wado/Random = $local_1;
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: $local_3;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: $local_3;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: "effect_handler_renamed_import.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(3_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "effect_handler_renamed_import.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes"(3_i64);
         }
         unreachable;
-    };
-    let $array_clone_src_2: ref Array<u8>;
-    $array_clone_src_2 = $local_3.repr;
-    $load_5 = $local_3.used;
-    let $array_clone_dst_3: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($load_5)), 0, $array_clone_src_2, 0, $load_5);
-    if @unlikely(0 >= $load_5) {
+    }).used;
+    if @unlikely(0 >= $load_4) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $load_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_renamed_import.wado:27"), used: 37 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, $load_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_renamed_import.wado:27"), used: 37 });
         unreachable;
     }
-    $sroa_t_h1_239 = builtin::array_get_value<u8>($array_clone_dst_3, 0);
-    $array_clone_src_2 = builtin::array_new<u8>(33);
-    $sroa_out_used_628 = 0;
-    $inline_core_prelude_string_wado_String__internal_push_view_21: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_21;
+    $sroa_t_h1_236 = builtin::array_get_value<u8>($local_3.repr, 0);
+    $sroa_out_repr_624 = builtin::array_new<u8>(33);
+    $sroa_out_used_625 = 0;
+    $inline_core_prelude_string_wado_String__internal_push_view_20: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
-    is_negative_84 = $load_5 < 0;
-    $load_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_88(x_88 = builtin::i64_extend_i32_s($load_5); select i64(x_88 < 0_i64, 0_i64 - x_88, x_88)));
-    if is_negative_84 {
-        if @unlikely(1 > builtin::array_len($array_clone_src_2)) {
+    is_negative_83 = $load_4 < 0;
+    $load_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_87(x_87 = builtin::i64_extend_i32_s($load_4); select i64(x_87 < 0_i64, 0_i64 - x_87, x_87)));
+    if is_negative_83 {
+        if @unlikely(1 > builtin::array_len($sroa_out_repr_624)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_629(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_2, used: 0 }), 1);
-            $array_clone_src_2 = $sroa_write_back_629.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_626(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_624, used: 0 }), 1);
+            $sroa_out_repr_624 = $sroa_write_back_626.repr;
         }
-        $sroa_out_used_628 = 1;
-        builtin::array_set_u8($array_clone_src_2, 0, 45);
+        $sroa_out_used_625 = 1;
+        builtin::array_set_u8($sroa_out_repr_624, 0, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_84($sroa_out_used_628 + $load_5) > builtin::array_len($array_clone_src_2)) {
+    if @unlikely(local.tee is_negative_83($sroa_out_used_625 + $load_4) > builtin::array_len($sroa_out_repr_624)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_629(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_2, used: $sroa_out_used_628 }), is_negative_84);
-        $array_clone_src_2 = $sroa_write_back_629.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_626(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_624, used: $sroa_out_used_625 }), is_negative_83);
+        $sroa_out_repr_624 = $sroa_write_back_626.repr;
     }
-    start_309 = $sroa_out_used_628;
-    $sroa_out_used_628 = is_negative_84;
-    "core:prelude/primitive.wado/write_decimal_digits"($array_clone_src_2, start_309, x_88, $load_5);
-    if @unlikely(local.tee $load_5($sroa_out_used_628 + 1) > builtin::array_len($array_clone_src_2)) {
+    start_306 = $sroa_out_used_625;
+    $sroa_out_used_625 = is_negative_83;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_out_repr_624, start_306, x_87, $load_4);
+    if @unlikely(local.tee $load_4($sroa_out_used_625 + 1) > builtin::array_len($sroa_out_repr_624)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_629(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_2, used: $sroa_out_used_628 }), $load_5);
-        $array_clone_src_2 = $sroa_write_back_629.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_626(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_624, used: $sroa_out_used_625 }), $load_4);
+        $sroa_out_repr_624 = $sroa_write_back_626.repr;
     }
-    is_negative_84 = $sroa_out_used_628;
-    $sroa_out_used_628 = $load_5;
-    builtin::array_copy<u8>($array_clone_src_2, is_negative_84, global:effect_handler_renamed_import.wado::$const_obj_0, 0, 1);
-    $load_5 = $sroa_t_h1_239 < 0;
-    $sroa_t_h1_239 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_88(x_88 = builtin::i64_extend_i32_s($sroa_t_h1_239); select i64(x_88 < 0_i64, 0_i64 - x_88, x_88)));
-    if $load_5 {
-        if @unlikely(local.tee $load_5($sroa_out_used_628 + 1) > builtin::array_len($array_clone_src_2)) {
+    is_negative_83 = $sroa_out_used_625;
+    $sroa_out_used_625 = $load_4;
+    builtin::array_copy<u8>($sroa_out_repr_624, is_negative_83, global:effect_handler_renamed_import.wado::$const_obj_0, 0, 1);
+    $load_4 = $sroa_t_h1_236 < 0;
+    $sroa_t_h1_236 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_87(x_87 = builtin::i64_extend_i32_s($sroa_t_h1_236); select i64(x_87 < 0_i64, 0_i64 - x_87, x_87)));
+    if $load_4 {
+        if @unlikely(local.tee $load_4($sroa_out_used_625 + 1) > builtin::array_len($sroa_out_repr_624)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_629(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_2, used: $sroa_out_used_628 }), $load_5);
-            $array_clone_src_2 = $sroa_write_back_629.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_626(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_624, used: $sroa_out_used_625 }), $load_4);
+            $sroa_out_repr_624 = $sroa_write_back_626.repr;
         }
-        is_negative_84 = $sroa_out_used_628;
-        $sroa_out_used_628 = $load_5;
-        builtin::array_set_u8($array_clone_src_2, is_negative_84, 45);
+        is_negative_83 = $sroa_out_used_625;
+        $sroa_out_used_625 = $load_4;
+        builtin::array_set_u8($sroa_out_repr_624, is_negative_83, 45);
     } else {
     }
-    if @unlikely(local.tee $load_5($sroa_out_used_628 + $sroa_t_h1_239) > builtin::array_len($array_clone_src_2)) {
+    if @unlikely(local.tee $load_4($sroa_out_used_625 + $sroa_t_h1_236) > builtin::array_len($sroa_out_repr_624)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_629(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_2, used: $sroa_out_used_628 }), $load_5);
-        $array_clone_src_2 = $sroa_write_back_629.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_626(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_624, used: $sroa_out_used_625 }), $load_4);
+        $sroa_out_repr_624 = $sroa_write_back_626.repr;
     }
-    is_negative_84 = $sroa_out_used_628;
-    $sroa_out_used_628 = $load_5;
-    "core:prelude/primitive.wado/write_decimal_digits"($array_clone_src_2, is_negative_84, x_88, $sroa_t_h1_239);
-    $inline_core_prelude_string_wado_String__internal_push_view_66: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_66;
+    is_negative_83 = $sroa_out_used_625;
+    $sroa_out_used_625 = $load_4;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_out_repr_624, is_negative_83, x_87, $sroa_t_h1_236);
+    $inline_core_prelude_string_wado_String__internal_push_view_65: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_65;
     };
-    $load_5 = builtin::i32_wrap_i64(local.tee x_88("wasi/stream-new"()));
-    $sroa_t_h1_239 = builtin::i32_wrap_i64(x_88 >> 32_i64);
-    $load_5 = "effect_handler_renamed_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_5);
-    builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($sroa_out_used_628 + 1)), 0, $array_clone_src_2, 0, $sroa_out_used_628);
-    builtin::array_set_u8($array_clone_dst_3, $sroa_out_used_628, 10);
+    $load_4 = builtin::i32_wrap_i64(local.tee x_87("wasi/stream-new"()));
+    $sroa_t_h1_236 = builtin::i32_wrap_i64(x_87 >> 32_i64);
+    $load_4 = "effect_handler_renamed_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_4);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($sroa_out_used_625 + 1)), 0, $sroa_out_repr_624, 0, $sroa_out_used_625);
+    builtin::array_set_u8(new_repr, $sroa_out_used_625, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $sroa_out_used_628 = $sroa_out_used_628 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_t_h1_239, $array_clone_dst_3, 0, $sroa_out_used_628);
+        $sroa_out_used_625 = $sroa_out_used_625 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_t_h1_236, new_repr, 0, $sroa_out_used_625);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_t_h1_239);
+        "wasi/stream-drop-writable"($sroa_t_h1_236);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_5);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_4);
     }
     global:effect_handler_renamed_import.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random;
 }

@@ -449,28 +449,26 @@ fn "generic_assoc_type_bounds.wado/$cm_export__$test_0_the_type_s_own_bound_answ
     let $v_1: ref "core:prelude/list.wado//List<i32>";
     let total: i32;
     let item: i32;
-    let $sroa_$iter_0_index_22: i32;
+    let $sroa_$iter_0_repr_25: ref Array<i32>;
+    let $sroa_$iter_0_index_26: i32;
     $v_0 = struct.new "generic_assoc_type_bounds.wado//Weigher" {};
     $v_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 };
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = $v_1.repr;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, $array_clone_src_1, 0, 2);
     total = 0;
-    $sroa_$iter_0_index_22 = 0;
+    $sroa_$iter_0_repr_25 = $v_1.repr;
+    $sroa_$iter_0_index_26 = 0;
     b11: block {
         l12: loop {
-            break_if b11 $sroa_$iter_0_index_22 >= 2;
-            item = builtin::array_get_value<i32>($array_clone_dst_2, $sroa_$iter_0_index_22);
-            $sroa_$iter_0_index_22 = $sroa_$iter_0_index_22 + 1;
+            break_if b11 $sroa_$iter_0_index_26 >= 2;
+            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_25, $sroa_$iter_0_index_26);
+            $sroa_$iter_0_index_26 = $sroa_$iter_0_index_26 + 1;
             total = total + item;
             continue l12;
         };
     };
     if @unlikely(total != 7) {
         cold_path;
-        let $mv_arg_4: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_4("core:prelude/string.wado/core:prelude/string.wado/String::format<generic_assoc_type_bounds.wado/$tmpl$df95f6c2bdcffed0,[&generic_assoc_type_bounds.wado/Weigher,core:prelude/list.wado/List<i32>,i32]>"(struct.new "generic_assoc_type_bounds.wado//$tmpl$df95f6c2bdcffed0" { h0: $v_0, h1: $v_1, h2: total, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_type_s_own_bound_answers_for_each_member_of_the_family at generic_assoc_type_bounds.wado:56
+        let $mv_arg_1: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<generic_assoc_type_bounds.wado/$tmpl$df95f6c2bdcffed0,[&generic_assoc_type_bounds.wado/Weigher,core:prelude/list.wado/List<i32>,i32]>"(struct.new "generic_assoc_type_bounds.wado//$tmpl$df95f6c2bdcffed0" { h0: $v_0, h1: $v_1, h2: total, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_type_s_own_bound_answers_for_each_member_of_the_family at generic_assoc_type_bounds.wado:56
 condition: measure(&Weigher {}, [3, 4] as List<i32>) == 7
 &Weigher {}: "), used: 195 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_type_s_own_bound_answers_for_each_member_of_the_family at generic_assoc_type_bounds.wado:56
 condition: measure(&Weigher {}, [3, 4] as List<i32>) == 7
@@ -478,7 +476,7 @@ condition: measure(&Weigher {}, [3, 4] as List<i32>) == 7
 [3, 4] as List<i32>: "), used: 22 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 [3, 4] as List<i32>: "), used: 22 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 measure(&Weigher {}, [3, 4] as List<i32>): "), used: 44 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-measure(&Weigher {}, [3, 4] as List<i32>): "), used: 44 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_4.used);
+measure(&Weigher {}, [3, 4] as List<i32>): "), used: 44 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
     "wasi/task-return"(0);

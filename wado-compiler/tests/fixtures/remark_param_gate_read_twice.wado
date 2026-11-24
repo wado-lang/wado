@@ -14,7 +14,8 @@ fn is_level(s: String, want: String) -> bool {
 }
 
 export fn run() with Stdout {
-    if is_level(LOG_LEVEL, "trace") || is_level(LOG_LEVEL, "debug") {
+    if is_level(builtin::black_box(LOG_LEVEL), "trace")
+        || is_level(builtin::black_box(LOG_LEVEL), "debug") {
         println(`verbose`);
     }
 }

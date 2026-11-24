@@ -480,37 +480,37 @@ global global:core:prelude/format.wado::$const_obj_52: ref "core:prelude/string.
 global global:core:prelude/string.wado::$const_obj_60: ref Array<u8> = array.new_fixed<u8>(59);
 
 fn "variadic_tuple_literal_index.wado/$test_0_the_scalar_prefix_ahead_of_a_pack_keeps_its_position"() {
-    let $load_4: i32;
     let $v_4: ref "tuple//[core:prelude/string.wado/String, i32]";
-    let v: ref "core:prelude/string.wado//String";
+    let $v_5: ref "core:prelude/string.wado//String";
+    let a_end: i32;
     let i: i32;
+    let $licm_repr_18: ref Array<u8>;
     block {
     };
-    v = local.tee $v_4(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 101, 97, 100), used: 4 }, 1: 1 }).0;
-    v = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = v.repr; $load_4 = v.used; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($load_4)), 0, $array_clone_src_2, 0, $load_4); $array_clone_dst_3, used: $load_4 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        if local.tee $load_4(v.used) != 4 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+    $v_5 = local.tee $v_4(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 101, 97, 100), used: 4 }, 1: 1 }).0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        if local.tee a_end($v_5.used) != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
         i = 0;
-        $array_clone_src_2 = v.repr;
+        $licm_repr_18 = $v_5.repr;
         b3: block {
             l4: loop {
-                break_if b3 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s($load_4);
-                if builtin::array_get_value<u8>($array_clone_src_2, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                break_if b3 (builtin::i64_extend_i32_s(i) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
+                if builtin::array_get_value<u8>($licm_repr_18, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                if builtin::array_get_value<u8>($licm_repr_18, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                if builtin::array_get_value<u8>($licm_repr_18, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                if builtin::array_get_value<u8>($licm_repr_18, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
                 continue l4;
@@ -518,24 +518,24 @@ fn "variadic_tuple_literal_index.wado/$test_0_the_scalar_prefix_ahead_of_a_pack_
         };
         b9: block {
             l10: loop {
-                break_if b9 i >= $load_4;
-                if builtin::array_get_value<u8>($array_clone_src_2, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                break_if b9 i >= a_end;
+                if builtin::array_get_value<u8>($licm_repr_18, i) != builtin::array_get_value<u8>(global:variadic_tuple_literal_index.wado::$const_obj_1, i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
                 continue l10;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_tuple_literal_index.wado/$tmpl$09e1c066327a27e8,[&[core:prelude/string.wado/String,i32],core:prelude/string.wado/String]>"(struct.new "variadic_tuple_literal_index.wado//$tmpl$09e1c066327a27e8" { h0: $v_4, h1: v, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_scalar_prefix_ahead_of_a_pack_keeps_its_position at variadic_tuple_literal_index.wado:52
+        "core:rt/panic"(local.tee $v_5("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_tuple_literal_index.wado/$tmpl$09e1c066327a27e8,[&[core:prelude/string.wado/String,i32],core:prelude/string.wado/String]>"(struct.new "variadic_tuple_literal_index.wado//$tmpl$09e1c066327a27e8" { h0: $v_4, h1: $v_5, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_scalar_prefix_ahead_of_a_pack_keeps_its_position at variadic_tuple_literal_index.wado:52
 condition: head(&[\"lead\", 1]) == \"lead\"
 &[\"lead\", 1]: "), used: 175 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_the_scalar_prefix_ahead_of_a_pack_keeps_its_position at variadic_tuple_literal_index.wado:52
 condition: head(&[\"lead\", 1]) == \"lead\"
 &[\"lead\", 1]: "), used: 175 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 head(&[\"lead\", 1]): "), used: 21 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-head(&[\"lead\", 1]): "), used: 21 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v.used);
+head(&[\"lead\", 1]): "), used: 21 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_5.used);
         unreachable;
     }
 }

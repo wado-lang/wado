@@ -1891,17 +1891,17 @@ impl HeapFrame {
         })
     }
 
-    /// Whether objects `local` holds stay reachable after the body returns:
-    /// through its result, a global, or a parameter they did not come from.
-    pub(super) fn outlives(&self, local: u32) -> bool {
-        let Some(h) = self.local_root(local) else {
+    /// Whether objects `local` holds, once it also holds what `other` holds,
+    /// stay reachable after the body returns: through its result, a global,
+    /// or a parameter they did not come from.
+    pub(super) fn outlives_sharing(&self, local: u32, other: u32) -> bool {
+        let (Some(a), Some(b)) = (self.local_root(local), self.local_root(other)) else {
             return true;
         };
-        let prov = self.classes.prov[h as usize];
-        !prov.is_fresh()
-            && (h == self.classes.root(RET)
-                || h == self.classes.root(ELSEWHERE)
-                || prov.params.count_ones() > 1)
+        let mut prov = self.classes.prov[a as usize];
+        prov.join(self.classes.prov[b as usize]);
+        let escaped = |h: u32| h == self.classes.root(RET) || h == self.classes.root(ELSEWHERE);
+        !prov.is_fresh() && (escaped(a) || escaped(b) || prov.params.count_ones() > 1)
     }
 
     /// Whether an access at a site `at` accepts, other than one through a
@@ -1990,7 +1990,7 @@ fn builtin_touches(
 }
 
 /// Visit the local each opaque leaf of the promoted value `v` reads.
-fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(u32)) {
+pub(super) fn for_each_leaf_local(body: &Body, v: ValueId, f: &mut impl FnMut(u32)) {
     let mut stack = vec![v];
     let mut seen = IndexSet::default();
     while let Some(v) = stack.pop() {

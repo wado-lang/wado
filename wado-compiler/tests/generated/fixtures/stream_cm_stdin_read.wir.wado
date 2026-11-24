@@ -557,8 +557,8 @@ fn "core:prelude/string.wado/utf8_prefix_end"(repr, start, len, char_count) {
 fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     let $load_1: ref "Array<core:prelude/types.wado/CopySettlement>";
     let status: i32;
-    let self_35: ref "core:prelude/list.wado//List<core:prelude/types.wado/CopySettlement>";
-    let self_41: i32;
+    let self_32: ref "core:prelude/list.wado//List<core:prelude/types.wado/CopySettlement>";
+    let self_38: i32;
     if packed != -1 {
         return packed;
     }
@@ -566,21 +566,21 @@ fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     b58: block {
         l59: loop {
             break_if b58 packed >= global:core:prelude/types.wado::SETTLED_COPIES.used;
-            if self_35 = global:core:prelude/types.wado::SETTLED_COPIES; self_41 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(((0 <= packed) & (packed < self_41)) == 0) {
+            if self_32 = global:core:prelude/types.wado::SETTLED_COPIES; self_38 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(((0 <= packed) & (packed < self_38)) == 0) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(packed, self_41, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:731"), used: 27 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(packed, self_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:731"), used: 27 });
                 unreachable;
-            }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_35.repr, packed).handle == handle {
-                self_35 = global:core:prelude/types.wado::SETTLED_COPIES;
+            }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_32.repr, packed).handle == handle {
+                self_32 = global:core:prelude/types.wado::SETTLED_COPIES;
                 handle = global:core:prelude/types.wado::SETTLED_COPIES.used;
                 if @unlikely(packed >= handle) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0"(packed, handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:808"), used: 27 });
                     unreachable;
                 }
-                handle = builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_1(self_35.repr), packed).packed;
-                builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_1, packed, $load_1, packed + 1, (local.tee self_41(self_35.used) - 1) - packed);
-                self_35.used = local.tee packed(self_41 - 1);
+                handle = builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_1(self_32.repr), packed).packed;
+                builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_1, packed, $load_1, packed + 1, (local.tee self_38(self_32.used) - 1) - packed);
+                self_32.used = local.tee packed(self_38 - 1);
                 builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_1, packed, ref.null none);
                 return handle;
             }
@@ -590,10 +590,10 @@ fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     };
     packed = "wasi/waitable-set-new"();
     "wasi/waitable-join"(handle, packed);
-    self_41 = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(packed, self_41));
-    status = builtin::load_i32(self_41 + 4);
-    drop("mem/realloc"(self_41, 8, 4, 0));
+    self_38 = "mem/realloc"(0, 0, 4, 8);
+    drop("wasi/waitable-set-wait"(packed, self_38));
+    status = builtin::load_i32(self_38 + 4);
+    drop("mem/realloc"(self_38, 8, 4, 0));
     "wasi/waitable-join"(handle, 0);
     "wasi/waitable-set-drop"(packed);
     return status;

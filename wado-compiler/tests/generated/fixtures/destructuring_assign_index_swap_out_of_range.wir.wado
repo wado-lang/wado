@@ -465,7 +465,6 @@ fn "destructuring_assign_index_swap_out_of_range.wado/$test_trap_2_a_key_the_map
     let $load_11: ref "Array<core:prelude/string.wado/String>";
     let $load_12: ref Array<i32>;
     let $load_13: ref Array<i32>;
-    let $load_22: i32;
     let m: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>";
     let a_15: ref "core:prelude/string.wado//String";
     let e_20: i32;
@@ -474,6 +473,7 @@ fn "destructuring_assign_index_swap_out_of_range.wado/$test_trap_2_a_key_the_map
     let existing: i32;
     let b_38: i32;
     let self_48: ref "Array<core:prelude/list.wado/List<i32>>";
+    let at_a_52: ref "core:prelude/list.wado//List<i32>";
     m = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<ref "core:prelude/list.wado//List<i32>">(0), alive: builtin::array_new<bool>(0), count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     $inline_core_collections_treemap_wado_TreeMap_core_prelude_string_wado_String_core_prelude_list_wado_List_i32____insert_0: block {
         key_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
@@ -503,12 +503,11 @@ fn "destructuring_assign_index_swap_out_of_range.wado/$test_trap_2_a_key_the_map
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>::found$cold0$dae[self,e]"(a_15);
         unreachable;
     }
-    $load_10 = local.tee value_27(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(local.tee self_48($load_0.values), e_20)).repr;
-    builtin::array_copy<i32>(local.tee $load_12(builtin::array_new<i32>(local.tee b_38(value_27.used))), 0, $load_10, 0, b_38);
-    $load_10 = local.tee value_27(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(self_48, existing)).repr;
-    builtin::array_copy<i32>(local.tee $load_13(builtin::array_new<i32>(local.tee $load_22(value_27.used))), 0, $load_10, 0, $load_22);
-    builtin::array_set<ref "core:prelude/list.wado//List<i32>">(self_48, e_20, struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_copy<i32>(local.tee $load_10(builtin::array_new<i32>($load_22)), 0, $load_13, 0, $load_22); $load_10, used: $load_22 });
-    builtin::array_set<ref "core:prelude/list.wado//List<i32>">(self_48, existing, struct.new "core:prelude/list.wado//List<i32>" { repr: builtin::array_copy<i32>(local.tee $load_10(builtin::array_new<i32>(b_38)), 0, $load_12, 0, b_38); $load_10, used: b_38 });
+    value_27 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(local.tee self_48($load_0.values), e_20);
+    b_38 = local.tee at_a_52(builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">(self_48, existing)).used;
+    builtin::array_set<ref "core:prelude/list.wado//List<i32>">(self_48, e_20, struct.new "core:prelude/list.wado//List<i32>" { repr: $load_10 = at_a_52.repr; builtin::array_copy<i32>(local.tee $load_12(builtin::array_new<i32>(b_38)), 0, $load_10, 0, b_38); $load_12, used: b_38 });
+    b_38 = value_27.used;
+    builtin::array_set<ref "core:prelude/list.wado//List<i32>">(self_48, existing, struct.new "core:prelude/list.wado//List<i32>" { repr: $load_10 = value_27.repr; builtin::array_copy<i32>(local.tee $load_12(builtin::array_new<i32>(b_38)), 0, $load_10, 0, b_38); $load_12, used: b_38 });
 }
 
 fn "destructuring_assign_index_swap_out_of_range.wado/$cm_export__$test_trap_0_the_second_index_past_the_end"() {

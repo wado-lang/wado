@@ -61,6 +61,21 @@ share:
 - the holder itself read as a value, other than at its final use, is a second
   owner of everything it holds.
 
+### Where the decision is made
+
+The optimizer decides it, in `nir/copy_elision`, on the body after inlining.
+There the readers of the aggregate are in the body, and the heap analysis tells
+the objects the body allocates from the ones it was handed.
+
+The inliner keeps each `$value_copy$T` helper a call until the optimizer's loop
+first converges, so the pass finds every copy whole in the body it lands in.
+It drops the call where three things hold:
+
+- every object the copy holds is allocated in the body and stays in it;
+- nothing in the body writes an object of a type the copy reaches, through the
+  copy or the aggregate holding it;
+- nothing in the body writes such an object through the source.
+
 ### A call lends what it returns
 
 A function whose returned value holds a part of a parameter lends that part
@@ -72,12 +87,18 @@ argument outright already works this way.
 
 ## Roadmap
 
-- [ ] A frame-local aggregate holds a shared part: a struct, tuple or list
+- [x] A frame-local aggregate holds a shared part: a struct, tuple or list
   literal element, and a value a `List` method stores into a local list.
 - [ ] A returned value lends a part of a parameter, and the caller decides its
   copy.
 
 ## Known gaps
+
+### Recursive types
+
+The heap analysis keys a write by the type of the object it writes. A `push`
+into a local `List<Tree>` writes an `Array<Tree>`, a type a `Tree` reaches, so
+it counts as a write to every `Tree` copy that list holds.
 
 ### Long-lived heap storage
 

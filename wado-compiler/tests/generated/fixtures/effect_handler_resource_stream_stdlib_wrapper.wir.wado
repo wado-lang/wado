@@ -983,8 +983,8 @@ fn "core:prelude/string.wado/utf8_prefix_end"(repr, start, len, char_count) {
 fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     let $load_1: ref "Array<core:prelude/types.wado/CopySettlement>";
     let status: i32;
-    let self_35: ref "core:prelude/list.wado//List<core:prelude/types.wado/CopySettlement>";
-    let self_41: i32;
+    let self_32: ref "core:prelude/list.wado//List<core:prelude/types.wado/CopySettlement>";
+    let self_38: i32;
     if packed != -1 {
         return packed;
     }
@@ -992,21 +992,21 @@ fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     b88: block {
         l89: loop {
             break_if b88 packed >= global:core:prelude/types.wado::SETTLED_COPIES.used;
-            if self_35 = global:core:prelude/types.wado::SETTLED_COPIES; self_41 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(((0 <= packed) & (packed < self_41)) == 0) {
+            if self_32 = global:core:prelude/types.wado::SETTLED_COPIES; self_38 = global:core:prelude/types.wado::SETTLED_COPIES.used; if @unlikely(((0 <= packed) & (packed < self_38)) == 0) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(packed, self_41, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:731"), used: 27 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(packed, self_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:731"), used: 27 });
                 unreachable;
-            }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_35.repr, packed).handle == handle {
-                self_35 = global:core:prelude/types.wado::SETTLED_COPIES;
+            }; builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(self_32.repr, packed).handle == handle {
+                self_32 = global:core:prelude/types.wado::SETTLED_COPIES;
                 handle = global:core:prelude/types.wado::SETTLED_COPIES.used;
                 if @unlikely(packed >= handle) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/CopySettlement>::remove$contract_report0"(packed, handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:808"), used: 27 });
                     unreachable;
                 }
-                handle = builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_1(self_35.repr), packed).packed;
-                builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_1, packed, $load_1, packed + 1, (local.tee self_41(self_35.used) - 1) - packed);
-                self_35.used = local.tee packed(self_41 - 1);
+                handle = builtin::array_get_value<ref "core:prelude/types.wado//CopySettlement">(local.tee $load_1(self_32.repr), packed).packed;
+                builtin::array_copy<ref "core:prelude/types.wado//CopySettlement">($load_1, packed, $load_1, packed + 1, (local.tee self_38(self_32.used) - 1) - packed);
+                self_32.used = local.tee packed(self_38 - 1);
                 builtin::array_set<ref "core:prelude/types.wado//CopySettlement">($load_1, packed, ref.null none);
                 return handle;
             }
@@ -1016,10 +1016,10 @@ fn "core:prelude/types.wado/settled_copy"(handle, packed) {
     };
     packed = "wasi/waitable-set-new"();
     "wasi/waitable-join"(handle, packed);
-    self_41 = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(packed, self_41));
-    status = builtin::load_i32(self_41 + 4);
-    drop("mem/realloc"(self_41, 8, 4, 0));
+    self_38 = "mem/realloc"(0, 0, 4, 8);
+    drop("wasi/waitable-set-wait"(packed, self_38));
+    status = builtin::load_i32(self_38 + 4);
+    drop("mem/realloc"(self_38, 8, 4, 0));
     "wasi/waitable-join"(handle, 0);
     "wasi/waitable-set-drop"(packed);
     return status;
@@ -1614,7 +1614,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let self_7: i32;
     let self_8: ref null "core:prelude/types.wado//StartedWrite<u8>";
     let buffer: ref null "core:prelude/types.wado//CopyBuffer";
-    let data_21: ref "core:prelude/list.wado//List<u8>";
+    let data_20: ref "core:prelude/list.wado//List<u8>";
     if data.used == 0 {
         return;
     }
@@ -1626,8 +1626,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
             multivalue_bind [data, $mv$$drop_spill_3$result] = "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(self_8.buffer, self_8.data);
             if ref.is_null(self_8) == 0 {
                 buffer = self_8.buffer;
-                data_21 = self_8.data;
-                multivalue_bind [_, _] = "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(buffer, data_21);
+                data_20 = self_8.data;
+                multivalue_bind [_, _] = "core:prelude/types.wado/core:prelude/types.wado/take_written<u8>"(buffer, data_20);
                 if ref.is_null(buffer) == 0 {
                     drop("core:prelude/types.wado/settled_copy"(buffer.handle, buffer.packed));
                     if local.tee $load_8(buffer.size) > 0 {
@@ -1948,24 +1948,19 @@ fn "effect_handler_resource_stream_stdlib_wrapper.wado/effect_handler_resource_s
 fn "effect_handler_resource_stream_stdlib_wrapper.wado/effect_handler_resource_stream_stdlib_wrapper.wado/$Closure_1::$call$dae[self#1,max,into]"(self) {
     let $load_3: i32;
     let self_1: ref "effect_handler_resource_stream_stdlib_wrapper.wado//MockStream";
-    let v_7: ref "core:prelude/list.wado//List<u8>";
-    let $sroa_chunk_result_19: "core:prelude/types.wado//enum:CopyResult";
-    v_7 = local.tee self_1(self.$capture_0).log;
-    let $array_clone_src_1: ref Array<u8>;
-    $array_clone_src_1 = v_7.repr;
-    $load_3 = v_7.used;
-    let $array_clone_dst_2: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_3)), 0, $array_clone_src_1, 0, $load_3);
+    let snapshot: ref "core:prelude/list.wado//List<u8>";
+    let $sroa_chunk_result_17: "core:prelude/types.wado//enum:CopyResult";
+    snapshot = local.tee self_1(self.$capture_0).log;
     self_1.log = struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
-    return struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: $sroa_chunk_result_19 = (if local.tee $sroa_chunk_result_19((if $load_3 == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+    return struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: $sroa_chunk_result_17 = (if local.tee $sroa_chunk_result_17((if local.tee $load_3(snapshot.used) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         1;
     } else {
         0;
     })) == 0 -> i32 {
         0;
     } else {
-        select i32($sroa_chunk_result_19 == 1, 1, 2);
-    }); struct.new "core:prelude/types.wado//CopyBuffer" { handle: 0, packed: $sroa_chunk_result_19, ptr: 0, size: 0, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>($load_3)), 0, $array_clone_dst_2, 0, $load_3); $array_clone_src_1, used: $load_3 } };
+        select i32($sroa_chunk_result_17 == 1, 1, 2);
+    }); struct.new "core:prelude/types.wado//CopyBuffer" { handle: 0, packed: $sroa_chunk_result_17, ptr: 0, size: 0, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = snapshot.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_3)), 0, $array_clone_src_1, 0, $load_3); $array_clone_dst_2, used: $load_3 } };
 }
 
 fn "effect_handler_resource_stream_stdlib_wrapper.wado/effect_handler_resource_stream_stdlib_wrapper.wado/$Closure_4::$call$dae[self#1]"(self, data) {
@@ -2176,21 +2171,21 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<effect_handle
 fn "effect_handler_resource_stream_stdlib_wrapper.wado/effect_handler_resource_stream_stdlib_wrapper.wado/MockStream^core:prelude/types.wado/StreamWritable<u8>::begin_write$sroa[&mut(self.log)]$dae[this]"(self, $mv$data$repr, $mv$data$used) {
     let item: u8;
     let used_13: i32;
-    let $licm_repr_29: ref Array<u8>;
-    let $sroa_$iter_0_index_31: i32;
-    $sroa_$iter_0_index_31 = 0;
-    $licm_repr_29 = self.repr;
+    let $licm_repr_28: ref Array<u8>;
+    let $sroa_$iter_0_index_30: i32;
+    $sroa_$iter_0_index_30 = 0;
+    $licm_repr_28 = self.repr;
     b236: block {
         l237: loop {
-            break_if b236 $sroa_$iter_0_index_31 >= $mv$data$used;
-            item = builtin::array_get_value<u8>($mv$data$repr, $sroa_$iter_0_index_31);
-            $sroa_$iter_0_index_31 = $sroa_$iter_0_index_31 + 1;
-            if @unlikely(local.tee used_13(self.used) >= builtin::array_len($licm_repr_29)) {
+            break_if b236 $sroa_$iter_0_index_30 >= $mv$data$used;
+            item = builtin::array_get_value<u8>($mv$data$repr, $sroa_$iter_0_index_30);
+            $sroa_$iter_0_index_30 = $sroa_$iter_0_index_30 + 1;
+            if @unlikely(local.tee used_13(self.used) >= builtin::array_len($licm_repr_28)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self);
-                $licm_repr_29 = self.repr;
+                $licm_repr_28 = self.repr;
             }
-            builtin::array_set_u8($licm_repr_29, used_13, item);
+            builtin::array_set_u8($licm_repr_28, used_13, item);
             self.used = used_13 + 1;
             continue l237;
         };

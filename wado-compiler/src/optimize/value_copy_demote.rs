@@ -19,7 +19,9 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
 use super::arena_query::storage_root;
-use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};
+use super::arena_query::{
+    expr_mentions_local, holds_reference, is_local, reachable_blocks, strip_refs,
+};
 use super::gate::{FunctionGate, GatedPass};
 use crate::ast::Visibility;
 use crate::compiler_trace;
@@ -27,7 +29,9 @@ use crate::module_source::ModuleSource;
 use crate::name::shallow_copy_helper_name;
 use crate::nir::FuncId;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
-use crate::optimize::heap_effect::{HeapEffects, HeapEffectsCache, LazyHeapFrame};
+use crate::optimize::heap_effect::{
+    HeapEffects, HeapEffectsCache, LazyHeapFrame, for_each_leaf_local,
+};
 use crate::parallel::lock;
 use cranelift_entity::EntityRef;
 use std::sync::Mutex;
@@ -425,18 +429,35 @@ fn is_immutable_ref_param(params: &[NirParam], type_table: &TypeTable, idx: u32)
         .any(|p| p.local_index == idx && matches!(type_table.get(p.type_id), ResolvedType::Ref(_)))
 }
 
-/// Whether `e` is a provably-fresh rvalue: a value materialized here that
+/// Whether `op` is a provably-fresh rvalue: a value materialized here that
 /// aliases no pre-existing storage, so a shallow copy of it shares elements with
-/// nothing observable. Conservative — only structurally-fresh aggregate literals
-/// qualify; a call / index / field read may return an alias and does not.
-fn rvalue_is_fresh(body: &Body, e: ExprId) -> bool {
-    matches!(
+/// nothing observable. Conservative: an aggregate literal qualifies only when
+/// each part does, since `List { repr: buf, .. }` is new while `buf` is not; a
+/// call, index or field read may return an alias and does not.
+fn rvalue_is_fresh(body: &Body, type_table: &TypeTable, op: Operand) -> bool {
+    if !holds_reference(type_table, body.operand_type(op)) {
+        return true;
+    }
+    let e = match op {
+        Operand::Expr(e) => e,
+        Operand::Value(v) => {
+            let mut reads_local = false;
+            for_each_leaf_local(body, v, &mut |_| reads_local = true);
+            return !reads_local;
+        }
+    };
+    let literal = matches!(
         &body.exprs[e].kind,
         ExprKind::ArrayLiteral { .. }
             | ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
             | ExprKind::VariantConstruct { .. }
-    )
+    );
+    let mut parts_fresh = true;
+    body.for_each_operand(NodeRef::Expr(e), |part| {
+        parts_fresh &= rvalue_is_fresh(body, type_table, part);
+    });
+    literal && parts_fresh
 }
 
 /// True when the binding `target_idx` and the source `value` reads from are
@@ -470,12 +491,7 @@ fn demote_candidate(
     // could change under a shared shallow copy).
     let arg_expr = arg0.as_expr();
     match arg_expr.and_then(|e| storage_root(body, e)) {
-        None => match arg_expr {
-            // A promoted `Operand::Value` arg (no skeleton expr) is an immutable
-            // constant — genuinely fresh.
-            None => true,
-            Some(e) => rvalue_is_fresh(body, e),
-        },
+        None => rvalue_is_fresh(body, an.type_table, arg0),
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)
                 || an.arg_local_is_element_clean(body, root);
@@ -510,7 +526,9 @@ fn elements_exposed(
             .and_then(|e| storage_root(body, e))
             .is_some_and(|l| l == target || l == root)
     };
-    frame.written(heap.effects, body, &keys, root, own) || frame.outlives(target)
+    frame.written(heap.effects, body, &keys, root, &own)
+        || frame.written(heap.effects, body, &keys, target, &own)
+        || frame.outlives_sharing(target, root)
 }
 
 /// Phase 2b mechanical rewrite: for each `let x = …` binding whose `(fi, x)` is

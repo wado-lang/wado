@@ -84,68 +84,68 @@ global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_
 fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     let $load_0: i32;
     let c: ref "value_copy_immutable_source_moved.wado//Point";
-    let $sroa_l_repr_80: ref "Array<value_copy_immutable_source_moved.wado/Point>";
-    let $sroa_write_back_85: ref "core:prelude/list.wado//List<value_copy_immutable_source_moved.wado/Point>";
-    let $cm_pair_7_94: i64;
-    let $sroa_$pattern_temp_0_1_14_101: i32;
-    let new_repr_106: ref Array<u8>;
+    let $sroa_l_repr_77: ref "Array<value_copy_immutable_source_moved.wado/Point>";
+    let $sroa_write_back_82: ref "core:prelude/list.wado//List<value_copy_immutable_source_moved.wado/Point>";
+    let $cm_pair_7_91: i64;
+    let $sroa_$pattern_temp_0_1_14_98: i32;
+    let new_repr_103: ref Array<u8>;
     $load_0 = local.tee c(struct.new "value_copy_immutable_source_moved.wado//Point" { x: black_box(3) }).x;
-    $sroa_l_repr_80 = array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">();
-    if @unlikely(0 >= builtin::array_len($sroa_l_repr_80)) {
+    $sroa_l_repr_77 = array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">();
+    if @unlikely(0 >= builtin::array_len($sroa_l_repr_77)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_immutable_source_moved.wado/Point>::grow"(local.tee $sroa_write_back_85(struct.new "core:prelude/list.wado//List<value_copy_immutable_source_moved.wado/Point>" { repr: $sroa_l_repr_80, used: 0 }));
-        $sroa_l_repr_80 = $sroa_write_back_85.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_immutable_source_moved.wado/Point>::grow"(local.tee $sroa_write_back_82(struct.new "core:prelude/list.wado//List<value_copy_immutable_source_moved.wado/Point>" { repr: $sroa_l_repr_77, used: 0 }));
+        $sroa_l_repr_77 = $sroa_write_back_82.repr;
     }
-    builtin::array_set<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_80, 0, c);
-    builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_80, 0).x = 99;
-    let $mv$message_87$repr: ref Array<u8>;
-    multivalue_bind [$mv$message_87$repr, $load_0] = (let $mv_field_3: i32; $mv_field_3 = builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_80, 0).x; "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_immutable_source_moved.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($load_0, $load_0, $mv_field_3));
-    $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7_94("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_101 = builtin::i32_wrap_i64($cm_pair_7_94 >> 32_i64);
+    builtin::array_set<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_77, 0, c);
+    builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_77, 0).x = 99;
+    let $mv$message_84$repr: ref Array<u8>;
+    multivalue_bind [$mv$message_84$repr, $load_0] = (let $mv_field_3: i32; $mv_field_3 = builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_77, 0).x; "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_immutable_source_moved.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($load_0, $load_0, $mv_field_3));
+    $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7_91("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_98 = builtin::i32_wrap_i64($cm_pair_7_91 >> 32_i64);
     $mv_field_3 = "value_copy_immutable_source_moved.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_3);
-    builtin::array_copy<u8>(local.tee new_repr_106(builtin::array_new<u8>($load_0 + 1)), 0, $mv$message_87$repr, 0, $load_0);
-    builtin::array_set_u8(new_repr_106, $load_0, 10);
+    builtin::array_copy<u8>(local.tee new_repr_103(builtin::array_new<u8>($load_0 + 1)), 0, $mv$message_84$repr, 0, $load_0);
+    builtin::array_set_u8(new_repr_103, $load_0, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
         $load_0 = $load_0 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_101, new_repr_106, 0, $load_0);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_98, new_repr_103, 0, $load_0);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_101);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_98);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_field_3);
     }
     $load_0 = black_box(5);
-    $sroa_l_repr_80 = array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">();
+    $sroa_l_repr_77 = array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">();
     c = struct.new "value_copy_immutable_source_moved.wado//Point" { x: $load_0 };
-    if @unlikely(0 >= builtin::array_len($sroa_l_repr_80)) {
+    if @unlikely(0 >= builtin::array_len($sroa_l_repr_77)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_immutable_source_moved.wado/Point>::grow"(local.tee $sroa_write_back_85(struct.new "core:prelude/list.wado//List<value_copy_immutable_source_moved.wado/Point>" { repr: $sroa_l_repr_80, used: 0 }));
-        $sroa_l_repr_80 = $sroa_write_back_85.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_immutable_source_moved.wado/Point>::grow"(local.tee $sroa_write_back_82(struct.new "core:prelude/list.wado//List<value_copy_immutable_source_moved.wado/Point>" { repr: $sroa_l_repr_77, used: 0 }));
+        $sroa_l_repr_77 = $sroa_write_back_82.repr;
     }
-    builtin::array_set<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_80, 0, c);
-    builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_80, 0).x = 77;
-    multivalue_bind [$mv$message_87$repr, $load_0] = ($mv_field_3 = builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_80, 0).x; "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_immutable_source_moved.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($load_0, $load_0, $mv_field_3));
-    $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7_94("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_101 = builtin::i32_wrap_i64($cm_pair_7_94 >> 32_i64);
+    builtin::array_set<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_77, 0, c);
+    builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_77, 0).x = 77;
+    multivalue_bind [$mv$message_84$repr, $load_0] = ($mv_field_3 = builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($sroa_l_repr_77, 0).x; "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_immutable_source_moved.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($load_0, $load_0, $mv_field_3));
+    $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7_91("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_98 = builtin::i32_wrap_i64($cm_pair_7_91 >> 32_i64);
     $mv_field_3 = "value_copy_immutable_source_moved.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_3);
-    builtin::array_copy<u8>(local.tee new_repr_106(builtin::array_new<u8>($load_0 + 1)), 0, $mv$message_87$repr, 0, $load_0);
-    builtin::array_set_u8(new_repr_106, $load_0, 10);
+    builtin::array_copy<u8>(local.tee new_repr_103(builtin::array_new<u8>($load_0 + 1)), 0, $mv$message_84$repr, 0, $load_0);
+    builtin::array_set_u8(new_repr_103, $load_0, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
         $load_0 = $load_0 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_101, new_repr_106, 0, $load_0);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_98, new_repr_103, 0, $load_0);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_101);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_98);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {

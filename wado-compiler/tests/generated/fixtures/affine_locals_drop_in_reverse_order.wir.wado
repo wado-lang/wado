@@ -225,59 +225,59 @@ fn "affine_locals_drop_in_reverse_order.wado/returns_early"(flag) {
 fn "affine_locals_drop_in_reverse_order.wado/each_iteration"() {
     let a: i32;
     let current: i32;
-    let $sroa_$iter_0_start_19: i32;
-    let $cm_pair_7_28: i64;
-    let $sroa_$pattern_temp_0_0_9_30: i32;
-    let $sroa_$pattern_temp_0_1_10_31: i32;
-    let new_repr_36: ref Array<u8>;
-    $sroa_$iter_0_start_19 = 0;
+    let $cm_pair_7_24: i64;
+    let $sroa_$pattern_temp_0_0_9_26: i32;
+    let $sroa_$pattern_temp_0_1_10_27: i32;
+    let new_repr_32: ref Array<u8>;
+    let $sroa_$iter_0_start_69: i32;
+    $sroa_$iter_0_start_69 = 0;
     b25: block {
         l26: loop {
-            break_if b25 $sroa_$iter_0_start_19 >= 2;
-            $sroa_$iter_0_start_19 = local.tee current($sroa_$iter_0_start_19) + 1;
+            break_if b25 $sroa_$iter_0_start_69 >= 2;
+            $sroa_$iter_0_start_69 = local.tee current($sroa_$iter_0_start_69) + 1;
             a = (current * 10) + 1;
-            let $mv$message_21$repr: ref Array<u8>;
-            multivalue_bind [$mv$message_21$repr, current] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"((current * 10) + 2);
-            $sroa_$pattern_temp_0_0_9_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7_28("wasi/stream-new"()));
-            $sroa_$pattern_temp_0_1_10_31 = builtin::i32_wrap_i64($cm_pair_7_28 >> 32_i64);
-            $sroa_$pattern_temp_0_0_9_30 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(if @unlikely(ref.is_null(ref.null eq) == 0) {
+            let $mv$message_17$repr: ref Array<u8>;
+            multivalue_bind [$mv$message_17$repr, current] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"((current * 10) + 2);
+            $sroa_$pattern_temp_0_0_9_26 = builtin::i32_wrap_i64(local.tee $cm_pair_7_24("wasi/stream-new"()));
+            $sroa_$pattern_temp_0_1_10_27 = builtin::i32_wrap_i64($cm_pair_7_24 >> 32_i64);
+            $sroa_$pattern_temp_0_0_9_26 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(if @unlikely(ref.is_null(ref.null eq) == 0) {
                 unreachable;
-            }; $sroa_$pattern_temp_0_0_9_30);
-            builtin::array_copy<u8>(local.tee new_repr_36(builtin::array_new<u8>(current + 1)), 0, $mv$message_21$repr, 0, current);
-            builtin::array_set_u8(new_repr_36, current, 10);
+            }; $sroa_$pattern_temp_0_0_9_26);
+            builtin::array_copy<u8>(local.tee new_repr_32(builtin::array_new<u8>(current + 1)), 0, $mv$message_17$repr, 0, current);
+            builtin::array_set_u8(new_repr_32, current, 10);
             drop(block -> "core:prelude/types.wado//enum:CopyResult" {
                 if @unlikely(ref.is_null(ref.null eq) == 0) {
                     unreachable;
                 }
                 current = current + 1;
-                "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_10_31, new_repr_36, 0, current);
+                "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_10_27, new_repr_32, 0, current);
             });
             if ref.is_null(ref.null eq) == 0 {
             } else {
-                "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10_31);
+                "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10_27);
             }
             if ref.is_null(ref.null eq) == 0 {
             } else {
-                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9_30);
+                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9_26);
             }
-            multivalue_bind [$mv$message_21$repr, current] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a);
-            a = builtin::i32_wrap_i64(local.tee $cm_pair_7_28("wasi/stream-new"()));
-            $sroa_$pattern_temp_0_0_9_30 = builtin::i32_wrap_i64($cm_pair_7_28 >> 32_i64);
+            multivalue_bind [$mv$message_17$repr, current] = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_locals_drop_in_reverse_order.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a);
+            a = builtin::i32_wrap_i64(local.tee $cm_pair_7_24("wasi/stream-new"()));
+            $sroa_$pattern_temp_0_0_9_26 = builtin::i32_wrap_i64($cm_pair_7_24 >> 32_i64);
             a = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(if @unlikely(ref.is_null(ref.null eq) == 0) {
                 unreachable;
             }; a);
-            builtin::array_copy<u8>(local.tee new_repr_36(builtin::array_new<u8>(current + 1)), 0, $mv$message_21$repr, 0, current);
-            builtin::array_set_u8(new_repr_36, current, 10);
+            builtin::array_copy<u8>(local.tee new_repr_32(builtin::array_new<u8>(current + 1)), 0, $mv$message_17$repr, 0, current);
+            builtin::array_set_u8(new_repr_32, current, 10);
             drop(block -> "core:prelude/types.wado//enum:CopyResult" {
                 if @unlikely(ref.is_null(ref.null eq) == 0) {
                     unreachable;
                 }
                 current = current + 1;
-                "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_0_9_30, new_repr_36, 0, current);
+                "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_0_9_26, new_repr_32, 0, current);
             });
             if ref.is_null(ref.null eq) == 0 {
             } else {
-                "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_9_30);
+                "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_9_26);
             }
             if ref.is_null(ref.null eq) == 0 {
             } else {

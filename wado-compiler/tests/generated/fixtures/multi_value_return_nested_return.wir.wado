@@ -90,58 +90,58 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "multi_value_return_nested_return.wado/run"() with Stdout {
     let fb_2: ref "tuple//[i32, i32]";
+    let a: i32;
+    let b: i32;
+    let $pattern_temp_0: ref "tuple//[i32, i32]";
     let current: i32;
-    let v_17: ref "tuple//[i32, i32]";
-    let $sroa_v_end_26: i32;
-    let $sroa_$iter_0_start_27: i32;
-    let $sroa_$pattern_temp_0_0_29: i32;
-    let $sroa_$pattern_temp_0_1_30: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
-    $sroa_v_end_26 = black_box(2);
-    $sroa_$iter_0_start_27 = 0;
+    let $sroa_v_end_56: i32;
+    let $sroa_$iter_0_start_57: i32;
+    $sroa_v_end_56 = black_box(2);
+    $sroa_$iter_0_start_57 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_27 >= $sroa_v_end_26;
-            $sroa_$iter_0_start_27 = local.tee current($sroa_$iter_0_start_27) + 1;
+            break_if b0 $sroa_$iter_0_start_57 >= $sroa_v_end_56;
+            $sroa_$iter_0_start_57 = local.tee current($sroa_$iter_0_start_57) + 1;
             fb_2 = struct.new "tuple//[i32, i32]" { 0: black_box(7), 1: 8 };
-            $sroa_$pattern_temp_0_0_29 = local.tee v_17($inline_pair_6: block -> ref "tuple//[i32, i32]" {
-                break $inline_pair_6: struct.new "tuple//[i32, i32]" { 0: (if current > 0 -> i32 {
+            a = local.tee $pattern_temp_0($inline_pair_4: block -> ref "tuple//[i32, i32]" {
+                break $inline_pair_4: struct.new "tuple//[i32, i32]" { 0: (if current > 0 -> i32 {
                     current;
                 } else {
-                    break $inline_pair_6: fb_2;
+                    break $inline_pair_4: fb_2;
                 }), 1: 1 };
             }).0;
-            $sroa_$pattern_temp_0_1_30 = v_17.1;
-            fb_2 = $inline_pick_7: block -> ref "tuple//[i32, i32]" {
+            b = $pattern_temp_0.1;
+            fb_2 = $inline_pick_5: block -> ref "tuple//[i32, i32]" {
                 if current == 0 -> ref "tuple//[i32, i32]" {
                     struct.new "tuple//[i32, i32]" { 0: 10, 1: 0 };
                 } else {
-                    break $inline_pick_7: fb_2;
+                    break $inline_pick_5: fb_2;
                 }
-                break $inline_pick_7;
+                break $inline_pick_5;
             };
-            let $mv$message_31$repr: ref Array<u8>;
-            multivalue_bind [$mv$message_31$repr, current] = "core:prelude/string.wado/core:prelude/string.wado/String::format<multi_value_return_nested_return.wado/$tmpl$746b3bd30636aac0,[i32,i32,i32,i32]>"(struct.new "multi_value_return_nested_return.wado//$tmpl$746b3bd30636aac0" { h0: $sroa_$pattern_temp_0_0_29, h1: $sroa_$pattern_temp_0_1_30, h2: fb_2.0, h3: fb_2.1, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
-            $sroa_$pattern_temp_0_0_29 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-            $sroa_$pattern_temp_0_1_30 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-            $sroa_$pattern_temp_0_0_29 = "multi_value_return_nested_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_29);
-            builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(current + 1)), 0, $mv$message_31$repr, 0, current);
+            let $mv$message_24$repr: ref Array<u8>;
+            multivalue_bind [$mv$message_24$repr, current] = "core:prelude/string.wado/core:prelude/string.wado/String::format<multi_value_return_nested_return.wado/$tmpl$746b3bd30636aac0,[i32,i32,i32,i32]>"(struct.new "multi_value_return_nested_return.wado//$tmpl$746b3bd30636aac0" { h0: a, h1: b, h2: fb_2.0, h3: fb_2.1, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
+            a = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+            b = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+            a = "multi_value_return_nested_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a);
+            builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(current + 1)), 0, $mv$message_24$repr, 0, current);
             builtin::array_set_u8(new_repr, current, 10);
             drop(block -> "core:prelude/types.wado//enum:CopyResult" {
                 if @unlikely(ref.is_null(ref.null eq) == 0) {
                     unreachable;
                 }
                 current = current + 1;
-                "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_30, new_repr, 0, current);
+                "core:rt/cm_stream_write_raw_all_u8"(b, new_repr, 0, current);
             });
             if ref.is_null(ref.null eq) == 0 {
             } else {
-                "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_30);
+                "wasi/stream-drop-writable"(b);
             }
             if ref.is_null(ref.null eq) == 0 {
             } else {
-                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_29);
+                "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(a);
             }
             continue l1;
         };

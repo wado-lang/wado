@@ -447,7 +447,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(159)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> [ref Array<u8>, i32];  // TypeId(160)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(160)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(161)
 
@@ -493,65 +493,62 @@ global global:core:prelude/string.wado::$const_obj_26: ref Array<u8> = array.new
 fn "match_catch_all_binding_referenced.wado/$test_0_a_referenced_catch_all_binding_is_the_variant_itself"() {
     let $v_0: ref "match_catch_all_binding_referenced.wado//Shape";
     let $v_1: ref "core:prelude//$Cell<match_catch_all_binding_referenced.wado/Shape>";
-    let v_14: ref "core:prelude/string.wado//String";
-    let shape_15: ref "match_catch_all_binding_referenced.wado//Shape";
-    let r_16: i32;
-    let i_31: i32;
-    r_16 = local.tee v_14((if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(local.tee shape_15(local.tee $v_1(struct.new "core:prelude//$Cell<match_catch_all_binding_referenced.wado/Shape>" { value: local.tee $v_0(struct.new "match_catch_all_binding_referenced.wado//Shape::Circle" { discriminant: 0, payload_0: 2 }) }).value)) -> ref "core:prelude/string.wado//String" {
-        r_16 = ref.cast "match_catch_all_binding_referenced.wado//Shape::Circle"(shape_15).payload_0;
-        let $mv_repr_1: ref Array<u8>;
-        multivalue_bind [$mv_repr_1, r_16] = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(r_16);
-        struct.new "core:prelude/string.wado//String" { repr: $mv_repr_1, used: r_16 };
+    let $v_2: ref "core:prelude/string.wado//String";
+    let shape_14: ref "match_catch_all_binding_referenced.wado//Shape";
+    let a_end_25: i32;
+    let i_30: i32;
+    let $licm_repr_80: ref Array<u8>;
+    $v_2 = (if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(local.tee shape_14(local.tee $v_1(struct.new "core:prelude//$Cell<match_catch_all_binding_referenced.wado/Shape>" { value: local.tee $v_0(struct.new "match_catch_all_binding_referenced.wado//Shape::Circle" { discriminant: 0, payload_0: 2 }) }).value)) -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(ref.cast "match_catch_all_binding_referenced.wado//Shape::Circle"(shape_14).payload_0);
     } else {
-        if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(shape_15) -> ref "core:prelude/string.wado//String" {
+        if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(shape_14) -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a circle"), used: 8 };
         } else {
-            ref.cast "match_catch_all_binding_referenced.wado//Shape::Label"(shape_15).payload_0;
+            ref.cast "match_catch_all_binding_referenced.wado//Shape::Label"(shape_14).payload_0;
         }
-    })).used;
-    v_14 = struct.new "core:prelude/string.wado//String" { repr: $mv_repr_1 = v_14.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(r_16)), 0, $mv_repr_1, 0, r_16); $array_clone_dst_4, used: r_16 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
-        if r_16 != 8 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+    });
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        if local.tee a_end_25($v_2.used) != 8 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        i_31 = 0;
-        $mv_repr_1 = v_14.repr;
+        i_30 = 0;
+        $licm_repr_80 = $v_2.repr;
         b4: block {
             l5: loop {
-                break_if b4 (builtin::i64_extend_i32_s(i_31) + 3_i64) >= builtin::i64_extend_i32_s(r_16);
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                break_if b4 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s(a_end_25);
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_31 = i_31 + 1;
+                i_30 = i_30 + 1;
                 continue l5;
             };
         };
         b10: block {
             l11: loop {
-                break_if b10 i_31 >= r_16;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                break_if b10 i_30 >= a_end_25;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_4, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_31 = i_31 + 1;
+                i_30 = i_30 + 1;
                 continue l11;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v_14("core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$401f92dc33300242,[match_catch_all_binding_referenced.wado/Shape,&match_catch_all_binding_referenced.wado/Shape,core:prelude/string.wado/String]>"(struct.new "match_catch_all_binding_referenced.wado//$tmpl$401f92dc33300242" { h0: $v_0, h1: $v_1, h2: v_14, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:32
+        "core:rt/panic"(local.tee $v_2("core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$401f92dc33300242,[match_catch_all_binding_referenced.wado/Shape,&match_catch_all_binding_referenced.wado/Shape,core:prelude/string.wado/String]>"(struct.new "match_catch_all_binding_referenced.wado//$tmpl$401f92dc33300242" { h0: $v_0, h1: $v_1, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:32
 condition: name_of(&Shape::Circle(2)) == \"circle 2\"
 Shape::Circle(2): "), used: 197 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:32
 condition: name_of(&Shape::Circle(2)) == \"circle 2\"
@@ -559,62 +556,60 @@ Shape::Circle(2): "), used: 197 }, s1: struct.new "core:prelude/string.wado//Str
 &Shape::Circle(2): "), used: 20 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 &Shape::Circle(2): "), used: 20 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 name_of(&Shape::Circle(2)): "), used: 29 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-name_of(&Shape::Circle(2)): "), used: 29 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v_14.used);
+name_of(&Shape::Circle(2)): "), used: 29 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_2.used);
         unreachable;
     }
-    r_16 = local.tee v_14((if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(local.tee shape_15(local.tee $v_1(struct.new "core:prelude//$Cell<match_catch_all_binding_referenced.wado/Shape>" { value: local.tee $v_0(struct.new "match_catch_all_binding_referenced.wado//Shape::Label" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } }) }).value)) -> ref "core:prelude/string.wado//String" {
-        multivalue_bind [$mv_repr_1, r_16] = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(ref.cast "match_catch_all_binding_referenced.wado//Shape::Circle"(shape_15).payload_0);
-        struct.new "core:prelude/string.wado//String" { repr: $mv_repr_1, used: r_16 };
+    $v_2 = (if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(local.tee shape_14(local.tee $v_1(struct.new "core:prelude//$Cell<match_catch_all_binding_referenced.wado/Shape>" { value: local.tee $v_0(struct.new "match_catch_all_binding_referenced.wado//Shape::Label" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } }) }).value)) -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(ref.cast "match_catch_all_binding_referenced.wado//Shape::Circle"(shape_14).payload_0);
     } else {
-        if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(shape_15) -> ref "core:prelude/string.wado//String" {
+        if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(shape_14) -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a circle"), used: 8 };
         } else {
-            ref.cast "match_catch_all_binding_referenced.wado//Shape::Label"(shape_15).payload_0;
+            ref.cast "match_catch_all_binding_referenced.wado//Shape::Label"(shape_14).payload_0;
         }
-    })).used;
-    v_14 = struct.new "core:prelude/string.wado//String" { repr: $mv_repr_1 = v_14.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(r_16)), 0, $mv_repr_1, 0, r_16); $array_clone_dst_4, used: r_16 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
-        if r_16 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+    });
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
+        if local.tee a_end_25($v_2.used) != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
         }
-        i_31 = 0;
-        $mv_repr_1 = v_14.repr;
+        i_30 = 0;
+        $licm_repr_80 = $v_2.repr;
         b17: block {
             l18: loop {
-                break_if b17 (builtin::i64_extend_i32_s(i_31) + 3_i64) >= builtin::i64_extend_i32_s(r_16);
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                break_if b17 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s(a_end_25);
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_31 = i_31 + 1;
+                i_30 = i_30 + 1;
                 continue l18;
             };
         };
         b23: block {
             l24: loop {
-                break_if b23 i_31 >= r_16;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                break_if b23 i_30 >= a_end_25;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_3, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_31 = i_31 + 1;
+                i_30 = i_30 + 1;
                 continue l24;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__9: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v_14("core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$401f92dc33300242,[match_catch_all_binding_referenced.wado/Shape,&match_catch_all_binding_referenced.wado/Shape,core:prelude/string.wado/String]>"(struct.new "match_catch_all_binding_referenced.wado//$tmpl$401f92dc33300242" { h0: $v_0, h1: $v_1, h2: v_14, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:33
+        "core:rt/panic"(local.tee $v_2("core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$401f92dc33300242,[match_catch_all_binding_referenced.wado/Shape,&match_catch_all_binding_referenced.wado/Shape,core:prelude/string.wado/String]>"(struct.new "match_catch_all_binding_referenced.wado//$tmpl$401f92dc33300242" { h0: $v_0, h1: $v_1, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:33
 condition: name_of(&Shape::Label(\"x\")) == \"x\"
 Shape::Label(\"x\"): "), used: 192 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:33
 condition: name_of(&Shape::Label(\"x\")) == \"x\"
@@ -622,115 +617,113 @@ Shape::Label(\"x\"): "), used: 192 }, s1: struct.new "core:prelude/string.wado//
 &Shape::Label(\"x\"): "), used: 21 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 &Shape::Label(\"x\"): "), used: 21 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 name_of(&Shape::Label(\"x\")): "), used: 30 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-name_of(&Shape::Label(\"x\")): "), used: 30 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v_14.used);
+name_of(&Shape::Label(\"x\")): "), used: 30 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_2.used);
         unreachable;
     }
-    multivalue_bind [$mv_repr_1, r_16] = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(ref.cast "match_catch_all_binding_referenced.wado//Shape::Circle"(local.tee $v_0(struct.new "match_catch_all_binding_referenced.wado//Shape::Circle" { discriminant: 0, payload_0: 3 })).payload_0);
-    v_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(r_16)), 0, $mv_repr_1, 0, r_16); $array_clone_dst_4, used: r_16 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__14: block -> bool {
-        if r_16 != 8 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
+    $v_2 = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(ref.cast "match_catch_all_binding_referenced.wado//Shape::Circle"(local.tee $v_0(struct.new "match_catch_all_binding_referenced.wado//Shape::Circle" { discriminant: 0, payload_0: 3 })).payload_0);
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__11: block -> bool {
+        if local.tee a_end_25($v_2.used) != 8 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
         }
-        i_31 = 0;
-        $mv_repr_1 = v_14.repr;
+        i_30 = 0;
+        $licm_repr_80 = $v_2.repr;
         b28: block {
             l29: loop {
-                break_if b28 (builtin::i64_extend_i32_s(i_31) + 3_i64) >= builtin::i64_extend_i32_s(r_16);
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
+                break_if b28 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s(a_end_25);
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
-                i_31 = i_31 + 1;
+                i_30 = i_30 + 1;
                 continue l29;
             };
         };
         b34: block {
             l35: loop {
-                break_if b34 i_31 >= r_16;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
+                break_if b34 i_30 >= a_end_25;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_2, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
-                i_31 = i_31 + 1;
+                i_30 = i_30 + 1;
                 continue l35;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__14: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__11: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v_14("core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$a3902889e65d9bc6,[match_catch_all_binding_referenced.wado/Shape,core:prelude/string.wado/String]>"(struct.new "match_catch_all_binding_referenced.wado//$tmpl$a3902889e65d9bc6" { h0: $v_0, h1: v_14, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:34
+        "core:rt/panic"(local.tee $v_2("core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$a3902889e65d9bc6,[match_catch_all_binding_referenced.wado/Shape,core:prelude/string.wado/String]>"(struct.new "match_catch_all_binding_referenced.wado//$tmpl$a3902889e65d9bc6" { h0: $v_0, h1: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:34
 condition: name_of_value(Shape::Circle(3)) == \"circle 3\"
 Shape::Circle(3): "), used: 202 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:34
 condition: name_of_value(Shape::Circle(3)) == \"circle 3\"
 Shape::Circle(3): "), used: 202 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 name_of_value(Shape::Circle(3)): "), used: 34 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-name_of_value(Shape::Circle(3)): "), used: 34 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v_14.used);
+name_of_value(Shape::Circle(3)): "), used: 34 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_2.used);
         unreachable;
     }
-    r_16 = local.tee v_14((if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(local.tee $v_0(struct.new "match_catch_all_binding_referenced.wado//Shape::Label" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 } })) -> ref "core:prelude/string.wado//String" {
+    $v_2 = (if ref.test "match_catch_all_binding_referenced.wado//Shape::Circle"(local.tee $v_0(struct.new "match_catch_all_binding_referenced.wado//Shape::Label" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 } })) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a circle"), used: 8 };
     } else {
         ref.cast "match_catch_all_binding_referenced.wado//Shape::Label"($v_0).payload_0;
-    })).used;
-    v_14 = struct.new "core:prelude/string.wado//String" { repr: $mv_repr_1 = v_14.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>(r_16)), 0, $mv_repr_1, 0, r_16); $array_clone_dst_4, used: r_16 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__19: block -> bool {
-        if r_16 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+    });
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__15: block -> bool {
+        if local.tee a_end_25($v_2.used) != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
         }
-        i_31 = 0;
-        $mv_repr_1 = v_14.repr;
+        i_30 = 0;
+        $licm_repr_80 = $v_2.repr;
         b40: block {
             l41: loop {
-                break_if b40 (builtin::i64_extend_i32_s(i_31) + 3_i64) >= builtin::i64_extend_i32_s(r_16);
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                break_if b40 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s(a_end_25);
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
                 }
-                i_31 = i_31 + 1;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
                 }
-                i_31 = i_31 + 1;
+                i_30 = i_30 + 1;
                 continue l41;
             };
         };
         b46: block {
             l47: loop {
-                break_if b46 i_31 >= r_16;
-                if builtin::array_get_value<u8>($mv_repr_1, i_31) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_31) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                break_if b46 i_30 >= a_end_25;
+                if builtin::array_get_value<u8>($licm_repr_80, i_30) != builtin::array_get_value<u8>(global:match_catch_all_binding_referenced.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
                 }
-                i_31 = i_31 + 1;
+                i_30 = i_30 + 1;
                 continue l47;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__19: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__15: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee v_14("core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$a3902889e65d9bc6,[match_catch_all_binding_referenced.wado/Shape,core:prelude/string.wado/String]>"(struct.new "match_catch_all_binding_referenced.wado//$tmpl$a3902889e65d9bc6" { h0: $v_0, h1: v_14, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:35
+        "core:rt/panic"(local.tee $v_2("core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch_all_binding_referenced.wado/$tmpl$a3902889e65d9bc6,[match_catch_all_binding_referenced.wado/Shape,core:prelude/string.wado/String]>"(struct.new "match_catch_all_binding_referenced.wado//$tmpl$a3902889e65d9bc6" { h0: $v_0, h1: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:35
 condition: name_of_value(Shape::Label(\"y\")) == \"y\"
 Shape::Label(\"y\"): "), used: 197 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_referenced_catch_all_binding_is_the_variant_itself at match_catch_all_binding_referenced.wado:35
 condition: name_of_value(Shape::Label(\"y\")) == \"y\"
 Shape::Label(\"y\"): "), used: 197 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 name_of_value(Shape::Label(\"y\")): "), used: 35 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-name_of_value(Shape::Label(\"y\")): "), used: 35 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v_14.used);
+name_of_value(Shape::Label(\"y\")): "), used: 35 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $v_2.used);
         unreachable;
     }
 }
@@ -2871,7 +2864,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<match_catch
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
     };
-    return $sroa_out_repr_305, $sroa_out_used_306;
+    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_305, used: $sroa_out_used_306 };
 }
 
 export fn "match_catch_all_binding_referenced.wado/$cm_export__$test_0_a_referenced_catch_all_binding_is_the_variant_itself" as "$test_0_a_referenced_catch_all_binding_is_the_variant_itself"

@@ -276,164 +276,161 @@ fn "effect_handler_forward_install_held.wado/run"() with Random {
     let counting: ref "effect_handler_forward_install_held.wado//Counting";
     let $h_wasi:random/random.wado/Random: ref "effect_handler_forward_install_held.wado//OnlyBytes";
     let $save_wasi:random/random.wado/Random: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
-    let $local_1_17: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
-    let $local_2_18: ref "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
-    let v_20: ref "core:prelude/list.wado//List<u8>";
-    let i_32: i32;
-    let $local_1_35: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
-    let $local_2_53: u64;
-    let $av_65: i32;
+    let $local_1_16: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_2_17: ref "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_3_18: ref "core:prelude/list.wado//List<u8>";
+    let a_end_25: i32;
+    let i_30: i32;
+    let $local_1_32: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_2_49: u64;
+    let $licm_repr_59: ref Array<u8>;
     counting = struct.new "effect_handler_forward_install_held.wado//Counting" { calls: 0 };
     $h_wasi:random/random.wado/Random = struct.new "effect_handler_forward_install_held.wado//OnlyBytes" {};
     global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = struct.new "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_0" { $capture_0: $h_wasi:random/random.wado/Random }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_1" {}, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_1" } };
-    $av_65 = local.tee v_20($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: block -> ref "core:prelude/list.wado//List<u8>" {
-        if ref.is_null(local.tee $local_1_17(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_18(ref.as_non_null($local_1_17)).outer;
-            $av_65 = local.tee v_20(block -> ref "core:prelude/list.wado//List<u8>" {
+    $local_3_18 = $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: block -> ref "core:prelude/list.wado//List<u8>" {
+        if ref.is_null(local.tee $local_1_16(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_17(ref.as_non_null($local_1_16)).outer;
+            $local_3_18 = block -> ref "core:prelude/list.wado//List<u8>" {
                 let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_18.op_get_random_bytes).env, 1_i64);
-            }).used;
-            v_20 = struct.new "core:prelude/list.wado//List<u8>" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = v_20.repr; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_65)), 0, $array_clone_src_2, 0, $av_65); $array_clone_dst_3, used: $av_65 };
-            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_17;
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: v_20;
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_17.op_get_random_bytes).env, 1_i64);
+            };
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_16;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: $local_3_18;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: "effect_handler_forward_install_held.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(1_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "effect_handler_forward_install_held.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(1_i64);
         }
         unreachable;
-    }).used;
-    v_20 = struct.new "core:prelude/list.wado//List<u8>" { repr: $array_clone_src_2 = v_20.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_65)), 0, $array_clone_src_2, 0, $av_65); $array_clone_dst_3, used: $av_65 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
-        if $av_65 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+    };
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+        if local.tee a_end_25($local_3_18.used) != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
-        i_32 = 0;
-        $array_clone_src_2 = v_20.repr;
+        i_30 = 0;
+        $licm_repr_59 = $local_3_18.repr;
         b4: block {
             l5: loop {
-                break_if b4 (builtin::i64_extend_i32_s(i_32) + 3_i64) >= builtin::i64_extend_i32_s($av_65);
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                break_if b4 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s(a_end_25);
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_32 = i_32 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_32 = i_32 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_32 = i_32 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_32 = i_32 + 1;
+                i_30 = i_30 + 1;
                 continue l5;
             };
         };
         b10: block {
             l11: loop {
-                break_if b10 i_32 >= $av_65;
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                break_if b10 i_30 >= a_end_25;
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                i_32 = i_32 + 1;
+                i_30 = i_30 + 1;
                 continue l11;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     } == 0) {
         cold_path;
-        let $mv_arg_8: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_forward_install_held.wado/$tmpl$bf1334cc08429f35,[core:prelude/bytes.wado/ByteList]>"(struct.new "effect_handler_forward_install_held.wado//$tmpl$bf1334cc08429f35" { h0: v_20, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_handler_forward_install_held.wado:33
+        let $mv_arg_2: ref "core:prelude/string.wado//String";
+        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_forward_install_held.wado/$tmpl$bf1334cc08429f35,[core:prelude/bytes.wado/ByteList]>"(struct.new "effect_handler_forward_install_held.wado//$tmpl$bf1334cc08429f35" { h0: $local_3_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_handler_forward_install_held.wado:33
 condition: Random::get_random_bytes(1) == [7]
 Random::get_random_bytes(1): "), used: 146 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_handler_forward_install_held.wado:33
 condition: Random::get_random_bytes(1) == [7]
-Random::get_random_bytes(1): "), used: 146 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+Random::get_random_bytes(1): "), used: 146 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_2.used);
         unreachable;
     }
-    global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = struct.new "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $local_1_17(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_2" { $capture_0: counting }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_2" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_3" { $capture_0: counting }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_3" } };
-    $av_65 = local.tee v_20($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_8: block -> ref "core:prelude/list.wado//List<u8>" {
-        if ref.is_null(local.tee $local_1_35(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_18(ref.as_non_null($local_1_35)).outer;
-            $av_65 = local.tee v_20(block -> ref "core:prelude/list.wado//List<u8>" {
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_18.op_get_random_bytes).env, 1_i64);
-            }).used;
-            v_20 = struct.new "core:prelude/list.wado//List<u8>" { repr: $array_clone_src_2 = v_20.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_65)), 0, $array_clone_src_2, 0, $av_65); $array_clone_dst_3, used: $av_65 };
-            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_35;
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_8: v_20;
+    global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = struct.new "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $local_1_16(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_2" { $capture_0: counting }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_2" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_3" { $capture_0: counting }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_3" } };
+    $local_3_18 = $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_5: block -> ref "core:prelude/list.wado//List<u8>" {
+        if ref.is_null(local.tee $local_1_32(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_17(ref.as_non_null($local_1_32)).outer;
+            $local_3_18 = block -> ref "core:prelude/list.wado//List<u8>" {
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1($local_2_17.op_get_random_bytes).env, 1_i64);
+            };
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_32;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_5: $local_3_18;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_8: "effect_handler_forward_install_held.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(1_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_5: "effect_handler_forward_install_held.wado/$cm_binding__wasi:random/random@0.3.0#get-random-bytes$spec0"(1_i64);
         }
         unreachable;
-    }).used;
-    v_20 = struct.new "core:prelude/list.wado//List<u8>" { repr: $array_clone_src_2 = v_20.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_65)), 0, $array_clone_src_2, 0, $av_65); $array_clone_dst_3, used: $av_65 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__12: block -> bool {
-        if $av_65 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
+    };
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
+        if local.tee a_end_25($local_3_18.used) != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
-        i_32 = 0;
-        $array_clone_src_2 = v_20.repr;
+        i_30 = 0;
+        $licm_repr_59 = $local_3_18.repr;
         b17: block {
             l18: loop {
-                break_if b17 (builtin::i64_extend_i32_s(i_32) + 3_i64) >= builtin::i64_extend_i32_s($av_65);
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
+                break_if b17 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s(a_end_25);
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_32 = i_32 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_32 = i_32 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_32 = i_32 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
+                i_30 = i_30 + 1;
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_32 = i_32 + 1;
+                i_30 = i_30 + 1;
                 continue l18;
             };
         };
         b23: block {
             l24: loop {
-                break_if b23 i_32 >= $av_65;
-                if builtin::array_get_value<u8>($array_clone_src_2, i_32) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_32) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
+                break_if b23 i_30 >= a_end_25;
+                if builtin::array_get_value<u8>($licm_repr_59, i_30) != builtin::array_get_value<u8>(global:effect_handler_forward_install_held.wado::$const_obj_1, i_30) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                i_32 = i_32 + 1;
+                i_30 = i_30 + 1;
                 continue l24;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__12: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_8("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_forward_install_held.wado/$tmpl$bf1334cc08429f35,[core:prelude/bytes.wado/ByteList]>"(struct.new "effect_handler_forward_install_held.wado//$tmpl$bf1334cc08429f35" { h0: v_20, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_handler_forward_install_held.wado:35
+        "core:rt/panic"(local.tee $mv_arg_2("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_forward_install_held.wado/$tmpl$bf1334cc08429f35,[core:prelude/bytes.wado/ByteList]>"(struct.new "effect_handler_forward_install_held.wado//$tmpl$bf1334cc08429f35" { h0: $local_3_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_handler_forward_install_held.wado:35
 condition: Random::get_random_bytes(1) == [7]
 Random::get_random_bytes(1): "), used: 146 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at effect_handler_forward_install_held.wado:35
 condition: Random::get_random_bytes(1) == [7]
-Random::get_random_bytes(1): "), used: 146 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_8.used);
+Random::get_random_bytes(1): "), used: 146 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_2.used);
         unreachable;
     }
-    drop($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_13: block -> u64 {
-        if ref.is_null(local.tee $local_1_35(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_18(ref.as_non_null($local_1_35)).outer;
-            $local_2_53 = block -> u64 {
-                let $indirect_call_17: ref null "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_17.func, local.tee $indirect_call_17($local_2_18.op_get_random_u64).env);
+    drop($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_9: block -> u64 {
+        if ref.is_null(local.tee $local_1_32(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_17(ref.as_non_null($local_1_32)).outer;
+            $local_2_49 = block -> u64 {
+                let $indirect_call_5: ref null "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_5.func, local.tee $indirect_call_5($local_2_17.op_get_random_u64).env);
             };
-            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_35;
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_13: $local_2_53;
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_32;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_9: $local_2_49;
         } else {
-            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_13: "effect_handler_forward_install_held.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64"();
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_9: "effect_handler_forward_install_held.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64"();
         }
         unreachable;
     });
-    global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_17;
+    global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_16;
     global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random;
-    if @unlikely(local.tee $av_65(counting.calls) != 2) {
+    if @unlikely(local.tee a_end_25(counting.calls) != 2) {
         cold_path;
-        "effect_handler_forward_install_held.wado/run$cold0"($av_65);
+        "effect_handler_forward_install_held.wado/run$cold0"(a_end_25);
         unreachable;
     }
 }

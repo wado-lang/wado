@@ -392,13 +392,13 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 
 fn "value_copy_elide_variant_alias.wado/$test_0_copy_is_independent_of_mutation_through_boxed_receiver"() {
     let b: ref null "core:prelude/list.wado//List<i32>";
+    let $sroa_a_value_25: ref null "core:prelude/list.wado//List<i32>";
     let $vc_payload_0: ref "core:prelude/list.wado//List<i32>";
-    let $sroa_a_value_28: ref null "core:prelude/list.wado//List<i32>";
     let $av_29: i32;
-    $av_29 = local.tee $vc_payload_0(ref.as_non_null(local.tee $sroa_a_value_28(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }))).used;
+    $av_29 = local.tee $vc_payload_0(ref.as_non_null(local.tee $sroa_a_value_25(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }))).used;
     b = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_0.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_29)), 0, $array_clone_src_1, 0, $av_29); $array_clone_dst_2, used: $av_29 };
-    if ref.is_null($sroa_a_value_28) == 0 {
-        if @unlikely(local.tee $av_29(local.tee $vc_payload_0(ref.as_non_null($sroa_a_value_28)).used) >= builtin::array_len($vc_payload_0.repr)) {
+    if ref.is_null($sroa_a_value_25) == 0 {
+        if @unlikely(local.tee $av_29(local.tee $vc_payload_0(ref.as_non_null($sroa_a_value_25)).used) >= builtin::array_len($vc_payload_0.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($vc_payload_0);
         }
@@ -411,7 +411,7 @@ fn "value_copy_elide_variant_alias.wado/$test_0_copy_is_independent_of_mutation_
         "value_copy_elide_variant_alias.wado/$test_0_copy_is_independent_of_mutation_through_boxed_receiver$cold1"($av_29);
         unreachable;
     }
-    if @unlikely(local.tee $av_29($sroa_a_value_28.used) != 2) {
+    if @unlikely(local.tee $av_29($sroa_a_value_25.used) != 2) {
         cold_path;
         "value_copy_elide_variant_alias.wado/$test_0_copy_is_independent_of_mutation_through_boxed_receiver$cold0"($av_29);
         unreachable;
@@ -419,14 +419,14 @@ fn "value_copy_elide_variant_alias.wado/$test_0_copy_is_independent_of_mutation_
 }
 
 fn "value_copy_elide_variant_alias.wado/$test_1_copy_is_independent_of_mutation_through_boxed_mut_argument"() {
+    let $sroa_base_value_21: ref null "core:prelude/list.wado//List<i32>";
+    let $sroa_y_value_22: ref null "core:prelude/list.wado//List<i32>";
     let $vc_payload_1: ref "core:prelude/list.wado//List<i32>";
-    let $sroa_base_value_24: ref null "core:prelude/list.wado//List<i32>";
-    let $sroa_y_value_25: ref null "core:prelude/list.wado//List<i32>";
     let $av_26: i32;
-    $av_26 = local.tee $vc_payload_1(ref.as_non_null(local.tee $sroa_base_value_24(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }))).used;
-    $sroa_y_value_25 = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_26)), 0, $array_clone_src_1, 0, $av_26); $array_clone_dst_2, used: $av_26 };
-    if ref.is_null($sroa_base_value_24) == 0 {
-        if @unlikely(local.tee $av_26(local.tee $vc_payload_1(ref.as_non_null($sroa_base_value_24)).used) >= builtin::array_len($vc_payload_1.repr)) {
+    $av_26 = local.tee $vc_payload_1(ref.as_non_null(local.tee $sroa_base_value_21(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }))).used;
+    $sroa_y_value_22 = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_26)), 0, $array_clone_src_1, 0, $av_26); $array_clone_dst_2, used: $av_26 };
+    if ref.is_null($sroa_base_value_21) == 0 {
+        if @unlikely(local.tee $av_26(local.tee $vc_payload_1(ref.as_non_null($sroa_base_value_21)).used) >= builtin::array_len($vc_payload_1.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($vc_payload_1);
         }
@@ -434,16 +434,16 @@ fn "value_copy_elide_variant_alias.wado/$test_1_copy_is_independent_of_mutation_
         $vc_payload_1.used = $av_26 + 1;
     } else {
     }
-    if ref.is_null($sroa_y_value_25) == 0 {
-        if @unlikely(local.tee $av_26($sroa_y_value_25.used) != 1) {
+    if ref.is_null($sroa_y_value_22) == 0 {
+        if @unlikely(local.tee $av_26($sroa_y_value_22.used) != 1) {
             cold_path;
             "value_copy_elide_variant_alias.wado/$test_1_copy_is_independent_of_mutation_through_boxed_mut_argument$cold1"($av_26);
             unreachable;
         }
     } else {
     }
-    if ref.is_null($sroa_base_value_24) == 0 {
-        if @unlikely(local.tee $av_26($sroa_base_value_24.used) != 2) {
+    if ref.is_null($sroa_base_value_21) == 0 {
+        if @unlikely(local.tee $av_26($sroa_base_value_21.used) != 2) {
             cold_path;
             "value_copy_elide_variant_alias.wado/$test_1_copy_is_independent_of_mutation_through_boxed_mut_argument$cold0"($av_26);
             unreachable;
@@ -453,32 +453,31 @@ fn "value_copy_elide_variant_alias.wado/$test_1_copy_is_independent_of_mutation_
 }
 
 fn "value_copy_elide_variant_alias.wado/$test_2_target_copy_is_independent_of_source_mutated_through_boxed_mut_argument"() {
-    let $vc_payload_1: ref "core:prelude/list.wado//List<i32>";
-    let $sroa_base_value_24: ref null "core:prelude/list.wado//List<i32>";
-    let $sroa_y_value_25: ref null "core:prelude/list.wado//List<i32>";
-    let $av_26: i32;
-    $av_26 = local.tee $vc_payload_1(ref.as_non_null(local.tee $sroa_base_value_24(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }))).used;
-    if ref.is_null(local.tee $sroa_y_value_25(struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $vc_payload_1.repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($av_26)), 0, $array_clone_src_1, 0, $av_26); $array_clone_dst_2, used: $av_26 })) == 0 {
-        if @unlikely(local.tee $av_26(local.tee $vc_payload_1(ref.as_non_null($sroa_y_value_25)).used) >= builtin::array_len($vc_payload_1.repr)) {
+    let v_11: ref "core:prelude/list.wado//List<i32>";
+    let used_14: i32;
+    let $sroa_y_value_22: ref null "core:prelude/list.wado//List<i32>";
+    if ref.is_null(local.tee $sroa_y_value_22(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 })) == 0 {
+        if @unlikely(local.tee used_14(local.tee v_11(ref.as_non_null($sroa_y_value_22)).used) >= builtin::array_len(v_11.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($vc_payload_1);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(v_11);
         }
-        builtin::array_set<i32>($vc_payload_1.repr, $av_26, 5);
-        $vc_payload_1.used = $av_26 + 1;
+        builtin::array_set<i32>(v_11.repr, used_14, 5);
+        v_11.used = used_14 + 1;
     } else {
     }
-    if ref.is_null($sroa_base_value_24) == 0 {
-        if @unlikely(local.tee $av_26($sroa_base_value_24.used) != 1) {
+    let $match_scrut_1: ref null "core:prelude/list.wado//List<i32>";
+    if ref.is_null(local.tee $match_scrut_1(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 })) == 0 {
+        if @unlikely(local.tee used_14($match_scrut_1.used) != 1) {
             cold_path;
-            "value_copy_elide_variant_alias.wado/$test_2_target_copy_is_independent_of_source_mutated_through_boxed_mut_argument$cold1"($av_26);
+            "value_copy_elide_variant_alias.wado/$test_2_target_copy_is_independent_of_source_mutated_through_boxed_mut_argument$cold1"(used_14);
             unreachable;
         }
     } else {
     }
-    if ref.is_null($sroa_y_value_25) == 0 {
-        if @unlikely(local.tee $av_26($sroa_y_value_25.used) != 2) {
+    if ref.is_null($sroa_y_value_22) == 0 {
+        if @unlikely(local.tee used_14($sroa_y_value_22.used) != 2) {
             cold_path;
-            "value_copy_elide_variant_alias.wado/$test_2_target_copy_is_independent_of_source_mutated_through_boxed_mut_argument$cold0"($av_26);
+            "value_copy_elide_variant_alias.wado/$test_2_target_copy_is_independent_of_source_mutated_through_boxed_mut_argument$cold0"(used_14);
             unreachable;
         }
     } else {
@@ -487,23 +486,23 @@ fn "value_copy_elide_variant_alias.wado/$test_2_target_copy_is_independent_of_so
 
 fn "value_copy_elide_variant_alias.wado/$test_3_sibling_pattern_binding_copy_is_independent_of_root_mutation"() {
     let $load_1: i32;
+    let used_13: i32;
+    let $sroa_b_value_19: ref null "core:prelude/list.wado//List<i32>";
     let $vc_payload_1: ref "core:prelude/list.wado//List<i32>";
-    let used_17: i32;
-    let $sroa_b_value_23: ref null "core:prelude/list.wado//List<i32>";
-    $vc_payload_1 = ref.as_non_null(local.tee $sroa_b_value_23(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }));
+    $vc_payload_1 = ref.as_non_null(local.tee $sroa_b_value_19(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }));
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = $vc_payload_1.repr;
     $load_1 = $vc_payload_1.used;
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
     builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_dst_2, 0, $load_1);
-    if ref.is_null($sroa_b_value_23) == 0 {
-        if @unlikely(local.tee used_17(local.tee $vc_payload_1(ref.as_non_null($sroa_b_value_23)).used) >= builtin::array_len($vc_payload_1.repr)) {
+    if ref.is_null($sroa_b_value_19) == 0 {
+        if @unlikely(local.tee used_13(local.tee $vc_payload_1(ref.as_non_null($sroa_b_value_19)).used) >= builtin::array_len($vc_payload_1.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($vc_payload_1);
         }
-        builtin::array_set<i32>($vc_payload_1.repr, used_17, 2);
-        $vc_payload_1.used = used_17 + 1;
+        builtin::array_set<i32>($vc_payload_1.repr, used_13, 2);
+        $vc_payload_1.used = used_13 + 1;
     } else {
     }
     if @unlikely($load_1 != 1) {
@@ -516,20 +515,20 @@ fn "value_copy_elide_variant_alias.wado/$test_3_sibling_pattern_binding_copy_is_
 fn "value_copy_elide_variant_alias.wado/$test_4_call_arg_copy_is_independent_of_sibling_mut_alias"() {
     let $load_1: i32;
     let t: ref "core:prelude/list.wado//List<i32>";
-    let used_13: i32;
-    let $sroa_b_value_19: ref null "core:prelude/list.wado//List<i32>";
-    t = ref.as_non_null(local.tee $sroa_b_value_19(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }));
+    let used_12: i32;
+    let $sroa_b_value_18: ref null "core:prelude/list.wado//List<i32>";
+    t = ref.as_non_null(local.tee $sroa_b_value_18(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }));
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = t.repr;
     $load_1 = t.used;
     builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_src_1, 0, $load_1);
-    if ref.is_null($sroa_b_value_19) == 0 {
-        if @unlikely(local.tee used_13(local.tee t(ref.as_non_null($sroa_b_value_19)).used) >= builtin::array_len(t.repr)) {
+    if ref.is_null($sroa_b_value_18) == 0 {
+        if @unlikely(local.tee used_12(local.tee t(ref.as_non_null($sroa_b_value_18)).used) >= builtin::array_len(t.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(t);
         }
-        builtin::array_set<i32>(t.repr, used_13, 9);
-        t.used = used_13 + 1;
+        builtin::array_set<i32>(t.repr, used_12, 9);
+        t.used = used_12 + 1;
     } else {
     }
     if @unlikely($load_1 != 1) {

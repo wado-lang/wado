@@ -707,15 +707,15 @@ type "functype//core:json/float_type_name$sroa[format.precision]" = fn(i32) -> r
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]$spec0" = fn(ref Array<u8>, i32, i32) -> i32;  // TypeId(196)
 
-type "functype//core:json/core:json/read_number_text<f64>$sroa[return]$spec0" = fn(ref Array<u8>, i32, i64) -> [i32, ref null "core:prelude/types.wado//Option<f64>", ref null "core:serde//DeserializeError"];  // TypeId(197)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]$spec0" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(197)
 
-type "functype//core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec1$sroa[input.repr]" = fn(ref Array<u8>) -> [i32, ref null "serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(198)
+type "functype//core:json/core:json/read_number_text<f64>$sroa[return]$spec0" = fn(ref Array<u8>, i32, i64) -> [i32, ref null "core:prelude/types.wado//Option<f64>", ref null "core:serde//DeserializeError"];  // TypeId(198)
 
-type "functype//core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec0$sroa[input.repr]" = fn(ref Array<u8>) -> [i32, ref null "serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(199)
+type "functype//core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec2$sroa[input.repr]" = fn(ref Array<u8>) -> [i32, ref null "serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(199)
 
-type "functype//core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec2$sroa[input.repr]" = fn(ref Array<u8>) -> [i32, ref null "serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(200)
+type "functype//core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec1$sroa[input.repr]" = fn(ref Array<u8>) -> [i32, ref null "serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(200)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]$spec0" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(201)
+type "functype//core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec0$sroa[input.repr]" = fn(ref Array<u8>) -> [i32, ref null "serde_json_unknown_fields.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(201)
 
 type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace" = fn(ref "core:json//JsonDeserializer") -> i32;  // TypeId(202)
 
@@ -4196,147 +4196,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/leading_sign_byte_len<core
     return 0;
 }
 
-fn "core:json/core:json/read_number_text<f64>$sroa[return]$spec0"($mv$text$repr, $mv$text$end, offset) {
-    let $load_0: ref "core:prelude/slice.wado//Slice<u8>";
-    let $load_2: i32;
-    let de: ref "core:json//JsonDeserializer";
-    let $vr_9: ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]";
-    let $qm_e: ref "core:serde//DeserializeError";
-    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$text$repr, start: 0, end: $mv$text$end }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
-    if (if local.tee $mv$text$end($inline_core_json_JsonDeserializer__peek_0: block -> i32 {
-        if 0 >= (local.tee $mv$text$end(local.tee $load_0(de.input).end) - local.tee $load_2($load_0.start)) {
-            break $inline_core_json_JsonDeserializer__peek_0: -1;
-        }
-        $mv$text$end = $mv$text$end - $load_2;
-        if @unlikely(0 >= $mv$text$end) {
-            cold_path;
-            "core:json/core:json/JsonDeserializer::peek$cold0$sroa[self.pos]"(0, $mv$text$end);
-            unreachable;
-        }
-        builtin::array_get_value<u8>($load_0.repr, $load_2);
-        break $inline_core_json_JsonDeserializer__peek_0;
-    }) != 45 -> i32 {
-        ((48 <= $mv$text$end) & ($mv$text$end <= 57)) == 0;
-    } else {
-        0;
-    }) {
-        return 0, global:core:builtin::$unit_case$core:prelude/types.wado//Option<f64>$0, ref.null none;
-    }
-    if local.tee $mv$text$end(local.tee $vr_9($inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__1: block -> ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
-        if local.tee $mv$text$end("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de)) == 34 {
-            let $mv_1_2: f64;
-            let $mv_2_3: ref null "core:serde//DeserializeError";
-            multivalue_bind [$mv$text$end, $mv_1_2, $mv_2_3] = "core:json/core:json/JsonDeserializer::quoted_number<f64>$sroa[return]"(de);
-            struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: $mv$text$end, 1: $mv_1_2, 2: $mv_2_3 };
-            break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__1;
-        }
-        break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__1: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: let $mv$$vr_4$1: u64; multivalue_bind [$mv$text$end, $mv$$vr_4$1, $mv_2_3] = (let $mv_arg_6: ref "core:prelude/fpfmt.wado//BinaryFormat"; $mv_arg_6 = global:core:prelude/fpfmt.wado::BINARY64; "core:json/core:json/JsonDeserializer::parse_float_bits$sroa[return]"(de, $mv$text$end, $mv_arg_6.precision, $mv_arg_6.exponent_bits)); builtin::f64_reinterpret_i64((if @likely($mv$text$end == 0) -> u64 {
-            $mv$$vr_4$1;
-        } else if @likely($mv$text$end == 1) -> u64 {
-            cold_path;
-            $qm_e = ref.as_non_null($mv_2_3);
-            cold_path;
-            break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__1: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 1, 1: 0, 2: $qm_e };
-        } else {
-            unreachable;
-        })), 2: ref.null none };
-    }).0) == 0 {
-        $mv_1_2 = $vr_9.1;
-        return 0, (if de.pos == local.tee $load_0(de.input).end - $load_0.start -> ref "core:prelude/types.wado//Option<f64>" {
-            struct.new "core:prelude/types.wado//Option<f64>::Some" { discriminant: 1, payload_0: $mv_1_2 };
-        } else {
-            global:core:builtin::$unit_case$core:prelude/types.wado//Option<f64>$0;
-        }), ref.null none;
-    } else if @likely($mv$text$end == 1) {
-        $mv$text$end = local.tee $qm_e(ref.as_non_null($vr_9.2)).kind;
-        if (0 | ($mv$text$end == 6)) | ($mv$text$end == 8) {
-            return 0, global:core:builtin::$unit_case$core:prelude/types.wado//Option<f64>$0, ref.null none;
-        } else {
-            return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: $mv$text$end, message: $qm_e.message, offset: offset, path: $qm_e.path };
-        }
-    } else {
-        unreachable;
-    }
-}
-
-fn "core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec1$sroa[input.repr]"(input) {
-    let de: ref "core:json//JsonDeserializer";
-    let $qm_e: ref "core:serde//DeserializeError";
-    let v_4: ref "serde_json_unknown_fields.wado//Point";
-    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: input, start: 0, end: 38 }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
-    let $mv$$vr_6$0: i32;
-    let $mv$$vr_6$1: ref null "serde_json_unknown_fields.wado//Point";
-    let $mv$$vr_6$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]$spec0"(de);
-    v_4 = (if @likely($mv$$vr_6$0 == 0) -> ref "serde_json_unknown_fields.wado//Point" {
-        ref.as_non_null($mv$$vr_6$1);
-    } else if @likely($mv$$vr_6$0 == 1) -> ref "serde_json_unknown_fields.wado//Point" {
-        cold_path;
-        $qm_e = ref.as_non_null($mv$$vr_6$2);
-        cold_path;
-        return 1, ref.null none, $qm_e;
-    } else {
-        unreachable;
-    });
-    if @unlikely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de) >= 0) {
-        cold_path;
-        return 1, ref.null none, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de.pos));
-    }
-    return 0, v_4, ref.null none;
-}
-
-fn "core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec0$sroa[input.repr]"(input) {
-    let de: ref "core:json//JsonDeserializer";
-    let $qm_e: ref "core:serde//DeserializeError";
-    let v_4: ref "serde_json_unknown_fields.wado//Point";
-    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: input, start: 0, end: 43 }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
-    let $mv$$vr_6$0: i32;
-    let $mv$$vr_6$1: ref null "serde_json_unknown_fields.wado//Point";
-    let $mv$$vr_6$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]$spec0"(de);
-    v_4 = (if @likely($mv$$vr_6$0 == 0) -> ref "serde_json_unknown_fields.wado//Point" {
-        ref.as_non_null($mv$$vr_6$1);
-    } else if @likely($mv$$vr_6$0 == 1) -> ref "serde_json_unknown_fields.wado//Point" {
-        cold_path;
-        $qm_e = ref.as_non_null($mv$$vr_6$2);
-        cold_path;
-        return 1, ref.null none, $qm_e;
-    } else {
-        unreachable;
-    });
-    if @unlikely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de) >= 0) {
-        cold_path;
-        return 1, ref.null none, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de.pos));
-    }
-    return 0, v_4, ref.null none;
-}
-
-fn "core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec2$sroa[input.repr]"(input) {
-    let de: ref "core:json//JsonDeserializer";
-    let $qm_e: ref "core:serde//DeserializeError";
-    let v_4: ref "serde_json_unknown_fields.wado//Point";
-    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: input, start: 0, end: 33 }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
-    let $mv$$vr_6$0: i32;
-    let $mv$$vr_6$1: ref null "serde_json_unknown_fields.wado//Point";
-    let $mv$$vr_6$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]$spec0"(de);
-    v_4 = (if @likely($mv$$vr_6$0 == 0) -> ref "serde_json_unknown_fields.wado//Point" {
-        ref.as_non_null($mv$$vr_6$1);
-    } else if @likely($mv$$vr_6$0 == 1) -> ref "serde_json_unknown_fields.wado//Point" {
-        cold_path;
-        $qm_e = ref.as_non_null($mv$$vr_6$2);
-        cold_path;
-        return 1, ref.null none, $qm_e;
-    } else {
-        unreachable;
-    });
-    if @unlikely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de) >= 0) {
-        cold_path;
-        return 1, ref.null none, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de.pos));
-    }
-    return 0, v_4, ref.null none;
-}
-
 fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]$spec0"(f, $mv$text$repr, $mv$text$used) {
     let $load_12: ref Array<u8>;
     let truncated: bool;
@@ -4364,9 +4223,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
     truncated = 0;
     $mv$text$repr = local.tee self_12(struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv$text$repr, used: 1, byte_index: 0 }).repr;
     $hfs_byte_index_489 = 0;
-    b510: block {
-        l511: loop {
-            break_if b510 $hfs_byte_index_489 >= 1;
+    b490: block {
+        l491: loop {
+            break_if b490 $hfs_byte_index_489 >= 1;
             $inline_decode_char_at_5: block {
                 if local.tee b0(builtin::array_get_value<u8>($mv$text$repr, $hfs_byte_index_489)) <u 128 {
                     $sroa_slot_478 = 1;
@@ -4406,7 +4265,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
             if start_65 >= 256 {
                 truncated = 1;
                 self_12.byte_index = $hfs_byte_index_489;
-                break b510;
+                break b490;
             }
             if b0 == 34 {
                 if @unlikely(local.tee new_used_64(new_used_64 + 1) > builtin::array_len(f.repr)) {
@@ -4613,7 +4472,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
             start_65 = start_65 + 1;
             self_12.byte_index = $hfs_byte_index_489;
             f.used = new_used_64;
-            continue l511;
+            continue l491;
         };
     };
     if @unlikely(local.tee new_used_64(f.used + 1) > builtin::array_len(f.repr)) {
@@ -4637,6 +4496,147 @@ fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/
         f.used = new_used_64;
         builtin::array_copy<u8>(f.repr, start_65, global:core:prelude/format.wado::$const_obj_37, 0, 3);
     }
+}
+
+fn "core:json/core:json/read_number_text<f64>$sroa[return]$spec0"($mv$text$repr, $mv$text$end, offset) {
+    let $load_0: ref "core:prelude/slice.wado//Slice<u8>";
+    let $load_2: i32;
+    let de: ref "core:json//JsonDeserializer";
+    let $vr_9: ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]";
+    let $qm_e: ref "core:serde//DeserializeError";
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$text$repr, start: 0, end: $mv$text$end }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
+    if (if local.tee $mv$text$end($inline_core_json_JsonDeserializer__peek_0: block -> i32 {
+        if 0 >= (local.tee $mv$text$end(local.tee $load_0(de.input).end) - local.tee $load_2($load_0.start)) {
+            break $inline_core_json_JsonDeserializer__peek_0: -1;
+        }
+        $mv$text$end = $mv$text$end - $load_2;
+        if @unlikely(0 >= $mv$text$end) {
+            cold_path;
+            "core:json/core:json/JsonDeserializer::peek$cold0$sroa[self.pos]"(0, $mv$text$end);
+            unreachable;
+        }
+        builtin::array_get_value<u8>($load_0.repr, $load_2);
+        break $inline_core_json_JsonDeserializer__peek_0;
+    }) != 45 -> i32 {
+        ((48 <= $mv$text$end) & ($mv$text$end <= 57)) == 0;
+    } else {
+        0;
+    }) {
+        return 0, global:core:builtin::$unit_case$core:prelude/types.wado//Option<f64>$0, ref.null none;
+    }
+    if local.tee $mv$text$end(local.tee $vr_9($inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__1: block -> ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
+        if local.tee $mv$text$end("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de)) == 34 {
+            let $mv_1_2: f64;
+            let $mv_2_3: ref null "core:serde//DeserializeError";
+            multivalue_bind [$mv$text$end, $mv_1_2, $mv_2_3] = "core:json/core:json/JsonDeserializer::quoted_number<f64>$sroa[return]"(de);
+            struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: $mv$text$end, 1: $mv_1_2, 2: $mv_2_3 };
+            break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__1;
+        }
+        break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__1: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: let $mv$$vr_4$1: u64; multivalue_bind [$mv$text$end, $mv$$vr_4$1, $mv_2_3] = (let $mv_arg_6: ref "core:prelude/fpfmt.wado//BinaryFormat"; $mv_arg_6 = global:core:prelude/fpfmt.wado::BINARY64; "core:json/core:json/JsonDeserializer::parse_float_bits$sroa[return]"(de, $mv$text$end, $mv_arg_6.precision, $mv_arg_6.exponent_bits)); builtin::f64_reinterpret_i64((if @likely($mv$text$end == 0) -> u64 {
+            $mv$$vr_4$1;
+        } else if @likely($mv$text$end == 1) -> u64 {
+            cold_path;
+            $qm_e = ref.as_non_null($mv_2_3);
+            cold_path;
+            break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__1: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 1, 1: 0, 2: $qm_e };
+        } else {
+            unreachable;
+        })), 2: ref.null none };
+    }).0) == 0 {
+        $mv_1_2 = $vr_9.1;
+        return 0, (if de.pos == local.tee $load_0(de.input).end - $load_0.start -> ref "core:prelude/types.wado//Option<f64>" {
+            struct.new "core:prelude/types.wado//Option<f64>::Some" { discriminant: 1, payload_0: $mv_1_2 };
+        } else {
+            global:core:builtin::$unit_case$core:prelude/types.wado//Option<f64>$0;
+        }), ref.null none;
+    } else if @likely($mv$text$end == 1) {
+        $mv$text$end = local.tee $qm_e(ref.as_non_null($vr_9.2)).kind;
+        if (0 | ($mv$text$end == 6)) | ($mv$text$end == 8) {
+            return 0, global:core:builtin::$unit_case$core:prelude/types.wado//Option<f64>$0, ref.null none;
+        } else {
+            return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: $mv$text$end, message: $qm_e.message, offset: offset, path: $qm_e.path };
+        }
+    } else {
+        unreachable;
+    }
+}
+
+fn "core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec2$sroa[input.repr]"(input) {
+    let de: ref "core:json//JsonDeserializer";
+    let $qm_e: ref "core:serde//DeserializeError";
+    let v_4: ref "serde_json_unknown_fields.wado//Point";
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: input, start: 0, end: 33 }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
+    let $mv$$vr_6$0: i32;
+    let $mv$$vr_6$1: ref null "serde_json_unknown_fields.wado//Point";
+    let $mv$$vr_6$2: ref null "core:serde//DeserializeError";
+    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]$spec0"(de);
+    v_4 = (if @likely($mv$$vr_6$0 == 0) -> ref "serde_json_unknown_fields.wado//Point" {
+        ref.as_non_null($mv$$vr_6$1);
+    } else if @likely($mv$$vr_6$0 == 1) -> ref "serde_json_unknown_fields.wado//Point" {
+        cold_path;
+        $qm_e = ref.as_non_null($mv$$vr_6$2);
+        cold_path;
+        return 1, ref.null none, $qm_e;
+    } else {
+        unreachable;
+    });
+    if @unlikely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de) >= 0) {
+        cold_path;
+        return 1, ref.null none, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de.pos));
+    }
+    return 0, v_4, ref.null none;
+}
+
+fn "core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec1$sroa[input.repr]"(input) {
+    let de: ref "core:json//JsonDeserializer";
+    let $qm_e: ref "core:serde//DeserializeError";
+    let v_4: ref "serde_json_unknown_fields.wado//Point";
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: input, start: 0, end: 38 }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
+    let $mv$$vr_6$0: i32;
+    let $mv$$vr_6$1: ref null "serde_json_unknown_fields.wado//Point";
+    let $mv$$vr_6$2: ref null "core:serde//DeserializeError";
+    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]$spec0"(de);
+    v_4 = (if @likely($mv$$vr_6$0 == 0) -> ref "serde_json_unknown_fields.wado//Point" {
+        ref.as_non_null($mv$$vr_6$1);
+    } else if @likely($mv$$vr_6$0 == 1) -> ref "serde_json_unknown_fields.wado//Point" {
+        cold_path;
+        $qm_e = ref.as_non_null($mv$$vr_6$2);
+        cold_path;
+        return 1, ref.null none, $qm_e;
+    } else {
+        unreachable;
+    });
+    if @unlikely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de) >= 0) {
+        cold_path;
+        return 1, ref.null none, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de.pos));
+    }
+    return 0, v_4, ref.null none;
+}
+
+fn "core:json/core:json/from_bytes<serde_json_unknown_fields.wado/Point,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]$spec0$sroa[input.repr]"(input) {
+    let de: ref "core:json//JsonDeserializer";
+    let $qm_e: ref "core:serde//DeserializeError";
+    let v_4: ref "serde_json_unknown_fields.wado//Point";
+    de = struct.new "core:json//JsonDeserializer" { input: struct.new "core:prelude/slice.wado//Slice<u8>" { repr: input, start: 0, end: 43 }, pos: 0, depth: 0, max_depth: 100, first_entry: 0, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0_i64, inexact: 0, mantissa_start: 0, mantissa_end: 0 } };
+    let $mv$$vr_6$0: i32;
+    let $mv$$vr_6$1: ref null "serde_json_unknown_fields.wado//Point";
+    let $mv$$vr_6$2: ref null "core:serde//DeserializeError";
+    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]$spec0"(de);
+    v_4 = (if @likely($mv$$vr_6$0 == 0) -> ref "serde_json_unknown_fields.wado//Point" {
+        ref.as_non_null($mv$$vr_6$1);
+    } else if @likely($mv$$vr_6$0 == 1) -> ref "serde_json_unknown_fields.wado//Point" {
+        cold_path;
+        $qm_e = ref.as_non_null($mv$$vr_6$2);
+        cold_path;
+        return 1, ref.null none, $qm_e;
+    } else {
+        unreachable;
+    });
+    if @unlikely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(de) >= 0) {
+        cold_path;
+        return 1, ref.null none, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de.pos));
+    }
+    return 0, v_4, ref.null none;
 }
 
 fn "core:json/core:json/JsonDeserializer::peek_after_whitespace"(self) {
@@ -8416,18 +8416,18 @@ fn "core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]"($
 
 fn "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]$spec0"(d) {
     let $vr_53: ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]";
-    let $qm_e_118: ref "core:serde//DeserializeError";
+    let $qm_e_114: ref "core:serde//DeserializeError";
     let depth: i32;
     let offset: i64;
-    let $sroa_$sroa_slots_0_112_0_145: i32;
-    let $sroa_$sroa_slots_0_112_1_146: f64;
-    let $sroa_$sroa_slots_1_113_0_147: i32;
-    let $sroa_$sroa_slots_1_113_1_148: f64;
-    let out_158: ref "core:prelude/string.wado//String";
-    $sroa_$sroa_slots_0_112_0_145 = 0;
-    $sroa_$sroa_slots_0_112_1_146 = 0;
-    $sroa_$sroa_slots_1_113_0_147 = 0;
-    $sroa_$sroa_slots_1_113_1_148 = 0;
+    let $sroa_$sroa_slots_0_108_0_141: i32;
+    let $sroa_$sroa_slots_0_108_1_142: f64;
+    let $sroa_$sroa_slots_1_109_0_143: i32;
+    let $sroa_$sroa_slots_1_109_1_144: f64;
+    let out_154: ref "core:prelude/string.wado//String";
+    $sroa_$sroa_slots_0_108_0_141 = 0;
+    $sroa_$sroa_slots_0_108_1_142 = 0;
+    $sroa_$sroa_slots_1_109_0_143 = 0;
+    $sroa_$sroa_slots_1_109_1_144 = 0;
     $thread_$inline_core_json_JsonDeserializer__open_container_0: block {
         $inline_core_json_JsonDeserializer__open_container_0__$thread_$inline_core_json_JsonDeserializer__expect_char_0: block {
             if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(d) == 123) {
@@ -8435,19 +8435,19 @@ fn "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::dese
                 break $inline_core_json_JsonDeserializer__open_container_0__$thread_$inline_core_json_JsonDeserializer__expect_char_0;
             }
             cold_path;
-            $qm_e_118 = "core:json/core:json/JsonDeserializer::expect_char_error"(d.input, d.pos, 123);
+            $qm_e_114 = "core:json/core:json/JsonDeserializer::expect_char_error"(d.input, d.pos, 123);
             cold_path;
             cold_path;
             cold_path;
-            return 1, ref.null none, $qm_e_118;
+            return 1, ref.null none, $qm_e_114;
         };
         d.depth = depth = d.depth; offset = builtin::i64_extend_i32_s(d.pos); if @unlikely(local.tee depth(depth + 1) > 100) {
             cold_path;
-            $qm_e_118 = "core:serde/core:serde/DeserializeError::depth_limit<core:prelude/string.wado/String>"("core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$fb51c04d54491732,[i32]>"(struct.new "core:serde//$tmpl$fb51c04d54491732" { h0: 100, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exceeded maximum nesting depth of "), used: 34 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exceeded maximum nesting depth of "), used: 34 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), offset);
+            $qm_e_114 = "core:serde/core:serde/DeserializeError::depth_limit<core:prelude/string.wado/String>"("core:prelude/string.wado/core:prelude/string.wado/String::format<core:serde/$tmpl$fb51c04d54491732,[i32]>"(struct.new "core:serde//$tmpl$fb51c04d54491732" { h0: 100, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exceeded maximum nesting depth of "), used: 34 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("exceeded maximum nesting depth of "), used: 34 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), offset);
             cold_path;
             cold_path;
             cold_path;
-            return 1, ref.null none, $qm_e_118;
+            return 1, ref.null none, $qm_e_114;
         }; depth;
         d.first_entry = 1;
         break $thread_$inline_core_json_JsonDeserializer__open_container_0;
@@ -8463,92 +8463,92 @@ fn "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::dese
             if @likely($mv$$vr_52$0 == 0) {
             } else if @likely($mv$$vr_52$0 == 1) {
                 cold_path;
-                $qm_e_118 = ref.as_non_null($mv$$vr_52$2);
+                $qm_e_114 = ref.as_non_null($mv$$vr_52$2);
                 cold_path;
-                return 1, ref.null none, $qm_e_118;
+                return 1, ref.null none, $qm_e_114;
             } else {
                 unreachable;
             }
             if $vr_discriminant_$mv$$vr_52$1 == 1 {
                 $mv$$vr_52$0 = 0;
                 if $vr_payload_0_$mv$$vr_52$1 == 0 {
-                    if $sroa_$sroa_slots_0_112_0_145 == 1 {
-                        $qm_e_118 = struct.new "core:serde//DeserializeError" { kind: 3, message: local.tee out_158(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17; builtin::array_copy<u8>(out_158.repr, 0, global:core:serde::$const_obj_27, 0, 17); let $mv_field_11: ref Array<u8>; $mv_field_11 = array.new_fixed<u8>(120); "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]$spec0"(out_158, $mv_field_11, 1); $inline_core_prelude_string_wado_String__format_core_serde__tmpl_d48748ffcad618c0__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline__core_prelude_string_wado_StrSlice_core_prelude_string_wado_AsStrSlice__internal_append_to_sroa_self_value__13__$inline_core_prelude_string_wado_String__internal_push_view_2: block {
+                    if $sroa_$sroa_slots_0_108_0_141 == 1 {
+                        $qm_e_114 = struct.new "core:serde//DeserializeError" { kind: 3, message: local.tee out_154(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17; builtin::array_copy<u8>(out_154.repr, 0, global:core:serde::$const_obj_27, 0, 17); let $mv_field_11: ref Array<u8>; $mv_field_11 = array.new_fixed<u8>(120); "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]$spec0"(out_154, $mv_field_11, 1); $inline_core_prelude_string_wado_String__format_core_serde__tmpl_d48748ffcad618c0__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline__core_prelude_string_wado_StrSlice_core_prelude_string_wado_AsStrSlice__internal_append_to_sroa_self_value__13__$inline_core_prelude_string_wado_String__internal_push_view_2: block {
                             break $inline_core_prelude_string_wado_String__format_core_serde__tmpl_d48748ffcad618c0__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__0__$inline__core_prelude_string_wado_StrSlice_core_prelude_string_wado_AsStrSlice__internal_append_to_sroa_self_value__13__$inline_core_prelude_string_wado_String__internal_push_view_2;
-                        }; out_158, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-                        return 1, ref.null none, $qm_e_118;
+                        }; out_154, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+                        return 1, ref.null none, $qm_e_114;
                     }
-                    $sroa_$sroa_slots_0_112_1_146 = (if @likely(local.tee $sroa_$sroa_slots_0_112_0_145(local.tee $vr_53($inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__2: block -> ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
-                        if local.tee $sroa_$sroa_slots_0_112_0_145("core:json/core:json/JsonDeserializer::peek_after_whitespace"(d)) == 34 {
-                            multivalue_bind [$sroa_$sroa_slots_0_112_0_145, $sroa_$sroa_slots_0_112_1_146, $mv$$vr_52$2] = "core:json/core:json/JsonDeserializer::quoted_number<f64>$sroa[return]"(d);
-                            struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: $sroa_$sroa_slots_0_112_0_145, 1: $sroa_$sroa_slots_0_112_1_146, 2: $mv$$vr_52$2 };
+                    $sroa_$sroa_slots_0_108_1_142 = (if @likely(local.tee $sroa_$sroa_slots_0_108_0_141(local.tee $vr_53($inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__2: block -> ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
+                        if local.tee $sroa_$sroa_slots_0_108_0_141("core:json/core:json/JsonDeserializer::peek_after_whitespace"(d)) == 34 {
+                            multivalue_bind [$sroa_$sroa_slots_0_108_0_141, $sroa_$sroa_slots_0_108_1_142, $mv$$vr_52$2] = "core:json/core:json/JsonDeserializer::quoted_number<f64>$sroa[return]"(d);
+                            struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: $sroa_$sroa_slots_0_108_0_141, 1: $sroa_$sroa_slots_0_108_1_142, 2: $mv$$vr_52$2 };
                             break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__2;
                         }
-                        break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__2: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: multivalue_bind [$sroa_$sroa_slots_0_112_0_145, offset, $mv$$vr_52$2] = (let $mv_arg_18: ref "core:prelude/fpfmt.wado//BinaryFormat"; $mv_arg_18 = global:core:prelude/fpfmt.wado::BINARY64; "core:json/core:json/JsonDeserializer::parse_float_bits$sroa[return]"(d, $sroa_$sroa_slots_0_112_0_145, $mv_arg_18.precision, $mv_arg_18.exponent_bits)); builtin::f64_reinterpret_i64((if @likely($sroa_$sroa_slots_0_112_0_145 == 0) -> u64 {
+                        break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__2: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: multivalue_bind [$sroa_$sroa_slots_0_108_0_141, offset, $mv$$vr_52$2] = (let $mv_arg_18: ref "core:prelude/fpfmt.wado//BinaryFormat"; $mv_arg_18 = global:core:prelude/fpfmt.wado::BINARY64; "core:json/core:json/JsonDeserializer::parse_float_bits$sroa[return]"(d, $sroa_$sroa_slots_0_108_0_141, $mv_arg_18.precision, $mv_arg_18.exponent_bits)); builtin::f64_reinterpret_i64((if @likely($sroa_$sroa_slots_0_108_0_141 == 0) -> u64 {
                             offset;
-                        } else if @likely($sroa_$sroa_slots_0_112_0_145 == 1) -> u64 {
+                        } else if @likely($sroa_$sroa_slots_0_108_0_141 == 1) -> u64 {
                             cold_path;
-                            $qm_e_118 = ref.as_non_null($mv$$vr_52$2);
+                            $qm_e_114 = ref.as_non_null($mv$$vr_52$2);
                             cold_path;
-                            break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__2: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 1, 1: 0, 2: $qm_e_118 };
+                            break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__2: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 1, 1: 0, 2: $qm_e_114 };
                         } else {
                             unreachable;
                         })), 2: ref.null none };
                     }).0) == 0) -> f64 {
                         $vr_53.1;
-                    } else if @likely($sroa_$sroa_slots_0_112_0_145 == 1) -> f64 {
+                    } else if @likely($sroa_$sroa_slots_0_108_0_141 == 1) -> f64 {
                         cold_path;
-                        $qm_e_118 = ref.as_non_null($vr_53.2);
+                        $qm_e_114 = ref.as_non_null($vr_53.2);
                         cold_path;
-                        return 1, ref.null none, "core:serde/core:serde/DeserializeError::within_field<core:prelude/string.wado/String>"($qm_e_118, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 });
+                        return 1, ref.null none, "core:serde/core:serde/DeserializeError::within_field<core:prelude/string.wado/String>"($qm_e_114, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 });
                     } else {
                         unreachable;
                     });
-                    $sroa_$sroa_slots_0_112_0_145 = 1;
+                    $sroa_$sroa_slots_0_108_0_141 = 1;
                     $mv$$vr_52$0 = 1;
                 } else if $vr_payload_0_$mv$$vr_52$1 == 1 {
-                    if $sroa_$sroa_slots_1_113_0_147 == 1 {
-                        $qm_e_118 = struct.new "core:serde//DeserializeError" { kind: 3, message: local.tee out_158(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17; builtin::array_copy<u8>(out_158.repr, 0, global:core:serde::$const_obj_27, 0, 17); $mv_field_11 = array.new_fixed<u8>(121); "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]$spec0"(out_158, $mv_field_11, 1); $inline_core_prelude_string_wado_String__format_core_serde__tmpl_d48748ffcad618c0__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__1__$inline__core_prelude_string_wado_StrSlice_core_prelude_string_wado_AsStrSlice__internal_append_to_sroa_self_value__13__$inline_core_prelude_string_wado_String__internal_push_view_2: block {
+                    if $sroa_$sroa_slots_1_109_0_143 == 1 {
+                        $qm_e_114 = struct.new "core:serde//DeserializeError" { kind: 3, message: local.tee out_154(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }).used = 17; builtin::array_copy<u8>(out_154.repr, 0, global:core:serde::$const_obj_27, 0, 17); $mv_field_11 = array.new_fixed<u8>(121); "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]$spec0"(out_154, $mv_field_11, 1); $inline_core_prelude_string_wado_String__format_core_serde__tmpl_d48748ffcad618c0__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__1__$inline__core_prelude_string_wado_StrSlice_core_prelude_string_wado_AsStrSlice__internal_append_to_sroa_self_value__13__$inline_core_prelude_string_wado_String__internal_push_view_2: block {
                             break $inline_core_prelude_string_wado_String__format_core_serde__tmpl_d48748ffcad618c0__core_prelude_string_wado_String___spec0_spec0_sroa_t_h0__1__$inline__core_prelude_string_wado_StrSlice_core_prelude_string_wado_AsStrSlice__internal_append_to_sroa_self_value__13__$inline_core_prelude_string_wado_String__internal_push_view_2;
-                        }; out_158, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-                        return 1, ref.null none, $qm_e_118;
+                        }; out_154, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
+                        return 1, ref.null none, $qm_e_114;
                     }
-                    $sroa_$sroa_slots_1_113_1_148 = (if @likely(local.tee $sroa_$sroa_slots_1_113_0_147(local.tee $vr_53($inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__4: block -> ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
-                        if local.tee $sroa_$sroa_slots_1_113_0_147("core:json/core:json/JsonDeserializer::peek_after_whitespace"(d)) == 34 {
-                            multivalue_bind [$sroa_$sroa_slots_1_113_0_147, $sroa_$sroa_slots_1_113_1_148, $mv$$vr_52$2] = "core:json/core:json/JsonDeserializer::quoted_number<f64>$sroa[return]"(d);
-                            struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: $sroa_$sroa_slots_1_113_0_147, 1: $sroa_$sroa_slots_1_113_1_148, 2: $mv$$vr_52$2 };
+                    $sroa_$sroa_slots_1_109_1_144 = (if @likely(local.tee $sroa_$sroa_slots_1_109_0_143(local.tee $vr_53($inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__4: block -> ref "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" {
+                        if local.tee $sroa_$sroa_slots_1_109_0_143("core:json/core:json/JsonDeserializer::peek_after_whitespace"(d)) == 34 {
+                            multivalue_bind [$sroa_$sroa_slots_1_109_0_143, $sroa_$sroa_slots_1_109_1_144, $mv$$vr_52$2] = "core:json/core:json/JsonDeserializer::quoted_number<f64>$sroa[return]"(d);
+                            struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: $sroa_$sroa_slots_1_109_0_143, 1: $sroa_$sroa_slots_1_109_1_144, 2: $mv$$vr_52$2 };
                             break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__4;
                         }
-                        break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__4: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: multivalue_bind [$sroa_$sroa_slots_1_113_0_147, offset, $mv$$vr_52$2] = ($mv_arg_18 = global:core:prelude/fpfmt.wado::BINARY64; "core:json/core:json/JsonDeserializer::parse_float_bits$sroa[return]"(d, $sroa_$sroa_slots_1_113_0_147, $mv_arg_18.precision, $mv_arg_18.exponent_bits)); builtin::f64_reinterpret_i64((if @likely($sroa_$sroa_slots_1_113_0_147 == 0) -> u64 {
+                        break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__4: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 0, 1: multivalue_bind [$sroa_$sroa_slots_1_109_0_143, offset, $mv$$vr_52$2] = ($mv_arg_18 = global:core:prelude/fpfmt.wado::BINARY64; "core:json/core:json/JsonDeserializer::parse_float_bits$sroa[return]"(d, $sroa_$sroa_slots_1_109_0_143, $mv_arg_18.precision, $mv_arg_18.exponent_bits)); builtin::f64_reinterpret_i64((if @likely($sroa_$sroa_slots_1_109_0_143 == 0) -> u64 {
                             offset;
-                        } else if @likely($sroa_$sroa_slots_1_113_0_147 == 1) -> u64 {
+                        } else if @likely($sroa_$sroa_slots_1_109_0_143 == 1) -> u64 {
                             cold_path;
-                            $qm_e_118 = ref.as_non_null($mv$$vr_52$2);
+                            $qm_e_114 = ref.as_non_null($mv$$vr_52$2);
                             cold_path;
-                            break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__4: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 1, 1: 0, 2: $qm_e_118 };
+                            break $inline_core_json_JsonDeserializer_core_serde_Deserializer__deserialize_f64_sroa_return__4: struct.new "tuple//[i32, f64, core:prelude/types.wado/Option<core:serde/DeserializeError>]" { 0: 1, 1: 0, 2: $qm_e_114 };
                         } else {
                             unreachable;
                         })), 2: ref.null none };
                     }).0) == 0) -> f64 {
                         $vr_53.1;
-                    } else if @likely($sroa_$sroa_slots_1_113_0_147 == 1) -> f64 {
+                    } else if @likely($sroa_$sroa_slots_1_109_0_143 == 1) -> f64 {
                         cold_path;
-                        $qm_e_118 = ref.as_non_null($vr_53.2);
+                        $qm_e_114 = ref.as_non_null($vr_53.2);
                         cold_path;
-                        return 1, ref.null none, "core:serde/core:serde/DeserializeError::within_field<core:prelude/string.wado/String>"($qm_e_118, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 });
+                        return 1, ref.null none, "core:serde/core:serde/DeserializeError::within_field<core:prelude/string.wado/String>"($qm_e_114, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 });
                     } else {
                         unreachable;
                     });
-                    $sroa_$sroa_slots_1_113_0_147 = 1;
+                    $sroa_$sroa_slots_1_109_0_143 = 1;
                     $mv$$vr_52$0 = 1;
                 } else {
                 }
                 if $mv$$vr_52$0 == 0 {
                     if @likely(ref.is_null(local.tee $mv$$vr_52$2("core:json/core:json/JsonDeserializer::skip_value$spec0"(d, depth)))) {
                     } else {
-                        $qm_e_118 = ref.as_non_null($mv$$vr_52$2);
+                        $qm_e_114 = ref.as_non_null($mv$$vr_52$2);
                         cold_path;
-                        return 1, ref.null none, $qm_e_118;
+                        return 1, ref.null none, $qm_e_114;
                     }
                 }
             } else {
@@ -8557,35 +8557,35 @@ fn "core:serde/serde_json_unknown_fields.wado/Point^core:serde/Deserialize::dese
             continue l1050;
         };
     };
-    $thread_$inline_core_json_JsonDeserializer__close_container_21: block {
-        $thread_$inline_core_json_JsonDeserializer__expect_char_22: block {
+    $thread_$inline_core_json_JsonDeserializer__close_container_19: block {
+        $thread_$inline_core_json_JsonDeserializer__expect_char_20: block {
             if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(d) == 125) {
                 d.pos = d.pos + 1;
-                break $thread_$inline_core_json_JsonDeserializer__expect_char_22;
+                break $thread_$inline_core_json_JsonDeserializer__expect_char_20;
             }
             cold_path;
-            $qm_e_118 = "core:json/core:json/JsonDeserializer::expect_char_error"(d.input, d.pos, 125);
+            $qm_e_114 = "core:json/core:json/JsonDeserializer::expect_char_error"(d.input, d.pos, 125);
             cold_path;
             cold_path;
-            return 1, ref.null none, $qm_e_118;
+            return 1, ref.null none, $qm_e_114;
         };
         d.depth = d.depth - 1;
         d.first_entry = 0;
-        break $thread_$inline_core_json_JsonDeserializer__close_container_21;
+        break $thread_$inline_core_json_JsonDeserializer__close_container_19;
     };
-    return 0, $sroa_$sroa_slots_0_112_1_146 = (if $sroa_$sroa_slots_0_112_0_145 == 1 -> f64 {
-        $sroa_$sroa_slots_0_112_1_146;
-    } else if @likely($sroa_$sroa_slots_0_112_0_145 == 0) -> f64 {
+    return 0, $sroa_$sroa_slots_0_108_1_142 = (if $sroa_$sroa_slots_0_108_0_141 == 1 -> f64 {
+        $sroa_$sroa_slots_0_108_1_142;
+    } else if @likely($sroa_$sroa_slots_0_108_0_141 == 0) -> f64 {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: x"), used: 16 }, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     } else {
         unreachable;
-    }); $sroa_$sroa_slots_1_113_1_148 = (if $sroa_$sroa_slots_1_113_0_147 == 1 -> f64 {
-        $sroa_$sroa_slots_1_113_1_148;
-    } else if @likely($sroa_$sroa_slots_1_113_0_147 == 0) -> f64 {
+    }); $sroa_$sroa_slots_1_109_1_144 = (if $sroa_$sroa_slots_1_109_0_143 == 1 -> f64 {
+        $sroa_$sroa_slots_1_109_1_144;
+    } else if @likely($sroa_$sroa_slots_1_109_0_143 == 0) -> f64 {
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: y"), used: 16 }, offset: -1_i64, path: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     } else {
         unreachable;
-    }); struct.new "serde_json_unknown_fields.wado//Point" { x: $sroa_$sroa_slots_0_112_1_146, y: $sroa_$sroa_slots_1_113_1_148 }, ref.null none;
+    }); struct.new "serde_json_unknown_fields.wado//Point" { x: $sroa_$sroa_slots_0_108_1_142, y: $sroa_$sroa_slots_1_109_1_144 }, ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$dae[alt_prefix]"(self, is_negative, digit_count) {

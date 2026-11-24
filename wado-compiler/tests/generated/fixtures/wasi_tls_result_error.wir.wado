@@ -831,37 +831,37 @@ fn "core:prelude/types.wado/delivered_state$sroa[return]"(handle) {
 fn "core:prelude/types.wado/drop_resolved"(subtask) {
     let $load_3: ref "Array<core:prelude/types.wado/Resolution>";
     let handle: i32;
-    let at_20: i32;
-    let self_26: ref "core:prelude/list.wado//List<core:prelude/types.wado/Resolution>";
-    let self_32: i32;
+    let at_19: i32;
+    let self_25: ref "core:prelude/list.wado//List<core:prelude/types.wado/Resolution>";
+    let self_31: i32;
     $fused_$inline_delivered_at_sroa_return__0: block {
         if @unlikely(ref.is_null(subtask.backing) == 0) {
             unreachable;
         }
         handle = subtask.value;
-        at_20 = 0;
+        at_19 = 0;
         b70: block {
             l71: loop {
-                break_if b70 at_20 >= global:core:prelude/types.wado::DELIVERED.used;
-                if self_26 = global:core:prelude/types.wado::DELIVERED; self_32 = global:core:prelude/types.wado::DELIVERED.used; if @unlikely(((0 <= at_20) & (at_20 < self_32)) == 0) {
+                break_if b70 at_19 >= global:core:prelude/types.wado::DELIVERED.used;
+                if self_25 = global:core:prelude/types.wado::DELIVERED; self_31 = global:core:prelude/types.wado::DELIVERED.used; if @unlikely(((0 <= at_19) & (at_19 < self_31)) == 0) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Resolution>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(at_20, self_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:912"), used: 27 });
+                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Resolution>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(at_19, self_31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:912"), used: 27 });
                     unreachable;
-                }; builtin::array_get_value<ref "core:prelude/types.wado//Resolution">(self_26.repr, at_20).handle == handle {
-                    self_26 = global:core:prelude/types.wado::DELIVERED;
+                }; builtin::array_get_value<ref "core:prelude/types.wado//Resolution">(self_25.repr, at_19).handle == handle {
+                    self_25 = global:core:prelude/types.wado::DELIVERED;
                     handle = global:core:prelude/types.wado::DELIVERED.used;
-                    if @unlikely(at_20 >= handle) {
+                    if @unlikely(at_19 >= handle) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Resolution>::remove$contract_report0"(at_20, handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:927"), used: 27 });
+                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Resolution>::remove$contract_report0"(at_19, handle, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:927"), used: 27 });
                         unreachable;
                     }
-                    drop(builtin::array_get_value<ref "core:prelude/types.wado//Resolution">(local.tee $load_3(self_26.repr), at_20));
-                    builtin::array_copy<ref "core:prelude/types.wado//Resolution">($load_3, at_20, $load_3, at_20 + 1, (local.tee handle(self_26.used) - 1) - at_20);
-                    self_26.used = local.tee handle(handle - 1);
+                    drop(builtin::array_get_value<ref "core:prelude/types.wado//Resolution">(local.tee $load_3(self_25.repr), at_19));
+                    builtin::array_copy<ref "core:prelude/types.wado//Resolution">($load_3, at_19, $load_3, at_19 + 1, (local.tee handle(self_25.used) - 1) - at_19);
+                    self_25.used = local.tee handle(handle - 1);
                     builtin::array_set<ref "core:prelude/types.wado//Resolution">($load_3, handle, ref.null none);
                     break $fused_$inline_delivered_at_sroa_return__0;
                 }
-                at_20 = at_20 + 1;
+                at_19 = at_19 + 1;
                 continue l71;
             };
         };

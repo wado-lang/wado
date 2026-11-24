@@ -455,71 +455,72 @@ global global:core:prelude/traits.wado::$const_obj_32: ref "core:prelude/string.
 global global:core:prelude/traits.wado::$const_obj_33: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(77, 105, 120, 101, 100), used: 5 };
 
 fn "variadic_nested_unroll_pack_element.wado/$test_0_a_nested_walk_over_the_same_pack_rebuilds_every_field"() {
-    let $load_3: i32;
-    let v_15: ref "variadic_nested_unroll_pack_element.wado//Mixed";
-    let v_16: ref "core:prelude/string.wado//String";
-    let i_30: i32;
+    let $load_1: ref "core:prelude/string.wado//String";
+    let item: ref "variadic_nested_unroll_pack_element.wado//Mixed";
+    let a_end: i32;
+    let i_28: i32;
+    let $licm_repr_33: ref Array<u8>;
     let $sroa_out_repr_70: ref "Array<variadic_nested_unroll_pack_element.wado/Mixed>";
-    let $sroa_$iter_3_index_152: i32;
+    let $sroa_$iter_3_index_149: i32;
     builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">(local.tee $sroa_out_repr_70(builtin::array_new<ref "variadic_nested_unroll_pack_element.wado//Mixed">(4)), 0, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, on: 1 });
     builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 1, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, on: 1 });
     builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 2, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, on: 1 });
-    $sroa_$iter_3_index_152 = 0;
+    $sroa_$iter_3_index_149 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_3_index_152 >= 3;
-            v_15 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: local.tee v_15(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, $sroa_$iter_3_index_152)).count, label: v_16 = v_15.label; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_16.repr; $load_3 = v_16.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_3)), 0, $array_clone_src_1, 0, $load_3); $array_clone_dst_2, used: $load_3 }, on: v_15.on };
-            $sroa_$iter_3_index_152 = $sroa_$iter_3_index_152 + 1;
-            if @unlikely(select i32((if v_15.count == 7 -> i32 {
-                $inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
-                    if local.tee $load_3(local.tee v_16(v_15.label).used) != 2 {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+            break_if b0 $sroa_$iter_3_index_149 >= 3;
+            item = builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, $sroa_$iter_3_index_149);
+            $sroa_$iter_3_index_149 = $sroa_$iter_3_index_149 + 1;
+            if @unlikely(select i32((if item.count == 7 -> i32 {
+                $inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
+                    if local.tee a_end(local.tee $load_1(item.label).used) != 2 {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                     }
-                    i_30 = 0;
-                    $array_clone_src_1 = v_16.repr;
+                    i_28 = 0;
+                    $licm_repr_33 = $load_1.repr;
                     b5: block {
                         l6: loop {
-                            break_if b5 (builtin::i64_extend_i32_s(i_30) + 3_i64) >= builtin::i64_extend_i32_s($load_3);
-                            if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_30) {
-                                break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                            break_if b5 (builtin::i64_extend_i32_s(i_28) + 3_i64) >= builtin::i64_extend_i32_s(a_end);
+                            if builtin::array_get_value<u8>($licm_repr_33, i_28) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_28) {
+                                break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                             }
-                            i_30 = i_30 + 1;
-                            if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_30) {
-                                break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                            i_28 = i_28 + 1;
+                            if builtin::array_get_value<u8>($licm_repr_33, i_28) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_28) {
+                                break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                             }
-                            i_30 = i_30 + 1;
-                            if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_30) {
-                                break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                            i_28 = i_28 + 1;
+                            if builtin::array_get_value<u8>($licm_repr_33, i_28) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_28) {
+                                break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                             }
-                            i_30 = i_30 + 1;
-                            if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_30) {
-                                break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                            i_28 = i_28 + 1;
+                            if builtin::array_get_value<u8>($licm_repr_33, i_28) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_28) {
+                                break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                             }
-                            i_30 = i_30 + 1;
+                            i_28 = i_28 + 1;
                             continue l6;
                         };
                     };
                     b11: block {
                         l12: loop {
-                            break_if b11 i_30 >= $load_3;
-                            if builtin::array_get_value<u8>($array_clone_src_1, i_30) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_30) {
-                                break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                            break_if b11 i_28 >= a_end;
+                            if builtin::array_get_value<u8>($licm_repr_33, i_28) != builtin::array_get_value<u8>(global:variadic_nested_unroll_pack_element.wado::$const_obj_1, i_28) {
+                                break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                             }
-                            i_30 = i_30 + 1;
+                            i_28 = i_28 + 1;
                             continue l12;
                         };
                     };
-                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 1;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
                 };
             } else {
                 0;
-            }), v_15.on == 1, 0) == 0) {
+            }), item.on == 1, 0) == 0) {
                 cold_path;
-                "core:rt/panic"(local.tee v_16("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_nested_unroll_pack_element.wado/$tmpl$6dfa0eb39ccd11fb,[variadic_nested_unroll_pack_element.wado/Mixed,variadic_nested_unroll_pack_element.wado/Mixed]>"(struct.new "variadic_nested_unroll_pack_element.wado//$tmpl$6dfa0eb39ccd11fb" { h0: v_15, h1: global:variadic_nested_unroll_pack_element.wado::$const_obj_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_nested_walk_over_the_same_pack_rebuilds_every_field at variadic_nested_unroll_pack_element.wado:56
+                "core:rt/panic"(local.tee $load_1("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_nested_unroll_pack_element.wado/$tmpl$6dfa0eb39ccd11fb,[variadic_nested_unroll_pack_element.wado/Mixed,variadic_nested_unroll_pack_element.wado/Mixed]>"(struct.new "variadic_nested_unroll_pack_element.wado//$tmpl$6dfa0eb39ccd11fb" { h0: item, h1: global:variadic_nested_unroll_pack_element.wado::$const_obj_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_nested_walk_over_the_same_pack_rebuilds_every_field at variadic_nested_unroll_pack_element.wado:56
 condition: c == m
 c: "), used: 150 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_a_nested_walk_over_the_same_pack_rebuilds_every_field at variadic_nested_unroll_pack_element.wado:56
 condition: c == m
-c: "), used: 150 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 109, 58, 32), used: 4 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 109, 58, 32), used: 4 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, v_16.used);
+c: "), used: 150 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 109, 58, 32), used: 4 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 109, 58, 32), used: 4 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $load_1.used);
                 unreachable;
             }
             continue l1;
@@ -531,26 +532,21 @@ fn "variadic_nested_unroll_pack_element.wado/$test_1_a_nested_walk_writes_one_sl
     let a_end_41: i32;
     let i_46: i32;
     let $licm_repr_97: ref Array<u8>;
-    let value_141: ref "variadic_nested_unroll_pack_element.wado//Mixed";
+    let value_152: ref "variadic_nested_unroll_pack_element.wado//Mixed";
     let $sroa_out_repr_70: ref "Array<variadic_nested_unroll_pack_element.wado/Mixed>";
-    let $sroa_fields_1_184: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_70 = builtin::array_new<ref "variadic_nested_unroll_pack_element.wado//Mixed">(4);
-    $sroa_fields_1_184 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
-    value_141 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 0, label: $sroa_fields_1_184, on: 1 };
-    builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 0, value_141);
-    $sroa_fields_1_184 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    value_141 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: $sroa_fields_1_184, on: 1 };
-    builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 1, value_141);
-    $sroa_fields_1_184 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
-    value_141 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: $sroa_fields_1_184, on: 0 };
-    builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 2, value_141);
-    if @unlikely(select i32((if value_141.count == 0 -> i32 {
+    let $sroa_fields_1_186: ref "core:prelude/string.wado//String";
+    builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">(local.tee $sroa_out_repr_70(builtin::array_new<ref "variadic_nested_unroll_pack_element.wado//Mixed">(4)), 0, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 0, label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, on: 1 });
+    $sroa_fields_1_186 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    value_152 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: $sroa_fields_1_186, on: 1 };
+    builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 1, value_152);
+    builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 2, struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, on: 0 });
+    if @unlikely(select i32((if value_152.count == 0 -> i32 {
         $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
-            if local.tee a_end_41(local.tee $sroa_fields_1_184(value_141.label).used) != 2 {
+            if local.tee a_end_41(local.tee $sroa_fields_1_186(value_152.label).used) != 2 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
             }
             i_46 = 0;
-            $licm_repr_97 = $sroa_fields_1_184.repr;
+            $licm_repr_97 = $sroa_fields_1_186.repr;
             b17: block {
                 l18: loop {
                     break_if b17 (builtin::i64_extend_i32_s(i_46) + 3_i64) >= builtin::i64_extend_i32_s(a_end_41);
@@ -587,22 +583,22 @@ fn "variadic_nested_unroll_pack_element.wado/$test_1_a_nested_walk_writes_one_sl
         };
     } else {
         0;
-    }), local.tee value_141(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 0)).on == 1, 0) == 0) {
+    }), local.tee value_152(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 0)).on == 1, 0) == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $sroa_fields_1_184("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_nested_unroll_pack_element.wado/$tmpl$23b39c7ee31b38d8,[variadic_nested_unroll_pack_element.wado/Mixed]>"(struct.new "variadic_nested_unroll_pack_element.wado//$tmpl$23b39c7ee31b38d8" { h0: value_141, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:64
+        "core:rt/panic"(local.tee $sroa_fields_1_186("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_nested_unroll_pack_element.wado/$tmpl$23b39c7ee31b38d8,[variadic_nested_unroll_pack_element.wado/Mixed]>"(struct.new "variadic_nested_unroll_pack_element.wado//$tmpl$23b39c7ee31b38d8" { h0: value_152, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:64
 condition: zeroed[0] == Mixed { count: 0, label: \"hi\", on: true }
 zeroed[0]: "), used: 200 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:64
 condition: zeroed[0] == Mixed { count: 0, label: \"hi\", on: true }
-zeroed[0]: "), used: 200 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $sroa_fields_1_184.used);
+zeroed[0]: "), used: 200 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $sroa_fields_1_186.used);
         unreachable;
     }
-    if @unlikely(select i32((if value_141.count == 7 -> i32 {
+    if @unlikely(select i32((if value_152.count == 7 -> i32 {
         $inline_core_prelude_array_wado_seq_eq_u8__13: block -> bool {
-            if local.tee a_end_41(local.tee $sroa_fields_1_184(value_141.label).used) != 0 {
+            if local.tee a_end_41(local.tee $sroa_fields_1_186(value_152.label).used) != 0 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
             }
             i_46 = 0;
-            $licm_repr_97 = $sroa_fields_1_184.repr;
+            $licm_repr_97 = $sroa_fields_1_186.repr;
             b29: block {
                 l30: loop {
                     break_if b29 (builtin::i64_extend_i32_s(i_46) + 3_i64) >= builtin::i64_extend_i32_s(a_end_41);
@@ -639,22 +635,22 @@ zeroed[0]: "), used: 200 }, s1: struct.new "core:prelude/string.wado//String" { 
         };
     } else {
         0;
-    }), local.tee value_141(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 1)).on == 1, 0) == 0) {
+    }), local.tee value_152(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 1)).on == 1, 0) == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $sroa_fields_1_184("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_nested_unroll_pack_element.wado/$tmpl$23b39c7ee31b38d8,[variadic_nested_unroll_pack_element.wado/Mixed]>"(struct.new "variadic_nested_unroll_pack_element.wado//$tmpl$23b39c7ee31b38d8" { h0: value_141, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:65
+        "core:rt/panic"(local.tee $sroa_fields_1_186("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_nested_unroll_pack_element.wado/$tmpl$23b39c7ee31b38d8,[variadic_nested_unroll_pack_element.wado/Mixed]>"(struct.new "variadic_nested_unroll_pack_element.wado//$tmpl$23b39c7ee31b38d8" { h0: value_152, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:65
 condition: zeroed[1] == Mixed { count: 7, label: \"\", on: true }
 zeroed[1]: "), used: 198 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:65
 condition: zeroed[1] == Mixed { count: 7, label: \"\", on: true }
-zeroed[1]: "), used: 198 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $sroa_fields_1_184.used);
+zeroed[1]: "), used: 198 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $sroa_fields_1_186.used);
         unreachable;
     }
-    if @unlikely(select i32((if value_141.count == 7 -> i32 {
+    if @unlikely(select i32((if value_152.count == 7 -> i32 {
         $inline_core_prelude_array_wado_seq_eq_u8__20: block -> bool {
-            if local.tee a_end_41(local.tee $sroa_fields_1_184(value_141.label).used) != 2 {
+            if local.tee a_end_41(local.tee $sroa_fields_1_186(value_152.label).used) != 2 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__20: 0;
             }
             i_46 = 0;
-            $licm_repr_97 = $sroa_fields_1_184.repr;
+            $licm_repr_97 = $sroa_fields_1_186.repr;
             b41: block {
                 l42: loop {
                     break_if b41 (builtin::i64_extend_i32_s(i_46) + 3_i64) >= builtin::i64_extend_i32_s(a_end_41);
@@ -691,13 +687,13 @@ zeroed[1]: "), used: 198 }, s1: struct.new "core:prelude/string.wado//String" { 
         };
     } else {
         0;
-    }), local.tee value_141(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 2)).on == 0, 0) == 0) {
+    }), local.tee value_152(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_out_repr_70, 2)).on == 0, 0) == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $sroa_fields_1_184("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_nested_unroll_pack_element.wado/$tmpl$23b39c7ee31b38d8,[variadic_nested_unroll_pack_element.wado/Mixed]>"(struct.new "variadic_nested_unroll_pack_element.wado//$tmpl$23b39c7ee31b38d8" { h0: value_141, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:66
+        "core:rt/panic"(local.tee $sroa_fields_1_186("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_nested_unroll_pack_element.wado/$tmpl$23b39c7ee31b38d8,[variadic_nested_unroll_pack_element.wado/Mixed]>"(struct.new "variadic_nested_unroll_pack_element.wado//$tmpl$23b39c7ee31b38d8" { h0: value_152, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:66
 condition: zeroed[2] == Mixed { count: 7, label: \"hi\", on: false }
 zeroed[2]: "), used: 201 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_a_nested_walk_writes_one_slot_per_outer_element at variadic_nested_unroll_pack_element.wado:66
 condition: zeroed[2] == Mixed { count: 7, label: \"hi\", on: false }
-zeroed[2]: "), used: 201 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $sroa_fields_1_184.used);
+zeroed[2]: "), used: 201 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $sroa_fields_1_186.used);
         unreachable;
     }
 }

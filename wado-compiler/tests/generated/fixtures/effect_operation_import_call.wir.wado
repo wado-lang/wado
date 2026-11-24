@@ -412,145 +412,139 @@ global global:core:prelude/primitive.wado::$const_obj_6: ref "core:prelude/strin
 global global:core:prelude/primitive.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "effect_operation_import_call.wado/$test_0_an_imported_operation_returns_its_declared_type"() {
-    let $load_7: i32;
     let h: ref "effect_operation_import_call.wado//Fixed";
     let $save_sub/effect_operation_import_iface.wado/Greeting: ref null "effect_operation_import_call.wado//$Dispatch_sub/effect_operation_import_iface.wado/Greeting";
-    let $local_0_11: ref null "effect_operation_import_call.wado//$Dispatch_sub/effect_operation_import_iface.wado/Greeting";
-    let $local_1_12: ref "effect_operation_import_call.wado//$Dispatch_sub/effect_operation_import_iface.wado/Greeting";
-    let $local_2_13: ref "core:prelude/string.wado//String";
-    let i_23: i32;
+    let $local_0_9: ref null "effect_operation_import_call.wado//$Dispatch_sub/effect_operation_import_iface.wado/Greeting";
+    let $local_1_10: ref "effect_operation_import_call.wado//$Dispatch_sub/effect_operation_import_iface.wado/Greeting";
+    let $local_2_11: ref "core:prelude/string.wado//String";
+    let a_end_16: i32;
+    let i_21: i32;
+    let $licm_repr_35: ref Array<u8>;
     h = struct.new "effect_operation_import_call.wado//Fixed" {};
     global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = struct.new "effect_operation_import_call.wado//$Dispatch_sub/effect_operation_import_iface.wado/Greeting" { outer: local.tee $save_sub/effect_operation_import_iface.wado/Greeting(global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_operation_import_call.wado//$Closure_0" { $capture_0: h }, func: ref.func "closure/effect_operation_import_call.wado/$closure_wrapper_0" } };
-    $local_2_13 = $inline__effect_dispatch__sub_effect_operation_import_iface_wado_Greeting__hello_3: block -> ref "core:prelude/string.wado//String" {
-        if @likely(ref.is_null(local.tee $local_0_11(global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting)) == 0) {
-            global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = local.tee $local_1_12(ref.as_non_null($local_0_11)).outer;
-            $local_2_13 = block -> ref "core:prelude/string.wado//String" {
+    $local_2_11 = $inline__effect_dispatch__sub_effect_operation_import_iface_wado_Greeting__hello_1: block -> ref "core:prelude/string.wado//String" {
+        if @likely(ref.is_null(local.tee $local_0_9(global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting)) == 0) {
+            global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = local.tee $local_1_10(ref.as_non_null($local_0_9)).outer;
+            $local_2_11 = block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_2: ref null "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_1_12.op_hello).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_1_10.op_hello).env);
             };
-            global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = $local_0_11;
-            break $inline__effect_dispatch__sub_effect_operation_import_iface_wado_Greeting__hello_3: $local_2_13;
+            global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = $local_0_9;
+            break $inline__effect_dispatch__sub_effect_operation_import_iface_wado_Greeting__hello_1: $local_2_11;
         } else {
-            "core:rt/panic"(local.tee $local_2_13(global:effect_operation_import_call.wado::$const_obj_1).repr, $local_2_13.used);
+            "core:rt/panic"(local.tee $local_2_11(global:effect_operation_import_call.wado::$const_obj_1).repr, $local_2_11.used);
             unreachable;
         }
         unreachable;
     };
-    let $array_clone_src_3: ref Array<u8>;
-    $array_clone_src_3 = $local_2_13.repr;
-    $load_7 = $local_2_13.used;
-    let $array_clone_dst_4: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($load_7)), 0, $array_clone_src_3, 0, $load_7);
-    $local_2_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>($load_7)), 0, $array_clone_dst_4, 0, $load_7); $array_clone_src_3, used: $load_7 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
-        if $load_7 != 2 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        if local.tee a_end_16($local_2_11.used) != 2 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        i_23 = 0;
-        $array_clone_src_3 = $local_2_13.repr;
+        i_21 = 0;
+        $licm_repr_35 = $local_2_11.repr;
         b4: block {
             l5: loop {
-                break_if b4 (builtin::i64_extend_i32_s(i_23) + 3_i64) >= builtin::i64_extend_i32_s($load_7);
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                break_if b4 (builtin::i64_extend_i32_s(i_21) + 3_i64) >= builtin::i64_extend_i32_s(a_end_16);
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                i_21 = i_21 + 1;
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                i_21 = i_21 + 1;
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                i_21 = i_21 + 1;
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_23 = i_23 + 1;
+                i_21 = i_21 + 1;
                 continue l5;
             };
         };
         b10: block {
             l11: loop {
-                break_if b10 i_23 >= $load_7;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                break_if b10 i_21 >= a_end_16;
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-                i_23 = i_23 + 1;
+                i_21 = i_21 + 1;
                 continue l11;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $local_2_13("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_operation_import_call.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "effect_operation_import_call.wado//$tmpl$d48748ffcad618c0" { h0: $local_2_13, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_an_imported_operation_returns_its_declared_type at effect_operation_import_call.wado:26
+        "core:rt/panic"(local.tee $local_2_11("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_operation_import_call.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "effect_operation_import_call.wado//$tmpl$d48748ffcad618c0" { h0: $local_2_11, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_an_imported_operation_returns_its_declared_type at effect_operation_import_call.wado:26
 condition: bare() == \"hi\"
 bare(): "), used: 150 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_an_imported_operation_returns_its_declared_type at effect_operation_import_call.wado:26
 condition: bare() == \"hi\"
-bare(): "), used: 150 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $local_2_13.used);
+bare(): "), used: 150 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $local_2_11.used);
         unreachable;
     }
-    $load_7 = local.tee $local_2_13($inline__effect_dispatch__sub_effect_operation_import_iface_wado_Greeting__hello_8: block -> ref "core:prelude/string.wado//String" {
-        if @likely(ref.is_null(local.tee $local_0_11(global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting)) == 0) {
-            global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = local.tee $local_1_12(ref.as_non_null($local_0_11)).outer;
-            $local_2_13 = block -> ref "core:prelude/string.wado//String" {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_1_12.op_hello).env);
+    $local_2_11 = $inline__effect_dispatch__sub_effect_operation_import_iface_wado_Greeting__hello_5: block -> ref "core:prelude/string.wado//String" {
+        if @likely(ref.is_null(local.tee $local_0_9(global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting)) == 0) {
+            global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = local.tee $local_1_10(ref.as_non_null($local_0_9)).outer;
+            $local_2_11 = block -> ref "core:prelude/string.wado//String" {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2($local_1_10.op_hello).env);
             };
-            global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = $local_0_11;
-            break $inline__effect_dispatch__sub_effect_operation_import_iface_wado_Greeting__hello_8: $local_2_13;
+            global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = $local_0_9;
+            break $inline__effect_dispatch__sub_effect_operation_import_iface_wado_Greeting__hello_5: $local_2_11;
         } else {
-            "core:rt/panic"(local.tee $local_2_13(global:effect_operation_import_call.wado::$const_obj_1).repr, $local_2_13.used);
+            "core:rt/panic"(local.tee $local_2_11(global:effect_operation_import_call.wado::$const_obj_1).repr, $local_2_11.used);
             unreachable;
         }
         unreachable;
-    }).used;
-    $local_2_13 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = $local_2_13.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($load_7)), 0, $array_clone_src_3, 0, $load_7); $array_clone_dst_4, used: $load_7 };
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__10: block -> bool {
-        if $load_7 != 2 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+    };
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
+        if local.tee a_end_16($local_2_11.used) != 2 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
         }
-        i_23 = 0;
-        $array_clone_src_3 = $local_2_13.repr;
+        i_21 = 0;
+        $licm_repr_35 = $local_2_11.repr;
         b17: block {
             l18: loop {
-                break_if b17 (builtin::i64_extend_i32_s(i_23) + 3_i64) >= builtin::i64_extend_i32_s($load_7);
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                break_if b17 (builtin::i64_extend_i32_s(i_21) + 3_i64) >= builtin::i64_extend_i32_s(a_end_16);
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                i_21 = i_21 + 1;
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                i_21 = i_21 + 1;
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                i_21 = i_21 + 1;
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
+                i_21 = i_21 + 1;
                 continue l18;
             };
         };
         b23: block {
             l24: loop {
-                break_if b23 i_23 >= $load_7;
-                if builtin::array_get_value<u8>($array_clone_src_3, i_23) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                break_if b23 i_21 >= a_end_16;
+                if builtin::array_get_value<u8>($licm_repr_35, i_21) != builtin::array_get_value<u8>(global:effect_operation_import_call.wado::$const_obj_0, i_21) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
-                i_23 = i_23 + 1;
+                i_21 = i_21 + 1;
                 continue l24;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__10: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $local_2_13("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_operation_import_call.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "effect_operation_import_call.wado//$tmpl$d48748ffcad618c0" { h0: $local_2_13, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_an_imported_operation_returns_its_declared_type at effect_operation_import_call.wado:27
+        "core:rt/panic"(local.tee $local_2_11("core:prelude/string.wado/core:prelude/string.wado/String::format<effect_operation_import_call.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "effect_operation_import_call.wado//$tmpl$d48748ffcad618c0" { h0: $local_2_11, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_an_imported_operation_returns_its_declared_type at effect_operation_import_call.wado:27
 condition: qualified() == \"hi\"
 qualified(): "), used: 160 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0_an_imported_operation_returns_its_declared_type at effect_operation_import_call.wado:27
 condition: qualified() == \"hi\"
-qualified(): "), used: 160 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $local_2_13.used);
+qualified(): "), used: 160 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $local_2_11.used);
         unreachable;
     }
     global:effect_operation_import_call.wado::$effect_sub/effect_operation_import_iface.wado/Greeting = $save_sub/effect_operation_import_iface.wado/Greeting;

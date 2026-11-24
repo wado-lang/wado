@@ -364,8 +364,8 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 fn "value_copy_elide_switch_alias.wado/pick"(n) {
     let a: ref "core:prelude/list.wado//List<i32>";
     let b: ref "core:prelude/list.wado//List<i32>";
+    let used_17: i32;
     let v: ref "core:prelude/list.wado//List<i32>";
-    let used_18: i32;
     a = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     b = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(4, 5, 6), used: 3 };
     v = b0: block -> ref "core:prelude/list.wado//List<i32>" {
@@ -432,12 +432,12 @@ fn "value_copy_elide_switch_alias.wado/pick"(n) {
     }
     builtin::array_set<i32>(a.repr, 3, 999);
     a.used = 4;
-    if @unlikely(local.tee used_18(b.used) >= builtin::array_len(b.repr)) {
+    if @unlikely(local.tee used_17(b.used) >= builtin::array_len(b.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(b);
     }
-    builtin::array_set<i32>(b.repr, used_18, 999);
-    b.used = used_18 + 1;
+    builtin::array_set<i32>(b.repr, used_17, 999);
+    b.used = used_17 + 1;
     return n;
 }
 

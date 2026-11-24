@@ -363,20 +363,20 @@ global global:core:prelude/primitive.wado::$const_obj_0: ref "core:prelude/strin
 fn "value_copy_mut_receiver_alias.wado/$test_0_by_value_arg_is_independent_of_the_mutated__mut_self_receiver"() {
     let $load_1: i32;
     let t: ref "core:prelude/list.wado//List<i32>";
-    let used_13: i32;
-    let $sroa_w_payload_19: ref null "core:prelude/list.wado//List<i32>";
-    t = ref.as_non_null(local.tee $sroa_w_payload_19(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }));
+    let used_12: i32;
+    let $sroa_w_payload_18: ref null "core:prelude/list.wado//List<i32>";
+    t = ref.as_non_null(local.tee $sroa_w_payload_18(struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }));
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = t.repr;
     $load_1 = t.used;
     builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_src_1, 0, $load_1);
-    if ref.is_null($sroa_w_payload_19) == 0 {
-        if @unlikely(local.tee used_13(local.tee t(ref.as_non_null($sroa_w_payload_19)).used) >= builtin::array_len(t.repr)) {
+    if ref.is_null($sroa_w_payload_18) == 0 {
+        if @unlikely(local.tee used_12(local.tee t(ref.as_non_null($sroa_w_payload_18)).used) >= builtin::array_len(t.repr)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(t);
         }
-        builtin::array_set<i32>(t.repr, used_13, 999);
-        t.used = used_13 + 1;
+        builtin::array_set<i32>(t.repr, used_12, 999);
+        t.used = used_12 + 1;
     } else {
     }
     if @unlikely($load_1 != 1) {
