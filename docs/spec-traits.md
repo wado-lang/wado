@@ -1153,11 +1153,14 @@ once the closure's body is walked.
 ```wado
 export fn run() with Stdout {
     let s = S {};
-    println(`${s.take(quiet)}`);
-    println(`${s.take(loud)}`);
-    println(`${s.take(|| {})}`);
-    println(`${s.take(|| { println("closure"); })}`);
-    println(`${through_bound(&s)}`);
+    assert s.take(quiet) == 1;
+    assert s.take(loud) == 2;
+    assert s.take(|| {}) == 1;
+    assert s.take(|| { println("closure"); }) == 2;
+    assert through_bound(&s) == 12;
+    // The candidates agree on the parameter types, which type `x`.
+    assert s.apply(|x| x + 1) == 2;
+    assert s.apply(|x| { println("printed"); return x; }) == 20;
 }
 ```
 

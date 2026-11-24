@@ -23,6 +23,22 @@ impl Take<fn() with Stdout> for S {
     }
 }
 
+trait Apply<F> with _ {
+    fn apply(&self, f: F) -> i32;
+}
+
+impl Apply<fn(i32) -> i32> for S {
+    fn apply(&self, f: fn(i32) -> i32) -> i32 {
+        return f(1);
+    }
+}
+
+impl Apply<fn(i32) -> i32 with Stdout> for S {
+    fn apply(&self, f: fn(i32) -> i32 with Stdout) -> i32 with Stdout {
+        return f(2) * 10;
+    }
+}
+
 fn quiet() {}
 
 fn loud() with Stdout {
@@ -35,12 +51,15 @@ fn through_bound<T: Take<fn()> + Take<fn() with Stdout>>(t: &T) -> i32 with _ {
 
 export fn run() with Stdout {
     let s = S {};
-    println(`${s.take(quiet)}`);
-    println(`${s.take(loud)}`);
-    println(`${s.take(|| {})}`);
-    println(`${s.take(|| { println("closure"); })}`);
-    println(`${through_bound(&s)}`);
+    assert s.take(quiet) == 1;
+    assert s.take(loud) == 2;
+    assert s.take(|| {}) == 1;
+    assert s.take(|| { println("closure"); }) == 2;
+    assert through_bound(&s) == 12;
+    // The candidates agree on the parameter types, which type `x`.
+    assert s.apply(|x| x + 1) == 2;
+    assert s.apply(|x| { println("printed"); return x; }) == 20;
 }
 
 __DATA__
-{"stdout": "1\nloud\n2\n1\nclosure\n2\nloud\n12\n"}
+{"stdout": "loud\nclosure\nloud\nprinted\n"}

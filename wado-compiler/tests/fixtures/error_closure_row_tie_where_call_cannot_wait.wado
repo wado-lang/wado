@@ -1,0 +1,32 @@
+// A closure's row selects among impls differing only in it once its body is
+// walked. A plain method call waits for that; a trait-qualified call and a
+// call on a subscript's element do not.
+use { println, Stdout } from "core:cli";
+
+trait Take<F> with _ {
+    fn take(&mut self, f: F) -> i32;
+}
+
+struct S {}
+
+impl Take<fn()> for S {
+    fn take(&mut self, f: fn()) -> i32 {
+        return 1;
+    }
+}
+
+impl Take<fn() with Stdout> for S {
+    fn take(&mut self, f: fn() with Stdout) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() with Stdout {
+    let mut s = S {};
+    println(`${Take::take(&mut s, || {})}`);
+    let mut xs: List<S> = [S {}];
+    println(`${xs[0].take(|| {})}`);
+}
+
+__DATA__
+{"compile_error": "which `take` this calls depends on what its closure argument performs, which this call cannot wait for; pin the trait's arguments", "compile_error_count": 2}

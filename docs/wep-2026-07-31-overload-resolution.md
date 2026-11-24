@@ -604,9 +604,6 @@ Where the pieces live:
   expects the receiver's own type, so a newtype dispatched to its base's impl
   type-checks as the newtype.
 
-The bounds counterpart of an overload set (`T: Take<A> + Take<B>`) cannot arise
-yet — positional trait arguments do not parse in bound position.
-
 Test surface: the `ufcs_*`, `trait_argument_*`, `from_*`, `operator_rhs_*` and
 `cross_module_same_name_*` fixture families in `wado-compiler/tests/fixtures/` —
 one fixture per rule above, plus `error_*` fixtures pinning every diagnostic's
@@ -668,9 +665,15 @@ Trade-offs:
 - A conversion reachable only through a blanket generic in its source type
   (`impl<T: Display> From<T> for W`) is rejected at `W::from(x)`, since its
   instantiation is not selected from the argument.
-- A trait-qualified call (`Take::take(&s, || {})`) never waits for its
-  selection, so one whose candidates differ only in a closure argument's row
-  is rejected; the same call written as a method selects.
+- A trait-qualified call (`Take::take(&s, || {})`) and a call on a subscript's
+  element (`xs[0].take(|| {})`) never wait for their selection, so one whose
+  candidates differ only in a closure argument's row is rejected; the same
+  call written as a plain method call selects.
+- Two bounds of one trait at different argument lists
+  (`T: Take<i64> + Take<i32>`) are not an overload set: a call through them
+  that the arguments do not select takes the first bound written, where the
+  impls would report an ambiguity. A function argument's row selects there,
+  but a closure argument does not wait for its body.
 
 ## See Also
 

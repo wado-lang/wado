@@ -4478,9 +4478,16 @@ pub(super) enum TraitLookup {
     /// more.
     Reported,
     /// The impls that may answer depend on what the receiver's variables
-    /// settle to, or on the row a closure argument's body solves: the blocks
-    /// still in the running, each `None` for a derived body.
+    /// settle to: the blocks the order names, each `None` for a derived body.
     Undecided(Vec<Option<DefId>>),
+    /// The impls that may answer differ only in the rows a closure argument
+    /// could meet, which its body solves once it is walked. `trait_args` is
+    /// what they agree on at each trait argument, a function type's row left
+    /// open where only the row differs.
+    AwaitsClosureRow {
+        live: Vec<Option<DefId>>,
+        trait_args: Vec<Option<TypeId>>,
+    },
 }
 
 impl TraitLookup {
@@ -4496,7 +4503,9 @@ impl TraitLookup {
     pub(super) fn found(self) -> Option<TraitMethodMatch> {
         match self {
             Self::Found(found) => Some(*found),
-            Self::Missing | Self::Reported | Self::Undecided(_) => None,
+            Self::Missing | Self::Reported | Self::Undecided(_) | Self::AwaitsClosureRow { .. } => {
+                None
+            }
         }
     }
 }

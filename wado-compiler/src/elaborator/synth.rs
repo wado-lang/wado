@@ -373,7 +373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Narrow `candidates` to those whose parameter is a function argument's
     /// type exactly, its row included, where any is. A function admits every
     /// parameter whose row holds its own, but only its own row selects: a
-    /// closure's is read as its body solved it, and closes there.
+    /// closure's is its body's solution, closed only where it selects.
     pub(super) fn narrow_to_exact_rows<C>(
         &self,
         candidates: &mut Vec<C>,
@@ -387,22 +387,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let &ArgClass::Exact(arg) = class else {
                 continue;
             };
-            let arg = {
+            let solved = {
                 let mut tt = self.tysys.type_table.borrow_mut();
                 if !matches!(tt.get(arg), ResolvedType::Function { .. }) {
                     continue;
                 }
-                let read = tt.read_effect_rows_in(arg);
-                let ResolvedType::Function { effects, .. } = tt.get(read) else {
-                    unreachable!("reading a row keeps a function a function")
+                let solved = tt.peek_effect_rows_in(arg);
+                let ResolvedType::Function { effects, .. } = tt.get(solved) else {
+                    unreachable!("solving a row keeps a function a function")
                 };
                 if effects.iter().any(EffectRef::is_var) {
                     continue;
                 }
-                read
+                solved
             };
-            let exact = |c: &C| param_at(c, position) == Some(arg);
+            let exact = |c: &C| param_at(c, position) == Some(solved);
             if candidates.iter().any(exact) {
+                self.tysys.type_table.borrow_mut().read_effect_rows_in(arg);
                 candidates.retain(exact);
             }
         }

@@ -267,8 +267,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The trait's own declaration of `method_name`, with `Self` the receiver,
     /// where the impls `live` names are all of one trait and the declaration
-    /// types the call without them. Each trait argument is a variable the
-    /// call's arguments may settle, and the impl selected settles otherwise.
+    /// types the call without them. Each trait argument is what `agreed` says
+    /// every live impl gives it, else a variable the call's arguments may
+    /// settle, and the impl selected settles otherwise.
     ///
     /// `None` where the call cannot wait: an impl written for no block, a
     /// receiver whose head is open or that names a parameter, or a method whose
@@ -276,6 +277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn trait_declared_info(
         &mut self,
         live: &[Option<DefId>],
+        agreed: &[Option<TypeId>],
         receiver: TypeId,
         method_name: &str,
     ) -> Option<(FqTraitName, MethodInfo)> {
@@ -309,7 +311,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slots.insert(TypeParamId::trait_self(*decl), receiver);
         let mut trait_args = Vec::with_capacity(arity);
         for index in 1..=arity {
-            let var = self.mint_infer_var();
+            let var = match agreed.get(index - 1) {
+                Some(&Some(arg)) => arg,
+                Some(None) | None => self.mint_infer_var(),
+            };
             let index = u32::try_from(index).expect("a trait's parameters fit a slot index");
             slots.insert(
                 TypeParamId {
@@ -368,7 +373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodInfo> {
         let receiver = self.apply_infer_holes(receiver);
         let live = self.undecided_impls(receiver, method_name, None)?;
-        let (_, info) = self.trait_declared_info(&live, receiver, method_name)?;
+        let (_, info) = self.trait_declared_info(&live, &[], receiver, method_name)?;
         (info.param_types.len() == arity).then_some(info)
     }
 
@@ -592,6 +597,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         match lookup {
             TraitLookup::Undecided(_) => return Some(call),
+            TraitLookup::AwaitsClosureRow { .. } => {
+                unreachable!("a waiting call classes its closures by their types")
+            }
             TraitLookup::Found(found) => {
                 self.select_pending(id, &call, &args, ref_kind, receiver, *found);
             }
