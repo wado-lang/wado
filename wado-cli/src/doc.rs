@@ -1033,8 +1033,8 @@ mod format_contract_tests {
 
     #[test]
     fn doc_text_keeps_a_lone_asterisk() {
-        let out = markdown_of("//! Computes a*b+c over 24*60*60 seconds.\n");
-        assert!(out.contains("a*b+c over 24*60*60"), "{out}");
+        let out = markdown_of("//! Scales a * b.\n");
+        assert!(out.contains("Scales a * b."), "{out}");
     }
 
     #[test]

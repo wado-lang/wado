@@ -21,6 +21,7 @@ use wado_compiler::{CompilerOptions, InMemoryCompilerHost, OptLevel};
 use wado_host::atomic_write::write_atomic;
 use wado_host::engine::{default_config, guest_store};
 use wado_host::random;
+use wado_lsp::host::install_dev_stdlib;
 
 use crate::COMPILER_STACK_SIZE;
 use crate::cache::user_cache_dir;
@@ -152,10 +153,9 @@ fn load_component(engine: &Engine) -> Component {
     let bytes = component
         .serialize()
         .unwrap_or_else(|e| panic!("serializing the bundled Marl: {e:#}"));
-    // Losing the entry only costs the next run a compile.
-    if write_atomic(&path, &bytes).is_ok() {
-        remove_stale_entries(&path);
-    }
+    // Losing the entry only costs the next run a compile. What another `wado`
+    // cached stays: it may be in use, and `wado clean` clears the user cache.
+    let _ = write_atomic(&path, &bytes);
     component
 }
 
@@ -171,21 +171,8 @@ fn cache_path() -> Option<PathBuf> {
     user_cache_dir().map(|dir| dir.join(CACHE_KIND).join(format!("{}.cwasm", hex32(&key))))
 }
 
-/// Removes what an earlier `wado` cached beside `current`, which no binary but
-/// that one reads.
-fn remove_stale_entries(current: &PathBuf) {
-    let Some(Ok(entries)) = current.parent().map(std::fs::read_dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path != *current {
-            let _ = std::fs::remove_file(path);
-        }
-    }
-}
-
 fn compile_component(engine: &Engine) -> Component {
+    install_dev_stdlib();
     let entry = SOURCES
         .iter()
         .find(|(name, _)| *name == ENTRY)
@@ -234,11 +221,9 @@ impl WasiView for Guest {
 mod tests {
     use super::*;
     use std::path::Path;
-    use wado_lsp::host::install_dev_stdlib;
 
     #[test]
     fn formats_markdown() {
-        install_dev_stdlib();
         assert_eq!(format("# Title\n* a\n* b\n"), "# Title\n\n- a\n- b\n");
     }
 
