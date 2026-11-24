@@ -57,9 +57,17 @@ failure is a `Result`, not an exception or a rejected promise; the method is
 ### The request target
 
 `HttpClient::new` parses the base URL with `core:url` and accepts only `http`
-and `https` with no query or fragment. `request` appends its path to the base
-path as text. RFC 3986 resolution would let `/v1/messages` drop the base path
-`/api`, which is never what a client of one API means.
+and `https` with no query or fragment, and drops one trailing `/` from the base
+path. `request` appends its path to the base path as text. The path must start
+with `/` and hold no `?` or `#`, or the request fails with an invalid URL; the
+query comes only from `RequestInit.query`.
+
+RFC 3986 resolution would let `/v1/messages` drop the base path `/api`, which
+is never what a client of one API means. OpenAPI appends a path to its server
+URL without resolution too. RFC 9110 does not join paths at all, and it treats
+an empty segment as significant, so `/api//v1` is a different resource from
+`/api/v1`; dropping the trailing `/` is what keeps a base of `/api/` from
+producing one.
 
 `RequestInit.query` takes name-value pairs, and the client percent-encodes
 them. Building a query by hand is where an OpenAPI client would most often get
@@ -169,6 +177,11 @@ instead, departing from both standards on purpose:
 A header name the response carries more than once is the one header that is
 not a view. RFC 9110 reads its values as one, joined with `, `, and both `header`
 and `header_bytes` answer that joined value, which is a copy.
+
+`Set-Cookie` cannot be joined, since a cookie's `Expires` holds a comma; RFC
+9110 § 5.3 names it as the exception. `header("set-cookie")` is an error that
+points to `headers_all(name)`, which gives every value as a view, as Fetch's
+`getSetCookie()` does.
 
 ## Roadmap
 
