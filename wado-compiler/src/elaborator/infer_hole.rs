@@ -27,7 +27,7 @@ use super::tysys::TypeSystem;
 use crate::ast::{AssocTypeBound, AstId, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
-    BodyFacts, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
+    BodyFacts, BodyFactsLens,ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
     LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch, SequenceCoercionFacts,
     StaticMethodDispatch,
 };
@@ -1157,7 +1157,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// End-of-module finalize: raise diagnostics for unsolved holes and
     /// substitute every hole (solved → concrete, unsolved → `error`) into all
     /// recorded facts that can carry one.
-    pub(super) fn finalize_infer_holes(&mut self) {
+    pub(super) fn facts_mark(&self) -> FactsMark {
+        FactsMark {
+            body: self.sem.types.body.lens(),
+            tuple_overlays: self.sem.types.tuple_overlays.len(),
+            default_methods: self.sem.default_method_facts.len(),
+        }
+    }
+
+    /// Settle the body the facts past `since` were recorded by.
+    pub(super) fn finalize_infer_holes(&mut self, since: FactsMark) {
         if self.infer_holes.is_empty() {
             return;
         }
@@ -1202,7 +1211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let subst = self.pinned_hole_subst();
         self.verify_commitments(&subst);
-        self.sweep_recorded_facts(&subst);
+        self.sweep_recorded_facts(&subst, since);
         self.infer_holes = InferHoleTable::default();
     }
 
@@ -1511,11 +1520,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Substitute holes through every recorded fact that can carry a `TypeId`.
-    /// Trait default-method bodies record into their own facts in
-    /// `default_method_facts`, not the main `types`; sweep those too, or a
-    /// hole minted in a default-method body leaks past reify.
-    fn sweep_recorded_facts(&mut self, subst: &IndexMap<InferVarId, TypeId>) {
+    /// Substitute holes through every fact the body recorded past `since` that
+    /// can carry a `TypeId`. Trait default-method bodies record into their own
+    /// facts in `default_method_facts`, not the main `types`; sweep those too,
+    /// or a hole minted in a default-method body leaks past reify.
+    fn sweep_recorded_facts(&mut self, subst: &IndexMap<InferVarId, TypeId>, since: FactsMark) {
         if subst.is_empty() {
             return;
         }
@@ -1524,17 +1533,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             selections: &std::mem::take(&mut self.infer_holes.selections),
         };
         let mut tt = self.tysys.type_table.borrow_mut();
-        Self::sweep_type_annotations(&mut tt, &mut self.sem.types, &sweep);
-        for facts in self.sem.default_method_facts.values_mut() {
-            Self::sweep_type_annotations(&mut tt, &mut facts.types, &sweep);
+        let types = &mut self.sem.types;
+        Self::sweep_decl_facts(&mut tt, types, subst);
+        let mut body = types.body.split_off(since.body);
+        Self::sweep_body_facts(&mut tt, &mut body, &sweep);
+        types.body.append(body);
+        Self::sweep_tuple_overlays(&mut tt, types, since.tuple_overlays, &sweep);
+        for facts in self
+            .sem
+            .default_method_facts
+            .values_mut()
+            .skip(since.default_methods)
+        {
+            Self::sweep_decl_facts(&mut tt, &mut facts.types, subst);
+            Self::sweep_body_facts(&mut tt, &mut facts.types.body, &sweep);
+            Self::sweep_tuple_overlays(&mut tt, &mut facts.types, 0, &sweep);
         }
     }
 
-    /// Substitute `subst` through one `TypeAnnotations` fact bundle: the
-    /// declaration-level maps, then every walk's body facts through
-    /// [`Self::sweep_body_facts`].
-    fn sweep_type_annotations(tt: &mut TypeTable, types: &mut TypeAnnotations, sweep: &Sweep<'_>) {
-        let subst = sweep.subst;
+    /// Substitute `subst` through the facts a declaration records once.
+    fn sweep_decl_facts(
+        tt: &mut TypeTable,
+        types: &mut TypeAnnotations,
+        subst: &IndexMap<InferVarId, TypeId>,
+    ) {
         sub_map(tt, &mut types.fn_return_types, subst);
         sub_map(tt, &mut types.function_task_returns, subst);
         sub_vec_map(tt, &mut types.fn_param_types, subst);
@@ -1543,8 +1565,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for i in types.impl_facts.values_mut() {
             sub_vec(tt, &mut i.trait_type_args, subst);
         }
-        Self::sweep_body_facts(tt, &mut types.body, sweep);
-        for overlays in types.tuple_overlays.values_mut() {
+    }
+
+    /// The tuple `for-of` overlays past the first `since` loops.
+    fn sweep_tuple_overlays(
+        tt: &mut TypeTable,
+        types: &mut TypeAnnotations,
+        since: usize,
+        sweep: &Sweep<'_>,
+    ) {
+        for overlays in types.tuple_overlays.values_mut().skip(since) {
             for overlay in overlays.iter_mut().flatten() {
                 Self::sweep_body_facts(tt, overlay, sweep);
             }
@@ -1625,7 +1655,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// What the module-end sweep writes into the recorded facts: each variable's
+/// Where the facts stood when a body's walk began, so the sweep at its end
+/// reaches only what the walk recorded.
+#[derive(Clone, Copy)]
+pub(super) struct FactsMark {
+    body: BodyFactsLens,
+    tuple_overlays: usize,
+    default_methods: usize,
+}
+
+/// What a body's sweep writes into the recorded facts: each variable's
 /// answer, and the dispatch each pending selection made.
 struct Sweep<'a> {
     subst: &'a IndexMap<InferVarId, TypeId>,

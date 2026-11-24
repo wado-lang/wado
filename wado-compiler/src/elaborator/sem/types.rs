@@ -343,6 +343,12 @@ macro_rules! define_body_facts {
                 }
             }
 
+            /// Put back what [`Self::split_off`] peeled off.
+            pub(crate) fn append(&mut self, tail: BodyFacts) {
+                $(self.$name.extend(tail.$name);)+
+                self.default_overlays.extend(tail.default_overlays);
+            }
+
             #[cfg(debug_assertions)]
             pub(crate) fn fact_count(&self) -> usize {
                 0 $(+ self.$name.len())+

@@ -224,7 +224,7 @@ Each step keeps every fixture passing and deletes what it replaces.
   from the origin, not from a side table. A report equates every variable it
   covers with the error type, which settles them without a word. What
   separately closes or blames a variable after a report goes.
-- [ ] The context is per body rather than per module, and so are the facts it
+- [x] The context is per body rather than per module, and so are the facts it
   writes back. A variable cannot outlive its body.
 
 ## Known gaps

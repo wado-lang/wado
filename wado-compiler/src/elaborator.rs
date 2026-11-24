@@ -1879,6 +1879,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut test_count = 0usize;
         for item in &module.items {
+            assert!(
+                self.infer_holes.is_empty(),
+                "a variable never outlives its body"
+            );
+            let mark = self.facts_mark();
             ForwardDefaults(self).visit_item(item);
             TypeReferences(self).visit_item(item);
             if let Item::Struct(ast::StructDecl { id, .. })
@@ -1961,13 +1966,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Other items will be added as needed
                 _ => {}
             }
+            self.finalize_infer_holes(mark);
         }
-
-        drop(_resolve_funcs_span);
-
-        // Solve / sweep holes minted in this module; unsolved ones raise
-        // "cannot infer". After every function, so all solve points have fired.
-        self.finalize_infer_holes();
     }
 
     /// The impl header's trait, named at the target it writes.
