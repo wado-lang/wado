@@ -93,17 +93,17 @@ signatures.
 
 ### Approaches considered
 
-| Approach                                  | Why not                                                                                                            |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Hand-written `drop` (Go, C#, Java)        | A `?` path forgets its drop. For a stream that is a hang, exactly where the guarantee matters most.                |
-| Reference counting (Swift ARC, Nim, Koka) | Needs a release point. A closure, a `Box` cell or an iterator state is reclaimed by the collector, which has none. |
-| Arena or scope object                     | Drops at the scope, not at the point the stream needs.                                                             |
-| Finalizers                                | Wasm GC has none, and a finalizer's timing is undefined where one exists.                                          |
-| Linear types (Austral)                    | Removes cleanup synthesis, but leaves the generic problem in place.                                                |
-| Scoped use (`bracket`, `with`)            | A resource cannot be held in a structure past the scope: no pool, no body written later.                           |
-| Post-monomorphization check               | Errors point into the stdlib's body, with no span the editor shows.                                                |
-| Finish the signature inference            | Unsound by construction: see above.                                                                                |
-| A run-time check on every use             | Makes a use after drop a certain trap, but makes no drop happen, and costs a check on every use.                   |
+| Approach                                  | Why not                                                                                                                        |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Hand-written `drop` (Go, C#, Java)        | A `?` path forgets its drop. For a stream that is a hang, exactly where the guarantee matters most.                            |
+| Reference counting (Swift ARC, Nim, Koka) | Needs a release point, and a count cannot keep a handle unique. See [Why not reference counting](#why-not-reference-counting). |
+| Arena or scope object                     | Drops at the scope, not at the point the stream needs.                                                                         |
+| Finalizers                                | Wasm GC has none, and a finalizer's timing is undefined where one exists.                                                      |
+| Linear types (Austral)                    | Removes cleanup synthesis, but leaves the generic problem in place.                                                            |
+| Scoped use (`bracket`, `with`)            | A resource cannot be held in a structure past the scope: no pool, no body written later.                                       |
+| Post-monomorphization check               | Errors point into the stdlib's body, with no span the editor shows.                                                            |
+| Finish the signature inference            | Unsound by construction: see above.                                                                                            |
+| A run-time check on every use             | Makes a use after drop a certain trap, but makes no drop happen, and costs a check on every use.                               |
 
 For references alone, three more:
 
@@ -112,6 +112,39 @@ For references alone, three more:
 | Second-class references (Swift's `borrowing`) | A descriptor could only be written as a literal in argument position. No `let`, no `push`.                                    |
 | Non-escaping holders (Swift's `~Escapable`)   | A borrow check within each body, against the language's stated absence of one, and a second kind of parameter for `List<&R>`. |
 | Reference-counted handles (Swift's Metal API) | Swift makes a GPU object a class. Reference counting is ruled out above.                                                      |
+
+### Why not reference counting
+
+The alternative is to drop the `affine` kind altogether. A resource would sit in
+a counted box, a copy would add an owner, and the handle would drop when its
+last owner does. Every type would be copyable again, and neither the kind marks
+nor the move check would exist. It is refused for four reasons.
+
+Swift had reference counting first and still added noncopyable types. Its
+classes are counted, and a counted object can always be given a second owner,
+so a class holds a resource like a file descriptor uniquely only by convention.
+Swift's answer for that kind of value is the model below, so counting alone
+would stop where Swift stopped.
+
+A Component Model `own` has one owner. Lowering one to the host takes the
+handle out of the guest's table, so a second counted owner would name a dead
+index, or one the host has reused. No count can say otherwise at compile time.
+The lowering would have to check the count as it runs, and so would every
+operation that consumes its receiver, such as `wait(self)` or `finish(self)`.
+
+A drop is a signal. Under value semantics a copy is written without being
+meant: a `let`, a `push`, an argument. One copy left in a list keeps a stream
+open, and the other side waits. The mistake this WEP reports where it is
+written would become a hang.
+
+It does not remove the hard part. A count is decremented only where an owner's
+end is known, which is a local's scope, an assignment over it or a temporary's
+statement. That is the same drop placement this WEP specifies. A closure's
+environment, the target of a reference that left its scope and a global are the
+collector's, which runs nothing when it reclaims one. So what a reference
+reaches after its owner dropped is still a question to answer. Copy elision
+would also become part of what the program means, since an elided copy must
+drop its paired decrement, or a handle drops twice or never.
 
 ### The model: Swift's noncopyable types
 
