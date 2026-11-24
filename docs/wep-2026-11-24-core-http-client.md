@@ -34,7 +34,7 @@ fn create(key: String, payload: ByteList) -> Result<Option<Message>, HttpError> 
     let client = HttpClient::new("https://api.anthropic.com", ClientInit {
         headers: [["x-api-key", key], ["anthropic-version", "2023-06-01"]],
     })?;
-    let res = client.request("/v1/messages", RequestInit {
+    let mut res = client.request("/v1/messages", RequestInit {
         method: Method::Post,
         body: Body::bytes(payload),
     })?;
@@ -112,22 +112,40 @@ that `request` calls with the body stream's writable end once the send has
 started, and the body ends when the function returns. The caller cannot write
 too early, and the deadlock above cannot happen.
 
-The response body is read in one of three ways, each consuming the response:
+The response body is read in one of three ways:
 
 - whole: `bytes()`, `text()`, `json()`;
 - as chunks: `body()`, an iterator of `Result<ByteList, HttpError>`;
 - as events: `events()`, an iterator of `Result<SseEvent, HttpError>`.
 
+Each takes `&mut self` and uses up the body, not the response, as Fetch's
+`bodyUsed` does. A second read is a contract violation. The response stays, so
+it can hand out the trailers once the body is done.
+
 A body cut short by the connection ends the stream just as a complete one does;
 only the future resolved after it tells them apart. So every way of reading
 awaits that future at the end. A whole read returns its error. An iterator
 yields it as its last item, so a caller cannot see the end without seeing the
-failure. The trailers arrive in the same future, and the response offers them
-once the body has been read to the end.
+failure.
 
 Whatever holds the body tells the host when it is dropped before the end,
 through the `res` future `consume-body` takes: the response before any read
 starts, the iterator after `body()` or `events()`.
+
+### Trailers
+
+Trailers are supported in both directions.
+
+The response's trailers arrive in the future that ends the body. Whatever read
+the body to the end stores them in the response, an iterator through the
+reference it holds to it. `res.trailers()` then gives them, read like headers:
+`header`, `header_bytes` and `headers_all`, with the same views and the same
+joining. Its contract is that the body was read to the end, so a call made too
+early fails where it is made rather than reading as "no trailers".
+
+A request sends trailers from `RequestInit.trailers`, or from the writer: the
+function returns them when it ends, so a trailer can carry what only writing
+the body computes, such as a checksum.
 
 ### Server-Sent Events
 
@@ -189,6 +207,8 @@ points to `headers_all(name)`, which gives every value as a view, as Fetch's
   reads, tested against a local `wasi:http/service` server.
 - [ ] Streaming request and response bodies, with a test that cuts a body short
   and expects `Err`.
+- [ ] Trailers both ways, with a test that sends a checksum trailer from a
+  writer and reads it back after each way of reading the body.
 - [ ] `events()`, with parser tests that split the input at every byte.
 - [ ] Eddy uses `core:http_client`, and `package-eddy/src/http.wado` goes away.
 
