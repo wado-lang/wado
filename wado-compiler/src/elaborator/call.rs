@@ -2724,9 +2724,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let generic = !self.lookup_function_type_params(&callee).is_empty();
-        if !(generic
-            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span))
-        {
+        let reference_reported = generic
+            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span);
+        if !reference_reported {
             self.defer_or_report_uninferred_fn_type_args(
                 &callee,
                 &mut type_args,

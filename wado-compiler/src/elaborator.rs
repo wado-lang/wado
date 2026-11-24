@@ -224,9 +224,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// Per-module deferred-inference state, solved and swept in
-    /// [`Self::finalize_infer_holes`] at the end of the module walk. See
-    /// [`infer_hole`].
+    /// The inference context of the body being walked, settled where
+    /// [`Self::as_body`] ends it. See [`infer_hole`].
     pub(super) infer_holes: infer_hole::InferHoleTable,
     /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.

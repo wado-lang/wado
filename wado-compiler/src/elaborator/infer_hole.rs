@@ -37,7 +37,7 @@ use crate::elaborator::typecheck::{
 use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name, written_param_name};
 use crate::tir;
 
-/// Per-module registry of inference holes and their (eventual) solutions.
+/// One body's inference variables and what is owed once they settle.
 #[derive(Default)]
 pub(crate) struct InferHoleTable {
     vars: VarStore,
@@ -1253,19 +1253,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.infer_holes.is_empty(),
             "a body starts with no variable open"
         );
-        let mark = self.facts_mark();
-        let walked = walk(self);
-        self.finalize_infer_holes(mark);
-        walked
-    }
-
-    fn facts_mark(&self) -> FactsMark {
-        FactsMark {
+        let mark = FactsMark {
             body: self.sem.types.body.lens(),
             decls: DeclFactsLens::of(&self.sem.types),
             tuple_overlays: self.sem.types.tuple_overlays.len(),
             default_methods: self.sem.default_method_facts.len(),
-        }
+        };
+        let walked = walk(self);
+        self.finalize_infer_holes(mark);
+        walked
     }
 
     /// Settle the body the facts past `since` were recorded by: report what
