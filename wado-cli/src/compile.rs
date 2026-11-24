@@ -1239,7 +1239,16 @@ fn build_dep_generator_local_path(
         return Ok(None);
     };
     let package_dir = absolute(package_root).join(path);
-    let Some(entry) = package_generator_entry(&package_dir, files)? else {
+    let Some(generator) = manifest_in(&package_dir, files)? else {
+        return Ok(None);
+    };
+    wado_manifest::dependency::check_source_package(
+        key,
+        Some(&dep.source),
+        generator.package.as_ref(),
+    )
+    .map_err(DiscoveryError::Source)?;
+    let Some(entry) = generator.world_entry(GENERATOR_WORLD_FQ) else {
         return Ok(None);
     };
     let entry = normalize_path(&package_dir.join(entry));

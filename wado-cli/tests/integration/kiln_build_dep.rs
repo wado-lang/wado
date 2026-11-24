@@ -124,6 +124,45 @@ export fn run() with Stdout {
     );
 }
 
+/// A coordinate key names the generator package its path holds; one naming
+/// another package is refused before the generator runs.
+#[test]
+fn a_build_dependency_key_names_the_package_its_path_holds() {
+    let tmp = tempfile::tempdir().unwrap();
+    let gen_pkg = tmp.path().join("gen");
+    fs::create_dir_all(gen_pkg.join("src")).unwrap();
+    fs::write(
+        gen_pkg.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
+    )
+    .unwrap();
+    fs::write(gen_pkg.join("src/generator.wado"), "").unwrap();
+    let app = tmp.path().join("app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [build-dependencies]\n\"acme:other\" = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    fs::write(app.join("schema.idl"), "anything\n").unwrap();
+    fs::write(
+        app.join("main.wado"),
+        "use { greeting } from \"./schema.idl\" with { generator: { module: \"acme:other\" } };\n\
+         export fn run() { let _ = greeting(); }\n",
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["check", "main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "`acme:other` names the package `acme:other`, but its source declares `acme:gen`",
+        ));
+}
+
 /// A path `[build-dependencies]` generator whose package is a **workspace
 /// member** (so its `[package]` fields inherit from `[workspace.package]`),
 /// invoked with a **bare relative entry path** (`src/main.wado`) from the

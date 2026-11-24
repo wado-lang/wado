@@ -28,6 +28,8 @@ pub struct ProjectManifest {
 pub enum DiscoveryError {
     Io(io::Error),
     Parse(ManifestError),
+    /// A dependency's source holds another package than its entry names.
+    Source(String),
 }
 
 impl std::fmt::Display for DiscoveryError {
@@ -35,6 +37,7 @@ impl std::fmt::Display for DiscoveryError {
         match self {
             DiscoveryError::Io(e) => write!(f, "failed to read wado.toml: {e}"),
             DiscoveryError::Parse(e) => write!(f, "invalid wado.toml: {e}"),
+            DiscoveryError::Source(reason) => write!(f, "invalid wado.toml: {reason}"),
         }
     }
 }

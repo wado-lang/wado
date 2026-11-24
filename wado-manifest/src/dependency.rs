@@ -7,7 +7,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::cache::registry_cache_relative;
-use crate::{DependencySource, LockFile, Manifest, Version, VersionSpecifier, registry_url};
+use crate::{
+    DependencySource, LockFile, Manifest, Package, Version, VersionSpecifier, registry_url,
+};
 
 /// A registry `[dependencies]` entry resolved to its exact lock-pinned version
 /// and shared-cache location — the single source of truth shared by the LSP
@@ -105,6 +107,48 @@ pub fn key_coordinate(key: &str) -> Option<&str> {
     )
 }
 
+/// Whether `package`, the `[package]` a dependency's source holds (`None` for
+/// a single file), is every package the entry `key` names: its key's
+/// coordinate, and the `package` a path source publishes as. `source` is
+/// `None` for an entry with no manifest table, such as an inline git `use`.
+///
+/// # Errors
+///
+/// The reason, naming both coordinates, when one differs.
+pub fn check_source_package(
+    key: &str,
+    source: Option<&DependencySource>,
+    package: Option<&Package>,
+) -> Result<(), String> {
+    let published = match source {
+        Some(DependencySource::Path {
+            publish_source: Some(publish),
+            ..
+        }) => match &**publish {
+            DependencySource::Registry { package, .. } => Some(package.as_str()),
+            DependencySource::Git { .. }
+            | DependencySource::Path { .. }
+            | DependencySource::Workspace => None,
+        },
+        Some(_) | None => None,
+    };
+    for named in key_coordinate(key).into_iter().chain(published) {
+        let Some(package) = package else {
+            return Err(format!(
+                "`{key}` names the package `{named}`, but its source is a single file, \
+                 which declares none; name it with a `lib:` key"
+            ));
+        };
+        let declared = package.unversioned_coordinate();
+        if declared != named {
+            return Err(format!(
+                "`{key}` names the package `{named}`, but its source declares `{declared}`"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// The lock id a registry dependency pins under. One implementation, so a pin
 /// derived from the cache lands where a lock-derived one would.
 #[must_use]
@@ -152,7 +196,8 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        RegistryComponentNeed, best_matching_version, key_coordinate, registry_component_need,
+        RegistryComponentNeed, best_matching_version, check_source_package, key_coordinate,
+        registry_component_need,
     };
     use crate::Manifest;
 
@@ -162,6 +207,61 @@ mod tests {
         assert_eq!(key_coordinate("acme:geo@1.0.0"), Some("acme:geo"));
         assert_eq!(key_coordinate("lib:geo"), None);
         assert_eq!(key_coordinate("geo"), None);
+    }
+
+    /// The source and `[package]` of the dependency `key` in a manifest whose
+    /// `[dependencies]` hold `entry`, its source declaring `declared`.
+    fn checked(entry: &str, key: &str, declared: Option<&str>) -> Result<(), String> {
+        let consumer: Manifest =
+            format!("[package]\nnamespace=\"acme\"\nname=\"app\"\nversion=\"0.1.0\"\n\n[dependencies]\n{entry}\n")
+                .parse()
+                .unwrap();
+        let package = declared.map(|coordinate| {
+            let (namespace, name) = coordinate.split_once(':').unwrap();
+            let manifest: Manifest = format!(
+                "[package]\nnamespace=\"{namespace}\"\nname=\"{name}\"\nversion=\"1.2.0\"\n"
+            )
+            .parse()
+            .unwrap();
+            manifest.package.unwrap()
+        });
+        let source = &consumer.dependencies[key].source;
+        check_source_package(key, Some(source), package.as_ref())
+    }
+
+    #[test]
+    fn a_source_must_hold_the_package_its_key_names() {
+        assert_eq!(
+            checked(r#""acme:geo" = { path = "../geo" }"#, "acme:geo", Some("acme:geo")),
+            Ok(())
+        );
+        assert_eq!(
+            checked(r#""acme:geo" = { path = "../geo" }"#, "acme:geo", Some("acme:map")),
+            Err("`acme:geo` names the package `acme:geo`, but its source declares `acme:map`"
+                .to_string())
+        );
+        assert_eq!(
+            checked(r#""lib:geo" = { path = "../geo.wado" }"#, "lib:geo", None),
+            Ok(())
+        );
+        assert_eq!(
+            checked(r#""acme:geo" = { path = "../geo.wado" }"#, "acme:geo", None),
+            Err("`acme:geo` names the package `acme:geo`, but its source is a single file, \
+                 which declares none; name it with a `lib:` key"
+                .to_string())
+        );
+    }
+
+    #[test]
+    fn a_source_must_hold_the_package_it_publishes_as() {
+        let entry = r#""lib:shared" = { path = "../shared", package = "wado-lang:shared", version = "^1.2.0" }"#;
+        assert_eq!(checked(entry, "lib:shared", Some("wado-lang:shared")), Ok(()));
+        assert_eq!(
+            checked(entry, "lib:shared", Some("acme:other")),
+            Err("`lib:shared` names the package `wado-lang:shared`, but its source declares \
+                 `acme:other`"
+                .to_string())
+        );
     }
 
     fn manifest_with_registry_dep() -> Manifest {

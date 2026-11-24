@@ -209,11 +209,11 @@ pub fn resolve_all(
         .filter_map(|(name, dep)| {
             let entry = match &dep.source {
                 DependencySource::Path { path, .. } => {
-                    keyed_lib_entry(name, &manifest_dir.join(path), files)
+                    keyed_lib_entry(name, Some(&dep.source), &manifest_dir.join(path), files)
                         .map(DependencyEntry::Source)
                 }
                 DependencySource::Git { url, directory, .. } => {
-                    git_dependency_entry(&git, name, url, directory.as_deref(), files)
+                    git_dependency_entry(&git, name, &dep.source, url, directory.as_deref(), files)
                         .map(DependencyEntry::Source)
                 }
                 DependencySource::Registry { .. } => return None,
@@ -325,6 +325,7 @@ fn cached_versions(dir: &Path) -> Vec<String> {
 fn git_dependency_entry(
     locked: &BTreeMap<String, (String, String)>,
     name: &str,
+    source: &DependencySource,
     url: &str,
     directory: Option<&str>,
     files: &dyn PackageFiles,
@@ -350,7 +351,7 @@ fn git_dependency_entry(
         Some(dir) => worktree_root.join(dir),
         None => worktree_root,
     };
-    keyed_lib_entry(name, &pkg_dir, files)
+    keyed_lib_entry(name, Some(source), &pkg_dir, files)
 }
 
 /// Parse `manifest_dir`'s `wado.lock`, or `None` when it is absent or
@@ -400,37 +401,19 @@ pub fn home_dir() -> Option<PathBuf> {
     std::env::home_dir().filter(|home| home.is_absolute())
 }
 
-/// The entry module of a source dependency: the file itself for a path naming
-/// a file, otherwise the directory's `[package].lib`. Shared by the path, git,
-/// and inline-git resolution paths so all three locate an entry the same way.
-pub fn package_lib_entry(dep_path: &Path, files: &dyn PackageFiles) -> Result<PathBuf, String> {
-    package_lib(dep_path, files).map(|(entry, _)| entry)
-}
-
-/// [`package_lib_entry`] for the dependency `key` names. A coordinate key names
-/// the package whose `[package]` declares that coordinate, so it cannot name a
-/// single file, which declares none.
+/// The entry module of the source dependency `key` = `source` at `dep_path`:
+/// the file itself for a path naming a file, otherwise the directory's
+/// `[package].lib`, which must be the package the entry names. Shared by the
+/// path, git, and inline-git resolution paths so all three locate an entry the
+/// same way.
 pub fn keyed_lib_entry(
     key: &str,
+    source: Option<&DependencySource>,
     dep_path: &Path,
     files: &dyn PackageFiles,
 ) -> Result<PathBuf, String> {
     let (entry, package) = package_lib(dep_path, files)?;
-    let Some(coordinate) = wado_manifest::dependency::key_coordinate(key) else {
-        return Ok(entry);
-    };
-    let Some(package) = package else {
-        return Err(format!(
-            "the dependency key `{key}` names a single file, which has no coordinate; \
-             name it with a `lib:` key"
-        ));
-    };
-    let declared = package.unversioned_coordinate();
-    if declared != coordinate {
-        return Err(format!(
-            "the dependency key `{key}` names a package whose coordinate is `{declared}`"
-        ));
-    }
+    wado_manifest::dependency::check_source_package(key, source, package.as_ref())?;
     Ok(entry)
 }
 
@@ -587,7 +570,7 @@ mod tests {
         )
         .unwrap();
 
-        let entry = package_lib_entry(&member_dir, &Disk).expect("member resolves");
+        let entry = keyed_lib_entry("lib:member", None, &member_dir, &Disk).expect("member resolves");
         assert_eq!(entry, member_dir.join("src/lib.wado"));
     }
 
@@ -596,14 +579,14 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let solo = tmp.path().join("solo.g4");
         std::fs::write(&solo, "pub fn f() {}\n").unwrap();
-        assert_eq!(package_lib_entry(&solo, &Disk).unwrap(), solo);
+        assert_eq!(keyed_lib_entry("lib:solo", None, &solo, &Disk).unwrap(), solo);
     }
 
     #[test]
     fn a_missing_path_is_named_itself() {
         let tmp = tempfile::tempdir().unwrap();
         let missing = tmp.path().join("solo.wado");
-        let error = package_lib_entry(&missing, &Disk).unwrap_err();
+        let error = keyed_lib_entry("lib:solo", None, &missing, &Disk).unwrap_err();
         assert!(
             error.starts_with(&format!("cannot read {}: ", missing.display())),
             "{error}"
@@ -618,7 +601,7 @@ mod tests {
             "[package]\nnamespace = \"acme\"\nname = \"nolib\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        let err = package_lib_entry(tmp.path(), &Disk).unwrap_err();
+        let err = keyed_lib_entry("lib:nolib", None, tmp.path(), &Disk).unwrap_err();
         assert!(err.contains("[package].lib"), "{err}");
     }
 
@@ -638,7 +621,7 @@ mod tests {
         let geo = geo_package();
         for key in ["acme:geo", "lib:anything", "geo"] {
             assert_eq!(
-                keyed_lib_entry(key, geo.path(), &Disk).unwrap(),
+                keyed_lib_entry(key, None, geo.path(), &Disk).unwrap(),
                 geo.path().join("lib.wado"),
                 "{key}"
             );
@@ -648,23 +631,10 @@ mod tests {
     #[test]
     fn a_coordinate_key_naming_another_package_is_refused() {
         let geo = geo_package();
-        let err = keyed_lib_entry("acme:shapes", geo.path(), &Disk).unwrap_err();
+        let err = keyed_lib_entry("acme:shapes", None, geo.path(), &Disk).unwrap_err();
         assert_eq!(
             err,
-            "the dependency key `acme:shapes` names a package whose coordinate is `acme:geo`"
-        );
-    }
-
-    #[test]
-    fn a_coordinate_key_naming_a_single_file_is_refused() {
-        let tmp = tempfile::tempdir().unwrap();
-        let solo = tmp.path().join("solo.wado");
-        std::fs::write(&solo, "pub fn f() {}\n").unwrap();
-        assert_eq!(keyed_lib_entry("lib:solo", &solo, &Disk).unwrap(), solo);
-        let err = keyed_lib_entry("acme:solo", &solo, &Disk).unwrap_err();
-        assert_eq!(
-            err,
-            "the dependency key `acme:solo` names a single file, which has no coordinate; name it with a `lib:` key"
+            "`acme:shapes` names the package `acme:shapes`, but its source declares `acme:geo`"
         );
     }
 

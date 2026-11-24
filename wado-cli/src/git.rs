@@ -212,7 +212,7 @@ pub fn materialize_entry(
         Some(dir) => worktree.join(dir),
         None => worktree,
     };
-    let entry = keyed_lib_entry(key, &pkg_dir, &Disk).map_err(|message| {
+    let entry = keyed_lib_entry(key, None, &pkg_dir, &Disk).map_err(|message| {
         ProviderError::InvalidManifest {
             source: pkg_dir.display().to_string(),
             message,
