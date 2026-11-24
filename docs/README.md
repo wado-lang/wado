@@ -226,6 +226,7 @@
 - [A Bare Name in a Pattern Always Binds](./wep-2026-11-20-bare-names-bind.md)
 - [One Inference Context: Equations and Obligations](./wep-2026-11-20-inference-context.md)
 - [Effect Rows in the Inference Context](./wep-2026-11-21-effect-rows-in-inference-context.md)
+- [HTTP Client (`core:http_client`)](./wep-2026-11-24-core-http-client.md)
 
 ## Standard Library
 
