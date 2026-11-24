@@ -2013,17 +2013,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let reached = self
             .tysys
             .packs_args_reach(input.param_types, input.args.len());
-<<<<<<< HEAD
-||||||| dc9edde5b55
-        let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
-=======
-        let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
         let effect_rows = self
             .tysys
             .type_table
             .borrow()
             .call_effect_binding(input.param_types, input.args);
->>>>>>> origin/main
         let mut type_args = self.resolve_method_type_args(explicit, input);
         self.settle_unreached_packs(own_params, slots, &mut type_args, &reached);
         let subst = self

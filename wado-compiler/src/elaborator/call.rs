@@ -13,36 +13,17 @@ use crate::name::{
     unalias_namespace_member,
 };
 use crate::resolve::Resolution;
-<<<<<<< HEAD
-use crate::tir::{FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId, TypeParamId};
-||||||| dc9edde5b55
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeArgMap, TypeId, TypeParamId,
+    EffectRows, FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId, TypeParamId,
 };
-=======
-use crate::tir::{
-    EffectRows, FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeArgMap, TypeId,
-    TypeParamId,
-};
->>>>>>> origin/main
 use crate::type_table::TypeTable;
 
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
-<<<<<<< HEAD
 use super::infer::unify;
-use super::infer_hole::uninferable_type_param;
-use super::instantiate::{InstanceKind, Instantiated, Instantiation, SlotLinks};
-||||||| dc9edde5b55
-use super::infer::{InferCtx, unify};
-use super::infer_hole::uninferable_type_param;
-use super::instantiate::{InstanceKind, Instantiated, Instantiation};
-=======
-use super::infer::{InferCtx, unify};
 use super::infer_hole::{BoundRows, uninferable_type_param};
-use super::instantiate::{InstanceKind, Instantiated, Instantiation};
->>>>>>> origin/main
+use super::instantiate::{InstanceKind, Instantiated, Instantiation, SlotLinks};
 use super::method_call::{
     PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
 };
@@ -4011,30 +3992,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         sig.own_params.get(*slot)
                     };
-<<<<<<< HEAD
-                    let bounds =
-                        param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
-                    self.defer_slot(inferred, span, message.clone(), name.clone(), bounds)
-||||||| dc9edde5b55
-                    let bounds =
-                        param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
-                    let var =
-                        self.defer_slot(inferred, span, message.clone(), name.clone(), bounds);
-                    if param.is_some_and(|p| p.is_pack) {
-                        self.mark_pack_var(var);
-                    }
-                    var
-=======
                     let bounds = param.map_or_else(Vec::new, |p| {
                         self.declared_bounds(p, None, &[], BoundRows::Unbound)
                     });
-                    let var =
-                        self.defer_slot(inferred, span, message.clone(), name.clone(), bounds);
-                    if param.is_some_and(|p| p.is_pack) {
-                        self.mark_pack_var(var);
-                    }
-                    var
->>>>>>> origin/main
+                    self.defer_slot(inferred, span, message.clone(), name.clone(), bounds)
                 } else {
                     TypeTable::ERROR
                 };
