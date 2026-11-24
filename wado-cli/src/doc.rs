@@ -1032,6 +1032,12 @@ mod format_contract_tests {
     }
 
     #[test]
+    fn doc_text_keeps_a_lone_asterisk() {
+        let out = markdown_of("//! Computes a*b+c over 24*60*60 seconds.\n");
+        assert!(out.contains("a*b+c over 24*60*60"), "{out}");
+    }
+
+    #[test]
     fn combined_markdown_output_is_marl_stable() {
         let inputs = ["core:cli".to_string(), "core:base64".to_string()];
         let docs: Vec<(String, _)> = inputs.iter().map(|i| (i.clone(), stdlib_doc(i))).collect();
@@ -1591,8 +1597,7 @@ fn render_md_doc(out: &mut String, doc: &str) {
 
 fn normalize_md_line(line: &str) -> String {
     let stripped = line.trim_start();
-    let collapsed = collapse_md_spaces(stripped);
-    replace_md_emphasis(&collapsed)
+    collapse_md_spaces(stripped)
 }
 
 /// Collapse multiple consecutive spaces to single space, preserving code spans.
@@ -1614,37 +1619,6 @@ fn collapse_md_spaces(s: &str) -> String {
         } else {
             result.push(c);
             prev_space = false;
-        }
-    }
-
-    result
-}
-
-/// Replace `*text*` emphasis with `_text_` (Marl's preference), preserving
-/// `**bold**` markers and code spans.
-fn replace_md_emphasis(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let chars: Vec<char> = s.chars().collect();
-    let mut i = 0;
-    let mut in_code = false;
-
-    while i < chars.len() {
-        if chars[i] == '`' {
-            in_code.toggle();
-            result.push('`');
-            i += 1;
-        } else if !in_code && chars[i] == '*' {
-            if i + 1 < chars.len() && chars[i + 1] == '*' {
-                result.push('*');
-                result.push('*');
-                i += 2;
-            } else {
-                result.push('_');
-                i += 1;
-            }
-        } else {
-            result.push(chars[i]);
-            i += 1;
         }
     }
 

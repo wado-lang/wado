@@ -89,7 +89,7 @@ Relaxed SIMD operations trade strict determinism for performance.
 Edge-case behavior (NaN, out-of-range) is host-defined, and fixed on one host.
 Methods use the `relaxed_` prefix.
 
-- **FMA:** `f32x4/f64x2.relaxed_madd(b, c)` (a_b+c), `relaxed_nmadd(b, c)` (-(a_b)+c)
+- **FMA:** `f32x4/f64x2.relaxed_madd(b, c)` (a*b+c), `relaxed_nmadd(b, c)` (-(a*b)+c)
 - **Min/Max:** `f32x4/f64x2.relaxed_min/max` (faster, NaN behavior varies)
 - **Truncation:** `i32x4::relaxed_trunc_f32x4_s/u`, `relaxed_trunc_f64x2_s/u_zero`
 - **Lane select:** `i8x16/i16x8/i32x4/i64x2.relaxed_laneselect`

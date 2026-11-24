@@ -25,7 +25,8 @@ use wado_host::random;
 use crate::COMPILER_STACK_SIZE;
 use crate::cache::user_cache_dir;
 use crate::compile::render_error_diagnostics;
-use crate::fingerprint::compiler_digest;
+use crate::eval_host::current_thread_runtime;
+use crate::fingerprint::{compiler_digest, hash_field};
 use crate::kiln_provider::hex32;
 
 macro_rules! marl_sources {
@@ -141,13 +142,11 @@ fn load_component(engine: &Engine) -> Component {
     let Some(path) = cache_path() else {
         return compile_component(engine);
     };
-    if path.exists() {
-        // SAFETY: the file was serialized by this binary, which its name keys
-        // through `compiler_digest`, into the user's own cache; wasmtime still
-        // refuses one from an incompatible engine.
-        if let Ok(component) = unsafe { Component::deserialize_file(engine, &path) } {
-            return component;
-        }
+    // SAFETY: the file was serialized by this binary, which its name keys
+    // through `compiler_digest`, into the user's own cache; wasmtime still
+    // refuses one from an incompatible engine.
+    if let Ok(component) = unsafe { Component::deserialize_file(engine, &path) } {
+        return component;
     }
     let component = compile_component(engine);
     let bytes = component
@@ -165,10 +164,8 @@ fn cache_path() -> Option<PathBuf> {
     let mut hasher = Sha256::new();
     hasher.update(compiler_digest());
     for (name, source) in SOURCES {
-        hasher.update((name.len() as u64).to_le_bytes());
-        hasher.update(name.as_bytes());
-        hasher.update((source.len() as u64).to_le_bytes());
-        hasher.update(source.as_bytes());
+        hash_field(&mut hasher, name.as_bytes());
+        hash_field(&mut hasher, source.as_bytes());
     }
     let key: [u8; 32] = hasher.finalize().into();
     user_cache_dir().map(|dir| dir.join(CACHE_KIND).join(format!("{}.cwasm", hex32(&key))))
@@ -218,13 +215,6 @@ fn compile_component(engine: &Engine) -> Component {
         .unwrap_or_else(|e| panic!("wasmtime rejected the bundled Marl: {e:#}"))
 }
 
-fn current_thread_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("building a current-thread runtime")
-}
-
 /// The store data of a Marl instance.
 struct Guest {
     ctx: WasiCtx,
@@ -264,6 +254,9 @@ mod tests {
             .collect();
         on_disk.sort();
         let listed: Vec<&str> = SOURCES.iter().map(|(name, _)| *name).collect();
-        assert_eq!(listed, on_disk, "SOURCES must list package-marl/src, sorted");
+        assert_eq!(
+            listed, on_disk,
+            "SOURCES must list package-marl/src, sorted"
+        );
     }
 }
