@@ -449,20 +449,20 @@ fn "value_copy_on_escape.wado/$test_2_single_use_parameter_is_moved_but_the_call
     let elements_15: ref Array<i32>;
     let v_19: ref "core:prelude/list.wado//List<i32>";
     let self_51: i32;
-    let $sroa_sink_repr_62: ref "Array<core:prelude/list.wado/List<i32>>";
-    let $sroa_write_back_66: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
+    let $sroa_sink_repr_61: ref "Array<core:prelude/list.wado/List<i32>>";
+    let $sroa_write_back_63: ref "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>";
     elements_15 = array.new_fixed<i32>(1, 2);
-    $sroa_sink_repr_62 = array.new_fixed<ref "core:prelude/list.wado//List<i32>">();
+    $sroa_sink_repr_61 = array.new_fixed<ref "core:prelude/list.wado//List<i32>">();
     v_19 = struct.new "core:prelude/list.wado//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(2)), 0, elements_15, 0, 2); $array_clone_dst_2, used: 2 };
-    if @unlikely(0 >= builtin::array_len($sroa_sink_repr_62)) {
+    if @unlikely(0 >= builtin::array_len($sroa_sink_repr_61)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::grow"(local.tee $sroa_write_back_66(struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: $sroa_sink_repr_62, used: 0 }));
-        $sroa_sink_repr_62 = $sroa_write_back_66.repr;
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>::grow"(local.tee $sroa_write_back_63(struct.new "core:prelude/list.wado//List<core:prelude/list.wado/List<i32>>" { repr: $sroa_sink_repr_61, used: 0 }));
+        $sroa_sink_repr_61 = $sroa_write_back_63.repr;
     }
-    builtin::array_set<ref "core:prelude/list.wado//List<i32>">($sroa_sink_repr_62, 0, v_19);
+    builtin::array_set<ref "core:prelude/list.wado//List<i32>">($sroa_sink_repr_61, 0, v_19);
     builtin::array_set<i32>(elements_15, 0, 999);
-    v_19 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($sroa_sink_repr_62, 0);
-    self_51 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($sroa_sink_repr_62, 0).used;
+    v_19 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($sroa_sink_repr_61, 0);
+    self_51 = builtin::array_get_value<ref "core:prelude/list.wado//List<i32>">($sroa_sink_repr_61, 0).used;
     if @unlikely(0 >= self_51) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(0, self_51, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value_copy_on_escape.wado:52"), used: 28 });
