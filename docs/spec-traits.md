@@ -1141,11 +1141,32 @@ A range, or a named literal of a generic struct, selects by its head type alone.
 head, such as `Take<RangeExclusive<i32>>` beside `Take<RangeExclusive<i64>>`,
 stay ambiguous for such an argument.
 
-These carry nothing to select on and admit every candidate: a closure, a
-compound literal (a tuple, an anonymous struct, a list, a spread), `?`, a
-tuple comprehension, a labeled block, a tagged template, a static
-call `Type::f(…)`, and a function named as a value. A name the argument binds
-for itself (a block's `let`, a match arm's pattern) is read the same way.
+A function argument selects by its type, row included. A function named as a
+value has the row its declaration states, and a closure the row its body
+performs. A function admits every parameter whose row holds its own, but where
+one candidate takes its row exactly, that candidate wins. A call whose
+candidates differ only in the rows a closure argument could meet is selected
+once the closure's body is walked.
+
+<!-- {"fixture":"trait_overload_selects_by_function_effects.wado"} -->
+
+```wado
+export fn run() with Stdout {
+    let s = S {};
+    println(`${s.take(quiet)}`);
+    println(`${s.take(loud)}`);
+    println(`${s.take(|| {})}`);
+    println(`${s.take(|| { println("closure"); })}`);
+    println(`${through_bound(&s)}`);
+}
+```
+
+These carry nothing to select on and admit every candidate: a compound literal
+(a tuple, an anonymous struct, a list, a spread), `?`, a tuple comprehension, a
+labeled block, a tagged template, a static call `Type::f(…)`, and a function
+named as a value whose type or effect parameters the expected type settles. A
+name the argument binds for itself (a block's `let`, a match arm's pattern) is
+read the same way.
 
 Selection is unique-or-error, with no ranking. An argument whose type the call
 site does not pin admits every candidate it could coerce to and never selects
@@ -1210,8 +1231,9 @@ is where [Specific Impls Win](#specific-impls-win) applies. Survivors naming
 several instantiations are ambiguous; there is no best match, only a unique one.
 Once one impl is selected, the arguments are typed against its signature as for
 any call, so a literal coerces to the chosen parameter type and its range is
-checked there. Selection never reads a literal's value, and never reads effects:
-the chosen method's `with` clause is checked afterwards.
+checked there. Selection never reads a literal's value, and reads effects only
+in a function argument's row: the chosen method's `with` clause is checked
+afterwards.
 
 No survivor is a different error from ambiguity. Every argument was admitted by
 what it could be, so no candidate admitting it means no impl accepts the

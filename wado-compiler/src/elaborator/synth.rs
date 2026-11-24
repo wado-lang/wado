@@ -370,6 +370,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Narrow `candidates` to those whose parameter is a function argument's
+    /// type exactly, its row included, where any is. A function admits every
+    /// parameter whose row holds its own, but only its own row selects: a
+    /// closure's is read as its body solved it, and closes there.
+    pub(super) fn narrow_to_exact_rows<C>(
+        &self,
+        candidates: &mut Vec<C>,
+        classes: &[ArgClass],
+        param_at: impl Fn(&C, usize) -> Option<TypeId>,
+    ) {
+        for (position, class) in classes.iter().enumerate() {
+            if candidates.len() < 2 {
+                return;
+            }
+            let &ArgClass::Exact(arg) = class else {
+                continue;
+            };
+            let arg = {
+                let mut tt = self.tysys.type_table.borrow_mut();
+                if !matches!(tt.get(arg), ResolvedType::Function { .. }) {
+                    continue;
+                }
+                tt.read_effect_rows_in(arg)
+            };
+            let open = {
+                let tt = self.tysys.type_table.borrow();
+                let ResolvedType::Function { effects, .. } = tt.get(arg) else {
+                    unreachable!("reading a row keeps a function a function")
+                };
+                effects.iter().any(EffectRef::is_var)
+            };
+            if open {
+                continue;
+            }
+            let exact = |c: &C| param_at(c, position) == Some(arg);
+            if candidates.iter().any(exact) {
+                candidates.retain(exact);
+            }
+        }
+    }
+
     /// Whether a candidate's parameter type is in `class`'s denoted set.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
@@ -567,21 +608,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((_, _, ty, _)) = self.sem.decls.imported_globals.get(name) {
                 return self.class_of_type(*ty);
             }
-            // A bare function name is a function *reference*, whose type the
-            // expected type instantiates; anything else did not resolve.
+            // A bare function name is a function *reference*: its signature
+            // types it, unless the expected type must settle its type or
+            // effect parameters. Anything else did not resolve.
             let is_function = self.sem.decls.function_return_types.contains_key(name)
                 || self.sem.decls.imported_functions.contains(name);
-            return ArgClass::Opaque(if is_function {
-                OpaqueReason::Inference
-            } else {
-                OpaqueReason::Unresolved
-            });
+            if !is_function {
+                return ArgClass::Opaque(OpaqueReason::Unresolved);
+            }
+            return self.synth_func_ref(id);
         }
         if let Some(AssocConstSig { ty, .. }) = self.tysys.associated_constant_of_path(id) {
             return self.class_of_type(ty);
         }
         let name = name.to_string();
         self.synth_qualified_case(id, &name)
+    }
+
+    /// A function reference's type, which `resolve_func_ref_ident` builds from
+    /// the signature alone where nothing is left to the expected type.
+    fn synth_func_ref(&mut self, id: &ast::IdentExpr) -> ArgClass {
+        let Some((sig, _, _)) = self.tysys.lookup_func_sig_for_ref(id) else {
+            return ArgClass::Opaque(OpaqueReason::Unresolved);
+        };
+        if !id.type_args.is_empty() || !sig.decl.own_effects.is_empty() {
+            return ArgClass::Opaque(OpaqueReason::Inference);
+        }
+        match self.compute_func_ref_type_from_sig(&sig, &[]) {
+            Some(ty) => self.class_of_type(ty),
+            None => ArgClass::Opaque(OpaqueReason::Inference),
+        }
     }
 
     /// `Color::Red`, `Flags::Bit`, and a payload-less case of a non-generic

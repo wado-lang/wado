@@ -241,7 +241,7 @@ yields `Head` when its head is known and `Opaque(Inference)` when it is not.
 | bytes literal, `#include_bytes`              | `Exact(List<u8>)` — the elaborator ignores the expected type here                        |
 | identifier — local, parameter, global, const | `Exact` of its declared type                                                             |
 | identifier — enum / flags / variant case     | `Exact` of the declaring type                                                            |
-| identifier — named function                  | `Opaque(Inference)` — a function reference is instantiated by the expected type          |
+| identifier — named function                  | `Exact` of its signature; `Opaque(Inference)` where the expected type settles parameters |
 | identifier — resolves to nothing             | `Opaque(Unresolved)`                                                                     |
 | `&e` / `&mut e`                              | the reference over `e`'s class                                                           |
 | `*e`                                         | the referent of `e`'s class                                                              |
@@ -306,6 +306,14 @@ retarget every existing call that meant `Take<i64>`. The common cases are
 unaffected: `l[0]` resolves, because an integer literal does not admit the
 range-typed candidates; `f.take(B { v: 1 })` resolves, because a named struct
 literal has a context-free type.
+
+A function argument's row selects among candidates its type admits: a
+function admits every parameter whose row holds its own, and the candidates
+taking its row exactly, where there are any, are the ones that remain. A
+closure's row is what its body performs, which is known only once the body is
+walked, so a method call whose candidates differ only in the rows a closure
+argument could meet waits for it, typed by the trait's declaration, as a call
+on an unsettled receiver does (issue #2719).
 
 Classes exist only to filter. After selection the winning signature drives
 ordinary argument elaboration, so a literal still coerces to the chosen
@@ -660,6 +668,9 @@ Trade-offs:
 - A conversion reachable only through a blanket generic in its source type
   (`impl<T: Display> From<T> for W`) is rejected at `W::from(x)`, since its
   instantiation is not selected from the argument.
+- A trait-qualified call (`Take::take(&s, || {})`) never waits for its
+  selection, so one whose candidates differ only in a closure argument's row
+  is rejected; the same call written as a method selects.
 
 ## See Also
 

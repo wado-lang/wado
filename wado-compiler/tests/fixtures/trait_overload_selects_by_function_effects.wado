@@ -1,0 +1,46 @@
+// One trait implemented at two function types that differ only in their row:
+// a function argument selects the impl whose row is exactly its own. A named
+// function's row is declared, and a closure's is what its body performs.
+use { println, Stdout } from "core:cli";
+
+trait Take<F> with _ {
+    fn take(&self, f: F) -> i32;
+}
+
+struct S {}
+
+impl Take<fn()> for S {
+    fn take(&self, f: fn()) -> i32 {
+        f();
+        return 1;
+    }
+}
+
+impl Take<fn() with Stdout> for S {
+    fn take(&self, f: fn() with Stdout) -> i32 with Stdout {
+        f();
+        return 2;
+    }
+}
+
+fn quiet() {}
+
+fn loud() with Stdout {
+    println("loud");
+}
+
+fn through_bound<T: Take<fn()> + Take<fn() with Stdout>>(t: &T) -> i32 with _ {
+    return t.take(quiet) * 10 + t.take(loud);
+}
+
+export fn run() with Stdout {
+    let s = S {};
+    println(`${s.take(quiet)}`);
+    println(`${s.take(loud)}`);
+    println(`${s.take(|| {})}`);
+    println(`${s.take(|| { println("closure"); })}`);
+    println(`${through_bound(&s)}`);
+}
+
+__DATA__
+{"stdout": "1\nloud\n2\n1\nclosure\n2\nloud\n12\n"}

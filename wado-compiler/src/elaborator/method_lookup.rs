@@ -37,7 +37,7 @@ use super::infer_hole::{BoundRows, DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
-use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess};
+use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess, OpaqueReason};
 use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
@@ -2545,10 +2545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | None => {}
             Some(Ordered::Undecided(_)) => unreachable!("returned above"),
         }
-        match self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe) {
-            Some(found) => TraitLookup::Found(Box::new(found)),
-            None => TraitLookup::Missing,
-        }
+        self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)
     }
 
     /// `lookup`, with an undecided selection reported at `span` as needing an
@@ -2563,7 +2560,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !matches!(lookup, TraitLookup::Undecided(_)) {
             return lookup;
         }
-        self.report_undecided_selection(receiver, method_name, span);
+        if self.type_has_infer_hole(self.apply_infer_holes(receiver)) {
+            self.report_undecided_selection(receiver, method_name, span);
+        } else {
+            let _ = self.emit(TypeError::CannotInferType {
+                message: format!(
+                    "which `{method_name}` this calls depends on what its closure argument performs, which only a method call waits for; call it as a method, or pin the trait's arguments"
+                ),
+                span,
+            });
+        }
         TraitLookup::Reported
     }
 
@@ -3294,7 +3300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: Span,
         probe: Option<ArgSource<'_, '_>>,
-    ) -> Option<TraitMethodMatch> {
+    ) -> TraitLookup {
         // The overload set is the concrete candidates of one declaration.
         // Distinct traits never form one, and a blanket neither forms nor
         // defeats one, having lost to every concrete impl already.
@@ -3339,6 +3345,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     found_traits[i].method_info.return_type
                 });
             }
+            self.narrow_to_exact_rows(&mut admitted, &classes, |&i, position| {
+                found_traits[i]
+                    .method_info
+                    .param_types
+                    .get(position)
+                    .copied()
+            });
             // An impl writing the trait's arguments defines the function the
             // call names; one leaving a slot to the call only covers it.
             let writes_trait_args =
@@ -3361,7 +3374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // them apart.
                 if let [first, _, ..] = admitted.as_slice() {
                     self.report_impls_tied_at_call(&found_traits, &admitted, receiver, span);
-                    return Some(found_traits.swap_remove(*first));
+                    return TraitLookup::Found(Box::new(found_traits.swap_remove(*first)));
                 }
             }
             // Unique-or-error: exactly one admitted candidate wins. No ranking
@@ -3375,7 +3388,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 [] if !applicable.is_empty() => {
                     self.report_no_admitted_overload(&found_traits, method_name, &classes, span);
-                    return found_traits.into_iter().next();
+                    return TraitLookup::first_of(found_traits);
+                }
+                [_, _, ..] if self.ties_on_closure_rows(&found_traits, &admitted, &classes) => {
+                    return TraitLookup::Undecided(
+                        admitted
+                            .iter()
+                            .map(|&i| found_traits[i].method_info.impl_block)
+                            .collect(),
+                    );
                 }
                 [] | [_, _, ..] => {}
             }
@@ -3384,7 +3405,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.report_trait_argument_ambiguity(&found_traits, method_name, &classes, span);
         // Still return a winner: reporting and then claiming the method is
         // missing would stack a second, wrong diagnostic on the same call.
-        found_traits.into_iter().next()
+        TraitLookup::first_of(found_traits)
+    }
+
+    /// Whether the `admitted` candidates differ only in the rows of the
+    /// function types they take where the argument is a closure: its body's
+    /// row selects among them once it is walked, so the call waits for it.
+    fn ties_on_closure_rows(
+        &self,
+        found_traits: &[TraitMethodMatch],
+        admitted: &[usize],
+        classes: &[ArgClass],
+    ) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        let shape = |param: Option<TypeId>| {
+            let ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                ..
+            } = tt.get(param?)
+            else {
+                return None;
+            };
+            Some((*is_mut, params.clone(), *return_type))
+        };
+        let mut closure_decides = false;
+        for (position, class) in classes.iter().enumerate() {
+            let params: Vec<Option<TypeId>> = admitted
+                .iter()
+                .map(|&i| found_traits[i].method_info.param_types.get(position).copied())
+                .collect();
+            if params.iter().all(|&param| param == params[0]) {
+                continue;
+            }
+            let first = shape(params[0]);
+            if *class != ArgClass::Opaque(OpaqueReason::Closure)
+                || first.is_none()
+                || params.iter().any(|&param| shape(param) != first)
+            {
+                return false;
+            }
+            closure_decides = true;
+        }
+        closure_decides
     }
 
     /// One trait implemented for a receiver at two argument lists leaves the

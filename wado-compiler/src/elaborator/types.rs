@@ -4478,11 +4478,21 @@ pub(super) enum TraitLookup {
     /// more.
     Reported,
     /// The impls that may answer depend on what the receiver's variables
-    /// settle to: the blocks the order names, each `None` for a derived body.
+    /// settle to, or on the row a closure argument's body solves: the blocks
+    /// still in the running, each `None` for a derived body.
     Undecided(Vec<Option<DefId>>),
 }
 
 impl TraitLookup {
+    /// The first of `matches`, which answers a call whose selection was
+    /// decided or reported, or `Missing` where there is none.
+    pub(super) fn first_of(matches: Vec<TraitMethodMatch>) -> Self {
+        matches
+            .into_iter()
+            .next()
+            .map_or(Self::Missing, |found| Self::Found(Box::new(found)))
+    }
+
     pub(super) fn found(self) -> Option<TraitMethodMatch> {
         match self {
             Self::Found(found) => Some(*found),

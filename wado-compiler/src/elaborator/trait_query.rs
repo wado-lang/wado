@@ -2363,6 +2363,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .return_type
                 });
             }
+            self.narrow_to_exact_rows(&mut admitted, &classes, |&i, position| {
+                sigs[i]
+                    .as_ref()
+                    .and_then(|sig| sig.param_types.get(position).copied())
+            });
             // One exact answer decides on its own. A parameter that is the
             // caller’s own type parameter is a bare slot to `class_admits`,
             // which admits every argument, so without this tier an exactly
