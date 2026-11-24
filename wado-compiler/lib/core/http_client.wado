@@ -7,6 +7,12 @@
 //! (`bytes`, `text`, `json`), as chunks (`body`), or as Server-Sent Events
 //! (`events`).
 //!
+//! Headers, trailers and the query are name-value pairs in the order given,
+//! written as an object literal (`{ accept: "text/html" }`). A literal cannot
+//! repeat a key, so a name sent more than once is written as a list of pairs
+//! (`[["accept", "text/html"], ["accept", "text/plain"]]`) or built with
+//! `push`.
+//!
 //! A status of 4xx or 5xx is a response, not an error. The client follows no
 //! redirect and retries nothing.
 //!
@@ -59,12 +65,6 @@ test {
 }
 
 /// What an `HttpClient` applies to every request.
-///
-/// Headers, trailers and the query are name-value pairs in the order given,
-/// written as an object literal (`{ "accept": "text/html" }`). A literal cannot
-/// repeat a key, so a name sent more than once is written as a list of pairs
-/// (`[["accept", "text/html"], ["accept", "text/plain"]]`) or built with
-/// `push`.
 pub struct ClientInit {
     pub headers: List<[String, String]> = [],
     pub connect_timeout: Option<Duration> = null,

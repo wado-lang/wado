@@ -12,6 +12,12 @@ answers an `HttpResponse` once its headers arrive; its body is read whole
 (`bytes`, `text`, `json`), as chunks (`body`), or as Server-Sent Events
 (`events`).
 
+Headers, trailers and the query are name-value pairs in the order given,
+written as an object literal (`{ accept: "text/html" }`). A literal cannot
+repeat a key, so a name sent more than once is written as a list of pairs
+(`[["accept", "text/html"], ["accept", "text/plain"]]`) or built with
+`push`.
+
 A status of 4xx or 5xx is a response, not an error. The client follows no
 redirect and retries nothing.
 
@@ -27,10 +33,10 @@ struct Item {
 // RFC 6761 reserves `.invalid` never to resolve, so this request fails
 // before any response.
 let client = HttpClient::new("https://api.example.invalid/v1", ClientInit {
-    headers: { "accept": "application/json" },
+    headers: { accept: "application/json" },
 }).unwrap();
 let result = client.request("/items", RequestInit {
-    query: { "limit": "10" },
+    query: { limit: "10" },
 });
 match result {
     Ok(mut res) => {
@@ -48,12 +54,6 @@ match result {
 ### `pub struct ClientInit`
 
 What an `HttpClient` applies to every request.
-
-Headers, trailers and the query are name-value pairs in the order given,
-written as an object literal (`{ "accept": "text/html" }`). A literal cannot
-repeat a key, so a name sent more than once is written as a list of pairs
-(`[["accept", "text/html"], ["accept", "text/plain"]]`) or built with
-`push`.
 
 #### `headers: List<[String, String]>`
 
