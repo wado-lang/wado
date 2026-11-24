@@ -1,0 +1,16 @@
+//! The Wado language: `parse` reads Wado source with the parser Gale generates
+//! from `assets/grammar/Wado.g4`, the grammar of Wado's whole syntax.
+//!
+//!     use { parse } from "wado-lang:wado";
+//!     let result = parse(src);
+
+pub use { parse, ParseResult, Diagnostic } from "../assets/grammar/Wado.g4"
+    with {
+        generator: {
+            module: "wado-lang:gale",
+            options: {
+                fragment_entries: ["statement"],
+                prediction: "longest",
+            },
+        },
+    };
