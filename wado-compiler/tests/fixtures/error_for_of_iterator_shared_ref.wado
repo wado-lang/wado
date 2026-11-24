@@ -1,0 +1,12 @@
+// A shared reference cannot advance the iterator it refers to, so `for-of`
+// refuses one rather than walking a copy.
+
+export fn run() {
+    let it = "abc".chars();
+    for let c of &it {
+        break;
+    }
+}
+
+__DATA__
+{"compile_error": ":6:5: type error: `for-of` advances the iterator `StrCharIter`, which `&StrCharIter` cannot: walk `&mut` or the value"}

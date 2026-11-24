@@ -58,6 +58,7 @@ pub(crate) enum FactKind {
     CallParamTypes,
     Coercion,
     Desugar,
+    ForOfIterator,
 }
 
 /// Where a routed fact lives: a binding is recorded once per module, a body
@@ -165,6 +166,10 @@ impl ModuleSemantics {
         Fact::new(FactKind::Coercion, FactMap::Body(|t| &t.coercions));
     pub(crate) const DESUGARS: Fact<types::DesugarKind> =
         Fact::new(FactKind::Desugar, FactMap::Body(|t| &t.desugars));
+    pub(crate) const FOR_OF_ITERATOR: Fact<types::ForOfIteratorInfo> = Fact::new(
+        FactKind::ForOfIterator,
+        FactMap::Body(|t| &t.for_of_iterator),
+    );
 
     /// Every fact this module's walk recorded that `Semantics` answers from —
     /// the list its routing is built over.
@@ -180,6 +185,7 @@ impl ModuleSemantics {
             .chain(Self::CALL_PARAM_TYPES.keys(self))
             .chain(Self::COERCIONS.keys(self))
             .chain(Self::DESUGARS.keys(self))
+            .chain(Self::FOR_OF_ITERATOR.keys(self))
     }
 }
 

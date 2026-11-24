@@ -1736,40 +1736,18 @@ impl<I: Iterator> IntoIterator for I {
     }
 }
 
-/// An iterator walked through a reference, so what takes from it leaves the
-/// iterator itself advanced: what `for let x of &mut iter` walks.
-pub struct IterRefMut<affine I: Iterator> {
-    internal inner: &mut I,
-}
-
-impl<affine I: Iterator> Iterator for IterRefMut<I> {
-    type Item = I::Item;
-
-    fn next(&mut self) -> Option<I::Item> with _ {
-        return self.inner.next();
-    }
-}
-
 /// What `for let x of e` walks when `e` is a value of a type implementing it:
 /// the loop passes `e` to `start` and calls the state's
 /// `next(&mut self) -> Option<Item>` until it answers `None`. The loop owns
-/// what it walks, so an affine element moves into the binding once. Any other
-/// iterable is walked through its `IntoIterator`.
+/// what it walks, so an affine element moves into the binding once. An
+/// iterator is walked itself, and any other iterable through its
+/// `IntoIterator`.
 #[compiler_item("for_of")]
 pub affine trait ForOf with _ {
     affine type Item;
     affine type State;
 
     fn start(self) -> Self::State;
-}
-
-impl<affine I: Iterator> ForOf for I {
-    type Item = I::Item;
-    type State = I;
-
-    fn start(self) -> I {
-        return self;
-    }
 }
 
 /// Infallible conversion trait.

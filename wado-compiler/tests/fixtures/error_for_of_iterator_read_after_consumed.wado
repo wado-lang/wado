@@ -1,0 +1,13 @@
+// `for-of` consumes an iterator it walks by value, copyable or not, so a read
+// of it after the loop is refused rather than seeing an unadvanced copy.
+
+export fn run() {
+    let it = "abc".chars();
+    for let c of it {
+        break;
+    }
+    let rest = it;
+}
+
+__DATA__
+{"compile_error": ":9:16: analysis error: `it` used after a `for-of` consumed it at 6:18; walk `&mut it` to keep what the loop leaves"}

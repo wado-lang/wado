@@ -33,8 +33,15 @@ pub struct AffineMoveError {
 
 #[derive(Debug, Clone)]
 enum MoveError {
-    /// A binding read after a by-value use moved it.
-    UseAfterMove { name: String, moved_at: Span },
+    /// A binding read after a by-value use moved it: an affine value, or an
+    /// iterator a for-of consumed.
+    UseAfterMove {
+        name: String,
+        moved_at: Span,
+        by_for_of: bool,
+    },
+    /// A for-of walking by value an iterator in a place the body does not own.
+    IteratorNotOwned { place: String },
     /// An affine value read by value through a reference, which leaves it with
     /// its owner: the read would be a second owner.
     MoveOutOfReference { type_name: String },
@@ -86,11 +93,32 @@ enum MoveError {
 impl From<AffineMoveError> for Diagnostic {
     fn from(e: AffineMoveError) -> Self {
         let (code, message) = match e.kind {
-            MoveError::UseAfterMove { name, moved_at } => (
+            MoveError::UseAfterMove {
+                name,
+                moved_at,
+                by_for_of: false,
+            } => (
                 Code::TypeMismatch,
                 format!(
                     "affine value `{name}` used after it was moved (moved at {}:{})",
                     moved_at.line, moved_at.column,
+                ),
+            ),
+            MoveError::UseAfterMove {
+                name,
+                moved_at,
+                by_for_of: true,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "`{name}` used after a `for-of` consumed it at {}:{}; walk `&mut {name}` to keep what the loop leaves",
+                    moved_at.line, moved_at.column,
+                ),
+            ),
+            MoveError::IteratorNotOwned { place } => (
+                Code::TypeMismatch,
+                format!(
+                    "`for-of` consumes the iterator it walks by value, and `{place}` is not a local it can take: walk `&mut {place}` to advance it in place"
                 ),
             ),
             MoveError::MoveOutOfReference { type_name } => (
@@ -235,6 +263,7 @@ pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
             regions_opened: 0,
             walked_in: IndexMap::default(),
             events: 0,
+            iterator_moves: IndexSet::default(),
         };
         for item in &module.items {
             checker.check_item(item);
@@ -297,6 +326,9 @@ struct Checker<'a> {
     walked_in: IndexMap<AstId, WalkedIn>,
     /// The events so far, which number the next.
     events: u32,
+    /// Where a for-of consumed a copyable iterator, which a later read reports
+    /// as such rather than as an affine move.
+    iterator_moves: IndexSet<Span>,
 }
 
 /// The innermost regions open where a temporary was walked.
@@ -1038,13 +1070,8 @@ impl MoveWalker<'_, '_> {
             return;
         };
         if let Some(moved_at) = self.moved_overlap(def, &place.fields) {
-            self.report(
-                MoveError::UseAfterMove {
-                    name: place.root.name.clone(),
-                    moved_at,
-                },
-                place.root.span,
-            );
+            let error = self.use_after_move(place.root.name.clone(), moved_at);
+            self.report(error, place.root.span);
         }
     }
 
@@ -1268,7 +1295,8 @@ impl MoveWalker<'_, '_> {
             return;
         }
         if let Some(moved_at) = self.moved_overlap(def, &place.fields) {
-            self.report(MoveError::UseAfterMove { name, moved_at }, place.root.span);
+            let error = self.use_after_move(name, moved_at);
+            self.report(error, place.root.span);
             return;
         }
         if self.is_drop_self(expr) && !self.decomposed.contains(&expr.id()) {
@@ -1283,6 +1311,48 @@ impl MoveWalker<'_, '_> {
             .entry((def, place.owned_fields()))
             .or_default()
             .push(moved);
+    }
+
+    /// A for-of consuming the copyable iterator the place `expr` names. Only a
+    /// local the body owns can give it up; anywhere else the loop would walk a
+    /// copy and leave the place unadvanced.
+    fn consume_iterator(&mut self, expr: &Expr, place: &PlacePath<'_>) {
+        let Some(def) = self.local_use(place.root) else {
+            return;
+        };
+        let captured = self
+            .closure_locals
+            .as_ref()
+            .is_some_and(|locals| !locals.contains(&def));
+        if self.global_name(def).is_some() || self.path_through_reference(expr) || captured {
+            let place = std::iter::once(place.root.name.as_str())
+                .chain(place.fields.iter().copied())
+                .collect::<Vec<_>>()
+                .join(".");
+            self.report(MoveError::IteratorNotOwned { place }, expr.span());
+            return;
+        }
+        if let Some(moved_at) = self.moved_overlap(def, &place.fields) {
+            let error = self.use_after_move(place.root.name.clone(), moved_at);
+            self.report(error, place.root.span);
+            return;
+        }
+        let moved = self.event(place.root.span);
+        self.checker.iterator_moves.insert(moved.span);
+        self.flow
+            .moved
+            .entry((def, place.owned_fields()))
+            .or_default()
+            .push(moved);
+    }
+
+    /// The error for reading `name` after the move at `moved_at`.
+    fn use_after_move(&self, name: String, moved_at: Span) -> MoveError {
+        MoveError::UseAfterMove {
+            name,
+            moved_at,
+            by_for_of: self.checker.iterator_moves.contains(&moved_at),
+        }
     }
 
     fn type_name_of(&self, expr: &Expr) -> String {
@@ -2324,9 +2394,16 @@ impl MoveWalker<'_, '_> {
                 }
                 walker.visit_loop(&head, &s.body, s.update.as_ref())
             }),
-            // The loop owns what it walks (WEP: Affine Types).
+            // The loop owns what it walks (WEP: Affine Types), and consumes an
+            // iterator it walks by value, copyable or not.
             Stmt::ForOf(s) => {
                 self.visit_at(&s.iterable);
+                if self.sem().for_of_consumes_iterator(s.id)
+                    && !self.expr_is_affine(s.iterable.id())
+                    && let Some(place) = self.place_path(&s.iterable)
+                {
+                    self.consume_iterator(&s.iterable, &place);
+                }
                 let owners = self.owners_of(&s.iterable);
                 self.visit_loop(&LoopHead::Binding(&s.binding, owners), &s.body, None)
             }

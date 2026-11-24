@@ -1734,7 +1734,9 @@ fn sub_operator_dispatch(
 fn sub_for_of(tt: &mut TypeTable, f: &mut ForOfIteratorInfo, subst: &IndexMap<InferVarId, TypeId>) {
     f.item_type = sub(tt, f.item_type, subst);
     f.iter_type = sub(tt, f.iter_type, subst);
-    sub_monomorph(tt, &mut f.into_iter, subst);
+    if let Some(start) = &mut f.start {
+        sub_monomorph(tt, &mut start.func, subst);
+    }
     sub_monomorph(tt, &mut f.next, subst);
 }
 

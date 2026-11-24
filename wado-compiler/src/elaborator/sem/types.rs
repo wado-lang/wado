@@ -590,7 +590,7 @@ impl BodyFacts {
             .chain(&self.index_swap_dispatch)
             .filter_map(|(id, op)| Some((*id, op.method_def?)));
         let iterators = self.for_of_iterator.iter().flat_map(|(id, info)| {
-            [info.into_iter_def, info.next_def]
+            [info.start.as_ref().and_then(|start| start.def), info.next_def]
                 .into_iter()
                 .flatten()
                 .map(move |def| (*id, def))
@@ -1227,14 +1227,13 @@ pub(crate) fn impl_self_layers(
 /// without re-dispatching.
 #[derive(Clone)]
 pub(crate) struct ForOfIteratorInfo {
-    /// The `into_iter` and `next` declarations dispatch chose. The loop spells
-    /// no method name, so nothing else names them.
-    pub(crate) into_iter_def: Option<DefId>,
+    /// The call that turns the operand into the iterator, or `None` where the
+    /// operand is the iterator: an iterator, which the loop consumes, or a
+    /// `&mut` one, which it advances in place.
+    pub(crate) start: Option<ForOfStart>,
+    /// The `next` declaration dispatch chose. The loop spells no method name,
+    /// so nothing else names it.
     pub(crate) next_def: Option<DefId>,
-    /// Resolved `IntoIterator::into_iter` dispatch target.
-    pub(crate) into_iter: FunctionRef,
-    /// Receiver-adjustment kind for the `.into_iter()` call.
-    pub(crate) into_iter_self_kind: ast::SelfKind,
     /// Resolved `Iterator::next` dispatch target.
     pub(crate) next: FunctionRef,
     /// Receiver-adjustment kind for the `.next()` call.
@@ -1248,6 +1247,15 @@ pub(crate) struct ForOfIteratorInfo {
     /// `let mut $iter_N: <iter_type> = …;` without re-running
     /// method dispatch.
     pub(crate) iter_type: TypeId,
+}
+
+/// `IntoIterator::into_iter` or `ForOf::start`, which a for-of calls once on
+/// its operand.
+#[derive(Clone)]
+pub(crate) struct ForOfStart {
+    pub(crate) def: Option<DefId>,
+    pub(crate) func: FunctionRef,
+    pub(crate) self_kind: ast::SelfKind,
 }
 
 /// Where a call reads its callee from, when that callee is a value and not a

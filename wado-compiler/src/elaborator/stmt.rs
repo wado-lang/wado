@@ -15,7 +15,7 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::{case_pattern_head, unparse_instance_pattern, unparse_pattern_source};
 
-use super::method_call::MethodCallInput;
+use super::method_call::{DispatchedMethod, MethodCallInput};
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
 use super::pending_selection::{ElementHome, Undecided};
 use super::type_resolution::slot_type_ids;
@@ -29,7 +29,7 @@ use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::orchestration::first_infer_span;
-use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo, ForOfStart};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
@@ -2689,8 +2689,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 inner_type_id = t;
             }
             // An affine operand walks `ForOf`, which `IntoIterator`'s
-            // unmarked impls do not reach (WEP: Affine Types).
-            let walkable = [CompilerItem::IntoIterator, CompilerItem::ForOf];
+            // unmarked impls do not reach (WEP: Affine Types), or is an
+            // iterator the loop walks itself.
+            let walkable = [
+                CompilerItem::IntoIterator,
+                CompilerItem::ForOf,
+                CompilerItem::Iterator,
+            ];
             let implements_into_iter = walkable.into_iter().any(|item| {
                 self.tysys.compiler_trait(item).is_some_and(|trait_| {
                     self.tysys
@@ -2919,9 +2924,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         let span = for_of.span;
-        let unique_id = ctx.fresh_serial();
-        let iter_var = minted_name("iter", unique_id);
-        let label = minted_name("for_of", unique_id);
+        let into_iter_receiver_type = match self.iterator_operand(into_iter_receiver_type) {
+            IteratorOperand::Not => into_iter_receiver_type,
+            IteratorOperand::Itself => {
+                return self.resolve_iterator_walk(for_of, None, into_iter_receiver_type, ctx);
+            }
+            IteratorOperand::Shared(iterator) => {
+                let tt = self.tysys.type_table.borrow();
+                let (iterator, operand) = (tt.name(iterator), tt.name(into_iter_receiver_type));
+                drop(tt);
+                let _ = self.emit(TypeError::CannotMutate {
+                    message: format!(
+                        "`for-of` advances the iterator `{iterator}`, which `{operand}` cannot: \
+                         walk `&mut` or the value"
+                    ),
+                    span,
+                });
+                TypeTable::ERROR
+            }
+        };
 
         // An affine value moves into the loop through `ForOf::start`, so the
         // loop owns what it walks. A copyable one walks its `IntoIterator`,
@@ -2969,14 +2990,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         );
-        let into_iter_dispatch = into_iter_outcome.dispatch;
         let iter_type = into_iter_outcome.type_id;
+        // A `ForOf` state answers `next` without being an iterator.
+        if !walks_value {
+            self.require_iterator(iter_type, span);
+        }
+        // A failed dispatch was diagnosed, so the loop records nothing.
+        let Some(start) = into_iter_outcome.dispatch else {
+            return self.resolve_iterator_walk(for_of, None, TypeTable::ERROR, ctx);
+        };
+        self.resolve_iterator_walk(for_of, Some(start), iter_type, ctx);
+    }
 
-        // Iterator-trait conformance check, mirroring the pre-refactor
-        // surface error. A `ForOf` state answers `next` without being one.
+    /// Whether a for-of walks an operand of type `operand` as the iterator
+    /// itself: an iterator, which it consumes, or a `&mut` one, which it
+    /// advances in place. A shared reference cannot advance one.
+    fn iterator_operand(&self, operand: TypeId) -> IteratorOperand {
+        let Some(iterator) = self.tysys.compiler_trait(CompilerItem::Iterator) else {
+            return IteratorOperand::Not;
+        };
+        let is_iterator =
+            |ty| self.tysys.type_implements_trait(&self.annotate_ctx, ty, &iterator);
+        let resolved = self.tysys.type_table.borrow().get(operand).clone();
+        match resolved {
+            ResolvedType::Unknown | ResolvedType::Error => IteratorOperand::Not,
+            ResolvedType::MutRef(inner) if is_iterator(inner) => IteratorOperand::Itself,
+            ResolvedType::Ref(inner) if is_iterator(inner) => IteratorOperand::Shared(inner),
+            _ if is_iterator(operand) => IteratorOperand::Itself,
+            _ => IteratorOperand::Not,
+        }
+    }
+
+    /// Report `iter_type`, what the operand's `into_iter` returned, where it is
+    /// not an iterator.
+    fn require_iterator(&mut self, iter_type: TypeId, span: Span) {
         let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
-        if !walks_value
-            && !iterator.is_some_and(|trait_| {
+        if !iterator.is_some_and(|trait_| {
                 self.tysys
                     .type_implements_trait(&self.annotate_ctx, iter_type, &trait_)
             })
@@ -2993,6 +3042,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// The loop that calls `next` on `iter_type`, which `start` turned the
+    /// operand into, or which the operand is where `start` is `None`.
+    fn resolve_iterator_walk(
+        &mut self,
+        for_of: &ForOfStmt,
+        start: Option<DispatchedMethod>,
+        iter_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) {
+        let span = for_of.span;
+        let unique_id = ctx.fresh_serial();
+        let iter_var = minted_name("iter", unique_id);
+        let label = minted_name("for_of", unique_id);
 
         // `let mut $iter_N = …;` — `defining_ast_id: None` keeps this
         // synthetic local out of `local_symbols`. Reify rebuilds the `let`;
@@ -3081,16 +3145,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // WEP 2026-05-26: record the iterator-path
         // dispatch decision so reify can re-emit the synthetic
-        // `into_iter()` / `next()` calls without re-dispatching. Only
-        // record when both dispatches succeeded (the trait-check error
-        // path above bailed without resolving them).
-        if let (Some(into_iter), Some(next)) = (into_iter_dispatch, next_dispatch) {
+        // `into_iter()` / `next()` calls without re-dispatching. A failed
+        // dispatch was diagnosed, and records nothing.
+        if let Some(next) = next_dispatch {
             self.record_for_of_iterator(
                 for_of.id,
                 ForOfIteratorInfo {
-                    into_iter_def: into_iter.method_def,
-                    into_iter: into_iter.func,
-                    into_iter_self_kind: into_iter.self_kind,
+                    start: start.map(|start| ForOfStart {
+                        def: start.method_def,
+                        func: start.func,
+                        self_kind: start.self_kind,
+                    }),
                     next_def: next.method_def,
                     next: next.func,
                     next_self_kind: next.self_kind,
@@ -3592,4 +3657,14 @@ impl AstVisitor<'_> for LoopControlFlowFinder {
 
     /// A declaration written in the body carries its own bodies.
     fn visit_item(&mut self, _item: &Item) {}
+}
+
+/// How a for-of reaches the iterator it walks from its operand.
+enum IteratorOperand {
+    /// The operand turns into one through `into_iter` or `start`.
+    Not,
+    /// The operand is one, or a `&mut` to one.
+    Itself,
+    /// A shared reference to the iterator it names, which cannot advance it.
+    Shared(TypeId),
 }

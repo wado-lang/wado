@@ -1,0 +1,65 @@
+// `for-of` over `&mut it`, where `it` is an iterator, advances `it` itself: a
+// loop that stops early leaves the rest for whatever reads `it` next.
+
+struct Count {
+    n: i32,
+    end: i32,
+}
+
+impl Iterator for Count {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        if self.n >= self.end {
+            return null;
+        }
+        self.n += 1;
+        return Option::Some(self.n);
+    }
+}
+
+fn take_two<I: Iterator<Item = i32>>(it: &mut I) -> List<i32> with _ {
+    let mut taken: List<i32> = [];
+    for let x of it {
+        taken.push(x);
+        if taken.len() == 2 {
+            break;
+        }
+    }
+    return taken;
+}
+
+test "a loop over `&mut it` leaves it where the loop stopped" {
+    let mut it = Count { n: 0, end: 5 };
+    let mut seen: List<i32> = [];
+    for let x of &mut it {
+        seen.push(x);
+        if x == 2 {
+            break;
+        }
+    }
+    assert seen == [1, 2];
+    assert it.next() == Option::Some(3);
+    let mut rest: List<i32> = [];
+    for let x of &mut it {
+        rest.push(x);
+    }
+    assert rest == [4, 5];
+    assert it.next() == null;
+}
+
+test "a `&mut` parameter, in a generic function" {
+    let mut it = Count { n: 0, end: 5 };
+    assert take_two(&mut it) == [1, 2];
+    assert take_two(&mut it) == [3, 4];
+    assert take_two(&mut it) == [5];
+}
+
+test "a stdlib iterator" {
+    let mut chars = "abc".chars();
+    for let c of &mut chars {
+        assert c == 'a';
+        break;
+    }
+    assert chars.next() == Option::Some('b');
+}

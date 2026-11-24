@@ -861,6 +861,13 @@ impl Semantics {
             .any(|dispatch| dispatch.consumes_self)
     }
 
+    /// Whether the for-of `id` walks its operand as the iterator itself, by
+    /// value: the loop consumes it, copyable or not.
+    pub(crate) fn for_of_consumes_iterator(&self, id: AstId) -> bool {
+        self.facts_at(ModuleSemantics::FOR_OF_ITERATOR, id)
+            .any(|info| info.start.is_none() && !self.types.is_reference(info.iter_type))
+    }
+
     /// Iterate every recorded method-dispatch decision keyed by the
     /// `MethodCallExpr`'s `(module, AstId)`. Pair with
     /// [`Self::method_dispatch_view`] for the stable public view onto

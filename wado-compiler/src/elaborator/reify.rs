@@ -3566,22 +3566,16 @@ impl<'a> Reify<'a> {
         let iter_var = minted_name("iter", unique_id);
         let label = minted_name("for_of", unique_id);
 
-        let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
-        let into_iter_receiver = self.adjust_receiver_for(
-            into_iter_receiver,
-            info.into_iter_self_kind,
-            &info.into_iter,
-            ctx,
-        );
+        let operand = self.reify_expr(&for_of.iterable, ctx, None);
         let iter_type = info.iter_type;
-        let into_iter_call = build_tir_method_call(
-            into_iter_receiver,
-            info.into_iter.clone(),
-            vec![],
-            vec![],
-            iter_type,
-            span,
-        );
+        let iter_value = match &info.start {
+            Some(start) => {
+                let receiver =
+                    self.adjust_receiver_for(operand, start.self_kind, &start.func, ctx);
+                build_tir_method_call(receiver, start.func.clone(), vec![], vec![], iter_type, span)
+            }
+            None => operand,
+        };
 
         let iter_local_index =
             ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
@@ -3591,7 +3585,7 @@ impl<'a> Reify<'a> {
                 local_index: iter_local_index,
                 is_mut: true,
                 type_id: iter_type,
-                value: Some(into_iter_call),
+                value: Some(iter_value),
                 storage: LetStorage::Planned,
             },
             span,

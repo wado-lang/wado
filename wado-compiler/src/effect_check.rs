@@ -3394,7 +3394,8 @@ impl AstVisitor<'_> for SemEffectWalker<'_> {
                 .cloned()
                 .collect();
             for info in &iterators {
-                for func_ref in [&info.into_iter, &info.next] {
+                let start = info.start.as_ref().map(|start| &start.func);
+                for func_ref in start.into_iter().chain([&info.next]) {
                     let (resolved, resource) = dispatch_effects(
                         self.sem,
                         self.index,
