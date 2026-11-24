@@ -33,7 +33,7 @@ use super::call::{
 };
 use super::coercion::ExpectedReturn;
 use super::infer::{infer_var_answers, unify};
-use super::infer_hole::{DeclaredBound, Obligation};
+use super::infer_hole::{BoundRows, DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
@@ -1392,7 +1392,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                 );
             }
-            let bounds = self.declared_bounds(param, None, &impl_args);
+            let bounds = self.declared_bounds(
+                param,
+                None,
+                &impl_args,
+                BoundRows::All(&EffectRows::default()),
+            );
             let owes = matches!(owed, OwedBounds::All) || {
                 let tt = self.tysys.type_table.borrow();
                 !tt.infer_vars_in(*arg).is_empty()
@@ -2069,6 +2074,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .packs_args_reach(input.param_types, input.args.len());
         let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
+        let effect_rows = self
+            .tysys
+            .type_table
+            .borrow()
+            .call_effect_binding(input.param_types, input.args);
         let mut type_args = self.resolve_method_type_args(explicit, input);
         let reached = self.settle_unreached_packs(own_params, slots, &mut type_args, &reached);
         self.report_unsettled_reached_packs(
@@ -2088,6 +2098,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &type_args,
                 impl_args,
                 Some(self_binding),
+                &effect_rows,
                 span,
             );
         }

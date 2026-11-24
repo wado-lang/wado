@@ -1,0 +1,62 @@
+// A dispatch through a bound naming the callee's own effect parameter runs the
+// impl at the row the call binds that parameter to: `Loud` implements the trait
+// at `Stdout` and at the empty row, so one `T` with two rows is two instances.
+// A free function, a method, a static method, and a generic caller forwarding
+// its own parameter all take it.
+use { println, Stdout } from "core:cli";
+
+trait Tr<A> with () {
+    fn go(&self) -> String;
+}
+
+struct Loud {}
+
+impl Tr<fn() with Stdout> for Loud {
+    fn go(&self) -> String {
+        return "loud";
+    }
+}
+
+impl Tr<fn()> for Loud {
+    fn go(&self) -> String {
+        return "quiet";
+    }
+}
+
+fn need<T: Tr<fn() with G>, effect G>(t: &T, f: fn() with G) -> String with G {
+    f();
+    return t.go();
+}
+
+fn ask<T: Tr<fn() with E>, effect E>(t: &T, f: fn() with E) -> String with E {
+    return need(t, f);
+}
+
+struct Holder {}
+
+impl Holder {
+    fn need<T: Tr<fn() with G>, effect G>(&self, t: &T, f: fn() with G) -> String with G {
+        f();
+        return t.go();
+    }
+
+    fn make<T: Tr<fn() with G>, effect G>(t: &T, f: fn() with G) -> String with G {
+        f();
+        return t.go();
+    }
+}
+
+export fn run() with Stdout {
+    println(need(&Loud {}, || { println("free"); }));
+    println(ask(&Loud {}, || { println("forwarded"); }));
+    let h = Holder {};
+    println(h.need(&Loud {}, || { println("method"); }));
+    println(Holder::make(&Loud {}, || { println("static"); }));
+    println(need(&Loud {}, || {}));
+    println(ask(&Loud {}, || {}));
+    println(h.need(&Loud {}, || {}));
+    println(Holder::make(&Loud {}, || {}));
+}
+
+__DATA__
+{"stdout": "free\nloud\nforwarded\nloud\nmethod\nloud\nstatic\nloud\nquiet\nquiet\nquiet\nquiet\n"}

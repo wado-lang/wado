@@ -1,0 +1,23 @@
+// The asking frame's own effect parameter in a bound is that parameter, not
+// any row: `T: Tr<fn() with E>` says nothing of `Tr<fn() with Stdout>`, which
+// the call to `need` asks for, its `G` bound to the closure's `Stdout`.
+use { println, Stdout } from "core:cli";
+
+trait Tr<A> with () {
+    fn go(&self);
+}
+
+fn need<T: Tr<fn() with G>, effect G>(t: &T, _f: fn() with G) {
+    t.go();
+}
+
+fn ask<T: Tr<fn() with E>, effect E>(t: &T) with Stdout {
+    need(t, || { println("x"); });
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{"compile_error": ":15:5: analysis error: type 'T' does not implement trait 'Tr<fn() -> () with Stdout>' required by bound on 'T'"}

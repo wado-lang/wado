@@ -1,0 +1,28 @@
+// An impl's effect parameter and its caller's are two parameters, whatever
+// they are named. `held()` hands back the caller's `E`, so calling what it
+// returns demands `E`, exactly as it would were the caller's named `F`.
+use { println } from "core:cli";
+
+trait Held with _ {
+    type Out;
+    fn held(&self) -> Self::Out;
+}
+
+impl<effect E> Held for fn() with E {
+    type Out = fn() with E;
+    fn held(&self) -> Self::Out {
+        return *self;
+    }
+}
+
+fn pass<effect E>(f: fn() with E) {
+    let g = f.held();
+    g();
+}
+
+export fn run() {
+    pass(|| { println("held"); });
+}
+
+__DATA__
+{"compile_error": ":20:5: analysis error: missing effects required by '(indirect call)'"}
