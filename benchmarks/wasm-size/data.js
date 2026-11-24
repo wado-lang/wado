@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795475108421,
+  "lastUpdate": 1795487397202,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81765,6 +81765,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a86a017b1ef94393624ad7b41d2bfb2a921e583c"
         },
         "date": 1795475107518,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df631a396bc7cd3cb0e065228b7ce318055804d7",
+          "message": "Merge pull request #2741 from wado-lang/ccr-5a053762-2x7vni\n\nfeat(compiler): a bound may name a function's own effect parameter",
+          "timestamp": "2026-11-24T11:12:50+09:00",
+          "tree_id": "3a1b288f568846a136253e6f99882527e0e903d7",
+          "url": "https://github.com/wado-lang/wado/commit/df631a396bc7cd3cb0e065228b7ce318055804d7"
+        },
+        "date": 1795487396425,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
