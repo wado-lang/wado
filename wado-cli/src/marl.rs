@@ -125,7 +125,7 @@ impl Formatter {
             .get_export_index(&mut store, Some(&interface), "format")
             .expect("the bundled Marl exports `format`");
         let format: TypedFunc<(String,), (String,)> = instance
-            .get_typed_func(&mut store, &func)
+            .get_typed_func(&mut store, func)
             .unwrap_or_else(|e| panic!("`format` takes and returns a string: {e:#}"));
         let (formatted,) = format
             .call_async(&mut store, (markdown.to_string(),))
@@ -247,10 +247,9 @@ mod tests {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../package-marl/src");
         let mut on_disk: Vec<String> = std::fs::read_dir(&dir)
             .expect("reading package-marl/src")
-            .map(|entry| entry.expect("listing package-marl/src").file_name())
-            .filter_map(|name| name.into_string().ok())
-            .filter(|name| name.ends_with(".wado"))
-            .map(|name| format!("./{name}"))
+            .map(|entry| entry.expect("listing package-marl/src").path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "wado"))
+            .map(|path| format!("./{}", path.file_name().unwrap().display()))
             .collect();
         on_disk.sort();
         let listed: Vec<&str> = SOURCES.iter().map(|(name, _)| *name).collect();
