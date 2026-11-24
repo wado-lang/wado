@@ -1,0 +1,19 @@
+// A function's reference to itself keeps its own effect parameter: `E` met by
+// `E` stands for itself, so the reference performs `E` and the slot, which
+// admits nothing, refuses it, as it does from any other function.
+use { println, Stdout } from "core:cli";
+
+fn wrapper<effect E>(f: fn() with E, n: i32) with E {
+    if n > 0 {
+        let g: fn(fn() with E, i32) = wrapper;
+        g(f, n - 1);
+    }
+    f();
+}
+
+export fn run() with Stdout {
+    wrapper(|| { println("x"); }, 1);
+}
+
+__DATA__
+{"compile_error": ":8:39: analysis error: type mismatch: expected 'fn(fn() -> () with E, i32) -> ()', found 'fn(fn() -> () with E, i32) -> () with E'"}

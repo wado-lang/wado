@@ -223,7 +223,7 @@ impl Semantics {
                 let late = solved.get(var).map(Vec::as_slice).unwrap_or_default();
                 assert!(
                     early.len() == late.len() && early.iter().all(|e| late.contains(e)),
-                    "a closed row {var} keeps the solution it was read at"
+                    "a closed row {var:?} keeps the solution it was read at"
                 );
             }
         }
