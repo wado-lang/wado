@@ -1,11 +1,11 @@
 //! Marl's `format`, which gives `wado doc`'s Markdown its final layout.
 //!
-//! `wado` compiles Marl from source on first use, keeping the component under a
-//! key of the compiler and the sources, never beside the files it documents. A
-//! self-contained build (the `dist` feature) embeds the sources and keeps the
-//! component in the user cache. Any other reads the checkout's sources, as it
-//! does the stdlib, and keeps the component in cargo's profile directory: every
-//! rebuild changes the key, and `cargo clean` takes what the old ones left.
+//! `wado` compiles Marl from source on first use and caches the component in
+//! one file, keyed by the compiler and the sources, never beside the files it
+//! documents. A self-contained build (the `dist` feature) embeds the sources
+//! and caches in the user cache. Any other reads the checkout's sources, as it
+//! does the stdlib, and caches in cargo's profile directory, which every
+//! rebuild would otherwise fill.
 
 use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
@@ -31,39 +31,49 @@ use crate::cache::user_cache_dir;
 use crate::compile::render_error_diagnostics;
 use crate::eval_host::current_thread_runtime;
 use crate::fingerprint::{compiler_digest, hash_field};
-use crate::kiln_provider::hex32;
 
 /// The checkout's Marl sources, which a build without `dist` reads.
 #[cfg(any(test, not(feature = "dist")))]
 const MARL_SRC: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../package-marl/src");
 
-macro_rules! marl_sources {
+macro_rules! embedded_marl {
     ($($name:literal),* $(,)?) => {
+        #[cfg(test)]
+        const EMBEDDED: &[&str] = &[$($name),*];
+
         /// Every `.wado` file of `package-marl/src`, as `("./name.wado", source)`.
         #[cfg(feature = "dist")]
         fn sources() -> &'static [(&'static str, &'static str)] {
             &[$((concat!("./", $name), include_str!(concat!("../../package-marl/src/", $name)))),*]
         }
-
-        /// Every `.wado` file of [`MARL_SRC`], read once per process, so an
-        /// edit to Marl needs no rebuild.
-        #[cfg(not(feature = "dist"))]
-        fn sources() -> &'static [(&'static str, &'static str)] {
-            static SOURCES: OnceLock<Vec<(&'static str, &'static str)>> = OnceLock::new();
-            SOURCES.get_or_init(|| vec![$((concat!("./", $name), read_source($name))),*])
-        }
     };
 }
 
+/// Every `.wado` file of [`MARL_SRC`], read once per process, so an edit to
+/// Marl needs no rebuild and a new file no list.
 #[cfg(not(feature = "dist"))]
-fn read_source(name: &str) -> &'static str {
-    let path = Path::new(MARL_SRC).join(name);
-    let source = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("reading Marl at {}: {e}", path.display()));
-    String::leak(source)
+fn sources() -> &'static [(&'static str, &'static str)] {
+    static SOURCES: OnceLock<Vec<(&'static str, &'static str)>> = OnceLock::new();
+    SOURCES.get_or_init(|| {
+        fn read<T>(e: std::io::Error) -> T {
+            panic!("reading Marl at {MARL_SRC}: {e}")
+        }
+        let mut sources: Vec<(&'static str, &'static str)> = std::fs::read_dir(MARL_SRC)
+            .unwrap_or_else(read)
+            .map(|entry| entry.unwrap_or_else(read).path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "wado"))
+            .map(|path| {
+                let name = format!("./{}", path.file_name().unwrap().display());
+                let source = std::fs::read_to_string(&path).unwrap_or_else(read);
+                (String::leak(name) as &str, String::leak(source) as &str)
+            })
+            .collect();
+        sources.sort_unstable();
+        sources
+    })
 }
 
-marl_sources![
+embedded_marl![
     "code_blocks.wado",
     "fmt_ast.wado",
     "fmt_html.wado",
@@ -84,9 +94,6 @@ const ENTRY: &str = "./format.wado";
 
 /// The library interface the component exports `format` in.
 const INTERFACE: &str = "wado-lang:marl/marl@0.0.0";
-
-/// Where the user cache keeps the compiled component.
-const CACHE_KIND: &str = "marl";
 
 /// Formats `markdown` as Marl's canonical layout.
 #[must_use]
@@ -171,37 +178,43 @@ fn load_component(engine: &Engine) -> Component {
     let Some(path) = cache_path() else {
         return compile_component(engine);
     };
-    // SAFETY: the file was serialized by this binary, which its name keys
-    // through `compiler_digest`, into a directory of the user's own; wasmtime
-    // still refuses one from an incompatible engine.
-    if let Ok(component) = unsafe { Component::deserialize_file(engine, &path) } {
+    let key = cache_key();
+    if let Ok(cached) = std::fs::read(&path)
+        && let Some(serialized) = cached.strip_prefix(key.as_slice())
+        // SAFETY: the key proves this binary serialized it, into a directory
+        // of the user's own; wasmtime still refuses an incompatible engine's.
+        && let Ok(component) = unsafe { Component::deserialize(engine, serialized) }
+    {
         return component;
     }
     let component = compile_component(engine);
-    let bytes = component
+    let serialized = component
         .serialize()
         .unwrap_or_else(|e| panic!("serializing the bundled Marl: {e:#}"));
-    // Losing the entry only costs the next run a compile. What another `wado`
-    // cached stays: it may be in use.
-    let _ = write_atomic(&path, &bytes);
+    // One file, replaced on a miss, so stale entries never pile up. Losing it
+    // only costs the next run a compile.
+    let _ = write_atomic(&path, &[key.as_slice(), &serialized].concat());
     component
 }
 
-/// The cache entry for this compiler and these sources.
-fn cache_path() -> Option<PathBuf> {
+/// What the compiled component depends on: this compiler and these sources.
+fn cache_key() -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(compiler_digest());
     for (name, source) in sources() {
         hash_field(&mut hasher, name.as_bytes());
         hash_field(&mut hasher, source.as_bytes());
     }
-    let key: [u8; 32] = hasher.finalize().into();
+    hasher.finalize().into()
+}
+
+fn cache_path() -> Option<PathBuf> {
     let dir = if cfg!(feature = "dist") {
         user_cache_dir()
     } else {
         cargo_profile_dir().or_else(user_cache_dir)
     };
-    dir.map(|dir| dir.join(CACHE_KIND).join(format!("{}.cwasm", hex32(&key))))
+    dir.map(|dir| dir.join("marl.cwasm"))
 }
 
 /// The cargo profile directory (`target/debug`) the running binary was built
@@ -280,18 +293,17 @@ mod tests {
     }
 
     #[test]
-    fn sources_list_every_marl_file() {
+    fn dist_embeds_every_marl_file() {
         let mut on_disk: Vec<String> = std::fs::read_dir(MARL_SRC)
             .expect("reading package-marl/src")
             .map(|entry| entry.expect("listing package-marl/src").path())
             .filter(|path| path.extension().is_some_and(|ext| ext == "wado"))
-            .map(|path| format!("./{}", path.file_name().unwrap().display()))
+            .map(|path| path.file_name().unwrap().display().to_string())
             .collect();
         on_disk.sort();
-        let listed: Vec<&str> = sources().iter().map(|(name, _)| *name).collect();
         assert_eq!(
-            listed, on_disk,
-            "marl_sources! must list package-marl/src, sorted"
+            EMBEDDED, on_disk,
+            "embedded_marl! must list package-marl/src, sorted"
         );
     }
 }

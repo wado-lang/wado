@@ -398,11 +398,11 @@ which CI holds every pull request to.
 
 Build the head arm first: every command below compares against
 `target/release/wado`, and a stale one compares main with itself. Both arms are
-release binaries named by `WADO_BIN`: the baseline is one, and without `WADO_BIN`
-the harness runs the dev build, whose host differs from it.
+release `dist` binaries named by `WADO_BIN`: the baseline is one, and without
+`WADO_BIN` the harness runs the dev build, whose host differs from it.
 
 ```sh
-cargo build --release --bin wado
+cargo build --release -p wado-cli --features dist --bin wado
 ```
 
 Run every benchmark at `-O0` through `-O3` before trusting an optimizer change:
