@@ -5,14 +5,19 @@ use {
     FieldName,
     FieldValue,
     Fields,
+    HeaderError,
     Headers,
     Method,
     Request,
+    RequestOptions,
+    RequestOptionsError,
     Response,
     Scheme,
     StatusCode,
     Trailers,
 } from "wasi:http";
+use { Duration } from "wasi:clocks";
+use json from "core:json";
 
 /// A host that answers every request with one canned response, and records
 /// what the client sent. Every operation the client performs on the request,
@@ -20,12 +25,21 @@ use {
 /// involved.
 affine struct MockHost {
     status: u16 = 200,
-    headers: List<[String, String]> = [],
+    headers: List<[String, ByteList]> = [],
     chunks: List<ByteList> = [],
+    /// The last chunk closes the stream as it arrives, rather than leaving a
+    /// read of nothing to close it.
+    close_with_last: bool = false,
     /// What the future that ends the response body resolves to: the trailers,
-    /// or why the body did not arrive whole.
-    outcome: Result<List<[String, String]>, ErrorCode> = Ok([]),
+    /// or why the body did not arrive whole; `None` where it never resolves.
+    outcome: Option<Result<List<[String, String]>, ErrorCode>> = Some(Ok([])),
     send_error: Option<ErrorCode> = null,
+    /// Why sending the request body failed, reported after the response.
+    body_error: Option<ErrorCode> = null,
+    /// The timeouts the client set, connect first, in nanoseconds.
+    timeouts: List<Option<u64>> = [],
+    /// Which of those timeouts the host refuses, counted from 0.
+    refused_timeout: Option<i32> = null,
     method: Option<Method> = null,
     scheme: Option<Scheme> = null,
     authority: String = "",
@@ -56,12 +70,20 @@ fn to_list(fields: &Fields) -> List<[String, String]> with Fields {
     return list;
 }
 
-fn from_list(list: &List<[String, String]>) -> Fields with Fields {
+fn from_list(list: &List<[String, ByteList]>) -> Fields with Fields {
     let mut entries: List<[FieldName, FieldValue]> = [];
     for let [name, value] of list {
-        entries.push([*name as FieldName, value.bytes().collect() as FieldValue]);
+        entries.push([*name as FieldName, *value as FieldValue]);
     }
     return Fields::from_list(entries).unwrap();
+}
+
+fn text_fields(list: List<[String, String]>) -> List<[String, ByteList]> {
+    let mut fields: List<[String, ByteList]> = [];
+    for let [name, value] of list {
+        fields.push([name, value.bytes().collect()]);
+    }
+    return fields;
 }
 
 impl Client for MockHost {
@@ -89,7 +111,12 @@ impl Stream<u8> for MockHost {
             resume StartedRead::settled(StreamChunk { items: [], result: CopyResult::Dropped });
         } else {
             let chunk = self.chunks.remove(0);
-            resume StartedRead::settled(StreamChunk { items: chunk as List<u8>, result: CopyResult::Completed });
+            let result = if self.close_with_last && self.chunks.is_empty() {
+                CopyResult::Dropped;
+            } else {
+                CopyResult::Completed;
+            };
+            resume StartedRead::settled(StreamChunk { items: chunk as List<u8>, result });
         }
     }
 
@@ -97,11 +124,6 @@ impl Stream<u8> for MockHost {
 }
 
 impl StreamWritable<u8> for MockHost {
-    fn begin_write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StartedWrite<u8> {
-        self.sent_body.extend(&(data as ByteList));
-        resume StartedWrite::settled(StreamWrite { rest: [], result: CopyResult::Completed });
-    }
-
     fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         self.sent_body.extend_from_slice(data);
         resume CopyResult::Completed;
@@ -110,9 +132,51 @@ impl StreamWritable<u8> for MockHost {
     ..forward
 }
 
+impl MockHost {
+    fn set_timeout(&mut self, duration: Option<Duration>) -> Result<(), RequestOptionsError> {
+        if self.refused_timeout == Option::Some(self.timeouts.len()) {
+            return Err(RequestOptionsError::NotSupported);
+        }
+        self.timeouts.push(duration.map(|d| d as u64));
+        return Ok(());
+    }
+}
+
+impl RequestOptions for MockHost {
+    fn set_connect_timeout(
+        &mut self,
+        this: &RequestOptions,
+        duration: Option<Duration>,
+    ) -> Result<(), RequestOptionsError> {
+        resume self.set_timeout(duration);
+    }
+
+    fn set_first_byte_timeout(
+        &mut self,
+        this: &RequestOptions,
+        duration: Option<Duration>,
+    ) -> Result<(), RequestOptionsError> {
+        resume self.set_timeout(duration);
+    }
+
+    fn set_between_bytes_timeout(
+        &mut self,
+        this: &RequestOptions,
+        duration: Option<Duration>,
+    ) -> Result<(), RequestOptionsError> {
+        resume self.set_timeout(duration);
+    }
+
+    ..forward
+}
+
 impl Future<Result<(), ErrorCode>> for MockHost {
     fn read(&mut self, this: &Future<Result<(), ErrorCode>>) -> Option<Result<(), ErrorCode>> {
-        resume Option::Some(Ok(()));
+        if let Some(code) = self.body_error {
+            resume Option::Some(Err(code));
+        } else {
+            resume Option::Some(Ok(()));
+        }
     }
 
     ..forward
@@ -137,15 +201,18 @@ impl Future<Result<Option<Trailers>, ErrorCode>> for MockHost {
         this: &Future<Result<Option<Trailers>, ErrorCode>>,
     ) -> Option<Result<Option<Trailers>, ErrorCode>> with Fields {
         match self.outcome {
-            Ok(trailers) => {
+            Some(Ok(trailers)) => {
                 if trailers.is_empty() {
                     resume Option::Some(Ok(null));
                 } else {
-                    resume Option::Some(Ok(Option::Some(from_list(&trailers) as Trailers)));
+                    resume Option::Some(Ok(Option::Some(from_list(&text_fields(trailers)) as Trailers)));
                 }
             },
-            Err(code) => {
+            Some(Err(code)) => {
                 resume Option::Some(Err(code));
+            },
+            null => {
+                resume null;
             },
         }
     }
@@ -182,9 +249,9 @@ fn pairs(list: List<[String, String]>) -> List<[String, String]> {
 
 test "a request goes to the base path, with the client's headers before its own" {
     let mut host = MockHost {
-        headers: [
+        headers: text_fields([
             ["content-type", "text/plain"],
-        ],
+        ]),
         chunks: [b"hel", b"lo"],
     };
     with &mut host do {
@@ -375,9 +442,9 @@ test "a streamed body is written by the function, whose trailers follow init's" 
 test "trailers that follow the response body are read after its end" {
     let mut host = MockHost {
         chunks: [b"abc"],
-        outcome: Ok([
+        outcome: Some(Ok([
             ["grpc-status", "0"],
-        ]),
+        ])),
     };
     with &mut host do {
         let mut body = client().request("/").unwrap().body();
@@ -425,7 +492,7 @@ test "a send the host refuses is a transport error before the response" {
 test "a body cut short ends with an error, not with its end" {
     let mut host = MockHost {
         chunks: [b"par", b"tial"],
-        outcome: Err(ErrorCode::ConnectionTerminated),
+        outcome: Some(Err(ErrorCode::ConnectionTerminated)),
     };
     with &mut host do {
         let mut body = client().request("/").unwrap().body();
@@ -442,17 +509,62 @@ test "a body cut short ends with an error, not with its end" {
     host.end_writes();
 }
 
-test "a whole read of a body cut short is an error" {
+test "a whole read of a body cut short is an error, however it decodes" {
     let mut host = MockHost {
         chunks: [b"par"],
-        outcome: Err(ErrorCode::ConnectionTerminated),
+        outcome: Some(Err(ErrorCode::ConnectionTerminated)),
     };
-    with &mut host do {
-        let mut res = client().request("/").unwrap();
-        assert res.bytes() matches { Err(Transport(_)) };
-        builtin::drop(res);
+    let results = with &mut host do {
+        let mut bytes = client().request("/").unwrap();
+        let mut text = client().request("/").unwrap();
+        let mut json = client().request("/").unwrap();
+        let results = [
+            bytes.bytes().is_err(),
+            text.text().is_err(),
+            json.json::<i32>().is_err(),
+        ];
+        builtin::drop(bytes);
+        builtin::drop(text);
+        builtin::drop(json);
+        results;
     };
     host.end_writes();
+    assert results == [true, true, true];
+}
+
+test "a body that never says how it ended is cut short" {
+    let mut host = MockHost {
+        chunks: [b"a"],
+        close_with_last: true,
+        outcome: null,
+    };
+    with &mut host do {
+        let mut body = client().request("/").unwrap().body();
+        assert body.next() matches { Some(Ok(_)) };
+        assert body.next() matches { Some(Err(Transport([_::ResponseBody, _::HttpResponseIncomplete]))) };
+        builtin::drop(body);
+    };
+    host.end_writes();
+}
+
+test "a body that is not text, or not the JSON asked for, is a decoding error" {
+    let mut host = MockHost {
+        chunks: [[0xff] as ByteList],
+    };
+    let [text, json] = with &mut host do {
+        let mut as_text = client().request("/").unwrap();
+        let mut as_json = client().request("/").unwrap();
+        let decoded = [
+            as_text.text(),
+            as_json.json::<i32>(),
+        ];
+        builtin::drop(as_text);
+        builtin::drop(as_json);
+        decoded;
+    };
+    host.end_writes();
+    assert text matches { Err(NotUtf8(_)) };
+    assert json matches { Err(Json(_)) };
 }
 
 test "a response dropped mid-body tells the host it was not read to its end" {
@@ -496,17 +608,18 @@ test "events arrive as the body does" {
 
 test "a repeated header joins with a comma, and Set-Cookie is read value by value" {
     let mut host = MockHost {
-        headers: [
+        headers: text_fields([
             ["vary", "accept"],
             ["Set-Cookie", "a=1; Expires=Wed, 21 Oct 2026"],
             ["Vary", "origin"],
             ["set-cookie", "b=2"],
-        ],
+            ["vary", "cookie"],
+        ]),
     };
     with &mut host do {
         let res = client().request("/").unwrap();
-        assert res.headers().header("vary").unwrap() == Option::Some("accept, origin".as_str_slice());
-        assert res.headers().header_bytes("VARY") == Option::Some(b"accept, origin".as_byte_slice());
+        assert res.headers().header("vary").unwrap() == Option::Some("accept, origin, cookie".as_str_slice());
+        assert res.headers().header_bytes("VARY") == Option::Some(b"accept, origin, cookie".as_byte_slice());
         let cookies = res.headers().headers_all("set-cookie").unwrap();
         assert cookies.len() == 2;
         assert cookies[0] == "a=1; Expires=Wed, 21 Oct 2026";
@@ -576,7 +689,187 @@ test "a root base URL leaves the path as given" {
     assert host.target == "/a";
 }
 
+test "a header value that is not UTF-8 is read only as octets" {
+    let mut host = MockHost {
+        headers: [
+            ["x-raw", [b'a', 0xff] as ByteList],
+        ],
+    };
+    let [header, all, bytes] = with &mut host do {
+        let res = client().request("/").unwrap();
+        let header = res.headers().header("x-raw").is_err();
+        let all = res.headers().headers_all("x-raw").is_err();
+        let bytes = res.headers().header_bytes("x-raw").unwrap().to_list();
+        builtin::drop(res);
+        [header, all, bytes];
+    };
+    host.end_writes();
+    assert header;
+    assert all;
+    assert bytes == [b'a', 0xff];
+}
+
+test "events end with the error that cut them short, and nothing after it" {
+    let mut host = MockHost {
+        chunks: [b"data: a\n\ndata: b"],
+        outcome: Some(Err(ErrorCode::ConnectionTerminated)),
+    };
+    let [first, cut, after, status] = with &mut host do {
+        let mut events = client().request("/").unwrap().events();
+        let first = events.next() matches { Some(Ok(_)) };
+        let cut = events.next() matches { Some(Err(Transport(_))) };
+        let after = events.next() matches { null };
+        let status = events.response().status;
+        builtin::drop(events);
+        [first, cut, after, status];
+    };
+    host.end_writes();
+    assert first && cut && after;
+    assert status == 200;
+}
+
+test "an event line that is not UTF-8 ends the events with an error" {
+    let mut host = MockHost {
+        chunks: [[b'd', b'a', b't', b'a', b':', 0xff, b'\n'] as ByteList],
+    };
+    let [bad, after] = with &mut host do {
+        let mut events = client().request("/").unwrap().events();
+        let bad = events.next() matches { Some(Err(NotUtf8(_))) };
+        let after = events.next() matches { null };
+        builtin::drop(events);
+        [bad, after];
+    };
+    host.end_writes();
+    assert bad && after;
+}
+
+test "a header or trailer the host refuses fails the request" {
+    let mut host = MockHost {};
+    let [header, trailer] = with &mut host do {
+        let header = client().request("/", RequestInit {
+            headers: [
+                ["bad name", "x"],
+            ],
+        });
+        let trailer = client().request("/", RequestInit {
+            trailers: [
+                ["bad name", "x"],
+            ],
+        });
+        let results = [header matches { Err(InvalidField(_)) }, trailer matches { Err(InvalidField(_)) }];
+        if let Ok(res) = header {
+            builtin::drop(res);
+        }
+        if let Ok(res) = trailer {
+            builtin::drop(res);
+        }
+        results;
+    };
+    host.end_writes();
+    assert header && trailer;
+}
+
+test "a request body the host failed to take is a transport error" {
+    let mut host = MockHost { body_error: Option::Some(ErrorCode::HttpRequestBodySize(null)) };
+    let result = with &mut host do {
+        let result = client().request("/", RequestInit { body: Option::Some(b"x".as_byte_slice()) });
+        let failed = result matches { Err(Transport([_::Request, _::HttpRequestBodySize(_)])) };
+        if let Ok(res) = result {
+            builtin::drop(res);
+        }
+        failed;
+    };
+    host.end_writes();
+    assert result;
+}
+
+test "a streamed request checks its path before writing" {
+    let mut host = MockHost {};
+    let failed = with &mut host do {
+        let result = client().request_streaming("no-slash", RequestInit {}, |tx| []);
+        let failed = result matches { Err(InvalidUrl(_)) };
+        if let Ok(res) = result {
+            builtin::drop(res);
+        }
+        failed;
+    };
+    assert failed;
+}
+
+fn timed_client() -> HttpClient {
+    return HttpClient::new("https://example.com", ClientInit {
+        connect_timeout: Option::Some(1),
+        first_byte_timeout: Option::Some(2),
+        between_bytes_timeout: Option::Some(3),
+    }).unwrap();
+}
+
+test "timeouts go to the host as request options" {
+    let mut host = MockHost {};
+    with &mut host do {
+        let res = timed_client().request("/").unwrap();
+        builtin::drop(res);
+    };
+    host.end_writes();
+    assert host.timeouts == [
+        Option::Some(1),
+        Option::Some(2),
+        Option::Some(3),
+    ] as List<Option<u64>>;
+}
+
+test "a timeout the host refuses fails the request before it is sent" {
+    for let refused of 0..<3 {
+        let mut host = MockHost { refused_timeout: Option::Some(refused) };
+        let failed = with &mut host do {
+            let result = timed_client().request("/");
+            let failed = result matches { Err(UnsupportedOption(_)) };
+            if let Ok(res) = result {
+                builtin::drop(res);
+            }
+            failed;
+        };
+        assert failed;
+        assert host.target == "";
+    }
+}
+
+test "a CR ending one chunk ends the line even when no LF opens the next" {
+    let events = parse(["data: a\r", "\rdata: b\n\n"]);
+    let want: List<[String, String, String]> = [
+        ["message", "a", ""],
+        ["message", "b", ""],
+    ];
+    assert events == want;
+}
+
+test "a retry out of range is ignored" {
+    let mut parser = SseParser::new();
+    parser.feed("retry: 99999999999999999999\ndata: d\n\n".bytes().collect());
+    let _ = parser.next_event();
+    assert parser.retry matches { null };
+}
+
+test "a base URL of another special scheme is refused" {
+    assert HttpClient::new("ws://example.com") matches { Err(InvalidUrl(_)) };
+}
+
 test "an HttpError reads as its reason" {
-    let e: HttpError = Transport([Stage::ResponseBody, ErrorCode::ConnectionTerminated]);
-    assert `${e}`.starts_with("HTTP transport failed while reading the response body");
+    let errors: List<HttpError> = [
+        InvalidUrl("x"),
+        InvalidField(HeaderError::Forbidden),
+        UnsupportedOption(RequestOptionsError::NotSupported),
+        Transport([Stage::Request, ErrorCode::ConnectionRefused]),
+        Transport([Stage::ResponseBody, ErrorCode::ConnectionTerminated]),
+        NotUtf8(String::try_from_utf8([0xff] as ByteList).unwrap_err()),
+        Json(json::from_string::<i32>("x").unwrap_err()),
+    ];
+    let prefixes: List<String> = [
+        "invalid URL: x", "invalid header: ", "unsupported request option: ",
+        "HTTP transport failed while sending the request", "HTTP transport failed while reading the response body",
+        "not UTF-8: ", "invalid JSON body: ",
+    ];
+    for let i of 0..<errors.len() {
+        assert `${errors[i]}`.starts_with(&prefixes[i]);
+    }
 }
