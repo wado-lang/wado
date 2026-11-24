@@ -43,11 +43,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
         panic("CLAUDE_API_KEY is not set");
     };
     let client = HttpClient::new("https://api.anthropic.com", ClientInit {
-        headers: [
-            ["x-api-key", api_key],
-            ["anthropic-version", "2023-06-01"],
-            ["user-agent", #file],
-        ],
+        headers: { "x-api-key": api_key, "anthropic-version": "2023-06-01", "user-agent": #file },
     }).unwrap();
 
     let request = MessagesRequest {
@@ -61,9 +57,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
     let mut res = client
         .request("/v1/messages", RequestInit {
             method: Method::Post,
-            headers: [
-                ["content-type", "application/json"],
-            ],
+            headers: { "content-type": "application/json" },
             body: Some(to_bytes(&request).unwrap()),
         })
         .unwrap();

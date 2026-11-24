@@ -32,7 +32,7 @@ struct Message { id: String }
 
 fn create(key: String, payload: ByteSlice) -> Result<Option<Message>, HttpError> with Client {
     let client = HttpClient::new("https://api.anthropic.com", ClientInit {
-        headers: [["x-api-key", key], ["anthropic-version", "2023-06-01"]],
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
     })?;
     let mut res = client.request("/v1/messages", RequestInit {
         method: Method::Post,
@@ -72,6 +72,12 @@ base of `/api/` from producing one.
 `RequestInit.query` takes name-value pairs, and the client percent-encodes
 them. Building a query by hand is where an OpenAPI client would most often get
 encoding wrong.
+
+Headers, trailers and the query are a list of name-value pairs, written as an
+object literal, which coerces to one in order. A literal cannot repeat a key,
+so a name sent more than once is written as a list of pairs or built with
+`push`. A value type that holds several values would spare that, but an object
+literal converts only a literal to it, never a variable such as an API key.
 
 Headers in `RequestInit` are appended after the client's. A name in both keeps
 both values, as `Fields::append` does; replacing would need the client to know

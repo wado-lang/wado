@@ -248,19 +248,14 @@ fn post<T: Deserialize>(
     request: ByteSlice,
 ) -> Result<T, String> with (Client, MonotonicClock) {
     let client = HttpClient::new("https://api.anthropic.com", ClientInit {
-        headers: [
-            ["anthropic-version", "2023-06-01"],
-            ["content-type", "application/json"],
-        ],
+        headers: { "anthropic-version": "2023-06-01", "content-type": "application/json" },
     }).unwrap();
     let mut renewed = false;
     loop {
         let mut res = client
             .request("/v1/messages", RequestInit {
                 method: Method::Post,
-                headers: [
-                    ["authorization", `Bearer ${credential.key()?}`],
-                ],
+                headers: { authorization: `Bearer ${credential.key()?}` },
                 body: Some(request),
             })
             .map_err(|e| `${e}`)?;

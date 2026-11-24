@@ -47,17 +47,12 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
         ],
     };
     let client = HttpClient::new("https://openrouter.ai/api/v1", ClientInit {
-        headers: [
-            ["authorization", `Bearer ${api_key}`],
-            ["user-agent", #file],
-        ],
+        headers: { authorization: `Bearer ${api_key}`, "user-agent": #file },
     }).unwrap();
     let mut res = client
         .request("/chat/completions", RequestInit {
             method: Method::Post,
-            headers: [
-                ["content-type", "application/json"],
-            ],
+            headers: { "content-type": "application/json" },
             body: Some(to_bytes(&request).unwrap()),
         })
         .unwrap();
