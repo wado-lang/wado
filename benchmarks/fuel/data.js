@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795519758614,
+  "lastUpdate": 1795557269659,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -89233,6 +89233,360 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cb4f66e2ce986b3ddb7f112e4b50cddbd18f1e37"
         },
         "date": 1795519755992,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "codec/zlib/compress (-O1)",
+            "value": 259190476,
+            "unit": "fuel"
+          },
+          {
+            "name": "codec/zlib/compress (-O2)",
+            "value": 218374880,
+            "unit": "fuel"
+          },
+          {
+            "name": "codec/zlib/compress (-O3)",
+            "value": 215285145,
+            "unit": "fuel"
+          },
+          {
+            "name": "codec/zlib/decompress (-O1)",
+            "value": 36481339,
+            "unit": "fuel"
+          },
+          {
+            "name": "codec/zlib/decompress (-O2)",
+            "value": 34671721,
+            "unit": "fuel"
+          },
+          {
+            "name": "codec/zlib/decompress (-O3)",
+            "value": 34671334,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/fts (-O1)",
+            "value": 1879789566,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/fts (-O2)",
+            "value": 1359789594,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/fts (-O3)",
+            "value": 1359789594,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/mandelbrot (-O1)",
+            "value": 3905984606,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/mandelbrot (-O2)",
+            "value": 3905984589,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/mandelbrot (-O3)",
+            "value": 3905984578,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/sieve (-O1)",
+            "value": 147910788,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/sieve (-O2)",
+            "value": 147909294,
+            "unit": "fuel"
+          },
+          {
+            "name": "compute/sieve (-O3)",
+            "value": 147909294,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/generate (-O1)",
+            "value": 1435597175,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/generate (-O2)",
+            "value": 1314530753,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/generate (-O3)",
+            "value": 1292690256,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/sqlite/highlight (-O1)",
+            "value": 22945661,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/sqlite/highlight (-O2)",
+            "value": 20589651,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/sqlite/highlight (-O3)",
+            "value": 20062428,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/sqlite/parse (-O1)",
+            "value": 14849702,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/sqlite/parse (-O2)",
+            "value": 14198334,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale/sqlite/parse (-O3)",
+            "value": 13638283,
+            "unit": "fuel"
+          },
+          {
+            "name": "ml/microgpt/infer (-O1)",
+            "value": 1209417271,
+            "unit": "fuel"
+          },
+          {
+            "name": "ml/microgpt/infer (-O2)",
+            "value": 1094543766,
+            "unit": "fuel"
+          },
+          {
+            "name": "ml/microgpt/infer (-O3)",
+            "value": 1079965949,
+            "unit": "fuel"
+          },
+          {
+            "name": "ml/microgpt/train (-O1)",
+            "value": 1423883593,
+            "unit": "fuel"
+          },
+          {
+            "name": "ml/microgpt/train (-O2)",
+            "value": 1357009148,
+            "unit": "fuel"
+          },
+          {
+            "name": "ml/microgpt/train (-O3)",
+            "value": 1349386391,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/canada/de (-O1)",
+            "value": 118522180,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/canada/de (-O2)",
+            "value": 95902182,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/canada/de (-O3)",
+            "value": 97581648,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/canada/ser (-O1)",
+            "value": 93450406,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/canada/ser (-O2)",
+            "value": 83676534,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/canada/ser (-O3)",
+            "value": 83676513,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/catalog/de (-O1)",
+            "value": 46156223,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/catalog/de (-O2)",
+            "value": 40155645,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/catalog/de (-O3)",
+            "value": 40676240,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/catalog/ser (-O1)",
+            "value": 17127547,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/catalog/ser (-O2)",
+            "value": 13450919,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/catalog/ser (-O3)",
+            "value": 13370084,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/twitter/de (-O1)",
+            "value": 31390788,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/twitter/de (-O2)",
+            "value": 29246152,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/twitter/de (-O3)",
+            "value": 29397623,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/twitter/ser (-O1)",
+            "value": 8369669,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/twitter/ser (-O2)",
+            "value": 7114535,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/cbor/twitter/ser (-O3)",
+            "value": 7183230,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/canada/de (-O1)",
+            "value": 323467584,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/canada/de (-O2)",
+            "value": 280497933,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/canada/de (-O3)",
+            "value": 280497908,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/canada/ser (-O1)",
+            "value": 266077307,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/canada/ser (-O2)",
+            "value": 264920089,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/canada/ser (-O3)",
+            "value": 252716516,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/catalog/de (-O1)",
+            "value": 121704989,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/catalog/de (-O2)",
+            "value": 118141442,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/catalog/de (-O3)",
+            "value": 118278510,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/catalog/ser (-O1)",
+            "value": 26697901,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/catalog/ser (-O2)",
+            "value": 21385160,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/catalog/ser (-O3)",
+            "value": 21339076,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/twitter/de (-O1)",
+            "value": 71841227,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/twitter/de (-O2)",
+            "value": 70715735,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/twitter/de (-O3)",
+            "value": 70306269,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/twitter/ser (-O1)",
+            "value": 22465388,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/twitter/ser (-O2)",
+            "value": 17227039,
+            "unit": "fuel"
+          },
+          {
+            "name": "serde/json/twitter/ser (-O3)",
+            "value": 17229786,
+            "unit": "fuel"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "64806562b4ee9fa74b7f60dd106eb8d1210774ad",
+          "message": "Merge pull request #2748 from wado-lang/ccr-5a053762-2x7vni\n\nfix(compiler): select an overload by a function argument's effect row",
+          "timestamp": "2026-11-25T06:39:34+09:00",
+          "tree_id": "c10f673c3e2770ae8015459a910431bdbb96b339",
+          "url": "https://github.com/wado-lang/wado/commit/64806562b4ee9fa74b7f60dd106eb8d1210774ad"
+        },
+        "date": 1795557267070,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
