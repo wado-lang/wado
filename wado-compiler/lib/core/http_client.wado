@@ -33,12 +33,9 @@ use { Url, percent_encode } from "core:url";
 use { Deserialize, DeserializeError } from "core:serde";
 use json from "core:json";
 
-/// Name-value pairs, in the order they go on the wire.
-pub type FieldList = List<[String, String]>;
-
 /// What an `HttpClient` applies to every request.
 pub struct ClientInit {
-    pub headers: FieldList = [],
+    pub headers: List<[String, String]> = [],
     pub connect_timeout: Option<Duration> = null,
     pub first_byte_timeout: Option<Duration> = null,
     pub between_bytes_timeout: Option<Duration> = null,
@@ -48,11 +45,11 @@ pub struct ClientInit {
 pub struct RequestInit {
     pub method: Method = Method::Get,
     /// Appended after the client's headers; a name in both keeps both values.
-    pub headers: FieldList = [],
+    pub headers: List<[String, String]> = [],
     /// Percent-encoded by the client. The path itself carries no query.
-    pub query: FieldList = [],
+    pub query: List<[String, String]> = [],
     pub body: Option<ByteList> = null,
-    pub trailers: FieldList = [],
+    pub trailers: List<[String, String]> = [],
 }
 
 /// Where a transport failure happened.
@@ -93,7 +90,8 @@ impl Display for HttpError {
     }
 }
 
-impl Error for HttpError {}
+impl Error for HttpError {
+}
 
 impl From<Utf8Error> for HttpError;
 impl From<DeserializeError> for HttpError;
@@ -104,7 +102,7 @@ pub struct HttpClient {
     authority: String,
     /// The base URL's path without its trailing `/`, so `/` is empty.
     base_path: String,
-    headers: FieldList,
+    headers: List<[String, String]>,
     connect_timeout: Option<Duration>,
     first_byte_timeout: Option<Duration>,
     between_bytes_timeout: Option<Duration>,
@@ -146,7 +144,11 @@ impl HttpClient {
 
     /// Send a request for `path`, which starts with `/` and holds no `?` or
     /// `#`, and answer once the response headers arrive.
-    pub fn request<P: AsStrSlice>(&self, path: P, init: RequestInit = RequestInit {}) -> Result<HttpResponse, HttpError> with Client {
+    pub fn request<P: AsStrSlice>(
+        &self,
+        path: P,
+        init: RequestInit = RequestInit {},
+    ) -> Result<HttpResponse, HttpError> with Client {
         let body = init.body;
         let has_body = body matches { Some(_) };
         let mut pending = self.start(path, &init, has_body)?;
@@ -163,7 +165,7 @@ impl HttpClient {
         &self,
         path: P,
         init: RequestInit,
-        write: fn mut(&StreamWritable<u8>) -> FieldList with E,
+        write: fn mut(&StreamWritable<u8>) -> List<[String, String]> with E,
     ) -> Result<HttpResponse, HttpError> with (Client, E)
         contract init.body matches { null }, "a streamed request takes its body from `write`"
     {
@@ -179,7 +181,12 @@ impl HttpClient {
         return pending.finish(trailers);
     }
 
-    fn start<P: AsStrSlice>(&self, path: P, init: &RequestInit, has_body: bool) -> Result<PendingRequest, HttpError> with Client {
+    fn start<P: AsStrSlice>(
+        &self,
+        path: P,
+        init: &RequestInit,
+        has_body: bool,
+    ) -> Result<PendingRequest, HttpError> with Client {
         let target = self.target(path, &init.query)?;
         let mut fields = self.headers;
         for let field of &init.headers {
@@ -189,7 +196,10 @@ impl HttpClient {
         let options = self.options()?;
         let [body_rx, body_tx] = if has_body {
             let [rx, tx] = Stream::<u8>::new();
-            [Option::Some(rx), Option::Some(tx)];
+            [
+                Option::Some(rx),
+                Option::Some(tx),
+            ];
         } else {
             [Option::<Stream<u8>>::None, Option::<StreamWritable<u8>>::None];
         };
@@ -205,7 +215,7 @@ impl HttpClient {
         return Ok(PendingRequest { call, body_tx, trailers_tx, sent });
     }
 
-    fn target<P: AsStrSlice>(&self, path: P, query: &FieldList) -> Result<String, HttpError> {
+    fn target<P: AsStrSlice>(&self, path: P, query: &List<[String, String]>) -> Result<String, HttpError> {
         let path = path.as_str_slice();
         if !path.starts_with("/") || path.contains_char('?') || path.contains_char('#') {
             return Err(HttpError::InvalidUrl(`a request path starts with "/" and holds no "?" or "#": ${path}`));
@@ -234,7 +244,7 @@ impl HttpClient {
     }
 }
 
-fn to_fields(list: &FieldList) -> Result<Fields, HttpError> with Client {
+fn to_fields(list: &List<[String, String]>) -> Result<Fields, HttpError> with Client {
     let mut entries: List<[FieldName, FieldValue]> = List::with_capacity(list.len());
     for let [name, value] of list {
         entries.push([*name as FieldName, value.bytes().collect() as FieldValue]);
@@ -259,7 +269,7 @@ impl PendingRequest {
         let _ = tx.write_raw_all(bytes.as_byte_slice() as Slice<u8>);
     }
 
-    fn finish(self, trailers: FieldList) -> Result<HttpResponse, HttpError> with Client {
+    fn finish(self, trailers: List<[String, String]>) -> Result<HttpResponse, HttpError> with Client {
         let PendingRequest { call, body_tx, trailers_tx, sent } = self;
         if let Some(tx) = body_tx {
             tx.drop();
@@ -275,7 +285,7 @@ impl PendingRequest {
                     let _ = sent.read();
                     return Err(e);
                 },
-            };
+            }
         };
         trailers_tx.write(Ok(trailer_fields));
         let response = match call.wait() {
@@ -449,19 +459,21 @@ impl HttpResponse {
     }
 
     /// The body as the chunks the host hands over.
-    pub fn body(&mut self) -> BodyChunks
+    pub fn body(self) -> BodyChunks
         contract !self.read, "a body is read once"
     {
-        self.read = true;
-        return BodyChunks { response: self };
+        let mut response = self;
+        response.read = true;
+        return BodyChunks { response };
     }
 
     /// The body as Server-Sent Events.
-    pub fn events(&mut self) -> EventStream
+    pub fn events(self) -> EventStream
         contract !self.read, "a body is read once"
     {
-        self.read = true;
-        return EventStream { response: self, parser: SseParser::new(), failed: false };
+        let mut response = self;
+        response.read = true;
+        return EventStream { response, parser: SseParser::new(), failed: false };
     }
 
     /// The next chunk of the body, or `None` once it ended whole.
@@ -552,8 +564,16 @@ global BODY_CHUNK_BYTES: i32 = 16384;
 
 /// The body of a response, chunk by chunk. A body cut short ends with an
 /// error rather than with `None`.
-pub struct BodyChunks {
-    response: &mut HttpResponse,
+pub affine struct BodyChunks {
+    response: HttpResponse,
+}
+
+impl BodyChunks {
+    /// The response the chunks are read from, its trailers in place once they
+    /// end.
+    pub fn response(&self) -> &HttpResponse {
+        return &self.response;
+    }
 }
 
 impl Iterator for BodyChunks {
@@ -579,13 +599,19 @@ pub struct SseEvent {
 
 /// The body of a response as Server-Sent Events. A body cut short, or a line
 /// that is not UTF-8, ends with an error rather than with `None`.
-pub struct EventStream {
-    response: &mut HttpResponse,
+pub affine struct EventStream {
+    response: HttpResponse,
     parser: SseParser,
     failed: bool,
 }
 
 impl EventStream {
+    /// The response the events are read from, its trailers in place once they
+    /// end.
+    pub fn response(&self) -> &HttpResponse {
+        return &self.response;
+    }
+
     /// The reconnection time in milliseconds the stream last set.
     pub fn retry(&self) -> Option<i64> {
         return self.parser.retry;
@@ -608,7 +634,8 @@ impl Iterator for EventStream {
                     self.failed = true;
                     return Option::Some(Err(HttpError::NotUtf8(e)));
                 },
-                null => {},
+                null => {
+                },
             }
             match self.response.next_chunk() {
                 Ok(Some(chunk)) => self.parser.feed(chunk),
@@ -760,7 +787,8 @@ impl SseParser {
                     }
                 }
             },
-            _ => {},
+            _ => {
+            },
         }
         return null;
     }
