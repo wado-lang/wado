@@ -835,6 +835,7 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeId) -> bool {
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::InferVar(_)
+        | ResolvedType::PackVar { .. }
         | ResolvedType::TypePack { .. }
         | ResolvedType::PackElement { .. }
         | ResolvedType::AssocTypeProjection { .. }

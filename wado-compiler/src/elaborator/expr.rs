@@ -14,7 +14,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
     EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing,
-    SubstitutionContext, TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
+    TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -27,7 +27,8 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::pending_selection::{PendingOp, PendingOperator};
 use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{
-    MeetRules, SlotFrame, TypeCheckResult, admits_condition, check_assignable, meetings,
+    MeetRules, Meetings, SlotFrame, TypeCheckResult, admits_condition, check_assignable,
+    meetings,
 };
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -2104,6 +2105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackVar { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. } => return (0, TypeTable::UNKNOWN),
             ResolvedType::Primitive(_)
@@ -4516,12 +4518,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .struct_fields_of_written_decl(struct_decl)
                 .map(|info| info.type_param_type_ids.clone())
                 .unwrap_or_default();
-            let subst = SubstitutionContext::new().bind(&slots, &type_args);
+            let subst = self.tysys.type_table.borrow().bind_params(&slots, &type_args);
             let mut fields: Vec<ResolvedField> = fields
                 .into_iter()
                 .map(|mut field| {
-                    field.type_id =
-                        subst.substitute(field.type_id, &mut self.tysys.type_table.borrow_mut());
+                    field.type_id = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .substitute_type_params(field.type_id, &subst);
                     field
                 })
                 .collect();
@@ -5032,16 +5037,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.leave_defaults_unwalked(holes, struct_lit.span, message);
             return;
         }
-        let settled = SubstitutionContext::new().bind(&slots, &args);
+        let settled = self.tysys.type_table.borrow().bind_params(&slots, &args);
         let defaults = omitted
             .into_iter()
             .map(|(idx, expr)| WalkedDefault {
                 binds: None,
                 expr,
-                expected: settled.substitute(
-                    struct_field_types[idx].1,
-                    &mut self.tysys.type_table.borrow_mut(),
-                ),
+                expected: self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .substitute_type_params(struct_field_types[idx].1, &settled),
                 check_at: Some(struct_lit.span),
             })
             .collect();
@@ -5114,15 +5120,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (struct_field, expected_field_type) in
             declared_pairs(fields, &field_types, &decl_field_names)
         {
-            let mut pairs = Vec::new();
+            let mut met = Meetings::default();
             meetings(
                 struct_field.type_id,
                 expected_field_type,
                 &self.tysys.type_table.borrow(),
                 MeetRules::PLAIN,
-                &mut pairs,
+                &mut met,
             );
-            for (value, slot) in pairs {
+            for (value, slot) in met.pairs {
                 let first = self.apply_infer_holes(slot);
                 let disagrees = {
                     let table = self.tysys.type_table.borrow();
@@ -5169,7 +5175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.answer_open_params_with_never(&declared, &values);
 
-        let mut inferred = self.solved_with_packs(&inst.vars, &declared, &values);
+        let mut inferred = self.apply_infer_holes_each(&inst.vars);
         // A phantom parameter — one no field mentions — is not an inference
         // failure: the declaration answers it, with its `= Default` if it wrote
         // one, and the bound is checked against that answer. A slot a field does
@@ -5338,8 +5344,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return Some(elems);
                 }
-                let elems = self.tysys.type_table.borrow().as_tuple(ty)?;
-                (elems.len() == arity).then_some(elems)
+                let table = self.tysys.type_table.borrow();
+                let elems = table.as_tuple(ty)?;
+                // A pack places nothing by position until it is answered.
+                let placed = !elems.iter().any(|&t| table.is_pack_like(t));
+                (placed && elems.len() == arity).then_some(elems)
             });
 
         // Reify's `reify_tuple_literal` owns the element / spread-expansion /

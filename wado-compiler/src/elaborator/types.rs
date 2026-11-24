@@ -960,17 +960,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A method's own type parameters that the arguments do not settle. Left
-    /// unspelled they reach codegen unsubstituted.
-    UninferredMethodTypeArgs {
-        receiver: String,
-        method: String,
-        /// The method's own parameters the call must spell, in declaration
-        /// order. Never empty.
-        params: Vec<String>,
-        span: Span,
-    },
-
     /// `Trait::<…>::method()` on a receiver-less declaration, with no `Self`
     /// binding. The turbofish is the trait's argument list, so it names no
     /// receiver (`docs/spec-traits.md`, "Qualified Calls").
@@ -2424,32 +2413,6 @@ impl TypeError {
                 format!(
                     "'{trait_name}::{method}' takes '{expected}'; the receiver spells its own mode: '{trait_name}::{method}({spelled}, …)'"
                 ),
-                *span,
-            ),
-            TypeError::UninferredMethodTypeArgs {
-                receiver,
-                method,
-                params,
-                span,
-            } => (
-                Code::NeedsTypeAnnotation,
-                {
-                    assert!(!params.is_empty(), "the emitter found an unspelled slot");
-                    let named = params
-                        .iter()
-                        .map(|p| format!("'{p}'"))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let (plural, verb, them) = if params.len() == 1 {
-                        ("", "is", "it")
-                    } else {
-                        ("s", "are", "them")
-                    };
-                    let spelled = params.join(", ");
-                    format!(
-                        "'{receiver}::{method}' declares the type parameter{plural} {named}, which {verb} not inferred from the arguments here; spell {them}: '{receiver}::{method}::<{spelled}>(…)'"
-                    )
-                },
                 *span,
             ),
             TypeError::AmbiguousStaticArgument {

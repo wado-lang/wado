@@ -821,6 +821,8 @@ impl Lowering {
                     literal: literal(id),
                 })),
             },
+            // A run of elements no answer has a length for yet.
+            ResolvedType::PackVar { .. } => Err(Unsaid::Open),
             ResolvedType::Unknown | ResolvedType::Error => Err(Unsaid::Failed),
         }
     }

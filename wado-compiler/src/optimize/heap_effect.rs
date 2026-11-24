@@ -734,7 +734,9 @@ impl HeapEffects<'_> {
             ResolvedType::Newtype { .. } => {
                 unreachable!("strip_handles removes every newtype")
             }
-            ResolvedType::InferVar(var) => panic!("{var} reached heap-effect analysis"),
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+                panic!("{var} reached heap-effect analysis")
+            }
         }
     }
 

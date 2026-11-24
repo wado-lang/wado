@@ -998,7 +998,9 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeId> 
             | ResolvedType::Flags { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
-            ResolvedType::InferVar(var) => panic!("{var} reached alias analysis"),
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+                panic!("{var} reached alias analysis")
+            }
         }
     }
     key(type_id, false, type_table)
@@ -1088,7 +1090,9 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Flags { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => false,
-        ResolvedType::InferVar(var) => panic!("{var} reached alias analysis"),
+        ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+            panic!("{var} reached alias analysis")
+        }
     }
 }
 

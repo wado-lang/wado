@@ -1148,6 +1148,7 @@ impl RefCarrying<'_> {
             ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
             // A closure holds what it captured, which its type does not name:

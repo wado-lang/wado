@@ -918,7 +918,7 @@ impl<'a> WirContext<'a> {
             ResolvedType::PackElement { pack, .. } => {
                 panic!("an element of pack {pack:?} reached codegen, which unrolling substitutes")
             }
-            ResolvedType::InferVar(var) => {
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
                 panic!("unsolved inference variable `{var}` reached codegen")
             }
             ResolvedType::AssocTypeProjection { assoc_name, .. } => {

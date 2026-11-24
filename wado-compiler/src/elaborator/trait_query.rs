@@ -1517,6 +1517,7 @@ impl TypeSystem {
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::AssocTypeProjection { .. } => false,
         }
     }

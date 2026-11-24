@@ -174,6 +174,12 @@ pub struct AssocParamId {
 }
 
 /// What a use site fills a declaration's parameters with.
+///
+/// Keyed by the parameter itself. A slot carries its own index, and only the
+/// declaration knows which index each of its parameters holds — a generic,
+/// `&`-target, blanket or variadic-tuple impl numbers its slots differently,
+/// and a partially concrete target leaves gaps no positional list can express.
+/// `impl<T, ..F> Emit for T` is enough to break a positional reconstruction.
 pub type TypeArgMap = IndexMap<TypeParamId, TypeId>;
 
 /// `args` filling `owner`'s parameters in declaration order, which is how a
@@ -184,174 +190,6 @@ pub fn positional_substitution(owner: DefId, args: &[TypeId]) -> TypeArgMap {
         .zip(args)
         .map(|(index, &arg)| (TypeParamId { owner, index }, arg))
         .collect()
-}
-
-/// What a use site chose for a declaration's type parameters.
-///
-/// Keyed by the parameter itself. A slot carries its own index, and only the
-/// declaration knows which index each of its parameters holds — a generic,
-/// `&`-target, blanket or variadic-tuple impl numbers its slots differently,
-/// and a partially concrete target leaves gaps no positional list can express.
-/// Keying by position asks the caller to reconstruct that, which it cannot;
-/// `impl<T, ..F> Emit for T` is enough to break the reconstruction.
-/// `instantiate_call` takes the same view.
-#[derive(Debug, Clone, Default)]
-pub struct SubstitutionContext {
-    substitutions: IndexMap<TypeId, TypeId>,
-}
-
-impl SubstitutionContext {
-    pub fn new() -> Self {
-        Self {
-            substitutions: IndexMap::default(),
-        }
-    }
-
-    /// Bind a declaration's type parameters to the arguments a use site chose.
-    ///
-    /// `params` are the parameters as the declaration holds them: a lookup
-    /// reports them, a declaration record carries them. Nothing recomputes
-    /// them. Parameters past the end of `args` stay unbound.
-    pub fn bind(mut self, params: &[TypeId], args: &[TypeId]) -> Self {
-        for (&param, &arg) in params.iter().zip(args.iter()) {
-            self.substitutions.insert(param, arg);
-        }
-        self
-    }
-
-    /// Substitute type parameters in a type
-    pub fn substitute(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
-        match type_table.get(type_id).clone() {
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => {
-                self.substitutions.get(&type_id).copied().unwrap_or(type_id)
-            }
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name,
-                args,
-                owning_trait,
-                trait_args,
-                assoc_type_bindings,
-            } => {
-                let concrete_id = self.substitute(param_id, type_table);
-                let new_args: Vec<TypeId> = args
-                    .iter()
-                    .map(|&a| self.substitute(a, type_table))
-                    .collect();
-                let new_trait_args: Option<Vec<TypeId>> = trait_args.as_ref().map(|given| {
-                    given
-                        .iter()
-                        .map(|&a| self.substitute(a, type_table))
-                        .collect()
-                });
-                if let Some(resolved) = type_table.answer_projection(
-                    concrete_id,
-                    &owning_trait,
-                    new_trait_args.as_deref(),
-                    &assoc_name,
-                    &new_args,
-                ) {
-                    return resolved;
-                }
-                // The associated type cannot be resolved yet because the
-                // projected parameter is still abstract (e.g. substituting
-                // `I::Item` with `I -> I`, or `I -> some other type param`).
-                // Preserve the projection over the substituted parameter
-                // rather than collapsing to the bare parameter, so later
-                // monomorphization can resolve `concrete::assoc_name`. What it
-                // carries is written in the same frame, so it substitutes too.
-                let new_bindings: Vec<(String, TypeId)> = assoc_type_bindings
-                    .iter()
-                    .map(|(name, bound)| (name.clone(), self.substitute(*bound, type_table)))
-                    .collect();
-                if concrete_id == param_id
-                    && new_args == args
-                    && new_trait_args == trait_args
-                    && new_bindings == assoc_type_bindings
-                {
-                    type_id
-                } else {
-                    type_table.make_assoc_type_projection(
-                        concrete_id,
-                        owning_trait,
-                        new_trait_args,
-                        assoc_name,
-                        new_args,
-                        new_bindings,
-                    )
-                }
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                let new_elem = self.substitute(elem, type_table);
-                type_table.make_builtin_array(new_elem)
-            }
-            ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.make_ref(new_inner)
-            }
-            ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.make_mut_ref(new_inner)
-            }
-            ResolvedType::Tuple(elems) => {
-                let mut new_elems: Vec<TypeId> = Vec::new();
-                for &elem in &elems {
-                    // A pack in a tuple stands for the elements it took, not
-                    // for the tuple holding them: `[..T]` with `T = [i32,
-                    // bool]` is `[i32, bool]`, never `[[i32, bool]]`.
-                    let is_plain_pack = matches!(
-                        type_table.get(elem),
-                        ResolvedType::TypePack {
-                            mapped_elem: None,
-                            ..
-                        }
-                    );
-                    let substituted = self.substitute(elem, type_table);
-                    if is_plain_pack
-                        && substituted != elem
-                        && let Some(elements) = type_table.as_tuple(substituted)
-                    {
-                        new_elems.extend(elements);
-                        continue;
-                    }
-                    new_elems.push(substituted);
-                }
-                type_table.make_tuple(new_elems)
-            }
-            ResolvedType::Struct {
-                def: StructDef::Decl(def),
-                type_args,
-            }
-            | ResolvedType::Variant { def, type_args }
-            | ResolvedType::Resource { def, type_args } => {
-                let new_args: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|&arg| self.substitute(arg, type_table))
-                    .collect();
-                type_table.make_generic_instance(def, new_args)
-            }
-            ResolvedType::Function {
-                is_mut,
-                params,
-                return_type,
-                effects,
-            } => {
-                let new_params: Vec<TypeId> = params
-                    .iter()
-                    .map(|&p| self.substitute(p, type_table))
-                    .collect();
-                let new_return = self.substitute(return_type, type_table);
-                type_table.make_function_with_mut(is_mut, new_params, new_return, effects)
-            }
-            // Other types don't contain type parameters
-            _ => type_id,
-        }
-    }
-
-    /// Check if this context has any substitutions
-    pub fn is_empty(&self) -> bool {
-        self.substitutions.is_empty()
-    }
 }
 
 /// Type identifier for resolved types in TIR.
@@ -790,6 +628,16 @@ pub enum ResolvedType {
     /// `R` does not mention the pack).
     TypePack {
         id: TypeParamId,
+        mapped_elem: Option<TypeId>,
+    },
+    /// An inference variable standing for a pack inside a tuple, which its
+    /// answer, a tuple, splices into: a use site instantiates a
+    /// [`ResolvedType::TypePack`] into one. Outside a tuple the variable is
+    /// the plain [`ResolvedType::InferVar`], the whole list as one type
+    /// argument. `mapped_elem` is a pack's, with the variable itself standing
+    /// for element `i` in it.
+    PackVar {
+        var: InferVarId,
         mapped_elem: Option<TypeId>,
     },
     /// One element of an identity pack: what `for let v of t` over `t: [..T]`

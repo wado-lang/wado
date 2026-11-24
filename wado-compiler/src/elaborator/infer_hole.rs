@@ -31,7 +31,9 @@ use crate::elaborator::sem::types::{
     LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch, SequenceCoercionFacts,
     StaticMethodDispatch,
 };
-use crate::elaborator::typecheck::{MeetRules, NeverMeets, TypeMismatchPayload, meetings};
+use crate::elaborator::typecheck::{
+    MeetRules, Meetings, NeverMeets, TypeMismatchPayload, meetings,
+};
 use crate::name::{FqTraitName, FqTypeName, TypeHead, mangle_generic_name, written_param_name};
 use crate::tir;
 
@@ -253,9 +255,6 @@ struct VarStore {
     parent: Vec<usize>,
     /// A root's answer, `None` while it has none.
     binding: Vec<Option<TypeId>>,
-    /// The variables standing for a pack: a list of types, spliced where a
-    /// tuple holds it, so never one element's type.
-    packs: IndexSet<TypeId>,
     /// How many answers the store has taken; each leaves one class fewer open.
     answers: usize,
 }
@@ -289,14 +288,6 @@ impl VarStore {
             i = self.parent[i];
         }
         i
-    }
-
-    /// Whether `t` is a variable whose class a pack variable joined.
-    fn is_pack(&self, t: TypeId) -> bool {
-        let Some(class) = self.root_of(t) else {
-            return false;
-        };
-        self.packs.iter().any(|&p| self.root_of(p) == Some(class))
     }
 
     /// The variable standing for `hole`'s class, `None` for a variable this
@@ -357,16 +348,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.attach_infer_var_diag(hole, span, message);
         self.attach_infer_var_bounds(hole, param_name, bounds, span);
         hole
-    }
-
-    /// Mark `var` as standing for a pack: it is answered by a tuple, never by
-    /// the type of one element of the tuple holding it.
-    pub(super) fn mark_pack_var(&mut self, var: TypeId) {
-        assert!(
-            self.infer_holes.vars.contains(var),
-            "a pack variable is minted here"
-        );
-        self.infer_holes.vars.packs.insert(var);
     }
 
     /// [`Self::mint_infer_hole`] for a call's type argument `slot`. A variable
@@ -723,13 +704,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
-    /// A variable for the slot `param`, blamed as one of `owner`.
-    pub(super) fn mint_slot_hole(&mut self, span: Span, param: &str, owner: &str) -> TypeId {
-        let hole = self.mint_infer_var_named(param);
-        self.attach_infer_var_blame(hole, span, param.to_string(), owner.to_string());
-        hole
-    }
-
     /// Blame each open `_` `arg` holds as the slot `param` it fills would be.
     pub(super) fn blame_holes_as_slot(
         &mut self,
@@ -865,22 +839,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         let outer = std::mem::replace(&mut self.infer_holes.equating, true);
         loop {
-            let mut pairs = Vec::new();
+            let mut met = Meetings::default();
             meetings(
                 self.apply_infer_holes(actual),
                 self.apply_infer_holes(expected),
                 &self.tysys.type_table.borrow(),
                 MeetRules {
-                    is_pack: &|t| self.infer_holes.vars.is_pack(t),
                     never,
                     written_base: &|base| {
                         actual_bases.contains(&base) && expected_bases.contains(&base)
                     },
                 },
-                &mut pairs,
+                &mut met,
             );
-            if !pairs
+            let runs: Vec<(TypeId, TypeId)> = met
+                .packs
                 .into_iter()
+                .map(|run| {
+                    let tuple = self.tysys.type_table.borrow_mut().make_tuple(run.elems);
+                    (tuple, run.var)
+                })
+                .collect();
+            if !met
+                .pairs
+                .into_iter()
+                .chain(runs)
                 .any(|(a, e)| self.settle_meeting(a, e, &scope))
             {
                 break;

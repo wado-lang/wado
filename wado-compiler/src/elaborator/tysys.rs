@@ -278,6 +278,7 @@ impl TypeSystem {
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => return false,
             ResolvedType::BuiltinArray(inner) => (vec![inner], Vec::new()),
@@ -343,6 +344,7 @@ impl TypeSystem {
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => return false,
             ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => vec![inner],

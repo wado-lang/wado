@@ -281,6 +281,7 @@ impl<'a> StorageReach<'a> {
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => Members::Unknown,
         }

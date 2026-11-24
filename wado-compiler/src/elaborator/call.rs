@@ -14,7 +14,7 @@ use crate::name::{
 };
 use crate::resolve::Resolution;
 use crate::tir::{
-    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeArgMap, TypeId, TypeParamId,
+    FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId, TypeParamId,
 };
 use crate::type_table::TypeTable;
 
@@ -708,29 +708,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let hints = self.expected_return_hints(own_vars, ret);
         self.chain_expected_return(own_vars, ret);
         let collection = PendingLiterals::of_call(own_vars);
-        let packs = self.own_packs(own_vars);
-        let mut stand_ins: Vec<(TypeId, TypeId)> = Vec::new();
         let (mut resolved, pending) = self.collecting_pending_literals(collection, |this| {
             let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
             let mut deferred: Vec<usize> = Vec::new();
             for (i, arg) in args.iter().enumerate() {
-                let answered = this.packs_answered(&packs, param_types, &resolved, i);
-                if matches!(arg, ast::Expr::Closure(_))
-                    && this.param_still_open(answered.as_ref().map(|a| a.declared))
-                {
+                let param = param_types.get(i).copied();
+                if matches!(arg, ast::Expr::Closure(_)) && this.param_still_open(param) {
                     deferred.push(i);
                     continue;
                 }
-                let param = answered.map(|a| this.standing_in_open_packs(a, &mut stand_ins));
                 resolved[i] = Some(this.resolve_arg_against_param(arg, ctx, param, &hints));
             }
             if let Some(inst) = inst {
                 this.link_slots(inst);
             }
             for i in deferred {
-                let param = this
-                    .packs_answered(&packs, param_types, &resolved, i)
-                    .map(|a| this.standing_in_open_packs(a, &mut stand_ins));
+                let param = param_types.get(i).copied();
                 resolved[i] = Some(this.resolve_arg_against_param(&args[i], ctx, param, &hints));
             }
             resolved
@@ -738,7 +731,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|r| r.expect("every argument is resolved in one of the two passes"))
                 .collect::<Vec<TypeId>>()
         });
-        self.answer_stand_ins(&packs, param_types, &resolved, &stand_ins);
         let settled = self.settle_pending_literals(pending, args, ret, ctx);
         // A `null` answers last, as a literal does.
         if let Some(ret) = ret {
@@ -781,148 +773,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.run_obligations();
     }
 
-    /// The callee's own packs among `own_vars`, each slot with its identity. An
-    /// instantiation leaves a pack rigid (see [`Self::instantiate`]).
-    fn own_packs(&self, own_vars: &[TypeId]) -> Vec<(TypeId, TypeParamId)> {
-        let table = self.tysys.type_table.borrow();
-        own_vars
-            .iter()
-            .filter_map(|&slot| match table.get(slot) {
-                ResolvedType::TypePack {
-                    id,
-                    mapped_elem: None,
-                    ..
-                } => Some((slot, *id)),
-                _ => None,
-            })
-            .collect()
-    }
-
-    /// Parameter `i`'s type, each of `packs` the arguments resolved so far
-    /// answer replaced by its answer.
-    fn packs_answered(
-        &mut self,
-        packs: &[(TypeId, TypeParamId)],
-        param_types: &[TypeId],
-        resolved: &[Option<TypeId>],
-        i: usize,
-    ) -> Option<PacksAnswered> {
-        let param = param_types.get(i).copied()?;
-        let mentions_pack = {
-            let table = self.tysys.type_table.borrow();
-            packs
-                .iter()
-                .any(|&(_, pack)| table.mentions_param(param, pack))
-        };
-        if !mentions_pack {
-            return Some(PacksAnswered {
-                declared: param,
-                open: Vec::new(),
-            });
-        }
-        let answers = self.pack_answers(packs, param_types, resolved);
-        let declared = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .substitute_type_params(param, &answers);
-        let open = packs
-            .iter()
-            .filter(|(_, pack)| !answers.contains_key(pack))
-            .map(|&(slot, _)| slot)
-            .collect();
-        Some(PacksAnswered { declared, open })
-    }
-
-    /// What a parameter `answered` reads its argument against. A pack is no
-    /// variable the module-end sweep substitutes, so a value typed from a tuple
-    /// holding one, as a list literal's element type is, would keep the
-    /// callee's slot in its own type. So each tuple a pack still open holds
-    /// stands in as a variable, pushed to `stand_ins` with the tuple, for
-    /// [`Self::answer_stand_ins`].
-    fn standing_in_open_packs(
-        &mut self,
-        answered: PacksAnswered,
-        stand_ins: &mut Vec<(TypeId, TypeId)>,
-    ) -> ArgParam {
-        let PacksAnswered { declared, open } = answered;
-        if open.is_empty() {
-            return ArgParam::of(declared);
-        }
-        let held = self
-            .tysys
-            .type_table
-            .borrow()
-            .tuples_holding(declared, &open);
-        let mut replacements = IndexMap::default();
-        // A tuple parameter itself stays, for the unifier to splice the pack
-        // across its argument's elements.
-        for tuple in held.into_iter().filter(|&tuple| tuple != declared) {
-            let var = self.mint_infer_var();
-            replacements.insert(tuple, var);
-            stand_ins.push((var, tuple));
-        }
-        let checked = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .replace_subterms(declared, &replacements);
-        ArgParam { checked, declared }
-    }
-
-    /// What the arguments `resolved` so far answer of `packs`.
-    fn pack_answers(
-        &self,
-        packs: &[(TypeId, TypeParamId)],
-        param_types: &[TypeId],
-        resolved: &[Option<TypeId>],
-    ) -> TypeArgMap {
-        let mut bindings = IndexMap::default();
-        for (&declared, actual) in param_types.iter().zip(resolved) {
-            if let Some(actual) = *actual {
-                unify(&self.tysys.type_table, declared, actual, &mut bindings);
-            }
-        }
-        packs
-            .iter()
-            .filter_map(|&(slot, pack)| bindings.get(&slot).map(|&tuple| (pack, tuple)))
-            .collect()
-    }
-
-    /// Answer each stand-in [`Self::standing_in_open_packs`] minted that its
-    /// argument left open, as an empty list literal does, with its tuple under
-    /// what every argument answers of `packs`. One whose tuple still holds a
-    /// pack stays open: the call reports that pack unanswered.
-    fn answer_stand_ins(
-        &mut self,
-        packs: &[(TypeId, TypeParamId)],
-        param_types: &[TypeId],
-        resolved: &[TypeId],
-        stand_ins: &[(TypeId, TypeId)],
-    ) {
-        if stand_ins.is_empty() {
-            return;
-        }
-        let resolved: Vec<Option<TypeId>> = resolved.iter().copied().map(Some).collect();
-        let answers = self.pack_answers(packs, param_types, &resolved);
-        let slots: Vec<TypeId> = packs.iter().map(|&(slot, _)| slot).collect();
-        for &(var, tuple) in stand_ins {
-            let answered = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .substitute_type_params(tuple, &answers);
-            if !self
-                .tysys
-                .type_table
-                .borrow()
-                .mentions_any(answered, &slots)
-            {
-                self.equate(var, answered);
-            }
-        }
-    }
-
     /// Whether a parameter type still holds an unanswered variable.
     fn param_still_open(&mut self, param_type: Option<TypeId>) -> bool {
         let Some(param_type) = param_type else {
@@ -939,13 +789,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         arg: &ast::Expr,
         ctx: &mut FunctionContext,
-        param: Option<ArgParam>,
+        param: Option<TypeId>,
         hints: &IndexMap<InferVarId, TypeId>,
     ) -> TypeId {
         let Some(param) = param else {
             return self.resolve_expr(arg, ctx, None);
         };
-        let expected = self.apply_infer_holes(param.checked);
+        let expected = self.apply_infer_holes(param);
         let element = self
             .tysys
             .type_table
@@ -957,7 +807,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let checked_against = self.context_literal_expected(arg, expected, hints);
         let resolved = self.resolve_expr(arg, ctx, Some(checked_against));
         if !answers_last(Some(arg)) {
-            self.equate(resolved, param.declared);
+            self.equate(resolved, param);
         }
         resolved
     }
@@ -1033,31 +883,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(InstanceOrder::One(InstanceImpl { depth: 0, .. }))
         )
     }
-}
-
-/// The type a call reads one argument against, and the parameter type it
-/// stands for. They differ only where a tuple holds a pack no argument has
-/// answered yet, which `checked` holds as a variable.
-#[derive(Clone, Copy)]
-struct ArgParam {
-    checked: TypeId,
-    declared: TypeId,
-}
-
-impl ArgParam {
-    fn of(param: TypeId) -> Self {
-        Self {
-            checked: param,
-            declared: param,
-        }
-    }
-}
-
-/// A parameter type with the packs the arguments so far answer substituted.
-struct PacksAnswered {
-    declared: TypeId,
-    /// The packs still open, by slot.
-    open: Vec<TypeId>,
 }
 
 impl TypeSystem {
@@ -2843,14 +2668,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // returns a full param-length vec, so no slot reaches codegen
         // unsubstituted.
         let declared = self.lookup_function_type_params(&callee);
-        let solved_in_context = arg_inst.as_ref().filter(|inst| {
+        let solved_in_context = arg_inst.as_ref().filter(|_| {
             declaring == 0
                 && type_args.len() <= callee_slots.len()
                 && callee_slots == self.tysys.callee_slots(&callee)
-                && !inst
-                    .vars
-                    .iter()
-                    .any(|&v| self.tysys.type_table.borrow().is_type_pack(v))
         });
         if let Some(inst) = solved_in_context {
             self.answer_open_params_with_never(&param_types, &args);
@@ -3912,38 +3733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         self.answer_open_params_with_never(param_types, args);
-        // The expected return answers a pack after every argument does.
-        let (declared, actual): (Vec<TypeId>, Vec<TypeId>) = param_types
-            .iter()
-            .copied()
-            .zip(args.iter().copied())
-            .chain(ret)
-            .unzip();
-        self.solved_with_packs(slots, &declared, &actual)
-    }
-
-    /// `slots` as the context answers them, each pack among them, which
-    /// instantiation leaves rigid, read off `args` against `param_types`.
-    pub(super) fn solved_with_packs(
-        &mut self,
-        slots: &[TypeId],
-        param_types: &[TypeId],
-        args: &[TypeId],
-    ) -> Vec<TypeId> {
-        let packs = self.own_packs(slots);
-        let resolved: Vec<Option<TypeId>> = args.iter().copied().map(Some).collect();
-        let pack_answers = self.pack_answers(&packs, param_types, &resolved);
-        let mut solved = self.apply_infer_holes_each(slots);
-        for &(slot, pack) in &packs {
-            if let Some(&tuple) = pack_answers.get(&pack) {
-                let i = slots
-                    .iter()
-                    .position(|&s| s == slot)
-                    .expect("a pack is a slot");
-                solved[i] = tuple;
-            }
-        }
-        solved
+        self.apply_infer_holes_each(slots)
     }
 
     /// Resolve a type parameter appearing only inside another's
@@ -4174,12 +3964,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     let bounds =
                         param.map_or_else(Vec::new, |p| self.declared_bounds(p, None, &[]));
-                    let var =
-                        self.defer_slot(inferred, span, message.clone(), name.clone(), bounds);
-                    if param.is_some_and(|p| p.is_pack) {
-                        self.mark_pack_var(var);
-                    }
-                    var
+                    self.defer_slot(inferred, span, message.clone(), name.clone(), bounds)
                 } else {
                     TypeTable::ERROR
                 };
@@ -4462,9 +4247,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 p.name.clone(),
                 bounds,
             );
-            if p.is_pack {
-                self.mark_pack_var(stand_in);
-            }
             new_args.push(stand_in);
         }
         *type_args = new_args;
@@ -4841,7 +4623,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         for pack_pos in unanswered {
-            type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
+            let empty = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
+            // The call's own variable for the pack answers every type
+            // written in it.
+            self.equate(empty, type_args[pack_pos]);
+            type_args[pack_pos] = empty;
         }
         reached
     }
@@ -5764,10 +5550,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// pinned one to. `x = Some(1)` into an `Option<!>` is an `Option<i32>`, and
     /// the mismatch is the whole value's; `Some(panic())` and `Some(&mut v)`
     /// into an `Option<&i32>` fit, so the expected type decides them.
-    ///
-    /// A pack slot instantiation left rigid takes the tuple the payload splices
-    /// into it. One nothing settles is deferred as unsolved: the declaration's
-    /// own pack means nothing at this site.
     fn case_type_args(
         &mut self,
         case: &CaseSite<'_>,
@@ -5794,7 +5576,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_some_and(|&t| t != TypeTable::UNKNOWN);
                 let at_site = self.instantiate_type(slot, inst);
                 let at_site = self.apply_infer_holes(at_site);
-                let answer = match from_payload.get(&slot).copied().filter(|_| !written) {
+                match from_payload.get(&slot).copied().filter(|_| !written) {
                     None => at_site,
                     Some(own) if at_site == slot => own,
                     Some(own) => {
@@ -5806,12 +5588,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             );
                         if fits { at_site } else { own }
                     }
-                };
-                if answer != slot || !self.tysys.type_table.borrow().is_type_pack(slot) {
-                    return answer;
                 }
-                let owner = InstanceKind::Variant.slot_owner(case.owner);
-                self.mint_slot_hole(case.span, &case.variant.type_params[i].name, &owner)
             })
             .collect()
     }
@@ -6374,8 +6151,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (method_type_args, subst) = self.bind_method_type_args(
                 written,
                 MethodInferenceInput {
-                    receiver_type: type_param_type_id,
-                    method_name,
                     slots: &method_slots,
                     own_params: &own_params,
                     param_types: &method_info_result.param_types,

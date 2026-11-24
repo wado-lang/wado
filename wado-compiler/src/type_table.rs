@@ -457,6 +457,7 @@ impl TypeTable {
             | ResolvedType::Enum { .. }
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam { .. }
@@ -605,7 +606,9 @@ impl TypeTable {
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
             ResolvedType::Newtype { .. } => unreachable!("strip_handles removes every newtype"),
-            ResolvedType::InferVar(var) => panic!("{var} reached heap-effect analysis"),
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+                panic!("{var} reached heap-effect analysis")
+            }
         }
     }
 
@@ -1086,6 +1089,7 @@ impl TypeTable {
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => false,
         }
@@ -1700,6 +1704,7 @@ impl TypeTable {
             | ResolvedType::Function { .. }
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam(_)
@@ -1961,7 +1966,8 @@ impl TypeTable {
                         components.extend(params.iter().copied());
                         components.push(*return_type);
                     }
-                    ResolvedType::TypePack { mapped_elem, .. } => {
+                    ResolvedType::TypePack { mapped_elem, .. }
+                    | ResolvedType::PackVar { mapped_elem, .. } => {
                         components.extend(mapped_elem.iter().copied());
                     }
                     ResolvedType::PackElement { pack, .. } => components.push(*pack),
@@ -2461,6 +2467,39 @@ impl TypeTable {
         matches!(self.get(id), ResolvedType::TypePack { .. })
     }
 
+    /// Whether `id` stands for a run of a tuple's elements: a pack, or a
+    /// variable standing for one.
+    pub fn is_pack_like(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(id),
+            ResolvedType::TypePack { .. } | ResolvedType::PackVar { .. }
+        )
+    }
+
+    /// The variable `id` is, where it is a pack variable standing for the
+    /// list itself rather than mapping it.
+    pub fn pack_var_list(&self, id: TypeId) -> Option<TypeId> {
+        match self.pack_var_run(id) {
+            Some((var, None)) => Some(var),
+            Some((_, Some(_))) | None => None,
+        }
+    }
+
+    /// The variable `id` is, where it is a pack variable a run of elements
+    /// answers, with the one type each element is where it repeats one: the
+    /// list itself, or a repeat whose element does not mention it.
+    pub fn pack_var_run(&self, id: TypeId) -> Option<(TypeId, Option<TypeId>)> {
+        let ResolvedType::PackVar { var, mapped_elem } = *self.get(id) else {
+            return None;
+        };
+        let var = self.infer_var_type(var);
+        match mapped_elem {
+            None => Some((var, None)),
+            Some(elem) if !self.infer_vars_in(elem).contains(&var) => Some((var, Some(elem))),
+            Some(_) => None,
+        }
+    }
+
     /// How a tuple's positions divide into packs and single slots, or `None`
     /// where `id` is no tuple. Equal layouts are the same shape for a value.
     pub fn tuple_layout(&self, id: TypeId) -> Option<Vec<TupleSlot>> {
@@ -2958,6 +2997,7 @@ impl TypeTable {
             }
             ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam { .. }
@@ -5021,6 +5061,45 @@ impl TypeTable {
         });
     }
 
+    /// Push to `out` what the pack variable `var`, answered with `answer`,
+    /// stands for in a tuple: each element of a tuple answer, mapped through
+    /// `mapped_elem`, or the variable whose class it joined, still a pack.
+    fn splice_pack_var(
+        &mut self,
+        var: InferVarId,
+        mapped_elem: Option<TypeId>,
+        answer: TypeId,
+        leaves: &Leaves<'_>,
+        out: &mut Vec<TypeId>,
+    ) {
+        let each = |this: &mut Self, element: TypeId| match mapped_elem {
+            Some(elem) => {
+                let mut vars = leaves.vars.clone();
+                vars.insert(var, element);
+                this.subst_rec(
+                    elem,
+                    &Leaves {
+                        vars: &vars,
+                        ..*leaves
+                    },
+                )
+            }
+            None => element,
+        };
+        if self.is_infer_var(answer) {
+            let mapped_elem = mapped_elem.map(|_| each(self, answer));
+            out.push(self.make_pack_var(answer, mapped_elem));
+            return;
+        }
+        if mapped_elem.is_some() && answer == Self::UNKNOWN {
+            out.push(Self::UNKNOWN);
+            return;
+        }
+        for element in self.elem_types_or_self(answer) {
+            out.push(each(self, element));
+        }
+    }
+
     /// The shared traversal behind [`Self::substitute_type_params_with`],
     /// [`Self::substitute_infer_vars`] and [`Self::instantiate_family`].
     fn subst_rec(&mut self, type_id: TypeId, leaves: &Leaves<'_>) -> TypeId {
@@ -5085,6 +5164,21 @@ impl TypeTable {
                 _ => type_id,
             },
             ResolvedType::InferVar(var) => leaves.vars.get(&var).copied().unwrap_or(type_id),
+            // An answered one is spliced by the tuple holding it.
+            ResolvedType::PackVar { var, mapped_elem } => match mapped_elem {
+                Some(elem) => {
+                    let substituted = self.subst_rec(elem, leaves);
+                    if substituted == elem {
+                        type_id
+                    } else {
+                        self.intern(ResolvedType::PackVar {
+                            var,
+                            mapped_elem: Some(substituted),
+                        })
+                    }
+                }
+                None => type_id,
+            },
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.subst_rec(elem, leaves);
                 if new_elem == elem {
@@ -5130,6 +5224,12 @@ impl TypeTable {
             ResolvedType::Tuple(elems) => {
                 let mut new_elems: Vec<TypeId> = Vec::new();
                 for &e in &elems {
+                    if let ResolvedType::PackVar { var, mapped_elem } = *self.get(e)
+                        && let Some(&answer) = leaves.vars.get(&var)
+                    {
+                        self.splice_pack_var(var, mapped_elem, answer, leaves, &mut new_elems);
+                        continue;
+                    }
                     let bound_pack = match self.get(e) {
                         ResolvedType::TypePack {
                             id, mapped_elem, ..
@@ -5143,6 +5243,23 @@ impl TypeTable {
                         new_elems.push(self.subst_rec(e, leaves));
                         continue;
                     };
+                    // A use site's variable for the pack: the tuple it is
+                    // answered with is spliced then.
+                    if self.is_infer_var(pack_type) {
+                        let mapped_elem = mapped_elem.map(|elem| {
+                            let mut elem_substitution = leaves.params.clone();
+                            elem_substitution.insert(pack, pack_type);
+                            self.subst_rec(
+                                elem,
+                                &Leaves {
+                                    params: &elem_substitution,
+                                    ..*leaves
+                                },
+                            )
+                        });
+                        new_elems.push(self.make_pack_var(pack_type, mapped_elem));
+                        continue;
+                    }
                     match mapped_elem {
                         // Mapped pack: substitute the element once per source
                         // pack element, binding the pack param to that element
@@ -5784,7 +5901,10 @@ impl TypeTable {
             ResolvedType::TypePack { .. } => packs_count,
             // One step's element is as rigid as a type parameter.
             ResolvedType::PackElement { .. } => false,
-            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
+            ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
             // Its arguments are holes of their own: `S::Buf<?0>` awaits `?0`.
             ResolvedType::AssocTypeProjection {
                 param_id,
@@ -5999,6 +6119,10 @@ impl TypeTable {
             ResolvedType::TypePack {
                 mapped_elem: Some(element),
                 ..
+            }
+            | ResolvedType::PackVar {
+                mapped_elem: Some(element),
+                ..
             } => f(*element),
             ResolvedType::Function {
                 params,
@@ -6207,6 +6331,23 @@ impl TypeTable {
         self.any_infer_var(id, &mut |_| true)
     }
 
+    /// The type the variable `var` is, which minting it interned.
+    fn infer_var_type(&self, var: InferVarId) -> TypeId {
+        *self
+            .intern_map
+            .get(&ResolvedType::InferVar(var))
+            .expect("a pack variable is minted as a variable first")
+    }
+
+    /// The pack variable `var` written inside a tuple, each element `elem`
+    /// with `var` standing for it, or the list itself where `elem` is `None`.
+    pub fn make_pack_var(&mut self, var: TypeId, mapped_elem: Option<TypeId>) -> TypeId {
+        let ResolvedType::InferVar(var) = *self.get(var) else {
+            panic!("a pack variable is an inference variable");
+        };
+        self.intern(ResolvedType::PackVar { var, mapped_elem })
+    }
+
     /// Whether `id` is an inference variable itself, not a type naming one.
     pub fn is_infer_var(&self, id: TypeId) -> bool {
         matches!(self.get(id), ResolvedType::InferVar(_))
@@ -6237,6 +6378,9 @@ impl TypeTable {
     fn any_infer_var(&self, id: TypeId, pred: &mut impl FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => pred(id),
+            ResolvedType::PackVar { var, .. } => {
+                pred(self.infer_var_type(*var)) || self.any_constituent(id, &mut |t| self.any_infer_var(t, pred))
+            }
             ResolvedType::AssocTypeProjection {
                 param_id,
                 args,
@@ -6395,6 +6539,7 @@ impl TypeTable {
                 type_pack_name(&render(*element))
             }
             ResolvedType::TypePack { id, .. } => type_pack_name(self.param_name(*id)),
+            ResolvedType::PackVar { var, .. } => type_pack_name(&self.infer_var_name(*var)),
             ResolvedType::PackElement { pack, walk } => {
                 pack_element_name(self.param_name(self.pack_id(*pack)), *walk)
             }
@@ -6744,7 +6889,9 @@ impl TypeTable {
                     RowSpelling::Erased => Vec::new(),
                 },
             ),
-            ResolvedType::InferVar(var) => FqTypeName::infer(*var),
+            ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+                FqTypeName::infer(*var)
+            }
             // What the solver reads as failed where a type id carries it.
             ResolvedType::Unknown | ResolvedType::Error => {
                 FqTypeName::unresolved(&self.mangle_type_name(id))
@@ -6841,6 +6988,9 @@ impl TypeTable {
             }
             ResolvedType::TypePack { id, .. } => {
                 TypeNameInfo::Named(type_pack_name(self.param_name(*id)))
+            }
+            ResolvedType::PackVar { var, .. } => {
+                TypeNameInfo::Named(type_pack_name(&var.to_string()))
             }
             // One parameter list cannot name a pack and a parameter alike, so
             // the bare name is unique to the element of the outermost walk.
@@ -7277,6 +7427,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
+            | ResolvedType::PackVar { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }

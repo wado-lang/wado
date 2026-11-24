@@ -337,9 +337,6 @@ pub(super) enum NeverMeets {
 /// What [`meetings`] reads beyond the two types.
 #[derive(Clone, Copy)]
 pub(super) struct MeetRules<'a> {
-    /// A variable standing for a list where a tuple holds it, whose elements,
-    /// as a rigid pack's do, meet no positions until it is answered.
-    pub(super) is_pack: &'a dyn Fn(TypeId) -> bool,
     pub(super) never: NeverMeets,
     /// A projection base both sides were written with. Two projections of one
     /// family meet argument by argument only over such a base: one a variable
@@ -348,9 +345,8 @@ pub(super) struct MeetRules<'a> {
 }
 
 impl MeetRules<'_> {
-    /// No packs, no `!` answers, and no projection meets another.
+    /// No `!` answers, and no projection meets another.
     pub(super) const PLAIN: MeetRules<'static> = MeetRules {
-        is_pack: &|_| false,
         never: NeverMeets::Nothing,
         written_base: &|_| false,
     };
@@ -367,23 +363,23 @@ pub(super) fn meetings(
     expected: TypeId,
     type_table: &TypeTable,
     rules: MeetRules<'_>,
-    out: &mut Vec<(TypeId, TypeId)>,
+    out: &mut Meetings,
 ) {
     if rules.never == NeverMeets::Variables
         && type_table.is_never(actual)
         && type_table.is_infer_var(expected)
     {
-        out.push((actual, expected));
+        out.pairs.push((actual, expected));
         return;
     }
     if actual == expected || says_nothing(actual) || says_nothing(expected) {
         return;
     }
     if type_table.is_infer_var(actual) || type_table.is_infer_var(expected) {
-        out.push((actual, expected));
+        out.pairs.push((actual, expected));
         return;
     }
-    let pairwise = |actual: &[TypeId], expected: &[TypeId], out: &mut Vec<_>| {
+    let pairwise = |actual: &[TypeId], expected: &[TypeId], out: &mut Meetings| {
         if actual.len() == expected.len() {
             for (&a, &e) in actual.iter().zip(expected) {
                 meetings(a, e, type_table, rules, out);
@@ -401,9 +397,12 @@ pub(super) fn meetings(
     }
     match (type_table.get(actual), type_table.get(expected)) {
         (ResolvedType::Tuple(a), ResolvedType::Tuple(e)) => {
-            let is_pack = |t: TypeId| (rules.is_pack)(t) || type_table.is_type_pack(t);
-            for (a, e) in fixed_around_packs(a, e, &is_pack) {
+            let around = fixed_around_packs(a, e, type_table);
+            for (a, e) in around.fixed {
                 meetings(a, e, type_table, rules, out);
+            }
+            if let Some(run) = around.run {
+                out.packs.push(run);
             }
         }
         (
@@ -460,40 +459,86 @@ pub(super) fn meetings(
     }
 }
 
-/// The elements of two tuples at one position whatever their packs expand
-/// to: all of them where neither holds a pack, else those ahead of the first
-/// pack and behind the last, counted from each end. Two tuples both holding
-/// packs place them alike or pair nothing.
-fn fixed_around_packs(
-    a: &[TypeId],
-    e: &[TypeId],
-    is_pack: &dyn Fn(TypeId) -> bool,
-) -> Vec<(TypeId, TypeId)> {
+/// What [`meetings`] finds two types meet at.
+#[derive(Default)]
+pub(super) struct Meetings {
+    /// Each `(actual, expected)` pair to equate.
+    pub(super) pairs: Vec<(TypeId, TypeId)>,
+    /// Each pack variable a tuple holds, with the run of elements it meets.
+    pub(super) packs: Vec<PackRun>,
+}
+
+/// A pack variable, as the plain variable, and the elements the other tuple
+/// holds where it stands, which answer it as one tuple.
+pub(super) struct PackRun {
+    pub(super) var: TypeId,
+    pub(super) elems: Vec<TypeId>,
+}
+/// What two tuples meet at whatever their packs expand to.
+struct AroundPacks {
+    /// The elements at one position: all of them where neither holds a pack,
+    /// else those ahead of the first pack and behind the last, counted from
+    /// each end. Two tuples both holding packs place them alike or pair
+    /// nothing.
+    fixed: Vec<(TypeId, TypeId)>,
+    /// A pack variable standing alone among the packs of its tuple, and what
+    /// the other tuple holds in its place.
+    run: Option<PackRun>,
+}
+
+fn fixed_around_packs(a: &[TypeId], e: &[TypeId], type_table: &TypeTable) -> AroundPacks {
     let packs_at = |t: &[TypeId]| -> Vec<usize> {
         t.iter()
             .enumerate()
-            .filter(|&(_, &t)| is_pack(t))
+            .filter(|&(_, &t)| type_table.is_pack_like(t))
             .map(|(i, _)| i)
             .collect()
     };
+    let nothing = || AroundPacks {
+        fixed: Vec::new(),
+        run: None,
+    };
     let (a_packs, e_packs) = (packs_at(a), packs_at(e));
     if a_packs.is_empty() && e_packs.is_empty() {
-        return if a.len() == e.len() {
-            a.iter().copied().zip(e.iter().copied()).collect()
-        } else {
-            Vec::new()
+        if a.len() != e.len() {
+            return nothing();
+        }
+        return AroundPacks {
+            fixed: a.iter().copied().zip(e.iter().copied()).collect(),
+            run: None,
         };
     }
     if !a_packs.is_empty() && !e_packs.is_empty() {
-        return if a.len() == e.len() && a_packs == e_packs {
-            a.iter()
-                .copied()
-                .zip(e.iter().copied())
-                .filter(|&(a, _)| !is_pack(a))
-                .collect()
-        } else {
-            Vec::new()
-        };
+        if a.len() != e.len() || a_packs != e_packs {
+            return nothing();
+        }
+        // A pack variable facing a pack is answered with it, a variable
+        // facing a variable joins it.
+        let mut fixed = Vec::new();
+        let mut run = None;
+        for (&a, &e) in a.iter().zip(e) {
+            match (type_table.pack_var_list(a), type_table.pack_var_list(e)) {
+                (Some(a_var), Some(e_var)) => fixed.push((a_var, e_var)),
+                (Some(var), None) if a_packs.len() == 1 => {
+                    run = Some(PackRun {
+                        var,
+                        elems: vec![e],
+                    });
+                }
+                (None, Some(var)) if a_packs.len() == 1 => {
+                    run = Some(PackRun {
+                        var,
+                        elems: vec![a],
+                    });
+                }
+                (Some(_) | None, Some(_) | None) => {
+                    if !type_table.is_pack_like(a) {
+                        fixed.push((a, e));
+                    }
+                }
+            }
+        }
+        return AroundPacks { fixed, run };
     }
     let (packed, packs, other) = if e_packs.is_empty() {
         (a, &a_packs, e)
@@ -503,7 +548,7 @@ fn fixed_around_packs(
     let before = packs[0];
     let after = packed.len() - packs[packs.len() - 1] - 1;
     if other.len() < before + after {
-        return Vec::new();
+        return nothing();
     }
     let ends = (0..before).chain(packed.len() - after..packed.len());
     let other_at = |i: usize| {
@@ -513,14 +558,28 @@ fn fixed_around_packs(
             other[other.len() - (packed.len() - i)]
         }
     };
-    ends.map(|i| {
+    let oriented = |packed_side: TypeId, other_side: TypeId| {
         if e_packs.is_empty() {
-            (packed[i], other_at(i))
+            (packed_side, other_side)
         } else {
-            (other_at(i), packed[i])
+            (other_side, packed_side)
         }
-    })
-    .collect()
+    };
+    let mut fixed: Vec<(TypeId, TypeId)> = ends.map(|i| oriented(packed[i], other_at(i))).collect();
+    // One pack takes what the ends leave over; two divide it at a boundary
+    // nothing here can find. A repeat's elements each meet the type it
+    // repeats.
+    let run = match packs[..] {
+        [only] => type_table.pack_var_run(packed[only]).map(|(var, each)| {
+            let elems = other[before..other.len() - after].to_vec();
+            if let Some(each) = each {
+                fixed.extend(elems.iter().map(|&elem| oriented(each, elem)));
+            }
+            PackRun { var, elems }
+        }),
+        _ => None,
+    };
+    AroundPacks { fixed, run }
 }
 
 /// Whether `actual` and `expected` part at some position: their heads, or
@@ -537,6 +596,7 @@ fn apart_around_holes(actual: TypeId, expected: TypeId, type_table: &TypeTable) 
                 matches!(
                     type_table.get(e),
                     ResolvedType::TypePack { .. }
+                        | ResolvedType::PackVar { .. }
                         | ResolvedType::InferVar(_)
                         | ResolvedType::Unknown
                         | ResolvedType::Error

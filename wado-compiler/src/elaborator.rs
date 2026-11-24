@@ -1534,6 +1534,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             | tir::ResolvedType::Ref(_)
             | tir::ResolvedType::MutRef(_)
             | tir::ResolvedType::InferVar(_)
+            | tir::ResolvedType::PackVar { .. }
             | tir::ResolvedType::TypePack { .. }
             | tir::ResolvedType::PackElement { .. }
             | tir::ResolvedType::AssocParam { .. }

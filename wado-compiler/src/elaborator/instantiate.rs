@@ -6,12 +6,12 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{ResolvedType, SubstitutionContext, TypeArgMap, TypeId, TypeParamId};
+use crate::tir::{ResolvedType, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
-use super::call::{bound_targets, slot_names};
+use super::call::slot_names;
 use super::coercion::ExpectedReturn;
 use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
@@ -121,19 +121,11 @@ impl Instantiated {
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots` — a declaration's type parameters, in order — with
-    /// one fresh inference variable each.
+    /// one fresh inference variable each. A type *pack* (`..T`) becomes one
+    /// too, answered by a tuple: inside a tuple it is written as a
+    /// [`ResolvedType::PackVar`], which the answer splices into.
     ///
-    /// A type *pack* (`..T`) is left rigid. A variable stands for one type; a
-    /// pack stands for a list of them, and the unifier splices it by
-    /// recognising `TypePack` inside the expected tuple. Rewriting `[..T]` to
-    /// `[?0]` would hide the shape that arm matches on and the pack would
-    /// never bind. Instantiating a pack needs a pack-shaped variable, which
-    /// does not exist yet.
-    ///
-    /// A slot [`Instantiation::type_args`] names is solved as it is minted. A
-    /// pack the turbofish names is substituted outright: what it stands for is
-    /// written, so a parameter type mentioning it is concrete before any
-    /// argument meets it, and nothing is left for the unifier to splice.
+    /// A slot [`Instantiation::type_args`] names is solved as it is minted.
     pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
         let mut diags = Vec::with_capacity(slots.len());
@@ -160,11 +152,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 diags.push(None);
                 continue;
             };
-            if is_pack {
-                if let Some(pack) = named {
-                    subst.insert(param, pack);
-                }
-                vars.push(slot);
+            // A pack the turbofish names is substituted outright: what it
+            // stands for is written, so nothing is left to splice.
+            if is_pack && let Some(pack) = named {
+                subst.insert(param, pack);
+                vars.push(pack);
                 diags.push(None);
                 continue;
             }
@@ -252,24 +244,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         param_types
             .iter()
-            .map(|&t| {
-                let substituted = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .substitute_type_params(t, &subst);
-                self.answer_frame_projections(substituted)
-            })
+            .map(|&t| self.substitute_ctx_in_frame(&subst, t))
             .collect()
     }
 
-    /// [`Self::substitute_in_frame`] for a substitution bound by name.
+    /// `subst` over `type_id`, then the projections that answers.
     pub(super) fn substitute_ctx_in_frame(
         &mut self,
-        subst: &SubstitutionContext,
+        subst: &TypeArgMap,
         type_id: TypeId,
     ) -> TypeId {
-        let substituted = subst.substitute(type_id, &mut self.tysys.type_table.borrow_mut());
+        let substituted = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(type_id, subst);
         self.answer_frame_projections(substituted)
     }
 
@@ -384,45 +373,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let bounds = self.declared_bounds(param, self_binding, impl_args);
             self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
-        }
-    }
-
-    /// Stand a variable in for each pack slot that a slot `solved` left open
-    /// pins through an associated-type equality
-    /// (`S: ReflectStruct<FieldTypes = [..F]>`). [`Self::instantiate`] leaves a
-    /// pack rigid, and only the owner's projection answers this one; it is
-    /// blamed with its owner.
-    pub(super) fn defer_pinned_packs(
-        &mut self,
-        inst: &Instantiated,
-        params: &[GenericParam],
-        names: &[ParamRef],
-        solved: &mut [TypeId],
-        self_binding: Option<SelfBinding>,
-        impl_args: &[(ParamRef, TypeId)],
-    ) {
-        for (i, param) in params.iter().enumerate() {
-            let Some((span, _, owner)) =
-                inst.diags[i].clone().filter(|_| solved[i] == inst.vars[i])
-            else {
-                continue;
-            };
-            let targets = param
-                .bounds
-                .iter()
-                .flat_map(|b| bound_targets(b, names, &self.tysys.resolutions));
-            for (_, j) in targets.collect::<Vec<_>>() {
-                let pack = &params[j];
-                if !pack.is_pack || solved[j] != inst.vars[j] {
-                    continue;
-                }
-                let var = self.mint_infer_var_named(&pack.name);
-                self.mark_pack_var(var);
-                self.attach_infer_var_blame(var, span, pack.name.clone(), owner.clone());
-                let bounds = self.declared_bounds(pack, self_binding, impl_args);
-                self.attach_infer_var_bounds(var, pack.name.clone(), bounds, span);
-                solved[j] = var;
-            }
         }
     }
 
