@@ -52,6 +52,9 @@ pub(crate) struct InferHoleTable {
     reports: std::cell::RefCell<Vec<Report>>,
     /// The innermost statement being walked.
     pub(super) statement: Option<Span>,
+    /// Whether a body is being walked, which settles everything here when it
+    /// ends.
+    in_body: bool,
     /// Struct literals whose field defaults were not walked, since a slot they
     /// are typed by was a hole. An unsolved hole reports itself; a solved one
     /// came too late for the defaults, so the literal reports it.
@@ -204,12 +207,14 @@ impl Report {
     /// Whether it covers the origin's span, or points into the statement the
     /// origin was minted in. A report raised there that points elsewhere,
     /// such as into a callee's default argument, is about that code instead.
+    /// A body with no statement, such as a global's initializer, is one.
     fn covers(&self, origin: &Origin) -> bool {
         let reported = Extent::of_report(&self.span);
-        let in_statement = |statement: Span| {
-            self.statement == Some(statement) && Extent::of(&statement).contains(&reported)
-        };
-        origin.statement.is_some_and(in_statement)
+        let in_statement = self.statement == origin.statement
+            && self
+                .statement
+                .is_none_or(|statement| Extent::of(&statement).contains(&reported));
+        in_statement
             || origin
                 .span()
                 .is_some_and(|span| reported.contains(&Extent::of(&span)))
@@ -471,32 +476,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         hole
     }
 
-    /// [`Self::mint_infer_hole`] for a call's type argument `slot`. A variable
-    /// inference already put there takes the diagnostic and the bounds: a
-    /// second one would orphan it, which the sweep would then pin to `error`
-    /// behind a diagnostic nobody asked for.
+    /// A variable for a call's type argument `slot` nothing answered yet,
+    /// reported at the end of the body as `param_name` [`owner`](
+    /// TypeError::cannot_infer_owner) if nothing does. A variable inference
+    /// already put there takes the blame and the bounds: a second one would
+    /// orphan it, which the sweep would then pin to `error` behind a diagnostic
+    /// nobody asked for.
     pub(super) fn defer_slot(
         &mut self,
         slot: Option<TypeId>,
         span: Span,
-        message: String,
+        owner: String,
         param_name: String,
         bounds: Vec<DeclaredBound>,
     ) -> TypeId {
+        let blame = Blame {
+            span,
+            param: Some(param_name.clone()),
+            owner,
+        };
         let existing = slot.filter(|&t| self.tysys.type_table.borrow().contains_infer_var(t));
-        let Some(var) = existing else {
-            return self.mint_infer_hole(span, message, param_name, bounds);
+        let var = match existing {
+            Some(var) => var,
+            None => self.mint_infer_var_named(&param_name),
         };
         // The site words the report: the blame the variable was minted with
         // knows only the declaration.
-        self.infer_holes.vars.reword_class(
-            var,
-            Blame {
-                span,
-                param: None,
-                owner: message,
-            },
-        );
+        self.infer_holes.vars.reword_class(var, blame);
         self.attach_infer_var_bounds(var, param_name, bounds, span);
         var
     }
@@ -1003,9 +1009,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             tt.assoc_type_projections(written)
                 .into_iter()
-                .filter_map(|projection| match tt.get(projection) {
-                    ResolvedType::AssocTypeProjection { param_id, .. } => Some(*param_id),
-                    _ => None,
+                .map(|projection| {
+                    let ResolvedType::AssocTypeProjection { param_id, .. } = tt.get(projection)
+                    else {
+                        unreachable!("`assoc_type_projections` yields projections")
+                    };
+                    *param_id
                 })
                 .collect::<Vec<TypeId>>()
         });
@@ -1250,9 +1259,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// ends: a variable never outlives its body.
     pub(super) fn as_body<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
         assert!(
-            self.infer_holes.is_empty(),
-            "a body starts with no variable open"
+            !self.infer_holes.in_body && self.infer_holes.is_empty(),
+            "a body starts outside every other, with no variable open"
         );
+        self.infer_holes.in_body = true;
         let mark = FactsMark {
             body: self.sem.types.body.lens(),
             decls: DeclFactsLens::of(&self.sem.types),

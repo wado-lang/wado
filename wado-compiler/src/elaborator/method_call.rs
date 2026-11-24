@@ -2984,12 +2984,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             declaring_args = self.apply_infer_holes_each(&declaring_args);
-            // A `_` nothing answered waits for a later use where the bare
-            // spelling's slot would, and is reported now where none can come.
-            if !unanswered.is_empty() && !self.defers_uninferred(&args, vars, expected_type) {
-                self.close_uninferred(&unanswered);
-                return TypeTable::ERROR;
-            }
             target_type_id = self.with_written_args(target_type_id, &declaring_args);
             let callee_args =
                 self.args_at_callee(target_type_id, &declaring_args, callee_sig.as_ref());

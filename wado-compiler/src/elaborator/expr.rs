@@ -3893,8 +3893,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if open.is_empty() {
             return self.apply_infer_holes(resolved);
         }
-        // An operand that reported its own error is the whole fault, and
-        // `resolve_expr` closes what it leaves open.
+        // An operand that reported its own error is the whole fault, and that
+        // report covers the `_`s of its statement.
         if self.logger.offered_error_count() == errors_before {
             self.close_uninferred(&open);
         }

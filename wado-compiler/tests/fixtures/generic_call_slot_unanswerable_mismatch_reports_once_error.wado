@@ -1,0 +1,19 @@
+// A wrong argument to a generic call whose slot nothing can answer is the whole
+// fault, in a statement and in a global's initializer alike: the slot is not
+// reported again as uninferred.
+fn make<T>(s: String) -> i32 {
+    return 0;
+}
+
+global G: i32 = make(5);
+
+export fn run() {
+    let x: i32 = make(5);
+}
+
+__DATA__
+{
+  "compile_error": "type mismatch: expected 'String', found 'i32'",
+  "compile_error_count": 2,
+  "compile_errors_not_contains": ["cannot infer"]
+}

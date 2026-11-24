@@ -1880,11 +1880,50 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut test_count = 0usize;
         for item in &module.items {
-            self.as_body(|this| this.annotate_item(item, module, &mut test_count));
+            self.as_body(|this| this.annotate_item_decl(item, module, &mut test_count));
+            self.annotate_item_bodies(item);
         }
     }
 
-    fn annotate_item(&mut self, item: &'a Item, module: &'a Module, test_count: &mut usize) {
+    /// Walk the function bodies `item` holds, each a body of its own.
+    fn annotate_item_bodies(&mut self, item: &'a Item) {
+        match item {
+            Item::Function(func) => self.resolve_function(func),
+            Item::Impl(impl_block) => self.resolve_impl_item(impl_block),
+            Item::Trait(trait_decl) => self.resolve_trait_bodies(trait_decl),
+            // An operation's default body is walked as the function reify
+            // will emit it as, so its facts land under the same `AstId` every
+            // other function's do.
+            Item::Interface(effect_decl) => {
+                for method in default_impl_methods(&effect_decl.name, &effect_decl.methods) {
+                    self.resolve_function(&method);
+                }
+            }
+            Item::Resource(resource_decl) => {
+                let resource = self.tysys.def_at(resource_decl.id);
+                let resource_type = self.tysys.type_table.borrow_mut().make_resource(resource);
+                for method in default_impl_methods(&resource_decl.name, &resource_decl.methods) {
+                    self.resolve_resource_default(&method, resource_type);
+                }
+            }
+            Item::Use(_)
+            | Item::Struct(_)
+            | Item::Enum(_)
+            | Item::Variant(_)
+            | Item::Flags(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => {}
+        }
+    }
+
+    /// Walk what `item` declares outside its function bodies: field and
+    /// parameter defaults, a global's initializer, a test.
+    fn annotate_item_decl(&mut self, item: &'a Item, module: &'a Module, test_count: &mut usize) {
         ForwardDefaults(self).visit_item(item);
         TypeReferences(self).visit_item(item);
         if let Item::Struct(ast::StructDecl { id, .. })
@@ -1895,18 +1934,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.type_param_defaults_are_ordered(def);
         }
         match item {
-            Item::Function(func) => {
-                self.resolve_function(func);
-            }
             Item::Struct(struct_decl) => {
                 self.resolve_struct(struct_decl);
             }
-            Item::Impl(impl_block) => {
-                self.resolve_impl_item(impl_block);
-            }
             Item::Trait(trait_decl) => {
                 self.resolve_trait_param_defaults(trait_decl);
-                self.resolve_trait_bodies(trait_decl);
             }
             Item::Variant(variant_decl) => {
                 self.resolve_variant_decl(variant_decl);
@@ -1918,10 +1950,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Item::Global(global_decl) => {
                 self.resolve_global(global_decl);
             }
-            // Enum / Flags / Newtype emit no body-level facts — reify
-            // rebuilds their `TirEnum` / `TirFlags` / `TirNewtype` from the
-            // AST + decl tables, so the body walk does nothing for them.
-            Item::Enum(_) | Item::Flags(_) | Item::Newtype(_) => {}
             Item::Interface(effect_decl) => {
                 self.reject_unsupported_operation_clauses(
                     &effect_decl.name,
@@ -1934,12 +1962,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &effect_decl.methods,
                     None,
                 );
-                // An operation's default body is walked as the function
-                // reify will emit it as, so its facts land under the same
-                // `AstId` every other function's do.
-                for method in default_impl_methods(&effect_decl.name, &effect_decl.methods) {
-                    self.resolve_function(&method);
-                }
             }
             Item::Resource(resource_decl) => {
                 self.record_decl_type_params(resource_decl.id, &resource_decl.type_params);
@@ -1958,13 +1980,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &resource_decl.methods,
                     Some(resource),
                 );
-                let resource_type = self.tysys.type_table.borrow_mut().make_resource(resource);
-                for method in default_impl_methods(&resource_decl.name, &resource_decl.methods) {
-                    self.resolve_resource_default(&method, resource_type);
-                }
             }
-            // Other items will be added as needed
-            _ => {}
+            // Reify rebuilds an enum, flags or newtype from the AST and the
+            // decl tables, so the body walk records nothing for them.
+            Item::Use(_)
+            | Item::Function(_)
+            | Item::Impl(_)
+            | Item::Enum(_)
+            | Item::Flags(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::World(_)
+            | Item::Error(_) => {}
         }
     }
 
@@ -2066,7 +2094,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let trait_name = scope.impl_block_trait_name(impl_block);
 
         if impl_block.is_synthesize_request {
-            scope.resolve_synthesize_request_marker(impl_block, &struct_name);
+            scope
+                .as_body(|scope| scope.resolve_synthesize_request_marker(impl_block, &struct_name));
             return;
         }
 

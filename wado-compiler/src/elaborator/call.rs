@@ -1988,11 +1988,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 // Before the record, which then holds what stands in for a slot
                 // deferred.
-                self.defer_or_report_uninferred_static_method_type_args(
+                self.defer_uninferred_static_method_type_args(
                     callee,
                     &mut static_args,
-                    &args,
-                    expected_type,
                     Some(receiver_type),
                     call.span,
                 );
@@ -2305,11 +2303,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ) else {
                         return TypeTable::ERROR;
                     };
-                    self.defer_or_report_uninferred_static_method_type_args(
+                    self.defer_uninferred_static_method_type_args(
                         callee,
                         &mut static_args,
-                        &args,
-                        expected_type,
                         ns_receiver_type,
                         call.span,
                     );
@@ -2723,19 +2719,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_function_type_arg_bounds(&callee, &type_args, &effect_rows, call.span);
         }
 
-        let generic = !self.lookup_function_type_params(&callee).is_empty();
-        let reference_reported = generic
-            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span);
-        if !reference_reported {
-            self.defer_or_report_uninferred_fn_type_args(
-                &callee,
-                &mut type_args,
-                &args,
-                &effect_rows,
-                expected_type,
-                call.span,
-            );
+        if !self.lookup_function_type_params(&callee).is_empty() {
+            self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span);
         }
+        self.defer_or_report_uninferred_fn_type_args(
+            &callee,
+            &mut type_args,
+            &effect_rows,
+            call.span,
+        );
         // The arguments were typed by the call's own variables, which what the
         // call settled answers: a projection or a default among them included.
         if let Some(inst) = &arg_inst
@@ -3838,8 +3830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `fn`-bound one hold no slot. Defaulted parameters (already filled) and
     /// ones bound to an outer-scope `TypeParam` (the caller forwarding its own
     /// generics) are excluded. A slot it reports is the error type from then
-    /// on, as [`Self::defer_or_report_uninferred_static_method_type_args`]
-    /// leaves one.
+    /// on.
     fn report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
@@ -3893,17 +3884,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ));
     }
 
-    /// Defer or report the slots a static call left unanswered, as
-    /// [`Self::defer_or_report_uninferred_fn_type_args`] does a free
-    /// function's. A slot it reports is the error type from then on: left as
-    /// the callee's own binder, it reads as whatever the caller declares under
-    /// that name. `receiver` is what `Self` means at the call.
-    fn defer_or_report_uninferred_static_method_type_args(
+    /// Defer the slots a static call left unanswered to the end of the body,
+    /// as [`Self::defer_or_report_uninferred_fn_type_args`] does a free
+    /// function's: a slot left as the callee's own binder would read as
+    /// whatever the caller declares under that name. `receiver` is what `Self`
+    /// means at the call.
+    fn defer_uninferred_static_method_type_args(
         &mut self,
         callee: StaticCallee,
         type_args: &mut StaticTypeArgs,
-        args: &[TypeId],
-        expected_type: Option<TypeId>,
         receiver: Option<TypeId>,
         span: token::Span,
     ) {
@@ -3953,19 +3942,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             format!("`{prefix}::<...>::{suffix}()`")
         };
-        let names: Vec<String> = impl_unresolved
-            .iter()
-            .chain(&method_unresolved)
-            .map(|(_, name)| name.clone())
-            .collect();
-        let owner = format!("`{prefix}::{suffix}`");
-        let own: Vec<TypeId> = impl_type_args
-            .iter()
-            .chain(method_type_args.iter())
-            .copied()
-            .collect();
-        let defers = self.defers_uninferred(args, &own, expected_type);
-        let message = TypeError::cannot_infer_message(&names, &owner, &turbofish);
+        let owner = TypeError::cannot_infer_owner(&format!("`{prefix}::{suffix}`"), &turbofish);
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let impl_params: &[ast::GenericParam] = sig
             .declaring_impl
@@ -3979,24 +3956,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if type_args.len() <= *slot {
                     type_args.resize(slot + 1, TypeTable::ERROR);
                 }
-                type_args[*slot] = if defers {
-                    let param = if declaring {
-                        impl_params.iter().find(|p| &p.name == name)
-                    } else {
-                        sig.own_params.get(*slot)
-                    };
-                    let bounds = param.map_or_else(Vec::new, |p| {
-                        self.declared_bounds(p, None, &[], BoundRows::Unbound)
-                    });
-                    self.defer_slot(inferred, span, message.clone(), name.clone(), bounds)
+                let param = if declaring {
+                    impl_params.iter().find(|p| &p.name == name)
                 } else {
-                    TypeTable::ERROR
+                    sig.own_params.get(*slot)
                 };
+                let bounds = param.map_or_else(Vec::new, |p| {
+                    self.declared_bounds(p, None, &[], BoundRows::Unbound)
+                });
+                type_args[*slot] =
+                    self.defer_slot(inferred, span, owner.clone(), name.clone(), bounds);
             }
-        }
-        if !defers {
-            let _ = self.emit(TypeError::CannotInferType { message, span });
-            return;
         }
         let (names, owners) = self.sig_slots(&sig);
         let split = sig.declaring_split();
@@ -4037,29 +4007,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (names, owners)
     }
 
-    /// Whether a slot nothing at the call site answers waits for a sink the
-    /// call's value reaches, a sibling branch's type among them. It does where
-    /// the type expected of the call is none or still holds a variable (an
-    /// enclosing call's argument), and its arguments hold no variable but the
-    /// call's own `type_args`, as a closure argument typed by them does.
-    pub(super) fn defers_uninferred(
-        &self,
-        args: &[TypeId],
-        type_args: &[TypeId],
-        expected_type: Option<TypeId>,
-    ) -> bool {
-        let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
-        let type_args = self.apply_infer_holes_each(type_args);
-        let args = self.apply_infer_holes_each(args);
-        let tt = self.tysys.type_table.borrow();
-        expected_type.is_none_or(|t| tt.contains_infer_var(t))
-            && args.iter().all(|&a| {
-                tt.infer_vars_in(a)
-                    .iter()
-                    .all(|var| type_args.contains(var))
-            })
-    }
-
     /// Each of `sig`'s declaring block's parameters whose argument in
     /// `impl_type_args` is `unanswered`, by slot and name. The arguments are
     /// indexed by slot, which a parameter nested in the target or pushed past a
@@ -4077,8 +4024,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// [`Self::defer_or_report_uninferred_static_method_type_args`] for a derived method,
-    /// whose slots are its type's own parameters.
+    /// Report the slots a static call to a derived method left unanswered,
+    /// whose slots are its type's own parameters and stand for no variable.
     fn report_uninferred_derived_type_args(
         &mut self,
         receiver: &ReceiverId,
@@ -4199,18 +4146,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         !mismatched.is_empty()
     }
 
-    /// Defer (mint inference holes) or report unresolved free-function type
-    /// parameters, mirroring the instance-method deferral. Gated on a hole-free
-    /// argument list and no expected type. Runs after
-    /// [`Self::fill_defaulted_fn_type_args`], so any declared default is already
-    /// substituted and only genuinely unresolvable params remain here.
+    /// Defer unresolved free-function type parameters to the end of the body,
+    /// which reports what nothing answered unless an error covers it. Runs
+    /// after [`Self::fill_defaulted_fn_type_args`], so any declared default is
+    /// already substituted and only genuinely unresolvable params remain here.
     pub(super) fn defer_or_report_uninferred_fn_type_args(
         &mut self,
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
-        args: &[TypeId],
         effect_rows: &EffectRows,
-        expected_type: Option<TypeId>,
         span: token::Span,
     ) {
         let params = self.lookup_function_type_params(callee);
@@ -4236,24 +4180,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             from_empty || this.slot_unanswered(type_args[i], &scope_params)
         };
 
-        let unresolved_names: Vec<String> = space
-            .iter()
-            .enumerate()
-            .filter(|&(i, _)| unresolved(self, i))
-            .map(|(_, p)| p.name.clone())
-            .collect();
-        if unresolved_names.is_empty() {
-            return;
-        }
-
-        if !self.defers_uninferred(args, type_args, expected_type) {
-            self.report_uninferred_fn_type_args(callee, type_args, span);
+        if !(0..n).any(|i| unresolved(self, i)) {
             return;
         }
 
         let func_name = callee.name();
-        let message = TypeError::cannot_infer_message(
-            &unresolved_names,
+        let owner = TypeError::cannot_infer_owner(
             &format!("function `{func_name}`"),
             &format!("`{func_name}::<...>()`"),
         );
@@ -4268,7 +4200,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let stand_in = self.defer_slot(
                 type_args.get(i).copied(),
                 span,
-                message.clone(),
+                owner.clone(),
                 p.name.clone(),
                 bounds,
             );

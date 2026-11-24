@@ -1799,9 +1799,15 @@ impl TypeError {
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "cannot infer type parameter {named} of {owner}; \
-             add a turbofish ({turbofish}) or a type annotation"
+            "cannot infer type parameter {named} {}",
+            Self::cannot_infer_owner(owner, turbofish)
         )
+    }
+
+    /// [`Self::cannot_infer_message`] past the parameters it names, which a
+    /// variable left open carries until the end of its body says which.
+    pub(super) fn cannot_infer_owner(owner: &str, turbofish: &str) -> String {
+        format!("of {owner}; add a turbofish ({turbofish}) or a type annotation")
     }
 
     /// This error as its `(code, message, span)` triple, which is what
