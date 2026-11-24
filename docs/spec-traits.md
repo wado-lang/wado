@@ -1153,7 +1153,10 @@ A function argument selects by its type, row included. A function named as a
 value has the row its declaration states, and a closure the row its body
 performs. A function admits every parameter it could be passed to, so a
 closure admits only function types, and a row admits every row that holds it.
-Where one candidate takes the row exactly, that candidate wins. A call whose
+The candidates taking every function argument's row exactly win, where there
+are any, and among those the ones taking every type exactly, `fn` over
+`fn mut`. Each tier judges all the arguments together, so two candidates
+exact at different arguments are ambiguous. A call whose
 candidates differ only in the rows a closure argument could meet is selected
 once the closure's body is walked.
 

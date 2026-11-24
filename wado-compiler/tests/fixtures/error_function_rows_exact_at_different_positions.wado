@@ -1,0 +1,39 @@
+// Each candidate takes one argument's row exactly and holds the other's, so
+// neither takes every row exactly: the call is ambiguous whichever position
+// the exact one stands in, rather than settled by the first argument. The
+// report names only the candidates the arguments admit.
+use { Stdout } from "core:cli";
+
+trait Two<A, B> with _ {
+    fn two(&self, a: A, b: B) -> i32;
+}
+
+struct S {}
+
+impl Two<i32, i32> for S {
+    fn two(&self, a: i32, b: i32) -> i32 {
+        return 0;
+    }
+}
+
+impl Two<fn() with Stdout, fn()> for S {
+    fn two(&self, a: fn() with Stdout, b: fn()) -> i32 {
+        return 1;
+    }
+}
+
+impl Two<fn(), fn() with Stdout> for S {
+    fn two(&self, a: fn(), b: fn() with Stdout) -> i32 {
+        return 2;
+    }
+}
+
+fn quiet() {}
+
+export fn run() with Stdout {
+    let s = S {};
+    assert s.two(quiet, quiet) > 0;
+}
+
+__DATA__
+{"compile_error": "the arguments do not select between 'Two<fn() -> () with Stdout, fn() -> ()>' and 'Two<fn() -> (), fn() -> () with Stdout>'; annotate", "compile_error_count": 1}

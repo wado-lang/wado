@@ -3419,7 +3419,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 [_, _, ..] if self.ties_on_closure_rows(&found_traits, &admitted, &classes) => {
                     return self.await_closure_row(&found_traits, &admitted);
                 }
-                [] | [_, _, ..] => {}
+                [_, _, ..] => {
+                    // What the report names, and what stands in for the
+                    // call, are the candidates the arguments admit.
+                    let mut index = 0;
+                    found_traits.retain(|_| {
+                        let keep = admitted.contains(&index);
+                        index += 1;
+                        keep
+                    });
+                }
+                [] => {}
             }
         }
 

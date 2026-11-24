@@ -1,6 +1,7 @@
 // A function argument admits what its typecheck lets it fill: `fn` where
 // `fn mut` is taken, a row an effect parameter leaves open, and a row holding
-// its own. A closure admits only function types.
+// its own. A closure admits only function types. Among those, the candidates
+// taking the row exactly win, and among those, the one taking the type exactly.
 use { println, Stdout, Stderr } from "core:cli";
 
 trait Wide<F> with _ {
@@ -59,6 +60,28 @@ impl Mutable<i32> for S {
     }
 }
 
+impl Mutable<fn() with Stdout> for S {
+    fn mutable(&self, f: fn() with Stdout) -> i32 {
+        return 2;
+    }
+}
+
+trait Kind<F> with _ {
+    fn kind(&self, f: F) -> i32;
+}
+
+impl Kind<fn mut()> for S {
+    fn kind(&self, f: fn mut()) -> i32 {
+        return 1;
+    }
+}
+
+impl Kind<fn()> for S {
+    fn kind(&self, f: fn()) -> i32 {
+        return 2;
+    }
+}
+
 trait Open<F> with _ {
     fn open(&self, f: F) -> i32;
 }
@@ -88,7 +111,11 @@ export fn run() with (Stdout, Stderr) {
     assert s.wide(|| { println("wide"); }) == 2;
     assert s.shape(|| {}) == 1;
     assert s.shape(|| { println("shape"); }) == 2;
+    // The exact row wins over a row holding it, whatever the mutability.
     assert s.mutable(quiet) == 1;
+    assert s.mutable(loud) == 2;
+    // Between two exact rows, the exact type wins.
+    assert s.kind(quiet) == 2;
     assert s.open(loud) == 1;
 }
 

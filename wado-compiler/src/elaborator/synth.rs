@@ -306,6 +306,42 @@ pub(super) fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
     }
 }
 
+/// Two function types alike in everything but `fn` versus `fn mut`.
+fn same_but_mutability(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
+    match (tt.get(param), tt.get(arg)) {
+        (
+            ResolvedType::Function {
+                params: p_params,
+                return_type: p_return,
+                effects: p_row,
+                ..
+            },
+            ResolvedType::Function {
+                params: a_params,
+                return_type: a_return,
+                effects: a_row,
+                ..
+            },
+        ) => p_params == a_params && p_return == a_return && p_row == a_row,
+        _ => false,
+    }
+}
+
+/// A function argument whose row is solved: `solved` is `arg` with it.
+struct RowedArg {
+    position: usize,
+    arg: TypeId,
+    solved: TypeId,
+}
+
+/// How closely a parameter takes a function argument, loosest first.
+#[derive(Clone, Copy)]
+enum Fit {
+    Holds,
+    Row,
+    Type,
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Classify one argument. See the module documentation for the soundness
     /// invariant and the side-effect discipline this entry point enforces.
@@ -353,51 +389,86 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Narrow `candidates` by a function argument's solved row: to those
-    /// taking it exactly where any does, else to those whose row holds it. A
-    /// closure's row is its body's solution, closed only where it selects.
+    /// Narrow `candidates` by the function arguments' solved rows: to those
+    /// whose rows hold them, then to those taking every row exactly where
+    /// any does, then to those taking every type exactly (`fn` over
+    /// `fn mut`). A tier judges all arguments at once, so no position
+    /// outranks another. A closure's row is its body's solution, closed only
+    /// where it selects.
     pub(super) fn narrow_by_function_rows<C>(
         &self,
         candidates: &mut Vec<C>,
         classes: &[ArgClass],
         param_at: impl Fn(&C, usize) -> Option<TypeId>,
     ) {
-        for (position, class) in classes.iter().enumerate() {
-            if candidates.len() < 2 {
-                return;
-            }
-            let &ArgClass::Exact(arg) = class else {
-                continue;
-            };
-            let solved = {
+        if candidates.len() < 2 {
+            return;
+        }
+        let rowed: Vec<RowedArg> = classes
+            .iter()
+            .enumerate()
+            .filter_map(|(position, class)| {
+                let &ArgClass::Exact(arg) = class else {
+                    return None;
+                };
                 let mut tt = self.tysys.type_table.borrow_mut();
                 if !matches!(tt.get(arg), ResolvedType::Function { .. }) {
-                    continue;
+                    return None;
                 }
                 let solved = tt.peek_effect_rows_in(arg);
                 let ResolvedType::Function { effects, .. } = tt.get(solved) else {
                     unreachable!("solving a row keeps a function a function")
                 };
-                if effects.iter().any(EffectRef::is_var) {
-                    continue;
-                }
-                solved
-            };
-            let exact = |c: &C| param_at(c, position) == Some(solved);
-            let holds = |c: &C| {
-                param_at(c, position).is_some_and(|param| {
-                    param_takes(&self.tysys.type_table.borrow(), param, solved)
+                (!effects.iter().any(EffectRef::is_var)).then_some(RowedArg {
+                    position,
+                    arg,
+                    solved,
                 })
-            };
-            let keeps: &dyn Fn(&C) -> bool = if candidates.iter().any(exact) {
-                &exact
-            } else {
-                &holds
-            };
-            if !candidates.iter().all(keeps) {
-                self.tysys.type_table.borrow_mut().read_effect_rows_in(arg);
-                candidates.retain(keeps);
+            })
+            .collect();
+        let takes_at = |c: &C, rowed: &RowedArg, fit: Fit| {
+            param_at(c, rowed.position).is_some_and(|param| {
+                let tt = self.tysys.type_table.borrow();
+                match fit {
+                    Fit::Holds => param_takes(&tt, param, rowed.solved),
+                    Fit::Row => same_but_mutability(&tt, param, rowed.solved),
+                    Fit::Type => param == rowed.solved,
+                }
+            })
+        };
+        for rowed in &rowed {
+            self.narrow_reading_rows(candidates, std::slice::from_ref(rowed), |c, r| {
+                takes_at(c, r, Fit::Holds)
+            });
+        }
+        for fit in [Fit::Row, Fit::Type] {
+            let takes_all = |c: &C| rowed.iter().all(|r| takes_at(c, r, fit));
+            if candidates.iter().any(takes_all) {
+                self.narrow_reading_rows(candidates, &rowed, |c, r| takes_at(c, r, fit));
             }
+        }
+    }
+
+    /// Keep the candidates `takes` admits at every one of `rowed`, reading
+    /// the rows of the arguments that told them apart.
+    fn narrow_reading_rows<C>(
+        &self,
+        candidates: &mut Vec<C>,
+        rowed: &[RowedArg],
+        takes: impl Fn(&C, &RowedArg) -> bool,
+    ) {
+        if candidates.len() < 2 {
+            return;
+        }
+        let mut selects = false;
+        for r in rowed {
+            if !candidates.iter().all(|c| takes(c, r)) {
+                selects = true;
+                self.tysys.type_table.borrow_mut().read_effect_rows_in(r.arg);
+            }
+        }
+        if selects {
+            candidates.retain(|c| rowed.iter().all(|r| takes(c, r)));
         }
     }
 

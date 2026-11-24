@@ -2440,14 +2440,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if group.len() < 2 {
             return group;
         }
-        let mut seen: Vec<Vec<TypeId>> = Vec::with_capacity(group.len());
-        let mut distinct = Vec::with_capacity(group.len());
+        // A written bound outranks a bare one, so the one kept of a pair is
+        // the written one wherever either stands.
+        let mut seen: Vec<(Vec<TypeId>, usize)> = Vec::with_capacity(group.len());
+        let mut distinct: Vec<BoundCandidate> = Vec::with_capacity(group.len());
         for candidate in group {
             if let Some(at) = self.candidate_trait_args(&candidate, self_type_id) {
-                if seen.contains(&at) {
+                if let Some(&(_, kept)) = seen.iter().find(|(args, _)| *args == at) {
+                    if distinct[kept].bound.type_args.is_empty() {
+                        distinct[kept] = candidate;
+                    }
                     continue;
                 }
-                seen.push(at);
+                seen.push((at, distinct.len()));
             }
             distinct.push(candidate);
         }

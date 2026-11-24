@@ -309,7 +309,9 @@ literal has a context-free type.
 
 A function argument's row selects among candidates its type admits: a
 function admits every parameter whose row holds its own, and the candidates
-taking its row exactly, where there are any, are the ones that remain. A
+taking every function argument's row exactly, where there are any, are the
+ones that remain. Judging the arguments together keeps position out of it:
+the first argument outranking the second would be a rule nobody wrote. A
 closure's row is what its body performs, which is known only once the body is
 walked, so a method call whose candidates differ only in the rows a closure
 argument could meet waits for it, typed by the trait's declaration, as a call
@@ -319,6 +321,8 @@ Bounds writing one trait at several argument lists (`T: Take<i64> + Take<i32>`)
 are the same overload set seen from inside a generic body, so they select by
 the same rule: unique-or-error, the exact row first. Reading the first bound
 written would make the order of a `+` list change which function a call names.
+For the same reason, a bare bound naming what a written one names merges into
+the written one wherever it stands.
 
 Classes exist only to filter. After selection the winning signature drives
 ordinary argument elaboration, so a literal still coerces to the chosen
