@@ -47,10 +47,10 @@ test {
 
     // RFC 6761 reserves `.invalid` never to resolve, so this request fails
     // before any response.
-    let client = HttpClient::new("https://api.example.invalid/v1", ClientInit {
+    let client = HttpClient::new("https://api.example.invalid/v1", {
         headers: { accept: "application/json" },
     }).unwrap();
-    let result = client.request("/items", RequestInit {
+    let result = client.request("/items", {
         query: { limit: "10" },
     });
     match result {
@@ -145,7 +145,7 @@ pub struct HttpClient {
 impl HttpClient {
     /// A client for `base_url`, an `http` or `https` URL with no user info,
     /// query or fragment.
-    pub fn new<S: AsStrSlice>(base_url: S, init: ClientInit = ClientInit {}) -> Result<HttpClient, HttpError> {
+    pub fn new<S: AsStrSlice>(base_url: S, init: ClientInit = {}) -> Result<HttpClient, HttpError> {
         let url = match Url::from_str(base_url) {
             Ok(url) => url,
             Err(e) => {
@@ -178,11 +178,7 @@ impl HttpClient {
 
     /// Send a request for `path`, which starts with `/` and holds no `?` or
     /// `#`, and answer once the response headers arrive.
-    pub fn request<P: AsStrSlice>(
-        &self,
-        path: P,
-        init: RequestInit = RequestInit {},
-    ) -> Result<HttpResponse, HttpError> with Client {
+    pub fn request<P: AsStrSlice>(&self, path: P, init: RequestInit = {}) -> Result<HttpResponse, HttpError> with Client {
         let body = init.body;
         let has_body = body matches { Some(_) };
         let mut pending = self.start(path, &init, has_body)?;

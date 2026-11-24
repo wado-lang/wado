@@ -1,4 +1,4 @@
-use { ClientInit, HttpClient, HttpError, RequestInit, SseEvent, SseParser, Stage } from "core:http_client";
+use { HttpClient, HttpError, SseEvent, SseParser, Stage } from "core:http_client";
 use {
     Client,
     ErrorCode,
@@ -236,7 +236,7 @@ impl FutureWritable<Result<Option<Trailers>, ErrorCode>> for MockHost {
 }
 
 fn client() -> HttpClient {
-    return HttpClient::new("https://api.example.com/v1/", ClientInit {
+    return HttpClient::new("https://api.example.com/v1/", {
         headers: [
             ["user-agent", "wado"],
         ],
@@ -256,7 +256,7 @@ test "a request goes to the base path, with the client's headers before its own"
     };
     with &mut host do {
         let mut res = client()
-            .request("/items", RequestInit {
+            .request("/items", {
                 headers: [
                     ["accept", "text/plain"],
                 ],
@@ -402,7 +402,7 @@ test "a body and its trailers go out after the headers" {
     let mut host = MockHost {};
     with &mut host do {
         let res = client()
-            .request("/upload", RequestInit {
+            .request("/upload", {
                 method: Method::Post,
                 body: Option::Some(b"payload".as_byte_slice()),
                 trailers: [
@@ -424,7 +424,7 @@ test "a streamed body is written by the function, whose trailers follow init's" 
     let mut host = MockHost {};
     with &mut host do {
         let res = client()
-            .request_streaming("/upload", RequestInit {
+            .request_streaming("/upload", {
                 method: Method::Put,
                 trailers: [
                     ["x-a", "1"],
@@ -672,7 +672,7 @@ test "a method or path the host refuses fails the request rather than going out 
     let mut host = MockHost {};
     let [path, method] = with &mut host do {
         let path = client().request("/users/John Smith");
-        let method = client().request("/", RequestInit { method: Method::Other("BAD METHOD") });
+        let method = client().request("/", { method: Method::Other("BAD METHOD") });
         let refused = [path matches { Err(InvalidUrl(_)) }, method matches { Err(InvalidMethod(_)) }];
         if let Ok(res) = path {
             builtin::drop(res);
@@ -773,12 +773,12 @@ test "an event line that is not UTF-8 ends the events with an error" {
 test "a header or trailer the host refuses fails the request" {
     let mut host = MockHost {};
     let [header, trailer] = with &mut host do {
-        let header = client().request("/", RequestInit {
+        let header = client().request("/", {
             headers: [
                 ["bad name", "x"],
             ],
         });
-        let trailer = client().request("/", RequestInit {
+        let trailer = client().request("/", {
             trailers: [
                 ["bad name", "x"],
             ],
@@ -799,7 +799,7 @@ test "a header or trailer the host refuses fails the request" {
 test "a request body the host failed to take is a transport error" {
     let mut host = MockHost { body_error: Option::Some(ErrorCode::HttpRequestBodySize(null)) };
     let result = with &mut host do {
-        let result = client().request("/", RequestInit { body: Option::Some(b"x".as_byte_slice()) });
+        let result = client().request("/", { body: Option::Some(b"x".as_byte_slice()) });
         let failed = result matches { Err(Transport([_::Request, _::HttpRequestBodySize(_)])) };
         if let Ok(res) = result {
             builtin::drop(res);
@@ -813,7 +813,7 @@ test "a request body the host failed to take is a transport error" {
 test "a streamed request checks its path before writing" {
     let mut host = MockHost {};
     let failed = with &mut host do {
-        let result = client().request_streaming("no-slash", RequestInit {}, |_tx| []);
+        let result = client().request_streaming("no-slash", {}, |_tx| []);
         let failed = result matches { Err(InvalidUrl(_)) };
         if let Ok(res) = result {
             builtin::drop(res);
@@ -824,7 +824,7 @@ test "a streamed request checks its path before writing" {
 }
 
 fn timed_client() -> HttpClient {
-    return HttpClient::new("https://example.com", ClientInit {
+    return HttpClient::new("https://example.com", {
         connect_timeout: Option::Some(1),
         first_byte_timeout: Option::Some(2),
         between_bytes_timeout: Option::Some(3),

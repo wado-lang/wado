@@ -12,7 +12,7 @@ use { println, env, Stdout, Stderr, Environment } from "core:cli";
 use { Client } from "wasi:http";
 use { Method } from "wasi:http";
 use { to_bytes } from "core:json";
-use { HttpClient, ClientInit, RequestInit } from "core:http_client";
+use { HttpClient } from "core:http_client";
 
 struct ChatMessage {
     role: String,
@@ -46,11 +46,11 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
             ChatMessage { role: "user", content: "Explain WebAssembly briefly" },
         ],
     };
-    let client = HttpClient::new("https://openrouter.ai/api/v1", ClientInit {
+    let client = HttpClient::new("https://openrouter.ai/api/v1", {
         headers: { authorization: `Bearer ${api_key}`, "user-agent": #file },
     }).unwrap();
     let mut res = client
-        .request("/chat/completions", RequestInit {
+        .request("/chat/completions", {
             method: Method::Post,
             headers: { "content-type": "application/json" },
             body: Some(to_bytes(&request).unwrap()),

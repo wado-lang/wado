@@ -25,16 +25,16 @@ generated OpenAPI client would build the struct anyway. `HttpClient` holds
 them, and `request` is its method.
 
 ```wado
-use { HttpClient, ClientInit, RequestInit, HttpError } from "core:http_client";
+use { HttpClient, HttpError } from "core:http_client";
 use { Method, Client } from "wasi:http";
 
 struct Message { id: String }
 
 fn create(key: String, payload: ByteSlice) -> Result<Option<Message>, HttpError> with Client {
-    let client = HttpClient::new("https://api.anthropic.com", ClientInit {
+    let client = HttpClient::new("https://api.anthropic.com", {
         headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
     })?;
-    let mut res = client.request("/v1/messages", RequestInit {
+    let mut res = client.request("/v1/messages", {
         method: Method::Post,
         body: Some(payload),
     })?;

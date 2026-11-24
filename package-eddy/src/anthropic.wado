@@ -7,7 +7,7 @@ use { MonotonicClock } from "wasi:clocks";
 use { to_bytes, from_bytes, from_string } from "core:json";
 use { Serialize, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
-use { HttpClient, ClientInit, RequestInit } from "core:http_client";
+use { HttpClient } from "core:http_client";
 
 pub use { Credential } from "./credential.wado";
 
@@ -247,13 +247,13 @@ fn post<T: Deserialize>(
     credential: &mut Credential,
     request: ByteSlice,
 ) -> Result<T, String> with (Client, MonotonicClock) {
-    let client = HttpClient::new("https://api.anthropic.com", ClientInit {
+    let client = HttpClient::new("https://api.anthropic.com", {
         headers: { "anthropic-version": "2023-06-01", "content-type": "application/json" },
     }).unwrap();
     let mut renewed = false;
     loop {
         let mut res = client
-            .request("/v1/messages", RequestInit {
+            .request("/v1/messages", {
                 method: Method::Post,
                 headers: { authorization: `Bearer ${credential.key()?}` },
                 body: Some(request),

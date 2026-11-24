@@ -4,14 +4,14 @@
 
 use { println, Stdout } from "core:cli";
 use { Client } from "wasi:http";
-use { HttpClient, ClientInit, RequestInit } from "core:http_client";
+use { HttpClient } from "core:http_client";
 
 export fn run() with (Stdout, Client) {
-    let client = HttpClient::new("https://httpbin.org", ClientInit {
+    let client = HttpClient::new("https://httpbin.org", {
         headers: { "user-agent": #file },
     }).unwrap();
     let mut res = client
-        .request("/get", RequestInit {
+        .request("/get", {
             query: { greeting: "hello world" },
         })
         .unwrap();

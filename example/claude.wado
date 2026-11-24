@@ -12,7 +12,7 @@
 use { print, println, env, Stdout, Stderr, Environment } from "core:cli";
 use { Client, Method } from "wasi:http";
 use { to_bytes, from_string } from "core:json";
-use { HttpClient, ClientInit, RequestInit } from "core:http_client";
+use { HttpClient } from "core:http_client";
 
 struct Message {
     role: String,
@@ -42,7 +42,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
     let Some(api_key) = env("CLAUDE_API_KEY") else {
         panic("CLAUDE_API_KEY is not set");
     };
-    let client = HttpClient::new("https://api.anthropic.com", ClientInit {
+    let client = HttpClient::new("https://api.anthropic.com", {
         headers: { "x-api-key": api_key, "anthropic-version": "2023-06-01", "user-agent": #file },
     }).unwrap();
 
@@ -55,7 +55,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
         ],
     };
     let mut res = client
-        .request("/v1/messages", RequestInit {
+        .request("/v1/messages", {
             method: Method::Post,
             headers: { "content-type": "application/json" },
             body: Some(to_bytes(&request).unwrap()),

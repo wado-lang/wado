@@ -32,10 +32,10 @@ struct Item {
 
 // RFC 6761 reserves `.invalid` never to resolve, so this request fails
 // before any response.
-let client = HttpClient::new("https://api.example.invalid/v1", ClientInit {
+let client = HttpClient::new("https://api.example.invalid/v1", {
     headers: { accept: "application/json" },
 }).unwrap();
-let result = client.request("/items", RequestInit {
+let result = client.request("/items", {
     query: { limit: "10" },
 });
 match result {
@@ -87,12 +87,12 @@ The settings of one origin, from which requests are sent.
 
 _Fields are private._
 
-#### `pub fn new<S: AsStrSlice>(base_url: S, init: ClientInit = ClientInit {}) -> Result<HttpClient, HttpError>`
+#### `pub fn new<S: AsStrSlice>(base_url: S, init: ClientInit = {}) -> Result<HttpClient, HttpError>`
 
 A client for `base_url`, an `http` or `https` URL with no user info,
 query or fragment.
 
-#### `pub fn request<P: AsStrSlice>(&self, path: P, init: RequestInit = RequestInit {}) -> Result<HttpResponse, HttpError> with Client`
+#### `pub fn request<P: AsStrSlice>(&self, path: P, init: RequestInit = {}) -> Result<HttpResponse, HttpError> with Client`
 
 Send a request for `path`, which starts with `/` and holds no `?` or
 `#`, and answer once the response headers arrive.
