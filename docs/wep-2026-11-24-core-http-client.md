@@ -10,8 +10,8 @@ whole: a future resolved after the close says that. Eddy wraps all of this in
 `package-eddy/src/http.wado`, and every other client would write it again.
 
 Eddy is the first user. The next is an OpenAPI client generator, so the module
-serves an API described per origin, not one call site. LLM APIs answer in
-Server-Sent Events, so streaming is part of the first version, not a later
+serves an API described per origin, not one call site. LLM APIs often stream
+their answers as Server-Sent Events, so streaming is part of the first version, not a later
 addition.
 
 ## Decision
@@ -25,17 +25,21 @@ generated OpenAPI client would build the struct anyway. `HttpClient` holds
 them, and `request` is its method.
 
 ```wado
-use { HttpClient, ClientInit, RequestInit, Body } from "core:http_client";
+use { HttpClient, ClientInit, RequestInit, Body, HttpError } from "core:http_client";
+use { Method } from "wasi:http";
 
-let client = HttpClient::new("https://api.anthropic.com", ClientInit {
-    headers: [["x-api-key", key], ["anthropic-version", "2023-06-01"]],
-})?;
-let res = client.request("/v1/messages", RequestInit {
-    method: Method::Post,
-    body: Body::bytes(payload),
-})?;
-if !res.ok() { ... }
-let msg = res.json::<Message>()?;
+struct Message { id: String }
+
+fn create(key: String, payload: ByteList) -> Result<Message, HttpError> with _ {
+    let client = HttpClient::new("https://api.anthropic.com", ClientInit {
+        headers: [["x-api-key", key], ["anthropic-version", "2023-06-01"]],
+    })?;
+    let res = client.request("/v1/messages", RequestInit {
+        method: Method::Post,
+        body: Body::bytes(payload),
+    })?;
+    return res.json::<Message>();
+}
 ```
 
 `HttpClient` holds settings only. The host owns connections, pooling, the
