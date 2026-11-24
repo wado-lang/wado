@@ -307,6 +307,14 @@ impl VarStore {
         self.holes.iter().copied().zip(&self.origins)
     }
 
+    /// The classes a variable blamed for a slot joined, in mint order.
+    fn blamed_classes(&self) -> IndexSet<TypeId> {
+        (0..self.len())
+            .filter(|&i| self.origins[i].blame.is_some())
+            .map(|i| self.holes[self.root(i)])
+            .collect()
+    }
+
     fn root(&self, mut i: usize) -> usize {
         while self.parent[i] != i {
             i = self.parent[i];
@@ -437,10 +445,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Mint a fresh inference variable carrying no diagnostic yet.
     ///
-    /// A use site that may discard its instantiation — inference runs twice
-    /// for a partial turbofish — mints bare and attaches the diagnostic only
-    /// to the variables it commits to. A variable nobody kept then reports
-    /// nothing.
+    /// A use site attaches the diagnostic only to the variables it commits
+    /// to, so one nobody kept reports nothing.
     pub(super) fn mint_infer_var(&mut self) -> TypeId {
         self.mint_infer_var_for(None)
     }
@@ -666,7 +672,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Set the diagnostic `var` raises if it is never solved. The first one
-    /// wins, matching the solutions map's keep-the-first policy.
+    /// wins.
     pub(super) fn attach_infer_var_diag(&mut self, var: TypeId, span: Span, message: String) {
         self.blame_once(
             var,
@@ -712,15 +718,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn awaits_report(&self, tt: &TypeTable, ty: TypeId) -> bool {
         let store = &self.infer_holes.vars;
         let vars = tt.infer_vars_in(ty);
+        let blamed = store.blamed_classes();
         !vars.is_empty()
             && vars.iter().all(|&var| {
-                let class = store.root_of(var);
                 store.is_unanswered(var)
                     && store
-                        .with_origins()
-                        .any(|(blamed, origin)| {
-                            origin.blame.is_some() && store.root_of(blamed) == class
-                        })
+                        .root_of(var)
+                        .is_some_and(|class| blamed.contains(&class))
             })
     }
 
@@ -1103,17 +1107,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// slot blames, at the `_`.
     fn blame_bare_written_holes(&mut self, within: impl Fn(TypeId) -> bool) {
         let vars = &self.infer_holes.vars;
-        let blamed: IndexSet<Option<TypeId>> = vars
-            .with_origins()
-            .filter(|(_, origin)| origin.blame.is_some())
-            .map(|(hole, _)| vars.root_of(hole))
-            .collect();
+        let blamed = vars.blamed_classes();
         let bare: Vec<(Span, TypeId)> = vars
             .with_origins()
             .filter_map(|(w, origin)| Some((origin.written?, w)))
             .filter(|&(_, w)| {
-                let root = vars.root_of(w);
-                vars.is_unanswered(w) && !blamed.contains(&root) && root.is_some_and(&within)
+                vars.is_unanswered(w)
+                    && vars
+                        .root_of(w)
+                        .is_some_and(|root| !blamed.contains(&root) && within(root))
             })
             .collect();
         for (span, hole) in bare {
@@ -1139,9 +1141,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.blame_bare_written_holes(|_| true);
         let vars = &self.infer_holes.vars;
         let unsolved: IndexSet<TypeId> = vars
-            .with_origins()
-            .filter(|(hole, origin)| origin.blame.is_some() && vars.is_unanswered(*hole))
-            .filter_map(|(hole, _)| vars.root_of(hole))
+            .blamed_classes()
+            .into_iter()
+            .filter(|&class| vars.is_unanswered(class))
             .collect();
         let blames = self.class_blames(&unsolved);
         self.report_uninferred(blames);
