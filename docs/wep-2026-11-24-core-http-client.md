@@ -64,10 +64,10 @@ query comes only from `RequestInit.query`.
 
 RFC 3986 resolution would let `/v1/messages` drop the base path `/api`, which
 is never what a client of one API means. OpenAPI appends a path to its server
-URL without resolution too. RFC 9110 does not join paths at all, and it treats
-an empty segment as significant, so `/api//v1` is a different resource from
-`/api/v1`; dropping the trailing `/` is what keeps a base of `/api/` from
-producing one.
+URL without resolution too. RFC 9110 does not join paths at all, and no
+normalization it or RFC 3986 defines removes an empty segment, so `/api//v1`
+names a different resource from `/api/v1`. Dropping the trailing `/` keeps a
+base of `/api/` from producing one.
 
 `RequestInit.query` takes name-value pairs, and the client percent-encodes
 them. Building a query by hand is where an OpenAPI client would most often get
