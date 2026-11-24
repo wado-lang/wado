@@ -884,7 +884,10 @@ test "only the timeouts asked for are set" {
         builtin::drop(res);
     };
     host.end_writes();
-    assert host.timeouts == [Option::Some(1), Option::Some(3)] as List<Option<u64>>;
+    assert host.timeouts == [
+        Option::Some(1),
+        Option::Some(3),
+    ] as List<Option<u64>>;
 }
 
 test "a timeout the host refuses fails the request before it is sent" {
