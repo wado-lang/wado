@@ -27,7 +27,7 @@ use discovery::{DependencyEntry, Disk, PackageFiles, absolutize, normalize_path,
 /// build serves what is on disk now and the compiler itself reads no file.
 /// Called wherever a dev build first reaches the stdlib: every host as it is
 /// built, [`crate::Engine::new`], and the `wado` binary before it dispatches.
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 pub fn install_dev_stdlib() {
     use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files, install_dev_stdlib};
 
@@ -40,8 +40,8 @@ pub fn install_dev_stdlib() {
     }));
 }
 
-/// A release or `wasm32` build embeds the stdlib, so there is nothing to read.
-#[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
+/// A `dist` or `wasm32` build embeds the stdlib, so there is nothing to read.
+#[cfg(any(feature = "dist", target_arch = "wasm32"))]
 pub fn install_dev_stdlib() {}
 
 /// `path`, or `.` where it is empty, as the parent of a bare file name is:
@@ -314,7 +314,7 @@ impl CompilerHost for FilesystemCompilerHost {
 
 /// Whether `dir` lies in the `core` tree of the stdlib this dev build reads,
 /// as a stdlib test's directory does.
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 fn is_in_dev_stdlib_core(dir: &Path) -> bool {
     use wado_compiler::stdlib::DEV_STDLIB_ROOT;
 
@@ -325,8 +325,8 @@ fn is_in_dev_stdlib_core(dir: &Path) -> bool {
     }
 }
 
-/// A release or `wasm32` build embeds the stdlib, so it runs none of its tests.
-#[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
+/// A `dist` or `wasm32` build embeds the stdlib, so it runs none of its tests.
+#[cfg(any(feature = "dist", target_arch = "wasm32"))]
 fn is_in_dev_stdlib_core(_dir: &Path) -> bool {
     false
 }

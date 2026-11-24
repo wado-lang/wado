@@ -1,10 +1,11 @@
 //! Marl's `format`, which gives `wado doc`'s Markdown its final layout.
 //!
-//! `wado` carries Marl as source and compiles it on first use, keeping the
-//! component under a key of the compiler and the sources, never beside the
-//! files it documents. A distributed build (the `dist` feature) keeps it in the
-//! user cache. Any other keeps it in cargo's profile directory: every rebuild
-//! changes the key, and `cargo clean` takes what the old ones left.
+//! `wado` compiles Marl from source on first use, keeping the component under a
+//! key of the compiler and the sources, never beside the files it documents. A
+//! self-contained build (the `dist` feature) embeds the sources and keeps the
+//! component in the user cache. Any other reads the checkout's sources, as it
+//! does the stdlib, and keeps the component in cargo's profile directory: every
+//! rebuild changes the key, and `cargo clean` takes what the old ones left.
 
 use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
@@ -32,14 +33,37 @@ use crate::eval_host::current_thread_runtime;
 use crate::fingerprint::{compiler_digest, hash_field};
 use crate::kiln_provider::hex32;
 
+/// The checkout's Marl sources, which a build without `dist` reads.
+#[cfg(any(test, not(feature = "dist")))]
+const MARL_SRC: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../package-marl/src");
+
 macro_rules! marl_sources {
     ($($name:literal),* $(,)?) => {
-        &[$((concat!("./", $name), include_str!(concat!("../../package-marl/src/", $name)))),*]
+        /// Every `.wado` file of `package-marl/src`, as `("./name.wado", source)`.
+        #[cfg(feature = "dist")]
+        fn sources() -> &'static [(&'static str, &'static str)] {
+            &[$((concat!("./", $name), include_str!(concat!("../../package-marl/src/", $name)))),*]
+        }
+
+        /// Every `.wado` file of [`MARL_SRC`], read once per process, so an
+        /// edit to Marl needs no rebuild.
+        #[cfg(not(feature = "dist"))]
+        fn sources() -> &'static [(&'static str, &'static str)] {
+            static SOURCES: OnceLock<Vec<(&'static str, &'static str)>> = OnceLock::new();
+            SOURCES.get_or_init(|| vec![$((concat!("./", $name), read_source($name))),*])
+        }
     };
 }
 
-/// Every `.wado` file of `package-marl/src`, as `("./name.wado", source)`.
-const SOURCES: &[(&str, &str)] = marl_sources![
+#[cfg(not(feature = "dist"))]
+fn read_source(name: &str) -> &'static str {
+    let path = Path::new(MARL_SRC).join(name);
+    let source = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("reading Marl at {}: {e}", path.display()));
+    String::leak(source)
+}
+
+marl_sources![
     "code_blocks.wado",
     "fmt_ast.wado",
     "fmt_html.wado",
@@ -167,7 +191,7 @@ fn load_component(engine: &Engine) -> Component {
 fn cache_path() -> Option<PathBuf> {
     let mut hasher = Sha256::new();
     hasher.update(compiler_digest());
-    for (name, source) in SOURCES {
+    for (name, source) in sources() {
         hash_field(&mut hasher, name.as_bytes());
         hash_field(&mut hasher, source.as_bytes());
     }
@@ -192,12 +216,12 @@ fn cargo_profile_dir() -> Option<PathBuf> {
 
 fn compile_component(engine: &Engine) -> Component {
     install_dev_stdlib();
-    let entry = SOURCES
+    let entry = sources()
         .iter()
         .find(|(name, _)| *name == ENTRY)
         .map(|(_, source)| *source)
         .expect("Marl has a format.wado");
-    let host = InMemoryCompilerHost::with_files(SOURCES);
+    let host = InMemoryCompilerHost::with_files(sources());
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         lib_world: Some(INTERFACE.to_string()),
@@ -257,18 +281,17 @@ mod tests {
 
     #[test]
     fn sources_list_every_marl_file() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../package-marl/src");
-        let mut on_disk: Vec<String> = std::fs::read_dir(&dir)
+        let mut on_disk: Vec<String> = std::fs::read_dir(MARL_SRC)
             .expect("reading package-marl/src")
             .map(|entry| entry.expect("listing package-marl/src").path())
             .filter(|path| path.extension().is_some_and(|ext| ext == "wado"))
             .map(|path| format!("./{}", path.file_name().unwrap().display()))
             .collect();
         on_disk.sort();
-        let listed: Vec<&str> = SOURCES.iter().map(|(name, _)| *name).collect();
+        let listed: Vec<&str> = sources().iter().map(|(name, _)| *name).collect();
         assert_eq!(
             listed, on_disk,
-            "SOURCES must list package-marl/src, sorted"
+            "marl_sources! must list package-marl/src, sorted"
         );
     }
 }
