@@ -329,6 +329,14 @@ test "data lines join with LF" {
     assert events == want;
 }
 
+test "an empty event type dispatches as message" {
+    let events = parse(["event: x\nevent:\ndata: a\n\n"]);
+    let want: List<[String, String, String]> = [
+        ["message", "a", ""],
+    ];
+    assert events == want;
+}
+
 test "comments, unknown fields and an event with no data dispatch nothing" {
     let events = parse([": keep-alive\nfoo: bar\nevent: x\n\ndata: y\n\n"]);
     let want: List<[String, String, String]> = [
@@ -660,6 +668,25 @@ test "a body is read once" {
     };
 }
 
+test "a method or path the host refuses fails the request rather than going out changed" {
+    let mut host = MockHost {};
+    let [path, method] = with &mut host do {
+        let path = client().request("/users/John Smith");
+        let method = client().request("/", RequestInit { method: Method::Other("BAD METHOD") });
+        let refused = [path matches { Err(InvalidUrl(_)) }, method matches { Err(InvalidMethod(_)) }];
+        if let Ok(res) = path {
+            builtin::drop(res);
+        }
+        if let Ok(res) = method {
+            builtin::drop(res);
+        }
+        refused;
+    };
+    host.end_writes();
+    assert path && method;
+    assert host.target == "";
+}
+
 test "a path must start with / and hold no query or fragment" {
     let mut host = MockHost {};
     with &mut host do {
@@ -786,7 +813,7 @@ test "a request body the host failed to take is a transport error" {
 test "a streamed request checks its path before writing" {
     let mut host = MockHost {};
     let failed = with &mut host do {
-        let result = client().request_streaming("no-slash", RequestInit {}, |tx| []);
+        let result = client().request_streaming("no-slash", RequestInit {}, |_tx| []);
         let failed = result matches { Err(InvalidUrl(_)) };
         if let Ok(res) = result {
             builtin::drop(res);
@@ -857,6 +884,7 @@ test "a base URL of another special scheme is refused" {
 test "an HttpError reads as its reason" {
     let errors: List<HttpError> = [
         InvalidUrl("x"),
+        InvalidMethod(Method::Other("A B")),
         InvalidField(HeaderError::Forbidden),
         UnsupportedOption(RequestOptionsError::NotSupported),
         Transport([Stage::Request, ErrorCode::ConnectionRefused]),
@@ -865,7 +893,7 @@ test "an HttpError reads as its reason" {
         Json(json::from_string::<i32>("x").unwrap_err()),
     ];
     let prefixes: List<String> = [
-        "invalid URL: x", "invalid header: ", "unsupported request option: ",
+        "invalid URL: x", "invalid method: Method::Other(\"A B\")", "invalid header: ", "unsupported request option: ",
         "HTTP transport failed while sending the request", "HTTP transport failed while reading the response body",
         "not UTF-8: ", "invalid JSON body: ",
     ];

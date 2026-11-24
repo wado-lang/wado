@@ -91,6 +91,8 @@ pub enum Stage {
 
 pub variant HttpError {
     InvalidUrl(String),
+    /// A method the host refused as no valid token.
+    InvalidMethod(Method),
     /// A header or trailer the host refused to send.
     InvalidField(HeaderError),
     /// A timeout the host does not support.
@@ -104,6 +106,7 @@ impl Display for HttpError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
             InvalidUrl(reason) => f.write_str(`invalid URL: ${reason}`),
+            InvalidMethod(method) => f.write_str(`invalid method: ${*method:?}`),
             InvalidField(e) => f.write_str(`invalid header: ${e:?}`),
             UnsupportedOption(e) => f.write_str(`unsupported request option: ${e:?}`),
             Transport([stage, code]) => {
@@ -234,14 +237,29 @@ impl HttpClient {
         };
         let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
         let [req, sent] = Request::new(headers as Headers, body_rx, trailers_rx, options);
-        let _ = req.set_method(init.method);
-        let _ = req.set_scheme(Option::Some(self.scheme));
-        let _ = req.set_authority(Option::Some(self.authority));
-        let _ = req.set_path_with_query(Option::Some(target));
+        if let Err(e) = self.address(&req, init.method, target) {
+            // With the request gone, nothing reads the trailers, so the write
+            // an unwritten end requires returns at once.
+            builtin::drop(req);
+            let _ = trailers_tx.write(Err(ErrorCode::InternalError(null)));
+            return Err(e);
+        }
         // The host reads the body only once the send has started, so the body
         // is written between `send` and `wait`.
         let call = Client::send(req);
         return Ok(PendingRequest { call, body_tx, trailers_tx, sent });
+    }
+
+    /// Set where `req` goes. A setter the host refuses leaves its default in
+    /// place, which would send the request somewhere else.
+    fn address(&self, req: &Request, method: Method, target: String) -> Result<(), HttpError> with Client {
+        req.set_method(method).map_err(|_| HttpError::InvalidMethod(method))?;
+        req.set_scheme(Option::Some(self.scheme)).unwrap();
+        req.set_authority(Option::Some(self.authority)).unwrap();
+        req
+            .set_path_with_query(Option::Some(target))
+            .map_err(|_| HttpError::InvalidUrl(`not a valid request target: ${target}`))?;
+        return Ok(());
     }
 
     fn target<P: AsStrSlice>(&self, path: P, query: &List<[String, String]>) -> Result<String, HttpError> {
@@ -802,7 +820,7 @@ impl SseParser {
         match name {
             "data" => self.push_data(value),
             "event" => {
-                self.event = Option::Some(value);
+                self.event = if value.is_empty() { null } else { Option::Some(value) };
             },
             "id" => {
                 if !value.contains_char('\0') {

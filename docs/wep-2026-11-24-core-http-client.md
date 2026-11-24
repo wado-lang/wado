@@ -97,6 +97,9 @@ endpoint, which is another `HttpClient`. That is policy above the client.
 `HttpError` is one variant:
 
 - An invalid URL, from `HttpClient::new` or from a path or query that makes one.
+  The client does not percent-encode a path, so a path the host refuses, such
+  as one holding a space, is this error rather than a request sent elsewhere.
+- A method the host refuses.
 - A header the host refuses, or a timeout it cannot apply.
 - A transport failure, with the `wasi:http` `ErrorCode` and the stage it
   happened in: before the response headers, or while reading the response

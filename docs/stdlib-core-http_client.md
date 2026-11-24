@@ -234,6 +234,10 @@ The reconnection time in milliseconds the stream last set.
 
 #### `InvalidUrl(String)`
 
+#### `InvalidMethod(Method)`
+
+A method the host refused as no valid token.
+
 #### `InvalidField(HeaderError)`
 
 A header or trailer the host refused to send.
