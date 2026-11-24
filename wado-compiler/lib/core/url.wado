@@ -440,8 +440,7 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
 /// WHATWG URL's forbidden domain code points. `%` is the one let through, since
 /// the host is not percent-decoded.
 fn domain(host: StrSlice) -> Result<String, ParseError> {
-    let forbidden = host.find_char(|c| c <= '\u{20}' || c == '\u{7f}' || "#/:<>?@[\\]^|".contains_char(c));
-    if forbidden matches { Some(_) } {
+    if host.find_char(|c| c <= '\u{20}' || c == '\u{7f}' || "#/:<>?@[\\]^|".contains_char(c)) matches { Some(_) } {
         return Result::Err(ParseError::InvalidHost);
     }
     return Result::Ok(host.to_ascii_lowercase());
