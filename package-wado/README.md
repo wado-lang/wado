@@ -16,6 +16,8 @@ assert result.ok();
 
 - `parse(src) -> ParseResult` — Gale's resilient parse result (`.ok()`,
   `.diagnostics`).
+- `diagnose(src) -> List<String>` — each syntax error rendered as a message;
+  empty when `src` parses. The component's export.
 
 ## The Grammar
 

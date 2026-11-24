@@ -14,3 +14,13 @@ pub use { parse, ParseResult, Diagnostic } from "../assets/grammar/Wado.g4"
             },
         },
     };
+
+/// The syntax errors in Wado `source`, one rendered message each; empty when
+/// it parses. The component's public entry point.
+export fn diagnose(source: String) -> List<String> {
+    let mut messages: List<String> = [];
+    for let d of parse(source).diagnostics {
+        messages.push(`${d}`);
+    }
+    return messages;
+}
