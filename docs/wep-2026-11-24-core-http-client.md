@@ -145,18 +145,18 @@ caller holds it, and the parser copies only in these cases:
   with LF. The common case in LLM APIs, one JSON document on one `data` line, is
   a view into the chunk.
 
-A line that is not valid UTF-8 is an error, the stream's last item. WHATWG
-decodes it with U+FFFD in place of each bad sequence, which is a copy for some
-lines only. This departs from the standard on purpose, for the reason the
-header values below give.
+Text is never decoded into a copy, so the cost does not depend on what the
+server sent. Input that is not UTF-8 is an error instead, departing from both
+standards on purpose:
 
-A response header value is always a view over the bytes the host handed over,
-never a copy. `header(name)` gives it as a `StrSlice`, and a value that is not
-UTF-8 is an error, not a decoded copy. A copy made only for some values would
-make the cost depend on what the server sent. RFC 9110 lets a value hold any
-octet from 0x80 up (`obs-text`), and Fetch decodes those as Latin-1. Values in
-practice are ASCII or UTF-8, so a client that must read the rest asks for the
-octets with `header_bytes(name)`, a `ByteSlice`.
+- An event line that is not UTF-8 ends the stream with an error. WHATWG
+  decodes it with U+FFFD in place of each bad sequence.
+- A response header value is a view over the bytes the host handed over.
+  `header(name)` gives it as a `StrSlice`, or an error when it is not UTF-8.
+  RFC 9110 lets a value hold any octet from 0x80 up (`obs-text`), and Fetch
+  decodes those as Latin-1. Values in practice are ASCII or UTF-8, so a client
+  that must read the rest asks for the octets with `header_bytes(name)`, a
+  `ByteSlice`.
 
 ## Roadmap
 
