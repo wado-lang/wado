@@ -96,7 +96,7 @@ mise run format          # format Rust, Markdown, and Wado files
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
 - A pre-existing issue must be fixed, with TDD when practical.
-- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries; a benchmark does not need it, since the dev profile builds wasmtime optimized too.
+- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. Only a binary to distribute takes `--release`, with the `dist` feature (§ The CLI); a benchmark does not need it, since the dev profile builds wasmtime optimized too.
 - Merge origin/main only through the `git-upstream-sync` skill, conflicts or not; a clean merge still ends with its sanity check.
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
 - Test the language from an e2e fixture. The fixtures state nearly everything the language does, diagnostics included; `wado-compiler/AGENTS.md` says how to write one.
@@ -146,9 +146,11 @@ build the dev binary before running it, so none of them runs a stale build.
 A `wado` built without the `dist` feature, release or not, reads the stdlib and
 Marl's sources from this checkout, so an edit to either needs no rebuild, and
 caches what it compiles from them in its `target/<profile>/`. `--features dist`
-(`-p wado-cli`) makes it self-contained, as the release workflow builds it: the
-sources embedded, the cache in the user cache. A binary that outlives the
-checkout, such as a benchmark baseline, is built with `dist`.
+(`-p wado-cli`) makes it self-contained: the sources embedded, the cache in the
+user cache. The release workflow builds with it, and so does any binary that
+outlives the checkout or must keep one version of the stdlib, such as a
+benchmark baseline or an arm of a stdlib A/B. A `wasm32` build embeds the
+stdlib whatever its features.
 
 The Wado formatter skips `wado-compiler/tests/**`, so an e2e fixture keeps its
 hand-authored layout. Naming a file bypasses the exclusion, so never

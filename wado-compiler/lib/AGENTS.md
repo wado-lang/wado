@@ -1,9 +1,6 @@
 # The Standard Library
 
-`../src/stdlib.rs` maps every import to its file here. A build without the
-`dist` feature, release or not, reads them from disk, so an edit takes effect on
-the next `wado` run with no rebuild. A `dist` build embeds them, as does any
-`wasm32` build.
+`../src/stdlib.rs` maps every import to its file here.
 
 `wasi/`, `core/kiln/`, `core/eval/`, `core/coverage/`, `core/fuel/` and
 `core/process/` are generated from WIT: read `wado-from-idl/AGENTS.md` first.
