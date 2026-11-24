@@ -1905,7 +1905,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.equate(decl_return, expected_return);
         match self.answered_slots(&inst) {
             Some(inferred) => FuncRefInference::Ok(inferred),
-            None => FuncRefInference::NotApplicable,
+            None => {
+                self.abandon(&inst);
+                FuncRefInference::NotApplicable
+            }
         }
     }
 

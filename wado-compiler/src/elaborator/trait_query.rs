@@ -2958,6 +2958,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
+    /// The affine type a slot not declared `affine` is given in `type_arg`,
+    /// each element where the slot is a pack, read in a scope whose affine
+    /// parameters are `affine_params`.
+    pub(super) fn affine_subject(
+        &self,
+        is_pack: bool,
+        type_arg: TypeId,
+        affine_params: &[TypeId],
+    ) -> Option<TypeId> {
+        self.tysys
+            .bound_subjects(is_pack, type_arg)
+            .into_iter()
+            .find(|&subject| self.tysys.is_affine(subject, affine_params))
+    }
+
     /// The single enforcement of trait bounds and `affine` marks on a generic
     /// decl's type args, shared by every generic-call kind and trait
     /// reference so the rule cannot drift. Only an arg
@@ -2989,18 +3004,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // An element of an enclosing pack is no one type, yet its kind is
             // its pack's: only a hole leaves the kind open, until it settles.
             let settled = rigid || !self.tysys.type_table.borrow().contains_infer_var(type_arg);
+            let affine_params = self.annotate_ctx.trait_ctx.affine_params();
             if !param.is_affine && !settled {
                 self.infer_holes.require(Obligation::Copyable {
                     ty: type_arg,
+                    is_pack: param.is_pack,
+                    affine_params,
                     param: param.name.clone(),
                     span,
                 });
             } else if !param.is_affine {
-                let affine_params = self.annotate_ctx.trait_ctx.affine_params();
-                if let Some(&affine) = subjects
-                    .iter()
-                    .find(|&&subject| self.tysys.is_affine(subject, &affine_params))
-                {
+                if let Some(affine) = self.affine_subject(param.is_pack, type_arg, &affine_params) {
                     let type_name = self.tysys.type_id_to_string(affine);
                     let _ = self.emit(TypeError::AffineArgument {
                         type_name,

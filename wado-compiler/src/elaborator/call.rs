@@ -3713,9 +3713,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn solve_instance(&mut self, inst: &Instantiated, solve: CallSolve<'_>) -> Vec<TypeId> {
         let inferred = self.solve_call_in_context(solve);
         if inferred == inst.vars {
-            for &var in &inst.vars {
-                self.waive_blame(var);
-            }
+            self.abandon(inst);
             return vec![];
         }
         self.record_instantiation(inst, &inferred);
@@ -4902,13 +4900,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut inferred: Vec<TypeId> = if given.is_some() {
             solved
         } else {
+            // The site reports the slot each parameter below stands for.
+            self.abandon(inst);
             solved
                 .into_iter()
                 .zip(&all_param_ids)
                 .map(|(answer, &param)| {
                     if self.tysys.type_table.borrow().is_infer_var(answer) {
-                        // The site reports the slot the parameter stands for.
-                        self.waive_blame(answer);
                         param
                     } else {
                         answer
@@ -5277,7 +5275,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let param_type = self.instantiate_type(param_type, &inst);
             self.equate(arg, param_type);
         }
-        self.answered_slots(&inst).unwrap_or_default()
+        self.answered_slots(&inst).unwrap_or_else(|| {
+            self.abandon(&inst);
+            Vec::new()
+        })
     }
 
     /// The slot a declared type parameter's `TypeId` holds in its own frame's
@@ -5606,7 +5607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
         let slots = &case.variant.type_param_type_ids;
-        slots
+        let solved: Vec<TypeId> = slots
             .iter()
             .enumerate()
             .map(|(i, &slot)| {
@@ -5630,7 +5631,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
             })
-            .collect()
+            .collect();
+        self.record_instantiation(inst, &solved);
+        solved
     }
 
     /// Meet each `_` inside a case's written arguments with what the expected

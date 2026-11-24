@@ -85,9 +85,11 @@ pub(super) enum Obligation {
         span: Span,
     },
     /// `ty`, which a slot not declared `affine` was given, answers no affine
-    /// type once its variables settle.
+    /// type once its variables settle, read in the scope that queued it.
     Copyable {
         ty: TypeId,
+        is_pack: bool,
+        affine_params: Vec<TypeId>,
         param: String,
         span: Span,
     },
@@ -241,7 +243,7 @@ impl InferHoleTable {
     }
 }
 
-/// The module's inference variables, as a union-find: a variable answered by
+/// The body's inference variables, as a union-find: a variable answered by
 /// another follows it, and only a root holds a binding.
 #[derive(Default)]
 struct VarStore {
@@ -711,6 +713,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.infer_holes.vars.origin_mut(var).blame = None;
     }
 
+    /// [`Self::waive_blame`] where `var` is a variable nothing answered.
+    pub(super) fn waive_open(&mut self, var: TypeId) {
+        if self.infer_holes.vars.is_unanswered(var) {
+            self.waive_blame(var);
+        }
+    }
+
     fn blame_once(&mut self, var: TypeId, blame: Blame) {
         self.infer_holes
             .vars
@@ -1168,6 +1177,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Settle the body the facts past `since` were recorded by.
     pub(super) fn finalize_infer_holes(&mut self, since: FactsMark) {
         if self.infer_holes.is_empty() {
+            // The reports the body made reach no later body.
+            self.infer_holes = InferHoleTable::default();
             return;
         }
         // A check queued after the last answer has not been asked yet.
@@ -1343,15 +1354,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 None
             }
-            Obligation::Copyable { ty, param, span } => {
+            Obligation::Copyable {
+                ty,
+                is_pack,
+                affine_params,
+                param,
+                span,
+            } => {
                 let answer = self.apply_infer_holes(ty);
                 if !self.is_settled(answer) {
-                    return Some(Obligation::Copyable { ty, param, span });
+                    return Some(Obligation::Copyable {
+                        ty,
+                        is_pack,
+                        affine_params,
+                        param,
+                        span,
+                    });
                 }
-                // A forwarded parameter is checked where its owner is.
-                let parametric = self.tysys.type_table.borrow().contains_type_param(answer);
-                if !parametric && self.tysys.is_affine(answer, &[]) {
-                    let type_name = self.tysys.type_id_to_string(answer);
+                if let Some(affine) = self.affine_subject(is_pack, answer, &affine_params) {
+                    let type_name = self.tysys.type_id_to_string(affine);
                     let _ = self.emit(TypeError::AffineArgument {
                         type_name,
                         param_name: param,

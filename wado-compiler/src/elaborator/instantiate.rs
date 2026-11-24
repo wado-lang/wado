@@ -285,7 +285,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A slot still open is reported by the blame it was minted with.
     pub(super) fn record_instantiation(&mut self, inst: &Instantiated, solved: &[TypeId]) {
         for (&var, &answer) in inst.vars.iter().zip(solved.iter()) {
+            // A slot instantiation declined stays rigid.
+            if !self.tysys.type_table.borrow().is_infer_var(var) {
+                continue;
+            }
             self.equate(var, answer);
+            // An answer the equation does not bind, such as an inferred `!`,
+            // still stands for the slot: the site settled it.
+            if self.apply_infer_holes(var) != self.apply_infer_holes(answer) {
+                self.waive_blame(var);
+            }
+        }
+    }
+
+    /// Leave unreported each of `inst`'s variables nothing answered: the site
+    /// gave the instance up, and reports what it could not settle itself.
+    pub(super) fn abandon(&mut self, inst: &Instantiated) {
+        for &var in &inst.vars {
+            self.waive_open(var);
         }
     }
 
