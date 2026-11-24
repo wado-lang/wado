@@ -175,14 +175,7 @@ async fn send_request(
         .map_err(|_| HttpError::ConnectionReadTimeout)?
         .map_err(HttpError::from)?;
 
-    let res = res.map(|incoming| IncomingResponseBody {
-        incoming,
-        timeout: {
-            let mut t = tokio::time::interval(between_bytes_timeout);
-            t.reset();
-            t
-        },
-    });
+    let res = res.map(|incoming| IncomingResponseBody::new(incoming, between_bytes_timeout));
 
     Ok((res, conn_driver))
 }
@@ -316,28 +309,46 @@ fn dns_error(rcode: String, info_code: u16) -> HttpError {
     }
 }
 
-struct IncomingResponseBody {
-    incoming: hyper::body::Incoming,
-    timeout: tokio::time::Interval,
+/// A response body that fails once `between_bytes` passes with no frame. A
+/// `Sleep` rather than an `Interval`, which panics on the zero a guest may set.
+struct IncomingResponseBody<B = hyper::body::Incoming> {
+    incoming: B,
+    between_bytes: Duration,
+    deadline: std::pin::Pin<Box<tokio::time::Sleep>>,
 }
 
-impl http_body::Body for IncomingResponseBody {
-    type Data = <hyper::body::Incoming as http_body::Body>::Data;
+impl<B> IncomingResponseBody<B> {
+    fn new(incoming: B, between_bytes: Duration) -> Self {
+        Self {
+            incoming,
+            between_bytes,
+            deadline: Box::pin(tokio::time::sleep(between_bytes)),
+        }
+    }
+}
+
+impl<B> http_body::Body for IncomingResponseBody<B>
+where
+    B: http_body::Body<Error = hyper::Error> + Unpin,
+{
+    type Data = B::Data;
     type Error = HttpError;
 
     fn poll_frame(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        use core::future::Future;
         use core::task::Poll;
         match std::pin::Pin::new(&mut self.as_mut().incoming).poll_frame(cx) {
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(from_hyper_response_error(err)))),
             Poll::Ready(Some(Ok(frame))) => {
-                self.timeout.reset();
+                let next = tokio::time::Instant::now() + self.between_bytes;
+                self.deadline.as_mut().reset(next);
                 Poll::Ready(Some(Ok(frame)))
             }
-            Poll::Pending => match self.timeout.poll_tick(cx) {
+            Poll::Pending => match self.deadline.as_mut().poll(cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(_) => Poll::Ready(Some(Err(HttpError::ConnectionReadTimeout))),
             },
@@ -401,6 +412,22 @@ mod tests {
             )
             .await;
             assert!(matches!(outcome, Err(HttpError::ConnectionTimeout)));
+        });
+    }
+
+    #[test]
+    fn a_zero_between_bytes_timeout_fails_the_first_wait() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let silent = http_body_util::StreamBody::new(futures::stream::pending::<
+                Result<http_body::Frame<Bytes>, hyper::Error>,
+            >());
+            let mut body = IncomingResponseBody::new(silent, Duration::ZERO);
+            let outcome = body.frame().await;
+            assert!(matches!(outcome, Some(Err(HttpError::ConnectionReadTimeout))));
         });
     }
 

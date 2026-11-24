@@ -1049,6 +1049,13 @@ test "from_parts keeps a malformed authority as the host" {
     assert Url::from_parts("http", "", null, null).host == "";
 }
 
+test "from_parts keeps nothing a failed authority parse set" {
+    let url = Url::from_parts("http", "u@bad host:8080", null, null);
+    assert url.host == "u@bad host:8080";
+    assert url.username == "";
+    assert url.port matches { null };
+}
+
 test "query parts that are empty are skipped" {
     let url = Url::from_str("http://h/?a=1&&a=2").unwrap();
     assert url.query_get_all("a") == ["1", "2"];

@@ -524,7 +524,11 @@ impl Url {
             fragment: fragment,
         };
         if !authority.is_empty() {
-            if parse_authority(&authority, &mut url).is_err() {
+            // A failed parse may have set the userinfo or the port already.
+            let mut parsed = url;
+            if parse_authority(&authority, &mut parsed).is_ok() {
+                url = parsed;
+            } else {
                 url.host = authority.to_string();
             }
         }

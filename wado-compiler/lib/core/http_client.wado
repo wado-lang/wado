@@ -286,9 +286,17 @@ impl HttpClient {
             return Ok(null);
         }
         let options = RequestOptions::new();
-        options.set_connect_timeout(self.connect_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
-        options.set_first_byte_timeout(self.first_byte_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
-        options.set_between_bytes_timeout(self.between_bytes_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
+        // A host may refuse a setter it does not support, so only a timeout
+        // the caller asked for is set.
+        if self.connect_timeout matches { Some(_) } {
+            options.set_connect_timeout(self.connect_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
+        }
+        if self.first_byte_timeout matches { Some(_) } {
+            options.set_first_byte_timeout(self.first_byte_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
+        }
+        if self.between_bytes_timeout matches { Some(_) } {
+            options.set_between_bytes_timeout(self.between_bytes_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
+        }
         return Ok(Option::Some(options));
     }
 }
@@ -539,8 +547,11 @@ impl HttpResponse {
             return Ok(Option::Some(chunk));
         }
         self.trailers = Option::Some(self.reader.take().unwrap().finish()?);
-        if let Some(Err(code)) = self.sent.take().unwrap().read() {
-            return Err(HttpError::Transport([Stage::Request, code]));
+        match self.sent.take().unwrap().read() {
+            Some(Ok(_)) => {},
+            Some(Err(code)) => return Err(HttpError::Transport([Stage::Request, code])),
+            // Dropping a future's writable end before writing it traps.
+            null => unreachable(),
         }
         return Ok(null);
     }
