@@ -10,8 +10,9 @@
 
 use { println, env, Stdout, Stderr, Environment } from "core:cli";
 use { Client } from "wasi:http";
-use { to_bytes, from_bytes } from "core:json";
-use { post } from "./https_post.wado";
+use { Method } from "wasi:http";
+use { to_bytes } from "core:json";
+use { HttpClient, ClientInit, RequestInit } from "core:http_client";
 
 struct ChatMessage {
     role: String,
@@ -45,19 +46,29 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
             ChatMessage { role: "user", content: "Explain WebAssembly briefly" },
         ],
     };
-    let [status, body] = post("openrouter.ai", "/api/v1/chat/completions", [
-        ["authorization", `Bearer ${api_key}`],
-        ["content-type", "application/json"],
-        ["user-agent", #file],
-    ], to_bytes(&request).unwrap());
+    let client = HttpClient::new("https://openrouter.ai/api/v1", ClientInit {
+        headers: [
+            ["authorization", `Bearer ${api_key}`],
+            ["user-agent", #file],
+        ],
+    }).unwrap();
+    let mut res = client
+        .request("/chat/completions", RequestInit {
+            method: Method::Post,
+            headers: [
+                ["content-type", "application/json"],
+            ],
+            body: Some(to_bytes(&request).unwrap()),
+        })
+        .unwrap();
 
-    if status != 200 {
-        panic(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+    if !res.ok() {
+        panic(`HTTP ${res.status}: ${res.text().unwrap()}`);
     }
 
-    let parsed = match from_bytes::<ChatResponse, ByteList>(body) {
+    let parsed = match res.json::<ChatResponse>() {
         Ok(r) => r,
-        Err(e) => panic(`failed to parse JSON response: ${e:?}`),
+        Err(e) => panic(`failed to parse JSON response: ${e}`),
     };
 
     if parsed.choices.is_empty() {

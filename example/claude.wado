@@ -1,4 +1,5 @@
-// Call Anthropic's Messages API with a fixed prompt.
+// Call Anthropic's Messages API with a fixed prompt, printing the answer as it
+// streams in as Server-Sent Events.
 //
 // Requires CLAUDE_API_KEY in the environment. The model is a build input:
 // CLAUDE_MODEL in the environment, or `-D CLAUDE_MODEL=...`.
@@ -8,10 +9,10 @@
 //   wado run example/claude.wado
 //   wado run -D CLAUDE_MODEL=claude-haiku-5-5 example/claude.wado
 
-use { println, env, Stdout, Stderr, Environment } from "core:cli";
-use { Client } from "wasi:http";
-use { to_bytes, from_bytes } from "core:json";
-use { post } from "./https_post.wado";
+use { print, println, env, Stdout, Stderr, Environment } from "core:cli";
+use { Client, Method } from "wasi:http";
+use { to_bytes, from_string } from "core:json";
+use { HttpClient, ClientInit, RequestInit } from "core:http_client";
 
 struct Message {
     role: String,
@@ -21,16 +22,17 @@ struct Message {
 struct MessagesRequest {
     model: String,
     max_tokens: i32,
+    stream: bool,
     messages: List<Message>,
 }
 
-// Only a `text` block carries `text`; a `thinking` block, say, does not.
-struct ContentBlock {
+// Only a `text_delta` carries `text`; a `thinking_delta`, say, does not.
+struct Delta {
     text: Option<String> = null,
 }
 
-struct MessagesResponse {
-    content: List<ContentBlock>,
+struct ContentBlockDelta {
+    delta: Delta,
 }
 
 #[param(from_env = "CLAUDE_MODEL")]
@@ -40,33 +42,49 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
     let Some(api_key) = env("CLAUDE_API_KEY") else {
         panic("CLAUDE_API_KEY is not set");
     };
+    let client = HttpClient::new("https://api.anthropic.com", ClientInit {
+        headers: [
+            ["x-api-key", api_key],
+            ["anthropic-version", "2023-06-01"],
+            ["user-agent", #file],
+        ],
+    }).unwrap();
 
     let request = MessagesRequest {
         model: CLAUDE_MODEL,
         max_tokens: 16000,
+        stream: true,
         messages: [
             Message { role: "user", content: "Explain WebAssembly briefly" },
         ],
     };
-    let [status, body] = post("api.anthropic.com", "/v1/messages", [
-        ["x-api-key", api_key],
-        ["anthropic-version", "2023-06-01"],
-        ["content-type", "application/json"],
-        ["user-agent", #file],
-    ], to_bytes(&request).unwrap());
-
-    if status != 200 {
-        panic(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+    let mut res = client
+        .request("/v1/messages", RequestInit {
+            method: Method::Post,
+            headers: [
+                ["content-type", "application/json"],
+            ],
+            body: Some(to_bytes(&request).unwrap()),
+        })
+        .unwrap();
+    if !res.ok() {
+        panic(`HTTP ${res.status}: ${res.text().unwrap()}`);
     }
 
-    let parsed = match from_bytes::<MessagesResponse, ByteList>(body) {
-        Ok(r) => r,
-        Err(e) => panic(`failed to parse JSON response: ${e:?}`),
-    };
-
-    for let block of parsed.content {
-        if let Some(text) = block.text {
-            println(text);
+    let mut events = res.events();
+    while let Some(event) = events.next() {
+        let event = event.unwrap();
+        if event.event == "error" {
+            panic(`the stream failed: ${event.data}`);
+        }
+        if event.event == "content_block_delta" {
+            let Ok(block) = from_string::<ContentBlockDelta>(event.data) else {
+                panic(`unparsed event: ${event.data}`);
+            };
+            if let Some(text) = block.delta.text {
+                print(text);
+            }
         }
     }
+    println("");
 }

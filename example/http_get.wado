@@ -3,45 +3,25 @@
 // Usage: wado run example/http_get.wado
 
 use { println, Stdout } from "core:cli";
-use { Url } from "core:url";
-use { Request, Response, ErrorCode, Headers, FieldValue, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http";
-use { read_body, expect_done } from "./https_post.wado";
-
-fn scheme_of(url: Url) -> Scheme {
-    return match url.scheme {
-        "http" => Scheme::Http,
-        "https" => Scheme::Https,
-        scheme => Scheme::Other(scheme),
-    };
-}
-
-fn send_get(url: Url) -> Response with Client {
-    let headers = Headers::new();
-    headers.append("user-agent", #file.bytes().collect() as FieldValue);
-
-    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let [req, sent] = Request::new(headers, null, trailers_rx, null);
-
-    req.set_scheme(Option::Some(scheme_of(url)));
-    req.set_authority(Option::Some(url.authority()));
-    req.set_path_with_query(Option::Some(url.path_with_query()));
-
-    let subtask = Client::send(req);
-    trailers_tx.write(Result::Ok(null));
-
-    let resp = match subtask.wait() {
-        Ok(resp) => resp,
-        Err(e) => panic(`HTTP request failed: ${e:?}`),
-    };
-    expect_done(sent, "HTTP request");
-    return resp;
-}
+use { HttpClient, ClientInit, RequestInit } from "core:http_client";
 
 export fn run() with (Stdout, Client) {
-    let url = Url::from_str("https://httpbin.org/get").unwrap();
-    let resp = send_get(url);
-    println(`Status: ${resp.get_status_code() as i32}`);
-
-    println(String::from_utf8_lossy(read_body(resp)));
+    let client = HttpClient::new("https://httpbin.org", ClientInit {
+        headers: [
+            ["user-agent", #file],
+        ],
+    }).unwrap();
+    let mut res = client
+        .request("/get", RequestInit {
+            query: [
+                ["greeting", "hello world"],
+            ],
+        })
+        .unwrap();
+    println(`Status: ${res.status}`);
+    if let Some(kind) = res.headers().header("content-type").unwrap() {
+        println(`Content-Type: ${kind}`);
+    }
+    println(res.text().unwrap());
 }
