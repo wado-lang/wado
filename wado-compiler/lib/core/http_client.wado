@@ -1,0 +1,801 @@
+#![stdlib("core:http_client")]
+//! HTTP client over `wasi:http` (`core:http_client`).
+//!
+//! An `HttpClient` holds what belongs to one origin: the base URL, the headers
+//! every request carries, and the timeouts. `request` sends one request and
+//! answers an `HttpResponse` once its headers arrive; its body is read whole
+//! (`bytes`, `text`, `json`), as chunks (`body`), or as Server-Sent Events
+//! (`events`).
+//!
+//! A status of 4xx or 5xx is a response, not an error. The client follows no
+//! redirect and retries nothing.
+//!
+//! See `docs/wep-2026-11-24-core-http-client.md` for the design.
+
+use {
+    Client,
+    ErrorCode,
+    FieldName,
+    FieldValue,
+    Fields,
+    HeaderError,
+    Headers,
+    Method,
+    Request,
+    RequestOptions,
+    RequestOptionsError,
+    Response,
+    Scheme,
+    Trailers,
+} from "wasi:http";
+use { Duration } from "wasi:clocks";
+use { Url, percent_encode } from "core:url";
+use { Deserialize, DeserializeError } from "core:serde";
+use json from "core:json";
+
+/// Name-value pairs, in the order they go on the wire.
+pub type FieldList = List<[String, String]>;
+
+/// What an `HttpClient` applies to every request.
+pub struct ClientInit {
+    pub headers: FieldList = [],
+    pub connect_timeout: Option<Duration> = null,
+    pub first_byte_timeout: Option<Duration> = null,
+    pub between_bytes_timeout: Option<Duration> = null,
+}
+
+/// One request, relative to the client's base URL.
+pub struct RequestInit {
+    pub method: Method = Method::Get,
+    /// Appended after the client's headers; a name in both keeps both values.
+    pub headers: FieldList = [],
+    /// Percent-encoded by the client. The path itself carries no query.
+    pub query: FieldList = [],
+    pub body: Option<ByteList> = null,
+    pub trailers: FieldList = [],
+}
+
+/// Where a transport failure happened.
+pub enum Stage {
+    /// Before the response headers: no part of the response was seen.
+    Request,
+    /// While the response body was read: part of it may have been handed out.
+    ResponseBody,
+}
+
+pub variant HttpError {
+    InvalidUrl(String),
+    /// A header or trailer the host refused to send.
+    InvalidField(HeaderError),
+    /// A timeout the host does not support.
+    UnsupportedOption(RequestOptionsError),
+    Transport([Stage, ErrorCode]),
+    NotUtf8(Utf8Error),
+    Json(DeserializeError),
+}
+
+impl Display for HttpError {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            InvalidUrl(reason) => f.write_str(`invalid URL: ${reason}`),
+            InvalidField(e) => f.write_str(`invalid header: ${e:?}`),
+            UnsupportedOption(e) => f.write_str(`unsupported request option: ${e:?}`),
+            Transport([stage, code]) => {
+                let when = match stage {
+                    _::Request => "sending the request",
+                    _::ResponseBody => "reading the response body",
+                };
+                f.write_str(`HTTP transport failed while ${when}: ${code:?}`);
+            },
+            NotUtf8(e) => f.write_str(`not UTF-8: ${e}`),
+            Json(e) => f.write_str(`invalid JSON body: ${e}`),
+        }
+    }
+}
+
+impl Error for HttpError {}
+
+impl From<Utf8Error> for HttpError;
+impl From<DeserializeError> for HttpError;
+
+/// The settings of one origin, from which requests are sent.
+pub struct HttpClient {
+    scheme: Scheme,
+    authority: String,
+    /// The base URL's path without its trailing `/`, so `/` is empty.
+    base_path: String,
+    headers: FieldList,
+    connect_timeout: Option<Duration>,
+    first_byte_timeout: Option<Duration>,
+    between_bytes_timeout: Option<Duration>,
+}
+
+impl HttpClient {
+    /// A client for `base_url`, an `http` or `https` URL with no user info,
+    /// query or fragment.
+    pub fn new<S: AsStrSlice>(base_url: S, init: ClientInit = ClientInit {}) -> Result<HttpClient, HttpError> {
+        let url = match Url::from_str(base_url) {
+            Ok(url) => url,
+            Err(e) => {
+                return Err(HttpError::InvalidUrl(`${e}`));
+            },
+        };
+        let scheme = match url.scheme.as_str_slice() {
+            "http" => Scheme::Http,
+            "https" => Scheme::Https,
+            _ => {
+                return Err(HttpError::InvalidUrl(`scheme must be http or https, not ${url.scheme}`));
+            },
+        };
+        if !url.username.is_empty() || !url.password.is_empty() {
+            return Err(HttpError::InvalidUrl("a base URL carries no user info"));
+        }
+        if url.query matches { Some(_) } || url.fragment matches { Some(_) } {
+            return Err(HttpError::InvalidUrl("a base URL carries no query or fragment"));
+        }
+        return Ok(HttpClient {
+            scheme,
+            authority: url.authority(),
+            base_path: url.path.trim_suffix("/").to_string(),
+            headers: init.headers,
+            connect_timeout: init.connect_timeout,
+            first_byte_timeout: init.first_byte_timeout,
+            between_bytes_timeout: init.between_bytes_timeout,
+        });
+    }
+
+    /// Send a request for `path`, which starts with `/` and holds no `?` or
+    /// `#`, and answer once the response headers arrive.
+    pub fn request<P: AsStrSlice>(&self, path: P, init: RequestInit = RequestInit {}) -> Result<HttpResponse, HttpError> with Client {
+        let body = init.body;
+        let has_body = body matches { Some(_) };
+        let mut pending = self.start(path, &init, has_body)?;
+        if let Some(bytes) = body {
+            pending.write_body(&bytes);
+        }
+        return pending.finish(init.trailers);
+    }
+
+    /// `request` with a body `write` streams, called once the send has
+    /// started. The trailers it returns follow the body, after those of
+    /// `init`, whose `body` must be `null`.
+    pub fn request_streaming<P: AsStrSlice, effect E>(
+        &self,
+        path: P,
+        init: RequestInit,
+        write: fn mut(&StreamWritable<u8>) -> FieldList with E,
+    ) -> Result<HttpResponse, HttpError> with (Client, E)
+        contract init.body matches { null }, "a streamed request takes its body from `write`"
+    {
+        let mut pending = self.start(path, &init, true)?;
+        let mut trailers = init.trailers;
+        let mut write = write;
+        let Some(tx) = &pending.body_tx else {
+            unreachable();
+        };
+        for let field of write(tx) {
+            trailers.push(field);
+        }
+        return pending.finish(trailers);
+    }
+
+    fn start<P: AsStrSlice>(&self, path: P, init: &RequestInit, has_body: bool) -> Result<PendingRequest, HttpError> with Client {
+        let target = self.target(path, &init.query)?;
+        let mut fields = self.headers;
+        for let field of &init.headers {
+            fields.push(*field);
+        }
+        let headers = to_fields(&fields)?;
+        let options = self.options()?;
+        let [body_rx, body_tx] = if has_body {
+            let [rx, tx] = Stream::<u8>::new();
+            [Option::Some(rx), Option::Some(tx)];
+        } else {
+            [Option::<Stream<u8>>::None, Option::<StreamWritable<u8>>::None];
+        };
+        let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [req, sent] = Request::new(headers as Headers, body_rx, trailers_rx, options);
+        let _ = req.set_method(init.method);
+        let _ = req.set_scheme(Option::Some(self.scheme));
+        let _ = req.set_authority(Option::Some(self.authority));
+        let _ = req.set_path_with_query(Option::Some(target));
+        // The host reads the body only once the send has started, so the body
+        // is written between `send` and `wait`.
+        let call = Client::send(req);
+        return Ok(PendingRequest { call, body_tx, trailers_tx, sent });
+    }
+
+    fn target<P: AsStrSlice>(&self, path: P, query: &FieldList) -> Result<String, HttpError> {
+        let path = path.as_str_slice();
+        if !path.starts_with("/") || path.contains_char('?') || path.contains_char('#') {
+            return Err(HttpError::InvalidUrl(`a request path starts with "/" and holds no "?" or "#": ${path}`));
+        }
+        let mut target = self.base_path;
+        target.push_str(path);
+        for let mut i = 0; i < query.len(); i += 1 {
+            let [name, value] = query[i];
+            target.push_str(if i == 0 { "?" } else { "&" });
+            target.push_str(&percent_encode(name));
+            target.push_str("=");
+            target.push_str(&percent_encode(value));
+        }
+        return Ok(target);
+    }
+
+    fn options(&self) -> Result<Option<RequestOptions>, HttpError> with Client {
+        if [self.connect_timeout, self.first_byte_timeout, self.between_bytes_timeout] matches { [null, null, null] } {
+            return Ok(null);
+        }
+        let options = RequestOptions::new();
+        options.set_connect_timeout(self.connect_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
+        options.set_first_byte_timeout(self.first_byte_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
+        options.set_between_bytes_timeout(self.between_bytes_timeout).map_err(|e| HttpError::UnsupportedOption(e))?;
+        return Ok(Option::Some(options));
+    }
+}
+
+fn to_fields(list: &FieldList) -> Result<Fields, HttpError> with Client {
+    let mut entries: List<[FieldName, FieldValue]> = List::with_capacity(list.len());
+    for let [name, value] of list {
+        entries.push([*name as FieldName, value.bytes().collect() as FieldValue]);
+    }
+    return Fields::from_list(entries).map_err(|e| HttpError::InvalidField(e));
+}
+
+/// A request whose send has started, while its body is still being written.
+affine struct PendingRequest {
+    call: AsyncCall<Result<Response, ErrorCode>>,
+    body_tx: Option<StreamWritable<u8>>,
+    trailers_tx: FutureWritable<Result<Option<Trailers>, ErrorCode>>,
+    sent: Future<Result<(), ErrorCode>>,
+}
+
+impl PendingRequest {
+    fn write_body(&mut self, bytes: &ByteList) with Client {
+        let Some(tx) = &self.body_tx else {
+            unreachable();
+        };
+        // A host that stopped reading reports why through the send.
+        let _ = tx.write_raw_all(bytes.as_byte_slice() as Slice<u8>);
+    }
+
+    fn finish(self, trailers: FieldList) -> Result<HttpResponse, HttpError> with Client {
+        let PendingRequest { call, body_tx, trailers_tx, sent } = self;
+        if let Some(tx) = body_tx {
+            tx.drop();
+        }
+        let trailer_fields: Option<Trailers> = if trailers.is_empty() {
+            null;
+        } else {
+            match to_fields(&trailers) {
+                Ok(fields) => Option::Some(fields as Trailers),
+                Err(e) => {
+                    trailers_tx.write(Err(ErrorCode::InternalError(Option::Some(`${e}`))));
+                    let _ = call.wait();
+                    let _ = sent.read();
+                    return Err(e);
+                },
+            };
+        };
+        trailers_tx.write(Ok(trailer_fields));
+        let response = match call.wait() {
+            Ok(response) => response,
+            Err(code) => {
+                let _ = sent.read();
+                return Err(HttpError::Transport([Stage::Request, code]));
+            },
+        };
+        if let Some(Err(code)) = sent.read() {
+            return Err(HttpError::Transport([Stage::Request, code]));
+        }
+        return Ok(HttpResponse::received(response));
+    }
+}
+
+/// A header or trailer section: name-value pairs as the host handed them over.
+/// A value is read as a view over those bytes, never copied, except where a
+/// name repeats and RFC 9110 reads its values as one.
+pub struct HttpFields {
+    entries: List<[FieldName, FieldValue]>,
+}
+
+impl HttpFields {
+    fn of(fields: &Fields) -> HttpFields with Client {
+        return HttpFields { entries: fields.copy_all() };
+    }
+
+    fn empty() -> HttpFields {
+        return HttpFields { entries: [] };
+    }
+
+    /// The value of `name`, compared without regard to ASCII case: its values
+    /// joined with `, ` where it repeats, or an error where that is not UTF-8.
+    pub fn header<S: AsStrSlice>(&self, name: S) -> Result<Option<StrSlice>, HttpError>
+        contract !name.as_str_slice().eq_ignore_ascii_case("set-cookie"), "Set-Cookie cannot be joined: read it with `headers_all`"
+    {
+        let Some(bytes) = self.header_bytes(name) else {
+            return Ok(null);
+        };
+        return Ok(Option::Some(text_view(&bytes)?));
+    }
+
+    /// `header`, as the octets themselves.
+    pub fn header_bytes<S: AsStrSlice>(&self, name: S) -> Option<ByteSlice>
+        contract !name.as_str_slice().eq_ignore_ascii_case("set-cookie"), "Set-Cookie cannot be joined: read it with `headers_all`"
+    {
+        let name = name.as_str_slice();
+        let mut found: Option<ByteSlice> = null;
+        let mut joined: Option<ByteList> = null;
+        for let entry of &self.entries {
+            if !entry.0.eq_ignore_ascii_case(name) {
+                continue;
+            }
+            if let Some(mut all) = joined {
+                push_joined(&mut all, &entry.1);
+                joined = Option::Some(all);
+            } else if let Some(first) = found {
+                let mut all = ByteList::with_capacity(first.len() + 2 + entry.1.len());
+                all.extend_from_slice(first as Slice<u8>);
+                push_joined(&mut all, &entry.1);
+                joined = Option::Some(all);
+            } else {
+                found = Option::Some(entry.1.as_byte_slice());
+            }
+        }
+        if let Some(all) = joined {
+            return Option::Some(all.as_byte_slice());
+        }
+        return found;
+    }
+
+    /// Every value of `name`, each a view, in the order they arrived.
+    pub fn headers_all<S: AsStrSlice>(&self, name: S) -> Result<List<StrSlice>, HttpError> {
+        let name = name.as_str_slice();
+        let mut values: List<StrSlice> = [];
+        for let entry of &self.entries {
+            if entry.0.eq_ignore_ascii_case(name) {
+                values.push(text_view(&entry.1.as_byte_slice())?);
+            }
+        }
+        return Ok(values);
+    }
+}
+
+fn push_joined(all: &mut ByteList, value: &FieldValue) {
+    all.push(b',');
+    all.push(b' ');
+    all.extend_from_slice(value.as_byte_slice() as Slice<u8>);
+}
+
+/// `bytes` as text, viewed where they lie.
+fn text_view(bytes: &ByteSlice) -> Result<StrSlice, Utf8Error> {
+    let prefix = String::utf8_valid_prefix(bytes);
+    if prefix != bytes.len() {
+        return Err(String::utf8_error_at(bytes, prefix));
+    }
+    let start = bytes.internal_start();
+    return Ok(StrSlice::internal_new(bytes.internal_repr(), start, start + bytes.len()));
+}
+
+/// A response whose headers have arrived. Reading the body in any of its
+/// ways uses up the body, not the response, which then hands out the
+/// trailers.
+pub affine struct HttpResponse {
+    pub status: u16,
+    headers: HttpFields,
+    /// Whether a read of the body has begun.
+    read: bool,
+    unread: Option<Response>,
+    reader: Option<BodyReader>,
+    /// The trailers, once the body was read to its end.
+    trailers: Option<HttpFields>,
+}
+
+impl HttpResponse {
+    fn received(response: Response) -> HttpResponse with Client {
+        return HttpResponse {
+            status: response.get_status_code() as u16,
+            headers: HttpFields::of(&(response.get_headers() as Fields)),
+            read: false,
+            unread: Option::Some(response),
+            reader: null,
+            trailers: null,
+        };
+    }
+
+    /// Whether the status is 2xx.
+    pub fn ok(&self) -> bool {
+        return 200 <= self.status < 300;
+    }
+
+    pub fn headers(&self) -> &HttpFields {
+        return &self.headers;
+    }
+
+    /// The trailers that followed the body, empty where none did.
+    pub fn trailers(&self) -> &HttpFields
+        contract self.trailers matches { Some(_) }, "the body must be read to its end first"
+    {
+        let Some(trailers) = &self.trailers else {
+            unreachable();
+        };
+        return trailers;
+    }
+
+    /// The whole body.
+    pub fn bytes(&mut self) -> Result<ByteList, HttpError> with Client
+        contract !self.read, "a body is read once"
+    {
+        self.read = true;
+        let mut all: ByteList = [];
+        while let Some(chunk) = self.next_chunk()? {
+            all.extend(&chunk);
+        }
+        return Ok(all);
+    }
+
+    /// The whole body, which must be UTF-8.
+    pub fn text(&mut self) -> Result<String, HttpError> with Client
+        contract !self.read, "a body is read once"
+    {
+        return Ok(String::try_from_utf8(self.bytes()?)?);
+    }
+
+    /// The whole body, decoded from JSON.
+    pub fn json<T: Deserialize>(&mut self) -> Result<T, HttpError> with Client
+        contract !self.read, "a body is read once"
+    {
+        return Ok(json::from_bytes::<T, ByteList>(self.bytes()?)?);
+    }
+
+    /// The body as the chunks the host hands over.
+    pub fn body(&mut self) -> BodyChunks
+        contract !self.read, "a body is read once"
+    {
+        self.read = true;
+        return BodyChunks { response: self };
+    }
+
+    /// The body as Server-Sent Events.
+    pub fn events(&mut self) -> EventStream
+        contract !self.read, "a body is read once"
+    {
+        self.read = true;
+        return EventStream { response: self, parser: SseParser::new(), failed: false };
+    }
+
+    /// The next chunk of the body, or `None` once it ended whole.
+    fn next_chunk(&mut self) -> Result<Option<ByteList>, HttpError> with Client {
+        if let Some(response) = self.unread.take() {
+            self.reader = Option::Some(BodyReader::open(response));
+        }
+        let Some(reader) = &mut self.reader else {
+            return Ok(null);
+        };
+        if let Some(chunk) = reader.next() {
+            return Ok(Option::Some(chunk));
+        }
+        self.trailers = Option::Some(self.reader.take().unwrap().finish()?);
+        return Ok(null);
+    }
+}
+
+/// The body stream of a response, and the future that ends it.
+affine struct BodyReader {
+    stream: Option<Stream<u8>>,
+    outcome: Option<Future<Result<Option<Trailers>, ErrorCode>>>,
+    /// Tells the host how reading the body ended.
+    done_tx: Option<FutureWritable<Result<(), ErrorCode>>>,
+}
+
+impl BodyReader {
+    fn open(response: Response) -> BodyReader with Client {
+        let [done_rx, done_tx] = Future::<Result<(), ErrorCode>>::new();
+        let [stream, outcome] = Response::consume_body(response, done_rx);
+        return BodyReader {
+            stream: Option::Some(stream),
+            outcome: Option::Some(outcome),
+            done_tx: Option::Some(done_tx),
+        };
+    }
+
+    /// The next chunk, or `None` once the stream closed; `finish` then says
+    /// whether it closed on the whole body.
+    fn next(&mut self) -> Option<ByteList> with Client {
+        let Some(stream) = self.stream.take() else {
+            return null;
+        };
+        let [stream, chunk] = stream.start_read(BODY_CHUNK_BYTES).finish();
+        if chunk.result == CopyResult::Completed {
+            self.stream = Option::Some(stream);
+        } else {
+            stream.drop();
+            if chunk.items.is_empty() {
+                return null;
+            }
+        }
+        return Option::Some(chunk.items as ByteList);
+    }
+
+    /// The trailers, read once the stream closed: an error where the body
+    /// did not arrive whole.
+    fn finish(self) -> Result<HttpFields, HttpError> with Client {
+        let mut reader = self;
+        let outcome = reader.outcome.take().unwrap().read();
+        let result: Result<HttpFields, HttpError> = match outcome {
+            Some(Ok(Some(trailers))) => Ok(HttpFields::of(&(trailers as Fields))),
+            Some(Ok(null)) => Ok(HttpFields::empty()),
+            Some(Err(code)) => Err(HttpError::Transport([Stage::ResponseBody, code])),
+            null => Err(HttpError::Transport([Stage::ResponseBody, ErrorCode::HttpResponseIncomplete])),
+        };
+        reader.done_tx.take().unwrap().write(Ok(()));
+        return result;
+    }
+}
+
+impl Drop for BodyReader {
+    fn drop(self) {
+        if let Some(stream) = self.stream {
+            stream.drop();
+        }
+        if let Some(outcome) = self.outcome {
+            outcome.drop();
+        }
+        if let Some(done_tx) = self.done_tx {
+            done_tx.write(Err(ErrorCode::InternalError(Option::Some("the body was not read to its end"))));
+        }
+    }
+}
+
+/// Bytes asked for by one read of a response body.
+global BODY_CHUNK_BYTES: i32 = 16384;
+
+/// The body of a response, chunk by chunk. A body cut short ends with an
+/// error rather than with `None`.
+pub struct BodyChunks {
+    response: &mut HttpResponse,
+}
+
+impl Iterator for BodyChunks {
+    type Item = Result<ByteList, HttpError>;
+
+    fn next(&mut self) -> Option<Result<ByteList, HttpError>> with Client {
+        return match self.response.next_chunk() {
+            Ok(Some(chunk)) => Option::Some(Ok(chunk)),
+            Ok(null) => null,
+            Err(e) => Option::Some(Err(e)),
+        };
+    }
+}
+
+/// One Server-Sent Event. Each field is a view into the body as it arrived.
+pub struct SseEvent {
+    /// The event type, `message` where the event named none.
+    pub event: StrSlice,
+    pub data: StrSlice,
+    /// The last event ID the stream set, empty where it set none.
+    pub id: StrSlice,
+}
+
+/// The body of a response as Server-Sent Events. A body cut short, or a line
+/// that is not UTF-8, ends with an error rather than with `None`.
+pub struct EventStream {
+    response: &mut HttpResponse,
+    parser: SseParser,
+    failed: bool,
+}
+
+impl EventStream {
+    /// The reconnection time in milliseconds the stream last set.
+    pub fn retry(&self) -> Option<i64> {
+        return self.parser.retry;
+    }
+}
+
+impl Iterator for EventStream {
+    type Item = Result<SseEvent, HttpError>;
+
+    fn next(&mut self) -> Option<Result<SseEvent, HttpError>> with Client {
+        if self.failed {
+            return null;
+        }
+        loop {
+            match self.parser.next_event() {
+                Some(Ok(event)) => {
+                    return Option::Some(Ok(event));
+                },
+                Some(Err(e)) => {
+                    self.failed = true;
+                    return Option::Some(Err(HttpError::NotUtf8(e)));
+                },
+                null => {},
+            }
+            match self.response.next_chunk() {
+                Ok(Some(chunk)) => self.parser.feed(chunk),
+                Ok(null) => {
+                    return null;
+                },
+                Err(e) => {
+                    self.failed = true;
+                    return Option::Some(Err(e));
+                },
+            }
+        }
+    }
+}
+
+/// The `text/event-stream` interpretation of WHATWG HTML § Server-sent events,
+/// fed chunk by chunk. A line within one chunk is a view into it; a line split
+/// across chunks, and data of more than one line, is copied once to join it.
+/// A line that is not UTF-8 is an error, where the standard decodes it lossily.
+internal struct SseParser {
+    chunk: ByteList,
+    pos: i32,
+    /// The start of a line the previous chunks did not end.
+    carry: ByteList,
+    /// A CR ended the last chunk, so an LF opening the next one belongs to it.
+    skip_lf: bool,
+    started: bool,
+    event: Option<StrSlice>,
+    data: Option<StrSlice>,
+    joined: Option<String>,
+    last_id: StrSlice,
+    internal retry: Option<i64>,
+}
+
+impl SseParser {
+    internal fn new() -> SseParser {
+        return SseParser {
+            chunk: [],
+            pos: 0,
+            carry: [],
+            skip_lf: false,
+            started: false,
+            event: null,
+            data: null,
+            joined: null,
+            last_id: "".as_str_slice(),
+            retry: null,
+        };
+    }
+
+    /// Hand over the next chunk, once `next_event` answers `None`.
+    internal fn feed(&mut self, chunk: ByteList)
+        contract self.pos == self.chunk.len(), "the previous chunk must be used up"
+    {
+        self.chunk = chunk;
+        self.pos = 0;
+        if self.skip_lf && !self.chunk.is_empty() {
+            self.skip_lf = false;
+            if self.chunk[0] == b'\n' {
+                self.pos = 1;
+            }
+        }
+    }
+
+    /// The next event the chunks fed so far complete, or `None` once they
+    /// complete no more.
+    internal fn next_event(&mut self) -> Option<Result<SseEvent, Utf8Error>> {
+        loop {
+            let Some(line) = self.next_line() else {
+                return null;
+            };
+            let line = match line {
+                Ok(line) => line,
+                Err(e) => {
+                    return Option::Some(Err(e));
+                },
+            };
+            if let Some(event) = self.take_line(line) {
+                return Option::Some(Ok(event));
+            }
+        }
+    }
+
+    fn next_line(&mut self) -> Option<Result<StrSlice, Utf8Error>> {
+        let start = self.pos;
+        let len = self.chunk.len();
+        let mut end = start;
+        while end < len && self.chunk[end] != b'\n' && self.chunk[end] != b'\r' {
+            end += 1;
+        }
+        if end == len {
+            self.carry.extend_from_slice(self.chunk.as_byte_slice().slice(start, len) as Slice<u8>);
+            self.pos = len;
+            return null;
+        }
+        if self.chunk[end] == b'\r' {
+            if end + 1 == len {
+                self.skip_lf = true;
+                self.pos = len;
+            } else if self.chunk[end + 1] == b'\n' {
+                self.pos = end + 2;
+            } else {
+                self.pos = end + 1;
+            }
+        } else {
+            self.pos = end + 1;
+        }
+        let mut bytes = self.chunk.as_byte_slice().slice(start, end);
+        if !self.carry.is_empty() {
+            let mut line = self.carry;
+            line.extend_from_slice(bytes as Slice<u8>);
+            self.carry = [];
+            bytes = line.as_byte_slice();
+        }
+        if !self.started {
+            self.started = true;
+            if bytes.len() >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf {
+                bytes = bytes.slice(3, bytes.len());
+            }
+        }
+        return Option::Some(text_view(&bytes));
+    }
+
+    fn take_line(&mut self, line: StrSlice) -> Option<SseEvent> {
+        if line.is_empty() {
+            return self.dispatch();
+        }
+        if line.starts_with(":") {
+            return null;
+        }
+        let [name, value] = match line.split_once(":") {
+            Some([name, value]) => [name, value.trim_prefix(" ")],
+            null => [line, "".as_str_slice()],
+        };
+        match name {
+            "data" => self.push_data(value),
+            "event" => {
+                self.event = Option::Some(value);
+            },
+            "id" => {
+                if !value.contains_char('\0') {
+                    self.last_id = value;
+                }
+            },
+            "retry" => {
+                if !value.is_empty() && value.find_char(|c| !c.is_ascii_digit()) matches { null } {
+                    if let Ok(ms) = i64::from_str(value) {
+                        self.retry = Option::Some(ms);
+                    }
+                }
+            },
+            _ => {},
+        }
+        return null;
+    }
+
+    fn push_data(&mut self, value: StrSlice) {
+        if let Some(joined) = &mut self.joined {
+            joined.push('\n');
+            joined.push_str(value);
+        } else if let Some(first) = self.data {
+            let mut joined = String::with_capacity(first.len() + 1 + value.len());
+            joined.push_str(first);
+            joined.push('\n');
+            joined.push_str(value);
+            self.joined = Option::Some(joined);
+        } else {
+            self.data = Option::Some(value);
+        }
+    }
+
+    fn dispatch(&mut self) -> Option<SseEvent> {
+        let [event, first, joined] = [self.event, self.data, self.joined];
+        self.event = null;
+        self.data = null;
+        self.joined = null;
+        let Some(first) = first else {
+            return null;
+        };
+        let data = match joined {
+            Some(joined) => joined.as_str_slice(),
+            null => first,
+        };
+        return Option::Some(SseEvent {
+            event: event.unwrap_or("message".as_str_slice()),
+            data,
+            id: self.last_id,
+        });
+    }
+}

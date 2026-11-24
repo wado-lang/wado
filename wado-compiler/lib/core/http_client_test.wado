@@ -1,0 +1,86 @@
+use { SseParser, SseEvent } from "core:http_client";
+
+/// Every event `chunks` complete, fed one at a time, as `[event, data, id]`.
+fn parse(chunks: List<String>) -> List<[String, String, String]> {
+    let mut parser = SseParser::new();
+    let mut out: List<[String, String, String]> = [];
+    for let chunk of chunks {
+        parser.feed(chunk.bytes().collect());
+        while let Some(event) = parser.next_event() {
+            let e = event.unwrap();
+            out.push([e.event.to_string(), e.data.to_string(), e.id.to_string()]);
+        }
+    }
+    return out;
+}
+
+test "an empty line dispatches an event, typed message by default" {
+    let events = parse(["data: hello\n\ndata: world\n\n"]);
+    let want: List<[String, String, String]> = [["message", "hello", ""], ["message", "world", ""]];
+    assert events == want;
+}
+
+test "event and id name the event; the id carries over" {
+    let events = parse(["event: ping\nid: 7\ndata: a\n\ndata: b\n\n"]);
+    let want: List<[String, String, String]> = [["ping", "a", "7"], ["message", "b", "7"]];
+    assert events == want;
+}
+
+test "data lines join with LF" {
+    let events = parse(["data: one\ndata:two\ndata\n\n"]);
+    let want: List<[String, String, String]> = [["message", "one\ntwo\n", ""]];
+    assert events == want;
+}
+
+test "comments, unknown fields and an event with no data dispatch nothing" {
+    let events = parse([": keep-alive\nfoo: bar\nevent: x\n\ndata: y\n\n"]);
+    let want: List<[String, String, String]> = [["message", "y", ""]];
+    assert events == want;
+}
+
+test "CR, LF and CRLF each end a line, a CRLF split across chunks too" {
+    let events = parse(["data: a\r\rdata: b\r\n\r", "\ndata: c\n\n"]);
+    let want: List<[String, String, String]> = [["message", "a", ""], ["message", "b", ""], ["message", "c", ""]];
+    assert events == want;
+}
+
+test "an event split at every byte parses as whole" {
+    let text = "\u{feff}event: e\nid: 9\ndata: héllo\ndata: wörld\n\n";
+    let bytes = text.as_bytes();
+    for let cut of 0..=bytes.len() {
+        let mut parser = SseParser::new();
+        parser.feed(bytes.slice(0, cut).to_list() as ByteList);
+        let mut got: List<SseEvent> = [];
+        while let Some(event) = parser.next_event() {
+            got.push(event.unwrap());
+        }
+        parser.feed(bytes.slice(cut, bytes.len()).to_list() as ByteList);
+        while let Some(event) = parser.next_event() {
+            got.push(event.unwrap());
+        }
+        assert got.len() == 1;
+        assert got[0].event == "e";
+        assert got[0].id == "9";
+        assert got[0].data == "héllo\nwörld";
+    }
+}
+
+test "an id holding NUL is ignored, and retry takes digits only" {
+    let mut parser = SseParser::new();
+    parser.feed("id: a\0b\nretry: 12x\nretry: 3000\ndata: d\n\n".bytes().collect());
+    let event = parser.next_event().unwrap().unwrap();
+    assert event.id == "";
+    assert parser.retry == Option::Some(3000);
+}
+
+test "an event not closed by an empty line is not dispatched" {
+    let events = parse(["data: done\n\ndata: cut"]);
+    let want: List<[String, String, String]> = [["message", "done", ""]];
+    assert events == want;
+}
+
+test "a line that is not UTF-8 is an error" {
+    let mut parser = SseParser::new();
+    parser.feed([b'd', b'a', b't', b'a', b':', 0xff, b'\n'] as ByteList);
+    assert parser.next_event().unwrap().is_err();
+}
