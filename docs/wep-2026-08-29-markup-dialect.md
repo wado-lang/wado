@@ -149,12 +149,6 @@ render function is its whole interface.
 - A source map for Kiln: a generator-supplied correspondence from output spans
   back to input spans, applied when the compiler renders a diagnostic. Recorded
   as a known gap in the Kiln WEP.
-- Grammar import resolution in Gale. `import S;` parses, but slave grammars are
-  not resolved, so a dialect vendors `Wado.g4` and something has to keep the copy
-  honest: `mise run check-grammar` holds the original to the compiler's parser,
-  and nothing holds a copy to the original. Gale's TODO records the work as
-  actionable on its own, and notes that the Kiln multi-input plumbing it needs
-  already exists.
 - What the markup lowers to. Builder is the target every position needs, and it
   does not exist. No surface can be studied before it.
 - Whether one surface serves both consumers, or the two shapes need two.
