@@ -96,6 +96,9 @@ pub enum LoadError {
     /// dependency could not be resolved to an entry module (e.g. its package
     /// declares no `[package].lib`). `reason` explains why.
     DependencyUnresolved { name: String, reason: String },
+    /// An import reaches a package whose coordinate another directory the
+    /// build reached first already holds.
+    PackageClaimed { path: String, reason: String },
     /// `"<package>/<file>"` names a file the package's `[package].exports`
     /// does not list. Worded at package granularity, so it never says whether
     /// the file is there.
@@ -229,6 +232,9 @@ impl std::fmt::Display for LoadError {
             LoadError::DependencyUnresolved { name, reason } => {
                 write!(f, "cannot resolve dependency '{name}': {reason}")
             }
+            LoadError::PackageClaimed { path, reason } => {
+                write!(f, "cannot load '{path}': {reason}")
+            }
             LoadError::UnexportedFile {
                 package,
                 file,
@@ -339,6 +345,7 @@ impl LoadError {
             | LoadError::InvalidIncludePath { .. }
             | LoadError::InvalidRemoteUrl { .. }
             | LoadError::DependencyUnresolved { .. }
+            | LoadError::PackageClaimed { .. }
             | LoadError::UnexportedFile { .. } => Code::ModuleNotFound,
         }
     }
@@ -2248,7 +2255,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         import_source: &str,
     ) -> Result<ModuleSource, LoadError> {
         let resolved = self.resolve_import_unnamed(from_module_source, import_source)?;
-        Ok(self.interner.locate(resolved, self.host))
+        let located = self.interner.locate(resolved, self.host);
+        self.interner
+            .claim(&located, self.host)
+            .map_err(|reason| LoadError::PackageClaimed {
+                path: import_source.to_string(),
+                reason,
+            })?;
+        Ok(located)
     }
 
     fn resolve_import_unnamed(

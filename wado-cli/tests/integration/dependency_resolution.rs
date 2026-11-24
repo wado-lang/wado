@@ -655,6 +655,54 @@ fn a_shared_dependency_is_one_package_through_a_symlink() {
         .success();
 }
 
+/// Write two checkouts of `acme:dep@0.1.0` under `root`: `dep`, and `fork`.
+fn two_checkouts(root: &std::path::Path) {
+    for dir in ["dep", "fork"] {
+        library(&root.join(dir), "", "pub fn v() -> i32 { return 1; }\n");
+    }
+    let manifest = root.join("fork/wado.toml");
+    let text = fs::read_to_string(&manifest).unwrap();
+    fs::write(&manifest, text.replace("name = \"fork\"", "name = \"dep\"")).unwrap();
+}
+
+/// A checkout reached by a relative path claims its coordinate as a declared
+/// one does, so a second checkout of a held coordinate is refused either way.
+#[test]
+fn a_second_checkout_reached_by_a_path_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    two_checkouts(root);
+    library(
+        &root.join("app"),
+        "\"acme:dep\" = { path = \"../dep\" }\n",
+        "use { v } from \"acme:dep\";\nuse { v as w } from \"../../fork/src/lib.wado\";\n\
+         pub fn api() -> i32 { return v() + w(); }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("one coordinate is one package"));
+}
+
+/// A declared checkout nothing imports claims nothing, so it does not stand in
+/// the way of the checkout the build reaches.
+#[test]
+fn a_declared_checkout_nothing_imports_claims_nothing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    two_checkouts(root);
+    library(
+        &root.join("app"),
+        "\"lib:fork\" = { path = \"../fork\" }\n\"acme:dep\" = { path = \"../dep\" }\n",
+        "use { v } from \"acme:dep\";\npub fn api() -> i32 { return v(); }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
+}
+
 /// A package reached by a path before another package declares it stays one
 /// package: its files keep one identity however they are reached after.
 #[test]

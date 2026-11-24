@@ -203,9 +203,6 @@ pub struct ModuleSourceInterner {
     /// compatibility range of its version: the coordinate as the root declares
     /// it, and the root.
     claimed_packages: hashmap::IndexMap<String, (String, String)>,
-    /// Each dependency entry module whose package another root already holds,
-    /// and the reason a `use` of it reports.
-    package_conflicts: hashmap::IndexMap<String, String>,
     /// The package of each path dependency that already has an identity, by
     /// lib: the entry's own package, reached back through a package it
     /// reaches, or one a path reached before any manifest declared it. Its
@@ -241,7 +238,6 @@ impl ModuleSourceInterner {
             root_dir: None,
             dependency_roots: hashmap::IndexMap::default(),
             claimed_packages: hashmap::IndexMap::default(),
-            package_conflicts: hashmap::IndexMap::default(),
             placed_libs: hashmap::IndexMap::default(),
             local_packages: hashmap::IndexMap::default(),
             undeclared_packages: hashmap::IndexMap::default(),
@@ -285,8 +281,8 @@ impl ModuleSourceInterner {
             ..
         }) = &package
         {
-            let conflict = self.claim_package(coordinate, root);
-            assert!(conflict.is_none(), "the entry's package is claimed first");
+            let claimed = self.claim_package(coordinate, root);
+            assert!(claimed.is_ok(), "the entry's package is claimed first");
         }
         self.root_dir = package.map(|package| package.root);
         let libs: Vec<String> = self.dependency_libs().map(str::to_string).collect();
@@ -300,15 +296,8 @@ impl ModuleSourceInterner {
             let file = self.host_file(&lib, host);
             self.lib_files.insert(file, lib.clone());
             if self.package(&lib).manifest.is_some()
-                && let Some(PackageDir {
-                    root, coordinate, ..
-                }) = self.dir_of(&lib, host).package
+                && let Some(root) = self.root_of(&lib, host)
             {
-                if let Some(coordinate) = coordinate
-                    && let Some(conflict) = self.claim_package(&coordinate, &root)
-                {
-                    self.package_conflicts.insert(lib.clone(), conflict);
-                }
                 let interned = self.intern(&root);
                 if self.root_dir.as_ref() == Some(&root) {
                     self.placed_libs
@@ -322,21 +311,46 @@ impl ModuleSourceInterner {
         }
     }
 
+    /// Claim the package of `source`, a module the build reached, for the root
+    /// its file lies in, or say why it cannot: another root the build reached
+    /// first holds that package. A module in no package claims nothing.
+    ///
+    /// # Errors
+    ///
+    /// The reason, naming both roots.
+    pub fn claim(&mut self, source: &ModuleSource, host: &impl PackageHost) -> Result<(), String> {
+        let Some(file) = source.file() else {
+            return Ok(());
+        };
+        match self.dir_of(&file, host).package {
+            Some(PackageDir {
+                root,
+                coordinate: Some(coordinate),
+                ..
+            }) => self.claim_package(&coordinate, &root),
+            Some(PackageDir {
+                coordinate: None, ..
+            })
+            | None => Ok(()),
+        }
+    }
+
     /// Record that the root `root` holds the package `coordinate` declares, or
     /// say why it cannot: another root holds that package already. A version in
     /// another compatibility range is another package.
-    fn claim_package(&mut self, coordinate: &str, root: &str) -> Option<String> {
+    fn claim_package(&mut self, coordinate: &str, root: &str) -> Result<(), String> {
         let held = self
             .claimed_packages
             .entry(compatibility_key(coordinate))
             .or_insert_with(|| (coordinate.to_string(), root.to_string()));
         let (first, first_root) = &*held;
-        (first_root != root).then(|| {
-            format!(
-                "it reaches `{coordinate}` in `{root}`, but `{first}` in `{first_root}` is the \
-                 same package; one coordinate is one package"
-            )
-        })
+        if first_root == root {
+            return Ok(());
+        }
+        Err(format!(
+            "`{root}` declares `{coordinate}`, the package `{first}` in `{first_root}` \
+             already is; one coordinate is one package"
+        ))
     }
 
     /// The local module at `path`, placed in its package first if it waits on
@@ -541,9 +555,6 @@ impl ModuleSourceInterner {
         name: &str,
     ) -> Option<ModuleSource> {
         let path = self.dependencies_of(importer).resolved.get(name)?.clone();
-        if self.package_conflicts.contains_key(&path) {
-            return None;
-        }
         Some(self.dependency(&path))
     }
 
@@ -577,9 +588,6 @@ impl ModuleSourceInterner {
                 .contains_key(name)
                 .then_some(Err(ExportRefusal::Component));
         };
-        if self.package_conflicts.contains_key(&lib) {
-            return None;
-        }
         let exports = &self.package(&lib).exports;
         let file: String = file.nfc().collect();
         let Some(path) = exports.get(&file).cloned() else {
@@ -663,12 +671,8 @@ impl ModuleSourceInterner {
     /// resolved, if any.
     #[must_use]
     pub fn unresolved_dependency(&self, importer: &ModuleSource, name: &str) -> Option<&str> {
-        let dependencies = self.dependencies_of(importer);
-        if let Some(reason) = dependencies.unresolved.get(name) {
-            return Some(reason);
-        }
-        let lib = dependencies.resolved.get(name)?;
-        self.package_conflicts.get(lib).map(String::as_str)
+        let unresolved = &self.dependencies_of(importer).unresolved;
+        unresolved.get(name).map(String::as_str)
     }
 
     /// The `wado.toml` `importer`'s dependencies were read from, if one governs
@@ -1799,15 +1803,44 @@ mod tests {
             ],
         );
         let entry = interner.entry_point("./main.wado");
-        assert!(interner.resolve_dependency(&entry, "acme:dep").is_some());
-        assert_eq!(interner.resolve_dependency(&entry, "lib:fork"), None);
+        let dep = interner.resolve_dependency(&entry, "acme:dep").unwrap();
+        let fork = interner.resolve_dependency(&entry, "lib:fork").unwrap();
+        assert_eq!(interner.claim(&dep, &host), Ok(()));
+        assert_eq!(interner.claim(&dep, &host), Ok(()));
         assert_eq!(
-            interner.unresolved_dependency(&entry, "lib:fork"),
-            Some(
-                "it reaches `acme:dep@0.2.5` in `fork`, but `acme:dep@0.2.0` in `dep` \
-                 is the same package; one coordinate is one package"
-            )
+            interner.claim(&fork, &host),
+            Err("`fork` declares `acme:dep@0.2.5`, the package `acme:dep@0.2.0` in `dep` \
+                 already is; one coordinate is one package"
+                .to_string())
         );
+    }
+
+    #[test]
+    fn the_checkout_the_build_reaches_first_holds_the_package() {
+        let host = Tree { base: "app/src" };
+        let mut interner = interner_with(
+            &host,
+            &[
+                ("acme:dep", "../../dep/src/lib.wado"),
+                ("lib:fork", "../../fork/src/lib.wado"),
+            ],
+        );
+        let entry = interner.entry_point("./main.wado");
+        let fork = interner.resolve_dependency(&entry, "lib:fork").unwrap();
+        assert_eq!(interner.claim(&fork, &host), Ok(()));
+        let dep = interner.resolve_dependency(&entry, "acme:dep").unwrap();
+        assert!(interner.claim(&dep, &host).is_err());
+    }
+
+    #[test]
+    fn a_checkout_reached_by_a_path_claims_its_package_too() {
+        let host = Tree { base: "app/src" };
+        let mut interner = interner_with(&host, &[("acme:dep", "../../dep/src/lib.wado")]);
+        let entry = interner.entry_point("./main.wado");
+        let dep = interner.resolve_dependency(&entry, "acme:dep").unwrap();
+        assert_eq!(interner.claim(&dep, &host), Ok(()));
+        let fork = interner.place("../../fork/src/lib.wado", &host);
+        assert!(interner.claim(&fork, &host).is_err());
     }
 
     #[test]
@@ -1821,8 +1854,10 @@ mod tests {
             ],
         );
         let entry = interner.entry_point("./main.wado");
-        assert!(interner.resolve_dependency(&entry, "lib:dep2").is_some());
-        assert!(interner.resolve_dependency(&entry, "lib:dep3").is_some());
+        for key in ["lib:dep2", "lib:dep3"] {
+            let source = interner.resolve_dependency(&entry, key).unwrap();
+            assert_eq!(interner.claim(&source, &host), Ok(()), "{key}");
+        }
     }
 
     #[test]
