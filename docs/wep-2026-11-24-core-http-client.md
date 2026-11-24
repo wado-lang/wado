@@ -77,6 +77,12 @@ means no response, or a body that did not arrive whole.
 The client does not follow redirects; a 3xx comes back as it is. Following one
 means sending the body again, and a streamed body cannot be sent twice.
 
+### No automatic retry
+
+The client never retries. A request that can be repeated exactly is rarer than
+it looks. A retry that matters often widens to POST or moves to another
+endpoint, which is another `HttpClient`. That is policy above the client.
+
 ### Errors
 
 `HttpError` is one variant:
@@ -85,8 +91,8 @@ means sending the body again, and a streamed body cannot be sent twice.
 - A transport failure, with the `wasi:http` `ErrorCode` and the stage it
   happened in: before the response headers, or while reading the response
   body. Before the headers, no part of the response was seen; during the body,
-  part of it was already handed to the caller. A retry policy needs the
-  difference.
+  part of it was already handed to the caller. A caller deciding whether to
+  retry needs the difference.
 - A body, header value or event that could not be decoded: not UTF-8 for
   `text()`, `header()` or `events()`, or not the type for `json()`.
 
@@ -131,7 +137,7 @@ The event parser is built into `core:http_client` and follows the
 
 `SseEvent` gives `event`, `data` and `id` as `StrSlice`, and `retry` as a
 number. Reconnecting with `Last-Event-ID` is EventSource behavior, not
-parsing, and it belongs to retry. Protocols layered on the events (a `[DONE]`
+parsing, and it belongs to the caller. Protocols layered on the events (a `[DONE]`
 sentinel, a JSON schema per event type) belong to the application.
 
 ### Copies
@@ -158,6 +164,10 @@ standards on purpose:
   that must read the rest asks for the octets with `header_bytes(name)`, a
   `ByteSlice`.
 
+A header name the response carries more than once is the one exception to
+views. RFC 9110 reads its values as one, joined with `, `, and both `header`
+and `header_bytes` answer that joined value, which is a copy.
+
 ## Roadmap
 
 - [ ] `HttpClient`, `RequestInit`, `Body`, `HttpError`, and the whole-body
@@ -169,10 +179,5 @@ standards on purpose:
 
 ## Known gaps
 
-- Retry. A request that can be repeated exactly is rarer than it looks; a retry
-  that matters widens to POST or moves to another endpoint, so another client.
-  That is policy for a separate module.
-- A header name sent more than once has several values. RFC 9110 reads them as
-  one, joined with `, `, but joining is a copy.
 - Cookies, multipart form bodies, and compression on the guest side.
 - Writing Server-Sent Events from a `wasi:http/service` handler.
