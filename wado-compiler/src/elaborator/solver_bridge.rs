@@ -56,9 +56,9 @@ enum DeclKey {
     },
     /// One head for every effect a function type names that reached nothing.
     UndeclaredEffect,
-    /// An effect parameter of the asking frame, by name: rigid, so it is an
-    /// effect of its own, and one frame never declares two of one name.
-    EffectParam(String),
+    /// An effect parameter of the asking frame, by its binder: rigid, so it is
+    /// an effect of its own.
+    EffectParam(AstId),
 }
 
 /// Why the lowering states nothing about a type, most telling first: a type
@@ -101,6 +101,20 @@ struct Written<'a> {
     declaring: &'a dyn Fn(AstId, &str, &str) -> Option<DefId>,
     /// What `Self` means, where anything does.
     self_type: Option<&'a SolverType>,
+    /// What an effect parameter in a `with` clause is.
+    row_params: RowParams,
+}
+
+/// What an effect parameter written in a function type's `with` clause is to
+/// the solver.
+#[derive(Clone, Copy)]
+enum RowParams {
+    /// A binder the match fills: the row meets any row holding the effects
+    /// written beside it. An impl's or a declaration's own parameter.
+    Binders,
+    /// An effect of its own: the asking frame's parameter, which a bound in
+    /// scope states for that parameter alone.
+    Rigid,
 }
 
 /// The trait among the bounds `params` puts on `base` that declares `assoc`.
@@ -296,9 +310,9 @@ impl Lowering {
         for param in resolutions.effect_params() {
             let head = TypeDeclId(intern(
                 &mut lowering.decls,
-                DeclKey::EffectParam(param.name().to_string()),
+                DeclKey::EffectParam(param.binder),
             ));
-            lowering.effects.insert(param, head);
+            lowering.effects.insert(EffectRef::Param(param), head);
         }
         lowering
     }
@@ -628,20 +642,25 @@ impl Lowering {
                 // A name reaching no effect declaration is the signature's own
                 // effect parameter, `_` among them.
                 let mut open = false;
-                let heads: Vec<TypeDeclId> = f
-                    .effects
-                    .iter()
-                    .filter_map(|effect| match resolutions.get(effect.id) {
-                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => Some(
-                            self.known_type(&DeclKey::Def(def))
-                                .expect("every effect is interned up front"),
-                        ),
-                        _ => {
-                            open = true;
-                            None
-                        }
-                    })
-                    .collect();
+                let mut heads: Vec<TypeDeclId> = Vec::new();
+                for effect in &f.effects {
+                    match resolutions.get(effect.id) {
+                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => heads
+                            .push(
+                                self.known_type(&DeclKey::Def(def))
+                                    .expect("every effect is interned up front"),
+                            ),
+                        _ => match written.row_params {
+                            RowParams::Binders => open = true,
+                            RowParams::Rigid => {
+                                let param = resolutions
+                                    .effect_at(effect.id, &effect.name)
+                                    .ok_or(Unsaid::Failed)?;
+                                heads.push(self.effect_head(&param));
+                            }
+                        },
+                    }
+                }
                 let row = if open {
                     SolverType::OpenRow(as_set(heads))
                 } else {
@@ -910,6 +929,7 @@ fn lower_header(
         param: &param,
         declaring: &declaring_here,
         self_type: None,
+        row_params: RowParams::Binders,
     };
     let target = lowering.ast_type(&header.ty, &space).ok()?;
     space.self_type = Some(&target);
@@ -1527,6 +1547,7 @@ impl SolverBridge {
                     declaring_among(tysys, own.iter().copied(), base, assoc)
                 },
                 self_type: None,
+                row_params: RowParams::Binders,
             };
             // An edge whose arguments the lowering cannot say states nothing:
             // answering it at the supertrait's defaults would be a guess.
@@ -1568,6 +1589,7 @@ impl SolverBridge {
                 param: &place,
                 declaring: &|_, _, _| None,
                 self_type: None,
+                row_params: RowParams::Binders,
             };
             let defaults: Vec<Option<ArgDefault>> = own
                 .iter()
@@ -1686,6 +1708,7 @@ impl SolverBridge {
                     declaring_among(tysys, info.type_params.iter(), base, assoc)
                 },
                 self_type: None,
+                row_params: RowParams::Binders,
             };
             if let Ok(base) = lowering.ast_type(&info.base_type_ast, &space) {
                 let head = lowering.declared_type(def);
@@ -2167,6 +2190,7 @@ impl SolverBridge {
                             param: &param,
                             declaring: &declaring,
                             self_type: self_type.as_ref(),
+                            row_params: RowParams::Rigid,
                         };
                         let args = said(
                             scoped

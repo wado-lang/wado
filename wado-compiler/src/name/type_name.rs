@@ -70,6 +70,16 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
     }
 }
 
+/// A function instance's `name` with the row each of its own effect parameters
+/// stands for, one `with(…)` apiece, so two rows are two instances.
+pub fn mangle_effect_args(mut name: String, effect_args: &[Vec<tir::EffectRef>]) -> String {
+    for row in effect_args {
+        let effects: Vec<String> = row.iter().map(mangle_effect_ref).collect();
+        push_with_clause(&mut name, &effects);
+    }
+    name
+}
+
 /// Mangle a tuple as `[T1,T2,…]`, e.g. `["i32","String"]` → `"[i32,String]"`.
 pub fn mangle_tuple_type(elems: &[String]) -> String {
     format!("[{}]", elems.join(","))
@@ -265,11 +275,15 @@ pub fn mangle_fn_type(
         out.push_str(ret_type);
     }
     if !with_clause.is_empty() {
-        out.push_str("with(");
-        out.push_str(&with_clause.join(","));
-        out.push(')');
+        push_with_clause(&mut out, with_clause);
     }
     out
+}
+
+fn push_with_clause(out: &mut String, effects: &[String]) {
+    out.push_str("with(");
+    out.push_str(&effects.join(","));
+    out.push(')');
 }
 
 /// How a function type is spelled from its parts, as [`mangle_fn_type`] and
@@ -318,7 +332,7 @@ fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
                 .expect("a ground effect is named in a module");
             effect_namespace(module, effect.name())
         }
-        tir::EffectRef::Param { name } | tir::EffectRef::Var { name, .. } => name.clone(),
+        tir::EffectRef::Param(_) | tir::EffectRef::Var { .. } => effect.name().to_string(),
     }
 }
 
@@ -1557,6 +1571,7 @@ impl std::fmt::Display for FqTraitName {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstId;
 
     #[test]
     fn a_function_type_name_spells_as_its_mangle() {
@@ -1565,7 +1580,10 @@ mod tests {
             true,
             vec![FqTypeName::binder("T"), FqTypeName::builtin("i32")],
             inner,
-            vec![tir::EffectRef::Param { name: "E".into() }],
+            vec![tir::EffectRef::Param(tir::EffectParam {
+                binder: AstId::fresh(),
+                name: "E".into(),
+            })],
         );
         assert_eq!(f.to_mangled(), "fn mut(T,i32)->(fn()->())with(E)");
         assert_eq!(f.to_display(), "fn mut(T, i32) -> (fn() -> ()) with E");

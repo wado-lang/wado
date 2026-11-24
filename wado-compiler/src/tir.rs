@@ -13,7 +13,7 @@ use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{MAX_GENERIC_PARAMS, NamePolicy, RangeKind, RestClause, Visibility};
+use crate::ast::{AstId, MAX_GENERIC_PARAMS, NamePolicy, RangeKind, RestClause, Visibility};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap;
 use crate::module_source::ModuleSource;
@@ -33,7 +33,8 @@ pub(crate) const REFLECT_NEWTYPE_BASE: &str = "Base";
 
 /// A resolved effect reference — a bare string in the AST. `Concrete` is
 /// identified by its declaration, so `with Stdout` imported from `wasi:cli` and
-/// from `core:cli` compare equal; `Param` by its name alone.
+/// from `core:cli` compare equal; `Param` by its binder, so two declarations'
+/// `E` are two parameters.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EffectRef {
     /// The effect (or resource) a name resolved to.
@@ -45,20 +46,59 @@ pub enum EffectRef {
         module_source: ModuleSource,
     },
     /// An effect parameter from a generic effect declaration (e.g., `E` in `<effect E>`)
-    Param { name: String },
+    Param(EffectParam),
     /// A row the elaborator cannot know yet, which the effect check solves: a
     /// closure literal's, or an effect parameter one call instantiates. Minted
     /// by [`TypeTable::mint_effect_var`]; `name` is the id's spelling.
     Var { id: u32, name: String },
 }
 
+/// An effect parameter: the binder that declares it, and the name it is
+/// written with, which says nothing of its identity.
+#[derive(Debug, Clone)]
+pub struct EffectParam {
+    pub binder: AstId,
+    pub name: String,
+}
+
+impl PartialEq for EffectParam {
+    fn eq(&self, other: &Self) -> bool {
+        self.binder == other.binder
+    }
+}
+
+impl Eq for EffectParam {}
+
+impl std::hash::Hash for EffectParam {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.binder.hash(state);
+    }
+}
+
+/// An effect parameter or variable, as a substitution ([`EffectRows`]) keys
+/// the row it stands for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RowVar {
+    Param(AstId),
+    Var(u32),
+}
+
 impl EffectRef {
     pub fn name(&self) -> &str {
         match self {
             EffectRef::Concrete(head) => head.name(),
-            EffectRef::Undeclared { name, .. }
-            | EffectRef::Param { name }
-            | EffectRef::Var { name, .. } => name,
+            EffectRef::Param(param) => &param.name,
+            EffectRef::Undeclared { name, .. } | EffectRef::Var { name, .. } => name,
+        }
+    }
+
+    /// What a substitution keys this effect by, where it is a parameter or a
+    /// variable.
+    pub fn row_var(&self) -> Option<RowVar> {
+        match self {
+            EffectRef::Param(param) => Some(RowVar::Param(param.binder)),
+            EffectRef::Var { id, .. } => Some(RowVar::Var(*id)),
+            EffectRef::Concrete(_) | EffectRef::Undeclared { .. } => None,
         }
     }
 
@@ -67,7 +107,7 @@ impl EffectRef {
         match self {
             EffectRef::Concrete(head) => Some(head.module()),
             EffectRef::Undeclared { module_source, .. } => Some(module_source),
-            EffectRef::Param { .. } | EffectRef::Var { .. } => None,
+            EffectRef::Param(_) | EffectRef::Var { .. } => None,
         }
     }
 
@@ -81,7 +121,28 @@ impl EffectRef {
     }
 
     pub fn is_param(&self) -> bool {
-        matches!(self, EffectRef::Param { .. })
+        matches!(self, EffectRef::Param(_))
+    }
+
+    pub fn as_param(&self) -> Option<&EffectParam> {
+        match self {
+            EffectRef::Param(param) => Some(param),
+            EffectRef::Concrete(_) | EffectRef::Undeclared { .. } | EffectRef::Var { .. } => None,
+        }
+    }
+
+    /// Whether `declared` names this effect outright, so an actual row meeting
+    /// it there adds nothing by it. A parameter met by its own binder is not
+    /// named outright: it stands for itself there, as in a recursive call.
+    pub fn named_outright_in(&self, declared: &[EffectRef]) -> bool {
+        !self.is_param() && declared.contains(self)
+    }
+
+    pub fn as_var(&self) -> Option<RowVar> {
+        match self {
+            EffectRef::Var { id, .. } => Some(RowVar::Var(*id)),
+            EffectRef::Concrete(_) | EffectRef::Undeclared { .. } | EffectRef::Param(_) => None,
+        }
     }
 
     /// Whether this is a row still to be solved.
@@ -104,18 +165,14 @@ pub fn canonicalize_row(row: &mut Vec<EffectRef>) {
     row.sort_by_cached_key(|effect| {
         let rank = match effect {
             EffectRef::Concrete(_) | EffectRef::Undeclared { .. } => 0,
-            EffectRef::Param { .. } => 1,
+            EffectRef::Param(_) => 1,
             EffectRef::Var { .. } => 2,
-        };
-        let id = match effect {
-            EffectRef::Var { id, .. } => *id,
-            _ => 0,
         };
         (
             rank,
             effect.name().to_string(),
             effect.module().map(ToString::to_string),
-            id,
+            effect.row_var(),
         )
     });
     row.dedup();
@@ -2299,8 +2356,8 @@ impl ProjectionAnswer {
     }
 }
 
-/// Effect parameters and variables, by name, and the row each stands for.
-pub type EffectRows = IndexMap<String, Vec<EffectRef>>;
+/// Effect parameters and variables, and the row each stands for.
+pub type EffectRows = IndexMap<RowVar, Vec<EffectRef>>;
 
 /// A function value with row `from` moved into a slot whose function type has
 /// row `into`: what the value performs must be what the slot admits.
@@ -2328,20 +2385,20 @@ pub struct RowClosing {
 pub fn solve_row(
     effects: &[EffectRef],
     rows: &EffectRows,
-    read: &mut impl FnMut(&str),
+    read: &mut impl FnMut(RowVar),
 ) -> Vec<EffectRef> {
     fn expand(
         effects: &[EffectRef],
         rows: &EffectRows,
-        read: &mut impl FnMut(&str),
-        expanded: &mut IndexSet<String>,
+        read: &mut impl FnMut(RowVar),
+        expanded: &mut IndexSet<RowVar>,
         out: &mut Vec<EffectRef>,
     ) {
         for effect in effects {
-            if let EffectRef::Var { name, .. } = effect {
-                read(name);
-                if let Some(solution) = rows.get(name) {
-                    if expanded.insert(name.clone()) {
+            if let Some(var) = effect.as_var() {
+                read(var);
+                if let Some(solution) = rows.get(&var) {
+                    if expanded.insert(var) {
                         expand(solution, rows, read, expanded, out);
                     }
                     continue;
@@ -2721,13 +2778,17 @@ pub struct TirFunction {
     pub is_async: bool,
     /// Generic type parameters (empty for non-generic functions)
     pub type_params: Vec<TirTypeParam>,
+    /// The function's own effect parameters, `_` among them. Each row a call
+    /// binds them to is an instance of its own, as each type is for a type
+    /// parameter: a dispatch in the body may read the row.
+    pub effect_params: Vec<EffectParam>,
     /// Type parameters from the impl block (for methods on generic structs)
     /// e.g., for a method in `impl Counter<T>`, this contains T's info
     pub impl_type_params: Vec<TirTypeParam>,
     /// The effect parameters the impl block's target writes in a row
     /// (`E` in `impl<effect E> Slot<fn() with E>`). Each row a receiver has
     /// there is an instance of its own, as each type is for a type parameter.
-    pub impl_effect_params: Vec<String>,
+    pub impl_effect_params: Vec<EffectParam>,
     /// The `impl` block a method was emitted into, which tells apart two blocks'
     /// like-named templates. `None` for anything else, instances included.
     pub impl_origin: Option<DefId>,
@@ -3502,6 +3563,7 @@ impl TirFunction {
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
+            effect_params: Vec::new(),
             impl_effect_params: Vec::new(),
             impl_origin: None,
             monomorph_info: None,
@@ -3569,6 +3631,7 @@ impl TirFunction {
     /// emitting it as written.
     pub fn is_template(&self) -> bool {
         self.has_real_type_params()
+            || !self.effect_params.is_empty()
             || !self.impl_type_params.is_empty()
             || !self.impl_effect_params.is_empty()
     }
@@ -4180,6 +4243,9 @@ pub struct InstantiationKey {
     pub impl_type_args: Vec<TypeId>,
     /// Method-level type arguments (from the method's own generics)
     pub method_type_args: Vec<TypeId>,
+    /// The row each of the function's own effect parameters stands for, in
+    /// the order [`TirFunction::effect_params`] declares them.
+    pub effect_args: Vec<Vec<EffectRef>>,
     /// Method info for method instantiations (None for struct/enum instantiations)
     /// Not included in equality/hash - used only for name formatting
     pub method_info: Option<LocalMethodName>,
@@ -4196,6 +4262,7 @@ impl PartialEq for InstantiationKey {
             && self.module_source == other.module_source
             && self.impl_type_args == other.impl_type_args
             && self.method_type_args == other.method_type_args
+            && self.effect_args == other.effect_args
     }
 }
 
@@ -4209,6 +4276,7 @@ impl std::hash::Hash for InstantiationKey {
         self.module_source.hash(state);
         self.impl_type_args.hash(state);
         self.method_type_args.hash(state);
+        self.effect_args.hash(state);
     }
 }
 

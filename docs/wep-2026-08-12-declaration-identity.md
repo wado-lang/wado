@@ -221,12 +221,23 @@ clause gets sites of its own, resolved in the trait's module, so the impl's
 module cannot capture the name. Fixture:
 `trait_head_effect_reaches_impl_module.wado`.
 
-An effect parameter (`<effect E>`) names that parameter. A type parameter names
-no effect. A name reaching no `interface` or resource is rejected where it is
-written, even when another module declares an effect of that name. So
-`with Stdout` needs `Stdout` in scope like any other name. `#[ambient(E)]` is
-held to the same rule, and so is a bare operation call: `use { E::{op} }` brings
-`op` into scope but not `E`, and the call still requires `E`. Fixtures:
+An effect parameter (`<effect E>`) names that parameter, and the parameter is
+its binder: two declarations' parameters of one spelling are two effects
+wherever both reach one question. A row substitution (`EffectRows`) and the
+solver's head (`DeclKey::EffectParam`) are keyed by the binder. A parameter met
+by its own binder, as in a function's reference to itself, stands for itself.
+An impl's own parameters stand for its trait's by position, in the parameters
+and the return type alike. Fixtures:
+`error_effect_param_same_name_in_impl_and_caller.wado`,
+`error_effect_param_own_reference_into_pure_slot.wado`,
+`trait_method_effect_param_in_return.wado`.
+
+A type parameter names no effect. A name reaching no `interface` or resource is
+rejected where it is written, even when another module declares an effect of
+that name. So `with Stdout` needs `Stdout` in scope like any other name.
+`#[ambient(E)]` is held to the same rule, and so is a bare operation call:
+`use { E::{op} }` brings `op` into scope but not `E`, and the call still
+requires `E`. Fixtures:
 `error_with_unknown_effect.wado`, `error_with_type_param_effect.wado`,
 `error_ambient_unknown_effect.wado`,
 `error_with_bare_operation_import_missing_effect.wado`.
@@ -991,14 +1002,3 @@ fresh inference variable, never the callee's binder, so a default fills it and
 an unanswered one is reported
 (`generic_call_default_beside_caller_binder.wado`). A binder inference cannot
 settle is reported once, and its slot becomes the error type.
-
-## Known gap: an effect parameter is its name
-
-`EffectRef::Param` carries the name a declaration gave its effect parameter, not
-the declaration. A row substitution (`EffectRows`) is keyed by that name, and so
-is the solver's head for one (`DeclKey::EffectParam`). Two declarations'
-parameters of one spelling are one effect wherever both reach one question.
-`TypeTable::effect_binding` tells a callee's parameter from the caller's of the
-same name by minting a variable for each while it matches them. What it admits
-is one declaration's row read as another's: a rigid `E` met by an unsubstituted
-`fn() with E` written elsewhere is taken for the same effect.

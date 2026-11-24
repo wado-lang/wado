@@ -1,0 +1,23 @@
+// An impl's own effect parameter stands for its trait method's wherever the
+// signature names it, the return type included.
+use { println, Stdout } from "core:cli";
+
+trait Pass with () {
+    fn pass<effect E>(&self, f: fn() with E) -> fn() with E;
+}
+
+struct P {}
+
+impl Pass for P {
+    fn pass<effect F>(&self, f: fn() with F) -> fn() with F {
+        return f;
+    }
+}
+
+export fn run() with Stdout {
+    let g = P {}.pass(|| { println("passed"); });
+    g();
+}
+
+__DATA__
+{"stdout": "passed\n"}

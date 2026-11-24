@@ -9,7 +9,9 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::{Pool, Templates};
-use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{
+    FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_effect_args, mangle_generic_name,
+};
 use crate::synthesis::template::written_impl_at;
 use crate::tir::{
     EffectRows, FunctionRef, InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam,
@@ -399,7 +401,7 @@ impl Monomorphizer {
                 .iter()
                 .map(|t| type_table.mangle_type_arg_for_generic(*t)),
         );
-        mangle_generic_name(&key.name, &args)
+        mangle_effect_args(mangle_generic_name(&key.name, &args), &key.effect_args)
     }
 
     /// Generate instantiated method name
@@ -457,7 +459,10 @@ impl Monomorphizer {
         let mangled_method =
             MethodName::format_method_with_args(&method_info.method_name, &method_arg_names);
 
-        MethodName::join_struct_method(&mangled_struct, &mangled_method)
+        mangle_effect_args(
+            MethodName::join_struct_method(&mangled_struct, &mangled_method),
+            &key.effect_args,
+        )
     }
 
     /// The newtype's own name when `type_id` peels to one that answers this call

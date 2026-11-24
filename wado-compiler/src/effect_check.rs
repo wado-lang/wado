@@ -20,7 +20,8 @@ use crate::name::{
 };
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{
-    EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, solve_row,
+    EffectParam, EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, RowVar, TemplateId,
+    TypeId, solve_row,
 };
 use crate::token::Span;
 use crate::type_table::{TypeSet, TypeTable};
@@ -616,7 +617,7 @@ fn run_effect_checks(
         sem.types
             .early_effect_rows()
             .iter()
-            .map(|(var, row)| (var.clone(), row.clone())),
+            .map(|(var, row)| (*var, row.clone())),
     );
     let mut log = ReachLog::default();
     let log = &mut log;
@@ -1046,7 +1047,7 @@ struct Brought {
 /// the declarations once every module's resolve, and again from
 /// [`Semantics`] + [`AnnotateState`] once the bodies are walked.
 pub(crate) struct OwnedEffectData {
-    flows_by_var: IndexMap<String, Vec<usize>>,
+    flows_by_var: IndexMap<RowVar, Vec<usize>>,
     fn_effects: IndexMap<AstId, Vec<EffectRef>>,
     fn_params: IndexMap<AstId, Vec<TypeId>>,
     /// Each function's declared return type, by declaration: where a call's
@@ -1362,13 +1363,15 @@ impl OwnedEffectData {
             }
         }
 
-        let mut flows_by_var: IndexMap<String, Vec<usize>> = IndexMap::default();
+        let mut flows_by_var: IndexMap<RowVar, Vec<usize>> = IndexMap::default();
         for (at, flow) in types.row_flows().iter().enumerate() {
-            for var in flow.from.iter().chain(&flow.into).filter(|e| e.is_var()) {
-                flows_by_var
-                    .entry(var.name().to_string())
-                    .or_default()
-                    .push(at);
+            for var in flow
+                .from
+                .iter()
+                .chain(&flow.into)
+                .filter_map(EffectRef::as_var)
+            {
+                flows_by_var.entry(var).or_default().push(at);
             }
         }
 
@@ -1443,7 +1446,7 @@ struct EffectIndex<'a> {
     types: &'a TypeTable,
     /// Each effect variable → the [`TypeTable::row_flows`] whose value's row or
     /// slot's row holds it.
-    flows_by_var: &'a IndexMap<String, Vec<usize>>,
+    flows_by_var: &'a IndexMap<RowVar, Vec<usize>>,
     /// Declaration key → resolved effects (free calls resolve via `references`).
     fn_effects: &'a IndexMap<AstId, Vec<EffectRef>>,
     /// Declaration key → parameter type ids (for effect-parameter resolution).
@@ -1943,7 +1946,7 @@ pub(crate) fn call_rows(
             .solved
             .iter()
             .filter(|(var, _)| !solved.contains_key(*var))
-            .map(|(var, row)| (var.clone(), row.clone()))
+            .map(|(var, row)| (*var, row.clone()))
             .collect()
     })
     .unwrap_or_default()
@@ -2355,7 +2358,7 @@ struct CalleeEffects {
     /// What a method of a resource demands besides its declaration.
     resource: OperationDemands,
     /// What each of the callee's effect parameters stood for at the call.
-    params: IndexMap<String, IndexSet<EffectRef>>,
+    params: IndexMap<EffectParam, IndexSet<EffectRef>>,
     /// The callee's declared return type, which the call's type instantiates.
     returns: Option<TypeId>,
     /// The function whose body the call runs, where a declaration names it.
@@ -3043,15 +3046,15 @@ fn resolve_effect_params(
     let skip = usize::from(is_method && !param_types.is_empty());
     // The callee's own effect parameter, and any its parameters' rows name,
     // which a call's type may carry out as a variable to solve.
-    let mut param_names: IndexSet<String> = callee_effects
+    let mut own: IndexSet<EffectParam> = callee_effects
         .iter()
-        .filter(|e| e.is_param())
-        .map(|e| e.name().to_string())
+        .filter_map(EffectRef::as_param)
+        .cloned()
         .collect();
     for &param_type in param_types.iter().skip(skip) {
-        type_table.effect_params_in(param_type, &mut param_names);
+        type_table.effect_params_in(param_type, &mut own);
     }
-    if param_names.is_empty() {
+    if own.is_empty() {
         return Resolved {
             required: callee_effects.to_vec(),
             params: IndexMap::default(),
@@ -3060,11 +3063,11 @@ fn resolve_effect_params(
     // `None` until an argument determines the parameter. An argument that
     // determines it to be pure leaves an empty set, which is not the same
     // answer as never having been determined.
-    let mut concrete: IndexMap<String, Option<IndexSet<EffectRef>>> =
-        param_names.iter().map(|n| (n.clone(), None)).collect();
+    let mut concrete: IndexMap<EffectParam, Option<IndexSet<EffectRef>>> =
+        own.iter().map(|p| (p.clone(), None)).collect();
     // The parameters an argument determines that no type says the effects of,
     // which stay requirements whatever else determines them.
-    let mut unread: IndexSet<String> = IndexSet::default();
+    let mut unread: IndexSet<EffectParam> = IndexSet::default();
     for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
         // A parameter whose rows sit inside it (`Holder<F>`, `F: fn() with
         // E`) meets them in the argument's type at the same places.
@@ -3079,18 +3082,14 @@ fn resolve_effect_params(
         };
         if !formal
             .iter()
-            .any(|e| e.is_param() && param_names.contains(e.name()))
+            .filter_map(EffectRef::as_param)
+            .any(|p| own.contains(p))
         {
             continue;
         }
         let actual_rows = fn_rows(type_table, sem.expression_types(arg.id()));
         if actual_rows.is_empty() {
-            unread.extend(
-                formal
-                    .iter()
-                    .filter(|e| e.is_param())
-                    .map(|e| e.name().to_string()),
-            );
+            unread.extend(formal.iter().filter_map(EffectRef::as_param).cloned());
             continue;
         }
         // A function value performs what its row holds, less what the
@@ -3098,11 +3097,11 @@ fn resolve_effect_params(
         let actual: Vec<EffectRef> = rows
             .row(&actual_rows.concat())
             .into_iter()
-            .filter(|e| e.is_param() || !formal.contains(e))
+            .filter(|e| !e.named_outright_in(formal))
             .collect();
         for formal_effect in formal {
-            if let EffectRef::Param { name } = formal_effect
-                && let Some(slot) = concrete.get_mut(name)
+            if let EffectRef::Param(param) = formal_effect
+                && let Some(slot) = concrete.get_mut(param)
             {
                 slot.get_or_insert_with(IndexSet::default)
                     .extend(actual.iter().cloned());
@@ -3125,20 +3124,20 @@ fn resolve_effect_params(
     // What each parameter stands for at this call, for a variable it became.
     let params = concrete
         .iter()
-        .filter_map(|(name, from_args)| {
+        .filter_map(|(param, from_args)| {
             if from_args.is_none() && !brought.determined {
                 return None;
             }
             let mut set = from_args.clone().unwrap_or_default();
             set.extend(brought_effects.iter().cloned());
-            Some((name.clone(), set))
+            Some((param.clone(), set))
         })
         .collect();
     let mut resolved = Vec::new();
     for effect in callee_effects {
         match effect {
-            EffectRef::Param { name } => {
-                let from_args = concrete.get(name).and_then(Option::as_ref);
+            EffectRef::Param(param) => {
+                let from_args = concrete.get(param).and_then(Option::as_ref);
                 // A function declares one effect parameter, `_` or `effect E`,
                 // and a bound's open trait passes its effects to it whatever it
                 // is called: the body performs them under it.
@@ -3151,7 +3150,7 @@ fn resolve_effect_params(
                 let mut set = from_args.cloned().unwrap_or_default();
                 set.extend(brought_effects.iter().cloned());
                 resolved.extend(set);
-                if brought.open || unread.contains(name) {
+                if brought.open || unread.contains(param) {
                     resolved.push(effect.clone());
                 }
             }
@@ -3170,7 +3169,7 @@ fn resolve_effect_params(
 /// stood for there.
 struct Resolved {
     required: Vec<EffectRef>,
-    params: IndexMap<String, IndexSet<EffectRef>>,
+    params: IndexMap<EffectParam, IndexSet<EffectRef>>,
 }
 
 /// For each effect parameter a row of `declared` names, the variables in the
@@ -3179,15 +3178,13 @@ fn pair_rows(
     types: &TypeTable,
     declared: TypeId,
     actual: TypeId,
-    met: &mut IndexMap<String, IndexSet<String>>,
+    met: &mut IndexMap<EffectParam, IndexSet<RowVar>>,
 ) {
     types.zip_rows(declared, actual, true, &mut |de, ae| {
-        for param in de.iter().filter(|e| e.is_param()) {
-            met.entry(param.name().to_string()).or_default().extend(
-                ae.iter()
-                    .filter(|e| e.is_var())
-                    .map(|e| e.name().to_string()),
-            );
+        for param in de.iter().filter_map(EffectRef::as_param) {
+            met.entry(param.clone())
+                .or_default()
+                .extend(ae.iter().filter_map(EffectRef::as_var));
         }
     });
 }
@@ -3200,16 +3197,16 @@ fn pair_effects(
     declared: TypeId,
     actual: TypeId,
     rows: &Rows,
-    met: &mut IndexMap<String, Option<IndexSet<EffectRef>>>,
+    met: &mut IndexMap<EffectParam, Option<IndexSet<EffectRef>>>,
 ) {
     types.zip_rows(declared, actual, true, &mut |de, ae| {
         let performed: Vec<EffectRef> = rows
             .row(ae)
             .into_iter()
-            .filter(|e| !de.contains(e))
+            .filter(|e| !e.named_outright_in(de))
             .collect();
-        for param in de.iter().filter(|e| e.is_param()) {
-            if let Some(slot) = met.get_mut(param.name()) {
+        for param in de.iter().filter_map(EffectRef::as_param) {
+            if let Some(slot) = met.get_mut(param) {
                 slot.get_or_insert_with(IndexSet::default)
                     .extend(performed.iter().cloned());
             }
@@ -3279,7 +3276,7 @@ fn rows_written_as(
             out.extend(
                 actual_row
                     .iter()
-                    .filter(|e| !written_row.contains(e))
+                    .filter(|e| !e.named_outright_in(written_row))
                     .cloned(),
             );
         }
@@ -3605,8 +3602,8 @@ impl SemEffectWalker<'_> {
         self.reach.closed.append(&mut body.reach.closed);
         self.closures.insert(closure.id, performed.clone());
         for row in fn_rows(self.sem.types(), closure_types) {
-            for var in row.iter().filter(|e| e.is_var()) {
-                self.rows.widen(var.name(), &performed);
+            for var in row.iter().filter_map(EffectRef::as_var) {
+                self.rows.widen(var, &performed);
             }
         }
         performed
@@ -3671,12 +3668,12 @@ impl SemEffectWalker<'_> {
         &mut self,
         returns: Option<TypeId>,
         call: AstId,
-        params: &IndexMap<String, IndexSet<EffectRef>>,
+        params: &IndexMap<EffectParam, IndexSet<EffectRef>>,
     ) {
         let Some(declared) = returns else {
             return;
         };
-        let mut met: IndexMap<String, IndexSet<String>> = IndexMap::default();
+        let mut met: IndexMap<EffectParam, IndexSet<RowVar>> = IndexMap::default();
         for actual in self.sem.expression_types(call) {
             pair_rows(self.sem.types(), declared, actual, &mut met);
         }
@@ -3689,7 +3686,7 @@ impl SemEffectWalker<'_> {
                 .map(|stands| stands.iter().cloned().collect())
                 .unwrap_or_default();
             for var in vars {
-                self.rows.widen(&var, &stands);
+                self.rows.widen(var, &stands);
             }
         }
     }
@@ -3701,7 +3698,7 @@ impl SemEffectWalker<'_> {
 struct Rows {
     solved: EffectRows,
     /// Each variable read, with the length its solution had when first read.
-    reads: RefCell<IndexMap<String, Option<usize>>>,
+    reads: RefCell<IndexMap<RowVar, Option<usize>>>,
 }
 
 impl Rows {
@@ -3717,8 +3714,8 @@ impl Rows {
         solve_row(effects, &self.solved, &mut |var| {
             self.reads
                 .borrow_mut()
-                .entry(var.to_string())
-                .or_insert_with(|| self.solved.get(var).map(Vec::len));
+                .entry(var)
+                .or_insert_with(|| self.solved.get(&var).map(Vec::len));
         })
     }
 
@@ -3736,8 +3733,8 @@ impl Rows {
     /// Add `effects` to what `var` is solved to. A solution only grows: one
     /// call site may resolve through several dispatches, each adding what it
     /// brings.
-    fn widen(&mut self, var: &str, effects: &[EffectRef]) -> bool {
-        let row = self.solved.entry(var.to_string()).or_default();
+    fn widen(&mut self, var: RowVar, effects: &[EffectRef]) -> bool {
+        let row = self.solved.entry(var).or_default();
         let had = row.len();
         for effect in effects {
             if !row.contains(effect) {
@@ -3766,9 +3763,10 @@ impl Rows {
                 let open = flow
                     .into
                     .iter()
-                    .filter(|e| e.is_var() && !closed.contains_key(e.name()));
+                    .filter_map(EffectRef::as_var)
+                    .filter(|var| !closed.contains_key(var));
                 for var in open {
-                    grew |= self.widen(var.name(), &carried);
+                    grew |= self.widen(var, &carried);
                 }
             }
             if !grew {
@@ -3785,10 +3783,7 @@ impl Rows {
     fn bound_flows(&self, index: &EffectIndex<'_>, out: &mut Vec<EffectError>) {
         let closed = index.types.effect_row_closings();
         for flow in index.flows_of(self) {
-            let closing = flow
-                .into
-                .iter()
-                .find_map(|e| e.is_var().then(|| closed.get(e.name())).flatten());
+            let closing = flow.into.iter().find_map(|e| closed.get(&e.as_var()?));
             if closing.is_none() && flow.into.iter().any(EffectRef::is_var) {
                 continue;
             }
@@ -3833,7 +3828,7 @@ impl Rows {
     /// call or a closure literal in the body, which the walk solves.
     fn assert_solved(&self, function: &str) {
         let reads = self.reads.borrow();
-        let unsolved: Vec<&String> = reads
+        let unsolved: Vec<&RowVar> = reads
             .keys()
             .filter(|var| !self.solved.contains_key(*var))
             .collect();

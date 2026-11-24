@@ -4,8 +4,8 @@
 use crate::elaborator::trait_env::{BlanketImpl, BlanketParamSource, BlanketReceiver};
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
-    CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TemplateId, TirExpr,
-    TirExprKind, TirFunction, TypeArgMap, TypeId,
+    CallArg, EffectRef, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, RowVar,
+    TemplateId, TirExpr, TirExprKind, TirFunction, TypeArgMap, TypeId, canonicalize_row,
 };
 use crate::type_table::TypeTable;
 
@@ -108,6 +108,7 @@ impl Monomorphizer {
                 args
             };
         let method_type_args = method_args_at(&template, &site, type_table)?;
+        let effect_args = effect_args_at(&template, expr, &site, type_table);
         Some(InstantiationKey {
             def: None,
             name: generic_function_name(
@@ -118,6 +119,7 @@ impl Monomorphizer {
             module_source: template.module_source.clone(),
             impl_type_args,
             method_type_args,
+            effect_args,
             method_info: template.method_info.clone(),
             template: Some(site.template.clone()),
         })
@@ -319,6 +321,58 @@ fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -
         link = *base_type;
     }
     link != outer
+}
+
+/// The row each of `template`'s own effect parameters stands for at the call
+/// or function reference `expr`: what the arguments' rows, or the reference's
+/// type, meet them with. A parameter left in a row is one no frame binds,
+/// which a call that determines nothing of a callee's `_` hands its caller: it
+/// keys the instance as it is.
+fn effect_args_at(
+    template: &TirFunction,
+    expr: &TirExpr,
+    site: &CallSite<'_>,
+    type_table: &mut TypeTable,
+) -> Vec<Vec<EffectRef>> {
+    if template.effect_params.is_empty() {
+        return Vec::new();
+    }
+    let rows = if let TirExprKind::Call { .. } = &expr.kind {
+        let receiver_slots = usize::from(site.receiver.is_some());
+        let declared: Vec<TypeId> = template
+            .params
+            .iter()
+            .skip(receiver_slots)
+            .map(|param| param.type_id)
+            .collect();
+        let actual: Vec<TypeId> = site.args.iter().map(|arg| arg.expr.type_id).collect();
+        type_table.call_effect_binding(&declared, &actual)
+    } else {
+        let params = template.params.iter().map(|param| param.type_id).collect();
+        let declared = type_table.make_function_with_mut(
+            false,
+            params,
+            template.return_type,
+            template.effects.clone(),
+        );
+        type_table.call_effect_binding(&[declared], &[expr.type_id])
+    };
+    template
+        .effect_params
+        .iter()
+        .map(|param| {
+            let mut row = rows
+                .get(&RowVar::Param(param.binder))
+                .cloned()
+                .unwrap_or_default();
+            canonicalize_row(&mut row);
+            assert!(
+                !row.iter().any(EffectRef::is_var),
+                "the effect check's write-back leaves no row variable in the TIR"
+            );
+            row
+        })
+        .collect()
 }
 
 /// The method arguments `template` instantiates under at `site`: spelled, else
