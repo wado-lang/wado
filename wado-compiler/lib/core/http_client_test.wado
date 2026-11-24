@@ -329,7 +329,7 @@ test "a body and its trailers go out after the headers" {
         let res = client()
             .request("/upload", RequestInit {
                 method: Method::Post,
-                body: Option::Some(b"payload"),
+                body: Option::Some(b"payload".as_byte_slice()),
                 trailers: [
                     ["x-checksum", "1234"],
                 ],

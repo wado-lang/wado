@@ -48,7 +48,7 @@ pub struct RequestInit {
     pub headers: List<[String, String]> = [],
     /// Percent-encoded by the client. The path itself carries no query.
     pub query: List<[String, String]> = [],
-    pub body: Option<ByteList> = null,
+    pub body: Option<ByteSlice> = null,
     pub trailers: List<[String, String]> = [],
 }
 
@@ -153,7 +153,7 @@ impl HttpClient {
         let has_body = body matches { Some(_) };
         let mut pending = self.start(path, &init, has_body)?;
         if let Some(bytes) = body {
-            pending.write_body(&bytes);
+            pending.write_body(bytes);
         }
         return pending.finish(init.trailers);
     }
@@ -261,12 +261,12 @@ affine struct PendingRequest {
 }
 
 impl PendingRequest {
-    fn write_body(&mut self, bytes: &ByteList) with Client {
+    fn write_body(&mut self, bytes: ByteSlice) with Client {
         let Some(tx) = &self.body_tx else {
             unreachable();
         };
         // A host that stopped reading reports why through the send.
-        let _ = tx.write_raw_all(bytes.as_byte_slice() as Slice<u8>);
+        let _ = tx.write_raw_all(bytes as Slice<u8>);
     }
 
     fn finish(self, trailers: List<[String, String]>) -> Result<HttpResponse, HttpError> with Client {

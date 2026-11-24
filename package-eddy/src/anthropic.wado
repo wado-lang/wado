@@ -7,7 +7,7 @@ use { MonotonicClock } from "wasi:clocks";
 use { to_bytes, from_bytes, from_string } from "core:json";
 use { Serialize, Deserialize } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
-use { fetch } from "./http.wado";
+use { HttpClient, ClientInit, RequestInit } from "core:http_client";
 
 pub use { Credential } from "./credential.wado";
 
@@ -247,19 +247,30 @@ fn post<T: Deserialize>(
     credential: &mut Credential,
     request: ByteSlice,
 ) -> Result<T, String> with (Client, MonotonicClock) {
-    let mut renewed = false;
-    loop {
-        let [status, body] = fetch(Method::Post, "api.anthropic.com", "/v1/messages", [
-            ["authorization", `Bearer ${credential.key()?}`],
+    let client = HttpClient::new("https://api.anthropic.com", ClientInit {
+        headers: [
             ["anthropic-version", "2023-06-01"],
             ["content-type", "application/json"],
-        ], request)?;
-        if status == 401 && !renewed && credential.renew()? {
+        ],
+    }).unwrap();
+    let mut renewed = false;
+    loop {
+        let mut res = client
+            .request("/v1/messages", RequestInit {
+                method: Method::Post,
+                headers: [
+                    ["authorization", `Bearer ${credential.key()?}`],
+                ],
+                body: Some(request),
+            })
+            .map_err(|e| `${e}`)?;
+        if res.status == 401 && !renewed && credential.renew()? {
             renewed = true;
             continue;
         }
-        if status != 200 {
-            return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+        let body = res.bytes().map_err(|e| `${e}`)?;
+        if res.status != 200 {
+            return Err(`HTTP ${res.status}: ${String::from_utf8_lossy(body)}`);
         }
         return match from_bytes::<T, ByteList>(body) {
             Ok(r) => Ok(r),
