@@ -548,8 +548,11 @@ impl HttpResponse {
         }
         self.trailers = Option::Some(self.reader.take().unwrap().finish()?);
         match self.sent.take().unwrap().read() {
-            Some(Ok(_)) => {},
-            Some(Err(code)) => return Err(HttpError::Transport([Stage::Request, code])),
+            Some(Ok(_)) => {
+            },
+            Some(Err(code)) => {
+                return Err(HttpError::Transport([Stage::Request, code]));
+            },
             // Dropping a future's writable end before writing it traps.
             null => unreachable(),
         }

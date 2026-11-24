@@ -427,7 +427,10 @@ mod tests {
             >());
             let mut body = IncomingResponseBody::new(silent, Duration::ZERO);
             let outcome = body.frame().await;
-            assert!(matches!(outcome, Some(Err(HttpError::ConnectionReadTimeout))));
+            assert!(matches!(
+                outcome,
+                Some(Err(HttpError::ConnectionReadTimeout))
+            ));
         });
     }
 
