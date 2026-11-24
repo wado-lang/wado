@@ -34,6 +34,35 @@ fn test_init_requires_namespace() {
         .stderr(predicate::str::contains("--namespace is required"));
 }
 
+/// A workspace member takes the fields `[workspace.package]` sets from the
+/// workspace, so `init` there writes neither them nor asks for them.
+#[test]
+fn init_in_a_workspace_member_leaves_out_what_it_inherits() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("wado-workspace.toml"),
+        "[workspace]\nmembers = [\"pkgs/*\"]\n\n\
+         [workspace.package]\nnamespace = \"acme\"\nversion = \"0.4.0\"\n",
+    )
+    .unwrap();
+    let member = tmp.path().join("pkgs/app");
+    fs::create_dir_all(&member).unwrap();
+
+    wado_in(&member)
+        .args(["init", "--name", "app", "--namespace", "myorg"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("the workspace sets the namespace `acme`"));
+    wado_in(&member)
+        .args(["init", "--name", "app"])
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(member.join("wado.toml")).unwrap();
+    assert!(!content.contains("namespace"), "{content}");
+    assert!(!content.contains("version"), "{content}");
+}
+
 #[test]
 fn test_init_fails_when_manifest_exists() {
     let tmp = tempfile::tempdir().unwrap();

@@ -38,7 +38,7 @@ fn init_run_creates_manifest_in_cwd() {
     with_tempdir(|| {
         let opts = wado_cli::init::InitOptions {
             name: "demo".to_string(),
-            namespace: "acme".to_string(),
+            namespace: Some("acme".to_string()),
             force: false,
         };
         let result = wado_cli::init::run(opts);
@@ -54,7 +54,7 @@ fn init_run_refuses_to_overwrite_without_force() {
         fs::write("wado.toml", "pre-existing").unwrap();
         let opts = wado_cli::init::InitOptions {
             name: "demo".to_string(),
-            namespace: "acme".to_string(),
+            namespace: Some("acme".to_string()),
             force: false,
         };
         let err = wado_cli::init::run(opts).expect_err("expected CliExit");
@@ -75,7 +75,7 @@ fn init_run_force_overwrites() {
         fs::write("wado.toml", "pre-existing").unwrap();
         let opts = wado_cli::init::InitOptions {
             name: "demo".to_string(),
-            namespace: "acme".to_string(),
+            namespace: Some("acme".to_string()),
             force: true,
         };
         wado_cli::init::run(opts).expect("force should succeed");

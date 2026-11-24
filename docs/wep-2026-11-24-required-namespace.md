@@ -38,7 +38,9 @@ published. What follows from that:
 - A coordinate does not mean published. `publish = false` is the only way a
   package stays out of a registry, and publishing no longer checks the
   namespace.
-- `wado init` takes `--namespace` as well as `--name`, and writes both.
+- `wado init` takes `--namespace` as well as `--name`, and writes both. In a
+  workspace member it writes neither the namespace nor the version that
+  `[workspace.package]` sets, and refuses a `--namespace` there.
 - An exported file and a Kiln input from another package are always named
   `namespace:name@version/path`.
 - A `lib:` alias renames a dependency, shortens its name, or tells two major
@@ -74,7 +76,7 @@ A `lib:` key that only shortened a sibling's coordinate (`"lib:gale"` for
 ## Roadmap
 
 1. [x] `wado-manifest` refuses a `[package]` with no `namespace`, and
-   `wado init` requires `--namespace`.
+   `wado init` requires `--namespace` unless the workspace sets one.
 2. [x] Every manifest in this repository declares a namespace or inherits one.
 3. [x] A coordinate key is checked against the `[package]` its source holds,
    and a single file under one is refused.
