@@ -143,6 +143,13 @@ build the dev binary before running it, so none of them runs a stale build.
 `wado-run-pjrt` runs on XLA's CPU plugin unless `--plugin` names another. The
 `wado-cli` skill covers every subcommand; read it before invoking `wado`.
 
+A `wado` built without the `dist` feature, release or not, reads the stdlib and
+Marl's sources from this checkout, so an edit to either needs no rebuild, and
+caches what it compiles from them in its `target/<profile>/`. `--features dist`
+(`-p wado-cli`) makes it self-contained, as the release workflow builds it: the
+sources embedded, the cache in the user cache. A binary that outlives the
+checkout, such as a benchmark baseline, is built with `dist`.
+
 The Wado formatter skips `wado-compiler/tests/**`, so an e2e fixture keeps its
 hand-authored layout. Naming a file bypasses the exclusion, so never
 `wado format -w` a fixture file directly. When the syntax changes, add tests to
