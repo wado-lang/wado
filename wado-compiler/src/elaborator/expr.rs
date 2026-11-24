@@ -1704,7 +1704,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (b) Generic without turbofish: a function value has no call to infer
         // from, so only `expected_type` settles its type arguments.
         if let Some(expected) = expected_type {
-            match self.infer_func_ref_type_args(&ident.name, &sig, expected) {
+            match self.infer_func_ref_type_args(&ident.name, ident.span, &sig, expected) {
                 FuncRefInference::Ok(inferred) => {
                     return self.func_ref_instance(ident, &sig, &inferred, Some(expected));
                 }
@@ -1848,6 +1848,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn infer_func_ref_type_args(
         &mut self,
         name: &str,
+        span: Span,
         sig: &FunctionSig,
         expected: TypeId,
     ) -> FuncRefInference {
@@ -1891,7 +1892,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &Instantiation {
                 kind: InstanceKind::Function,
                 name,
-                span: Span::default(),
+                span,
                 type_args: &[],
                 self_binding: None,
                 impl_args: &[],

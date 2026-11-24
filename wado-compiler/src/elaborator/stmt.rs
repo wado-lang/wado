@@ -231,6 +231,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// from the AST; desugared constructs that expand to multiple statements
     /// record their `DesugarKind` tag here.
     pub(super) fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
+        let outer = self.infer_holes.statement.replace(stmt.span());
+        self.resolve_stmt_kind(stmt, ctx);
+        self.infer_holes.statement = outer;
+    }
+
+    fn resolve_stmt_kind(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
         match stmt {
             Stmt::Let(let_stmt) => self.resolve_let(let_stmt, ctx),
             Stmt::Expr(expr_stmt) => self.resolve_expr_stmt(expr_stmt, ctx),

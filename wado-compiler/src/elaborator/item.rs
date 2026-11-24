@@ -1973,7 +1973,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.restoring_decls(|this| {
             for func in bodies {
                 this.annotate_ctx.abstract_selections = Some(hashmap::IndexMap::default());
-                this.walk_trait_body(def, func);
+                this.as_body(|this| this.walk_trait_body(def, func));
                 let selections = this
                     .annotate_ctx
                     .abstract_selections
@@ -2675,19 +2675,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Resolve a function for its facts.
     pub(super) fn resolve_function(&mut self, func: &Function) {
-        self.resolve_function_with_self(func, None);
+        self.as_body(|this| this.resolve_function_with_self(func, None));
     }
 
     /// [`Self::resolve_function`] on a resource operation's default, where
     /// `Self` is the resource of type `resource`.
     pub(super) fn resolve_resource_default(&mut self, func: &Function, resource: TypeId) {
-        self.resolve_function_with_self(
-            func,
-            Some(SelfBinding {
-                type_id: resource,
-                declaring_trait: None,
-            }),
-        );
+        let binding = SelfBinding {
+            type_id: resource,
+            declaring_trait: None,
+        };
+        self.as_body(|this| this.resolve_function_with_self(func, Some(binding)));
     }
 
     fn resolve_function_with_self(&mut self, func: &Function, self_binding: Option<SelfBinding>) {

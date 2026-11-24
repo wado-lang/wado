@@ -222,7 +222,9 @@ Each step keeps every fixture passing and deletes what it replaces.
 - [x] A variable carries its origin: the slot it stands for, the declaration
   that owns it, or the `_` the source wrote, and where. Its report is read
   from the origin, not from a side table. A report equates every variable it
-  covers with the error type, which settles them without a word. What
+  covers with the error type, which settles them without a word. A report
+  covers a variable whose origin it spans, and one minted in the innermost
+  statement the report points into. What
   separately closes or blames a variable after a report goes.
 - [x] The context is per body rather than per module, and so are the facts it
   writes back. A variable cannot outlive its body.

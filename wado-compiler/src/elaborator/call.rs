@@ -2724,16 +2724,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let generic = !self.lookup_function_type_params(&callee).is_empty();
-        if generic
-            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span)
+        if !(generic
+            && self.report_value_for_reference(&declared_param_types, &call.args, &args, call.span))
         {
-            // The missing `&` is why a slot went unanswered, and is reported.
-            for arg in &mut type_args {
-                if self.tysys.type_table.borrow().is_infer_var(*arg) {
-                    *arg = TypeTable::ERROR;
-                }
-            }
-        } else {
             self.defer_or_report_uninferred_fn_type_args(
                 &callee,
                 &mut type_args,

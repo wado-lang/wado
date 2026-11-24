@@ -24,7 +24,7 @@ use super::trait_query::{SelfBinding, spelled_at};
 use super::type_resolution::ParamSpace;
 use super::types::TypeError;
 use super::tysys::TypeSystem;
-use crate::ast::{AssocTypeBound, AstId, GenericParam};
+use crate::ast::{AssocTypeBound, AstId, AstIdSpace, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
     BodyFacts, BodyFactsLens, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation,
@@ -46,9 +46,12 @@ pub(crate) struct InferHoleTable {
     pub(super) holes_writable: bool,
     /// Where an error was reported since the variables last absorbed one.
     /// The error says what was wrong there, so each open variable whose
-    /// origin it covers takes the error type without a word. Recorded where
-    /// the diagnostic is emitted, which reads the table, so behind a cell.
-    reports: std::cell::RefCell<Vec<DiagnosticSpan>>,
+    /// origin it covers, or which its statement minted, takes the error type
+    /// without a word. Recorded where the diagnostic is emitted, which reads
+    /// the table, so behind a cell.
+    reports: std::cell::RefCell<Vec<Report>>,
+    /// The innermost statement being walked.
+    pub(super) statement: Option<Span>,
     /// Struct literals whose field defaults were not walked, since a slot they
     /// are typed by was a hole. An unsolved hole reports itself; a solved one
     /// came too late for the defaults, so the literal reports it.
@@ -140,7 +143,10 @@ pub(super) struct ProjectionLink {
 
 impl InferHoleTable {
     pub(super) fn note_report(&self, span: DiagnosticSpan) {
-        self.reports.borrow_mut().push(span);
+        self.reports.borrow_mut().push(Report {
+            span,
+            statement: self.statement,
+        });
     }
 
     pub(super) fn require(&self, obligation: Obligation) {
@@ -188,15 +194,58 @@ impl InferHoleTable {
     }
 }
 
-/// Whether the reported `outer` covers `inner`, both in one parse.
-fn covers(outer: &DiagnosticSpan, inner: &Span) -> bool {
-    let end = (
-        outer.end_line.unwrap_or(outer.line),
-        outer.end_column.unwrap_or(outer.column),
-    );
-    outer.space == inner.space
-        && (outer.line, outer.column) <= (inner.line, inner.column)
-        && (inner.end_line, inner.end_column) <= end
+/// An error reported, and the statement it was reported in.
+struct Report {
+    span: DiagnosticSpan,
+    statement: Option<Span>,
+}
+
+impl Report {
+    /// Whether it covers the origin's span, or points into the statement the
+    /// origin was minted in. A report raised there that points elsewhere,
+    /// such as into a callee's default argument, is about that code instead.
+    fn covers(&self, origin: &Origin) -> bool {
+        let reported = Extent::of_report(&self.span);
+        let in_statement = |statement: Span| {
+            self.statement == Some(statement) && Extent::of(&statement).contains(&reported)
+        };
+        origin.statement.is_some_and(in_statement)
+            || origin
+                .span()
+                .is_some_and(|span| reported.contains(&Extent::of(&span)))
+    }
+}
+
+/// A source range in one parse.
+struct Extent {
+    space: AstIdSpace,
+    start: (usize, usize),
+    end: (usize, usize),
+}
+
+impl Extent {
+    fn of(span: &Span) -> Self {
+        Extent {
+            space: span.space,
+            start: (span.line, span.column),
+            end: (span.end_line, span.end_column),
+        }
+    }
+
+    fn of_report(span: &DiagnosticSpan) -> Self {
+        Extent {
+            space: span.space,
+            start: (span.line, span.column),
+            end: (
+                span.end_line.unwrap_or(span.line),
+                span.end_column.unwrap_or(span.column),
+            ),
+        }
+    }
+
+    fn contains(&self, inner: &Extent) -> bool {
+        self.space == inner.space && self.start <= inner.start && inner.end <= self.end
+    }
 }
 
 /// A trait bound a slot declared: the trait its reference site names, with the
@@ -287,6 +336,8 @@ struct Origin {
     blame: Option<Blame>,
     /// Where the source wrote the `_` it is, while that `_` reports itself.
     written: Option<Span>,
+    /// The statement it was minted in.
+    statement: Option<Span>,
 }
 
 impl Origin {
@@ -305,7 +356,7 @@ impl VarStore {
         self.holes.len()
     }
 
-    fn mint(&mut self, hole: TypeId) {
+    fn mint(&mut self, hole: TypeId, statement: Option<Span>) {
         let i = self.holes.len();
         assert!(
             self.index.insert(hole, i).is_none(),
@@ -314,7 +365,10 @@ impl VarStore {
         self.holes.push(hole);
         self.parent.push(i);
         self.binding.push(None);
-        self.origins.push(Origin::default());
+        self.origins.push(Origin {
+            statement,
+            ..Origin::default()
+        });
     }
 
     fn contains(&self, hole: TypeId) -> bool {
@@ -524,7 +578,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             tt.set_infer_var_name(var, slot_name.map(str::to_string));
             hole
         };
-        self.infer_holes.vars.mint(hole);
+        let statement = self.infer_holes.statement;
+        self.infer_holes.vars.mint(hole, statement);
         hole
     }
 
@@ -867,9 +922,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.answer_infer_var(var, TypeTable::ERROR);
     }
 
-    /// Settle with the error type each open variable whose origin an error
-    /// reported since the last call covers: that error is the whole fault,
-    /// so neither the variable nor its class asks for itself as well.
+    /// Settle with the error type each open variable an error reported since
+    /// the last call covers: that error is the whole fault, so neither the
+    /// variable nor its class asks for itself as well.
     fn absorb_reports(&mut self) {
         let reports = self.infer_holes.reports.take();
         if reports.is_empty() {
@@ -879,10 +934,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let covered: Vec<TypeId> = vars
             .with_origins()
             .filter(|(hole, origin)| {
-                vars.is_unanswered(*hole)
-                    && origin
-                        .span()
-                        .is_some_and(|span| reports.iter().any(|outer| covers(outer, &span)))
+                vars.is_unanswered(*hole) && reports.iter().any(|report| report.covers(origin))
             })
             .map(|(hole, _)| hole)
             .collect();
@@ -1194,10 +1246,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// End-of-module finalize: raise diagnostics for unsolved holes and
-    /// substitute every hole (solved → concrete, unsolved → `error`) into all
-    /// recorded facts that can carry one.
-    pub(super) fn facts_mark(&self) -> FactsMark {
+    /// Walk one body with `walk` in a context of its own, settled where it
+    /// ends: a variable never outlives its body.
+    pub(super) fn as_body<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
+        assert!(
+            self.infer_holes.is_empty(),
+            "a body starts with no variable open"
+        );
+        let mark = self.facts_mark();
+        let walked = walk(self);
+        self.finalize_infer_holes(mark);
+        walked
+    }
+
+    fn facts_mark(&self) -> FactsMark {
         FactsMark {
             body: self.sem.types.body.lens(),
             decls: DeclFactsLens::of(&self.sem.types),
@@ -1206,8 +1268,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Settle the body the facts past `since` were recorded by.
-    pub(super) fn finalize_infer_holes(&mut self, since: FactsMark) {
+    /// Settle the body the facts past `since` were recorded by: report what
+    /// nothing answered, close it to `error`, and substitute every answer into
+    /// those facts.
+    fn finalize_infer_holes(&mut self, since: FactsMark) {
         if self.infer_holes.is_empty() {
             // The reports the body made reach no later body.
             self.infer_holes = InferHoleTable::default();

@@ -291,9 +291,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             self.equate(var, answer);
-            // An answer the equation does not bind, such as an inferred `!`,
-            // still stands for the slot: the site settled it.
-            if self.apply_infer_holes(var) != self.apply_infer_holes(answer) {
+            // An inferred `!` binds nothing, yet stands for the slot: the
+            // site settled it.
+            if self.apply_infer_holes(answer) == TypeTable::NEVER {
                 self.waive_open(var);
             }
         }

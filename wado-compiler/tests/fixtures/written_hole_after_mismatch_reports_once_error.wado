@@ -1,0 +1,11 @@
+// A mismatch in the statement a written `_` is in is the whole fault: the `_`
+// is not reported again as uninferred.
+export fn run() {
+    let x: Option<_> = 5;
+}
+
+__DATA__
+{
+  "compile_error": ":4:24: analysis error: type mismatch: expected 'Option<_>', found 'i32'",
+  "compile_errors_not_contains": ["cannot infer"]
+}

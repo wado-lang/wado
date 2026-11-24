@@ -1,0 +1,14 @@
+// A generic function referenced where the expected `fn` type leaves a slot
+// open is reported at the reference.
+fn ignore<T>(x: T) -> i32 {
+    return 0;
+}
+
+export fn run() {
+    let f: fn(_) -> i32 = ignore;
+}
+
+__DATA__
+{
+  "compile_error": ":8:27: analysis error: cannot infer type parameter `T` of function `ignore`"
+}

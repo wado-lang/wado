@@ -340,7 +340,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// answers only for a span no parse produced.
     pub(super) fn emit(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
         let diagnostic: Diagnostic = err.into();
-        if let Some(span) = &diagnostic.span {
+        if let Some(span) = &diagnostic.span
+            && !self.logger.is_quiet()
+        {
             self.infer_holes.note_report(span.clone());
         }
         self.logger
@@ -1879,94 +1881,91 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut test_count = 0usize;
         for item in &module.items {
-            assert!(
-                self.infer_holes.is_empty(),
-                "a variable never outlives its body"
-            );
-            let mark = self.facts_mark();
-            ForwardDefaults(self).visit_item(item);
-            TypeReferences(self).visit_item(item);
-            if let Item::Struct(ast::StructDecl { id, .. })
-            | Item::Variant(ast::VariantDecl { id, .. })
-            | Item::Newtype(ast::Newtype { id, .. }) = item
-                && let Some(def) = self.tysys.resolutions.defs().of_ast_id(*id)
-            {
-                self.type_param_defaults_are_ordered(def);
+            self.as_body(|this| this.annotate_item(item, module, &mut test_count));
+        }
+    }
+
+    fn annotate_item(&mut self, item: &'a Item, module: &'a Module, test_count: &mut usize) {
+        ForwardDefaults(self).visit_item(item);
+        TypeReferences(self).visit_item(item);
+        if let Item::Struct(ast::StructDecl { id, .. })
+        | Item::Variant(ast::VariantDecl { id, .. })
+        | Item::Newtype(ast::Newtype { id, .. }) = item
+            && let Some(def) = self.tysys.resolutions.defs().of_ast_id(*id)
+        {
+            self.type_param_defaults_are_ordered(def);
+        }
+        match item {
+            Item::Function(func) => {
+                self.resolve_function(func);
             }
-            match item {
-                Item::Function(func) => {
-                    self.resolve_function(func);
-                }
-                Item::Struct(struct_decl) => {
-                    self.resolve_struct(struct_decl);
-                }
-                Item::Impl(impl_block) => {
-                    self.resolve_impl_item(impl_block);
-                }
-                Item::Trait(trait_decl) => {
-                    self.resolve_trait_param_defaults(trait_decl);
-                    self.resolve_trait_bodies(trait_decl);
-                }
-                Item::Variant(variant_decl) => {
-                    self.resolve_variant_decl(variant_decl);
-                }
-                Item::Test(test_decl) => {
-                    self.resolve_test_decl(test_decl, test_count, module.has_todo());
-                    test_count += 1;
-                }
-                Item::Global(global_decl) => {
-                    self.resolve_global(global_decl);
-                }
-                // Enum / Flags / Newtype emit no body-level facts — reify
-                // rebuilds their `TirEnum` / `TirFlags` / `TirNewtype` from the
-                // AST + decl tables, so the body walk does nothing for them.
-                Item::Enum(_) | Item::Flags(_) | Item::Newtype(_) => {}
-                Item::Interface(effect_decl) => {
-                    self.reject_unsupported_operation_clauses(
-                        &effect_decl.name,
-                        &effect_decl.methods,
-                        OperationOwner::Interface,
-                    );
-                    self.resolve_operation_param_defaults(
-                        self.tysys.def_at(effect_decl.id),
-                        &[],
-                        &effect_decl.methods,
-                        None,
-                    );
-                    // An operation's default body is walked as the function
-                    // reify will emit it as, so its facts land under the same
-                    // `AstId` every other function's do.
-                    for method in default_impl_methods(&effect_decl.name, &effect_decl.methods) {
-                        self.resolve_function(&method);
-                    }
-                }
-                Item::Resource(resource_decl) => {
-                    self.record_decl_type_params(resource_decl.id, &resource_decl.type_params);
-                    self.reject_unsupported_operation_clauses(
-                        &resource_decl.name,
-                        &resource_decl.methods,
-                        OperationOwner::Resource {
-                            has_host: resource_decl.has_host(),
-                            generic: !resource_decl.type_params.is_empty(),
-                        },
-                    );
-                    let resource = self.tysys.def_at(resource_decl.id);
-                    self.resolve_operation_param_defaults(
-                        resource,
-                        &resource_decl.type_params,
-                        &resource_decl.methods,
-                        Some(resource),
-                    );
-                    let resource_type = self.tysys.type_table.borrow_mut().make_resource(resource);
-                    for method in default_impl_methods(&resource_decl.name, &resource_decl.methods)
-                    {
-                        self.resolve_resource_default(&method, resource_type);
-                    }
-                }
-                // Other items will be added as needed
-                _ => {}
+            Item::Struct(struct_decl) => {
+                self.resolve_struct(struct_decl);
             }
-            self.finalize_infer_holes(mark);
+            Item::Impl(impl_block) => {
+                self.resolve_impl_item(impl_block);
+            }
+            Item::Trait(trait_decl) => {
+                self.resolve_trait_param_defaults(trait_decl);
+                self.resolve_trait_bodies(trait_decl);
+            }
+            Item::Variant(variant_decl) => {
+                self.resolve_variant_decl(variant_decl);
+            }
+            Item::Test(test_decl) => {
+                self.resolve_test_decl(test_decl, *test_count, module.has_todo());
+                *test_count += 1;
+            }
+            Item::Global(global_decl) => {
+                self.resolve_global(global_decl);
+            }
+            // Enum / Flags / Newtype emit no body-level facts — reify
+            // rebuilds their `TirEnum` / `TirFlags` / `TirNewtype` from the
+            // AST + decl tables, so the body walk does nothing for them.
+            Item::Enum(_) | Item::Flags(_) | Item::Newtype(_) => {}
+            Item::Interface(effect_decl) => {
+                self.reject_unsupported_operation_clauses(
+                    &effect_decl.name,
+                    &effect_decl.methods,
+                    OperationOwner::Interface,
+                );
+                self.resolve_operation_param_defaults(
+                    self.tysys.def_at(effect_decl.id),
+                    &[],
+                    &effect_decl.methods,
+                    None,
+                );
+                // An operation's default body is walked as the function
+                // reify will emit it as, so its facts land under the same
+                // `AstId` every other function's do.
+                for method in default_impl_methods(&effect_decl.name, &effect_decl.methods) {
+                    self.resolve_function(&method);
+                }
+            }
+            Item::Resource(resource_decl) => {
+                self.record_decl_type_params(resource_decl.id, &resource_decl.type_params);
+                self.reject_unsupported_operation_clauses(
+                    &resource_decl.name,
+                    &resource_decl.methods,
+                    OperationOwner::Resource {
+                        has_host: resource_decl.has_host(),
+                        generic: !resource_decl.type_params.is_empty(),
+                    },
+                );
+                let resource = self.tysys.def_at(resource_decl.id);
+                self.resolve_operation_param_defaults(
+                    resource,
+                    &resource_decl.type_params,
+                    &resource_decl.methods,
+                    Some(resource),
+                );
+                let resource_type = self.tysys.type_table.borrow_mut().make_resource(resource);
+                for method in default_impl_methods(&resource_decl.name, &resource_decl.methods) {
+                    self.resolve_resource_default(&method, resource_type);
+                }
+            }
+            // Other items will be added as needed
+            _ => {}
         }
     }
 
@@ -2076,12 +2075,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // perspective, so this module must be the one that records them.
         let mut scope = scope;
         for constant in &impl_block.constants {
-            let declared = scope.resolve_type(&constant.ty);
-            let mut ctx = FunctionContext::new(
-                declared,
-                global_name(&scope.current_module_source, &constant.name),
-            );
-            scope.resolve_expr(&constant.value, &mut ctx, Some(declared));
+            scope.as_body(|scope| {
+                let declared = scope.resolve_type(&constant.ty);
+                let mut ctx = FunctionContext::new(
+                    declared,
+                    global_name(&scope.current_module_source, &constant.name),
+                );
+                scope.resolve_expr(&constant.value, &mut ctx, Some(declared));
+            });
         }
 
         // Collect explicitly provided method names
@@ -2101,17 +2102,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .method_sig(method_def)
                 .cloned()
                 .expect("the decl pass records every impl-declared method's canonical signature");
-            scope.resolve_method(
-                method,
-                &struct_name,
-                &impl_block.ty,
-                trait_name.as_ref(),
-                impl_block.trait_type.as_ref(),
-                impl_is_concrete,
-                &impl_block.type_params,
-                Some(&recorded_sig),
-                impl_owner,
-            );
+            scope.as_body(|scope| {
+                scope.resolve_method(
+                    method,
+                    &struct_name,
+                    &impl_block.ty,
+                    trait_name.as_ref(),
+                    impl_block.trait_type.as_ref(),
+                    impl_is_concrete,
+                    &impl_block.type_params,
+                    Some(&recorded_sig),
+                    impl_owner,
+                );
+            });
         }
 
         // For trait impls, synthesize TIR functions for default methods not
@@ -2142,17 +2145,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // per-node facts apart.
             for default_method in &default_methods {
                 let ((), facts) = scope.with_lent_semantics(|scope| {
-                    scope.resolve_method(
-                        default_method,
-                        &struct_name,
-                        &impl_block.ty,
-                        Some(trait_n),
-                        Some(trait_ast),
-                        impl_is_concrete,
-                        &impl_block.type_params,
-                        None,
-                        impl_owner,
-                    );
+                    scope.as_body(|scope| {
+                        scope.resolve_method(
+                            default_method,
+                            &struct_name,
+                            &impl_block.ty,
+                            Some(trait_n),
+                            Some(trait_ast),
+                            impl_is_concrete,
+                            &impl_block.type_params,
+                            None,
+                            impl_owner,
+                        );
+                    });
                 });
                 scope
                     .sem
