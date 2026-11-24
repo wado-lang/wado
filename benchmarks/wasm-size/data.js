@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795491670393,
+  "lastUpdate": 1795499437021,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -81853,6 +81853,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/059072c6695c5b08ed7d8ccec322a43254531e63"
         },
         "date": 1795491669442,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c9d948fe6e3c143043fe5afafc0310bca6d8c0f",
+          "message": "Merge pull request #2744 from wado-lang/ccr-5b902256-qd9vgw\n\nfeat(packages)!: every package has a coordinate, and a dependency key names its package",
+          "timestamp": "2026-11-24T14:33:26+09:00",
+          "tree_id": "222424e61a17ac7e6a21286946899797f0357d4a",
+          "url": "https://github.com/wado-lang/wado/commit/1c9d948fe6e3c143043fe5afafc0310bca6d8c0f"
+        },
+        "date": 1795499435784,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
