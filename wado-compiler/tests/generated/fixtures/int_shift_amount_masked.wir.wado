@@ -666,39 +666,27 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:prelude/int128.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "int_shift_amount_masked.wado/$test_3_u128_and_i128_shift_modulo_128"() {
-    let $load_4: u64;
+    let $load_2: u64;
     let $v_0: ref "core:prelude/int128.wado//u128";
     let $v_1: ref "core:prelude/int128.wado//u128";
     let $v_2: ref "core:prelude/int128.wado//u128";
     let $v_5: ref "core:prelude/int128.wado//i128";
     let $v_6: ref "core:prelude/int128.wado//i128";
     let $v_7: ref "core:prelude/int128.wado//i128";
-    let shift_21: i32;
+    let shift_20: i32;
     let s_22: u64;
-    let inv_s_24: u64;
-    let $sroa_slot_76: u64;
     $v_0 = black_box(struct.new "core:prelude/int128.wado//u128" { low: 1_i64, high: 0_i64 });
     $v_1 = black_box(struct.new "core:prelude/int128.wado//u128" { low: 129_i64, high: 0_i64 });
-    $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__3: block {
-        if local.tee shift_21(builtin::i32_wrap_i64($v_1.low & 127_i64)) >= 64 {
-            s_22 = builtin::i64_extend_i32_s(shift_21 - 64);
-            $sroa_slot_76 = 0_i64;
-            s_22 = $v_0.low << s_22;
-            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__3;
+    if @unlikely(((local.tee $v_2($inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__2: block -> ref "core:prelude/int128.wado//u128" {
+        if local.tee shift_20(builtin::i32_wrap_i64($v_1.low & 127_i64)) >= 64 {
+            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__2: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: $v_0.low << builtin::i64_extend_i32_s(shift_20 - 64) };
         }
-        if shift_21 == 0 {
-            $sroa_slot_76 = $v_0.low;
-            s_22 = $v_0.high;
-            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__3;
+        if shift_20 == 0 {
+            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__2: $v_0;
         }
-        s_22 = builtin::i64_extend_i32_s(shift_21);
-        inv_s_24 = builtin::i64_extend_i32_s(64 - shift_21);
-        $sroa_slot_76 = local.tee $load_4($v_0.low) << s_22;
-        s_22 = ($v_0.high << s_22) | ($load_4 >>u inv_s_24);
-        break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__3;
-    };
-    $v_2 = struct.new "core:prelude/int128.wado//u128" { low: $sroa_slot_76, high: s_22 };
-    if @unlikely((($sroa_slot_76 == 2_i64) & (s_22 == 0_i64)) == 0) {
+        s_22 = builtin::i64_extend_i32_s(shift_20);
+        break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__2: struct.new "core:prelude/int128.wado//u128" { low: local.tee $load_2($v_0.low) << s_22, high: ($v_0.high << s_22) | ($load_2 >>u builtin::i64_extend_i32_s(64 - shift_20)) };
+    }).low == 2_i64) & ($v_2.high == 0_i64)) == 0) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<int_shift_amount_masked.wado/$tmpl$983933493ac23683,[core:prelude/int128.wado/u128,core:prelude/int128.wado/u128,core:prelude/int128.wado/u128]>"(struct.new "int_shift_amount_masked.wado//$tmpl$983933493ac23683" { h0: $v_0, h1: $v_1, h2: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_u128_and_i128_shift_modulo_128 at int_shift_amount_masked.wado:27
@@ -714,26 +702,16 @@ builtin::black_box(1 as u128) << builtin::black_box(129 as u128): "), used: 67 }
     }
     $v_5 = black_box(struct.new "core:prelude/int128.wado//i128" { low: 1_i64, high: 0_i64 });
     $v_6 = black_box(struct.new "core:prelude/int128.wado//i128" { low: 129_i64, high: 0_i64 });
-    $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__9: block {
-        if local.tee shift_21(builtin::i32_wrap_i64($v_6.low & 127_i64)) >= 64 {
-            s_22 = builtin::i64_extend_i32_s(shift_21 - 64);
-            $sroa_slot_76 = 0_i64;
-            s_22 = $v_5.low << s_22;
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__9;
+    if @unlikely(((local.tee $v_7($inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__7: block -> ref "core:prelude/int128.wado//i128" {
+        if local.tee shift_20(builtin::i32_wrap_i64($v_6.low & 127_i64)) >= 64 {
+            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__7: struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: $v_5.low << builtin::i64_extend_i32_s(shift_20 - 64) };
         }
-        if shift_21 == 0 {
-            $sroa_slot_76 = $v_5.low;
-            s_22 = $v_5.high;
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__9;
+        if shift_20 == 0 {
+            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__7: $v_5;
         }
-        s_22 = builtin::i64_extend_i32_s(shift_21);
-        inv_s_24 = builtin::i64_extend_i32_s(64 - shift_21);
-        $sroa_slot_76 = local.tee $load_4($v_5.low) << s_22;
-        s_22 = ($v_5.high << s_22) | ($load_4 >>u inv_s_24);
-        break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__9;
-    };
-    $v_7 = struct.new "core:prelude/int128.wado//i128" { low: $sroa_slot_76, high: s_22 };
-    if @unlikely((($sroa_slot_76 == 2_i64) & (s_22 == 0_i64)) == 0) {
+        s_22 = builtin::i64_extend_i32_s(shift_20);
+        break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shl__shl_sroa_rhs_low__7: struct.new "core:prelude/int128.wado//i128" { low: local.tee $load_2($v_5.low) << s_22, high: ($v_5.high << s_22) | ($load_2 >>u builtin::i64_extend_i32_s(64 - shift_20)) };
+    }).low == 2_i64) & ($v_7.high == 0_i64)) == 0) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<int_shift_amount_masked.wado/$tmpl$041c0609c163a694,[core:prelude/int128.wado/i128,core:prelude/int128.wado/i128,core:prelude/int128.wado/i128]>"(struct.new "int_shift_amount_masked.wado//$tmpl$041c0609c163a694" { h0: $v_5, h1: $v_6, h2: $v_7, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_u128_and_i128_shift_modulo_128 at int_shift_amount_masked.wado:28
 condition: builtin::black_box(1 as i128) << builtin::black_box(129 as i128) == 2
@@ -748,25 +726,16 @@ builtin::black_box(1 as i128) << builtin::black_box(129 as i128): "), used: 67 }
     }
     $v_5 = black_box(struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 });
     $v_6 = black_box(struct.new "core:prelude/int128.wado//i128" { low: 255_i64, high: 0_i64 });
-    $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__15: block {
-        if local.tee shift_21(builtin::i32_wrap_i64($v_6.low & 127_i64)) >= 64 {
-            s_22 = builtin::i64_extend_i32_s(shift_21 - 64);
-            inv_s_24 = select i64(local.tee $sroa_slot_76($v_5.high) < 0_i64, -1_i64, 0_i64);
-            s_22 = $sroa_slot_76 >> s_22;
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__15;
+    if @unlikely(((local.tee $v_7($inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__12: block -> ref "core:prelude/int128.wado//i128" {
+        if local.tee shift_20(builtin::i32_wrap_i64($v_6.low & 127_i64)) >= 64 {
+            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__12: struct.new "core:prelude/int128.wado//i128" { low: local.tee s_22($v_5.high) >> builtin::i64_extend_i32_s(shift_20 - 64), high: select i64(s_22 < 0_i64, -1_i64, 0_i64) };
         }
-        if shift_21 == 0 {
-            s_22 = $v_5.low;
-            inv_s_24 = $v_5.high;
-            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__15;
+        if shift_20 == 0 {
+            break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__12: $v_5;
         }
-        $sroa_slot_76 = builtin::i64_extend_i32_s(shift_21);
-        s_22 = ($v_5.low >>u $sroa_slot_76) | (local.tee inv_s_24($v_5.high) << builtin::i64_extend_i32_s(64 - shift_21));
-        inv_s_24 = inv_s_24 >> $sroa_slot_76;
-        break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__15;
-    };
-    $v_7 = struct.new "core:prelude/int128.wado//i128" { low: s_22, high: inv_s_24 };
-    if @unlikely(((s_22 == -1_i64) & (inv_s_24 == -1_i64)) == 0) {
+        s_22 = builtin::i64_extend_i32_s(shift_20);
+        break $inline_core_prelude_int128_wado_i128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__12: struct.new "core:prelude/int128.wado//i128" { low: ($v_5.low >>u s_22) | (local.tee $load_2($v_5.high) << builtin::i64_extend_i32_s(64 - shift_20)), high: $load_2 >> s_22 };
+    }).low == -1_i64) & ($v_7.high == -1_i64)) == 0) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<int_shift_amount_masked.wado/$tmpl$3d945fee2f02f162,[core:prelude/int128.wado/i128,core:prelude/int128.wado/i128,core:prelude/int128.wado/i128,core:prelude/int128.wado/i128]>"(struct.new "int_shift_amount_masked.wado//$tmpl$3d945fee2f02f162" { h0: struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 }, h1: $v_5, h2: $v_6, h3: $v_7, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_u128_and_i128_shift_modulo_128 at int_shift_amount_masked.wado:29
 condition: builtin::black_box(i128::MIN) >> builtin::black_box(255 as i128) == -1
@@ -783,24 +752,16 @@ builtin::black_box(i128::MIN) >> builtin::black_box(255 as i128): "), used: 67 }
     }
     $v_0 = black_box(struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 });
     $v_1 = black_box(struct.new "core:prelude/int128.wado//u128" { low: 255_i64, high: 0_i64 });
-    $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__22: block {
-        if local.tee shift_21(builtin::i32_wrap_i64($v_1.low & 127_i64)) >= 64 {
-            s_22 = $v_0.high >>u builtin::i64_extend_i32_s(shift_21 - 64);
-            $sroa_slot_76 = 0_i64;
-            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__22;
+    if @unlikely(((local.tee $v_2($inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__18: block -> ref "core:prelude/int128.wado//u128" {
+        if local.tee shift_20(builtin::i32_wrap_i64($v_1.low & 127_i64)) >= 64 {
+            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__18: struct.new "core:prelude/int128.wado//u128" { low: $v_0.high >>u builtin::i64_extend_i32_s(shift_20 - 64), high: 0_i64 };
         }
-        if shift_21 == 0 {
-            s_22 = $v_0.low;
-            $sroa_slot_76 = $v_0.high;
-            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__22;
+        if shift_20 == 0 {
+            break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__18: $v_0;
         }
-        $sroa_slot_76 = builtin::i64_extend_i32_s(shift_21);
-        s_22 = ($v_0.low >>u $sroa_slot_76) | (local.tee inv_s_24($v_0.high) << builtin::i64_extend_i32_s(64 - shift_21));
-        $sroa_slot_76 = inv_s_24 >>u $sroa_slot_76;
-        break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__22;
-    };
-    $v_2 = struct.new "core:prelude/int128.wado//u128" { low: s_22, high: $sroa_slot_76 };
-    if @unlikely(((s_22 == 1_i64) & ($sroa_slot_76 == 0_i64)) == 0) {
+        s_22 = builtin::i64_extend_i32_s(shift_20);
+        break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Shr__shr_sroa_rhs_low__18: struct.new "core:prelude/int128.wado//u128" { low: ($v_0.low >>u s_22) | (local.tee $load_2($v_0.high) << builtin::i64_extend_i32_s(64 - shift_20)), high: $load_2 >>u s_22 };
+    }).low == 1_i64) & ($v_2.high == 0_i64)) == 0) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<int_shift_amount_masked.wado/$tmpl$6d69502116030246,[core:prelude/int128.wado/u128,core:prelude/int128.wado/u128,core:prelude/int128.wado/u128,core:prelude/int128.wado/u128]>"(struct.new "int_shift_amount_masked.wado//$tmpl$6d69502116030246" { h0: struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 }, h1: $v_0, h2: $v_1, h3: $v_2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_u128_and_i128_shift_modulo_128 at int_shift_amount_masked.wado:30
 condition: builtin::black_box(u128::MAX) >> builtin::black_box(255 as u128) == 1
