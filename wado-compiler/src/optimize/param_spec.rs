@@ -2,6 +2,7 @@
 //! on a constant field of one passed by reference.
 //! Compiler items and cached clones retain their contracts for synthesized calls.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
@@ -864,39 +865,65 @@ fn summarize_params(
                 .map(move |(local, facts)| ((FuncId::new(index), *local), facts.clone()))
         })
         .collect();
+    close_over_forwards(&mut facts);
+    facts
+}
 
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for index in 0..facts.len() {
-            for slot in 0..facts[index].forwards.len() {
-                let current = &facts[index];
-                let added = match facts.get(&current.forwards[slot]) {
-                    Some(target) => ParamFacts {
-                        reads: target.reads.difference(&current.reads).copied().collect(),
-                        writes: target.writes.difference(&current.writes).copied().collect(),
-                        opaque: target.opaque && !current.opaque,
+/// Join into each parameter's facts those of every parameter it is forwarded
+/// to, to the least fixpoint: a worklist revisits only the parameters
+/// forwarding to one that grew.
+fn close_over_forwards(facts: &mut IndexMap<(FuncId, u32), ParamFacts>) {
+    // Per entry, the entries it forwards to; `None` where the callee's
+    // parameter is not a tracked struct reference, so nothing is known about it.
+    let targets: Vec<Vec<Option<usize>>> = facts
+        .values()
+        .map(|f| f.forwards.iter().map(|key| facts.get_index_of(key)).collect())
+        .collect();
+    let mut forwarders: Vec<Vec<usize>> = vec![Vec::new(); facts.len()];
+    for (index, targets) in targets.iter().enumerate() {
+        for &target in targets.iter().flatten() {
+            forwarders[target].push(index);
+        }
+    }
+    let mut queued = vec![true; facts.len()];
+    let mut work: VecDeque<usize> = (0..facts.len()).collect();
+    while let Some(index) = work.pop_front() {
+        queued[index] = false;
+        let mut grew = false;
+        for &target in &targets[index] {
+            let added = match target {
+                Some(target) => {
+                    let (current, from) = (&facts[index], &facts[target]);
+                    let reads = !from.reads.is_subset(&current.reads);
+                    let writes = !from.writes.is_subset(&current.writes);
+                    (reads || writes || from.opaque && !current.opaque).then(|| ParamFacts {
+                        reads: if reads { from.reads.clone() } else { IndexSet::default() },
+                        writes: if writes { from.writes.clone() } else { IndexSet::default() },
+                        opaque: from.opaque,
                         forwards: Vec::new(),
-                    },
-                    // No summary means the callee's parameter is not a tracked
-                    // struct reference, so nothing is known about it.
-                    None => ParamFacts {
-                        opaque: !current.opaque,
-                        ..ParamFacts::default()
-                    },
-                };
-                if added == ParamFacts::default() {
-                    continue;
+                    })
                 }
-                let current = &mut facts[index];
-                current.reads.extend(added.reads);
-                current.writes.extend(added.writes);
-                current.opaque |= added.opaque;
-                changed = true;
+                None => (!facts[index].opaque).then(|| ParamFacts {
+                    opaque: true,
+                    ..ParamFacts::default()
+                }),
+            };
+            let Some(added) = added else { continue };
+            let current = &mut facts[index];
+            current.reads.extend(added.reads);
+            current.writes.extend(added.writes);
+            current.opaque |= added.opaque;
+            grew = true;
+        }
+        if grew {
+            for &forwarder in &forwarders[index] {
+                if !queued[forwarder] {
+                    queued[forwarder] = true;
+                    work.push_back(forwarder);
+                }
             }
         }
     }
-    facts
 }
 
 // ---------------------------------------------------------------------------
