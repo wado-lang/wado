@@ -577,9 +577,15 @@ impl<'a> Analyzer<'a> {
         place_move_bases: &IndexSet<u32>,
     ) -> IndexSet<u32> {
         // A call's result that keeps an argument (`s.into_iter()`, `s[0..<2]`)
-        // reads that argument's storage for as long as the result is live.
+        // reads that argument's storage for as long as the result is live, and
+        // so does whatever is handed what that result holds.
         let mut paths = paths.clone();
-        for (root, _, holders) in &self.pending_bounded {
+        let holds = self
+            .pending_bounded
+            .iter()
+            .map(|(root, _, holders)| (root, holders))
+            .chain(self.value_holds.iter().map(|(root, holders)| (root, holders)));
+        for (root, holders) in holds {
             for &holder in holders {
                 paths
                     .entry(holder)
@@ -1437,6 +1443,24 @@ pub fn has_unsupported_form(body: &TirBlock) -> bool {
     }
     let mut s = Scan { found: false };
     s.visit_block(body);
+    s.found
+}
+
+/// Whether `body` mints a closure, which captures what it reads by reference.
+fn mints_closure(body: &TirExpr) -> bool {
+    struct Scan {
+        found: bool,
+    }
+    impl TirRefVisitor for Scan {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            self.found |= matches!(expr.kind, TirExprKind::Closure { .. });
+            if !self.found {
+                self.walk_expr(expr);
+            }
+        }
+    }
+    let mut s = Scan { found: false };
+    s.walk_expr(body);
     s.found
 }
 
@@ -3604,14 +3628,18 @@ impl<'a> Analyzer<'a> {
                 self.walk_persisting(value, live, record);
             }
             // The body indexes locals of its own.
-            TirExprKind::Closure { captures, .. } => {
+            TirExprKind::Closure { captures, body, .. } => {
                 let kept = self.result_kept.take().unwrap_or(Kept::Frame);
+                // A closure the body mints captures by reference too, and can
+                // carry that reference anywhere the body reaches, which no
+                // holder of this closure bounds.
+                let lends = !mints_closure(body);
                 for index in capture_source_locals(captures) {
                     self.mark_read(index, None, live);
                     if !record {
                         continue;
                     }
-                    if self.mutable_locals.contains(&index) {
+                    if !lends || self.mutable_locals.contains(&index) {
                         self.mark_escaped(index, None);
                         self.mark_local_mutated(index, false, live);
                         let at = self.consumed.entry(index).or_default();

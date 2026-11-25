@@ -24,7 +24,7 @@ use crate::compiler_trace;
 use crate::cut_memo::CutWalk;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::analyze;
+use crate::lower::plan::value_copy::{analyze, is_scalar_type};
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
     RetainInto, RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
@@ -1137,12 +1137,15 @@ impl RefCarrying<'_> {
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
             // A closure holds what it captured, which its type does not name:
-            // whatever any closure of its shape captured. `make_reader(p)`
-            // returns a closure holding `p`.
-            ResolvedType::Function { .. } => {
-                let captured = self.captures.of(type_id, self.type_table).to_vec();
-                self.any(captured, walk)
-            }
+            // whatever any closure of its shape captured. A capture shares the
+            // binding's storage rather than copying it, so any but a scalar is
+            // the caller's storage. `make_reader(p)` returns a closure holding
+            // `p`.
+            ResolvedType::Function { .. } => self
+                .captures
+                .of(type_id, self.type_table)
+                .iter()
+                .any(|&t| !is_scalar_type(t, self.type_table)),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -1548,7 +1551,9 @@ impl StoresWalker<'_> {
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let facts = self.indirect_facts(&self.reaching_of(callee), callee, args.len());
-                let routed = self.carried_args(args.iter(), &facts.into_result, &facts);
+                let mut routed = self.carried_args(args.iter(), &facts.into_result, &facts);
+                // A closure called hands back what it captured.
+                extend(&mut routed, &self.carried(callee).all());
                 self.placed(expr.type_id, routed)
             }
             // A control form's value is the tail of whichever arm runs, plus

@@ -1,0 +1,80 @@
+// A closure shares a captured binding's storage, so a binding a closure
+// captures shares its source only while nothing past the closure can reach
+// that storage. A call of the closure hands it on through its result, and a
+// closure minted in the closure's body hands it on anywhere that body reaches:
+// either way, the write to the source must not show through.
+struct Range { lo: i32, hi: i32 }
+struct Class { ranges: List<Range>, neg: bool }
+
+global mut STASHED: Option<fn() -> i32> = null;
+
+fn holds(c: &Class, x: i32) -> bool {
+    for let r of &c.ranges {
+        if r.lo <= x && x <= r.hi { return !c.neg; }
+    }
+    return c.neg;
+}
+
+fn fresh() -> Class {
+    return Class { ranges: [Range { lo: 1, hi: builtin::black_box(3) }], neg: false };
+}
+
+fn nested_closure(c: &mut Class) -> bool {
+    let f = *c;
+    let outer = || { let inner = |x: i32| holds(&f, x); return inner; };
+    let g = outer();
+    c.ranges[0].hi = 100;
+    return g(5);
+}
+
+fn call(h: fn() -> fn(i32) -> bool) -> fn(i32) -> bool {
+    return h();
+}
+
+fn nested_closure_through_call(c: &mut Class) -> bool {
+    let f = *c;
+    let outer = || { let inner = |x: i32| holds(&f, x); return inner; };
+    let g = call(outer);
+    c.ranges[0].hi = 100;
+    return g(5);
+}
+
+fn nested_closure_stashed(c: &mut Class) -> i32 {
+    let f = *c;
+    let stash = || { STASHED = Some(|| f.ranges[0].hi); return 0; };
+    stash();
+    c.ranges[0].hi = 100;
+    return STASHED.unwrap()();
+}
+
+fn apply(h: fn() -> &Class) -> &Class {
+    return h();
+}
+
+fn returned_ref_through_call(c: &mut Class) -> i32 {
+    let f = *c;
+    let k = || &f;
+    let r = apply(k);
+    c.ranges[0].hi = 100;
+    return r.ranges[0].hi;
+}
+
+test "a closure returned by a capturing closure keeps the copy" {
+    let mut c = fresh();
+    assert !nested_closure(&mut c);
+}
+
+test "a closure returned through a named call keeps the copy" {
+    let mut c = fresh();
+    assert !nested_closure_through_call(&mut c);
+}
+
+test "a closure stored in a global keeps the copy" {
+    let mut c = fresh();
+    assert nested_closure_stashed(&mut c) == 3;
+}
+
+test "a reference returned through a named call keeps the copy" {
+    let mut c = fresh();
+    assert returned_ref_through_call(&mut c) == 3;
+}
