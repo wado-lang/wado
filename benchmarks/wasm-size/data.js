@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795557274059,
+  "lastUpdate": 1795570567156,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82073,6 +82073,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/64806562b4ee9fa74b7f60dd106eb8d1210774ad"
         },
         "date": 1795557272935,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "77d5d9c37e42b6bd52386ff36d0856011016a7b3",
+          "message": "Merge pull request #2749 from wado-lang/ccr-0e02c439-rk3ejh\n\nfeat(wado-cli): format wado doc with Marl and ship a self-contained dist build, dropping dprint",
+          "timestamp": "2026-11-25T10:21:44+09:00",
+          "tree_id": "945cd2f3f0a0cf92f2f21d6039f29d56de6957f8",
+          "url": "https://github.com/wado-lang/wado/commit/77d5d9c37e42b6bd52386ff36d0856011016a7b3"
+        },
+        "date": 1795570566094,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
