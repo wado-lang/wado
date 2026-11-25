@@ -76,35 +76,36 @@ they want the result.
 ### Wado type
 
 ```wado
-// core/prelude/types.wado
-pub struct AsyncCall<T> {
-    __cm_packed: i32,          // the CM subtask handle and its status
-    __cm_outptr: i32,          // the linear-memory result buffer
-    __cm_size: i32,            // its size and alignment, for `realloc`-based free
-    __cm_align: i32,
-    __cm_lift: fn(i32) -> T,   // reads `T` out of the buffer
-    __cm_ended: &mut bool,     // set by the first `wait` or `cancel`
+// core/prelude/async.wado
+pub affine struct AsyncCall<affine T> {
+    subtask: Option<Subtask>,       // None where the call completed synchronously
+    buffer: Option<ResultBuffer>,   // the linear-memory result buffer, with its size and alignment
+    lift: fn(i32) -> T,             // reads `T` out of the buffer
+    args: Option<ArgBuffer>,        // what the arguments were lowered into
+    promise: Option<ExternObject>,  // what an `async` web import answered in place of a subtask
 }
 
-impl<T> AsyncCall<T> {
-    pub fn wait(&self) -> T with (Subtask, WaitableSet);
-    pub fn cancel(&self) with Subtask;
-    pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask;
+impl<affine T> AsyncCall<T> {
+    pub fn wait(self) -> T with Subtask;
+    pub fn cancel(self) with Subtask;
 }
+
+impl<affine T> Waitable for AsyncCall<T> { ... }
 ```
 
 `AsyncCall<T>` is a `struct`, not a `resource`. It is not a CM primitive but
 the guest's own bookkeeping around one: the subtask handle, the result buffer
 the subtask writes into, and the lift that reads `T` back out. That is what the
-CM `subtask` lacks, and a resource stands for a CM handle. Size and alignment
-are baked in at monomorphization time based on `T`.
+CM `subtask` lacks, and a resource stands for a CM handle. The buffer's size
+and alignment are baked in at monomorphization time based on `T`.
 
-`wait` and `cancel` end the call: the subtask handle is dropped and the buffer
-freed. A copy of the struct shares the handle and the buffer, so it shares the
-end too. `__cm_ended` is a reference for that reason, and a `wait`, `cancel` or
-`join` on an ended call traps rather than lift a freed buffer. A call never
-ended leaks its handle and buffer: ending it on drop would need to know that no
-copy is left, which a struct does not track.
+The struct is `affine`, so a call is one value that moves and is never copied.
+`wait` and `cancel` take `self`: each ends the call, dropping the subtask
+handle and freeing the buffer, and the compiler refuses a second use. Dropping
+a call nobody waited on cancels it, and lifts a result the callee already
+returned so the handles it owns drop too. A call waits among others by moving
+into a set with `WaitableSet::insert`, and the set's `wait` moves it back out
+in a `Ready`.
 
 ### Synthesis of async imports
 
@@ -122,12 +123,11 @@ Wado. The body:
 The eager wait + lift + free pipeline lives in `AsyncCall<T>::wait`,
 monomorphized per `T`:
 
-1. If the packed handle is zero (`Status::Returned` synchronously), skip the
-   wait.
-2. Otherwise, create a `WaitableSet`, join the subtask, loop on `wait()` until
-   `Status::Returned`, drop both.
-3. Lift `T` from outptr using the per-import lift function.
-4. `realloc(outptr, size, align, 0)` to free.
+1. If the call holds no subtask (it returned synchronously), skip the wait.
+2. Otherwise, create a `WaitableSet<Subtask>`, insert the subtask, `wait()`
+   until it resolves, and drop both.
+3. Lift `T` from the buffer using the per-import lift function.
+4. The buffer drops, which frees it: `realloc(ptr, size, align, 0)`.
 
 The Component Model delivers a subtask's resolution once, through the first
 `waitable-set.wait` that reports it. A call a user's set handed back after
@@ -135,7 +135,7 @@ that would wait for an event that never comes, and `subtask.cancel` traps on
 it. So a set records each resolution it delivers by the subtask's handle, and
 the record goes when the subtask drops, before the host reuses the handle. A
 call reads it: `wait` skips the wait, a drop skips the cancel, and a set the
-call joins again reports it without the host. The record is keyed by handle
+call is inserted into again reports it without the host. The record is keyed by handle
 rather than kept in the `AsyncCall`, so it holds whatever a user's `Waitable`
 wraps the call in.
 
@@ -180,30 +180,28 @@ trailers_tx.write(Result::Ok(null));
 - Every caller of a WIT `async func` import sees a signature change. Existing
   callers must add `.wait()` to retrieve the result. In practice this is only
   `Client::send`; no other async imports are currently used from Wado.
-- The non-generic `Subtask` resource is _retained_ as a compiler-internal
-  type, not replaced. `AsyncCall<T>` reaches the CM canonical operations
-  (`subtask-drop`, `subtask-cancel`, `waitable-join`) by `as`-casting its
-  packed handle to `Subtask` inside the stdlib. Those `as` casts between a raw
-  `i32` and a resource are an internal escape hatch that bypasses ownership
-  entirely; WEP 2026-05-21 tracks restricting them to `internal`-only code.
+- The non-generic `Subtask` resource is _retained_, not replaced. It is a
+  `pub` resource `core:prelude` exports, so user code can name it, as the
+  member type of a `WaitableSet<Subtask>` or as the effect `wait` and `cancel`
+  perform. Its methods (`subtask-drop`, `subtask-cancel`) are private to the
+  prelude: `AsyncCall<T>` holds the subtask and reaches them there.
 
 ## Implementation status
 
-- [x] `AsyncCall<T>` added to `prelude/types.wado`; non-generic `Subtask`
-  retained as an internal resource.
-- [x] Compiler representation: `AsyncCall<T>` is a struct-like type with the
-  hidden `i32` fields plus the lift `fn` pointer; type elaborator,
-  monomorphization, and WIR lowering construct and read it. Hardcoded
-  under the name `"AsyncCall"` in `cm_binding/import_adapter.rs`,
-  `cm_binding/types.rs`, `elaborator/call.rs`, and `component_model.rs`.
-- [x] `AsyncCall<T>::wait` / `cancel` / `join` written in Wado in
-  `prelude/types.wado`, reusing `wait_for_subtask`-style logic.
-- [x] `needs_async_lower` branch in `cm_binding.rs` returns `AsyncCall<T>`
+- [x] `AsyncCall<T>` added to `prelude/async.wado`; non-generic `Subtask`
+  retained as a public resource with private methods.
+- [x] Compiler representation: `AsyncCall<T>` is an ordinary prelude struct
+  the compiler finds as the compiler item `async_call`, with `result_buffer`
+  and `arg_buffer` beside it. The import adapter
+  (`synthesis/cm_binding/import_adapter.rs`) builds one with a struct literal.
+- [x] `AsyncCall<T>::wait` / `cancel` and its `Waitable` impl written in Wado
+  in `prelude/async.wado`, over `WaitableSet<Subtask>`.
+- [x] `needs_async_lower` branch in `import_adapter.rs` returns `AsyncCall<T>`
   without waiting.
 - [x] `wado-from-idl` emits `AsyncCall<…>` for `is_async` functions.
 - [x] Existing `Client::send` fixtures migrated to add `.wait()`.
-- [x] A `wait`, `cancel` or `join` on an ended call, or on a copy of one,
-  traps through the shared `__cm_ended` flag.
+- [x] A use of an ended call is a compile error: `AsyncCall<T>` is affine, and
+  `wait` and `cancel` consume it.
 - [ ] Restrict `as` casts between `i32` and resources to `internal`-only
   code so user code cannot forge or alias resource handles. Tracked by
   WEP 2026-05-21.

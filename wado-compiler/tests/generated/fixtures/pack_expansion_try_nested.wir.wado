@@ -7,7 +7,7 @@ struct core:prelude/string.wado//String {  // TypeId(0)
     mut used: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
 array Array<u8> (mut u8);  // TypeId(2)
 
@@ -48,13 +48,13 @@ type "functype//pack_expansion_try_nested.wado/$test_0_nested_in_two_elements$co
 
 type "functype//pack_expansion_try_nested.wado/$test_1_nested_in_one_element$cold0" = fn();  // TypeId(18)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
+type "functype//core:prelude/async.wado/copy_result" = fn(i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(19)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(20)
+type "functype//core:prelude/async.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(20)
 
-type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
+type "functype//core:prelude/numeric.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(21)
 
-type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(22)
+type "functype//core:prelude/numeric.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(22)
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(23)
 
@@ -70,7 +70,7 @@ type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(28)
 
 type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(29)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(30)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(30)
 
 type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(31)
 
@@ -241,7 +241,7 @@ fn "pack_expansion_try_nested.wado/$test_0_nested_in_two_elements"() {
             break $inline_pack_expansion_try_nested_wado_build__i32_core_prelude_string_wado_String___i32___sroa_return__dae_n__0__$inline_core_prelude_string_wado_String__format_pack_expansion_try_nested_wado__tmpl_fb51c04d54491732__i32___spec1_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_20;
         };
         is_negative_284 = a_end_17 < 0;
-        a_end_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(a_end_17); select i64(x < 0_i64, 0_i64 - x, x)));
+        a_end_17 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(a_end_17); select i64(x < 0_i64, 0_i64 - x, x)));
         if is_negative_284 {
             if @unlikely(1 > builtin::array_len($licm_repr_43)) {
                 cold_path;
@@ -257,7 +257,7 @@ fn "pack_expansion_try_nested.wado/$test_0_nested_in_two_elements"() {
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_555(struct.new "core:prelude/string.wado//String" { repr: $licm_repr_43, used: i_22 }), is_negative_284);
             $licm_repr_43 = $sroa_write_back_555.repr;
         }
-        "core:prelude/primitive.wado/write_decimal_digits"($licm_repr_43, i_22, x, a_end_17);
+        "core:prelude/numeric.wado/write_decimal_digits"($licm_repr_43, i_22, x, a_end_17);
         $inline_pack_expansion_try_nested_wado_build__i32_core_prelude_string_wado_String___i32___sroa_return__dae_n__0__$inline_core_prelude_string_wado_String__format_pack_expansion_try_nested_wado__tmpl_fb51c04d54491732__i32___spec1_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
             break $inline_pack_expansion_try_nested_wado_build__i32_core_prelude_string_wado_String___i32___sroa_return__dae_n__0__$inline_core_prelude_string_wado_String__format_pack_expansion_try_nested_wado__tmpl_fb51c04d54491732__i32___spec1_spec0_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
         };
@@ -320,21 +320,49 @@ condition: build::<[i32], [String, i32]>(2) matches { Ok([4]) }
     unreachable;
 }
 
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+fn "core:prelude/async.wado/copy_result"(packed) {
+    return (if local.tee packed(packed & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
+        0;
+    } else if packed == 1 -> "core:prelude/async.wado//enum:CopyResult" {
+        1;
+    } else if @likely(packed == 2) -> "core:prelude/async.wado//enum:CopyResult" {
+        2;
+    } else {
+        "core:rt/unreachable"();
+        unreachable;
+    });
+}
+
+fn "core:prelude/async.wado/cm_await_copy"(handle) {
+    let ws: i32;
+    let evt_ptr: i32;
+    let status: i32;
+    ws = "wasi/waitable-set-new"();
+    "wasi/waitable-join"(handle, ws);
+    evt_ptr = "mem/realloc"(0, 0, 4, 8);
+    drop("wasi/waitable-set-wait"(ws, evt_ptr));
+    status = builtin::load_i32(evt_ptr + 4);
+    drop("mem/realloc"(evt_ptr, 8, 4, 0));
+    "wasi/waitable-join"(handle, 0);
+    "wasi/waitable-set-drop"(ws);
+    return status;
+}
+
+fn "core:prelude/numeric.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let q: u64;
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b36: block {
-        l37: loop {
-            break_if b36 (digit_count - offset) < 2;
+    b39: block {
+        l40: loop {
+            break_if b39 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l37;
+            continue l40;
         };
     };
     if digit_count > offset {
@@ -342,7 +370,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
 }
 
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
+fn "core:prelude/numeric.wado/count_digits_u64"(val) {
     if val <u 100000_i64 {
         if val <u 100_i64 {
             if val <u 10_i64 {
@@ -401,34 +429,6 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
         return 19;
     }
     return 20;
-}
-
-fn "core:prelude/types.wado/copy_result"(packed) {
-    return (if local.tee packed(packed & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
-        0;
-    } else if packed == 1 -> "core:prelude/types.wado//enum:CopyResult" {
-        1;
-    } else if @likely(packed == 2) -> "core:prelude/types.wado//enum:CopyResult" {
-        2;
-    } else {
-        "core:rt/unreachable"();
-        unreachable;
-    });
-}
-
-fn "core:prelude/types.wado/cm_await_copy"(handle) {
-    let ws: i32;
-    let evt_ptr: i32;
-    let status: i32;
-    ws = "wasi/waitable-set-new"();
-    "wasi/waitable-join"(handle, ws);
-    evt_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, evt_ptr));
-    status = builtin::load_i32(evt_ptr + 4);
-    drop("mem/realloc"(evt_ptr, 8, 4, 0));
-    "wasi/waitable-join"(handle, 0);
-    "wasi/waitable-set-drop"(ws);
-    return status;
 }
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
@@ -490,7 +490,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -541,7 +541,7 @@ fn "core:rt/cm_await_blocked"(handle, packed) {
     if packed != -1 {
         return packed;
     }
-    return "core:prelude/types.wado/cm_await_copy"(handle);
+    return "core:prelude/async.wado/cm_await_copy"(handle);
 }
 
 fn "core:rt/cm_stream_write_once"(handle, ptr, count) {
@@ -560,7 +560,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l77: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
-            written = "core:prelude/types.wado/copy_result"(written);
+            written = "core:prelude/async.wado/copy_result"(written);
             taken = taken + delivered_6;
             if ((written != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));

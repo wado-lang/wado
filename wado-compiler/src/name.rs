@@ -1476,10 +1476,10 @@ mod tests {
             "$value_copy"
         );
         // A type argument carries a module path of its own.
-        let traits = interner.core("prelude/traits.wado");
+        let reflect = interner.core("prelude/reflect.wado");
         assert_eq!(
             named(
-                &traits,
+                &reflect,
                 "TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
             ),
             "TemplateHole<$tmpl$59e1,String>::lit"
