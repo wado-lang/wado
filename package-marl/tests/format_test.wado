@@ -37,9 +37,14 @@ test "format keeps a destination with a space in angle brackets" {
     assert formatted("[a]: <x y> 't'\n\n[a]\n") == "[a]: <x y> \"t\"\n\n[a]\n";
 }
 
-test "format keeps a shortcut reference link's label as its definition names it" {
-    assert formatted("see [a*b]\n\n[a*b]: /u\n") == "see [a*b]\n\n[a*b]: /u\n";
-    assert formatted("see [*x*]\n\n[*x*]: /u\n") == "see [*x*]\n\n[*x*]: /u\n";
+test "format keeps a shortcut reference link whose text prints as its label" {
+    assert formatted("see [x]\n\n[x]: /u\n") == "see [x]\n\n[x]: /u\n";
+    assert formatted("see [\nx]\n\n[x]: /u\n") == "see [\nx]\n\n[x]: /u\n";
+}
+
+test "format spells out a shortcut reference link whose text prints otherwise than its label" {
+    assert formatted("see [*x*]\n\n[*x*]: /u\n") == "see [_x_][*x*]\n\n[*x*]: /u\n";
+    assert formatted("see [a*b+c*d]\n\n[a*b+c*d]: /u\n") == "see [a\\*b+c\\*d][a*b+c*d]\n\n[a*b+c*d]: /u\n";
 }
 
 test "format keeps * for an emphasis a longer run closes before a letter" {
