@@ -3621,13 +3621,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: DefId,
     ) {
         // A reference is keyed by its referent's head, under its own kind.
-        let (ref_kind, referent) = {
+        let reference = {
             let tt = self.tysys.type_table.borrow();
-            (
-                tt.ref_kind(concrete_type_id),
-                tt.ref_pointee(concrete_type_id),
-            )
+            tt.ref_kind(concrete_type_id)
+                .zip(tt.ref_pointee(concrete_type_id))
         };
+        let referent = reference.map(|(_, referent)| referent);
         // Get the base type name and concrete type args for impl block lookup.
         // For newtypes, follow the chain to the underlying type to find the trait impl,
         // but registration (below) still uses concrete_type_id so the monomorphizer can
@@ -3662,8 +3661,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         };
-        let receiver = match ref_kind {
-            Some(kind) => Receiver::RefTo(kind, type_name),
+        let receiver = match reference {
+            Some((kind, _)) => Receiver::RefTo(kind, type_name),
             None => Receiver::Type(type_name),
         };
 
@@ -3791,9 +3790,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if header.associated_types.is_empty() {
                     continue;
                 }
-                let subject = match (blanket.receiver, ref_kind, referent) {
-                    (BlanketReceiver::Value, None, None) => concrete_type_id,
-                    (BlanketReceiver::Ref { is_mut }, Some(kind), Some(referent))
+                let subject = match (blanket.receiver, reference) {
+                    (BlanketReceiver::Value, None) => concrete_type_id,
+                    (BlanketReceiver::Ref { is_mut }, Some((kind, referent)))
                         if is_mut == (kind == RefKind::Mut) =>
                     {
                         referent

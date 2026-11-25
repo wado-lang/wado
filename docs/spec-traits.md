@@ -834,7 +834,8 @@ test {
 A reference satisfies a bound in one of two ways. A trait implemented for the
 reference is satisfied by that impl. Otherwise the reference stands in for what
 it points to: `&T` satisfies a bound `T` satisfies, and a method called through
-the bound is the referent's, called through the reference.
+the bound is the referent's, called through the reference. An associated type
+read through the bound is the answering impl's, as the method is.
 
 It stands in only where every method borrows it. A reference does not satisfy
 through its referent:
