@@ -14,7 +14,7 @@ Three things have changed since that design.
 - `Array<T>` became a value type in its own right
   ([Sequence Family](./wep-2026-06-02-sequence-family.md)) and gained a
   first-class NIR node
-  ([`NirExprKind::ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md)). A
+  ([`ArrayLiteral`](./wep-2026-05-11-nir.md#arrayliteral)). A
   fixed-length array _is_ what a literal denotes, and the optimizer already
   deduplicates it, folds indexing into it, and promotes a constant one to the
   data section.
@@ -260,8 +260,7 @@ mechanism needs.
   and it costs the benchmarks nothing: their `-O2` WIR is unchanged.
 - The node's meaning narrows: it is the raw `Array<T>` a literal denotes, not
   the `List<T>` the retired pass materialized.
-  [`NirExprKind::ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) is
-  rewritten to match.
+  [`ArrayLiteral`](./wep-2026-05-11-nir.md#arrayliteral) describes it so.
 
 ## Known gaps
 
@@ -292,5 +291,5 @@ mechanism needs.
 - [Literal Spread (`..base`)](./wep-2026-07-03-literal-spread.md)
 - [JSON Literal Compatibility](./wep-2026-01-18-json-literal-compatibility.md)
 - [Sequence Family](./wep-2026-06-02-sequence-family.md)
-- [`NirExprKind::ArrayLiteral` — a NIR-Materialized List Node](./wep-2026-05-31-nir-array-literal.md)
+- [Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md#arrayliteral)
 - [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)

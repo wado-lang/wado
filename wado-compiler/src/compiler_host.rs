@@ -6,7 +6,13 @@
 //! - Browser with in-memory sources
 //! - LSP with editor buffers
 //!
-//! See WEP: `CompilerHost` Abstraction for Compiler I/O
+//! Loading and diagnostics are one trait because a host without I/O of its own
+//! always supplies both, and no caller pairs one host's sources with another's
+//! diagnostics. Loading is async so a host can fetch over HTTP or yield to a
+//! browser's event loop.
+//!
+//! The compiler serves the standard library itself. A host that served it
+//! would have to know `core:*` and `wasi:*`, and every host would carry a copy.
 
 use std::future::Future;
 use std::sync::Arc;

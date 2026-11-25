@@ -40,7 +40,7 @@ LSP runs the same phases up to liveness and stops there.
 | AST | Surface syntax, kept as written so `wado format` round-trips.                         |
 | TIR | Typed IR. One per module after reify; one flat package of every item after link.      |
 | NIR | Normalized IR, what the optimizer rewrites. See [WEP: NIR](./wep-2026-05-11-nir.md).  |
-| WIR | Close to Wasm core instructions. See [WEP: WIR Layer](./wep-2026-02-14-wir-layer.md). |
+| WIR | Close to Wasm core instructions, as a tree with named locals and types (`wir.rs`).    |
 
 Codegen reads NIR and WIR only, and knows nothing of the phases before them.
 

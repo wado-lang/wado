@@ -270,7 +270,7 @@ the literal node NIR already has for each shape.
 | `Variant`                   | `VariantConstruct` |
 
 `wir_build` lowers all five node forms already, and
-[`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) was added for a consumer
+[`ArrayLiteral`](./wep-2026-05-11-nir.md#arrayliteral) was added for a consumer
 of exactly this kind.
 
 Field order is load-bearing: `wir_build` lowers a struct literal's fields
