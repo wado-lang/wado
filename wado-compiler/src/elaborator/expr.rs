@@ -4816,22 +4816,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let mut resolved_fields: Vec<ResolvedField> = Vec::new();
+        let mut resolved_fields: Vec<ResolvedField> = struct_lit
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(index, field)| ResolvedField {
+                name: field.name.clone(),
+                type_id: self.resolve_expr(&field.value, ctx, None),
+                field_index: index as u32,
+                span: field.value.span(),
+            })
+            .collect();
+        // Read once every field is resolved: a later field answers a slot an
+        // earlier one left open, so the order they are written in decides
+        // nothing.
         let mut shaped = true;
-        for (index, field) in struct_lit.fields.iter().enumerate() {
-            let type_id = self.resolve_expr(&field.value, ctx, None);
-            let type_id = self.apply_infer_holes(type_id);
-            let open = self.tysys.type_table.borrow().infer_vars_in(type_id);
+        for field in &mut resolved_fields {
+            field.type_id = self.apply_infer_holes(field.type_id);
+            let open = self.tysys.type_table.borrow().infer_vars_in(field.type_id);
             if !open.is_empty() {
                 self.close_uninferred(&open);
                 shaped = false;
             }
-            resolved_fields.push(ResolvedField {
-                name: field.name.clone(),
-                type_id,
-                field_index: index as u32,
-                span: field.value.span(),
-            });
         }
         // The literal's type is the shape its fields make, and an open
         // variable names none.

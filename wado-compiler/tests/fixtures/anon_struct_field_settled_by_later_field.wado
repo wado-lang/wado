@@ -1,0 +1,36 @@
+// An anonymous struct's fields are settled by the literal as a whole: a slot
+// one field leaves open is answered by a later field, so the order the fields
+// are written in does not decide whether the literal types.
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn takes_i32(o: Option<i32>) -> i32 {
+    return if o matches { null } { 1 } else { 0 };
+}
+
+fn same<T>(a: T, _b: T) -> T {
+    return a;
+}
+
+test "a later field settles an earlier one" {
+    let x = none();
+    let s = { a: x, b: takes_i32(x) };
+    assert s.a matches { null };
+    assert s.b == 1;
+}
+
+test "an earlier field settles a later one" {
+    let x = none();
+    let s = { b: takes_i32(x), a: x };
+    assert s.a matches { null };
+    assert s.b == 1;
+}
+
+test "a field between them does not close the slot" {
+    let x = none();
+    let s = { a: x, n: 7, c: same(x, Option::Some("x")) };
+    assert s.a matches { null };
+    assert s.n == 7;
+    assert s.c matches { null };
+}

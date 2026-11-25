@@ -238,7 +238,8 @@ Each step keeps every fixture passing and deletes what it replaces.
   `Mk::<_>::mk(&s)` stay unsettled where the unqualified `s.mk()` selects by
   the annotation.
 
-- An anonymous struct literal's field must be settled by its own value. In
+- An anonymous struct literal's fields must be settled by the literal itself:
+  one field may answer another's slot, in either order. In
   `same({ a: none() }.a, x)` the rest of the statement would settle `a`, and
   the field is reported all the same.
 
