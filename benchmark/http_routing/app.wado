@@ -102,6 +102,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with (Re
 
     // One `from-list` crosses the component boundary once, where `new` and an
     // `append` per header cross it each.
+    //
     // Without content-length the body streams out chunked, where the Axum,
     // Node and Bun servers all send a length. The header value's allocation is
     // what it costs — an optimization target, not a reason to hand-roll the
