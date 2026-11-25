@@ -1,0 +1,30 @@
+// A reference does not satisfy a bound on a trait with a by-value `self`
+// through its referent: the call would read the referent out of the
+// reference. Regression: `through(&mut j)` consumed `j` in place, and `j`
+// dropped twice.
+
+affine trait Finish with () {
+    fn finish(self) -> i32;
+}
+
+affine struct Job { id: i32 }
+
+impl Drop for Job {
+    fn drop(self) {}
+}
+
+impl Finish for Job {
+    fn finish(self) -> i32 { return self.id; }
+}
+
+fn through<T: Finish>(t: T) -> i32 {
+    return t.finish();
+}
+
+export fn run() {
+    let mut j = Job { id: 7 };
+    assert through(&mut j) == 7;
+}
+
+__DATA__
+{"compile_error": ":26:12: error: type '&mut Job' does not implement trait 'Finish' required by bound on 'T'"}

@@ -323,6 +323,13 @@ special about a receiver.
   `&mut self` methods stay the referent's, which read the same value more
   directly.
 
+The second rule holds through a bound as well. A reference satisfies a bound
+through its referent only where every method of the trait borrows it, so a
+trait with a by-value `self` is satisfied by the value or by a reference it is
+implemented for. Before that, `fn through<T: Finish>(t: T)` handed `&mut job`
+called `finish(self)` on the referent in place: an affine `job` dropped twice,
+and a copyable one was copied where the caller wrote `&mut`.
+
 An iterator adapter therefore takes a copy of a copyable iterator: after
 `it.take(2)`, `it` has not advanced. That is what value semantics says of any
 method that returns a new value, and it predates this WEP, whose only change
@@ -1041,13 +1048,27 @@ loop walk the value it began with, at the cost of a copy of each list read
 after the loop, since value-copy elision does not share a parameter stored into
 a returned value.
 
-### `&mut it` as an `IntoIterator` walks a copy
+### Whether `into_iter` borrows or takes
 
-A `&mut` to an iterator is an `Iterator` and not an `IntoIterator` of its own:
-it satisfies that bound through its referent, as a reference satisfies any
-bound no impl is written for. So a function taking `C: IntoIterator` and handed
-`&mut it`, and `(&mut it).into_iter()` written out, walk a copy of `it`, where a
-function taking `I: Iterator` and a for-of loop advance it.
+`IntoIterator::into_iter` takes `&self`. That is why a reference satisfies the
+bound through its referent, and why a loop over a copyable list shares it, the
+gap above. It also decides what `&mut it` means there: a `&mut` to an iterator
+is an `Iterator` and not an `IntoIterator` of its own, so a function taking
+`C: IntoIterator` and handed `&mut it`, and `(&mut it).into_iter()` written
+out, walk a copy of `it`, where a function taking `I: Iterator` and a for-of
+loop advance it. As the trait stands this is its contract: `into_iter` reads
+the value and leaves it.
+
+The question is which the trait should say, and nobody has chosen.
+
+- `into_iter(self)` says the walk owns what it walks. The loop then walks the
+  value it began with, a reference needs its own impl, and `&mut it` would be
+  given one. Every list read after its loop is then a copy. Swift takes this
+  reading and pays for it with copy-on-write, which this WEP
+  [refused](#why-not-reference-counting).
+- `into_iter(&self)` says the value can be walked from its start without being
+  consumed, and then it is the name `Into` that misleads. The loop keeps
+  sharing a list the body writes to.
 
 ### Maps and sets of affine values
 

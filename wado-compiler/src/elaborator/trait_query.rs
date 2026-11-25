@@ -1560,18 +1560,23 @@ impl TypeSystem {
 
     /// Whether a reference is denied `trait_`'s bound, which it otherwise
     /// inherits from its pointee by auto-deref at the call. `==` on a reference
-    /// is identity, so `&T` is no `Ord`; and see below for the other rule.
+    /// is identity, so `&T` is no `Ord`; and see below for the other rules.
     pub(super) fn ref_denies_bound(&self, on_bound: Option<OnBoundTrait>, trait_: DefId) -> bool {
         if on_bound == Some(OnBoundTrait::Ord) {
             return true;
         }
-        // A receiverless method has no receiver to deref, so `&T` inherits it
-        // by forwarding — which works only where `Self` is absent from the
-        // signature: `kind() -> String` forwards, `-> Option<Self>` cannot.
         trait_sig_of_with(trait_, &self.trait_env, &self.signatures).is_some_and(|sig| {
-            sig.methods.values().any(|m| {
-                m.sig.self_kind == SelfKind::None
-                    && self.receiverless_method_mentions_self(trait_, &m.sig)
+            sig.methods.values().any(|m| match m.sig.self_kind {
+                // A receiverless method has no receiver to deref, so `&T`
+                // inherits it by forwarding — which works only where `Self`
+                // is absent from the signature: `kind() -> String` forwards,
+                // `-> Option<Self>` cannot.
+                SelfKind::None => self.receiverless_method_mentions_self(trait_, &m.sig),
+                // A by-value `self` is the value itself, which a deref would
+                // read out of the reference: a copy the caller of a `&mut`
+                // did not ask for, or a second owner of an affine pointee.
+                SelfKind::Value => true,
+                SelfKind::Ref | SelfKind::MutRef => false,
             })
         })
     }

@@ -530,8 +530,10 @@ The remaining ways are read off a type, and each goes where it belongs:
 - A trait that holds for everything is a flag on its declaration, since the
   unbounded blanket that would say so is rejected.
 - How a reference answers is a flag on the trait: `Eq` of itself, `Ord` never,
-  and the rest by auto-deref to the pointee unless a receiverless method names
-  `Self`.
+  and the rest by auto-deref to the pointee unless a method takes `self` by
+  value or a receiverless method names `Self`. A by-value `self` reached that
+  way read the referent out of the reference: a generic body handed `&mut x`
+  consumed an affine `x` in place, and it dropped twice.
 - A reflection kind is a fact stated of a declaration. It depends on no member's
   trait and on no module, so it answers for every instance from everywhere. It
   states the kind's member channel and, for a struct, `FieldInputs`, which a

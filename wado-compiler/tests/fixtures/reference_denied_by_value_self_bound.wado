@@ -1,0 +1,40 @@
+// A reference satisfies a bound through its referent only where every method
+// borrows it. A trait with a by-value `self` is satisfied by the value, or by
+// a reference the trait is implemented for.
+
+trait Size with () {
+    fn size(&self) -> i32;
+}
+
+trait Bump with () {
+    fn bumped(self) -> i32;
+}
+
+struct Counter { n: i32 }
+
+impl Size for Counter {
+    fn size(&self) -> i32 { return self.n; }
+}
+
+impl Bump for Counter {
+    #[allow(self_by_value)]
+    fn bumped(self) -> i32 { return self.n + 1; }
+}
+
+fn size_of<T: Size>(t: T) -> i32 {
+    return t.size();
+}
+
+fn bump<T: Bump>(t: T) -> i32 {
+    return t.bumped();
+}
+
+export fn run() {
+    let mut c = Counter { n: 1 };
+    assert size_of(&c) == 1;
+    assert bump(c) == 2;
+    assert bump(&mut c) == 2;
+}
+
+__DATA__
+{"compile_error": ":36:12: error: type '&mut Counter' does not implement trait 'Bump' required by bound on 'T'"}

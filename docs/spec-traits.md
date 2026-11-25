@@ -829,6 +829,47 @@ test {
 }
 ```
 
+### A Reference as a Type Argument
+
+A reference satisfies a bound in one of two ways. A trait implemented for the
+reference is satisfied by that impl. Otherwise the reference stands in for what
+it points to: `&T` satisfies a bound `T` satisfies, and a method called through
+the bound is the referent's, called through the reference.
+
+It stands in only where every method borrows it. A reference does not satisfy
+through its referent:
+
+- a trait with a method taking `self` by value, which would read the referent
+  out of the reference;
+- a trait with a method that has no receiver and names `Self`, which has
+  nothing to read through;
+- `Ord`, since `==` on a reference compares the values it points to and an
+  order over references would not.
+
+Such a trait is satisfied by the value, or by a reference it is implemented
+for, as [`Iterator` is for `&mut I`](./spec-standard-traits.md#iterator---core-iteration-trait).
+
+<!-- {"fixture":"reference_denied_by_value_self_bound.wado"} -->
+
+```wado
+fn size_of<T: Size>(t: T) -> i32 {
+    return t.size();
+}
+
+fn bump<T: Bump>(t: T) -> i32 {
+    return t.bumped();
+}
+
+export fn run() {
+    let mut c = Counter { n: 1 };
+    assert size_of(&c) == 1;
+    assert bump(c) == 2;
+    assert bump(&mut c) == 2;
+}
+```
+
+The last call is a compile error: `&mut Counter` does not implement `Bump`.
+
 ### Bounds on Generic Traits
 
 A bound that writes no argument names the declared default. `T: Add` is
