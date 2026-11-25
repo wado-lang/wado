@@ -171,8 +171,13 @@ pub(super) fn reachable_function_positions(
 ) -> IndexSet<usize> {
     let descriptors = cache.descriptors(project);
     let functors = functor_methods(project);
-    let analyses = walks.analyses(project, exec, descriptors, &functors);
-    let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
+    let (analyses, positions) = walks.analyses(project, exec, descriptors, &functors);
+    let mut graph = assemble_analysis_graph(
+        project,
+        Cow::Borrowed(analyses),
+        Cow::Borrowed(positions),
+        functors,
+    );
     let roots: Vec<Target> = cached
         .into_iter()
         .map(|id| Target::Stored(id.index()))
@@ -556,7 +561,7 @@ type FuncPositions = IndexMap<FunctionId, usize>;
 struct AnalysisGraph<'a> {
     /// The inspect edges a caller's own callees lack, by caller position.
     inspect_edges: IndexMap<usize, IndexSet<FunctionId>>,
-    func_positions: FuncPositions,
+    func_positions: Cow<'a, FuncPositions>,
     /// Each function's facts, indexed by position in `project.functions`:
     /// [`compute_global_reachability`] and [`populate_type_reachability`]
     /// aggregate the reachable ones.
@@ -602,7 +607,17 @@ fn build_analysis_graph(
     let analyses = exec.map(&project.functions, |f| {
         function_analysis(&f.borrow(), type_table, descriptors, &functors)
     });
-    assemble_analysis_graph(project, Cow::Owned(analyses), functors)
+    let mut positions = FuncPositions::with_capacity_and_hasher(
+        project.functions.len(),
+        rustc_hash::FxBuildHasher,
+    );
+    extend_positions(project, &mut positions);
+    assemble_analysis_graph(
+        project,
+        Cow::Owned(analyses),
+        Cow::Owned(positions),
+        functors,
+    )
 }
 
 /// One function's facts for the [`AnalysisGraph`], from its signature and body.
@@ -633,17 +648,20 @@ fn function_analysis(
 pub(super) struct ReachabilityCache {
     walks: BodyMemo<FunctionAnalysis>,
     renames_seen: usize,
+    /// The positions of `project.functions` as the walks last saw it, extended
+    /// as functions are appended and rebuilt after a rename.
+    positions: FuncPositions,
 }
 
 impl ReachabilityCache {
-    /// Every function's [`function_analysis`] as `project` stands.
+    /// Every function's [`function_analysis`] and position as `project` stands.
     fn analyses(
         &mut self,
         project: &NirPackage,
         exec: &Executor,
         descriptors: &[FunctionRef],
         functors: &FunctorMethods,
-    ) -> &[FunctionAnalysis] {
+    ) -> (&[FunctionAnalysis], &FuncPositions) {
         let renamed: IndexSet<FuncId> = project.renamed[self.renames_seen..]
             .iter()
             .copied()
@@ -652,26 +670,27 @@ impl ReachabilityCache {
         if !renamed.is_empty() {
             self.walks
                 .forget_where(|walk| !walk.named.is_disjoint(&renamed));
+            self.positions.clear();
         }
+        assert!(
+            self.positions.len() <= project.functions.len(),
+            "a function was removed while the reachability cache was kept"
+        );
+        extend_positions(project, &mut self.positions);
         let type_table = &*project.type_table.borrow();
-        self.walks.refresh(project, exec, |f| {
+        let walks = self.walks.refresh(project, exec, |f| {
             function_analysis(f, type_table, descriptors, functors)
-        })
+        });
+        (walks, &self.positions)
     }
 }
 
-fn assemble_analysis_graph<'a>(
-    project: &NirPackage,
-    analyses: Cow<'a, [FunctionAnalysis]>,
-    functors: FunctorMethods,
-) -> AnalysisGraph<'a> {
-    assert_eq!(analyses.len(), project.functions.len());
-    let mut func_positions: FuncPositions =
-        IndexMap::with_capacity_and_hasher(analyses.len(), rustc_hash::FxBuildHasher);
-    for (pos, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
+/// Add the positions of the functions past those `positions` holds.
+fn extend_positions(project: &NirPackage, positions: &mut FuncPositions) {
+    for pos in positions.len()..project.functions.len() {
+        let func = project.functions[pos].borrow();
         let func_id = function_id_for(&func);
-        if let Some(prior) = func_positions.insert(func_id.clone(), pos) {
+        if let Some(prior) = positions.insert(func_id.clone(), pos) {
             let prior = project.functions[prior].borrow();
             panic!(
                 "function_id_for collision in project.functions: `{}` and `{}` \
@@ -682,6 +701,16 @@ fn assemble_analysis_graph<'a>(
             );
         }
     }
+}
+
+fn assemble_analysis_graph<'a>(
+    project: &NirPackage,
+    analyses: Cow<'a, [FunctionAnalysis]>,
+    func_positions: Cow<'a, FuncPositions>,
+    functors: FunctorMethods,
+) -> AnalysisGraph<'a> {
+    assert_eq!(analyses.len(), project.functions.len());
+    assert_eq!(func_positions.len(), project.functions.len());
     AnalysisGraph {
         inspect_edges: IndexMap::default(),
         func_positions,
@@ -2763,7 +2792,7 @@ mod tests {
     fn graph(names: &[FunctionId], calls: &[&[FunctionId]]) -> AnalysisGraph<'static> {
         AnalysisGraph {
             inspect_edges: IndexMap::default(),
-            func_positions: names.iter().cloned().zip(0..).collect(),
+            func_positions: Cow::Owned(names.iter().cloned().zip(0..).collect()),
             analyses: Cow::Owned(
                 calls
                     .iter()
