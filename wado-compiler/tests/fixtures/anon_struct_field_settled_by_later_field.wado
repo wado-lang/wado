@@ -1,6 +1,5 @@
 // An anonymous struct's fields are settled by the literal as a whole: a slot
-// one field leaves open is answered by a later field, so the order the fields
-// are written in does not decide whether the literal types.
+// one field leaves open is answered by a later field of the same literal.
 fn none<T>() -> Option<T> {
     return null;
 }
@@ -11,6 +10,59 @@ fn takes_i32(o: Option<i32>) -> i32 {
 
 fn same<T>(a: T, _b: T) -> T {
     return a;
+}
+
+struct W<T> {
+    v: T,
+}
+
+impl Add for W<i32> {
+    type Output = W<i32>;
+    fn add(&self, rhs: &W<i32>) -> W<i32> {
+        return W { v: self.v + rhs.v + 1 };
+    }
+}
+
+impl Add for W<i64> {
+    type Output = W<i64>;
+    fn add(&self, rhs: &W<i64>) -> W<i64> {
+        return W { v: self.v + rhs.v };
+    }
+}
+
+fn zeroed<T: Default>() -> W<T> {
+    return W { v: T::default() };
+}
+
+fn take32(w: W<i32>) -> i32 {
+    return w.v;
+}
+
+struct Bx<T> {
+    v: Option<T>,
+}
+
+fn empty<T>() -> Bx<T> {
+    return Bx { v: null };
+}
+
+// The operator's impl is chosen once `c` settles `x`, and its `Output` is the
+// type of `b`. The field once reached the shape still open, with nothing to
+// report it.
+test "a later field decides an operator an earlier one waits on" {
+    let x = zeroed();
+    let s = { a: x, b: x + x, c: take32(x) };
+    assert s.a.v == 0;
+    assert s.b.v == 1;
+    assert s.c == 0;
+}
+
+// A base's fields are part of the shape. One left open once reached codegen.
+test "a field settles a spread base" {
+    let b = empty();
+    let s = { ..b, c: takes_i32(b.v) };
+    assert s.v matches { null };
+    assert s.c == 1;
 }
 
 test "a later field settles an earlier one" {
