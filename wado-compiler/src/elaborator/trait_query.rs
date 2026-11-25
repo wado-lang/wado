@@ -3651,13 +3651,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         (tt.fq_type_name(effective_id), vec![])
                     }
                     ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                    _ => {
                         drop(tt);
-                        let referent = referent.expect("only a referent is itself a reference");
-                        return self
-                            .register_assoc_types_for_concrete_type_and_trait(referent, trait_);
+                        // A reference to a reference is keyed by neither
+                        // layer, and answers through what it points to.
+                        if let Some(referent) = referent {
+                            self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
+                        }
+                        return;
                     }
-                    _ => return,
                 }
             }
         };
