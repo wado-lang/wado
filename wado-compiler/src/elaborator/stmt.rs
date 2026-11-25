@@ -36,7 +36,7 @@ use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::elaborator::util::reserve_float_pattern_locals;
 use crate::name::{
-    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
+    Receiver, constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias, range_local_name,
 };
 use crate::primitive::PrimitiveType;
@@ -2936,7 +2936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and `start` would.
         // An `IntoIterator` written for the reference itself says what a walk
         // of it is, and answers first as a reference's own impl always does.
-        let reference_states_its_walk = crate::name::Receiver::ref_to(
+        let reference_states_its_walk = Receiver::ref_to(
             &self
                 .tysys
                 .type_table
