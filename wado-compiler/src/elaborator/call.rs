@@ -1837,12 +1837,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: call.span,
             });
         }
+        let static_method = call_receiver.as_ref().map(|receiver| {
+            let (_, method_name) = effective_name
+                .split_once("::")
+                .expect("a receiver comes with a qualified name");
+            (receiver, method_name)
+        });
         // A static a newtype inherits is solved at the link declaring it.
-        let expected_at_owner = match &call_receiver {
-            Some(receiver) => {
-                let (_, method_name) = effective_name
-                    .split_once("::")
-                    .expect("a receiver comes with a qualified name");
+        let expected_at_owner = match static_method {
+            Some((receiver, method_name)) => {
                 let owner = self.static_owner_key(receiver.key(), method_name);
                 let newtype = (&owner != receiver.key())
                     .then(|| receiver.key().decl())
@@ -1863,10 +1866,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Literal preselect on a static call's arguments (WEP 2026-07-31
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
-        if let Some(receiver) = &call_receiver {
-            let (_, method_name) = effective_name
-                .split_once("::")
-                .expect("a receiver comes with a qualified name");
+        if let Some((receiver, method_name)) = static_method {
             let typed = receiver.at_type(rewritten_receiver);
             let preselected = self.preselect_static_args(
                 StaticReceiver {
