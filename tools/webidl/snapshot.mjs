@@ -59,7 +59,8 @@ const everyInterface = () => {
   const slice = new Set(
     [...defined.values()].filter(onWindow).map((def) => def.name),
   );
-  // A slice is closed: a set grows while it is walked, so each parent's is visited too.
+  // A slice holds each member's parent. A `Set` walks what the walk adds, so
+  // each parent's parent is reached too.
   for (const name of slice) {
     const parent = defined.get(name).inheritance;
     if (parent) slice.add(parent);

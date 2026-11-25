@@ -137,20 +137,6 @@ pub enum Member {
 }
 
 impl Member {
-    /// The keyword of an iteration declaration, which has no name.
-    fn iteration(&self) -> Option<&'static str> {
-        match self {
-            Self::Iterable => Some("iterable"),
-            Self::Maplike => Some("maplike"),
-            Self::Setlike => Some("setlike"),
-            Self::AsyncIterable => Some("async_iterable"),
-            Self::Attribute { .. }
-            | Self::Operation { .. }
-            | Self::Constructor { .. }
-            | Self::Const { .. } => None,
-        }
-    }
-
     /// What a report calls the member: its `WebIDL` name, or what stands in for one.
     fn label(&self) -> String {
         match self {
@@ -158,9 +144,10 @@ impl Member {
             Self::Operation { name, special, .. } if name.is_empty() => format!("({special})"),
             Self::Operation { name, .. } => name.clone(),
             Self::Constructor { .. } => "new".to_string(),
-            Self::Iterable | Self::Maplike | Self::Setlike | Self::AsyncIterable => {
-                format!("({})", self.iteration().expect("an iteration declaration"))
-            }
+            Self::Iterable => "(iterable)".to_string(),
+            Self::Maplike => "(maplike)".to_string(),
+            Self::Setlike => "(setlike)".to_string(),
+            Self::AsyncIterable => "(async_iterable)".to_string(),
         }
     }
 }
@@ -1034,9 +1021,7 @@ impl Lowering<'_> {
             }
             Member::Const { .. } => vec![Err((member.label(), Reason::of(Cause::Constant)))],
             Member::Iterable | Member::Maplike | Member::Setlike | Member::AsyncIterable => {
-                let keyword = member.iteration().expect("an iteration declaration");
-                let reason = Reason::new(Cause::Iteration, format!("`{keyword}` declaration"));
-                vec![Err((member.label(), reason))]
+                vec![Err((member.label(), Reason::of(Cause::Iteration)))]
             }
         }
     }

@@ -993,11 +993,14 @@ fn every_member_kind_parses_and_one_without_a_binding_is_reported() {
         .collect();
     let expected = [
         ("Node.ELEMENT_NODE: a constant", Cause::Constant),
-        ("Node.(iterable): `iterable` declaration", Cause::Iteration),
-        ("Node.(maplike): `maplike` declaration", Cause::Iteration),
-        ("Node.(setlike): `setlike` declaration", Cause::Iteration),
         (
-            "Node.(async_iterable): `async_iterable` declaration",
+            "Node.(iterable): an iteration declaration",
+            Cause::Iteration,
+        ),
+        ("Node.(maplike): an iteration declaration", Cause::Iteration),
+        ("Node.(setlike): an iteration declaration", Cause::Iteration),
+        (
+            "Node.(async_iterable): an iteration declaration",
             Cause::Iteration,
         ),
         (
