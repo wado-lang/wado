@@ -1276,7 +1276,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied()
             .filter(|&class| {
                 let answered = self.apply_infer_holes(class);
-                let open = self.tysys.type_table.borrow().infer_vars_in(answered);                open.iter().any(|&var| var == class || !blamed.contains(&var))
+                let open = self.tysys.type_table.borrow().infer_vars_in(answered);
+                open.iter()
+                    .any(|&var| var == class || !blamed.contains(&var))
             })
             .collect();
         let blames = self.class_blames(&unsolved);

@@ -23,9 +23,7 @@ use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::unify;
 use super::infer_hole::{BoundRows, uninferable_type_param};
-use super::instantiate::{
-    InstanceKind, Instantiated, Instantiation, SlotLinks, static_slot_owner,
-};
+use super::instantiate::{InstanceKind, Instantiated, Instantiation, SlotLinks, static_slot_owner};
 use super::method_call::{
     PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
 };
@@ -5089,9 +5087,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The newtype a static call's receiver is, where it inherits the static
     /// from the link `owner` below it, at the arguments `owner_args` give that
     /// link. The resolution retypes a newtype declaring no parameters itself;
-    /// one declaring some is solved from `owner_args` here. `None` where the
-    /// receiver owns the static, or where the arguments leave the newtype
-    /// open.
+    /// one declaring some is solved from `owner_args` here, as far as they
+    /// answer it. `None` where the receiver owns the static.
     pub(super) fn inherited_static(
         &mut self,
         receiver: &ImplTargetKey,

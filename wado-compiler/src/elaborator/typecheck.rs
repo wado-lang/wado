@@ -491,8 +491,9 @@ pub(super) struct PackRun {
 struct AroundPacks {
     /// The elements at one position: all of them where neither holds a pack,
     /// else those ahead of the first pack and behind the last, counted from
-    /// each end. Two tuples both holding packs place them alike or pair
-    /// nothing.
+    /// each end. Two tuples both holding packs place them alike, or one is a
+    /// lone pack variable taking a run the other's packs stand inside, or
+    /// they pair nothing.
     fixed: Vec<(TypeId, TypeId)>,
     /// A pack variable standing alone among the packs of its tuple, and what
     /// the other tuple holds in its place.
