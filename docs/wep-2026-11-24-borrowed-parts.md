@@ -61,6 +61,13 @@ share:
 - the holder itself read as a value, other than at its final use, is a second
   owner of everything it holds.
 
+A closure is such a holder: it shares the storage of what it captures. Lowering
+lets an immutable capture share its source for as long as whatever keeps the
+closure is live, and that includes the result of calling the closure, which
+may hand the captured storage back. A closure whose body mints another closure
+lends nothing: the inner closure captures the same storage and can carry it
+anywhere the body reaches, which no holder of the outer one bounds.
+
 ### Where the decision is made
 
 The optimizer decides it, in `nir/copy_elision`, on the body after inlining.

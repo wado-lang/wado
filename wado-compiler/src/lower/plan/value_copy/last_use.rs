@@ -584,7 +584,11 @@ impl<'a> Analyzer<'a> {
             .pending_bounded
             .iter()
             .map(|(root, _, holders)| (root, holders))
-            .chain(self.value_holds.iter().map(|(root, holders)| (root, holders)));
+            .chain(
+                self.value_holds
+                    .iter()
+                    .map(|(root, holders)| (root, holders)),
+            );
         for (root, holders) in holds {
             for &holder in holders {
                 paths
@@ -1446,7 +1450,6 @@ pub fn has_unsupported_form(body: &TirBlock) -> bool {
     s.found
 }
 
-/// Whether `body` mints a closure, which captures what it reads by reference.
 fn mints_closure(body: &TirExpr) -> bool {
     struct Scan {
         found: bool,
