@@ -83,12 +83,17 @@ the review and hands the findings to `code-review-response`.
 ## Reviewing a Pull Request
 
 A repository admin comments `@wado-bot review` on a pull request, or
-dispatches the `Eddy` workflow with its number. The workflow reviews the pull
-request's head and posts `review.md` as a comment. Eddy itself, `mise.toml`
-and every script come from the default branch, so the pull request's code runs
-only inside Eddy's confinement. The workflow pushes the record to the wiki,
-and the patches stay in the run's artifact for 90 days, as
-`eddy-<pr>-<head>`.
+dispatches the `Eddy` workflow with its number. The workflow also starts by
+itself on an admin's pull request, when CodeRabbit's commit status says its
+review of the head was rate limited. A head carries an `Eddy` commit status
+once a review of it starts, and a head that carries one is not started again
+this way.
+
+The workflow reviews the pull request's head and posts `review.md` as a
+comment. Eddy itself, `mise.toml` and every script come from the default
+branch, so the pull request's code runs only inside Eddy's confinement. The
+workflow pushes the record to the wiki, and the patches stay in the run's
+artifact for 90 days, as `eddy-<pr>-<head>`.
 
 The workflow holds no API key. With `ANTHROPIC_FEDERATION_RULE_ID` and the
 rest of a Workload Identity Federation rule in its environment, Eddy trades

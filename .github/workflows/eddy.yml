@@ -2,10 +2,15 @@ name: Eddy
 
 # Reviews a pull request with Eddy (package-eddy/) and posts the findings as
 # one comment. A repository admin starts it, by commenting `@wado-bot review`
-# on the pull request or by dispatching it with the pull request's number.
+# on the pull request or by dispatching it with the pull request's number. An
+# admin's pull request also gets one where CodeRabbit's review limit leaves its
+# head unreviewed.
 on:
   issue_comment:
     types: [created]
+  # CodeRabbit's comment may be cut short of its reason, so its commit status
+  # is what says a review was rate limited.
+  status:
   workflow_dispatch:
     inputs:
       pr:
@@ -23,10 +28,13 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event.issue.pull_request && startsWith(github.event.comment.body, '@wado-bot review'))
+      || (github.event_name == 'status' && github.event.context == 'CodeRabbit'
+      && github.event.description == 'Review rate limited' && github.event.sender.login == 'coderabbitai[bot]')
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
+      statuses: write
     outputs:
       pr: ${{ steps.pr.outputs.pr }}
       sha: ${{ steps.pr.outputs.sha }}
@@ -43,22 +51,48 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           REPO: ${{ github.repository }}
-          # A re-run keeps the comment and `github.actor` of the run it repeats.
-          ACTORS: ${{ github.event.comment.user.login || github.actor }} ${{ github.triggering_actor }}
+          # A re-run keeps the event and `github.actor` of the run it repeats.
+          REQUESTER: ${{ github.event.comment.user.login || github.actor }}
+          RERUNNER: ${{ github.triggering_actor != github.actor && github.triggering_actor || '' }}
           PR: ${{ github.event.issue.number || inputs.pr }}
           COMMENT_ID: ${{ github.event.comment.id }}
+          RATE_LIMITED_SHA: ${{ github.event_name == 'status' && github.event.sha || '' }}
         run: |
           set -euo pipefail
+          permission_of() {
+            gh api "repos/$REPO/collaborators/$1/permission" --jq .permission
+          }
+          if [ -n "$RATE_LIMITED_SHA" ]; then
+            # Nobody asked, so the pull request's author stands as the one who
+            # did. A status that calls for no review is passed over, not failed.
+            sha="$RATE_LIMITED_SHA"
+            read -r PR REQUESTER <<< "$(gh api "repos/$REPO/commits/$sha/pulls" \
+              --jq ".[] | select(.state == \"open\" and .head.sha == \"$sha\") | \"\(.number) \(.user.login)\"" | head -n 1)"
+            if [ -z "$PR" ]; then
+              echo "::notice::${sha:0:9} is the head of no open pull request"
+              exit 0
+            fi
+            if [ "$(permission_of "$REQUESTER" || true)" != admin ]; then
+              echo "::notice::#$PR is not a repository admin's, so one of them asks for its review"
+              exit 0
+            fi
+            # A re-run is an admin asking again.
+            if [ -z "$RERUNNER" ] && [ -n "$(gh api "repos/$REPO/commits/$sha/statuses" --jq '.[] | select(.context == "Eddy") | .id')" ]; then
+              echo "::notice::Eddy has already taken ${sha:0:9}"
+              exit 0
+            fi
+          else
+            sha="$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)"
+          fi
           # A review builds and runs the pull request's code, and is paid for,
           # so only an owner starts one.
-          for actor in $ACTORS; do
-            permission="$(gh api "repos/$REPO/collaborators/$actor/permission" --jq .permission)"
+          for actor in $REQUESTER $RERUNNER; do
+            permission="$(permission_of "$actor")"
             if [ "$permission" != admin ]; then
               echo "::error::Eddy is started by a repository admin; $actor has $permission"
               exit 1
             fi
           done
-          sha="$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)"
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [ -n "$COMMENT_ID" ]; then
@@ -71,6 +105,7 @@ jobs:
       # That commit may predate this workflow's, so it is taken only where the
       # files the review runs from it are this workflow's commit's.
       - id: eddy
+        if: steps.pr.outputs.sha
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -99,6 +134,17 @@ jobs:
           done <<< "$runs"
           echo "::error::no recent CI run on main kept a prebuilt wado"
           exit 1
+      # The mark a rate-limited status reads, so a head CodeRabbit reports
+      # twice, or one an admin already asked about, is reviewed once.
+      - if: steps.pr.outputs.sha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/$REPO/statuses/$SHA" \
+            -f context=Eddy -f state=pending -f description="Reviewing" -f target_url="$RUN" > /dev/null
 
   # Eddy and everything around it come from main: the pull request's own
   # scripts, mise.toml or Eddy would run outside the sandbox, in a job that can
@@ -108,6 +154,7 @@ jobs:
   review:
     name: Review
     needs: gate
+    if: needs.gate.outputs.sha
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions:
@@ -158,7 +205,8 @@ jobs:
           git worktree remove --force "$RUNNER_TEMP/head"
       # Workload Identity Federation, so no API key is stored: Eddy mints its
       # tokens from the job's identity. The rule accepts only this workflow on
-      # main, which only an admin's comment or dispatch starts.
+      # main, which starts only for an admin: on their comment or dispatch, or
+      # on their own pull request.
       - id: eddy
         env:
           ANTHROPIC_FEDERATION_RULE_ID: fdrl_01N2UzGtpPyqSMQz3htMdLce
@@ -186,12 +234,23 @@ jobs:
   post:
     name: Post
     needs: [gate, review]
-    if: always() && needs.gate.result == 'success'
+    if: always() && needs.gate.result == 'success' && needs.gate.outputs.sha
     runs-on: ubuntu-latest
     # The wiki, which holds the records, is written with the contents grant.
     permissions:
       contents: write
+      statuses: write
     steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.gate.outputs.sha }}
+          STATE: ${{ needs.review.result == 'success' && 'success' || 'failure' }}
+          DESCRIPTION: ${{ needs.review.result == 'success' && 'Reviewed' || 'The review did not finish' }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/$REPO/statuses/$SHA" \
+            -f context=Eddy -f state="$STATE" -f description="$DESCRIPTION" -f target_url="$RUN" > /dev/null
       - id: token
         uses: actions/create-github-app-token@v3
         with:
