@@ -31,17 +31,18 @@ jobs:
       || (github.event_name == 'status' && github.event.context == 'CodeRabbit'
       && github.event.description == 'Review rate limited' && github.event.sender.login == 'coderabbitai[bot]')
     runs-on: ubuntu-latest
-    # A rate-limited status reads the head's `Eddy` status, and the gate that
-    # passes writes it, so two for one head go one at a time.
+    # A rate-limited status reads the head's `Eddy` check, and its gate writes
+    # one, so two for one head go one at a time.
     concurrency:
       group: eddy-gate-${{ github.event_name == 'status' && github.event.sha || github.run_id }}
     permissions:
       actions: read
+      checks: write
       contents: read
-      statuses: write
     outputs:
       pr: ${{ steps.pr.outputs.pr }}
       sha: ${{ steps.pr.outputs.sha }}
+      check: ${{ steps.check.outputs.id }}
       eddy-run: ${{ steps.eddy.outputs.run }}
       eddy-sha: ${{ steps.eddy.outputs.sha }}
       attempt: ${{ github.run_attempt }}
@@ -61,6 +62,8 @@ jobs:
           PR: ${{ github.event.issue.number || inputs.pr }}
           COMMENT_ID: ${{ github.event.comment.id }}
           RATE_LIMITED_SHA: ${{ github.event_name == 'status' && github.event.sha || '' }}
+          CHECKS_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           # Nobody asked for a rate-limited head's review, so the pull request's
@@ -69,6 +72,8 @@ jobs:
           author=
           pass_over_author() {
             echo "::notice::#$PR is $author's, so a repository admin asks for its review"
+            GH_TOKEN="$CHECKS_TOKEN" gh api -X POST "repos/$REPO/check-runs" -f name=Eddy -f head_sha="$sha" \
+              -f status=completed -f conclusion=skipped -f details_url="$RUN" > /dev/null
             exit 0
           }
           if [ -n "$RATE_LIMITED_SHA" ]; then
@@ -79,6 +84,14 @@ jobs:
             if [ -z "$PR" ]; then
               echo "::notice::${sha:0:9} is the head of no open pull request"
               exit 0
+            fi
+            # A re-run is an admin asking again.
+            if [ -z "$RERUNNER" ]; then
+              taken="$(gh api "repos/$REPO/commits/$sha/check-runs?check_name=Eddy" --jq '.check_runs[].id')"
+              if [ -n "$taken" ]; then
+                echo "::notice::Eddy has already taken ${sha:0:9}"
+                exit 0
+              fi
             fi
             # A bot has no permission to look up.
             if [ "$type" != User ]; then
@@ -100,14 +113,6 @@ jobs:
               exit 1
             fi
           done
-          # A re-run is an admin asking again.
-          if [ -n "$author" ] && [ -z "$RERUNNER" ]; then
-            taken="$(gh api "repos/$REPO/commits/$sha/status" --jq '.statuses[] | select(.context == "Eddy") | .state')"
-            if [ -n "$taken" ]; then
-              echo "::notice::Eddy has already taken ${sha:0:9}"
-              exit 0
-            fi
-          fi
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [ -n "$COMMENT_ID" ]; then
@@ -151,15 +156,18 @@ jobs:
           exit 1
       # The mark a rate-limited status reads, so a head CodeRabbit reports
       # twice, or one an admin already asked about, is reviewed once.
-      - if: steps.pr.outputs.sha
+      - id: check
+        if: steps.pr.outputs.sha
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ steps.pr.outputs.sha }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh api -X POST "repos/$REPO/statuses/$SHA" \
-            -f context=Eddy -f state=pending -f description="Reviewing" -f target_url="$RUN" > /dev/null
+          set -euo pipefail
+          id="$(gh api -X POST "repos/$REPO/check-runs" -f name=Eddy -f head_sha="$SHA" \
+            -f status=in_progress -f details_url="$RUN" --jq .id)"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
   # Eddy and everything around it come from main: the pull request's own
   # scripts, mise.toml or Eddy would run outside the sandbox, in a job that can
@@ -253,8 +261,8 @@ jobs:
     runs-on: ubuntu-latest
     # The wiki, which holds the records, is written with the contents grant.
     permissions:
+      checks: write
       contents: write
-      statuses: write
     steps:
       - id: token
         uses: actions/create-github-app-token@v3
@@ -299,23 +307,19 @@ jobs:
             printf '\n[The run](%s)\n' "$RUN" >> "$body"
           fi
           gh pr comment "$PR" --repo "$REPO" --body-file "$body"
+      # The check says whether Eddy ran and reported, not what it found.
       - if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ needs.gate.outputs.sha }}
-          DESCRIPTION: >-
-            ${{ needs.review.result != 'success' && 'The review did not finish'
-            || steps.comment.outcome != 'success' && 'The review was not posted'
-            || 'Reviewed' }}
-          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHECK: ${{ needs.gate.outputs.check }}
+          CONCLUSION: >-
+            ${{ needs.review.result == 'cancelled' && 'cancelled'
+            || needs.review.result == 'success' && steps.comment.outcome == 'success' && 'success'
+            || 'failure' }}
         run: |
-          state=failure
-          if [ "$DESCRIPTION" = Reviewed ]; then
-            state=success
-          fi
-          gh api -X POST "repos/$REPO/statuses/$SHA" \
-            -f context=Eddy -f state="$state" -f description="$DESCRIPTION" -f target_url="$RUN" > /dev/null
+          gh api -X PATCH "repos/$REPO/check-runs/$CHECK" \
+            -f status=completed -f conclusion="$CONCLUSION" > /dev/null
       - env:
           SHA: ${{ needs.gate.outputs.sha }}
           TOKEN: ${{ github.token }}
