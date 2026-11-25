@@ -249,6 +249,16 @@ test "a lookaround asserts what is around a position, and consumes nothing" {
     assert re(#"^(?=.*\d)(?=.*[a-z]).{4,}$"#).is_match("ab12");
 }
 
+test "a lookaround holds only on a character boundary" {
+    assert found(#"(?!^)"#, "éa") == "2..2 ";
+    assert found(#"(?!é)"#, "é") == "2..2 ";
+    assert !re(#"(?<!^)(?!$)"#).is_match("é");
+    assert all(#"(?!^)"#, "é€") == "2: 5:";
+    assert all(#"(?=)(?<!^)"#, "é€") == "2: 5:";
+    assert found(#"(?<=((?<!(?=€)))+)a"#, "€€1b1€bcc€a") == "18..19 a";
+    assert re(#"(?<!x)"#).split("éa").count() == 4;
+}
+
 test "a lookaround reads the text around the search's start" {
     assert re(#"(?<=a)b"#).find_at("ab", 1).unwrap().start() == 1;
     assert re(#"(?<!a)b"#).find_at("ab", 1) matches { null };
