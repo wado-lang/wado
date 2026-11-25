@@ -282,6 +282,7 @@
 - [ML Inference and WebGPU — Research Reference](./research-ml-inference-webgpu.md)
 - [Operator Precedence Research](./research-operator-precedence.md)
 - [Research: Rust Reference Semantics Edge Cases](./research-rust-reference-semantics.md)
+- [Research: Swift's Ownership Decisions, and What Its Users Say About Them](./research-swift-ownership.md)
 - [Google TPU Through PJRT — Research Reference](./research-tpu.md)
 - [Research: Variadic Generics / Variadic Templates](./research-variadic-generics.md)
 - [Wasm Component Model Async Primitives — Research Reference](./research-wasm-cm.md)

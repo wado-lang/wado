@@ -1026,6 +1026,7 @@ kept. Whether a list's index should keep it, as a field read does, is open.
 
 ## References
 
+- [Research: Swift's Ownership Decisions, and What Its Users Say About Them](./research-swift-ownership.md)
 - [SE-0390: Noncopyable structs and enums](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0390-noncopyable-structs-and-enums.md)
 - [SE-0427: Noncopyable generics](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0427-noncopyable-generics.md)
 - [SE-0429: Partial consumption of noncopyable values](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0429-partial-consumption.md)
