@@ -1792,8 +1792,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         for (field, &type_id) in struct_decl.fields.iter().zip(field_types) {
             if let Some(default_ast) = &field.default {
-                let resolved = self.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
-                self.typecheck_value(default_ast, resolved, type_id);
+                self.in_statement(default_ast.span(), |s| {
+                    let resolved = s.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
+                    s.typecheck_value(default_ast, resolved, type_id);
+                });
             }
         }
     }

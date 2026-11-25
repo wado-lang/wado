@@ -1,0 +1,25 @@
+// A field default is a statement of its own, as a parameter default is: the
+// mismatch in one field's default once covered the slot another's left open,
+// in a module struct and a local one alike.
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn pick<T>(_o: Option<T>) -> i32 {
+    return 1;
+}
+
+struct S {
+    a: i32 = "y",
+    b: i32 = pick(none()),
+}
+
+export fn run() {
+    struct L {
+        a: i32 = "y",
+        b: i32 = pick(none()),
+    }
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `T` of function `pick`", "compile_error_count": 2}
