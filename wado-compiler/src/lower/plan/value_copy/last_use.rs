@@ -639,6 +639,36 @@ impl<'a> Analyzer<'a> {
         let Some(ShareSource { path, binds }) = self.share_sources.get(&local) else {
             return false;
         };
+        let behind_root = self.reference_locals.contains(&path.root);
+        let referent = path.through_ref || behind_root;
+        let root_given_away = inputs
+            .consumed_reach
+            .get(&path.root)
+            .is_some_and(|reach| reach.contains(&local));
+        // A referent the binding hands back by `return` stays the caller's: a
+        // binding sharing it is no fresh local, so the return conventions
+        // leave the copy to the caller.
+        let taken = if referent {
+            self.taken_unreturned.contains(&local)
+        } else {
+            self.consumed.contains_key(&local)
+        };
+        let moved_out = taken || inputs.place_move_bases.contains(&local);
+        let unwritten_elsewhere = path.root != local
+            // A root a `&mut` outlives is written wherever the holder runs it,
+            // which the scan below never sees.
+            && !self.written_through_escape.contains(&path.root)
+            // A reference to the binding kept out of this body's sight reads its
+            // storage after any write the scan below weighs.
+            && !self.ref_escaped.contains_key(&local)
+            // A share skips a copy's right-sizing: a binding whose capacity is read keeps its copy.
+            && !inputs.capacity_observed.contains(&local)
+            && !moved_out
+            && !self.is_mutated_root(local)
+            && !root_given_away;
+        if !unwritten_elsewhere {
+            return false;
+        }
         // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind of
         // the place is never itself a conflict. Every other mutation must be
         // unreachable.
@@ -652,10 +682,8 @@ impl<'a> Analyzer<'a> {
         // field ends anywhere, so only its type can rule either out. So may a
         // callee's write past a handle of this frame's own, through the
         // references the handle holds.
-        let behind_root = self.reference_locals.contains(&path.root);
-        let referent = path.through_ref || behind_root;
         let writes = self.mutations.iter().zip(&inputs.at_write).zip(&inputs.landed);
-        let share_safe = writes.into_iter().all(|((m, r), landed)| {
+        writes.into_iter().all(|((m, r), landed)| {
             let placed = !path.through_ref
                 && (!behind_root
                     || m.path.root == path.root
@@ -681,33 +709,7 @@ impl<'a> Analyzer<'a> {
                             written.beyond_handed,
                         )
                 },
-            ));
-        let root_given_away = inputs
-            .consumed_reach
-            .get(&path.root)
-            .is_some_and(|reach| reach.contains(&local));
-        // A referent the binding hands back by `return` stays the caller's: a
-        // binding sharing it is no fresh local, so the return conventions
-        // leave the copy to the caller.
-        let taken = if referent {
-            self.taken_unreturned.contains(&local)
-        } else {
-            self.consumed.contains_key(&local)
-        };
-        let moved_out = taken || inputs.place_move_bases.contains(&local);
-        path.root != local
-            // A root a `&mut` outlives is written wherever the holder runs it,
-            // which the scan above never sees.
-            && !self.written_through_escape.contains(&path.root)
-            // A reference to the binding kept out of this body's sight reads its
-            // storage after any write the scan above weighs.
-            && !self.ref_escaped.contains_key(&local)
-            // A share skips a copy's right-sizing: a binding whose capacity is read keeps its copy.
-            && !inputs.capacity_observed.contains(&local)
-            && !moved_out
-            && !self.is_mutated_root(local)
-            && !root_given_away
-            && share_safe
+            ))
     }
 
     /// The places each local's value was read out of, so a write stays
