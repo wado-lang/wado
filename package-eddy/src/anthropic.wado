@@ -4,8 +4,8 @@
 use { Method } from "wasi:http";
 use { Client } from "wasi:http";
 use { MonotonicClock } from "wasi:clocks";
-use { to_bytes, from_bytes, from_string } from "core:json";
-use { Serialize, Deserialize } from "core:serde";
+use { to_bytes, from_bytes, JsonDeserializer } from "core:json";
+use { Serialize, Deserialize, DeserializeError } from "core:serde";
 use { Value, to_value, from_value } from "core:value";
 use { HttpClient } from "core:http_client";
 
@@ -201,19 +201,30 @@ pub fn ask_json<T: Deserialize>(
     return json_object::<T>(&text);
 }
 
-/// The one JSON object in a model's reply, from its first `{` to its last `}`.
+/// The first JSON object in a model's reply that reads as a `T`. The reader
+/// finds where it ends, since the prose on either side may hold braces of its
+/// own (`a{13}`).
 pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
-    if let [Some(start), Some(end)] = [
-        text.find("{"),
-        text.rfind("}"),
-    ]
-        && start < end {
-        return match from_string::<T, String>(text.substr_bytes(start, end + 1)) {
-            Ok(v) => Ok(v),
-            Err(e) => Err(`unparsed: ${e:?}: ${*text}`),
-        };
+    let bytes = text.as_bytes();
+    let mut furthest: Option<[i32, DeserializeError]> = null;
+    for let start of 0..<bytes.len() {
+        if bytes[start] != b'{' {
+            continue;
+        }
+        let mut reader = JsonDeserializer::new(bytes.slice(start, bytes.len()));
+        match T::deserialize(&mut reader) {
+            Ok(v) => {
+                return Ok(v);
+            },
+            Err(e) => if !furthest matches { Some([_, f]) && f.offset >= e.offset } {
+                furthest = Some([start, e]);
+            },
+        }
     }
-    return Err(`unparsed: ${*text}`);
+    return match furthest {
+        Some([start, e]) => Err(`unparsed: at byte ${start}: ${e:?}: ${*text}`),
+        null => Err(`unparsed: ${*text}`),
+    };
 }
 
 /// `model`'s next turn in `messages`. With `use_tools` false the model must

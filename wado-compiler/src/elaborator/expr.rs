@@ -23,7 +23,7 @@ use super::call::{CaseSite, DefaultWalk, WalkedDefault, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
-use super::pending_selection::{PendingOp, PendingOperator};
+use super::pending_selection::{PendingOp, PendingOperator, Undecided};
 use super::synth::{ArgClass, KeyedAccess};
 use super::typecheck::{
     MeetRules, Meetings, SlotFrame, TypeCheckResult, admits_condition, check_assignable, meetings,
@@ -4816,32 +4816,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let mut resolved_fields: Vec<ResolvedField> = Vec::new();
-        let mut shaped = true;
-        for (index, field) in struct_lit.fields.iter().enumerate() {
-            let type_id = self.resolve_expr(&field.value, ctx, None);
-            let type_id = self.apply_infer_holes(type_id);
-            let open = self.tysys.type_table.borrow().infer_vars_in(type_id);
-            if !open.is_empty() {
-                self.close_uninferred(&open);
-                shaped = false;
-            }
-            resolved_fields.push(ResolvedField {
+        let resolved_fields: Vec<ResolvedField> = struct_lit
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(index, field)| ResolvedField {
                 name: field.name.clone(),
-                type_id,
+                type_id: self.resolve_expr(&field.value, ctx, None),
                 field_index: index as u32,
                 span: field.value.span(),
-            });
-        }
-        // The literal's type is the shape its fields make, and an open
-        // variable names none.
-        if !shaped {
-            return TypeTable::ERROR;
-        }
-
+            })
+            .collect();
+        // Read once every field is resolved, and every selection they decided
+        // is made: a later field answers a slot an earlier one left open.
+        self.run_obligations();
+        self.settle_pending_selections(Undecided::Wait);
         // A composition's shape is the union of its bases and explicit fields;
         // otherwise just the explicit fields.
-        let effective_fields: Vec<(String, TypeId)> = if compose_union {
+        let mut effective_fields: Vec<(String, TypeId)> = if compose_union {
             self.check_union_composition(struct_lit, &spread_base_types, &base_info);
             let base_field_lists: Vec<Vec<(String, TypeId, u32)>> = base_info
                 .iter()
@@ -4866,6 +4858,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|f| (f.name.clone(), f.type_id))
                 .collect()
         };
+        // The literal's type is the shape these fields make, and an open
+        // variable names none. A member another overrides is not among them,
+        // so the rest of the body may still settle it.
+        let mut shaped = true;
+        for (_, field_type) in &mut effective_fields {
+            *field_type = self.apply_infer_holes(*field_type);
+            shaped &= !self.closes_open_vars(*field_type);
+        }
+        if !shaped {
+            return TypeTable::ERROR;
+        }
 
         // An anonymous struct literal names no declaration: its head is the
         // shape its fields make, so two literals of one shape intern to one

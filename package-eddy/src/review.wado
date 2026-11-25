@@ -136,6 +136,26 @@ pub fn review(
     return reviewed;
 }
 
+test "a brace in the prose ahead of the answer is not taken for it" {
+    let answer = json_object::<Answer>(
+        &"The body `(?<=a[ab]{13})c` gives up.\n\n{\"findings\": [{\"file\": \"a.wado\", \"summary\": \"s\", \"detail\": \"{d}\"}]}\n",
+    ).unwrap();
+    assert answer.findings.len() == 1 && answer.findings[0].detail == "{d}";
+    assert json_object::<Answer>(&"{\"findings\": []}\n\nNote: `a{2}` is fine.").unwrap().findings.is_empty();
+}
+
+test "the answer is the first object that reads as one, whatever follows it" {
+    let answer = json_object::<Answer>(
+        &"{\"findings\": [{\"file\": \"a.wado\", \"summary\": \"s\", \"detail\": \"d\"}]}\nor else {\"findings\": []}",
+    ).unwrap();
+    assert answer.findings.len() == 1;
+}
+
+test "an unread answer reports the object that read furthest, not a brace in the prose" {
+    let error = json_object::<Answer>(&"`a{2}` and {\"findings\": [}").unwrap_err();
+    assert error.starts_with("unparsed: at byte 11: ");
+}
+
 test "a reviewer is told of the tools its workspace offers, and no others" {
     let reading = instructions(&Workspace { root: "src" });
     assert reading.contains("Read, Grep and Glob");

@@ -1213,7 +1213,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report `vars` as never answered now, then pin each to the error type so
-    /// nothing later settles them.
+    /// nothing later settles them. A class carrying no blame closes unreported,
+    /// as the end of the body closes it: what left it open reports there, a
+    /// selection still waiting among them.
     pub(super) fn close_uninferred(&mut self, vars: &[TypeId]) {
         self.absorb_reports();
         let vars: Vec<TypeId> = vars
@@ -1227,15 +1229,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         self.blame_bare_written_holes(|root| classes.contains(&root));
         let blames = self.class_blames(&classes);
-        assert_eq!(
-            blames.len(),
-            classes.len(),
-            "an open class carries the blame that reports it"
-        );
         self.report_uninferred(blames);
         for var in vars {
             self.close_infer_var(var);
         }
+    }
+
+    /// [`Self::close_uninferred`] on the variables still open in `ty`, and
+    /// whether there was one.
+    pub(super) fn closes_open_vars(&mut self, ty: TypeId) -> bool {
+        let open = self.tysys.type_table.borrow().infer_vars_in(ty);
+        self.close_uninferred(&open);
+        !open.is_empty()
     }
 
     /// Blame each open `_` the source wrote in a class `within` takes and no
