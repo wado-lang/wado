@@ -25,3 +25,8 @@ printer. The public API takes and returns values only, so `render` and
 `tidy` job runs it. A change to what `format` prints therefore reformats the
 repository: run `mise run format-md` and commit the result with the change.
 `format(format(x)) == format(x)` must hold over that corpus.
+
+`format` keeps meaning: `render(format(x)).html == render(x).html` for every
+input. Every test of `format` or the printer asserts it, and the CLI leaves a
+file that would break it unwritten and fails. A normalization the renderer
+cannot see through is a bug in one of the two.

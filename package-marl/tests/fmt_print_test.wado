@@ -1,9 +1,13 @@
 use { print_document } from "../src/fmt_print.wado";
 use { parse_document } from "../src/fmt_parse_block.wado";
 use { Node } from "../src/fmt_ast.wado";
+use { render } from "../src/fmt_html.wado";
 
 fn roundtrip<S: AsStrSlice>(source: S) -> String {
-    return print_document(&parse_document(source));
+    let printed = print_document(&parse_document(source));
+    let source = source.to_string();
+    assert render(printed).html == render(source).html, "printing must keep what the source renders to";
+    return printed;
 }
 
 test "print_document prints a paragraph with a trailing newline" {
