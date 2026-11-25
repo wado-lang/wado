@@ -2,7 +2,16 @@
 //! 1:1 to Wasm instructions while staying readable: locals and types are named
 //! rather than indexed, value types keep their Wado distinctions instead of
 //! collapsing to `i32`, control flow is a tree rather than a flat sequence, value
-//! copies are explicit, and TIR metadata survives for unparse. See WEP 2026-02-14.
+//! copies are explicit, and TIR metadata survives for unparse.
+//!
+//! An instruction's operands are its children, not stack values, so a body
+//! reads as an expression and flattens to the stack machine by a post-order
+//! walk. WIR is not a control-flow graph: it keeps Wasm's structured `block`,
+//! `loop` and `if`. Nor does it abstract over Wasm versions: it targets GC and
+//! the Component Model as they are.
+//!
+//! It exists so that deciding what to emit and encoding it are two steps, with
+//! a form between them that `wado dump` can print.
 
 use std::fmt;
 use std::hash::{Hash, Hasher};

@@ -221,9 +221,9 @@ All types are imported from `"wasi:http"`.
 ### CM Async Primitives
 
 `Future<T>`, `FutureWritable<T>`, `Stream<T>`, and `StreamWritable<T>` are Component Model
-primitives used throughout the HTTP API. Their resource declarations, canonical attributes,
-and error handling semantics are defined in
-[WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md).
+primitives used throughout the HTTP API. They are resources declared in
+`core:prelude/async.wado`; see
+[WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md#canonical-operations-are-declared-on-the-resource).
 
 ## E2E Test Fixtures
 
@@ -282,7 +282,6 @@ Stream body fixtures are in `wado-compiler/tests/fixtures/stream-http-*.wado`:
 - WASI HTTP WIT: `vendor/wasmtime/crates/wasi-http/src/p3/wit/deps/http.wit`
 - Wado HTTP types: `wado-compiler/lib/wasi/http.wado`
 - [WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md)
-- [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md)
 - [WEP: Target WASI P3 Only](wep-2026-01-11-wasi-p3-only.md)
 - WASI HTTP types: `wasi:http/types@0.3.0-rc-2026-01-06`
 - WASI HTTP handler: `wasi:http/handler@0.3.0-rc-2026-01-06`

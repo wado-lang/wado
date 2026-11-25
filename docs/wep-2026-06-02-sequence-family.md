@@ -155,7 +155,7 @@ Methods take the same axis: `iter_value()`, `iter_ref()`, `iter_ref_mut()`, and
 semantics diverge — a `&T` into an array element is a snapshot copy that cannot
 write back, and `&mut T` needs `T: RefMut` — so Rust's names would mislead,
 which
-[Checked/Unchecked Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
+[String and List API Conventions](./wep-2026-03-29-redesign-string-array-api.md#naming)
 forbids. `IntoIterator` / `into_iter` are exempt: they are the `for-of`
 desugaring hook, and `for-of` marks the axis in syntax already.
 
