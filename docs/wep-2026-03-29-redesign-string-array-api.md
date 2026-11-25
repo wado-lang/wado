@@ -49,7 +49,7 @@ clamp a caller's bug to 0.
 ### Preconditions
 
 A method states what it requires as a `contract`, and a call marked `unchecked`
-skips the check. No method name carries `_unchecked`.
+skips the check. No public method name carries `_unchecked`.
 [Contract Checks](./wep-2026-10-06-contract-checks.md) holds the mechanism.
 
 A write that leaves a `String` invalid UTF-8 between two steps has no public
@@ -79,11 +79,11 @@ Rust's `contains`, `find` and `split` take a `Pattern`, which a `&str`, a
 | `binary_search(&x)`                 | `TreeMap` / `TreeSet`                   |
 | `dedup()`, `dedup_by(f)`            | `TreeSet`                               |
 | `retain(pred)`                      | `.iter().filter().collect()`            |
-| `split_at(i)`, `split_off(i)`       | `slice` and `truncate`                  |
+| `split_at(i)`, `split_off(i)`       | a `Slice` of each part, and `truncate`  |
 | `drain(..)`                         | an iterator                             |
 | `rotate_left(n)`, `rotate_right(n)` | niche                                   |
 | `resize(n, val)`                    | `truncate` and `extend`                 |
-| `as_slice()`, `as_mut_slice()`      | no borrowing distinction                |
+| `as_mut_slice()`                    | no borrowing distinction                |
 | `into_boxed_slice()`, `leak()`      | no ownership model                      |
 
 `String`:
