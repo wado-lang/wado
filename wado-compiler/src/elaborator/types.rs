@@ -4519,9 +4519,7 @@ impl TraitMethodMatch {
     pub(super) fn answers_reference_receiver(&self) -> bool {
         !self.is_blanket_ref_impl || self.method_info.self_kind == ast::SelfKind::Value
     }
-}
 
-impl TraitMethodMatch {
     /// The owner a call on `receiver_base` dispatches with: a newtype inherits
     /// a reference impl the way it inherits a value one, so its signature
     /// re-types to the receiver.

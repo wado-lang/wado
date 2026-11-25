@@ -3617,11 +3617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         // A reference no impl is written for answers through its referent,
         // whose registration a projection off the reference reads.
-        let referent = self
-            .tysys
-            .type_table
-            .borrow()
-            .ref_pointee(concrete_type_id);
+        let referent = self.tysys.type_table.borrow().ref_pointee(concrete_type_id);
         if let Some(referent) = referent {
             return self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
         }

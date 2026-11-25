@@ -3102,8 +3102,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // WEP 2026-05-26: record the iterator-path
         // dispatch decision so reify can re-emit the synthetic
         // `into_iter()` / `next()` calls without re-dispatching. Only
-        // record when both dispatches succeeded (the trait-check error
-        // path above bailed without resolving them).
+        // record when every dispatch the loop makes succeeded (the
+        // trait-check error path above bailed without resolving them).
         if let Some(next) = next_dispatch
             && (walks_operand || start.is_some())
         {

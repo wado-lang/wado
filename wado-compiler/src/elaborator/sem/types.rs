@@ -1232,8 +1232,8 @@ pub(crate) fn impl_self_layers(
 #[derive(Clone)]
 pub(crate) struct ForOfIteratorInfo {
     /// The call that turns the operand into what the loop walks. `None` where
-    /// the operand is a reference that is an iterator, which the loop walks as
-    /// it stands.
+    /// the loop walks the operand as it stands: an iterator that is a
+    /// reference, or of a type its instance settles.
     pub(crate) start: Option<ForOfStart>,
     /// The `next` declaration dispatch chose. The loop spells no method name,
     /// so nothing else names it.

@@ -2971,7 +2971,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
 
         // Detect blanket ref impls: `impl<T: Bound> Trait for &T` where the inner type
-        // is a type parameter. These should NOT override base-type methods.
+        // is a type parameter.
         let is_blanket_ref_impl = match &header.ty {
             Type::Reference(inner) | Type::MutReference(inner) => {
                 if let Type::Named(named) = inner.as_ref() {
