@@ -31,6 +31,10 @@ jobs:
       || (github.event_name == 'status' && github.event.context == 'CodeRabbit'
       && github.event.description == 'Review rate limited' && github.event.sender.login == 'coderabbitai[bot]')
     runs-on: ubuntu-latest
+    # A rate-limited status reads the head's `Eddy` status, and the gate that
+    # passes writes it, so two for one head go one at a time.
+    concurrency:
+      group: eddy-gate-${{ github.event_name == 'status' && github.event.sha || github.run_id }}
     permissions:
       actions: read
       contents: read
@@ -59,40 +63,51 @@ jobs:
           RATE_LIMITED_SHA: ${{ github.event_name == 'status' && github.event.sha || '' }}
         run: |
           set -euo pipefail
-          permission_of() {
-            gh api "repos/$REPO/collaborators/$1/permission" --jq .permission
+          # Nobody asked for a rate-limited head's review, so the pull request's
+          # author stands as the one who did. A status that calls for no review
+          # is passed over, not failed.
+          author=
+          pass_over_author() {
+            echo "::notice::#$PR is $author's, so a repository admin asks for its review"
+            exit 0
           }
           if [ -n "$RATE_LIMITED_SHA" ]; then
-            # Nobody asked, so the pull request's author stands as the one who
-            # did. A status that calls for no review is passed over, not failed.
             sha="$RATE_LIMITED_SHA"
-            read -r PR REQUESTER <<< "$(gh api "repos/$REPO/commits/$sha/pulls" \
-              --jq ".[] | select(.state == \"open\" and .head.sha == \"$sha\") | \"\(.number) \(.user.login)\"" | head -n 1)"
+            pull="$(gh api "repos/$REPO/commits/$sha/pulls" \
+              --jq ".[] | select(.state == \"open\" and .head.sha == \"$sha\") | \"\(.number) \(.user.login) \(.user.type)\"")"
+            read -r PR author type <<< "$pull"
             if [ -z "$PR" ]; then
               echo "::notice::${sha:0:9} is the head of no open pull request"
               exit 0
             fi
-            if [ "$(permission_of "$REQUESTER")" != admin ]; then
-              echo "::notice::#$PR is not a repository admin's, so one of them asks for its review"
-              exit 0
+            # A bot has no permission to look up.
+            if [ "$type" != User ]; then
+              pass_over_author
             fi
-            # A re-run is an admin asking again.
-            if [ -z "$RERUNNER" ] && [ -n "$(gh api "repos/$REPO/commits/$sha/statuses" --jq '.[] | select(.context == "Eddy") | .id')" ]; then
-              echo "::notice::Eddy has already taken ${sha:0:9}"
-              exit 0
-            fi
+            REQUESTER="$author"
           else
             sha="$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)"
           fi
           # A review builds and runs the pull request's code, and is paid for,
           # so only an owner starts one.
           for actor in $REQUESTER $RERUNNER; do
-            permission="$(permission_of "$actor")"
+            permission="$(gh api "repos/$REPO/collaborators/$actor/permission" --jq .permission)"
             if [ "$permission" != admin ]; then
+              if [ "$actor" = "$author" ]; then
+                pass_over_author
+              fi
               echo "::error::Eddy is started by a repository admin; $actor has $permission"
               exit 1
             fi
           done
+          # A re-run is an admin asking again.
+          if [ -n "$author" ] && [ -z "$RERUNNER" ]; then
+            taken="$(gh api "repos/$REPO/commits/$sha/status" --jq '.statuses[] | select(.context == "Eddy") | .state')"
+            if [ -n "$taken" ]; then
+              echo "::notice::Eddy has already taken ${sha:0:9}"
+              exit 0
+            fi
+          fi
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [ -n "$COMMENT_ID" ]; then
@@ -241,16 +256,6 @@ jobs:
       contents: write
       statuses: write
     steps:
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ needs.gate.outputs.sha }}
-          STATE: ${{ needs.review.result == 'success' && 'success' || 'failure' }}
-          DESCRIPTION: ${{ needs.review.result == 'success' && 'Reviewed' || 'The review did not finish' }}
-          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          gh api -X POST "repos/$REPO/statuses/$SHA" \
-            -f context=Eddy -f state="$STATE" -f description="$DESCRIPTION" -f target_url="$RUN" > /dev/null
       - id: token
         uses: actions/create-github-app-token@v3
         with:
@@ -261,7 +266,8 @@ jobs:
         with:
           name: eddy-${{ needs.gate.outputs.pr }}-${{ needs.gate.outputs.sha }}
           path: scratchpad
-      - env:
+      - id: comment
+        env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           REPO: ${{ github.repository }}
           PR: ${{ needs.gate.outputs.pr }}
@@ -293,6 +299,23 @@ jobs:
             printf '\n[The run](%s)\n' "$RUN" >> "$body"
           fi
           gh pr comment "$PR" --repo "$REPO" --body-file "$body"
+      - if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.gate.outputs.sha }}
+          DESCRIPTION: >-
+            ${{ needs.review.result != 'success' && 'The review did not finish'
+            || steps.comment.outcome != 'success' && 'The review was not posted'
+            || 'Reviewed' }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          state=failure
+          if [ "$DESCRIPTION" = Reviewed ]; then
+            state=success
+          fi
+          gh api -X POST "repos/$REPO/statuses/$SHA" \
+            -f context=Eddy -f state="$state" -f description="$DESCRIPTION" -f target_url="$RUN" > /dev/null
       - env:
           SHA: ${{ needs.gate.outputs.sha }}
           TOKEN: ${{ github.token }}
