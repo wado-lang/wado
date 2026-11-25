@@ -231,7 +231,7 @@ pub(super) fn version_loops(
                 body,
                 locals,
                 address_taken_locals,
-                &type_table,
+                type_table,
                 &first_param_types,
                 &call_immutability,
             );
@@ -252,7 +252,7 @@ pub(super) fn version_loops(
                 if let Some(plan) = analyze_loop(
                     &engine,
                     &binds,
-                    &type_table,
+                    type_table,
                     &frame,
                     parent,
                     loop_stmt,
@@ -284,14 +284,14 @@ pub(super) fn version_loops(
 
             let fast_arms: Vec<FastArm> = plans
                 .iter()
-                .map(|plan| apply_version(&mut engine, &binds, &type_table, plan))
+                .map(|plan| apply_version(&mut engine, &binds, type_table, plan))
                 .collect();
 
             // Sweep the deleted checks' residue: the `if false { panic }` shells
             // and any now-write-only condition temps. The proofs are taken after
             // the splice, so the fast arm's cloned calls carry theirs.
             let proofs =
-                bounds::analyze(engine.body, &type_table, |fid| builtins[fid.index()]).proofs;
+                bounds::analyze(engine.body, type_table, |fid| builtins[fid.index()]).proofs;
             let calls = CallFacts {
                 effects: &summaries.effects,
                 proofs: &proofs,
