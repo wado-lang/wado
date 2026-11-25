@@ -1,0 +1,32 @@
+// A closure value captured by a closure an adaptor holds turns direct, and
+// splices, one level per optimizer round: the round's `inline` takes the
+// `$call` its pre-inline peephole devirtualized. Ten levels fit the rounds the
+// loop runs, so `nest` keeps no indirect call.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn nest(n: i32) -> bool {
+    let f0: fn(i32) -> bool = |x: i32| x == 9;
+    let f1: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f0(y + x));
+    let f2: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f1(y + x));
+    let f3: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f2(y + x));
+    let f4: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f3(y + x));
+    let f5: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f4(y + x));
+    let f6: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f5(y + x));
+    let f7: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f6(y + x));
+    let f8: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f7(y + x));
+    let f9: fn(i32) -> bool = |x: i32| (0..<n).any(|y: i32| f8(y + x));
+    return (0..<n).any(|y: i32| f9(y));
+}
+
+export fn run() with Stdout {
+    println(`${nest(builtin::black_box(2))}`);
+}
+
+__DATA__
+{
+    "stdout": "true\n",
+    "wir_scope": "closure_devirt_nested_adaptors_converge.wado/nest",
+    "wir_pass": {"O2": ["nir/peephole/closure_devirt"]},
+    "wir_not_expect:O2": ["call_ref"]
+}
