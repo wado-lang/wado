@@ -506,9 +506,11 @@ fn print_reference_link(link: &ReferenceLinkNode, out: &mut String) {
     out.push(']');
 }
 
+/// Prints the label as written, not the normalized children: the label is what
+/// matches the definition, so `[*x*]` printed as `[_x_]` would link nowhere.
 fn print_shortcut_link(link: &ReferenceLinkNode, out: &mut String) {
     out.push('[');
-    print_inline_seq(&link.children, out);
+    out.push_str(&link.label);
     out.push(']');
 }
 
