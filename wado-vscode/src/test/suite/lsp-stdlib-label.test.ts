@@ -122,7 +122,7 @@ suite('Wado LSP (stdlib editor label)', () => {
         const tab = await waitForTab(uri, 90_000);
         assert.strictEqual(
             tab.label,
-            'types.wado',
+            'option.wado',
             `Expected the submodule tab label to be the basename, got: ${tab.label}`,
         );
     });
