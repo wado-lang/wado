@@ -4769,7 +4769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|spread| self.resolve_expr(&spread.expr, ctx, None))
             .collect();
-        let mut base_info: Vec<BaseSpreadInfo> = spread_base_types
+        let base_info: Vec<BaseSpreadInfo> = spread_base_types
             .iter()
             .map(|&t| {
                 let is_map = self.is_key_value_literal_target(t);
@@ -4816,7 +4816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let mut resolved_fields: Vec<ResolvedField> = struct_lit
+        let resolved_fields: Vec<ResolvedField> = struct_lit
             .fields
             .iter()
             .enumerate()
@@ -4831,27 +4831,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // is made: a later field answers a slot an earlier one left open.
         self.run_obligations();
         self.settle_pending_selections(Undecided::Wait);
-        let mut shaped = true;
-        for field in &mut resolved_fields {
-            field.type_id = self.apply_infer_holes(field.type_id);
-            shaped &= !self.closes_open_vars(field.type_id);
-        }
-        // A base's fields are part of the shape as the written ones are.
-        for (_, fields) in &mut base_info {
-            for (_, field_type, ..) in fields.iter_mut().flat_map(|(_, fields)| fields) {
-                *field_type = self.apply_infer_holes(*field_type);
-                shaped &= !self.closes_open_vars(*field_type);
-            }
-        }
-        // The literal's type is the shape its fields make, and an open
-        // variable names none.
-        if !shaped {
-            return TypeTable::ERROR;
-        }
-
         // A composition's shape is the union of its bases and explicit fields;
         // otherwise just the explicit fields.
-        let effective_fields: Vec<(String, TypeId)> = if compose_union {
+        let mut effective_fields: Vec<(String, TypeId)> = if compose_union {
             self.check_union_composition(struct_lit, &spread_base_types, &base_info);
             let base_field_lists: Vec<Vec<(String, TypeId, u32)>> = base_info
                 .iter()
@@ -4876,6 +4858,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|f| (f.name.clone(), f.type_id))
                 .collect()
         };
+        // The literal's type is the shape these fields make, and an open
+        // variable names none. A member another overrides is not among them,
+        // so the rest of the body may still settle it.
+        let mut shaped = true;
+        for (_, field_type) in &mut effective_fields {
+            *field_type = self.apply_infer_holes(*field_type);
+            shaped &= !self.closes_open_vars(*field_type);
+        }
+        if !shaped {
+            return TypeTable::ERROR;
+        }
 
         // An anonymous struct literal names no declaration: its head is the
         // shape its fields make, so two literals of one shape intern to one

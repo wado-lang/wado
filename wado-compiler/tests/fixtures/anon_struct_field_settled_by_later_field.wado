@@ -46,6 +46,15 @@ fn empty<T>() -> Bx<T> {
     return Bx { v: null };
 }
 
+struct Bn<T> {
+    v: Option<T>,
+    n: i32,
+}
+
+fn partly<T>() -> Bn<T> {
+    return Bn { v: null, n: 3 };
+}
+
 // The operator's impl is chosen once `c` settles `x`, and its `Output` is the
 // type of `b`. The field once reached the shape still open, with nothing to
 // report it.
@@ -63,6 +72,15 @@ test "a field settles a spread base" {
     let s = { ..b, c: takes_i32(b.v) };
     assert s.v matches { null };
     assert s.c == 1;
+}
+
+// The base's `v` never reaches the shape, so the literal leaves it open.
+test "a later statement settles a base field the literal overrides" {
+    let b = partly();
+    let s = { ..b, v: 42 };
+    assert takes_i32(b.v) == 1;
+    assert s.v == 42;
+    assert s.n == 3;
 }
 
 test "a later field settles an earlier one" {
