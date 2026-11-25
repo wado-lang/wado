@@ -1,16 +1,28 @@
 // A generic body is checked at its definition: a by-value `self` of an affine
 // parameter cannot be reached through a reference to it.
 
-fn first_of<affine I: Iterator>(it: &mut I) -> Option<I::Item> with _ {
-    let mut head = it.take(1);
-    return head.next();
+affine trait Finish with () {
+    fn finish(self) -> i32;
+}
+
+affine struct Job { id: i32 }
+
+impl Drop for Job {
+    fn drop(self) {}
+}
+
+impl Finish for Job {
+    fn finish(self) -> i32 { return self.id; }
+}
+
+fn finish_through<affine T: Finish>(t: &mut T) -> i32 {
+    return t.finish();
 }
 
 export fn run() {
-    let xs: List<i32> = [1, 2];
-    let mut it = xs.iter_value();
-    let _ = first_of(&mut it);
+    let mut j = Job { id: 7 };
+    let _ = finish_through(&mut j);
 }
 
 __DATA__
-{"compile_error": ":5:20: analysis error: cannot move affine type `I` out of a reference"}
+{"compile_error": ":19:12: analysis error: cannot move affine type `T` out of a reference"}
