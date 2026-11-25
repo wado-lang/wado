@@ -1591,8 +1591,8 @@ impl MoveWalker<'_, '_> {
 
     /// Refuse a by-value `self` that `call` reads out of the reference its
     /// receiver is: a move of an affine referent, or a copy of any other out
-    /// of a `&mut`. A copy out of a `&` stands: nothing can tell it from the
-    /// referent.
+    /// past a `&mut` at any depth. A copy out of `&`s alone stands: nothing
+    /// can tell it from the referent.
     fn refuse_self_out_of_reference(&mut self, call: &ast::MethodCallExpr) {
         if !self.sem().method_call_reads_self_out_of_reference(call.id) {
             return;
@@ -1607,7 +1607,7 @@ impl MoveWalker<'_, '_> {
             MoveError::MoveOutOfReference {
                 type_name: types.name(referent),
             }
-        } else if types.is_mut_ref(receiver) {
+        } else if types.reaches_through_mut_ref(receiver) {
             MoveError::SelfCopiedOutOfMutReference {
                 method: call.method.clone(),
                 receiver: types.name(receiver),

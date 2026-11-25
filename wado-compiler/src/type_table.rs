@@ -3173,6 +3173,18 @@ impl TypeTable {
         matches!(self.get(type_id), ResolvedType::MutRef(_))
     }
 
+    /// Whether a `&mut` is among the references holding `type_id`'s pointee:
+    /// `&&mut X` is, `&&X` is not.
+    pub fn reaches_through_mut_ref(&self, mut type_id: TypeId) -> bool {
+        loop {
+            match self.get(type_id) {
+                ResolvedType::MutRef(_) => return true,
+                ResolvedType::Ref(inner) => type_id = *inner,
+                _ => return false,
+            }
+        }
+    }
+
     /// The type the reference `type_id` points at.
     pub fn ref_pointee(&self, type_id: TypeId) -> Option<TypeId> {
         match self.get(type_id) {

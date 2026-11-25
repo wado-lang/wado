@@ -1,0 +1,41 @@
+// The lint reads whether every value of the receiver is copyable, whatever
+// kind of type it is: a newtype, a flags type, a primitive and one instance of
+// a generic type are each copied at every call, as a struct is.
+
+struct Point { x: i32, y: i32 }
+
+type Location = Point;
+
+impl Location {
+    fn first(self) -> i32 { return self.x; }
+}
+
+flags Perms { Read, Write }
+
+impl Perms {
+    fn bits(self) -> u32 { return self as u32; }
+}
+
+type Meters = f64;
+
+impl Meters {
+    fn doubled(self) -> f64 { return (self as f64) * 2.0; }
+}
+
+struct Pair<T> { a: T, b: T }
+
+impl Pair<i32> {
+    fn sum(self) -> i32 { return self.a + self.b; }
+}
+
+export fn run() {
+    let loc = Point { x: 1, y: 2 } as Location;
+    assert loc.first() == 1;
+    assert (Perms::Read | Perms::Write).bits() == 3;
+    let m: Meters = 1.5;
+    assert m.doubled() == 3.0;
+    assert Pair { a: 1, b: 2 }.sum() == 3;
+}
+
+__DATA__
+{"warnings_contains":["`self` by value copies `Location` at every call", "`self` by value copies `Perms` at every call", "`self` by value copies `Meters` at every call", "`self` by value copies `Pair<i32>` at every call"]}

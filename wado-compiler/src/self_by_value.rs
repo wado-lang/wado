@@ -6,11 +6,11 @@ use crate::Lints;
 use crate::ast::{Item, SelfKind, attrs_allow, inner_attrs_allow, lint};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::semantics::Semantics;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::TypeId;
 
 /// Source-level `SelfByValue` warnings: every inherent method taking `self` by
-/// value on a struct, variant or enum that no instance makes affine. A generic
-/// type and a trait method are left alone, since an affine instance moves
+/// value on a type no instance makes affine. A receiver holding a type
+/// parameter and a trait method are left alone, since an affine instance moves
 /// through the same declaration.
 pub fn self_by_value_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
@@ -61,15 +61,8 @@ pub fn self_by_value_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnosti
     out
 }
 
-/// Whether every value of `receiver` is copyable: a struct, variant or enum
-/// with no type argument that could be affine, and no affine member.
+/// Whether every value of `receiver` is copyable: it holds no affine value,
+/// and no type parameter an affine argument could fill.
 fn always_copied(sem: &Semantics, receiver: TypeId) -> bool {
-    let has_no_type_args = match sem.types.get(receiver) {
-        ResolvedType::Enum { .. } => true,
-        ResolvedType::Struct { type_args, .. } | ResolvedType::Variant { type_args, .. } => {
-            type_args.is_empty()
-        }
-        _ => false,
-    };
-    has_no_type_args && !sem.is_affine(receiver, &[])
+    !sem.types.contains_type_param(receiver) && !sem.is_affine(receiver, &[])
 }

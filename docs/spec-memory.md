@@ -327,7 +327,7 @@ test "the receiver is copied out of a shared reference" {
 
 Where a trait is implemented for the reference itself, the method called on a reference is that impl's, and its `self` is the reference. A blanket impl over a reference (`impl<T: Bound> Tr for &mut T`) answers a by-value `self` this way and leaves `&self` and `&mut self` methods to the referent.
 
-Otherwise a by-value `self` is not called on a `&mut`: the call would act on a copy, where `&mut` says the caller meant the value itself. That is a compile error (`RECEIVER_MISMATCH`), and a written `*` asks for the copy.
+Otherwise a by-value `self` is not called on a `&mut`, nor on a reference to one at any depth (`&&mut T`): the call would act on a copy, where `&mut` says the caller meant the value itself. That is a compile error (`RECEIVER_MISMATCH`), and a written `*` asks for the copy.
 
 <!-- {"fixture":"self_by_value_through_dereference.wado"} -->
 
