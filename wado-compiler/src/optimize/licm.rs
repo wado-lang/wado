@@ -1991,7 +1991,9 @@ fn collect_modified_vars_in_expr(
 // Immutable-reference binding collection
 // ---------------------------------------------------------------------------
 
-/// An in-loop immutable reference binding `let ref_var: &T = &source_var`.
+/// An in-loop binding a field read sees through to its source: the immutable
+/// reference `let ref_var: &T = &source_var`, or the GC alias
+/// `let ref_var = source_var`, which a hoist out of a nested loop leaves behind.
 /// Valid for look-through only when `ref_var` provably holds `&source_var` at
 /// every in-loop use: bound by exactly one in-loop `let` (`let_count == 1`;
 /// any second binding could retarget it) and never reassigned or
@@ -2031,8 +2033,8 @@ fn collect_licm_ref_bindings(
     bindings: &mut IndexMap<u32, LicmRefBinding>,
     let_counts: &mut IndexMap<u32, u32>,
 ) {
-    // `let x: &T = &y` (immutable ref to a local) records `x -> y`; every
-    // `let` counts toward its local's binding total.
+    // `let x: &T = &y` (immutable ref to a local) and the GC alias `let x = y`
+    // record `x -> y`; every `let` counts toward its local's binding total.
     if let NodeRef::Stmt(s) = node
         && let StmtKind::Let {
             local_index,
@@ -2042,13 +2044,17 @@ fn collect_licm_ref_bindings(
         } = &body.stmts[s].kind
     {
         *let_counts.entry(*local_index).or_insert(0) += 1;
-        if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
-            && let Some(ve) = value.and_then(Operand::as_expr)
-            && let ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                expr: source,
-            } = &body.exprs[ve].kind
-            && let Some(se) = source.as_expr()
+        let source = value.and_then(Operand::as_expr).and_then(|ve| {
+            match &body.exprs[ve].kind {
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr: source,
+                } if matches!(type_table.get(*type_id), ResolvedType::Ref(_)) => source.as_expr(),
+                ExprKind::Local { .. } if is_gc_heap_type(*type_id, type_table) => Some(ve),
+                _ => None,
+            }
+        });
+        if let Some(se) = source
             && let ExprKind::Local {
                 index: source_idx,
                 name: source_name,
@@ -2140,7 +2146,8 @@ fn find_hoist_candidates(
                 });
             }
         }
-        // Case 2: access through an immutable reference to a loop-invariant local.
+        // Case 2: access through an immutable reference or a GC alias to a
+        // loop-invariant local.
         else if let Some(ref_binding) = ref_bindings.get(index)
             && modified_vars.is_field_hoistable(ref_binding.source_index, field_index)
             && seen.insert((ref_binding.source_index, field_index))
