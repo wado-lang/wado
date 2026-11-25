@@ -279,7 +279,7 @@ fn "sroa_param_snapshot_interior_alias.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_290: i32;
+    let start_300: i32;
     $sroa_hh_data_114 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     out_1 = struct.new "core:prelude/list.wado//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     "sroa_param_snapshot_interior_alias.wado/probe"($sroa_hh_data_114, struct.new "sroa_param_snapshot_interior_alias.wado//Holder" { data: $sroa_hh_data_114 }, out_1);
@@ -295,22 +295,22 @@ fn "sroa_param_snapshot_interior_alias.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_81);
         }
-        start_290 = out_18.used;
+        start_300 = out_18.used;
         out_18.used = is_negative_81;
-        builtin::array_set_u8(out_18.repr, start_290, 45);
+        builtin::array_set_u8(out_18.repr, start_300, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_81(out_18.used + self_24) > builtin::array_len(out_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_81);
     }
-    start_290 = out_18.used;
+    start_300 = out_18.used;
     out_18.used = is_negative_81;
     arr = out_18.repr;
-    self_24 = start_290 + self_24;
+    self_24 = start_300 + self_24;
     b16: block {
         l17: loop {
-            break_if b16 (self_24 - start_290) < 2;
+            break_if b16 (self_24 - start_300) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_81(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, self_24 - 1, (48 + is_negative_81) - (tens * 10));
@@ -320,8 +320,8 @@ fn "sroa_param_snapshot_interior_alias.wado/run"() with Stdout {
             continue l17;
         };
     };
-    if self_24 > start_290 {
-        builtin::array_set_u8(arr, start_290, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if self_24 > start_300 {
+        builtin::array_set_u8(arr, start_300, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
@@ -329,14 +329,14 @@ fn "sroa_param_snapshot_interior_alias.wado/run"() with Stdout {
     self_24 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_81 = builtin::i32_wrap_i64(x >> 32_i64);
     self_24 = "sroa_param_snapshot_interior_alias.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_24);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_290(out_18.used) + 1)), 0, out_18.repr, 0, start_290);
-    builtin::array_set_u8(arr, start_290, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_300(out_18.used) + 1)), 0, out_18.repr, 0, start_300);
+    builtin::array_set_u8(arr, start_300, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_290 = start_290 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_81, arr, 0, start_290);
+        start_300 = start_300 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_81, arr, 0, start_300);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

@@ -170,6 +170,31 @@ impl Executor {
         items.iter().for_each(f);
     }
 
+    /// `f` on each item in place, for a visit that rewrites only its own item.
+    pub fn for_each_mut<T: Send>(&self, items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = self.pool_for(items.len()) {
+            let f = carrying_skips(f);
+            pool.install(|| items.par_iter_mut().for_each(f));
+            return;
+        }
+        items.iter_mut().for_each(f);
+    }
+
+    /// [`Self::map`] of a visit that rewrites only its own item, in item order.
+    pub fn map_mut<T: Send, R: Send>(
+        &self,
+        items: &mut [T],
+        f: impl Fn(&mut T) -> R + Sync + Send,
+    ) -> Vec<R> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = self.pool_for(items.len()) {
+            let f = carrying_skips(f);
+            return pool.install(|| items.par_iter_mut().map(f).collect());
+        }
+        items.iter_mut().map(f).collect()
+    }
+
     /// [`Self::for_each`] over the indices below `len`.
     pub fn for_each_index(&self, len: usize, f: impl Fn(usize) + Sync + Send) {
         #[cfg(not(target_arch = "wasm32"))]
@@ -215,7 +240,7 @@ mod tests {
     fn every_visit_skips_what_its_caller_skips() {
         let _scope = SkipScope::enter(&["x".to_string()]);
         let executor = Executor::new(4);
-        let items: Vec<u32> = (0..64).collect();
+        let mut items: Vec<u32> = (0..64).collect();
         let skips = |_: &u32| !decides("x");
         let indexed = |_: usize| !decides("x");
         assert!(executor.map(&items, skips).into_iter().all(|s| s));
@@ -241,6 +266,13 @@ mod tests {
         };
         executor.for_each(&items, |i| count(skips(i)));
         executor.for_each_index(64, |i| count(indexed(i)));
+        executor.for_each_mut(&mut items, |i| count(skips(i)));
+        assert!(
+            executor
+                .map_mut(&mut items, |i| skips(i))
+                .into_iter()
+                .all(|s| s)
+        );
         assert_eq!(unskipped.into_inner(), 0);
     }
 }

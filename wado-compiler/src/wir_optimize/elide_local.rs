@@ -8,6 +8,7 @@
 //! since eliding one write can strand another.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::parallel::Executor;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
@@ -15,9 +16,9 @@ use super::liveness::dead_stores;
 use super::nullability::Nullability;
 use super::util::{count_local_gets, is_side_effect_free, may_trap_in};
 
-pub(super) fn elide_dead_stores(module: &mut WirPackage) {
+pub(super) fn elide_dead_stores(module: &mut WirPackage, exec: &Executor) {
     let types = &module.types;
-    for func in &mut module.functions {
+    exec.for_each_mut(&mut module.functions, |func| {
         // Declared locals are stable across the sweep (elision only nops stores;
         // `DeclareLocal`s go later in `cleanup`), so read the SSoT once.
         let locals = func.typed_locals(types);
@@ -25,7 +26,7 @@ pub(super) fn elide_dead_stores(module: &mut WirPackage) {
             let null = Nullability::new(&locals);
             while elide_dead_stores_in_body(body, &null) {}
         }
-    }
+    });
 }
 
 fn elide_dead_stores_in_body(body: &mut [WirInstr], null: &Nullability) -> bool {
@@ -200,7 +201,7 @@ mod tests {
     use super::*;
     use crate::wir::{WirFuncId, WirLocals, WirType, WirTypeId};
     use std::assert_matches;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     fn lget(name: &str) -> WirInstr {
         WirInstr::LocalGet {
@@ -227,7 +228,7 @@ mod tests {
     }
     fn call() -> WirInstr {
         WirInstr::Call {
-            func_id: WirFuncId::new(0, Rc::from("f")),
+            func_id: WirFuncId::new(0, Arc::from("f")),
             args: vec![],
         }
     }
@@ -282,7 +283,7 @@ mod tests {
     #[test]
     fn dropped_struct_new_keeps_only_its_operands_effects() {
         let mut body = vec![WirInstr::Drop(Box::new(WirInstr::StructNew {
-            type_id: WirTypeId::new(0, Rc::from("pair")),
+            type_id: WirTypeId::new(0, Arc::from("pair")),
             fields: vec![WirInstr::I32WrapI64(Box::new(call())), lget("x")],
         }))];
         assert!(elide_dead_stores_in_body(

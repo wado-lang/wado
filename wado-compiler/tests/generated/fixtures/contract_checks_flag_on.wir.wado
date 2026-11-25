@@ -326,9 +326,9 @@ fn "contract_checks_flag_on.wado/run"() with Stdout {
     let is_negative_187: bool;
     let x: i64;
     let new_repr: ref Array<u8>;
-    let start_300: i32;
-    let $sroa_out_used_467: i32;
-    let $sroa_write_back_468: ref "core:prelude/string.wado//String";
+    let start_310: i32;
+    let $sroa_out_used_473: i32;
+    let $sroa_write_back_474: ref "core:prelude/string.wado//String";
     repr_51 = array.new_data<u8>("abcdef");
     if @unlikely(local.tee $contract_arg_4(black_box(5)) >u 3) {
         cold_path;
@@ -349,7 +349,7 @@ fn "contract_checks_flag_on.wado/run"() with Stdout {
         unreachable;
     }
     repr_51 = builtin::array_new<u8>(16);
-    $sroa_out_used_467 = 0;
+    $sroa_out_used_473 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_51: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_51;
     };
@@ -358,35 +358,35 @@ fn "contract_checks_flag_on.wado/run"() with Stdout {
     if is_negative_187 {
         if @unlikely(1 > builtin::array_len(repr_51)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_468(struct.new "core:prelude/string.wado//String" { repr: repr_51, used: 0 }), 1);
-            repr_51 = $sroa_write_back_468.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_474(struct.new "core:prelude/string.wado//String" { repr: repr_51, used: 0 }), 1);
+            repr_51 = $sroa_write_back_474.repr;
         }
-        $sroa_out_used_467 = 1;
+        $sroa_out_used_473 = 1;
         builtin::array_set_u8(repr_51, 0, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_187($sroa_out_used_467 + $contract_arg_4) > builtin::array_len(repr_51)) {
+    if @unlikely(local.tee is_negative_187($sroa_out_used_473 + $contract_arg_4) > builtin::array_len(repr_51)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_468(struct.new "core:prelude/string.wado//String" { repr: repr_51, used: $sroa_out_used_467 }), is_negative_187);
-        repr_51 = $sroa_write_back_468.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_474(struct.new "core:prelude/string.wado//String" { repr: repr_51, used: $sroa_out_used_473 }), is_negative_187);
+        repr_51 = $sroa_write_back_474.repr;
     }
-    start_300 = $sroa_out_used_467;
-    $sroa_out_used_467 = is_negative_187;
-    "core:prelude/numeric.wado/write_decimal_digits"(repr_51, start_300, x, $contract_arg_4);
+    start_310 = $sroa_out_used_473;
+    $sroa_out_used_473 = is_negative_187;
+    "core:prelude/numeric.wado/write_decimal_digits"(repr_51, start_310, x, $contract_arg_4);
     $inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_70;
     };
     $contract_arg_4 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_187 = builtin::i32_wrap_i64(x >> 32_i64);
     $contract_arg_4 = "contract_checks_flag_on.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($contract_arg_4);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($sroa_out_used_467 + 1)), 0, repr_51, 0, $sroa_out_used_467);
-    builtin::array_set_u8(new_repr, $sroa_out_used_467, 10);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($sroa_out_used_473 + 1)), 0, repr_51, 0, $sroa_out_used_473);
+    builtin::array_set_u8(new_repr, $sroa_out_used_473, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $sroa_out_used_467 = $sroa_out_used_467 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_187, new_repr, 0, $sroa_out_used_467);
+        $sroa_out_used_473 = $sroa_out_used_473 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_187, new_repr, 0, $sroa_out_used_473);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

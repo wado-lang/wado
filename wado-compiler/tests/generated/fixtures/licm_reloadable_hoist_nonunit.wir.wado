@@ -1198,12 +1198,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reload
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_207: i32;
-    let $sroa_out_repr_483: ref Array<u8>;
-    let $sroa_out_used_484: i32;
-    let $sroa_write_back_486: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_483 = builtin::array_new<u8>(17);
-    $sroa_out_used_484 = 0;
+    let start_209: i32;
+    let $sroa_out_repr_485: ref Array<u8>;
+    let $sroa_out_used_486: i32;
+    let $sroa_write_back_488: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_485 = builtin::array_new<u8>(17);
+    $sroa_out_used_486 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
@@ -1271,42 +1271,42 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<licm_reload
         break $inline_count_digits_u64_0: 20;
     };
     if is_negative_65 {
-        $sroa_out_used_484 = 1;
-        builtin::array_set_u8($sroa_out_repr_483, 0, 45);
+        $sroa_out_used_486 = 1;
+        builtin::array_set_u8($sroa_out_repr_485, 0, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65($sroa_out_used_484 + t) > 17) {
+    if @unlikely(local.tee is_negative_65($sroa_out_used_486 + t) > 17) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_486(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_483, used: $sroa_out_used_484 }), is_negative_65);
-        $sroa_out_repr_483 = $sroa_write_back_486.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_488(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_485, used: $sroa_out_used_486 }), is_negative_65);
+        $sroa_out_repr_485 = $sroa_write_back_488.repr;
     }
-    start_207 = $sroa_out_used_484;
-    $sroa_out_used_484 = is_negative_65;
-    t = start_207 + t;
+    start_209 = $sroa_out_used_486;
+    $sroa_out_used_486 = is_negative_65;
+    t = start_209 + t;
     b175: block {
         l176: loop {
-            break_if b175 (t - start_207) < 2;
+            break_if b175 (t - start_209) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_out_repr_483, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8($sroa_out_repr_483, t - 2, 48 + tens);
+            builtin::array_set_u8($sroa_out_repr_485, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8($sroa_out_repr_485, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l176;
         };
     };
-    if t > start_207 {
-        builtin::array_set_u8($sroa_out_repr_483, start_207, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_209 {
+        builtin::array_set_u8($sroa_out_repr_485, start_209, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-    if @unlikely(local.tee t($sroa_out_used_484 + 1) > builtin::array_len($sroa_out_repr_483)) {
+    if @unlikely(local.tee t($sroa_out_used_486 + 1) > builtin::array_len($sroa_out_repr_485)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_486(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_483, used: $sroa_out_used_484 }), t);
-        $sroa_out_repr_483 = $sroa_write_back_486.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_488(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_485, used: $sroa_out_used_486 }), t);
+        $sroa_out_repr_485 = $sroa_write_back_488.repr;
     }
-    is_negative_65 = $sroa_out_used_484;
-    $sroa_out_used_484 = t;
-    builtin::array_copy<u8>($sroa_out_repr_483, is_negative_65, global:core:prelude/string.wado::$const_obj_5, 0, 1);
-    return $sroa_out_repr_483, $sroa_out_used_484;
+    is_negative_65 = $sroa_out_used_486;
+    $sroa_out_used_486 = t;
+    builtin::array_copy<u8>($sroa_out_repr_485, is_negative_65, global:core:prelude/string.wado::$const_obj_5, 0, 1);
+    return $sroa_out_repr_485, $sroa_out_used_486;
 }
 
 export fn "licm_reloadable_hoist_nonunit.wado/$cm_export__run" as "run"

@@ -57,42 +57,42 @@ global global:global_multimod_same_name.wado::$const_obj_0: ref Array<u8> = arra
 global global:global_multimod_same_name.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(83, 84, 65, 84, 69, 61);
 
 fn "global_multimod_same_name.wado/run"() with Stdout {
-    let new_repr_116: ref Array<u8>;
+    let new_repr_118: ref Array<u8>;
     let pos: i32;
-    let t_365: u64;
+    let t_373: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let $sroa_out_repr_369: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $sroa_out_repr_369(builtin::array_new<u8>(22)), 0, global:global_multimod_same_name.wado::$const_obj_1, 0, 6);
+    let $sroa_out_repr_377: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $sroa_out_repr_377(builtin::array_new<u8>(22)), 0, global:global_multimod_same_name.wado::$const_obj_1, 0, 6);
     pos = 9;
-    t_365 = 107_i64;
+    t_373 = 107_i64;
     b0: block {
         l1: loop {
             break_if b0 (pos - 6) < 2;
-            q = t_365 /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(t_365 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_out_repr_369, pos - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($sroa_out_repr_369, pos - 2, 48 + tens);
+            q = t_373 /u 100_i64;
+            tens = local.tee pair(builtin::i32_wrap_i64(t_373 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($sroa_out_repr_377, pos - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($sroa_out_repr_377, pos - 2, 48 + tens);
             pos = pos - 2;
-            t_365 = q;
+            t_373 = q;
             continue l1;
         };
     };
     if pos > 6 {
-        builtin::array_set_u8($sroa_out_repr_369, 6, 48 + builtin::i32_wrap_i64(t_365 %u 10_i64));
+        builtin::array_set_u8($sroa_out_repr_377, 6, 48 + builtin::i32_wrap_i64(t_373 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__format_global_multimod_same_name_wado__tmpl_fb51c04d54491732__i32___spec0_1__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_global_multimod_same_name_wado__tmpl_fb51c04d54491732__i32___spec0_1__$inline_core_prelude_string_wado_String__internal_push_view_39;
     };
-    pos = builtin::i32_wrap_i64(local.tee t_365("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_365 >> 32_i64);
+    pos = builtin::i32_wrap_i64(local.tee t_373("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_373 >> 32_i64);
     pos = "global_multimod_same_name.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos);
-    builtin::array_copy<u8>(local.tee new_repr_116(builtin::array_new<u8>(10)), 0, $sroa_out_repr_369, 0, 9);
-    builtin::array_set_u8(new_repr_116, 9, 10);
+    builtin::array_copy<u8>(local.tee new_repr_118(builtin::array_new<u8>(10)), 0, $sroa_out_repr_377, 0, 9);
+    builtin::array_set_u8(new_repr_118, 9, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; pair, new_repr_116);
+    }; pair, new_repr_118);
     if ref.is_null(ref.null eq) == 0 {
     } else {
         "wasi/stream-drop-writable"(pair);
@@ -101,14 +101,14 @@ fn "global_multimod_same_name.wado/run"() with Stdout {
     } else {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(pos);
     }
-    pos = builtin::i32_wrap_i64(local.tee t_365("wasi/stream-new"()));
-    pair = builtin::i32_wrap_i64(t_365 >> 32_i64);
+    pos = builtin::i32_wrap_i64(local.tee t_373("wasi/stream-new"()));
+    pair = builtin::i32_wrap_i64(t_373 >> 32_i64);
     pos = "global_multimod_same_name.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(pos);
-    builtin::array_copy<u8>(local.tee $sroa_out_repr_369(builtin::array_new<u8>(9)), 0, global:global_multimod_same_name.wado::$const_obj_0, 0, 8);
-    builtin::array_set_u8($sroa_out_repr_369, 8, 10);
+    builtin::array_copy<u8>(local.tee $sroa_out_repr_377(builtin::array_new<u8>(9)), 0, global:global_multimod_same_name.wado::$const_obj_0, 0, 8);
+    builtin::array_set_u8($sroa_out_repr_377, 8, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
-    }; pair, $sroa_out_repr_369);
+    }; pair, $sroa_out_repr_377);
     if ref.is_null(ref.null eq) == 0 {
     } else {
         "wasi/stream-drop-writable"(pair);

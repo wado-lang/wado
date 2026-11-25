@@ -104,8 +104,8 @@ fn "resource_without_cm_generic_op_reaches_handler.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let $sroa_t_h0_143: i32;
-    let start_182: i32;
+    let $sroa_t_h0_145: i32;
+    let start_192: i32;
     c = struct.new "resource_without_cm_generic_op_reaches_handler.wado//Ctx" { seen: 0 };
     global:resource_without_cm_generic_op_reaches_handler.wado::$effect_resource_without_cm_generic_op_reaches_handler.wado/Tally<i32> = struct.new "resource_without_cm_generic_op_reaches_handler.wado//$Dispatch_resource_without_cm_generic_op_reaches_handler.wado/Tally<i32>" { outer: local.tee $save_resource_without_cm_generic_op_reaches_handler.wado/Tally<i32>(global:resource_without_cm_generic_op_reaches_handler.wado::$effect_resource_without_cm_generic_op_reaches_handler.wado/Tally<i32>), op_add: struct.new "canonical//CanonicalClosure_0" { env: struct.new "resource_without_cm_generic_op_reaches_handler.wado//$Closure_0" { $capture_0: c }, func: ref.func "closure/resource_without_cm_generic_op_reaches_handler.wado/$closure_wrapper_0" } };
     $inline__effect_dispatch__resource_without_cm_generic_op_reaches_handler_wado_Tally_i32___add_1: block {
@@ -121,15 +121,15 @@ fn "resource_without_cm_generic_op_reaches_handler.wado/run"() with Stdout {
         }
     };
     global:resource_without_cm_generic_op_reaches_handler.wado::$effect_resource_without_cm_generic_op_reaches_handler.wado/Tally<i32> = $save_resource_without_cm_generic_op_reaches_handler.wado/Tally<i32>;
-    $sroa_t_h0_143 = c.seen;
+    $sroa_t_h0_145 = c.seen;
     $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_24: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_24;
     };
-    is_negative_81 = $sroa_t_h0_143 < 0;
-    x = builtin::i64_extend_i32_s($sroa_t_h0_143);
+    is_negative_81 = $sroa_t_h0_145 < 0;
+    x = builtin::i64_extend_i32_s($sroa_t_h0_145);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    $sroa_t_h0_143 = $inline_count_digits_u64_1: block -> i32 {
+    $sroa_t_h0_145 = $inline_count_digits_u64_1: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
@@ -194,48 +194,48 @@ fn "resource_without_cm_generic_op_reaches_handler.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, is_negative_81);
         }
-        start_182 = $mv_arg_1.used;
+        start_192 = $mv_arg_1.used;
         $mv_arg_1.used = is_negative_81;
-        builtin::array_set_u8($mv_arg_1.repr, start_182, 45);
+        builtin::array_set_u8($mv_arg_1.repr, start_192, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_81($mv_arg_1.used + $sroa_t_h0_143) > builtin::array_len($mv_arg_1.repr)) {
+    if @unlikely(local.tee is_negative_81($mv_arg_1.used + $sroa_t_h0_145) > builtin::array_len($mv_arg_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, is_negative_81);
     }
-    start_182 = $mv_arg_1.used;
+    start_192 = $mv_arg_1.used;
     $mv_arg_1.used = is_negative_81;
     arr = $mv_arg_1.repr;
-    $sroa_t_h0_143 = start_182 + $sroa_t_h0_143;
+    $sroa_t_h0_145 = start_192 + $sroa_t_h0_145;
     b23: block {
         l24: loop {
-            break_if b23 ($sroa_t_h0_143 - start_182) < 2;
+            break_if b23 ($sroa_t_h0_145 - start_192) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_81(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, $sroa_t_h0_143 - 1, (48 + is_negative_81) - (tens * 10));
-            builtin::array_set_u8(arr, $sroa_t_h0_143 - 2, 48 + tens);
-            $sroa_t_h0_143 = $sroa_t_h0_143 - 2;
+            builtin::array_set_u8(arr, $sroa_t_h0_145 - 1, (48 + is_negative_81) - (tens * 10));
+            builtin::array_set_u8(arr, $sroa_t_h0_145 - 2, 48 + tens);
+            $sroa_t_h0_145 = $sroa_t_h0_145 - 2;
             x = q;
             continue l24;
         };
     };
-    if $sroa_t_h0_143 > start_182 {
-        builtin::array_set_u8(arr, start_182, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_t_h0_145 > start_192 {
+        builtin::array_set_u8(arr, start_192, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
     };
-    $sroa_t_h0_143 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    $sroa_t_h0_145 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_81 = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_t_h0_143 = "resource_without_cm_generic_op_reaches_handler.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_143);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_182($mv_arg_1.used) + 1)), 0, $mv_arg_1.repr, 0, start_182);
-    builtin::array_set_u8(arr, start_182, 10);
+    $sroa_t_h0_145 = "resource_without_cm_generic_op_reaches_handler.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_145);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_192($mv_arg_1.used) + 1)), 0, $mv_arg_1.repr, 0, start_192);
+    builtin::array_set_u8(arr, start_192, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_182 = start_182 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_81, arr, 0, start_182);
+        start_192 = start_192 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_81, arr, 0, start_192);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -243,7 +243,7 @@ fn "resource_without_cm_generic_op_reaches_handler.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_143);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_145);
     }
 }
 

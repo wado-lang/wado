@@ -2455,7 +2455,7 @@ mod tests {
         WirName, WirNames, WirPackage, WirStructType, WirType, WirTypeDef, WirTypeId,
     };
     use crate::world_registry::WorldSurface;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     fn empty_package() -> WirPackage {
         WirPackage {
@@ -2517,7 +2517,7 @@ mod tests {
     /// fallback, which leaves the `(ref $P)` global's init ill-typed.
     #[test]
     fn const_struct_global_init_validates() {
-        let tid = WirTypeId::new(0, Rc::from("test//P"));
+        let tid = WirTypeId::new(0, Arc::from("test//P"));
         let struct_ty = point_struct();
         let global = WirGlobal {
             name: WirName {
@@ -2549,8 +2549,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "has no Wasm type index")]
     fn unmapped_type_index_is_an_ice() {
-        let known = WirTypeId::new(0, Rc::from("test//P"));
-        let missing = WirTypeId::new(1, Rc::from("test//Missing"));
+        let known = WirTypeId::new(0, Arc::from("test//P"));
+        let missing = WirTypeId::new(1, Arc::from("test//Missing"));
         let mut pkg = empty_package();
         pkg.types.push(WirTypeDef::Struct(point_struct()));
         pkg.globals.push(WirGlobal {
@@ -2582,7 +2582,7 @@ mod tests {
         pkg.exports.push(WirExport {
             name: "gone".to_string(),
             desc: WirExportDesc::Func {
-                func_id: WirFuncId::new(7, Rc::from("test//gone")),
+                func_id: WirFuncId::new(7, Arc::from("test//gone")),
             },
         });
 

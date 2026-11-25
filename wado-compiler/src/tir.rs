@@ -3,7 +3,7 @@
 //! reference a local index, every call a resolved target, and all syntactic
 //! sugar is already desugared.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -938,8 +938,74 @@ pub struct TirExpr {
     /// What a pass decided about this node, written where it decided it while
     /// it held the body by reference. The node is its own identity: a span is
     /// none, since every synthesized node shares one, and a copy carries the
-    /// decision along.
-    marks: Cell<ExprMarks>,
+    /// decision along. Atomic so lowering's ownership walk can mark the bodies
+    /// of different functions on different threads.
+    marks: MarkCell,
+}
+
+/// An [`ExprMarks`] packed into one atomic byte.
+#[derive(Default)]
+struct MarkCell(std::sync::atomic::AtomicU8);
+
+impl MarkCell {
+    const IN_PLACE: u8 = 1;
+    const MOVES: u8 = 2;
+    const WRITTEN: u8 = 4;
+    const EXTENDED: u8 = 8;
+
+    fn unpack(bits: u8) -> ExprMarks {
+        ExprMarks {
+            in_place: bits & Self::IN_PLACE != 0,
+            moves: bits & Self::MOVES != 0,
+            written: bits & Self::WRITTEN != 0,
+            extended: bits & Self::EXTENDED != 0,
+        }
+    }
+
+    fn pack(marks: ExprMarks) -> u8 {
+        [
+            (marks.in_place, Self::IN_PLACE),
+            (marks.moves, Self::MOVES),
+            (marks.written, Self::WRITTEN),
+            (marks.extended, Self::EXTENDED),
+        ]
+        .into_iter()
+        .filter(|(set, _)| *set)
+        .fold(0, |bits, (_, bit)| bits | bit)
+    }
+
+    fn get(&self) -> ExprMarks {
+        Self::unpack(self.0.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    fn set(&self, marks: ExprMarks) {
+        self.0
+            .store(Self::pack(marks), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Rewrite the marks in one atomic step, so no other thread's mark is lost.
+    fn update(&self, mut f: impl FnMut(&mut ExprMarks)) {
+        let relaxed = std::sync::atomic::Ordering::Relaxed;
+        self.0.update(relaxed, relaxed, |bits| {
+            let mut marks = Self::unpack(bits);
+            f(&mut marks);
+            Self::pack(marks)
+        });
+    }
+}
+
+impl Clone for MarkCell {
+    fn clone(&self) -> Self {
+        let copy = Self::default();
+        copy.set(self.get());
+        copy
+    }
+}
+
+impl std::fmt::Debug for MarkCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.get().fmt(f)
+    }
 }
 
 /// What lowering's ownership walk decided about one expression.
@@ -966,7 +1032,7 @@ impl TirExpr {
             kind,
             type_id,
             span,
-            marks: Cell::default(),
+            marks: MarkCell::default(),
         }
     }
 
@@ -975,10 +1041,8 @@ impl TirExpr {
         self.marks.get()
     }
 
-    pub fn mark(&self, set: impl FnOnce(&mut ExprMarks)) {
-        let mut marks = self.marks.get();
-        set(&mut marks);
-        self.marks.set(marks);
+    pub fn mark(&self, set: impl FnMut(&mut ExprMarks)) {
+        self.marks.update(set);
     }
 
     /// Replace `self` with `with`, the same value spelled another way, which

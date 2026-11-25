@@ -567,7 +567,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     let $sroa_slot_182_182: ref null "core:prelude/string.wado//String";
     let $sroa_$pattern_temp_0_0_183: i32;
     let $sroa_$pattern_temp_0_1_184: i32;
-    let $sroa_t_h0_206: ref "core:prelude/string.wado//String";
+    let $sroa_t_h0_208: ref "core:prelude/string.wado//String";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:wasi_tls_mock_recv.wado::$modules_initialized);
         cold_path;
@@ -592,20 +592,20 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     }
     if @likely(local.tee $match_24("core:prelude/async.wado/core:prelude/async.wado/AsyncCall<core:prelude/option.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_mock_recv.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[static]connector.connect$spec0"(conn, global:wasi_tls_mock_recv.wado::$const_obj_2))).discriminant == 0) {
     } else {
-        $sroa_t_h0_206 = "wasi_tls_mock_recv.wado/$cm_binding__wasi:tls/types@0.3.0-draft#[method]error.to-debug-string"(ref.cast "core:prelude/option.wado//Result<(),wasi:tls/types.wado/Error>::Err"($match_24).payload_0);
+        $sroa_t_h0_208 = "wasi_tls_mock_recv.wado/$cm_binding__wasi:tls/types@0.3.0-draft#[method]error.to-debug-string"(ref.cast "core:prelude/option.wado//Result<(),wasi:tls/types.wado/Error>::Err"($match_24).payload_0);
         local.tee out_29(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(46), used: 0 }).used = 30;
         builtin::array_copy<u8>(out_29.repr, 0, global:wasi_tls_mock_recv.wado::$const_obj_1, 0, 30);
         $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__30: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
                 $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                    break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee conn($sroa_t_h0_206.used) == 0;
+                    break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee conn($sroa_t_h0_208.used) == 0;
                     if @unlikely(local.tee $sroa_$pattern_temp_0_0_183(30 + conn) > 46) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_29, $sroa_$pattern_temp_0_0_183);
                     }
                     $sroa_$pattern_temp_0_1_184 = out_29.used;
                     out_29.used = $sroa_$pattern_temp_0_0_183;
-                    builtin::array_copy<u8>(out_29.repr, $sroa_$pattern_temp_0_1_184, $sroa_t_h0_206.repr, 0, conn);
+                    builtin::array_copy<u8>(out_29.repr, $sroa_$pattern_temp_0_1_184, $sroa_t_h0_208.repr, 0, conn);
                 };
                 break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
             };
@@ -650,11 +650,11 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
         break $inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__53;
     };
     if @likely($sroa_$pattern_temp_0_1_184 == 0) {
-        $sroa_t_h0_206 = ref.as_non_null($sroa_slot_182_182);
+        $sroa_t_h0_208 = ref.as_non_null($sroa_slot_182_182);
         conn = builtin::i32_wrap_i64(local.tee $cm_pair_18("wasi/stream-new"()));
         $sroa_$pattern_temp_0_0_183 = builtin::i32_wrap_i64($cm_pair_18 >> 32_i64);
         conn = "wasi_tls_mock_recv.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(conn);
-        builtin::array_copy<u8>(local.tee $mv$received$repr(builtin::array_new<u8>(local.tee $sroa_$pattern_temp_0_1_184($sroa_t_h0_206.used) + 1)), 0, $sroa_t_h0_206.repr, 0, $sroa_$pattern_temp_0_1_184);
+        builtin::array_copy<u8>(local.tee $mv$received$repr(builtin::array_new<u8>(local.tee $sroa_$pattern_temp_0_1_184($sroa_t_h0_208.used) + 1)), 0, $sroa_t_h0_208.repr, 0, $sroa_$pattern_temp_0_1_184);
         builtin::array_set_u8($mv$received$repr, $sroa_$pattern_temp_0_1_184, 10);
         drop(block -> "core:prelude/async.wado//enum:CopyResult" {
             if @unlikely(ref.is_null(ref.null eq) == 0) {
@@ -672,7 +672,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
             "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(conn);
         }
     } else if $sroa_$pattern_temp_0_1_184 == 1 {
-        "core:rt/panic"(local.tee $sroa_t_h0_206(global:wasi_tls_mock_recv.wado::$const_obj_0).repr, $sroa_t_h0_206.used);
+        "core:rt/panic"(local.tee $sroa_t_h0_208(global:wasi_tls_mock_recv.wado::$const_obj_0).repr, $sroa_t_h0_208.used);
         unreachable;
     } else {
         unreachable;

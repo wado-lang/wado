@@ -132,14 +132,14 @@ fn "remark_param_gate_inlined_twice.wado/run"() with Stdout {
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_298: i32;
-    let v_354: ref "core:prelude/string.wado//String";
+    let start_308: i32;
+    let v_360: ref "core:prelude/string.wado//String";
     $load_1 = $inline_gated_3: block -> i32 {
         if $inline_is_level_4: block -> bool {
-            v_354 = black_box(global:remark_param_gate_inlined_twice.wado::LOG_LEVEL);
+            v_360 = black_box(global:remark_param_gate_inlined_twice.wado::LOG_LEVEL);
             let $array_clone_src_1: ref Array<u8>;
-            $array_clone_src_1 = v_354.repr;
-            $load_1 = v_354.used;
+            $array_clone_src_1 = v_360.repr;
+            $load_1 = v_360.used;
             let $array_clone_dst_2: ref Array<u8>;
             builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1);
             if $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
@@ -189,7 +189,7 @@ fn "remark_param_gate_inlined_twice.wado/run"() with Stdout {
         }
         break $inline_gated_3: 0;
     } + "remark_param_gate_inlined_twice.wado/other"();
-    v_354 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    v_360 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_27: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_27;
     };
@@ -257,26 +257,26 @@ fn "remark_param_gate_inlined_twice.wado/run"() with Stdout {
         break $inline_count_digits_u64_0: 20;
     };
     if i {
-        if @unlikely(local.tee i(0 + 1) > builtin::array_len(v_354.repr)) {
+        if @unlikely(local.tee i(0 + 1) > builtin::array_len(v_360.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_354, i);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_360, i);
         }
-        start_298 = v_354.used;
-        v_354.used = i;
-        builtin::array_set_u8(v_354.repr, start_298, 45);
+        start_308 = v_360.used;
+        v_360.used = i;
+        builtin::array_set_u8(v_360.repr, start_308, 45);
     } else {
     }
-    if @unlikely(local.tee i(v_354.used + $load_1) > builtin::array_len(v_354.repr)) {
+    if @unlikely(local.tee i(v_360.used + $load_1) > builtin::array_len(v_360.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_354, i);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_360, i);
     }
-    start_298 = v_354.used;
-    v_354.used = i;
-    $array_clone_src_1 = v_354.repr;
-    $load_1 = start_298 + $load_1;
+    start_308 = v_360.used;
+    v_360.used = i;
+    $array_clone_src_1 = v_360.repr;
+    $load_1 = start_308 + $load_1;
     b46: block {
         l47: loop {
-            break_if b46 ($load_1 - start_298) < 2;
+            break_if b46 ($load_1 - start_308) < 2;
             q = x /u 100_i64;
             tens = local.tee i(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($array_clone_src_1, $load_1 - 1, (48 + i) - (tens * 10));
@@ -286,8 +286,8 @@ fn "remark_param_gate_inlined_twice.wado/run"() with Stdout {
             continue l47;
         };
     };
-    if $load_1 > start_298 {
-        builtin::array_set_u8($array_clone_src_1, start_298, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $load_1 > start_308 {
+        builtin::array_set_u8($array_clone_src_1, start_308, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_46: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
@@ -295,14 +295,14 @@ fn "remark_param_gate_inlined_twice.wado/run"() with Stdout {
     $load_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i = builtin::i32_wrap_i64(x >> 32_i64);
     $load_1 = "remark_param_gate_inlined_twice.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_1);
-    builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee start_298(v_354.used) + 1)), 0, v_354.repr, 0, start_298);
-    builtin::array_set_u8($array_clone_src_1, start_298, 10);
+    builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee start_308(v_360.used) + 1)), 0, v_360.repr, 0, start_308);
+    builtin::array_set_u8($array_clone_src_1, start_308, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_298 = start_298 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i, $array_clone_src_1, 0, start_298);
+        start_308 = start_308 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i, $array_clone_src_1, 0, start_308);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

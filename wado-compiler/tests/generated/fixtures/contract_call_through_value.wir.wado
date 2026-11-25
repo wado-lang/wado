@@ -184,11 +184,11 @@ fn "contract_call_through_value.wado/run"() with Stdout {
     let $sroa_$pattern_temp_0_1_14_24: i32;
     let new_repr_29: ref Array<u8>;
     let is_negative_120: bool;
-    let new_repr_156: ref Array<u8>;
-    let start_227: i32;
+    let new_repr_158: ref Array<u8>;
+    let start_237: i32;
     let q: u64;
     let tens: i32;
-    let $sroa_write_back_384: ref "core:prelude/string.wado//String";
+    let $sroa_write_back_392: ref "core:prelude/string.wado//String";
     $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_23 = "contract_call_through_value.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_23);
@@ -221,8 +221,8 @@ fn "contract_call_through_value.wado/run"() with Stdout {
     if is_negative_120 {
         if @unlikely(1 > builtin::array_len(new_repr_29)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_384(struct.new "core:prelude/string.wado//String" { repr: new_repr_29, used: 0 }), 1);
-            new_repr_29 = $sroa_write_back_384.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_392(struct.new "core:prelude/string.wado//String" { repr: new_repr_29, used: 0 }), 1);
+            new_repr_29 = $sroa_write_back_392.repr;
         }
         $sroa_$pattern_temp_0_1_14_24 = 1;
         builtin::array_set_u8(new_repr_29, 0, 45);
@@ -230,15 +230,15 @@ fn "contract_call_through_value.wado/run"() with Stdout {
     }
     if @unlikely(local.tee is_negative_120($sroa_$pattern_temp_0_1_14_24 + $sroa_$pattern_temp_0_0_13_23) > builtin::array_len(new_repr_29)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_384(struct.new "core:prelude/string.wado//String" { repr: new_repr_29, used: $sroa_$pattern_temp_0_1_14_24 }), is_negative_120);
-        new_repr_29 = $sroa_write_back_384.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_392(struct.new "core:prelude/string.wado//String" { repr: new_repr_29, used: $sroa_$pattern_temp_0_1_14_24 }), is_negative_120);
+        new_repr_29 = $sroa_write_back_392.repr;
     }
-    start_227 = $sroa_$pattern_temp_0_1_14_24;
+    start_237 = $sroa_$pattern_temp_0_1_14_24;
     $sroa_$pattern_temp_0_1_14_24 = is_negative_120;
-    $sroa_$pattern_temp_0_0_13_23 = start_227 + $sroa_$pattern_temp_0_0_13_23;
+    $sroa_$pattern_temp_0_0_13_23 = start_237 + $sroa_$pattern_temp_0_0_13_23;
     b7: block {
         l8: loop {
-            break_if b7 ($sroa_$pattern_temp_0_0_13_23 - start_227) < 2;
+            break_if b7 ($sroa_$pattern_temp_0_0_13_23 - start_237) < 2;
             q = $cm_pair_7_17 /u 100_i64;
             tens = local.tee is_negative_120(builtin::i32_wrap_i64($cm_pair_7_17 - (q * 100_i64))) / 10;
             builtin::array_set_u8(new_repr_29, $sroa_$pattern_temp_0_0_13_23 - 1, (48 + is_negative_120) - (tens * 10));
@@ -248,8 +248,8 @@ fn "contract_call_through_value.wado/run"() with Stdout {
             continue l8;
         };
     };
-    if $sroa_$pattern_temp_0_0_13_23 > start_227 {
-        builtin::array_set_u8(new_repr_29, start_227, 48 + builtin::i32_wrap_i64($cm_pair_7_17 %u 10_i64));
+    if $sroa_$pattern_temp_0_0_13_23 > start_237 {
+        builtin::array_set_u8(new_repr_29, start_237, 48 + builtin::i32_wrap_i64($cm_pair_7_17 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__format_contract_call_through_value_wado__tmpl_fb51c04d54491732__i32___spec1_5__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_contract_call_through_value_wado__tmpl_fb51c04d54491732__i32___spec1_5__$inline_core_prelude_string_wado_String__internal_push_view_39;
@@ -257,14 +257,14 @@ fn "contract_call_through_value.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
     is_negative_120 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_23 = "contract_call_through_value.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_23);
-    builtin::array_copy<u8>(local.tee new_repr_156(builtin::array_new<u8>($sroa_$pattern_temp_0_1_14_24 + 1)), 0, new_repr_29, 0, $sroa_$pattern_temp_0_1_14_24);
-    builtin::array_set_u8(new_repr_156, $sroa_$pattern_temp_0_1_14_24, 10);
+    builtin::array_copy<u8>(local.tee new_repr_158(builtin::array_new<u8>($sroa_$pattern_temp_0_1_14_24 + 1)), 0, new_repr_29, 0, $sroa_$pattern_temp_0_1_14_24);
+    builtin::array_set_u8(new_repr_158, $sroa_$pattern_temp_0_1_14_24, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
         $sroa_$pattern_temp_0_1_14_24 = $sroa_$pattern_temp_0_1_14_24 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_120, new_repr_156, 0, $sroa_$pattern_temp_0_1_14_24);
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_120, new_repr_158, 0, $sroa_$pattern_temp_0_1_14_24);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

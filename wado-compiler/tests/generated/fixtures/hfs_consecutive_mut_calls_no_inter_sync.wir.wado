@@ -102,96 +102,96 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     let c_ret: i32;
     let x_71: i64;
     let new_repr: ref Array<u8>;
-    let $sroa_out_repr_958: ref Array<u8>;
-    let $sroa_write_back_960: ref "core:prelude/string.wado//String";
-    let $hfs_v_965: i32;
+    let $sroa_out_repr_968: ref Array<u8>;
+    let $sroa_write_back_970: ref "core:prelude/string.wado//String";
+    let $hfs_v_975: i32;
     b = struct.new "hfs_consecutive_mut_calls_no_inter_sync.wado//Buf" { v: 0 };
     sum = 0;
     i = 0;
-    $hfs_v_965 = 0;
+    $hfs_v_975 = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            b.v = $hfs_v_965;
-            $hfs_v_965 = "hfs_consecutive_mut_calls_no_inter_sync.wado/add1"(b);
+            b.v = $hfs_v_975;
+            $hfs_v_975 = "hfs_consecutive_mut_calls_no_inter_sync.wado/add1"(b);
             b_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add10"(b);
             c_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add100"(b);
-            sum = ((sum + $hfs_v_965) + b_ret) + c_ret;
-            $hfs_v_965 = b.v;
+            sum = ((sum + $hfs_v_975) + b_ret) + c_ret;
+            $hfs_v_975 = b.v;
             i = i + 1;
-            b.v = $hfs_v_965;
+            b.v = $hfs_v_975;
             continue l1;
         };
     };
     i = b.v;
-    $sroa_out_repr_958 = builtin::array_new<u8>(33);
-    $hfs_v_965 = 0;
+    $sroa_out_repr_968 = builtin::array_new<u8>(33);
+    $hfs_v_975 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_16: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_16;
     };
     b_ret = sum < 0;
     sum = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_71(x_71 = builtin::i64_extend_i32_s(sum); select i64(x_71 < 0_i64, 0_i64 - x_71, x_71)));
     if b_ret {
-        if @unlikely(1 > builtin::array_len($sroa_out_repr_958)) {
+        if @unlikely(1 > builtin::array_len($sroa_out_repr_968)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_960(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_958, used: 0 }), 1);
-            $sroa_out_repr_958 = $sroa_write_back_960.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_970(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_968, used: 0 }), 1);
+            $sroa_out_repr_968 = $sroa_write_back_970.repr;
         }
-        $hfs_v_965 = 1;
-        builtin::array_set_u8($sroa_out_repr_958, 0, 45);
+        $hfs_v_975 = 1;
+        builtin::array_set_u8($sroa_out_repr_968, 0, 45);
     } else {
     }
-    if @unlikely(local.tee b_ret($hfs_v_965 + sum) > builtin::array_len($sroa_out_repr_958)) {
+    if @unlikely(local.tee b_ret($hfs_v_975 + sum) > builtin::array_len($sroa_out_repr_968)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_960(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_958, used: $hfs_v_965 }), b_ret);
-        $sroa_out_repr_958 = $sroa_write_back_960.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_970(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_968, used: $hfs_v_975 }), b_ret);
+        $sroa_out_repr_968 = $sroa_write_back_970.repr;
     }
-    c_ret = $hfs_v_965;
-    $hfs_v_965 = b_ret;
-    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_958, c_ret, x_71, sum);
-    if @unlikely(local.tee sum($hfs_v_965 + 1) > builtin::array_len($sroa_out_repr_958)) {
+    c_ret = $hfs_v_975;
+    $hfs_v_975 = b_ret;
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_968, c_ret, x_71, sum);
+    if @unlikely(local.tee sum($hfs_v_975 + 1) > builtin::array_len($sroa_out_repr_968)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_960(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_958, used: $hfs_v_965 }), sum);
-        $sroa_out_repr_958 = $sroa_write_back_960.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_970(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_968, used: $hfs_v_975 }), sum);
+        $sroa_out_repr_968 = $sroa_write_back_970.repr;
     }
-    b_ret = $hfs_v_965;
-    $hfs_v_965 = sum;
-    builtin::array_copy<u8>($sroa_out_repr_958, b_ret, global:hfs_consecutive_mut_calls_no_inter_sync.wado::$const_obj_0, 0, 1);
+    b_ret = $hfs_v_975;
+    $hfs_v_975 = sum;
+    builtin::array_copy<u8>($sroa_out_repr_968, b_ret, global:hfs_consecutive_mut_calls_no_inter_sync.wado::$const_obj_0, 0, 1);
     sum = i < 0;
     i = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_71(x_71 = builtin::i64_extend_i32_s(i); select i64(x_71 < 0_i64, 0_i64 - x_71, x_71)));
     if sum {
-        if @unlikely(local.tee sum($hfs_v_965 + 1) > builtin::array_len($sroa_out_repr_958)) {
+        if @unlikely(local.tee sum($hfs_v_975 + 1) > builtin::array_len($sroa_out_repr_968)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_960(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_958, used: $hfs_v_965 }), sum);
-            $sroa_out_repr_958 = $sroa_write_back_960.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_970(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_968, used: $hfs_v_975 }), sum);
+            $sroa_out_repr_968 = $sroa_write_back_970.repr;
         }
-        b_ret = $hfs_v_965;
-        $hfs_v_965 = sum;
-        builtin::array_set_u8($sroa_out_repr_958, b_ret, 45);
+        b_ret = $hfs_v_975;
+        $hfs_v_975 = sum;
+        builtin::array_set_u8($sroa_out_repr_968, b_ret, 45);
     } else {
     }
-    if @unlikely(local.tee sum($hfs_v_965 + i) > builtin::array_len($sroa_out_repr_958)) {
+    if @unlikely(local.tee sum($hfs_v_975 + i) > builtin::array_len($sroa_out_repr_968)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_960(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_958, used: $hfs_v_965 }), sum);
-        $sroa_out_repr_958 = $sroa_write_back_960.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_970(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_968, used: $hfs_v_975 }), sum);
+        $sroa_out_repr_968 = $sroa_write_back_970.repr;
     }
-    b_ret = $hfs_v_965;
-    $hfs_v_965 = sum;
-    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_958, b_ret, x_71, i);
+    b_ret = $hfs_v_975;
+    $hfs_v_975 = sum;
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_968, b_ret, x_71, i);
     $inline_core_prelude_string_wado_String__internal_push_view_61: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_61;
     };
     sum = builtin::i32_wrap_i64(local.tee x_71("wasi/stream-new"()));
     i = builtin::i32_wrap_i64(x_71 >> 32_i64);
     sum = "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($hfs_v_965 + 1)), 0, $sroa_out_repr_958, 0, $hfs_v_965);
-    builtin::array_set_u8(new_repr, $hfs_v_965, 10);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($hfs_v_975 + 1)), 0, $sroa_out_repr_968, 0, $hfs_v_975);
+    builtin::array_set_u8(new_repr, $hfs_v_975, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        $hfs_v_965 = $hfs_v_965 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i, new_repr, 0, $hfs_v_965);
+        $hfs_v_975 = $hfs_v_975 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i, new_repr, 0, $hfs_v_975);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

@@ -612,7 +612,7 @@ impl CompileKnobOpt {
                 long: Some("optimize-threads"),
                 short: None,
                 value: Some("<n>"),
-                desc: "Threads the optimizer runs on; the output does not depend on it\n(default: the available cores, shared among the files compiled\nat once: 1 each under `wado test`)",
+                desc: "Threads lowering and the optimizer run on; the output does not depend on it\n(default: the available cores, shared among the files compiled\nat once: 1 each under `wado test`)",
             },
             Self::PredictableBranchThreshold => OptSpec {
                 long: Some("optimize-predictable-branch-threshold"),

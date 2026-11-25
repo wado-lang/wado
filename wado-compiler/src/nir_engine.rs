@@ -13,15 +13,17 @@ use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::copied_local_what;
-use crate::nir::{FuncId, NirLocal, NirParam};
+use crate::nir::{FuncId, FuncParts, NirLocal, NirParam};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind,
     PatNode, StmtId, StmtKind, StmtNode, SubtreeCopy, Tracked,
 };
+use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::AliasSets;
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder, constant_kind};
 use crate::niri::CtfeBuiltinMap;
 use crate::optimize::arena_query::operand_local;
+use crate::parallel::Executor;
 use crate::tir::{ObjectTypes, ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -408,6 +410,36 @@ impl SubtreeCopy for Engine<'_> {
             None => (local, name),
         }
     }
+}
+
+/// `visit` on an engine over each function body of `project`, on `exec`'s
+/// threads. Returns whether any visit changed its body.
+pub fn visit_every_body(
+    project: &NirPackage,
+    exec: &Executor,
+    visit: impl Fn(&mut Engine) -> bool + Sync + Send,
+) -> bool {
+    let type_table = project.type_table.borrow();
+    let type_table = &*type_table;
+    exec.map_init(
+        &project.functions,
+        EngineBuffers::default,
+        |buffers, func| {
+            let mut func = func.borrow_mut();
+            let FuncParts {
+                body,
+                locals,
+                params,
+                ..
+            } = func.parts();
+            let Some(body) = body else {
+                return false;
+            };
+            visit(&mut Engine::new(body, buffers, locals, params, type_table))
+        },
+    )
+    .into_iter()
+    .any(|changed| changed)
 }
 
 impl<'a> Engine<'a> {
@@ -993,45 +1025,63 @@ impl<'a> Engine<'a> {
     }
 
     /// Whether `node` is reachable from the root. Every edit that drops a child
-    /// clears its parent edge, so the edges alone answer.
+    /// clears its parent edge, so the edges alone answer; [`Engine::run`]
+    /// asserts that they do.
     fn is_attached(&self, node: NodeRef) -> bool {
         let root = NodeRef::Block(self.body.root());
         let mut at = node;
-        let attached = loop {
+        loop {
             if at == root {
-                break true;
+                return true;
             }
             match self.parent_of(at) {
                 Some(parent) => at = parent,
-                None => break false,
+                None => return false,
             }
-        };
-        debug_assert_eq!(
-            attached,
-            self.is_held_from_root(node),
-            "[NIR engine] {node:?} keeps a parent edge its parent dropped: an edit \
-             wrote the body outside the edit API"
-        );
-        attached
+        }
     }
 
-    /// [`Engine::is_attached`] checked edge by edge against each parent's
-    /// children.
-    fn is_held_from_root(&self, mut node: NodeRef) -> bool {
-        let root = NodeRef::Block(self.body.root());
-        while node != root {
-            let Some(parent) = self.parent_of(node) else {
-                return false;
-            };
-            let mut held = false;
-            self.body
-                .for_each_child(parent, |child| held |= child == node);
-            if !held {
-                return false;
-            }
-            node = parent;
+    /// [`Engine::is_attached`] answers as a walk of each parent's children
+    /// from the root would. Checked once per run rather than per query: walking
+    /// each ancestor's children at every pop cost a dev build of a large
+    /// program 3% of its compile time.
+    #[cfg(debug_assertions)]
+    fn assert_attachment_held(&self) {
+        let body = &self.body;
+        let mut held = [
+            vec![false; body.exprs.len()],
+            vec![false; body.stmts.len()],
+            vec![false; body.blocks.len()],
+            vec![false; body.pats.len()],
+        ];
+        let slot = |node: NodeRef| match node {
+            NodeRef::Expr(id) => (0, id.index()),
+            NodeRef::Stmt(id) => (1, id.index()),
+            NodeRef::Block(id) => (2, id.index()),
+            NodeRef::Pat(id) => (3, id.index()),
+        };
+        let mut stack = vec![NodeRef::Block(body.root())];
+        while let Some(node) = stack.pop() {
+            let (arena, i) = slot(node);
+            held[arena][i] = true;
+            body.for_each_child(node, |child| {
+                if self.parent_of(child) == Some(node) {
+                    stack.push(child);
+                }
+            });
         }
-        true
+        let nodes = (body.exprs.keys().map(NodeRef::Expr))
+            .chain(body.stmts.keys().map(NodeRef::Stmt))
+            .chain(body.blocks.keys().map(NodeRef::Block))
+            .chain(body.pats.keys().map(NodeRef::Pat));
+        for node in nodes {
+            let (arena, i) = slot(node);
+            assert!(
+                held[arena][i] || !self.is_attached(node),
+                "[NIR engine] {node:?} keeps a parent edge its parent dropped: an edit \
+                 wrote the body outside the edit API"
+            );
+        }
     }
 
     /// Push a node onto the worklist unless it is already queued.
@@ -1178,18 +1228,27 @@ impl<'a> Engine<'a> {
     /// no parent edge to move and nothing to enqueue — which is also why `f` may
     /// only rewrite one promoted value to another.
     pub fn map_operands(&mut self, node: NodeRef, f: &mut impl FnMut(Operand) -> Operand) {
-        let mut spliced = false;
-        self.body.for_each_operand_mut(node, |slot| {
-            let new = f(*slot);
-            spliced |= new != *slot && (new.as_expr().is_some() || slot.as_expr().is_some());
-            *slot = new;
+        // Mapped on a read walk first: a mutable borrow counts as an edit, and
+        // a caller may map a slot to itself, as a snapshot does.
+        let mut mapped: Vec<Operand> = Vec::new();
+        let mut moved = false;
+        self.body.for_each_operand(node, |old| {
+            let new = f(old);
+            assert!(
+                new == old || (new.as_expr().is_none() && old.as_expr().is_none()),
+                "[NIR engine] map_operands({node:?}) moved a skeleton operand: installing \
+                 one is a splice and replacing one orphans its subtree, and either way \
+                 the parent map goes stale. Use `redirect_expr` / `replace_expr_kind`."
+            );
+            moved |= new != old;
+            mapped.push(new);
         });
-        assert!(
-            !spliced,
-            "[NIR engine] map_operands({node:?}) moved a skeleton operand: installing \
-             one is a splice and replacing one orphans its subtree, and either way \
-             the parent map goes stale. Use `redirect_expr` / `replace_expr_kind`."
-        );
+        if moved {
+            let mut mapped = mapped.into_iter();
+            self.body.for_each_operand_mut(node, |slot| {
+                *slot = mapped.next().expect("both walks visit the same slots");
+            });
+        }
         self.census_add_subtree(node);
     }
 
@@ -1541,6 +1600,8 @@ impl<'a> Engine<'a> {
                 }
             }
         }
+        #[cfg(debug_assertions)]
+        self.assert_attachment_held();
         #[cfg(debug_assertions)]
         if let Some(local) = self.body.surviving_read(&self.buf.elided_locals) {
             panic!(

@@ -78,9 +78,9 @@ fn "licm_hoist_through_ref_forwarding.wado/run"() with Stdout {
     let at_2: i32;
     let is_negative_56: bool;
     let x_60: i64;
-    let new_repr_380: ref Array<u8>;
-    let start_932: i32;
-    let start_1334: i32;
+    let new_repr_386: ref Array<u8>;
+    let start_954: i32;
+    let start_1356: i32;
     out_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     src = black_box(global:licm_hoist_through_ref_forwarding.wado::$const_obj_2);
     at_2 = "licm_hoist_through_ref_forwarding.wado/licm_hoist_through_ref_forwarding.wado/count_quotes<&core:prelude/string.wado/String>"(out_0, src);
@@ -95,18 +95,18 @@ fn "licm_hoist_through_ref_forwarding.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(src, is_negative_56);
         }
-        start_932 = src.used;
+        start_954 = src.used;
         src.used = is_negative_56;
-        builtin::array_set_u8(src.repr, start_932, 45);
+        builtin::array_set_u8(src.repr, start_954, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_56(src.used + at_2) > builtin::array_len(src.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(src, is_negative_56);
     }
-    start_932 = src.used;
+    start_954 = src.used;
     src.used = is_negative_56;
-    "core:prelude/numeric.wado/write_decimal_digits"(local.tee $load_8(src.repr), start_932, x_60, at_2);
+    "core:prelude/numeric.wado/write_decimal_digits"(local.tee $load_8(src.repr), start_954, x_60, at_2);
     if @unlikely(local.tee at_2(is_negative_56 + 1) > builtin::array_len($load_8)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(src, at_2);
@@ -122,9 +122,9 @@ fn "licm_hoist_through_ref_forwarding.wado/run"() with Stdout {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(src, at_2);
                 }
-                start_932 = src.used;
+                start_954 = src.used;
                 src.used = at_2;
-                builtin::array_copy<u8>(src.repr, start_932, out_0.repr, 0, is_negative_56);
+                builtin::array_copy<u8>(src.repr, start_954, out_0.repr, 0, is_negative_56);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
         };
@@ -136,14 +136,14 @@ fn "licm_hoist_through_ref_forwarding.wado/run"() with Stdout {
     at_2 = builtin::i32_wrap_i64(local.tee x_60("wasi/stream-new"()));
     is_negative_56 = builtin::i32_wrap_i64(x_60 >> 32_i64);
     at_2 = "licm_hoist_through_ref_forwarding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(at_2);
-    builtin::array_copy<u8>(local.tee $load_8(builtin::array_new<u8>(local.tee start_932(src.used) + 1)), 0, src.repr, 0, start_932);
-    builtin::array_set_u8($load_8, start_932, 10);
+    builtin::array_copy<u8>(local.tee $load_8(builtin::array_new<u8>(local.tee start_954(src.used) + 1)), 0, src.repr, 0, start_954);
+    builtin::array_set_u8($load_8, start_954, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_932 = start_932 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_56, $load_8, 0, start_932);
+        start_954 = start_954 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_56, $load_8, 0, start_954);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -160,9 +160,9 @@ fn "licm_hoist_through_ref_forwarding.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_97: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_97;
     };
-    start_932 = at_2 < 0;
+    start_954 = at_2 < 0;
     at_2 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_60(x_60 = builtin::i64_extend_i32_s(at_2); select i64(x_60 < 0_i64, 0_i64 - x_60, x_60)));
-    if start_932 {
+    if start_954 {
         if @unlikely(1 > builtin::array_len($load_8)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee out_0(struct.new "core:prelude/string.wado//String" { repr: $load_8, used: 0 }), 1);
@@ -172,32 +172,32 @@ fn "licm_hoist_through_ref_forwarding.wado/run"() with Stdout {
         builtin::array_set_u8($load_8, 0, 45);
     } else {
     }
-    if @unlikely(local.tee start_932(is_negative_56 + at_2) > builtin::array_len($load_8)) {
+    if @unlikely(local.tee start_954(is_negative_56 + at_2) > builtin::array_len($load_8)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee out_0(struct.new "core:prelude/string.wado//String" { repr: $load_8, used: is_negative_56 }), start_932);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee out_0(struct.new "core:prelude/string.wado//String" { repr: $load_8, used: is_negative_56 }), start_954);
         $load_8 = out_0.repr;
     }
-    start_1334 = is_negative_56;
-    is_negative_56 = start_932;
-    "core:prelude/numeric.wado/write_decimal_digits"($load_8, start_1334, x_60, at_2);
+    start_1356 = is_negative_56;
+    is_negative_56 = start_954;
+    "core:prelude/numeric.wado/write_decimal_digits"($load_8, start_1356, x_60, at_2);
     $inline_core_prelude_string_wado_String__internal_push_view_116: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_116;
     };
     at_2 = builtin::i32_wrap_i64(local.tee x_60("wasi/stream-new"()));
-    start_932 = builtin::i32_wrap_i64(x_60 >> 32_i64);
+    start_954 = builtin::i32_wrap_i64(x_60 >> 32_i64);
     at_2 = "licm_hoist_through_ref_forwarding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(at_2);
-    builtin::array_copy<u8>(local.tee new_repr_380(builtin::array_new<u8>(is_negative_56 + 1)), 0, $load_8, 0, is_negative_56);
-    builtin::array_set_u8(new_repr_380, is_negative_56, 10);
+    builtin::array_copy<u8>(local.tee new_repr_386(builtin::array_new<u8>(is_negative_56 + 1)), 0, $load_8, 0, is_negative_56);
+    builtin::array_set_u8(new_repr_386, is_negative_56, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
         is_negative_56 = is_negative_56 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(start_932, new_repr_380, 0, is_negative_56);
+        "core:rt/cm_stream_write_raw_all_u8"(start_954, new_repr_386, 0, is_negative_56);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"(start_932);
+        "wasi/stream-drop-writable"(start_954);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -218,25 +218,25 @@ fn "licm_hoist_through_ref_forwarding.wado/$cm_export__run"() {
 
 fn "licm_hoist_through_ref_forwarding.wado/licm_hoist_through_ref_forwarding.wado/count_quotes<&core:prelude/string.wado/String>"(buf, s) {
     let i: i32;
-    let self_5: i32;
+    let self_4: i32;
     let start_31: i32;
     let $licm_repr_33: ref Array<u8>;
-    self_5 = s.used;
+    self_4 = s.used;
     i = 0;
     $licm_repr_33 = s.repr;
     b17: block {
         l18: loop {
-            break_if b17 i >= self_5;
+            break_if b17 i >= self_4;
             if builtin::array_get_value<u8>($licm_repr_33, i) != 34 {
                 i = i + 1;
                 continue l18;
             }
-            if @unlikely(local.tee self_5(buf.used + 3) > builtin::array_len(buf.repr)) {
+            if @unlikely(local.tee self_4(buf.used + 3) > builtin::array_len(buf.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, self_5);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, self_4);
             }
             start_31 = buf.used;
-            buf.used = self_5;
+            buf.used = self_4;
             builtin::array_copy<u8>(buf.repr, start_31, global:licm_hoist_through_ref_forwarding.wado::$const_obj_3, 0, 3);
             return i;
         };

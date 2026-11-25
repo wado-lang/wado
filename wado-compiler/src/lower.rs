@@ -17,21 +17,23 @@ use crate::compiler_host::{SpanEmitter, in_span};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 
 /// Lower a [`FlatPackage`] and return a [`NirPackage`].
 pub fn lower(
     mut flat: FlatPackage,
     errors: &dyn ErrorSink,
     profiler: &dyn SpanEmitter,
+    exec: &Executor,
 ) -> Result<NirPackage, Bail> {
     // Ahead of the plan, which binds the locals a copied clause brings.
     contract_checks::lower(&mut flat);
     let plan = in_span(profiler, "lower/plan", || {
-        plan::plan(&mut flat, errors, profiler)
+        plan::plan(&mut flat, errors, profiler, exec)
     })?;
     // `translate` mints canonical FuncIds and stamps every call node at
     // construction ("born resolved"); there is no post-pass id assignment.
     Ok(in_span(profiler, "lower/translate", || {
-        translate::translate(flat, plan, profiler)
+        translate::translate(flat, plan, profiler, exec)
     }))
 }

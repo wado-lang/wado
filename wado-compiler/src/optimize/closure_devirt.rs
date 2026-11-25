@@ -7,7 +7,7 @@
 //! instead, and the read of that field only exists after `inline`.
 
 use crate::call_args::CallArgs;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir::{CallParamSource, FuncId};
 use crate::nir_arena::{
@@ -310,17 +310,25 @@ impl ClosureDevirtRule {
     }
 
     /// Every wrapper declared in `block` some `IndirectCall` dispatches
-    /// through to a `$call` taking the env. Parking a functor nothing reads
-    /// would only add a binding.
+    /// through to a `$call` taking the env, with those calls. Parking a functor
+    /// nothing reads would only add a binding.
     ///
     /// Walks that block alone: `runs_before` only admits a call sharing the
     /// wrapper's block, so no call outside the region can reach one inside it.
-    fn dispatched_wrappers(&self, engine: &mut Engine, block: BlockId) -> IndexSet<ExprId> {
-        exprs_under(engine.body, NodeRef::Block(block))
-            .into_iter()
-            .filter_map(|call| self.dispatched_wrapper(engine, call))
-            .filter_map(|(canonical, target)| target.takes_env().then_some(canonical))
-            .collect()
+    fn dispatched_wrappers(
+        &self,
+        engine: &mut Engine,
+        block: BlockId,
+    ) -> IndexMap<ExprId, Vec<ExprId>> {
+        let mut calls: IndexMap<ExprId, Vec<ExprId>> = IndexMap::default();
+        for call in exprs_under(engine.body, NodeRef::Block(block)) {
+            if let Some((canonical, target)) = self.dispatched_wrapper(engine, call)
+                && target.takes_env()
+            {
+                calls.entry(canonical).or_default().push(call);
+            }
+        }
+        calls
     }
 }
 
@@ -381,10 +389,14 @@ impl Rule for ClosureDevirtRule {
         let dispatched = self.dispatched_wrappers(engine, id);
         let Some((at, canonical, functor)) = candidates
             .into_iter()
-            .find(|&(_, canonical, _)| dispatched.contains(&canonical))
+            .find(|&(_, canonical, _)| dispatched.contains_key(&canonical))
         else {
             return false;
         };
+        // The calls can name the parked functor now, in this same run.
+        for &call in &dispatched[&canonical] {
+            engine.enqueue(NodeRef::Expr(call));
+        }
         let type_id = engine.body.exprs[functor].type_id;
         let span = engine.body.exprs[functor].span;
         let (bind, read) = engine.bind_minted("functor", Operand::Expr(functor), type_id, span);

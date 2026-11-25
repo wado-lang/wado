@@ -2634,33 +2634,35 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/iter.wado/FromIterator::from_iter<core:prelude/iter.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>>with()"(iter) {
-    let $load_1: i32;
+    let $load_0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
+    let $load_2: i32;
     let item_10: i32;
     let $sroa_result_repr_20: ref Array<i32>;
     let $sroa_result_used_21: i32;
     let $sroa_write_back_22: ref "core:prelude/list.wado//List<i32>";
     let $licm_inner_23: ref "core:prelude/slice.wado//SliceValueIter<i32>";
+    let $licm_f_24: ref "canonical//CanonicalClosure_1";
     $sroa_result_repr_20 = array.new_fixed<i32>();
     $sroa_result_used_21 = 0;
-    $licm_inner_23 = iter.inner;
+    $licm_inner_23 = local.tee $load_0(iter.inner);
+    $licm_f_24 = iter.f;
     b331: block {
         l332: loop {
             $fused_$inline_core_prelude_iter_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_iter_wado_Iterator__next_sroa_return__1: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_iter_wado_Iterator__next_sroa_return__2: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_iter_wado_Iterator__next_sroa_return__2 local.tee $load_1($licm_inner_23.index) >= $licm_inner_23.end;
-                    item_10 = builtin::array_get_value<i32>($licm_inner_23.repr, $load_1);
-                    $licm_inner_23.index = $load_1 + 1;
-                    $load_1 = block -> i32 {
-                        let $indirect_call_1: ref null "canonical//CanonicalClosure_1";
-                        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(iter.f).env, item_10);
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_iter_wado_Iterator__next_sroa_return__2 local.tee $load_2($licm_inner_23.index) >= $licm_inner_23.end;
+                    item_10 = builtin::array_get_value<i32>($licm_inner_23.repr, $load_2);
+                    $licm_inner_23.index = $load_2 + 1;
+                    $load_2 = block -> i32 {
+                        call_ref "functype/$canonical_closure_fn_1"($licm_f_24.func, $licm_f_24.env, item_10);
                     };
-                    $licm_inner_23 = iter.inner;
+                    $licm_inner_23 = $load_0;
                     if @unlikely($sroa_result_used_21 >= builtin::array_len($sroa_result_repr_20)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_22(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_result_repr_20, used: $sroa_result_used_21 }));
                         $sroa_result_repr_20 = $sroa_write_back_22.repr;
                     }
-                    builtin::array_set<i32>($sroa_result_repr_20, $sroa_result_used_21, $load_1);
+                    builtin::array_set<i32>($sroa_result_repr_20, $sroa_result_used_21, $load_2);
                     $sroa_result_used_21 = $sroa_result_used_21 + 1;
                     break $fused_$inline_core_prelude_iter_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_iter_wado_Iterator__next_sroa_return__1;
                 };
@@ -3549,41 +3551,41 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<spec_functions_closures.wado/$tmpl$7ac161ac968eb099,[core:prelude/numparse.wado/ParseIntError]>$spec0$spec0$sroa[t.h0]"(t) {
     let self_59: "core:prelude/numparse.wado//enum:IntErrorKind";
-    let $sroa_slot_105: ref null Array<u8>;
-    let $sroa_out_repr_129: ref Array<u8>;
-    let $sroa_out_used_130: i32;
-    let $sroa_write_back_138: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_129 = builtin::array_new<u8>(16);
-    $sroa_out_used_130 = 0;
+    let $sroa_slot_107: ref null Array<u8>;
+    let $sroa_out_repr_131: ref Array<u8>;
+    let $sroa_out_used_132: i32;
+    let $sroa_write_back_140: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_131 = builtin::array_new<u8>(16);
+    $sroa_out_used_132 = 0;
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
     };
     if local.tee self_59(t.kind) == 0 {
-        $sroa_slot_105 = array.new_data<u8>("cannot parse integer from empty string");
+        $sroa_slot_107 = array.new_data<u8>("cannot parse integer from empty string");
         self_59 = 38;
     } else if self_59 == 1 {
-        $sroa_slot_105 = array.new_data<u8>("invalid digit found in string");
+        $sroa_slot_107 = array.new_data<u8>("invalid digit found in string");
         self_59 = 29;
     } else if self_59 == 2 {
-        $sroa_slot_105 = array.new_data<u8>("number too large to fit in target type");
+        $sroa_slot_107 = array.new_data<u8>("number too large to fit in target type");
         self_59 = 38;
     } else {
-        $sroa_slot_105 = array.new_data<u8>("number too small to fit in target type");
+        $sroa_slot_107 = array.new_data<u8>("number too small to fit in target type");
         self_59 = 38;
     }
     $inline_core_prelude_string_wado_String__internal_push_string_32: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_32 self_59 == 0;
-        if @unlikely(local.tee $sroa_out_used_130(self_59) > 16) {
+        if @unlikely(local.tee $sroa_out_used_132(self_59) > 16) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_138(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_129, used: 0 }), $sroa_out_used_130);
-            $sroa_out_repr_129 = $sroa_write_back_138.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_140(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_131, used: 0 }), $sroa_out_used_132);
+            $sroa_out_repr_131 = $sroa_write_back_140.repr;
         }
-        builtin::array_copy<u8>($sroa_out_repr_129, 0, $sroa_slot_105, 0, self_59);
+        builtin::array_copy<u8>($sroa_out_repr_131, 0, $sroa_slot_107, 0, self_59);
     };
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
     };
-    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_129, used: $sroa_out_used_130 };
+    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_131, used: $sroa_out_used_132 };
 }
 
 fn "closure/spec_functions_closures.wado/$closure_wrapper_0"($env, $p_0) {
