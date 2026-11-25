@@ -520,6 +520,16 @@ fn run_bounded_fixpoint(
     })
 }
 
+/// Run `step` until it changes nothing, returning whether any run changed
+/// something.
+fn until_quiet(mut step: impl FnMut() -> bool) -> bool {
+    let mut changed = false;
+    while step() {
+        changed = true;
+    }
+    changed
+}
+
 /// Run a single optimization pass with profiling, returning whether it changed anything.
 ///
 /// Honours the `WADO_LIST_PASSES`, `WADO_DUMP_PASS_BEFORE`, and

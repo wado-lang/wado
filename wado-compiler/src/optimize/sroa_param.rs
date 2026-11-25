@@ -33,6 +33,7 @@ use cranelift_entity::EntityRef;
 use super::arena_query::{is_local_operand, is_pure_operand, operand_local, place_root_local};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
+use super::until_quiet;
 use crate::ast::Visibility;
 use crate::nir::FuncId;
 use crate::nir_visitor::reachable_exprs;
@@ -69,11 +70,7 @@ pub fn sroa_single_field_parameters(
     // A clone's scalar parameter can be a one-field struct reference again, one
     // level down a nested chain. Peeling it now rather than next round keeps a
     // chain deeper than the round cap from holding the fixpoint open.
-    let mut changed = false;
-    while scalarize_one_level(project, gate, state) {
-        changed = true;
-    }
-    changed
+    until_quiet(|| scalarize_one_level(project, gate, state))
 }
 
 fn scalarize_one_level(

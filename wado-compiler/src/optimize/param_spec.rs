@@ -36,6 +36,7 @@ use super::dce::{DescriptorCache, ReachabilityCache, reachable_function_position
 use super::extract::is_place_read;
 use super::gate::{FunctionGate, GatedPass};
 use super::inline::{body_callees, recursive_functions};
+use super::until_quiet;
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
@@ -1602,10 +1603,8 @@ pub(super) fn specialize_const_params(
     let mut reachable =
         reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
     let mut memos = RoundMemos::default();
-    let mut changed = false;
-    while specialize_round(project, state, gate, &mut memos, &mut reachable) {
-        changed = true;
-    }
+    let changed =
+        until_quiet(|| specialize_round(project, state, gate, &mut memos, &mut reachable));
     gate.catch_up(GatedPass::ParamSpec, project.functions.len());
     changed
 }

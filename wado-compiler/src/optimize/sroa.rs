@@ -13,6 +13,7 @@ use super::arena_query::{
 };
 use super::gate::{FunctionGate, GatedPass};
 use super::heap_effect::{HeapEffects, HeapEffectsCache};
+use super::until_quiet;
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::minted_what;
@@ -175,11 +176,7 @@ impl Rule for SroaRule<'_> {
         // An element bound to a nested literal is a candidate of its own, one
         // level down. Splitting it now rather than next round keeps a nesting
         // deeper than the round cap from holding the fixpoint open.
-        let mut changed = false;
-        while sroa_at_root(engine, self) {
-            changed = true;
-        }
-        changed
+        until_quiet(|| sroa_at_root(engine, self))
     }
 }
 
