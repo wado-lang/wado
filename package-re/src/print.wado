@@ -30,6 +30,16 @@ fn node_to(node: &Node, out: &mut String) {
             node_to(&g.body, out);
             out.push(')');
         },
+        Lookaround(l) => {
+            out.push_str(match [l.ahead, l.negated] {
+                [true, false] => "(?=",
+                [true, true] => "(?!",
+                [false, false] => "(?<=",
+                [false, true] => "(?<!",
+            });
+            node_to(&l.body, out);
+            out.push(')');
+        },
         Modified(m) => {
             out.push_str("(?");
             flags_to(m.add, out);

@@ -177,8 +177,8 @@ reports the reference that closes the cycle as failing.
 
 `multipleOf` divides the decimals as written, so `0.3` is a multiple of `0.1`.
 `pattern` and `patternProperties` use `wado-lang:re`, which reads ECMA-262 patterns in
-Unicode mode and rejects at `compile` what it cannot match in linear time, such
-as a backreference or a lookbehind.
+Unicode mode and rejects at `compile` what it cannot match in linear time: a
+backreference.
 
 ### More than one document
 
@@ -367,7 +367,7 @@ The validator treats `format` as an annotation unless it is compiled with
 grammar, read strictly. Jade asserts `date-time`, `date`, `time`, `duration`,
 `email`, `ipv4`, `ipv6`, `uri`, `uri-reference`, `iri`, `iri-reference`,
 `uuid`, `uri-template`, `json-pointer`, `relative-json-pointer` and `regex`. A
-`regex` is held to ECMA-262's syntax alone, so a lookbehind passes though
+`regex` is held to ECMA-262's syntax alone, so a backreference passes though
 `pattern` rejects it. Any other format passes every string.
 
 ```text

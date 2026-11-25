@@ -16,10 +16,28 @@ internal variant Node {
     NotWordBoundary,
     Set(CharSet),
     Group(Group),
+    Lookaround(Lookaround),
     Modified(Modified),
     Repeat(Repeat),
     Concat(List<Node>),
     Alternation(List<Node>),
+}
+
+/// Calls `visit` on each node directly under `node`, in the pattern's order.
+internal fn each_child(node: &Node, mut visit: fn mut(&Node)) {
+    match *node {
+        Group(g) => visit(&g.body),
+        Lookaround(l) => visit(&l.body),
+        Modified(m) => visit(&m.body),
+        Repeat(r) => visit(&r.body),
+        Concat(nodes) | Alternation(nodes) => {
+            for let n of &nodes {
+                visit(n);
+            }
+        },
+        Char(_) | _::Any | _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Set(_) => {
+        },
+    }
 }
 
 /// `(…)`, `(?<name>…)` or `(?:…)`. A capturing group's index counts its
@@ -27,6 +45,17 @@ internal variant Node {
 internal struct Group {
     internal index: Option<i32>,
     internal name: Option<String>,
+    internal body: Node,
+}
+
+/// `(?=…)` `(?!…)` `(?<=…)` `(?<!…)`
+internal struct Lookaround {
+    /// Counts its opening parenthesis among the pattern's lookarounds, from
+    /// 0, so one holds a higher index than whatever encloses it.
+    internal index: i32,
+    /// Whether it reads what follows its position, or what precedes it.
+    internal ahead: bool,
+    internal negated: bool,
     internal body: Node,
 }
 
@@ -41,6 +70,13 @@ internal struct Modified {
     internal add: Flag,
     internal remove: Flag,
     internal body: Node,
+}
+
+impl Modified {
+    /// The flags in force in the body, where `outer` are in force around it.
+    internal fn inside(&self, outer: Flag) -> Flag {
+        return (outer | self.add) & ~self.remove;
+    }
 }
 
 internal struct Repeat {
