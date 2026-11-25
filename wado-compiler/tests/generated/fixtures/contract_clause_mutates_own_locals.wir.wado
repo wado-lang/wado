@@ -181,54 +181,54 @@ fn "contract_clause_mutates_own_locals.wado/total"(xs) {
     let $load_1: ref Array<i32>;
     let sum_1: i32;
     let ref_val_19: i32;
-    let $sroa_$iter_0_index_62: i32;
+    let $sroa_$iter_0_index_63: i32;
     let $sroa_write_back_74: ref "core:prelude/list.wado//List<i32>";
     sum_1 = 0;
     $load_0 = xs.used;
     $load_1 = xs.repr;
-    $sroa_$iter_0_index_62 = 0;
+    $sroa_$iter_0_index_63 = 0;
     b0: block {
         l1: loop {
-            break_if b0 (builtin::i64_extend_i32_s($sroa_$iter_0_index_62) + 3_i64) >= builtin::i64_extend_i32_s($load_0);
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            break_if b0 (builtin::i64_extend_i32_s($sroa_$iter_0_index_63) + 3_i64) >= builtin::i64_extend_i32_s($load_0);
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
             continue l1;
         };
     };
     b2: block {
         l3: loop {
-            break_if b2 $sroa_$iter_0_index_62 >= $load_0;
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            break_if b2 $sroa_$iter_0_index_63 >= $load_0;
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
             continue l3;
         };
     };
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_0)), 0, $load_1, 0, $load_0);
-    if @unlikely(local.tee $sroa_$iter_0_index_62($load_0) >= builtin::array_len($array_clone_dst_2)) {
+    if @unlikely(local.tee $sroa_$iter_0_index_63($load_0) >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_74(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: $load_0 }));
         $array_clone_dst_2 = $sroa_write_back_74.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, $sroa_$iter_0_index_62, 0);
-    if @unlikely(local.tee $sroa_$iter_0_index_62(local.tee $load_0($sroa_$iter_0_index_62 + 1)) >= builtin::array_len($array_clone_dst_2)) {
+    builtin::array_set<i32>($array_clone_dst_2, $sroa_$iter_0_index_63, 0);
+    if @unlikely(local.tee $sroa_$iter_0_index_63(local.tee $load_0($sroa_$iter_0_index_63 + 1)) >= builtin::array_len($array_clone_dst_2)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_74(struct.new "core:prelude/list.wado//List<i32>" { repr: $array_clone_dst_2, used: $load_0 }));
         $array_clone_dst_2 = $sroa_write_back_74.repr;
     }
-    builtin::array_set<i32>($array_clone_dst_2, $sroa_$iter_0_index_62, 1);
-    $load_0 = $sroa_$iter_0_index_62 + 1;
+    builtin::array_set<i32>($array_clone_dst_2, $sroa_$iter_0_index_63, 1);
+    $load_0 = $sroa_$iter_0_index_63 + 1;
     if @unlikely((if sum_1 >= 0 -> i32 {
         $load_0 == (xs.used + 2);
     } else {
@@ -238,28 +238,28 @@ fn "contract_clause_mutates_own_locals.wado/total"(xs) {
         "contract_clause_mutates_own_locals.wado/total$cold0$dae[xs]"();
         unreachable;
     }
-    return sum_1 = 0, $load_0 = xs.used, $load_1 = xs.repr, $sroa_$iter_0_index_62 = 0, b8: block {
+    return sum_1 = 0, $load_0 = xs.used, $load_1 = xs.repr, $sroa_$iter_0_index_63 = 0, b8: block {
         l9: loop {
-            break_if b8 (builtin::i64_extend_i32_s($sroa_$iter_0_index_62) + 3_i64) >= builtin::i64_extend_i32_s($load_0);
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            break_if b8 (builtin::i64_extend_i32_s($sroa_$iter_0_index_63) + 3_i64) >= builtin::i64_extend_i32_s($load_0);
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
             continue l9;
         };
     }, b10: block {
         l11: loop {
-            break_if b10 $sroa_$iter_0_index_62 >= $load_0;
-            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_62);
-            $sroa_$iter_0_index_62 = $sroa_$iter_0_index_62 + 1;
+            break_if b10 $sroa_$iter_0_index_63 >= $load_0;
+            ref_val_19 = builtin::array_get_value<i32>($load_1, $sroa_$iter_0_index_63);
+            $sroa_$iter_0_index_63 = $sroa_$iter_0_index_63 + 1;
             sum_1 = sum_1 + ref_val_19;
             continue l11;
         };
