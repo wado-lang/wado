@@ -475,9 +475,10 @@ reuses the same move-check machinery, resources being its first client.
   checker" and "every `resource` method takes `&self`" claims are narrowed to
   host-object resources; affine resources additionally have by-value consuming
   methods. Applied there.
-- WEP 2026-03-01 (CM Canonical Attributes): the resource `drop` method is
-  amended from `fn drop(&self)` (unsound under move-only) to `fn drop(self)`; the
-  call syntax is unchanged. Applied there.
+- The canonical resources' `drop` method is amended from `fn drop(&self)`
+  (unsound under move-only) to `fn drop(self)`; the call syntax is unchanged.
+  [CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md#canonical-operations-are-declared-on-the-resource)
+  states it so.
 
 ## Consequences
 
@@ -884,7 +885,7 @@ handle nothing minted, which the program then owns and drops.
 - [CM Explainer — Handle types](../vendor/component-model/design/mvp/Explainer.md)
 - [CM Canonical ABI — `lift_own` / `lift_borrow`](../vendor/component-model/design/mvp/CanonicalABI.md)
 - [Resource Lifecycle Management (RAII)](./wep-2026-01-12-resource-lifecycle.md)
-- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
+- [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md#canonical-operations-are-declared-on-the-resource)
 - [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)

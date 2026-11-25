@@ -1,28 +1,30 @@
-//! A backtracker over a span the DFAs found: it follows the Pike VM's threads
-//! one at a time, the preferred first, and never enters a state at a position
-//! twice, so it takes time linear in the span as the Pike VM does. It holds one
-//! set of slots where the Pike VM copies one for each thread, and pays for
-//! that with a bit for each state at each position, which is why it reads
-//! short spans only.
+//! A backtracker over a span known to hold a match: it follows the Pike VM's
+//! threads one at a time, the preferred first, and never enters a state at a
+//! position twice, so it takes time linear in the span as the Pike VM does. It
+//! holds one set of slots where the Pike VM copies one for each thread, and
+//! pays for that with a bit for each state at each position, which is why it
+//! reads short spans only.
 
 use { Cache, holds } from "./pike.wado";
-use { Program } from "./program.wado";
+use { Direction, Program } from "./program.wado";
 
 /// How many bits a search may mark: the program's states times the span's
 /// positions. The Pike VM reads what would take more.
 global MAX_VISITED_BITS: i32 = 1 << 18;
 
-/// Whether `backtrack` reads the span `[start, end)`.
+/// Whether `backtrack` reads the span between `start` and `end`.
 internal fn fits(program: &Program, start: i32, end: i32) -> bool {
-    return program.states() <= MAX_VISITED_BITS / (end - start + 1);
+    return program.states() <= MAX_VISITED_BITS / (i32::abs(end - start) + 1);
 }
 
 /// The capture slots of the leftmost-first match starting at `start`, which
-/// the DFAs found to end at `end`; an unset slot is -1.
+/// is known to end at `end`, the way the program reads; an unset slot is -1.
+/// `cache.oracle` is that of `text` where the program holds a lookaround.
 internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, start: i32, end: i32) -> List<i32>
     contract fits(program, start, end)
 {
-    let positions = end - start + 1;
+    let step = if program.direction == Direction::Forward { 1 } else { -1 };
+    let positions = i32::abs(end - start) + 1;
     let words = (program.states() * positions + 31) / 32;
     cache.visited.truncate(0);
     for let _w of 0..<words {
@@ -51,7 +53,7 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
             if inst matches { Byte(_) | _::Match } {
                 entered = 0;
             }
-            let bit = (program.state_base[pc] + entered) * positions + (pos - start);
+            let bit = (program.state_base[pc] + entered) * positions + i32::abs(pos - start);
             let mask = 1 << (bit & 31);
             if cache.visited[bit >> 5] & mask != 0 {
                 break;
@@ -59,15 +61,15 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
             cache.visited[bit >> 5] |= mask;
             match inst {
                 Byte([lo, hi]) => {
-                    if pos >= end {
+                    if pos == end {
                         break;
                     }
-                    let b = text.byte_at(pos);
+                    let b = program.direction.byte_at(text, pos);
                     if b < lo || b > hi {
                         break;
                     }
                     pc += 1;
-                    pos += 1;
+                    pos += step;
                 },
                 _::Match => {
                     assert pos == end;
@@ -118,9 +120,18 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
                 _::Fail => {
                     break;
                 },
-                // The DFAs run no program that holds one, so none found
-                // this span.
-                Lookaround(_) => unreachable(),
+                Lookaround([index, mark]) => {
+                    if !cache.oracle.passes(index, pos) {
+                        break;
+                    }
+                    if mark >= 0 {
+                        cache.stack.push(-1 - mark);
+                        cache.stack.push(slots[mark]);
+                        cache.stack.push(0);
+                        slots[mark] = pos;
+                    }
+                    pc += 1;
+                },
             }
         }
     }

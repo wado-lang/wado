@@ -170,6 +170,6 @@ This WEP does not design the browser playground integration. It requires only th
 
 ## See Also
 
-- [`wep-2026-01-16-source-provider-abstraction.md`](./wep-2026-01-16-source-provider-abstraction.md) — `CompilerHost` abstraction that makes the compiler I/O-free and Wasm-buildable.
+- `wado-compiler/src/compiler_host.rs` — the `CompilerHost` abstraction that makes the compiler I/O-free and Wasm-buildable.
 - [`wep-2026-01-11-wasi-p3-only.md`](./wep-2026-01-11-wasi-p3-only.md) — Wado's position on WASI versions; the LSP server targets p2 for VS Code hosting reasons, which is independent of the runtime targets used by compiled Wado programs.
 - [Language Server Protocol specification](https://microsoft.github.io/language-server-protocol/) — wire protocol for the transport implemented in `wado-lsp/src/server/`.

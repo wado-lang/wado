@@ -1,11 +1,11 @@
 # WEP: Async Canonical Options for `stream.read` / `stream.write`
 
-Makes the stream halves of [ReturnCode Semantics](./wep-2026-03-01-cm-resource-canonical-attrs.md)
-in WEP-2026-03-01 true, by lowering both stream copy canonicals with `async`.
+Lowers both stream copy canonicals with `async`, so a stream copy receives
+BLOCKED as a future copy does.
 
 ## Context
 
-WEP-2026-03-01 specified one BLOCKED protocol for all four CM copy operations:
+All four CM copy operations were designed around one BLOCKED protocol:
 
 | CM ReturnCode | Wado behavior                     |
 | ------------- | --------------------------------- |
@@ -211,9 +211,8 @@ Neutral:
 
 ## Related WEPs
 
-- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
-  — defines the resource surface and the BLOCKED protocol this WEP corrects for
-  streams.
+- [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md#canonical-operations-are-declared-on-the-resource)
+  — the resource surface the copies are declared on.
 - [Generic `AsyncCall<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
   — subtasks already use the asynchronous lowering and `wait_for_subtask`.
 - [WASI HTTP Integration](./wep-2026-02-21-wasi-http.md) — the handler patterns

@@ -1,6 +1,6 @@
 # Re Benchmark
 
-Searches one text with six patterns and reports throughput, Re against Node's
+Searches one text with ten patterns and reports throughput, Re against Node's
 `RegExp`.
 
 ```sh
@@ -35,26 +35,38 @@ which is the bar a literal pattern is held to.
 | `email`               | `[\w.+-]+@[\w-]+(?:\.[\w-]+)+`                                 | counting every match              |
 | `uri`                 | `[a-z][a-z0-9+.-]*://[^\s/?#]+[^\s?#]*(?:\?[^\s#]*)?(?:#\S*)?` | counting every match              |
 | `timestamp-captures`  | `(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`             | summing group 4 of every match    |
+| `lookahead`           | `\w+(?=@\w)`                                                   | counting every match              |
+| `lookbehind`          | `(?<=://)[^\s/?#]+`                                            | counting every match              |
+| `negated-lookaround`  | `(?<!\d)\d{2}(?!\d)`                                           | counting every match              |
+| `lookbehind-captures` | `(?<=T(\d{2}):\d{2}:\d{2}Z )[A-Z]+`                            | summing group 1 of every match    |
 | `pathological`        | `(?:x+x+)+y`                                                   | one failing search of the 24 `x`s |
+
+The four lookaround rows each take a different path: a lookahead and a
+lookbehind whose tables a DFA fills, two lookarounds that each ask about one
+byte, and a lookbehind whose group is read after the match.
 
 ## Results
 
-Environment: Wado 2026-11-15 (`-O2`), wasmtime 50.0.1, Node.js v26.13.0,
+Environment: Wado 2026-11-25 (`-O2`), wasmtime 50.0.1, Node.js v26.13.0,
 Linux x86_64. Best of three runs, picked by `benchmark/pick.ts`.
 
 | Case                  |     Node.js |        Wado | Node.js ms/iter | Wado ms/iter | Wado vs Node.js |
 | --------------------- | ----------: | ----------: | --------------: | -----------: | --------------- |
-| `literal`             |   4.01 GB/s | 542.00 MB/s |           0.016 |        0.121 | 7.4x slower     |
-| `literal-find`        |   9.19 GB/s | 926.58 MB/s |           0.007 |        0.070 | 9.9x slower     |
-| `literal-ignore-case` |   1.35 GB/s | 224.17 MB/s |           0.049 |        0.292 | 6.0x slower     |
-| `email`               | 100.95 MB/s | 207.97 MB/s |           0.651 |        0.315 | 2.1x faster     |
-| `uri`                 | 105.57 MB/s | 175.34 MB/s |           0.622 |        0.374 | 1.7x faster     |
-| `timestamp-captures`  |   1.08 GB/s | 266.49 MB/s |           0.061 |        0.246 | 4.1x slower     |
-| `pathological`        |  172.51 B/s | 163.48 MB/s |         139.124 |      < 0.001 | 10⁶x faster     |
+| `literal`             |   3.76 GB/s | 533.01 MB/s |           0.017 |        0.123 | 7.1x slower     |
+| `literal-find`        |   7.34 GB/s | 897.40 MB/s |           0.009 |        0.073 | 8.2x slower     |
+| `literal-ignore-case` |   1.08 GB/s | 198.63 MB/s |           0.061 |        0.330 | 5.4x slower     |
+| `email`               |  76.21 MB/s | 171.29 MB/s |           0.862 |        0.383 | 2.2x faster     |
+| `uri`                 |  99.37 MB/s | 152.44 MB/s |           0.661 |        0.430 | 1.5x faster     |
+| `timestamp-captures`  | 755.31 MB/s | 217.47 MB/s |           0.087 |        0.301 | 3.5x slower     |
+| `lookahead`           |  57.62 MB/s |  82.57 MB/s |           1.140 |        0.795 | 1.4x faster     |
+| `lookbehind`          | 278.15 MB/s | 195.83 MB/s |           0.236 |        0.335 | 1.4x slower     |
+| `negated-lookaround`  | 840.51 MB/s | 106.68 MB/s |           0.078 |        0.615 | 7.9x slower     |
+| `lookbehind-captures` | 875.32 MB/s | 138.12 MB/s |           0.075 |        0.475 | 6.3x slower     |
+| `pathological`        |  147.23 B/s | 143.70 MB/s |         163.015 |      < 0.001 | 10⁶x faster     |
 
 ## Fuel
 
-`re.wado`'s `test "fuel"` measures each case once with the DFA's states built,
+`re.wado`'s `test "fuel"` measures each case once with the DFAs' states built,
 and `re/first-search` holds what building them costs. Fuel does not move with
 the host, so it is what tells two versions of Re apart:
 

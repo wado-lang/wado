@@ -57,11 +57,12 @@ function countFinds(text, needle) {
   return n;
 }
 
-// The sum of every timestamp's hour, so that each match's groups are read.
-function sumHours(regex, text) {
+// The sum of every timestamp's hour, which `group` holds, so that each match's
+// groups are read.
+function sumHours(regex, text, group) {
   regex.lastIndex = 0;
   let sum = 0;
-  for (let m; (m = regex.exec(text)) !== null; ) sum += Number(m[4]);
+  for (let m; (m = regex.exec(text)) !== null; ) sum += Number(m[group]);
   return sum;
 }
 
@@ -90,6 +91,10 @@ const email = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/gu;
 const uri = /[a-z][a-z0-9+.-]*:\/\/[^\s\/?#]+[^\s?#]*(?:\?[^\s#]*)?(?:#\S*)?/gu;
 const timestamp = /(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z/gu;
 const pathological = /(?:x+x+)+y/u;
+const lookahead = /\w+(?=@\w)/gu;
+const lookbehind = /(?<=:\/\/)[^\s\/?#]+/gu;
+const negatedLookaround = /(?<!\d)\d{2}(?!\d)/gu;
+const lookbehindCaptures = /(?<=T(\d{2}):\d{2}:\d{2}Z )[A-Z]+/gu;
 
 console.log(`re (Node.js RegExp): ${Buffer.byteLength(INPUT)} bytes`);
 bench("literal", INPUT, 223, () => countMatches(literal, INPUT));
@@ -97,5 +102,9 @@ bench("literal-find", INPUT, 223, () => countFinds(INPUT, "Sherlock Holmes"));
 bench("literal-ignore-case", INPUT, 452, () => countMatches(literalIgnoreCase, INPUT));
 bench("email", INPUT, 176, () => countMatches(email, INPUT));
 bench("uri", INPUT, 176, () => countMatches(uri, INPUT));
-bench("timestamp-captures", INPUT, 1904, () => sumHours(timestamp, INPUT));
+bench("timestamp-captures", INPUT, 1904, () => sumHours(timestamp, INPUT, 4));
+bench("lookahead", INPUT, 176, () => countMatches(lookahead, INPUT));
+bench("lookbehind", INPUT, 176, () => countMatches(lookbehind, INPUT));
+bench("negated-lookaround", INPUT, 980, () => countMatches(negatedLookaround, INPUT));
+bench("lookbehind-captures", INPUT, 1904, () => sumHours(lookbehindCaptures, INPUT, 1));
 bench("pathological", PATHOLOGICAL, 0, () => (pathological.test(PATHOLOGICAL) ? 1 : 0));
