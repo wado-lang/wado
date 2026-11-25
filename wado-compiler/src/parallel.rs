@@ -226,7 +226,7 @@ mod tests {
     fn every_visit_skips_what_its_caller_skips() {
         let _scope = SkipScope::enter(&["x".to_string()]);
         let executor = Executor::new(4);
-        let items: Vec<u32> = (0..64).collect();
+        let mut items: Vec<u32> = (0..64).collect();
         let skips = |_: &u32| !decides("x");
         let indexed = |_: usize| !decides("x");
         assert!(executor.map(&items, skips).into_iter().all(|s| s));
@@ -252,7 +252,7 @@ mod tests {
         };
         executor.for_each(&items, |i| count(skips(i)));
         executor.for_each_index(64, |i| count(indexed(i)));
-        executor.for_each_mut(&mut items.clone(), |i| count(skips(i)));
+        executor.for_each_mut(&mut items, |i| count(skips(i)));
         assert_eq!(unskipped.into_inner(), 0);
     }
 }
