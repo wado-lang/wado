@@ -76,19 +76,19 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let start_308: i32;
-    let $sroa_t_h0_1070: i32;
-    let $sroa_t_h1_1071: ref "core:prelude/string.wado//String";
-    $sroa_t_h0_1070 = local.tee c(black_box(struct.new "ctfe_struct_result.wado//Config" { width: 10, name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 105, 100, 101), used: 4 } })).width;
-    $sroa_t_h1_1071 = c.name;
+    let start_312: i32;
+    let $sroa_t_h0_1074: i32;
+    let $sroa_t_h1_1075: ref "core:prelude/string.wado//String";
+    $sroa_t_h0_1074 = local.tee c(black_box(struct.new "ctfe_struct_result.wado//Config" { width: 10, name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 105, 100, 101), used: 4 } })).width;
+    $sroa_t_h1_1075 = c.name;
     out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_17: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_17;
     };
-    is_negative_64 = $sroa_t_h0_1070 < 0;
-    x_68 = builtin::i64_extend_i32_s($sroa_t_h0_1070);
+    is_negative_64 = $sroa_t_h0_1074 < 0;
+    x_68 = builtin::i64_extend_i32_s($sroa_t_h0_1074);
     x_68 = select i64(x_68 < 0_i64, 0_i64 - x_68, x_68);
-    $sroa_t_h0_1070 = $inline_count_digits_u64_7: block -> i32 {
+    $sroa_t_h0_1074 = $inline_count_digits_u64_7: block -> i32 {
         if x_68 <u 100000_i64 {
             if x_68 <u 100_i64 {
                 if x_68 <u 10_i64 {
@@ -153,52 +153,52 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, is_negative_64);
         }
-        start_308 = out_15.used;
+        start_312 = out_15.used;
         out_15.used = is_negative_64;
-        builtin::array_set_u8(out_15.repr, start_308, 45);
+        builtin::array_set_u8(out_15.repr, start_312, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_64(out_15.used + $sroa_t_h0_1070) > builtin::array_len(out_15.repr)) {
+    if @unlikely(local.tee is_negative_64(out_15.used + $sroa_t_h0_1074) > builtin::array_len(out_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, is_negative_64);
     }
-    start_308 = out_15.used;
+    start_312 = out_15.used;
     out_15.used = is_negative_64;
     $load_10 = out_15.repr;
-    $sroa_t_h0_1070 = start_308 + $sroa_t_h0_1070;
+    $sroa_t_h0_1074 = start_312 + $sroa_t_h0_1074;
     b22: block {
         l23: loop {
-            break_if b22 ($sroa_t_h0_1070 - start_308) < 2;
+            break_if b22 ($sroa_t_h0_1074 - start_312) < 2;
             q = x_68 /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x_68 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_10, $sroa_t_h0_1070 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_10, $sroa_t_h0_1070 - 2, 48 + tens);
-            $sroa_t_h0_1070 = $sroa_t_h0_1070 - 2;
+            builtin::array_set_u8($load_10, $sroa_t_h0_1074 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($load_10, $sroa_t_h0_1074 - 2, 48 + tens);
+            $sroa_t_h0_1074 = $sroa_t_h0_1074 - 2;
             x_68 = q;
             continue l23;
         };
     };
-    if $sroa_t_h0_1070 > start_308 {
-        builtin::array_set_u8($load_10, start_308, 48 + builtin::i32_wrap_i64(x_68 %u 10_i64));
+    if $sroa_t_h0_1074 > start_312 {
+        builtin::array_set_u8($load_10, start_312, 48 + builtin::i32_wrap_i64(x_68 %u 10_i64));
     }
-    if @unlikely(local.tee $sroa_t_h0_1070(is_negative_64 + 1) > builtin::array_len($load_10)) {
+    if @unlikely(local.tee $sroa_t_h0_1074(is_negative_64 + 1) > builtin::array_len($load_10)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $sroa_t_h0_1070);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $sroa_t_h0_1074);
     }
     is_negative_64 = out_15.used;
-    out_15.used = $sroa_t_h0_1070;
+    out_15.used = $sroa_t_h0_1074;
     builtin::array_copy<u8>(local.tee $load_10(out_15.repr), is_negative_64, global:ctfe_struct_result.wado::$const_obj_0, 0, 1);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__57: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee is_negative_64($sroa_t_h1_1071.used) == 0;
-                if @unlikely(local.tee $sroa_t_h0_1070($sroa_t_h0_1070 + is_negative_64) > builtin::array_len($load_10)) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee is_negative_64($sroa_t_h1_1075.used) == 0;
+                if @unlikely(local.tee $sroa_t_h0_1074($sroa_t_h0_1074 + is_negative_64) > builtin::array_len($load_10)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $sroa_t_h0_1070);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, $sroa_t_h0_1074);
                 }
-                start_308 = out_15.used;
-                out_15.used = $sroa_t_h0_1070;
-                builtin::array_copy<u8>(out_15.repr, start_308, $sroa_t_h1_1071.repr, 0, is_negative_64);
+                start_312 = out_15.used;
+                out_15.used = $sroa_t_h0_1074;
+                builtin::array_copy<u8>(out_15.repr, start_312, $sroa_t_h1_1075.repr, 0, is_negative_64);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
         };
@@ -207,17 +207,17 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_74: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_74;
     };
-    $sroa_t_h0_1070 = builtin::i32_wrap_i64(local.tee x_68("wasi/stream-new"()));
+    $sroa_t_h0_1074 = builtin::i32_wrap_i64(local.tee x_68("wasi/stream-new"()));
     is_negative_64 = builtin::i32_wrap_i64(x_68 >> 32_i64);
-    $sroa_t_h0_1070 = "ctfe_struct_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_1070);
-    builtin::array_copy<u8>(local.tee $load_10(builtin::array_new<u8>(local.tee start_308(out_15.used) + 1)), 0, out_15.repr, 0, start_308);
-    builtin::array_set_u8($load_10, start_308, 10);
+    $sroa_t_h0_1074 = "ctfe_struct_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_1074);
+    builtin::array_copy<u8>(local.tee $load_10(builtin::array_new<u8>(local.tee start_312(out_15.used) + 1)), 0, out_15.repr, 0, start_312);
+    builtin::array_set_u8($load_10, start_312, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_308 = start_308 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_64, $load_10, 0, start_308);
+        start_312 = start_312 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_64, $load_10, 0, start_312);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -225,7 +225,7 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_1070);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_1074);
     }
 }
 

@@ -45,6 +45,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool, null_kind};
 use crate::optimize::pass_dump;
+use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::reflect_marker::{BridgeCallee, bridge_callee};
 use crate::tir::{
@@ -66,7 +67,12 @@ use crate::{nir, tir};
 /// the `NirPackage`. The closure-functor conversion looks up the
 /// fresh [`FuncRef`] in `func_map`, so a functor shares its methods with
 /// the package rather than holding copies.
-pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter) -> NirPackage {
+pub fn translate(
+    flat: FlatPackage,
+    plan: LowerPlan,
+    profiler: &dyn SpanEmitter,
+    exec: &Executor,
+) -> NirPackage {
     let LowerPlan {
         box_plan,
         closure,
@@ -165,13 +171,26 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         }),
     };
 
+    // Each body's walk reads only that body and the plan, so the walks run on
+    // `exec`'s threads ahead of the conversions, which mint ids in order.
+    let analyses = {
+        let bodies: Vec<_> = functions.iter().map(|f| f.borrow()).collect();
+        let bodies: Vec<&TirFunction> = bodies.iter().map(|f| &**f).collect();
+        let type_table = type_table.borrow();
+        let type_table: &TypeTable = &type_table;
+        let (points_to, struct_fields_map) = (&translator.points_to, &translator.struct_fields_map);
+        exec.map(&bodies, |func| {
+            copy_analysis(func, type_table, &value_copy, points_to, struct_fields_map)
+        })
+    };
     let mut func_map: IndexMap<*const RefCell<TirFunction>, FuncRef> =
         IndexMap::with_capacity_and_hasher(functions.len(), rustc_hash::FxBuildHasher);
     let functions: Vec<FuncRef> = functions
         .into_iter()
-        .map(|func_rc| {
+        .zip(analyses)
+        .map(|(func_rc, analysis)| {
             let ptr = Rc::as_ptr(&func_rc);
-            let nir_rc = FuncCell::new(translator.convert_function(&func_rc.borrow()));
+            let nir_rc = FuncCell::new(translator.convert_function(&func_rc.borrow(), analysis));
             func_map.insert(ptr, Arc::clone(&nir_rc));
             nir_rc
         })
@@ -489,8 +508,76 @@ struct ExtraLocals {
     locals: RefCell<Vec<TirLocal>>,
 }
 
+/// What the ownership walk decides about a function's copies, with the root
+/// each reference local is taken over.
+type CopyAnalysis = (
+    value_copy::last_use::Ownership,
+    value_copy::last_use::RefTargets,
+);
+
+/// `func`'s [`CopyAnalysis`]; `None` where the function holds nothing a copy
+/// is made of. The move/share/alias analyses only ever mark copyable-value
+/// locals, and most functions (scalar/reference-only) have none, so skipping
+/// them saves pure per-function allocation. What a reference leads to counts,
+/// which `*r` hands to a call, and so does what a cell local holds, and a
+/// borrowed temporary, whose copy the walk decides.
+fn copy_analysis(
+    func: &TirFunction,
+    type_table: &TypeTable,
+    plan: &value_copy::ValueCopyPlan,
+    points_to: &PointsTo,
+    struct_fields_map: &StructFields,
+) -> Option<CopyAnalysis> {
+    let needs_copy_analysis = func
+        .params
+        .iter()
+        .map(|p| p.type_id)
+        .chain(func.locals.iter().map(|l| l.type_id))
+        .any(|tid| value_copy::needs_value_copy(type_table.peel_refs(tid), type_table))
+        || func
+            .body
+            .as_ref()
+            .is_some_and(|b| value_copy::last_use::borrows_temporary(b, type_table));
+    if !needs_copy_analysis {
+        return None;
+    }
+    // One resolver for the body, shared by every question about what an
+    // expression names: the ownership walk and the reference-root table.
+    let resolver = place::Resolver::new(
+        func,
+        type_table,
+        &plan.return_paths,
+        &plan.returns_owned,
+        &plan.builtins,
+    );
+    let oracle = value_copy::ownership::OwnedCalls::new(
+        &plan.returns_owned,
+        &plan.returns_projection,
+        &plan.builtins,
+        &plan.retention,
+    )
+    .with_indirect(&plan.indirect_owned_returns);
+    Some((
+        value_copy::last_use::analyze_ownership(
+            func,
+            &oracle,
+            type_table,
+            &resolver,
+            plan,
+            points_to,
+            plan.flow.outlived(func),
+            &value_copy::reach::StorageReach::new(
+                type_table,
+                struct_fields_map,
+                &plan.closure_captures,
+            ),
+        ),
+        value_copy::last_use::compute_ref_targets(func, &resolver, type_table),
+    ))
+}
+
 impl<'a, 'p> FunctionTranslator<'a, 'p> {
-    fn new(base: &'a Translator<'p>, func: &TirFunction) -> Self {
+    fn new(base: &'a Translator<'p>, func: &TirFunction, analysis: Option<CopyAnalysis>) -> Self {
         let key = (func.module_source.clone(), func.name.clone());
         let specialized = base
             .closure
@@ -506,65 +593,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
         let boxed_locals = BoxedLocals::of(func, base.box_plan);
-        // The move/share/alias analyses only ever mark copyable-value locals; a
-        // function with none has nothing to elide, so all three are empty. Skip
-        // them — running them is otherwise pure per-function allocation, and most
-        // functions (scalar/reference-only) hit this path. What a reference
-        // leads to counts, which `*r` hands to a call, and so does what a cell
-        // local holds, and a borrowed temporary, whose copy the walk decides.
-        let needs_copy_analysis = {
-            let tt = base.type_table.borrow();
-            func.params
-                .iter()
-                .map(|p| p.type_id)
-                .chain(func.locals.iter().map(|l| l.type_id))
-                .any(|tid| value_copy::needs_value_copy(tt.peel_refs(tid), &tt))
-                || func
-                    .body
-                    .as_ref()
-                    .is_some_and(|b| value_copy::last_use::borrows_temporary(b, &tt))
-        };
-        // One resolver for the body, shared by every question about what an
-        // expression names: the ownership walk and the reference-root table.
-        let (ownership, ref_targets) = if needs_copy_analysis {
-            let type_table = base.type_table.borrow();
-            let resolver = place::Resolver::new(
-                func,
-                &type_table,
-                &base.value_copy.return_paths,
-                &base.value_copy.returns_owned,
-                &base.value_copy.builtins,
-            );
-            let oracle = value_copy::ownership::OwnedCalls::new(
-                &base.value_copy.returns_owned,
-                &base.value_copy.returns_projection,
-                &base.value_copy.builtins,
-                &base.value_copy.retention,
-            )
-            .with_indirect(&base.value_copy.indirect_owned_returns);
-            (
-                value_copy::last_use::analyze_ownership(
-                    func,
-                    &oracle,
-                    &type_table,
-                    &resolver,
-                    base.value_copy,
-                    &base.points_to,
-                    base.value_copy.flow.outlived(func),
-                    &value_copy::reach::StorageReach::new(
-                        &type_table,
-                        &base.struct_fields_map,
-                        &base.value_copy.closure_captures,
-                    ),
-                ),
-                value_copy::last_use::compute_ref_targets(func, &resolver, &type_table),
-            )
-        } else {
-            (
-                value_copy::last_use::Ownership::default(),
-                value_copy::last_use::RefTargets::default(),
-            )
-        };
+        let needs_copy_analysis = analysis.is_some();
+        let (ownership, ref_targets) = analysis.unwrap_or_default();
         let analyzed = needs_copy_analysis
             && func
                 .body
@@ -742,8 +772,8 @@ impl Translator<'_> {
             .collect()
     }
 
-    fn convert_function(&self, func: &TirFunction) -> NirFunction {
-        let fctx = FunctionTranslator::new(self, func);
+    fn convert_function(&self, func: &TirFunction, analysis: Option<CopyAnalysis>) -> NirFunction {
+        let fctx = FunctionTranslator::new(self, func, analysis);
         // Walk the body first so any locals allocated by per-arm
         // rewrites (currently only the wide-int `Match` scrutinee
         // hoist) are visible when we materialize `locals` /
@@ -2219,6 +2249,7 @@ impl FunctionTranslator<'_, '_> {
             if self.base.closure.specializable.contains(closure_id) {
                 return nir_struct;
             }
+            assert_canonical_target(&self.base.type_table.borrow(), functor, expr.type_id);
             return self.alloc_expr(
                 ExprKind::ClosureToCanonical {
                     functor: nir_struct.into(),
@@ -2333,6 +2364,7 @@ impl FunctionTranslator<'_, '_> {
             return functor;
         }
         let info = &self.base.closure.functor_infos[spec.functor_id as usize];
+        assert_canonical_target(&self.base.type_table.borrow(), info, site_type);
         self.alloc_expr(
             ExprKind::ClosureToCanonical {
                 functor: functor.into(),
@@ -3185,6 +3217,31 @@ impl FunctionTranslator<'_, '_> {
             param_abi: ParamAbi::default(),
         }
     }
+}
+
+/// A closure becomes a function value of its canonical signature alone, which
+/// is what lets the heap-effect summaries run an indirect call through just the
+/// closures of its callee's signature.
+fn assert_canonical_target(
+    type_table: &TypeTable,
+    functor: &ClosureFunctor,
+    target_fn_type: tir::TypeId,
+) {
+    let ResolvedType::Function {
+        params,
+        return_type,
+        ..
+    } = type_table.get(target_fn_type)
+    else {
+        unreachable!("a closure converts to a function type");
+    };
+    assert!(
+        *return_type == functor.canonical_return
+            && params
+                .iter()
+                .eq(functor.canonical_user_params.iter().map(|(_, ty)| ty)),
+        "a closure converts to its canonical signature"
+    );
 }
 
 fn convert_test(test: &TirTest) -> NirTest {

@@ -212,7 +212,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     }
     rewrite_call_sites(project, &all, gate.exec(), &mut touched);
     touched.extend(project.rename_reshaped(candidates.keys().copied(), gate.exec()));
-    scalarize_variant_locals(project, &dirty, &mut touched);
+    scalarize_variant_locals(project, &dirty, &mut touched, gate.exec());
     // A round with no new candidates still does work: `nir/inline` plants call
     // sites on callees scalarized earlier, and rewriting one is a change the
     // fixed-point loop has to see. Reporting only the candidate set let the
@@ -2036,9 +2036,10 @@ fn rewrite_call_sites(
                 .map(|(&local, f)| (local, candidates[f].layout.tuple_type))
                 .collect();
             for (&local, &tuple_type) in &tuple_types {
-                let slot = &mut func.locals[local as usize].type_id;
-                changed |= *slot != tuple_type;
-                *slot = tuple_type;
+                if func.locals[local as usize].type_id != tuple_type {
+                    func.locals[local as usize].type_id = tuple_type;
+                    changed = true;
+                }
             }
             changed |= retype_lets(&mut body, &tuple_types);
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
@@ -2069,40 +2070,60 @@ fn rewrite_call_sites(
 /// … s = Some(v); … match s { … }` holds `[tag, v]`, which `sroa` then splits
 /// into scalars, so no write allocates. It qualifies when every write builds a
 /// case and every read destructures, so nothing ever needs the variant whole.
-fn scalarize_variant_locals(project: &NirPackage, dirty: &[FuncId], touched: &mut IndexSet<usize>) {
+fn scalarize_variant_locals(
+    project: &NirPackage,
+    dirty: &[FuncId],
+    touched: &mut IndexSet<usize>,
+    exec: &Executor,
+) {
+    // A layout may intern the types it splits into, so the table is filled in
+    // the functions' order before they are rewritten on `exec`'s threads.
     let mut layouts: IndexMap<TypeId, Option<Candidate>> = IndexMap::default();
     for &fid in dirty {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        let Some(mut body) = func.body.take() else {
+        let func = project.functions[fid.index()].borrow();
+        if func.body.is_none() {
             continue;
-        };
-        if scalarize_locals_in(project, &mut func, &mut body, &mut layouts) {
-            touched.insert(fid.index());
         }
-        func.body = Some(body);
+        for local in splittable_locals(&func) {
+            let ty = func.locals[local as usize].type_id;
+            if !layouts.contains_key(&ty) {
+                let cand = local_candidate(project, ty);
+                layouts.insert(ty, cand);
+            }
+        }
     }
+    let functions = &project.functions;
+    let type_table = &*project.type_table.borrow();
+    let layouts = &layouts;
+    touched.extend(exec.filter_map(dirty, |&fid| {
+        let mut func = functions[fid.index()].borrow_mut();
+        let mut body = func.body.take()?;
+        let rewrote = scalarize_locals_in(type_table, &mut func, &mut body, layouts);
+        func.body = Some(body);
+        rewrote.then_some(fid.index())
+    }));
+}
+
+/// The locals of `func` that phase 4 may split: neither a parameter nor one
+/// whose address is taken.
+fn splittable_locals(func: &NirFunction) -> impl Iterator<Item = u32> + '_ {
+    (0..u32::try_from(func.locals.len()).expect("too many locals")).filter(|local| {
+        !func.address_taken_locals.contains(local)
+            && !func.params.iter().any(|p| p.local_index == *local)
+    })
 }
 
 /// Phase 4 over one function, whose body the caller holds. Returns whether it
 /// rewrote anything.
 fn scalarize_locals_in(
-    project: &NirPackage,
+    type_table: &TypeTable,
     func: &mut NirFunction,
     body: &mut Body,
-    layouts: &mut IndexMap<TypeId, Option<Candidate>>,
+    layouts: &IndexMap<TypeId, Option<Candidate>>,
 ) -> bool {
     let mut candidates: IndexMap<u32, Candidate> = IndexMap::default();
-    for (local, l) in func.locals.iter().enumerate() {
-        let local = u32::try_from(local).expect("too many locals");
-        if func.address_taken_locals.contains(&local)
-            || func.params.iter().any(|p| p.local_index == local)
-        {
-            continue;
-        }
-        let cand = layouts
-            .entry(l.type_id)
-            .or_insert_with(|| local_candidate(project, l.type_id));
-        if let Some(cand) = cand {
+    for local in splittable_locals(func) {
+        if let Some(cand) = &layouts[&func.locals[local as usize].type_id] {
             candidates.insert(local, cand.clone());
         }
     }
@@ -2113,8 +2134,7 @@ fn scalarize_locals_in(
     // allocates at every write, `null` included.
     let rebound = arena_query::rebound_locals(body);
     candidates.retain(|local, _| !rebound.contains(local));
-    let type_table = project.type_table.borrow();
-    let rebind = Rebind::new(func, &type_table);
+    let rebind = Rebind::new(func, type_table);
     retain_rewritable_locals(body, &mut candidates, &rebind);
     if candidates.is_empty() {
         return false;
@@ -2326,18 +2346,23 @@ fn case_tuple(body: &mut Body, value: Operand, cand: &Candidate, span: Span) -> 
 /// tuple-returning call claim to produce a boxed one. Reports `changed` only when
 /// a type moved on a node that runs.
 fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candidate>) -> bool {
-    let mut changed = false;
-    for e in reachable_exprs(body) {
-        let node = &mut body.exprs[e];
-        if let ExprKind::Call { func_id, .. } = &node.kind
-            && let Some(cand) = candidates.get(func_id)
-            && node.type_id != cand.layout.tuple_type
-        {
-            node.type_id = cand.layout.tuple_type;
-            changed = true;
-        }
+    // Read before writing: a mutable borrow counts as an edit, and this runs
+    // over every caller of a scalarized callee each round.
+    let retypes: Vec<(ExprId, TypeId)> = reachable_exprs(body)
+        .into_iter()
+        .filter_map(|e| {
+            let node = &body.exprs[e];
+            let ExprKind::Call { func_id, .. } = &node.kind else {
+                return None;
+            };
+            let tuple_type = candidates.get(func_id)?.layout.tuple_type;
+            (node.type_id != tuple_type).then_some((e, tuple_type))
+        })
+        .collect();
+    for &(e, tuple_type) in &retypes {
+        body.exprs[e].type_id = tuple_type;
     }
-    changed
+    !retypes.is_empty()
 }
 
 /// Retype the binding statement and every read of the bound temp. The local's
@@ -2349,32 +2374,46 @@ fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) -> bool {
 
 /// [`retype_let`] for several locals in one sweep.
 fn retype_lets(body: &mut Body, tuple_types: &IndexMap<u32, TypeId>) -> bool {
-    let mut changed = false;
-    for stmt in body.stmts.values_mut() {
-        if let StmtKind::Let {
-            local_index,
-            type_id,
-            ..
-        } = &mut stmt.kind
-            && let Some(&tuple_type) = tuple_types.get(local_index)
-            && *type_id != tuple_type
-        {
-            *type_id = tuple_type;
-            changed = true;
-        }
+    // Read before writing, as `retype_candidate_calls` does.
+    let lets: Vec<(StmtId, TypeId)> = body
+        .stmts
+        .iter()
+        .filter_map(|(s, stmt)| {
+            let StmtKind::Let {
+                local_index,
+                type_id,
+                ..
+            } = &stmt.kind
+            else {
+                return None;
+            };
+            let tuple_type = *tuple_types.get(local_index)?;
+            (*type_id != tuple_type).then_some((s, tuple_type))
+        })
+        .collect();
+    let reads: Vec<(ExprId, TypeId)> = body
+        .exprs
+        .iter()
+        .filter_map(|(e, node)| {
+            let ExprKind::Local { index, .. } = &node.kind else {
+                return None;
+            };
+            let tuple_type = *tuple_types.get(index)?;
+            (node.type_id != tuple_type).then_some((e, tuple_type))
+        })
+        .collect();
+    for &(s, tuple_type) in &lets {
+        let StmtKind::Let { type_id, .. } = &mut body.stmts[s].kind else {
+            unreachable!("collected as a `Let`");
+        };
+        *type_id = tuple_type;
     }
-    for node in body.exprs.values_mut() {
-        if let ExprKind::Local { index, .. } = &node.kind
-            && let Some(&tuple_type) = tuple_types.get(index)
-            && node.type_id != tuple_type
-        {
-            node.type_id = tuple_type;
-            changed = true;
-        }
+    for &(e, tuple_type) in &reads {
+        body.exprs[e].type_id = tuple_type;
     }
     let retyped: Vec<(u32, TypeId)> = tuple_types.iter().map(|(&l, &t)| (l, t)).collect();
-    body.values.retype_locals(&retyped);
-    changed
+    body.retype_locals(&retyped);
+    !lets.is_empty() || !reads.is_empty()
 }
 
 /// Read-only context for the call-site rewrite over one body.

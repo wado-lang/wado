@@ -220,14 +220,14 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let $sroa_$iter_0_start_161: i32;
+    let $sroa_$iter_0_start_163: i32;
     $sroa_xs_repr_128 = builtin::array_new<i32>(64);
     $sroa_xs_used_129 = 0;
-    $sroa_$iter_0_start_161 = 0;
+    $sroa_$iter_0_start_163 = 0;
     b4: block {
         l5: loop {
-            break_if b4 $sroa_$iter_0_start_161 >= 4;
-            $sroa_$iter_0_start_161 = local.tee current($sroa_$iter_0_start_161) + 1;
+            break_if b4 $sroa_$iter_0_start_163 >= 4;
+            $sroa_$iter_0_start_163 = local.tee current($sroa_$iter_0_start_163) + 1;
             current = black_box(current);
             if @unlikely($sroa_xs_used_129 >= builtin::array_len($sroa_xs_repr_128)) {
                 cold_path;
@@ -240,14 +240,14 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
         };
     };
     $sroa_xs_used_129 = block -> i32 {
-        $sroa_$iter_0_start_161 = black_box(1);
-        "array_bounds_elim_panic_block_early_exit.wado/sum"($sroa_xs_repr_128, $sroa_xs_used_129, $sroa_$iter_0_start_161);
+        $sroa_$iter_0_start_163 = black_box(1);
+        "array_bounds_elim_panic_block_early_exit.wado/sum"($sroa_xs_repr_128, $sroa_xs_used_129, $sroa_$iter_0_start_163);
     };
     out_30 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_30: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_30;
     };
-    $sroa_$iter_0_start_161 = $sroa_xs_used_129 < 0;
+    $sroa_$iter_0_start_163 = $sroa_xs_used_129 < 0;
     x = builtin::i64_extend_i32_s($sroa_xs_used_129);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     $sroa_xs_used_129 = $inline_count_digits_u64_1: block -> i32 {
@@ -310,30 +310,30 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if $sroa_$iter_0_start_161 {
-        if @unlikely(local.tee $sroa_$iter_0_start_161(0 + 1) > builtin::array_len(out_30.repr)) {
+    if $sroa_$iter_0_start_163 {
+        if @unlikely(local.tee $sroa_$iter_0_start_163(0 + 1) > builtin::array_len(out_30.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, $sroa_$iter_0_start_161);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, $sroa_$iter_0_start_163);
         }
         current = out_30.used;
-        out_30.used = $sroa_$iter_0_start_161;
+        out_30.used = $sroa_$iter_0_start_163;
         builtin::array_set_u8(out_30.repr, current, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_$iter_0_start_161(out_30.used + $sroa_xs_used_129) > builtin::array_len(out_30.repr)) {
+    if @unlikely(local.tee $sroa_$iter_0_start_163(out_30.used + $sroa_xs_used_129) > builtin::array_len(out_30.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, $sroa_$iter_0_start_161);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, $sroa_$iter_0_start_163);
     }
     current = out_30.used;
-    out_30.used = $sroa_$iter_0_start_161;
+    out_30.used = $sroa_$iter_0_start_163;
     arr = out_30.repr;
     $sroa_xs_used_129 = current + $sroa_xs_used_129;
     b30: block {
         l31: loop {
             break_if b30 ($sroa_xs_used_129 - current) < 2;
             q = x /u 100_i64;
-            tens = local.tee $sroa_$iter_0_start_161(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, $sroa_xs_used_129 - 1, (48 + $sroa_$iter_0_start_161) - (tens * 10));
+            tens = local.tee $sroa_$iter_0_start_163(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, $sroa_xs_used_129 - 1, (48 + $sroa_$iter_0_start_163) - (tens * 10));
             builtin::array_set_u8(arr, $sroa_xs_used_129 - 2, 48 + tens);
             $sroa_xs_used_129 = $sroa_xs_used_129 - 2;
             x = q;
@@ -347,7 +347,7 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_49;
     };
     $sroa_xs_used_129 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $sroa_$iter_0_start_161 = builtin::i32_wrap_i64(x >> 32_i64);
+    $sroa_$iter_0_start_163 = builtin::i32_wrap_i64(x >> 32_i64);
     $sroa_xs_used_129 = "array_bounds_elim_panic_block_early_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_xs_used_129);
     builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee current(out_30.used) + 1)), 0, out_30.repr, 0, current);
     builtin::array_set_u8(arr, current, 10);
@@ -356,11 +356,11 @@ fn "array_bounds_elim_panic_block_early_exit.wado/run"() with Stdout {
             unreachable;
         }
         current = current + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_start_161, arr, 0, current);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$iter_0_start_163, arr, 0, current);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_$iter_0_start_161);
+        "wasi/stream-drop-writable"($sroa_$iter_0_start_163);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {

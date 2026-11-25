@@ -133,10 +133,10 @@ fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
     let i: i32;
     let out_30: ref "core:prelude/string.wado//String";
     let x: i64;
-    let arr_132: ref Array<u8>;
+    let arr_134: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_195: i32;
+    let start_205: i32;
     sum = 0;
     i = 0;
     b0: block {
@@ -238,33 +238,33 @@ fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, i);
         }
-        start_195 = out_30.used;
+        start_205 = out_30.used;
         out_30.used = i;
-        builtin::array_set_u8(out_30.repr, start_195, 45);
+        builtin::array_set_u8(out_30.repr, start_205, 45);
     } else {
     }
     if @unlikely(local.tee i(out_30.used + sum) > builtin::array_len(out_30.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, i);
     }
-    start_195 = out_30.used;
+    start_205 = out_30.used;
     out_30.used = i;
-    arr_132 = out_30.repr;
-    sum = start_195 + sum;
+    arr_134 = out_30.repr;
+    sum = start_205 + sum;
     b27: block {
         l28: loop {
-            break_if b27 (sum - start_195) < 2;
+            break_if b27 (sum - start_205) < 2;
             q = x /u 100_i64;
             tens = local.tee i(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr_132, sum - 1, (48 + i) - (tens * 10));
-            builtin::array_set_u8(arr_132, sum - 2, 48 + tens);
+            builtin::array_set_u8(arr_134, sum - 1, (48 + i) - (tens * 10));
+            builtin::array_set_u8(arr_134, sum - 2, 48 + tens);
             sum = sum - 2;
             x = q;
             continue l28;
         };
     };
-    if sum > start_195 {
-        builtin::array_set_u8(arr_132, start_195, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if sum > start_205 {
+        builtin::array_set_u8(arr_134, start_205, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_46: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
@@ -272,14 +272,14 @@ fn "array_bounds_elim_loop_guard.wado/run"() with Stdout {
     sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i = builtin::i32_wrap_i64(x >> 32_i64);
     sum = "array_bounds_elim_loop_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    builtin::array_copy<u8>(local.tee arr_132(builtin::array_new<u8>(local.tee start_195(out_30.used) + 1)), 0, out_30.repr, 0, start_195);
-    builtin::array_set_u8(arr_132, start_195, 10);
+    builtin::array_copy<u8>(local.tee arr_134(builtin::array_new<u8>(local.tee start_205(out_30.used) + 1)), 0, out_30.repr, 0, start_205);
+    builtin::array_set_u8(arr_134, start_205, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_195 = start_195 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i, arr_132, 0, start_195);
+        start_205 = start_205 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i, arr_134, 0, start_205);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

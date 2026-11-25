@@ -33,6 +33,7 @@ use cranelift_entity::EntityRef;
 use super::arena_query::{is_local_operand, is_pure_operand, operand_local, place_root_local};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
+use super::until_quiet;
 use crate::ast::Visibility;
 use crate::nir::FuncId;
 use crate::nir_visitor::reachable_exprs;
@@ -62,6 +63,17 @@ struct SroaInfo {
 }
 
 pub fn sroa_single_field_parameters(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    state: &mut SroaParamState,
+) -> bool {
+    // A clone's scalar parameter can be a one-field struct reference again, one
+    // level down a nested chain. Peeling it now rather than next round keeps a
+    // chain deeper than the round cap from holding the fixpoint open.
+    until_quiet(|| scalarize_one_level(project, gate, state))
+}
+
+fn scalarize_one_level(
     project: &mut NirPackage,
     gate: &mut FunctionGate,
     state: &mut SroaParamState,
@@ -1153,7 +1165,7 @@ fn mint_scalarized_clones(
                 .iter()
                 .map(|s| (s.local, s.scalar_type_id))
                 .collect();
-            body.values.retype_locals(&retyped);
+            body.retype_locals(&retyped);
             let root = body.root();
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }

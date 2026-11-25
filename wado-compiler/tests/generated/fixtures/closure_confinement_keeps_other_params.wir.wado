@@ -71,7 +71,7 @@ type "functype//closure_confinement_keeps_other_params.wado/$hole_fmt$closure_co
 
 type "functype//closure_confinement_keeps_other_params.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//closure_confinement_keeps_other_params.wado/total$sroa[xs.used]$dae[tag]" = fn(i32) -> i32;  // TypeId(20)
+type "functype//closure_confinement_keeps_other_params.wado/total$sroa[xs.used]" = fn(i32, i32) -> i32;  // TypeId(20)
 
 type "functype//core:prelude/async.wado/copy_result" = fn(i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(21)
 
@@ -189,7 +189,7 @@ global global:core:prelude/numeric.wado::$const_obj_8: ref "core:prelude/string.
 
 fn "closure_confinement_keeps_other_params.wado/caller"(src) {
     let $av_4: i32;
-    return "closure_confinement_keeps_other_params.wado/total$sroa[xs.used]$dae[tag]"(local.tee $av_4(src.used)) + $av_4;
+    return "closure_confinement_keeps_other_params.wado/total$sroa[xs.used]"(local.tee $av_4(src.used), 5) + $av_4;
 }
 
 fn "closure_confinement_keeps_other_params.wado/$template_segment$closure_confinement_keeps_other_params.wado/$tmpl$bf35c06f94276816"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, index) {
@@ -238,8 +238,8 @@ caller(&[1]): "), used: 15 }, s2: struct.new "core:prelude/string.wado//String" 
     "wasi/task-return"(0);
 }
 
-fn "closure_confinement_keeps_other_params.wado/total$sroa[xs.used]$dae[tag]"(xs) {
-    return xs + 6;
+fn "closure_confinement_keeps_other_params.wado/total$sroa[xs.used]"(xs, tag) {
+    return xs + (tag + 1);
 }
 
 fn "core:prelude/async.wado/copy_result"(packed) {

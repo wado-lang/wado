@@ -781,52 +781,52 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<stores_fn_t
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_170: i32;
-    let $sroa_out_repr_303: ref Array<u8>;
-    let $sroa_out_used_304: i32;
-    let $sroa_write_back_306: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_303 = builtin::array_new<u8>(24);
-    $sroa_out_used_304 = 8;
-    builtin::array_copy<u8>($sroa_out_repr_303, 0, global:core:prelude/string.wado::$const_obj_2, 0, 8);
+    let start_172: i32;
+    let $sroa_out_repr_305: ref Array<u8>;
+    let $sroa_out_used_306: i32;
+    let $sroa_write_back_308: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_305 = builtin::array_new<u8>(24);
+    $sroa_out_used_306 = 8;
+    builtin::array_copy<u8>($sroa_out_repr_305, 0, global:core:prelude/string.wado::$const_obj_2, 0, 8);
     is_negative_65 = t < 0;
     t = "core:prelude/numeric.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_65 {
-        if @unlikely(9 > builtin::array_len($sroa_out_repr_303)) {
+        if @unlikely(9 > builtin::array_len($sroa_out_repr_305)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_306(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_303, used: 8 }), 9);
-            $sroa_out_repr_303 = $sroa_write_back_306.repr;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_308(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_305, used: 8 }), 9);
+            $sroa_out_repr_305 = $sroa_write_back_308.repr;
         }
-        $sroa_out_used_304 = 9;
-        builtin::array_set_u8($sroa_out_repr_303, 8, 45);
+        $sroa_out_used_306 = 9;
+        builtin::array_set_u8($sroa_out_repr_305, 8, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65($sroa_out_used_304 + t) > builtin::array_len($sroa_out_repr_303)) {
+    if @unlikely(local.tee is_negative_65($sroa_out_used_306 + t) > builtin::array_len($sroa_out_repr_305)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_306(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_303, used: $sroa_out_used_304 }), is_negative_65);
-        $sroa_out_repr_303 = $sroa_write_back_306.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_308(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_305, used: $sroa_out_used_306 }), is_negative_65);
+        $sroa_out_repr_305 = $sroa_write_back_308.repr;
     }
-    start_170 = $sroa_out_used_304;
-    $sroa_out_used_304 = is_negative_65;
-    t = start_170 + t;
+    start_172 = $sroa_out_used_306;
+    $sroa_out_used_306 = is_negative_65;
+    t = start_172 + t;
     b101: block {
         l102: loop {
-            break_if b101 (t - start_170) < 2;
+            break_if b101 (t - start_172) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_out_repr_303, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8($sroa_out_repr_303, t - 2, 48 + tens);
+            builtin::array_set_u8($sroa_out_repr_305, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8($sroa_out_repr_305, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l102;
         };
     };
-    if t > start_170 {
-        builtin::array_set_u8($sroa_out_repr_303, start_170, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_172 {
+        builtin::array_set_u8($sroa_out_repr_305, start_172, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
     };
-    return $sroa_out_repr_303, $sroa_out_used_304;
+    return $sroa_out_repr_305, $sroa_out_used_306;
 }
 
 export fn "stores_fn_type_with_effect_param.wado/$cm_export__run" as "run"

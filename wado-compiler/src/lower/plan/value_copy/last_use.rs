@@ -2,12 +2,14 @@
 //! backward liveness walk per body plus small auxiliary scans. A handler
 //! reads twice, so skips.
 
+use std::cell::{OnceCell, RefCell};
+
 use super::analyze::is_owned_value;
 use super::confine::ConfinedParams;
 use super::funcset::FuncKeySet;
 use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
-use super::points_to::{Locations, PointsTo};
+use super::points_to::{LocalReach, Locations, PointsTo};
 use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use super::{is_scalar_type, needs_value_copy};
@@ -116,6 +118,7 @@ pub fn analyze_ownership(
         frame: points_to
             .frame(&func.module_source, &func.name)
             .expect("the fold computes points-to over every body it analyzes"),
+        root_reach: RefCell::default(),
         exits: Vec::new(),
         loop_seeds: IndexMap::default(),
         reference_locals: all_locals
@@ -356,6 +359,9 @@ struct AssignSite<'a> {
 struct ShareInputs<'a> {
     /// The storage each mutation's live set can still read, in `mutations` order.
     at_write: Vec<IndexSet<u32>>,
+    /// The locations each mutation lands in, in `mutations` order, once a
+    /// verdict asks.
+    landed: Vec<OnceCell<IndexSet<u32>>>,
     /// The storage readable where each of `opaque_writes` runs, in order.
     at_opaque_write: Vec<IndexSet<u32>>,
     capacity_observed: IndexSet<u32>,
@@ -604,6 +610,7 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|m| readable_storage(paths, &m.live))
                 .collect(),
+            landed: self.mutations.iter().map(|_| OnceCell::new()).collect(),
             at_opaque_write: self
                 .opaque_writes
                 .iter()
@@ -632,43 +639,8 @@ impl<'a> Analyzer<'a> {
         let Some(ShareSource { path, binds }) = self.share_sources.get(&local) else {
             return false;
         };
-        // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind of
-        // the place is never itself a conflict. Every other mutation must be
-        // unreachable.
-        //
-        // A source reached through a reference, or rooted at one the resolver
-        // could not follow (`*base` with `base` a parameter), lies in storage
-        // this body does not own, which any alias of it may write: a `&mut`
-        // parameter, a callee, a global. A write under the same reference root,
-        // or into storage of this frame's own, is placed by its path. One under
-        // another reference root may alias it, and a path past a reference
-        // field ends anywhere, so only its type can rule either out. So may a
-        // callee's write past a handle of this frame's own, through the
-        // references the handle holds.
         let behind_root = self.reference_locals.contains(&path.root);
         let referent = path.through_ref || behind_root;
-        let share_safe = self.mutations.iter().zip(&inputs.at_write).all(|(m, r)| {
-            let placed = !path.through_ref
-                && (!behind_root
-                    || m.path.root == path.root
-                    || !(self.reference_locals.contains(&m.path.root)
-                        || matches!(m.lands, Lands::Reach(_))));
-            !r.contains(&local)
-                || (placed && write_cannot_reach(m, path))
-                || (referent && !self.lands_in_reach(m.lands, path.root))
-                || m.written
-                    .is_some_and(|written| !self.reach.write_reaches(written, *binds))
-        }) && !(referent
-            && self.opaque_writes.iter().zip(&inputs.at_opaque_write).any(
-                |((written, _), readable)| {
-                    readable.contains(&local)
-                        && self.root_reaches_written(
-                            path.root,
-                            &written.locations,
-                            written.beyond_handed,
-                        )
-                },
-            ));
         let root_given_away = inputs
             .consumed_reach
             .get(&path.root)
@@ -682,19 +654,66 @@ impl<'a> Analyzer<'a> {
             self.consumed.contains_key(&local)
         };
         let moved_out = taken || inputs.place_move_bases.contains(&local);
-        path.root != local
+        let unwritten_elsewhere = path.root != local
             // A root a `&mut` outlives is written wherever the holder runs it,
-            // which the scan above never sees.
+            // which the scan below never sees.
             && !self.written_through_escape.contains(&path.root)
             // A reference to the binding kept out of this body's sight reads its
-            // storage after any write the scan above weighs.
+            // storage after any write the scan below weighs.
             && !self.ref_escaped.contains_key(&local)
             // A share skips a copy's right-sizing: a binding whose capacity is read keeps its copy.
             && !inputs.capacity_observed.contains(&local)
             && !moved_out
             && !self.is_mutated_root(local)
-            && !root_given_away
-            && share_safe
+            && !root_given_away;
+        if !unwritten_elsewhere {
+            return false;
+        }
+        // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind of
+        // the place is never itself a conflict. Every other mutation must be
+        // unreachable.
+        //
+        // A source reached through a reference, or rooted at one the resolver
+        // could not follow (`*base` with `base` a parameter), lies in storage
+        // this body does not own, which any alias of it may write: a `&mut`
+        // parameter, a callee, a global. A write under the same reference root,
+        // or into storage of this frame's own, is placed by its path. One under
+        // another reference root may alias it, and a path past a reference
+        // field ends anywhere, so only its type can rule either out. So may a
+        // callee's write past a handle of this frame's own, through the
+        // references the handle holds.
+        let writes = self
+            .mutations
+            .iter()
+            .zip(&inputs.at_write)
+            .zip(&inputs.landed);
+        writes.into_iter().all(|((m, r), landed)| {
+            let placed = !path.through_ref
+                && (!behind_root
+                    || m.path.root == path.root
+                    || !(self.reference_locals.contains(&m.path.root)
+                        || matches!(m.lands, Lands::Reach(_))));
+            !r.contains(&local)
+                || (placed && write_cannot_reach(m, path))
+                || (referent
+                    && !self.root_reaches_written(
+                        path.root,
+                        landed.get_or_init(|| self.landed(m.lands)),
+                        false,
+                    ))
+                || m.written
+                    .is_some_and(|written| !self.reach.write_reaches(written, *binds))
+        }) && !(referent
+            && self.opaque_writes.iter().zip(&inputs.at_opaque_write).any(
+                |((written, _), readable)| {
+                    readable.contains(&local)
+                        && self.root_reaches_written(
+                            path.root,
+                            &written.locations,
+                            written.beyond_handed,
+                        )
+                },
+            ))
     }
 
     /// The places each local's value was read out of, so a write stays
@@ -772,11 +791,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Whether a write landing at `lands` may meet storage `root` reaches.
-    fn lands_in_reach(&self, lands: Lands<'_>, root: u32) -> bool {
-        self.root_reaches_written(root, &self.landed(lands), false)
-    }
-
     /// The locations a write `lands` in.
     fn landed(&self, lands: Lands<'_>) -> IndexSet<u32> {
         match lands {
@@ -801,13 +815,15 @@ impl<'a> Analyzer<'a> {
         locations: &IndexSet<u32>,
         beyond_handed: bool,
     ) -> bool {
-        let Some(slot) = self.points_to.location(self.frame, root) else {
+        let mut cache = self.root_reach.borrow_mut();
+        let reached = cache.entry(root).or_insert_with(|| {
+            let slot = self.points_to.location(self.frame, root)?;
+            Some((slot, self.points_to.local_reach(self.frame, root)))
+        });
+        let Some((slot, reach)) = reached else {
             return true;
         };
-        locations.contains(&slot)
-            || self
-                .points_to
-                .reaches_written(self.frame, root, locations, beyond_handed)
+        locations.contains(slot) || reach.meets(locations, beyond_handed)
     }
 
     fn is_mutated_root(&self, local: u32) -> bool {
@@ -1665,6 +1681,9 @@ struct Analyzer<'a> {
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
+    /// Each root `root_reaches_written` has asked of: its slot and what its
+    /// value reaches, or `None` where the analysis gives it no location.
+    root_reach: RefCell<IndexMap<u32, Option<(u32, LocalReach)>>>,
     exits: Vec<Exit>,
     /// Each loop's head as last solved, by its body.
     loop_seeds: IndexMap<*const TirBlock, LoopSeed>,

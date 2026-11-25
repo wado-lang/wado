@@ -221,7 +221,7 @@ fn "closure_row_in_synthesized_argument.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_203: i32;
+    let start_213: i32;
     elements_5 = array.new_fixed<i32>(0, 1, 2);
     $sroa_again_repr_132 = array.new_fixed<i32>();
     $sroa_again_used_133 = 0;
@@ -313,22 +313,22 @@ fn "closure_row_in_synthesized_argument.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_34, $mv_used_2);
         }
-        start_203 = out_34.used;
+        start_213 = out_34.used;
         out_34.used = $mv_used_2;
-        builtin::array_set_u8(out_34.repr, start_203, 45);
+        builtin::array_set_u8(out_34.repr, start_213, 45);
     } else {
     }
     if @unlikely(local.tee $mv_used_2(out_34.used + $sroa_again_used_133) > builtin::array_len(out_34.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_34, $mv_used_2);
     }
-    start_203 = out_34.used;
+    start_213 = out_34.used;
     out_34.used = $mv_used_2;
     arr = out_34.repr;
-    $sroa_again_used_133 = start_203 + $sroa_again_used_133;
+    $sroa_again_used_133 = start_213 + $sroa_again_used_133;
     b23: block {
         l24: loop {
-            break_if b23 ($sroa_again_used_133 - start_203) < 2;
+            break_if b23 ($sroa_again_used_133 - start_213) < 2;
             q = x /u 100_i64;
             tens = local.tee $mv_used_2(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_again_used_133 - 1, (48 + $mv_used_2) - (tens * 10));
@@ -338,8 +338,8 @@ fn "closure_row_in_synthesized_argument.wado/run"() with Stdout {
             continue l24;
         };
     };
-    if $sroa_again_used_133 > start_203 {
-        builtin::array_set_u8(arr, start_203, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_again_used_133 > start_213 {
+        builtin::array_set_u8(arr, start_213, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_52: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_52;
@@ -347,14 +347,14 @@ fn "closure_row_in_synthesized_argument.wado/run"() with Stdout {
     $sroa_again_used_133 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $mv_used_2 = builtin::i32_wrap_i64(x >> 32_i64);
     $sroa_again_used_133 = "closure_row_in_synthesized_argument.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_again_used_133);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_203(out_34.used) + 1)), 0, out_34.repr, 0, start_203);
-    builtin::array_set_u8(arr, start_203, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_213(out_34.used) + 1)), 0, out_34.repr, 0, start_213);
+    builtin::array_set_u8(arr, start_213, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_203 = start_203 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($mv_used_2, arr, 0, start_203);
+        start_213 = start_213 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($mv_used_2, arr, 0, start_213);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
@@ -832,47 +832,46 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/iter.wa
     let $sroa_result_repr_13: ref Array<i32>;
     let $sroa_result_used_14: i32;
     let $sroa_write_back_15: ref "core:prelude/list.wado//List<i32>";
-    let item_20: i32;
-    let $licm_end_8: i32;
-    let $licm_repr_9: ref Array<i32>;
+    let $sroa_slot_27: i32;
     let $licm_inner_28: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let $licm_pred_29: ref "canonical//CanonicalClosure_0";
+    let $licm_end_30: i32;
+    let $licm_repr_31: ref Array<i32>;
     $sroa_result_repr_13 = array.new_fixed<i32>();
     $sroa_result_used_14 = 0;
     $licm_inner_28 = iter.inner;
     $licm_pred_29 = iter.pred;
+    $licm_end_30 = $licm_inner_28.end;
+    $licm_repr_31 = $licm_inner_28.repr;
     b93: block {
         l94: loop {
             $inline_core_prelude_iter_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_iter_wado_Iterator__next_sroa_return__0: block {
-                $licm_end_8 = $licm_inner_28.end;
-                $licm_repr_9 = $licm_inner_28.repr;
                 block {
                     l96: loop {
-                        if local.tee $load_4($licm_inner_28.index) >= $licm_end_8 {
-                            $licm_end_8 = 0;
+                        if local.tee $load_4($licm_inner_28.index) >= $licm_end_30 {
                             $load_4 = 0;
+                            $sroa_slot_27 = 0;
                             break $inline_core_prelude_iter_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_iter_wado_Iterator__next_sroa_return__0;
                         }
-                        item_20 = builtin::array_get_value<i32>($licm_repr_9, $load_4);
+                        $sroa_slot_27 = builtin::array_get_value<i32>($licm_repr_31, $load_4);
                         $licm_inner_28.index = $load_4 + 1;
                         if block -> bool {
-                            call_ref "functype/$canonical_closure_fn_0"($licm_pred_29.func, $licm_pred_29.env, item_20);
+                            call_ref "functype/$canonical_closure_fn_0"($licm_pred_29.func, $licm_pred_29.env, $sroa_slot_27);
                         } {
-                            $licm_end_8 = 1;
-                            $load_4 = item_20;
+                            $load_4 = 1;
                             break $inline_core_prelude_iter_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_iter_wado_Iterator__next_sroa_return__0;
                         }
                         continue l96;
                     };
                 };
             };
-            if $licm_end_8 == 1 {
+            if $load_4 == 1 {
                 if @unlikely($sroa_result_used_14 >= builtin::array_len($sroa_result_repr_13)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_15(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_result_repr_13, used: $sroa_result_used_14 }));
                     $sroa_result_repr_13 = $sroa_write_back_15.repr;
                 }
-                builtin::array_set<i32>($sroa_result_repr_13, $sroa_result_used_14, $load_4);
+                builtin::array_set<i32>($sroa_result_repr_13, $sroa_result_used_14, $sroa_slot_27);
                 $sroa_result_used_14 = $sroa_result_used_14 + 1;
             } else {
                 break b93;

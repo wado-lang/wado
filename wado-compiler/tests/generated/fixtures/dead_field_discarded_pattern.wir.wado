@@ -188,7 +188,7 @@ fn "dead_field_discarded_pattern.wado/report"(ss) with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_202: i32;
+    let start_212: i32;
     self_19 = ss.used;
     if @unlikely(0 >= self_19) {
         cold_path;
@@ -269,22 +269,22 @@ fn "dead_field_discarded_pattern.wado/report"(ss) with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_32, is_negative_101);
         }
-        start_202 = out_32.used;
+        start_212 = out_32.used;
         out_32.used = is_negative_101;
-        builtin::array_set_u8(out_32.repr, start_202, 45);
+        builtin::array_set_u8(out_32.repr, start_212, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_101(out_32.used + self_19) > builtin::array_len(out_32.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_32, is_negative_101);
     }
-    start_202 = out_32.used;
+    start_212 = out_32.used;
     out_32.used = is_negative_101;
     arr = out_32.repr;
-    self_19 = start_202 + self_19;
+    self_19 = start_212 + self_19;
     b23: block {
         l24: loop {
-            break_if b23 (self_19 - start_202) < 2;
+            break_if b23 (self_19 - start_212) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_101(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, self_19 - 1, (48 + is_negative_101) - (tens * 10));
@@ -294,8 +294,8 @@ fn "dead_field_discarded_pattern.wado/report"(ss) with Stdout {
             continue l24;
         };
     };
-    if self_19 > start_202 {
-        builtin::array_set_u8(arr, start_202, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if self_19 > start_212 {
+        builtin::array_set_u8(arr, start_212, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
@@ -303,14 +303,14 @@ fn "dead_field_discarded_pattern.wado/report"(ss) with Stdout {
     self_19 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_101 = builtin::i32_wrap_i64(x >> 32_i64);
     self_19 = "dead_field_discarded_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_19);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_202(out_32.used) + 1)), 0, out_32.repr, 0, start_202);
-    builtin::array_set_u8(arr, start_202, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_212(out_32.used) + 1)), 0, out_32.repr, 0, start_212);
+    builtin::array_set_u8(arr, start_212, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_202 = start_202 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_101, arr, 0, start_202);
+        start_212 = start_212 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_101, arr, 0, start_212);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

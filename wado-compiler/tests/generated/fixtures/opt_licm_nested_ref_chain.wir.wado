@@ -106,11 +106,11 @@ fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let start_239: i32;
-    let $sroa_t_h1_784: bool;
-    let $sroa_slot_816: ref null Array<u8>;
+    let start_243: i32;
+    let $sroa_t_h1_788: bool;
+    let $sroa_slot_832: ref null Array<u8>;
     result = "opt_licm_nested_ref_chain.wado/drain"(local.tee cur(struct.new "opt_licm_nested_ref_chain.wado//Cursor" { inner: struct.new "opt_licm_nested_ref_chain.wado//Inner" { limit: 5, pos: 0, acc: 0 }, started: 0 }));
-    $sroa_t_h1_784 = cur.started;
+    $sroa_t_h1_788 = cur.started;
     out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_16: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_16;
@@ -183,22 +183,22 @@ fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, is_negative_64);
         }
-        start_239 = out_15.used;
+        start_243 = out_15.used;
         out_15.used = is_negative_64;
-        builtin::array_set_u8(out_15.repr, start_239, 45);
+        builtin::array_set_u8(out_15.repr, start_243, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_64(out_15.used + result) > builtin::array_len(out_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, is_negative_64);
     }
-    start_239 = out_15.used;
+    start_243 = out_15.used;
     out_15.used = is_negative_64;
     $load_9 = out_15.repr;
-    result = start_239 + result;
+    result = start_243 + result;
     b25: block {
         l26: loop {
-            break_if b25 (result - start_239) < 2;
+            break_if b25 (result - start_243) < 2;
             q = x_68 /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x_68 - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_9, result - 1, (48 + pair) - (tens * 10));
@@ -208,8 +208,8 @@ fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
             continue l26;
         };
     };
-    if result > start_239 {
-        builtin::array_set_u8($load_9, start_239, 48 + builtin::i32_wrap_i64(x_68 %u 10_i64));
+    if result > start_243 {
+        builtin::array_set_u8($load_9, start_243, 48 + builtin::i32_wrap_i64(x_68 %u 10_i64));
     }
     if @unlikely(local.tee result(is_negative_64 + 1) > builtin::array_len($load_9)) {
         cold_path;
@@ -218,23 +218,23 @@ fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
     is_negative_64 = out_15.used;
     out_15.used = result;
     builtin::array_copy<u8>(local.tee $load_9(out_15.repr), is_negative_64, global:opt_licm_nested_ref_chain.wado::$const_obj_0, 0, 1);
-    if $sroa_t_h1_784 {
-        $sroa_slot_816 = array.new_fixed<u8>(116, 114, 117, 101);
-        $sroa_t_h1_784 = 4;
+    if $sroa_t_h1_788 {
+        $sroa_slot_832 = array.new_fixed<u8>(116, 114, 117, 101);
+        $sroa_t_h1_788 = 4;
     } else {
-        $sroa_slot_816 = array.new_data<u8>("false");
-        $sroa_t_h1_784 = 5;
+        $sroa_slot_832 = array.new_data<u8>("false");
+        $sroa_t_h1_788 = 5;
     }
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 $sroa_t_h1_784 == 0;
-            if @unlikely(local.tee result(result + $sroa_t_h1_784) > builtin::array_len($load_9)) {
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1__$inline_core_prelude_string_wado_String__internal_push_string_2 $sroa_t_h1_788 == 0;
+            if @unlikely(local.tee result(result + $sroa_t_h1_788) > builtin::array_len($load_9)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, result);
             }
             is_negative_64 = out_15.used;
             out_15.used = result;
-            builtin::array_copy<u8>(out_15.repr, is_negative_64, $sroa_slot_816, 0, $sroa_t_h1_784);
+            builtin::array_copy<u8>(out_15.repr, is_negative_64, $sroa_slot_832, 0, $sroa_t_h1_788);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__1;
     };
@@ -242,7 +242,7 @@ fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_55;
     };
     result = builtin::i32_wrap_i64(local.tee x_68("wasi/stream-new"()));
-    $sroa_t_h1_784 = builtin::i32_wrap_i64(x_68 >> 32_i64);
+    $sroa_t_h1_788 = builtin::i32_wrap_i64(x_68 >> 32_i64);
     result = "opt_licm_nested_ref_chain.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(result);
     builtin::array_copy<u8>(local.tee $load_9(builtin::array_new<u8>(local.tee is_negative_64(out_15.used) + 1)), 0, out_15.repr, 0, is_negative_64);
     builtin::array_set_u8($load_9, is_negative_64, 10);
@@ -251,11 +251,11 @@ fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
             unreachable;
         }
         is_negative_64 = is_negative_64 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($sroa_t_h1_784, $load_9, 0, is_negative_64);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_t_h1_788, $load_9, 0, is_negative_64);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"($sroa_t_h1_784);
+        "wasi/stream-drop-writable"($sroa_t_h1_788);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {

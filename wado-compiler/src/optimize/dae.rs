@@ -20,6 +20,7 @@ use crate::nir_package::{NirPackage, Reshape};
 
 use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
+use super::until_quiet;
 use crate::nir::FuncId;
 use crate::parallel::Executor;
 use crate::type_table::TypeTable;
@@ -34,11 +35,7 @@ pub fn eliminate_dead_arguments(project: &mut NirPackage, gate: &mut FunctionGat
     // Keyed by `FuncId`, which no reshape moves, so this is read once rather
     // than per round.
     let closure_call_keys = collect_closure_call_keys(project);
-    let mut changed = false;
-    while eliminate_dead_arguments_round(project, gate, &closure_call_keys) {
-        changed = true;
-    }
-    changed
+    until_quiet(|| eliminate_dead_arguments_round(project, gate, &closure_call_keys))
 }
 
 /// One find / validate / apply sweep, reporting whether it rewrote anything.

@@ -6,6 +6,7 @@
 //! existing only after lowering.
 
 use crate::compiler_trace;
+use crate::parallel::Executor;
 use crate::wir::{WirInstr, WirLocals, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_optimize::nullability::Nullability;
 use crate::wir_optimize::util::{
@@ -46,14 +47,14 @@ fn is_immediate_const(instr: &WirInstr) -> bool {
 /// single-def and never tee'd, `source` is invariant over the span, and the copy
 /// dominates every use — together giving `alias == source` everywhere. Running
 /// before SROA also lets variant SROA see casts on the original local.
-pub(super) fn propagate_trivial_copies(module: &mut WirPackage) {
-    for func in &mut module.functions {
+pub(super) fn propagate_trivial_copies(module: &mut WirPackage, exec: &Executor) {
+    exec.for_each_mut(&mut module.functions, |func| {
         let Some(body) = &mut func.body else {
-            continue;
+            return;
         };
         let params: IndexSet<String> = func.param_names.iter().cloned().collect();
         propagate_copies_in_function(body, &params);
-    }
+    });
 }
 
 fn propagate_copies_in_function(body: &mut [WirInstr], params: &IndexSet<String>) {
@@ -1556,23 +1557,29 @@ fn fuse_local_tees(instrs: &mut [WirInstr]) -> bool {
 
 /// Fuse every set-then-get pair left, as the last rewrite before the locals
 /// are settled: a tee hides the copy it replaces from every pass before.
-pub(super) fn fuse_remaining_local_tees(module: &mut WirPackage) {
-    for body in module.functions.iter_mut().filter_map(|f| f.body.as_mut()) {
+pub(super) fn fuse_remaining_local_tees(module: &mut WirPackage, exec: &Executor) {
+    exec.for_each_mut(&mut module.functions, |func| {
+        let Some(body) = func.body.as_mut() else {
+            return;
+        };
         TeeFuser {
             reach: TeeReach::Final,
             only: None,
             changed: false,
         }
         .visit_body(body);
-    }
+    });
 }
 
 /// Fuse the set-then-get pairs of the locals read once, which leaves a tee
 /// nothing reads for dead-store elimination to take back to its value. Before
 /// `coalesce_locals`, since the local goes and so hides no copy, while one
 /// merged into a live range is read elsewhere and keeps its tee.
-pub(super) fn fuse_once_read_local_tees(module: &mut WirPackage) {
-    for body in module.functions.iter_mut().filter_map(|f| f.body.as_mut()) {
+pub(super) fn fuse_once_read_local_tees(module: &mut WirPackage, exec: &Executor) {
+    exec.for_each_mut(&mut module.functions, |func| {
+        let Some(body) = func.body.as_mut() else {
+            return;
+        };
         let mut reads = IndexMap::default();
         for instr in body.iter() {
             util::count_local_gets(instr, &mut reads);
@@ -1587,7 +1594,7 @@ pub(super) fn fuse_once_read_local_tees(module: &mut WirPackage) {
             changed: false,
         }
         .visit_body(body);
-    }
+    });
 }
 
 /// Fuses in every statement list, dropping the `Nop` each fusion leaves.
@@ -1766,10 +1773,10 @@ mod tests {
     use super::*;
     use crate::wir::{WirAbstractHeapType, WirFuncId, WirMemoryRef};
     use std::assert_matches;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     fn tid(index: u32) -> WirTypeId {
-        WirTypeId::new(index, Rc::from(format!("T{index}").as_str()))
+        WirTypeId::new(index, Arc::from(format!("T{index}").as_str()))
     }
 
     fn local_get(name: &str, result_ty: WirType) -> WirInstr {

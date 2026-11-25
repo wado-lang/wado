@@ -575,8 +575,9 @@ pub struct CompilerOptions {
     /// it recorded no run of. A module is looked up under its name
     /// ([`coverage::ModulePlan::name`]).
     pub profile: Option<Arc<pgo::Profile>>,
-    /// How many threads the optimizer visits functions on. The output does not
-    /// depend on it. A host compiling several files at once passes 1.
+    /// How many threads lowering and the optimizer visit functions on. The
+    /// output does not depend on it. A host compiling several files at once
+    /// passes 1.
     pub parallelism: usize,
 }
 
@@ -2606,7 +2607,12 @@ fn build_after_load<H: CompilerHost>(
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let mut nir = {
         let _span = logger.span("lower");
-        lower(flat, logger, logger)?
+        lower(
+            flat,
+            logger,
+            logger,
+            &parallel::Executor::new(options.parallelism),
+        )?
     };
     if let Some(views) = views.as_deref_mut() {
         views.lowered_nir_text = Some(nir_unparse::unparse_nir_package(&nir));
@@ -2749,7 +2755,12 @@ fn build_after_load<H: CompilerHost>(
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
+        wir_optimize::optimize_wir(
+            &mut wir_package,
+            options.opt_level,
+            logger,
+            &parallel::Executor::new(options.parallelism),
+        );
     }
     wir_package.declare_memory64();
 

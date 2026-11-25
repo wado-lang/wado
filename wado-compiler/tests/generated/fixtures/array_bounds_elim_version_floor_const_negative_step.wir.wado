@@ -196,7 +196,7 @@ fn "array_bounds_elim_version_floor_const_negative_step.wado/run"() with Stdout 
     let out_16: ref "core:prelude/string.wado//String";
     let x: i64;
     let limit: i32;
-    let start_117: i32;
+    let start_119: i32;
     let sum: i32;
     let r: i32;
     let i: i32;
@@ -204,13 +204,13 @@ fn "array_bounds_elim_version_floor_const_negative_step.wado/run"() with Stdout 
     let q: u64;
     repr_3 = builtin::array_new<i32>(11);
     limit = black_box(10);
-    start_117 = black_box(2);
+    start_119 = black_box(2);
     sum = 0;
     r = 0;
     b0: block {
         l1: loop {
             break_if b0 r >= 2;
-            i = start_117;
+            i = start_119;
             b2: block {
                 l3: loop {
                     break_if b2 i > limit;
@@ -273,7 +273,7 @@ fn "array_bounds_elim_version_floor_const_negative_step.wado/run"() with Stdout 
     limit = sum < 0;
     x = builtin::i64_extend_i32_s(sum);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    start_117 = $inline_count_digits_u64_2: block -> i32 {
+    start_119 = $inline_count_digits_u64_2: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
@@ -343,20 +343,20 @@ fn "array_bounds_elim_version_floor_const_negative_step.wado/run"() with Stdout 
         builtin::array_set_u8(out_16.repr, sum, 45);
     } else {
     }
-    if @unlikely(local.tee limit(out_16.used + start_117) > builtin::array_len(out_16.repr)) {
+    if @unlikely(local.tee limit(out_16.used + start_119) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, limit);
     }
     sum = out_16.used;
     out_16.used = limit;
     arr = out_16.repr;
-    limit = sum + start_117;
+    limit = sum + start_119;
     b35: block {
         l36: loop {
             break_if b35 (limit - sum) < 2;
             q = x /u 100_i64;
-            r = local.tee start_117(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, limit - 1, (48 + start_117) - (r * 10));
+            r = local.tee start_119(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, limit - 1, (48 + start_119) - (r * 10));
             builtin::array_set_u8(arr, limit - 2, 48 + r);
             limit = limit - 2;
             x = q;
@@ -370,7 +370,7 @@ fn "array_bounds_elim_version_floor_const_negative_step.wado/run"() with Stdout 
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
     };
     limit = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_117 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_119 = builtin::i32_wrap_i64(x >> 32_i64);
     limit = "array_bounds_elim_version_floor_const_negative_step.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(limit);
     builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee sum(out_16.used) + 1)), 0, out_16.repr, 0, sum);
     builtin::array_set_u8(arr, sum, 10);
@@ -379,11 +379,11 @@ fn "array_bounds_elim_version_floor_const_negative_step.wado/run"() with Stdout 
             unreachable;
         }
         sum = sum + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(start_117, arr, 0, sum);
+        "core:rt/cm_stream_write_raw_all_u8"(start_119, arr, 0, sum);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/stream-drop-writable"(start_117);
+        "wasi/stream-drop-writable"(start_119);
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {

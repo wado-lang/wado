@@ -180,7 +180,7 @@ fn "ctfe_list_result.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_190: i32;
+    let start_200: i32;
     if @unlikely(local.tee i(black_box(2)) >=u 5) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, 5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ctfe_list_result.wado:18"), used: 24 });
@@ -259,22 +259,22 @@ fn "ctfe_list_result.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_87);
         }
-        start_190 = out_18.used;
+        start_200 = out_18.used;
         out_18.used = is_negative_87;
-        builtin::array_set_u8(out_18.repr, start_190, 45);
+        builtin::array_set_u8(out_18.repr, start_200, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_87(out_18.used + i) > builtin::array_len(out_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_87);
     }
-    start_190 = out_18.used;
+    start_200 = out_18.used;
     out_18.used = is_negative_87;
     arr = out_18.repr;
-    i = start_190 + i;
+    i = start_200 + i;
     b23: block {
         l24: loop {
-            break_if b23 (i - start_190) < 2;
+            break_if b23 (i - start_200) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_87(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, i - 1, (48 + is_negative_87) - (tens * 10));
@@ -284,8 +284,8 @@ fn "ctfe_list_result.wado/run"() with Stdout {
             continue l24;
         };
     };
-    if i > start_190 {
-        builtin::array_set_u8(arr, start_190, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if i > start_200 {
+        builtin::array_set_u8(arr, start_200, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
@@ -293,14 +293,14 @@ fn "ctfe_list_result.wado/run"() with Stdout {
     i = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_87 = builtin::i32_wrap_i64(x >> 32_i64);
     i = "ctfe_list_result.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_190(out_18.used) + 1)), 0, out_18.repr, 0, start_190);
-    builtin::array_set_u8(arr, start_190, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_200(out_18.used) + 1)), 0, out_18.repr, 0, start_200);
+    builtin::array_set_u8(arr, start_200, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_190 = start_190 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_87, arr, 0, start_190);
+        start_200 = start_200 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_87, arr, 0, start_200);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {

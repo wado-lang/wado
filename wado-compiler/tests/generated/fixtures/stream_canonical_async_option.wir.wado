@@ -289,7 +289,7 @@ fn "stream_canonical_async_option.wado/run"() with Stdout, Stdin {
     let $replaced_3: ref null "core:prelude/option.wado//Option<[core:prelude/async.wado/Stream<u8>,core:prelude/async.wado/StartedRead<u8>]>";
     let out_42: ref "core:prelude/string.wado//String";
     let x: i64;
-    let handle_142: i32;
+    let handle_144: i32;
     let packed: i32;
     let $sroa_slot_19: i32;
     let q: u64;
@@ -305,10 +305,10 @@ fn "stream_canonical_async_option.wado/run"() with Stdout, Stdin {
     if @unlikely(ref.is_null(stdin_stream_0.backing) == 0) {
         unreachable;
     }
-    handle_142 = stdin_stream_0.value;
+    handle_144 = stdin_stream_0.value;
     $sroa_slot_19 = "mem/realloc"(0, 0, 1, 16);
-    packed = "wasi/stream-read"(handle_142, $sroa_slot_19, 16);
-    started_20 = struct.new "core:prelude/async.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/async.wado//CopyBuffer" { handle: handle_142, packed: packed, ptr: $sroa_slot_19, size: 16, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
+    packed = "wasi/stream-read"(handle_144, $sroa_slot_19, 16);
+    started_20 = struct.new "core:prelude/async.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/async.wado//CopyBuffer" { handle: handle_144, packed: packed, ptr: $sroa_slot_19, size: 16, align: 1 }, items: struct.new "core:prelude/list.wado//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } };
     copy = struct.new "core:prelude/async.wado//ReadCopy<u8>" { copy: struct.new "core:prelude//$Cell<core:prelude/option.wado/Option<[core:prelude/async.wado/Stream<u8>,core:prelude/async.wado/StartedRead<u8>]>>" { value: struct.new "core:prelude/option.wado//Option<[core:prelude/async.wado/Stream<u8>,core:prelude/async.wado/StartedRead<u8>]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/async.wado/Stream<u8>, core:prelude/async.wado/StartedRead<u8>]" { 0: stdin_stream_0, 1: started_20 } } } };
     stdin_stream_0 = local.tee $pattern_temp_0_17($inline_core_prelude_option_wado_Option__core_prelude_async_wado_Stream_u8__core_prelude_async_wado_StartedRead_u8_____unwrap_2: block -> ref null "tuple//[core:prelude/async.wado/Stream<u8>, core:prelude/async.wado/StartedRead<u8>]" {
         $replaced_3 = local.tee self_24(copy.copy).value;
@@ -327,18 +327,18 @@ fn "stream_canonical_async_option.wado/run"() with Stdout, Stdin {
     }
     if ref.is_null(stdin_stream_0.backing) == 0 {
     } else {
-        handle_142 = stdin_stream_0.value;
+        handle_144 = stdin_stream_0.value;
         stdin_stream_0.value = 0;
         stdin_stream_0.backing = ref.null eq;
-        "wasi/stream-drop-readable"(handle_142);
+        "wasi/stream-drop-readable"(handle_144);
     }
-    handle_142 = chunk_12.items.used;
+    handle_144 = chunk_12.items.used;
     local.tee out_42(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }).used = local.tee $sroa_slot_19(5);
     builtin::array_copy<u8>(local.tee $load_16(out_42.repr), 0, global:stream_canonical_async_option.wado::$const_obj_1, 0, 5);
-    packed = handle_142 < 0;
-    x = builtin::i64_extend_i32_s(handle_142);
+    packed = handle_144 < 0;
+    x = builtin::i64_extend_i32_s(handle_144);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    handle_142 = $inline_count_digits_u64_3: block -> i32 {
+    handle_144 = $inline_count_digits_u64_3: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
@@ -408,39 +408,39 @@ fn "stream_canonical_async_option.wado/run"() with Stdout, Stdin {
         builtin::array_set_u8(out_42.repr, packed, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_slot_19(out_42.used + handle_142) > builtin::array_len(out_42.repr)) {
+    if @unlikely(local.tee $sroa_slot_19(out_42.used + handle_144) > builtin::array_len(out_42.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_42, $sroa_slot_19);
     }
     packed = out_42.used;
     out_42.used = $sroa_slot_19;
     $load_16 = out_42.repr;
-    handle_142 = packed + handle_142;
+    handle_144 = packed + handle_144;
     b26: block {
         l27: loop {
-            break_if b26 (handle_142 - packed) < 2;
+            break_if b26 (handle_144 - packed) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_16, handle_142 - 1, (48 + pair) - (tens * 10));
-            builtin::array_set_u8($load_16, handle_142 - 2, 48 + tens);
-            handle_142 = handle_142 - 2;
+            builtin::array_set_u8($load_16, handle_144 - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8($load_16, handle_144 - 2, 48 + tens);
+            handle_144 = handle_144 - 2;
             x = q;
             continue l27;
         };
     };
-    if handle_142 > packed {
+    if handle_144 > packed {
         builtin::array_set_u8($load_16, packed, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
-    if @unlikely(local.tee handle_142($sroa_slot_19 + 6) > builtin::array_len($load_16)) {
+    if @unlikely(local.tee handle_144($sroa_slot_19 + 6) > builtin::array_len($load_16)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_42, handle_142);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_42, handle_144);
     }
     $sroa_slot_19 = out_42.used;
-    out_42.used = handle_142;
+    out_42.used = handle_144;
     builtin::array_copy<u8>(out_42.repr, $sroa_slot_19, global:stream_canonical_async_option.wado::$const_obj_0, 0, 6);
-    handle_142 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    handle_144 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $sroa_slot_19 = builtin::i32_wrap_i64(x >> 32_i64);
-    handle_142 = "stream_canonical_async_option.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(handle_142);
+    handle_144 = "stream_canonical_async_option.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(handle_144);
     builtin::array_copy<u8>(local.tee $load_16(builtin::array_new<u8>(local.tee packed(out_42.used) + 1)), 0, out_42.repr, 0, packed);
     builtin::array_set_u8($load_16, packed, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
@@ -456,15 +456,15 @@ fn "stream_canonical_async_option.wado/run"() with Stdout, Stdin {
     }
     if ref.is_null(ref.null eq) == 0 {
     } else {
-        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_142);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_144);
     }
     if ref.is_null(_done) == 0 {
         if ref.is_null(_done.backing) == 0 {
         } else {
-            handle_142 = _done.value;
+            handle_144 = _done.value;
             _done.value = 0;
             _done.backing = ref.null eq;
-            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_142);
+            "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_144);
         }
     }
 }

@@ -61,15 +61,15 @@ pub fn scalarize_hot_fields(
     // Phase 2: Run scalarization (mutable access)
     let type_table = project.type_table.borrow();
     let effects = heap.effects(project, &type_table, gate.exec());
-    let mut changed = false;
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
-        if scalarize_function(&mut func, &type_table, &cache, &effects) {
-            gate.mark_changed(FuncId::new(i));
-            changed = true;
-        }
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    let changed = gate.exec().indices_where(functions.len(), |i| {
+        scalarize_function(&mut functions[i].borrow_mut(), type_table, &cache, &effects)
+    });
+    for &i in &changed {
+        gate.mark_changed(FuncId::new(i));
     }
-    changed
+    !changed.is_empty()
 }
 
 fn build_field_usage_cache(project: &NirPackage) -> FieldUsageCache {

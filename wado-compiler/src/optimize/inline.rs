@@ -3100,7 +3100,7 @@ fn inline_round(
 
     let inline_type_table = project.type_table.borrow();
     let type_table: &TypeTable = &inline_type_table;
-    let carried = carried_calls(&inline_candidates);
+    let carried = carried_calls(&inline_candidates, scans);
     let functions = &project.functions;
     let held = &holds.held;
     // Only a hot price reads it, and a profile with no hot region sets none.
@@ -3424,14 +3424,11 @@ fn add_site(
 /// a candidate.
 fn carried_calls(
     candidates: &IndexMap<FuncId, NirFunction>,
+    scans: &[BodyScan],
 ) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
+    // A candidate is its function's body as the round's scan read it.
     let call_sites = |id: FuncId| {
-        let body = candidates[&id]
-            .body
-            .as_ref()
-            .expect("a candidate has a body");
-        let mut callees = Vec::new();
-        for_each_call_site(body, NodeRef::Block(body.root()), |g| callees.push(g));
+        let callees: Vec<FuncId> = scans[id.index()].calls.iter().map(|(g, _)| *g).collect();
         assert!(!callees.contains(&id), "a candidate is never recursive");
         callees
     };

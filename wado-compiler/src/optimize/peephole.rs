@@ -88,9 +88,11 @@ pub(super) fn run_peephole(
     let if_chain_rule = IfChainToMatchRule;
     let tuple_projection_rule = TupleProjectionRule;
     let known_case_rule = KnownCaseRule { markers };
-    // Post-inline only: the closure-bearing field read it resolves through is
-    // what `inline` exposes when an iterator adaptor's `next` is copied in.
-    let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
+    // The closure-bearing field read it resolves through is what `inline`
+    // exposes when an iterator adaptor's `next` is copied in. The pre-inline run
+    // takes the reads the passes after `inline` resolved, so that round's
+    // `inline` splices the `$call`.
+    let closure_devirt_rule = build_closure_devirt(project);
     let heap_effects = (!pre_inline).then(|| heap.effects(project, &type_table, gate.exec()));
 
     debug_assert!(
@@ -189,9 +191,7 @@ pub(super) fn run_peephole(
         if !pre_inline {
             rules.push((PeepholeRule::DropValue, &DropValueRule));
         }
-        if let Some(closure_devirt_rule) = closure_devirt_rule.as_ref() {
-            rules.push((PeepholeRule::ClosureDevirt, closure_devirt_rule));
-        }
+        rules.push((PeepholeRule::ClosureDevirt, &closure_devirt_rule));
         rules.extend([
             // Ahead of the folding rules: the arms it drops are what leaves a
             // constant condition and a dead branch for them to reclaim.

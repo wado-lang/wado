@@ -812,6 +812,21 @@ impl Body {
         *self.root = root;
     }
 
+    /// Give each named local's `Opaque` leaf its new type. A pass that re-types
+    /// locals owes this: extraction names a `FieldAccess` field by that type.
+    /// Borrows the pool mutably only for a leaf whose type moves, since a
+    /// mutable borrow counts as an edit.
+    pub fn retype_locals(&mut self, types: &[(u32, TypeId)]) {
+        let retypes = self.values.local_retypes(types);
+        if retypes.is_empty() {
+            return;
+        }
+        let values = &mut *self.values;
+        for (id, ty) in retypes {
+            values.set_type(id, ty);
+        }
+    }
+
     /// Push `block` and make it the root.
     pub fn push_root(&mut self, block: BlockNode) {
         let root = self.blocks.push(block);

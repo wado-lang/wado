@@ -1168,9 +1168,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_hot_col
     let x: i64;
     let q: u64;
     let tens: i32;
-    let $sroa_view_repr_124: ref Array<u8>;
+    let $sroa_view_repr_126: ref Array<u8>;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $load_0($mv$t$s0.used) + 16), used: 0 };
-    $sroa_view_repr_124 = $mv$t$s0.repr;
+    $sroa_view_repr_126 = $mv$t$s0.repr;
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_20 $load_0 == 0;
         if @unlikely($load_0 > builtin::array_len(out_3.repr)) {
@@ -1179,27 +1179,27 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pgo_hot_col
         }
         start_49 = out_3.used;
         out_3.used = $load_0;
-        builtin::array_copy<u8>(out_3.repr, start_49, $sroa_view_repr_124, 0, $load_0);
+        builtin::array_copy<u8>(out_3.repr, start_49, $sroa_view_repr_126, 0, $load_0);
     };
     $load_0 = $mv$t$h0 < 0;
     $mv$t$h0 = "core:prelude/numeric.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($mv$t$h0); select i64(x < 0_i64, 0_i64 - x, x)));
     $load_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $load_0, $mv$t$h0);
-    $sroa_view_repr_124 = out_3.repr;
+    $sroa_view_repr_126 = out_3.repr;
     $mv$t$h0 = $load_0 + $mv$t$h0;
     b136: block {
         l137: loop {
             break_if b136 ($mv$t$h0 - $load_0) < 2;
             q = x /u 100_i64;
             tens = local.tee start_49(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_view_repr_124, $mv$t$h0 - 1, (48 + start_49) - (tens * 10));
-            builtin::array_set_u8($sroa_view_repr_124, $mv$t$h0 - 2, 48 + tens);
+            builtin::array_set_u8($sroa_view_repr_126, $mv$t$h0 - 1, (48 + start_49) - (tens * 10));
+            builtin::array_set_u8($sroa_view_repr_126, $mv$t$h0 - 2, 48 + tens);
             $mv$t$h0 = $mv$t$h0 - 2;
             x = q;
             continue l137;
         };
     };
     if $mv$t$h0 > $load_0 {
-        builtin::array_set_u8($sroa_view_repr_124, $load_0, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+        builtin::array_set_u8($sroa_view_repr_126, $load_0, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

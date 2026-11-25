@@ -4,36 +4,22 @@
 use crate::call_args::CallArgs;
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
-use crate::nir::{FuncId, FuncParts, FunctionRef, NirUnaryOp};
+use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule, visit_every_body};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::mod_ref::ModRef;
+use crate::parallel::Executor;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
 
 /// Run select lowering on all functions, driven by the rewrite engine.
-pub fn select_lowering(project: &mut NirPackage) -> bool {
-    let select_id = intern_select(project);
-    let type_table = project.type_table.borrow();
-    let rule = SelectLoweringRule { select_id };
-    let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        let FuncParts {
-            body,
-            locals,
-            params,
-            ..
-        } = func.parts();
-        if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
-            changed |= engine.run(&[&rule]);
-        }
-    }
-    changed
+pub fn select_lowering(project: &mut NirPackage, exec: &Executor) -> bool {
+    let rule = SelectLoweringRule {
+        select_id: intern_select(project),
+    };
+    visit_every_body(project, exec, |engine| engine.run(&[&rule]))
 }
 
 /// Intern the `select` builtin once so every synthesized call is born

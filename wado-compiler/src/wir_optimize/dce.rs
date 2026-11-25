@@ -5,7 +5,7 @@
 //! absolute `WirFuncId`s and 0-based array indices from
 //! [`WirPackage::defined_func_base`].
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
@@ -86,7 +86,7 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     match instr {
         WirInstr::Call { func_id, .. } | WirInstr::RefFunc { func_id } => {
             if let Some(&new) = remap.get(&func_id.index()) {
-                *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
+                *func_id = WirFuncId::new(new, Arc::from(func_id.fq()));
             }
         }
         _ => {}
@@ -373,7 +373,7 @@ fn compact_funcs(module: &mut WirPackage) {
         if let WirExportDesc::Func { func_id } = &mut export.desc
             && let Some(&new_id) = remap.get(&func_id.index())
         {
-            *func_id = WirFuncId::new(new_id, Rc::from(func_id.fq()));
+            *func_id = WirFuncId::new(new_id, Arc::from(func_id.fq()));
         }
     }
 
@@ -381,7 +381,7 @@ fn compact_funcs(module: &mut WirPackage) {
     for elem in &mut module.elements {
         for fid in &mut elem.func_ids {
             if let Some(&new_id) = remap.get(&fid.index()) {
-                *fid = WirFuncId::new(new_id, Rc::from(fid.fq()));
+                *fid = WirFuncId::new(new_id, Arc::from(fid.fq()));
             }
         }
     }
@@ -479,7 +479,7 @@ fn compact_globals(module: &mut WirPackage) {
 
 fn remap_type_id(type_id: &mut WirTypeId, remap: &IndexMap<u32, u32>) {
     if let Some(&new_idx) = remap.get(&type_id.index()) {
-        *type_id = WirTypeId::new(new_idx, Rc::from(type_id.fq()));
+        *type_id = WirTypeId::new(new_idx, Arc::from(type_id.fq()));
     }
 }
 

@@ -104,7 +104,7 @@ fn "cm_unprovided_import_record_type_runs.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_291: i32;
+    let start_301: i32;
     f_0 = struct.new "cm_unprovided_import_record_type_runs.wado//Fake" {};
     global:cm_unprovided_import_record_type_runs.wado::$effect_cm_unprovided_import_record_type_runs.wado/Dom = struct.new "cm_unprovided_import_record_type_runs.wado//$Dispatch_cm_unprovided_import_record_type_runs.wado/Dom" { outer: local.tee $save_cm_unprovided_import_record_type_runs.wado/Dom(global:cm_unprovided_import_record_type_runs.wado::$effect_cm_unprovided_import_record_type_runs.wado/Dom), op_touch: struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_unprovided_import_record_type_runs.wado//$Closure_0" { $capture_0: f_0 }, func: ref.func "closure/cm_unprovided_import_record_type_runs.wado/$closure_wrapper_0" } };
     $local_3 = $inline__effect_dispatch__cm_unprovided_import_record_type_runs_wado_Dom__touch_4: block -> i32 {
@@ -194,22 +194,22 @@ fn "cm_unprovided_import_record_type_runs.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, is_negative_82);
         }
-        start_291 = out_16.used;
+        start_301 = out_16.used;
         out_16.used = is_negative_82;
-        builtin::array_set_u8(out_16.repr, start_291, 45);
+        builtin::array_set_u8(out_16.repr, start_301, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_82(out_16.used + $local_3) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, is_negative_82);
     }
-    start_291 = out_16.used;
+    start_301 = out_16.used;
     out_16.used = is_negative_82;
     arr = out_16.repr;
-    $local_3 = start_291 + $local_3;
+    $local_3 = start_301 + $local_3;
     b24: block {
         l25: loop {
-            break_if b24 ($local_3 - start_291) < 2;
+            break_if b24 ($local_3 - start_301) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_82(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $local_3 - 1, (48 + is_negative_82) - (tens * 10));
@@ -219,8 +219,8 @@ fn "cm_unprovided_import_record_type_runs.wado/run"() with Stdout {
             continue l25;
         };
     };
-    if $local_3 > start_291 {
-        builtin::array_set_u8(arr, start_291, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $local_3 > start_301 {
+        builtin::array_set_u8(arr, start_301, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_44: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_44;
@@ -228,14 +228,14 @@ fn "cm_unprovided_import_record_type_runs.wado/run"() with Stdout {
     $local_3 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_82 = builtin::i32_wrap_i64(x >> 32_i64);
     $local_3 = "cm_unprovided_import_record_type_runs.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_3);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_291(out_16.used) + 1)), 0, out_16.repr, 0, start_291);
-    builtin::array_set_u8(arr, start_291, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_301(out_16.used) + 1)), 0, out_16.repr, 0, start_301);
+    builtin::array_set_u8(arr, start_301, 10);
     drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
-        start_291 = start_291 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_82, arr, 0, start_291);
+        start_301 = start_301 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_82, arr, 0, start_301);
     });
     if ref.is_null(ref.null eq) == 0 {
     } else {
