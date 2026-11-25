@@ -2071,8 +2071,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     tt.ref_pointee(target_type_id)
                         .filter(|&referent| tt.type_param_id(referent).is_some())
                 };
+                let impl_def = self.tysys.def_at(impl_block.id);
                 if let (Some(param), Some(kind)) = (ref_blanket_param, target_ref) {
-                    let impl_def = self.tysys.def_at(impl_block.id);
                     self.tysys
                         .type_table
                         .borrow_mut()
@@ -2080,7 +2080,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             trait_ref, kind, name, param, type_id, impl_def,
                         );
                 } else if let Some(base_decl) = base_decl {
-                    let impl_def = self.tysys.def_at(impl_block.id);
                     self.tysys
                         .type_table
                         .borrow_mut()

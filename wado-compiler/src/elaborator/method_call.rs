@@ -1227,14 +1227,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
                 method_type_args,
                 consumes_self,
-                (consumes_self && !is_ref_impl && {
-                    let (references, _) = self
+                (consumes_self
+                    && !is_ref_impl
+                    && self
                         .tysys
                         .type_table
                         .borrow()
-                        .reference_path(written_receiver);
-                    !references.is_empty()
-                })
+                        .represented_ref_kind(written_receiver)
+                        .is_some())
                 .then_some(written_receiver),
             );
             if waits_for_selection {
