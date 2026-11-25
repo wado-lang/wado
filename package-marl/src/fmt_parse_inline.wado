@@ -390,6 +390,7 @@ fn push_leftover(d: &DelimTok, current: &mut List<Node>) {
         return;
     }
     if d.gfm_could_pair {
+        assert d.count == 1, "only a single `*` departs from GFM";
         current.push(Node::Text("\\*"));
         return;
     }
