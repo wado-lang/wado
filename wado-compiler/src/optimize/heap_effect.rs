@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 use std::cell::OnceCell;
 use std::ops::Range;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 
 use cranelift_entity::EntityRef;
 
@@ -392,6 +392,23 @@ enum Callee {
     },
 }
 
+/// A function type's parameter and result types. An indirect call runs only
+/// the closures of its callee's signature: a closure becomes a function value
+/// of its canonical signature alone, and function types are invariant.
+type Signature = (Vec<TypeId>, TypeId);
+
+fn signature(type_table: &TypeTable, fn_type: TypeId) -> Signature {
+    let ResolvedType::Function {
+        params,
+        return_type,
+        ..
+    } = type_table.get(fn_type)
+    else {
+        unreachable!("an indirect call's callee has a function type");
+    };
+    (params.clone(), *return_type)
+}
+
 /// One function as the solver sees it.
 #[derive(Debug, PartialEq)]
 struct FunctionEntry {
@@ -399,20 +416,26 @@ struct FunctionEntry {
     closure: bool,
     /// The functions its reachable calls name.
     calls: IndexSet<usize>,
-    calls_indirect: bool,
+    /// The signatures its reachable indirect calls go through.
+    calls_indirect: IndexSet<Signature>,
 }
 
 impl FunctionEntry {
-    fn of(f: &NirFunction, declarations: &BuiltinDeclarations) -> Self {
+    fn of(f: &NirFunction, declarations: &BuiltinDeclarations, type_table: &TypeTable) -> Self {
         let mut calls = IndexSet::default();
-        let mut calls_indirect = false;
+        let mut calls_indirect = IndexSet::default();
         if let Some(body) = &f.body {
             body.for_each_reachable_node(|node| {
                 let NodeRef::Expr(e) = node else { return };
-                if let ExprKind::Call { func_id, .. } = &body.exprs[e].kind {
-                    calls.insert(func_id.index());
+                match &body.exprs[e].kind {
+                    ExprKind::Call { func_id, .. } => {
+                        calls.insert(func_id.index());
+                    }
+                    ExprKind::IndirectCall { callee, .. } => {
+                        calls_indirect.insert(signature(type_table, body.operand_type(*callee)));
+                    }
+                    _ => {}
                 }
-                calls_indirect |= matches!(body.exprs[e].kind, ExprKind::IndirectCall { .. });
             });
         }
         Self {
@@ -455,8 +478,14 @@ pub(super) struct HeapEffectsCache {
     /// Each body's unlinked frame, built by the first summary that needs it
     /// since the body was last written.
     frames: Vec<OnceLock<HeapFrame>>,
-    /// The join over every closure body, which is what an indirect call runs.
-    indirect: Summary,
+    /// Every signature a closure or an indirect call has had, numbering the
+    /// nodes past the last function: node `len + k` stands for what an
+    /// indirect call through `signatures[k]` runs.
+    signatures: IndexSet<Signature>,
+    /// Per signature, the closure bodies of it.
+    closures: Vec<Vec<usize>>,
+    /// Per signature, the join over its closure bodies.
+    indirect: Vec<Summary>,
     /// Filled during a sweep by whichever visit asks first; its values depend
     /// only on the type, so the order changes nothing.
     reach_memo: Mutex<IndexMap<TypeId, Arc<ObjectTypes>>>,
@@ -492,19 +521,24 @@ impl HeapEffectsCache {
         }
         let len = project.functions.len();
         let mut edited = vec![false; len];
-        // Whether a node's answer to its callers moved; the last is the indirect one.
-        let mut moved = vec![false; len + 1];
+        // Whether a node's answer to its callers moved; the signatures' nodes
+        // follow the functions'.
+        let mut moved = vec![false; len];
         let declarations = &project.builtin_declarations;
         self.functions.refresh_observing(
             project,
             exec,
-            |f| FunctionEntry::of(f, declarations),
+            |f| FunctionEntry::of(f, declarations, type_table),
             |i, old, new| {
                 edited[i] = true;
                 moved[i] = old.is_none_or(|old| old.shape() != new.shape());
             },
         );
+        self.file_closures(project);
+        moved.resize(len + self.signatures.len(), false);
         self.summaries.resize_with(len, Summary::default);
+        self.indirect
+            .resize_with(self.signatures.len(), Summary::default);
         self.frames.resize_with(len, OnceLock::new);
         for (frame, &edited) in self.frames.iter_mut().zip(&edited) {
             if edited {
@@ -516,6 +550,40 @@ impl HeapEffectsCache {
         }
         #[cfg(debug_assertions)]
         self.assert_one_settled(&project.functions, type_table);
+    }
+
+    /// Number every signature an indirect call goes through, and file each
+    /// closure body under its functor's canonical signature.
+    fn file_closures(&mut self, project: &NirPackage) {
+        let entries = self.functions.facts();
+        for entry in entries {
+            for s in &entry.calls_indirect {
+                if !self.signatures.contains(s) {
+                    self.signatures.insert(s.clone());
+                }
+            }
+        }
+        let signature_of: IndexMap<usize, usize> = project
+            .closure_functors
+            .iter()
+            .map(|functor| {
+                let id = functor
+                    .call_method
+                    .borrow()
+                    .id
+                    .expect("a functor method is stamped with an id");
+                let params = functor.canonical_user_params.iter().map(|p| p.1);
+                let signature = (params.collect(), functor.canonical_return);
+                (id.index(), self.signatures.insert_full(signature).0)
+            })
+            .collect();
+        self.closures = vec![Vec::new(); self.signatures.len()];
+        for (i, entry) in entries.iter().enumerate() {
+            if entry.closure {
+                let k = signature_of[&i];
+                self.closures[k].push(i);
+            }
+        }
     }
 
     /// The least fixpoint over the call graph, callees first; a component whose
@@ -530,7 +598,6 @@ impl HeapEffectsCache {
         edited: &[bool],
         moved: &mut [bool],
     ) {
-        let indirect = self.functions.facts().len();
         let successors = self.successors();
         let components = strongly_connected_components(&successors);
         let mut component_of = vec![0; successors.len()];
@@ -566,7 +633,7 @@ impl HeapEffectsCache {
                 .into_iter()
                 .filter(|&c| {
                     components[c].iter().any(|&n| {
-                        (n != indirect && edited[n]) || successors[n].iter().any(|&s| moved[s])
+                        edited.get(n) == Some(&true) || successors[n].iter().any(|&s| moved[s])
                     })
                 })
                 .flat_map(|c| components[c].iter().copied())
@@ -593,11 +660,11 @@ impl HeapEffectsCache {
         }
     }
 
-    /// Each node's callees, the node past the last function standing for what
-    /// every indirect call runs.
+    /// Each node's callees, the nodes past the last function standing for what
+    /// an indirect call through each signature runs.
     fn successors(&self) -> Vec<Vec<usize>> {
         let entries = self.functions.facts();
-        let indirect = entries.len();
+        let len = entries.len();
         let mut successors: Vec<Vec<usize>> = entries
             .iter()
             .map(|f| match f.callee {
@@ -605,25 +672,25 @@ impl HeapEffectsCache {
                     .calls
                     .iter()
                     .copied()
-                    .chain(f.calls_indirect.then_some(indirect))
+                    .chain(f.calls_indirect.iter().map(|s| len + self.signature_node(s)))
                     .collect(),
                 Callee::Builtin(_) | Callee::Opaque { .. } => Vec::new(),
             })
             .collect();
-        successors.push(self.closure_bodies().collect());
+        successors.extend(self.closures.iter().cloned());
         successors
     }
 
-    fn closure_bodies(&self) -> impl Iterator<Item = usize> + '_ {
-        let entries = self.functions.facts();
-        (0..entries.len()).filter(|&i| entries[i].closure)
+    fn signature_node(&self, signature: &Signature) -> usize {
+        self.signatures
+            .get_index_of(signature)
+            .expect("`file_closures` numbers every signature an indirect call goes through")
     }
 
     fn summary_mut(&mut self, n: usize) -> &mut Summary {
-        if n == self.summaries.len() {
-            &mut self.indirect
-        } else {
-            &mut self.summaries[n]
+        match n.checked_sub(self.summaries.len()) {
+            Some(k) => &mut self.indirect[k],
+            None => &mut self.summaries[n],
         }
     }
 
@@ -637,9 +704,9 @@ impl HeapEffectsCache {
         cached: bool,
     ) -> Summary {
         let entries = self.functions.facts();
-        if n == entries.len() {
+        if let Some(k) = n.checked_sub(entries.len()) {
             let mut indirect = Summary::default();
-            for c in self.closure_bodies() {
+            for &c in &self.closures[k] {
                 indirect.join(&self.summaries[c]);
             }
             return indirect;
@@ -684,7 +751,7 @@ impl HeapEffectsCache {
     /// rotating, keeps the check cheap.
     #[cfg(debug_assertions)]
     fn assert_one_settled(&mut self, functions: &[FuncRef], type_table: &TypeTable) {
-        let nodes = self.summaries.len() + 1;
+        let nodes = self.summaries.len() + self.indirect.len();
         self.cursor %= nodes;
         let n = self.cursor;
         self.cursor += 1;
@@ -803,7 +870,7 @@ impl HeapEffects<'_> {
     }
 
     /// Per function, in store order, whether it lies on a call cycle, an
-    /// indirect call reaching every closure.
+    /// indirect call reaching every closure of its signature.
     pub(super) fn recursive_functions(&self) -> Vec<bool> {
         let mut recursive = recursive_scc_members(&self.cache.successors());
         recursive.truncate(self.cache.functions.facts().len());
@@ -2940,7 +3007,17 @@ fn call_target<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> Target<'
             Some(&Callee::Opaque { suspends }) => Target::Opaque { suspends },
             None => Target::Opaque { suspends: true },
         },
-        ExprKind::IndirectCall { .. } => Target::Summary(&cache.indirect),
+        ExprKind::IndirectCall { callee, .. } => {
+            let signature = signature(effects.type_table, body.operand_type(*callee));
+            // Every closure's signature is numbered, so one that is not runs nothing.
+            static NO_CLOSURE: LazyLock<Summary> = LazyLock::new(Summary::default);
+            Target::Summary(
+                cache
+                    .signatures
+                    .get_index_of(&signature)
+                    .map_or(&*NO_CLOSURE, |k| &cache.indirect[k]),
+            )
+        }
         other => panic!("call_target on a non-call {other:?}"),
     }
 }

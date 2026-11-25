@@ -2219,6 +2219,7 @@ impl FunctionTranslator<'_, '_> {
             if self.base.closure.specializable.contains(closure_id) {
                 return nir_struct;
             }
+            assert_canonical_target(&self.base.type_table.borrow(), functor, expr.type_id);
             return self.alloc_expr(
                 ExprKind::ClosureToCanonical {
                     functor: nir_struct.into(),
@@ -2333,6 +2334,7 @@ impl FunctionTranslator<'_, '_> {
             return functor;
         }
         let info = &self.base.closure.functor_infos[spec.functor_id as usize];
+        assert_canonical_target(&self.base.type_table.borrow(), info, site_type);
         self.alloc_expr(
             ExprKind::ClosureToCanonical {
                 functor: functor.into(),
@@ -3185,6 +3187,31 @@ impl FunctionTranslator<'_, '_> {
             param_abi: ParamAbi::default(),
         }
     }
+}
+
+/// A closure becomes a function value of its canonical signature alone, which
+/// is what lets the heap-effect summaries run an indirect call through just the
+/// closures of its callee's signature.
+fn assert_canonical_target(
+    type_table: &TypeTable,
+    functor: &ClosureFunctor,
+    target_fn_type: tir::TypeId,
+) {
+    let ResolvedType::Function {
+        params,
+        return_type,
+        ..
+    } = type_table.get(target_fn_type)
+    else {
+        unreachable!("a closure converts to a function type");
+    };
+    assert!(
+        *return_type == functor.canonical_return
+            && params
+                .iter()
+                .eq(functor.canonical_user_params.iter().map(|(_, ty)| ty)),
+        "a closure converts to its canonical signature"
+    );
 }
 
 fn convert_test(test: &TirTest) -> NirTest {
