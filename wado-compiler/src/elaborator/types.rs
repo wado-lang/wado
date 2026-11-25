@@ -593,12 +593,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A by-value `self` receiver on a copyable type, which takes `&self`.
-    SelfByValueOnCopyable {
-        type_name: String,
-        span: Span,
-    },
-
     /// `_` inference placeholder outside a type an expression writes.
     InferPlaceholderNotAllowed {
         span: Span,
@@ -1926,13 +1920,6 @@ impl TypeError {
                 format!(
                     "flags `{name}` has {count} members; at most 32 are supported \
                      (a flags value is a single 32-bit word at the Component Model boundary)"
-                ),
-                *span,
-            ),
-            TypeError::SelfByValueOnCopyable { type_name, span } => (
-                Code::ReceiverMismatch,
-                format!(
-                    "`self` by value is only allowed on an affine type; `{type_name}` is copyable — use `&self`"
                 ),
                 *span,
             ),

@@ -180,7 +180,8 @@ written.
 - Swift's two iteration protocols, and the `inout` inconsistency, are kept for
   source and ABI compatibility. Wado has neither constraint.
 - Swift's designers and its critics agree on one point: an iterator should not
-  be copied. Its collections and ranges stay copyable.
+  be copied. Its collections and ranges stay copyable. Wado keeps its iterators
+  copyable, and the WEP says what that choice weighed.
 - Swift's references are safe because they cannot escape, and its mutable
   reference cannot be copied. Wado's `&mut T` can do both, and Wado has no
   borrow check. The WEP already departs from Swift here.

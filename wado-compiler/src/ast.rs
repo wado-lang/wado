@@ -1954,6 +1954,8 @@ pub mod lint {
     /// A handler scope leaving out an operation its body reaches through the
     /// `extends` family of a resource it handles.
     pub const UNHANDLED_OPERATION: &str = "unhandled_operation";
+    /// A by-value `self` on a type every value of which is copyable.
+    pub const SELF_BY_VALUE: &str = "self_by_value";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";
     /// Integer literals alone overflowing their type, `200 as u8 + 100`, or a

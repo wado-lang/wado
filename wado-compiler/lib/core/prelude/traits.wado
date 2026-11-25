@@ -1411,6 +1411,13 @@ pub affine trait Iterator with _ {
         return null;
     }
 
+    /// Returns an iterator that takes from this one, so an adapter over it
+    /// leaves this iterator advanced. An adapter called on the iterator itself
+    /// takes a copy and leaves it where it was.
+    fn by_ref(&mut self) -> IterRefMut<Self> with () {
+        return IterRefMut { inner: self };
+    }
+
     /// Returns an adapter that skips elements for which `pred` returns false.
     fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(self, pred: F) -> IterFilter<Self, F> with () {
         return IterFilter { inner: self, pred };

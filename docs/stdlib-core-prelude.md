@@ -753,6 +753,12 @@ Returns the 0-based index of the first element for which `pred` returns true, or
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
 
+#### `fn by_ref(&mut self) -> IterRefMut<Self> with ()`
+
+Returns an iterator that takes from this one, so an adapter over it
+leaves this iterator advanced. An adapter called on the iterator itself
+takes a copy and leaves it where it was.
+
 #### `fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(self, pred: F) -> IterFilter<Self, F> with ()`
 
 Returns an adapter that skips elements for which `pred` returns false.

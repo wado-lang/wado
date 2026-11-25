@@ -298,6 +298,46 @@ replaces the one `base` carried, which is dropped. A type that implements
 it, as SE-0429 holds for a type with a `deinit`: its `drop` relies on the
 fields it was built with.
 
+### A by-value `self` is a parameter like any other
+
+A by-value `self` is copied when its type is copyable and moved when it is
+affine, as every by-value parameter is. Two rules follow, and nothing else is
+special about a receiver.
+
+- Any type may declare one. A concrete type every value of which is copyable
+  used to be refused, which left the rule in three parts: allowed on an affine
+  type, on a generic type, and in a trait. The refusal steered a writer toward
+  `&self`, and steering is a lint's work: `self_by_value` warns at the
+  declaration.
+- A by-value `self` is not called on a reference, whatever it points to. For an
+  affine value the call would move it out of the reference. For a copyable
+  value it would act on a copy, where `&mut` says the caller meant the value
+  itself: `r.take(2)` on an `&mut I` left the iterator where it was. A written
+  `*` asks for the copy. The standard library and seven packages held no such
+  call when the rule was adopted.
+
+An iterator adapter therefore takes a copy of a copyable iterator: after
+`it.take(2)`, `it` has not advanced. That is what value semantics says of any
+method that returns a new value, and it predates this WEP, whose only change
+was the receiver's spelling. `Iterator::by_ref` is the form that advances the
+iterator itself.
+
+What was considered and refused:
+
+- A warning on using a value after a by-value `self` call on it. It fires on
+  legitimate code: a range looped over twice, or one iterator both counted and
+  collected. It would also make "a type that implements `Iterator`" a third
+  kind beside copyable and affine.
+- Making iterators affine. Swift's newest iteration protocol does this, and
+  [the survey](./research-swift-ownership.md) records why. Here it needs an
+  affine type that holds no resource, which widens `affine` from "holds a
+  resource" to "may not be copied". Ranges would have to stop being iterators,
+  and a generic body could not return an item it took from an affine iterator
+  it owns.
+- Resolving a method on `&mut I` to an impl for the reference, as Rust does.
+  The refusal above leaves room for it: a call that is an error today can be
+  given that meaning later without changing a program that compiles.
+
 ### A reference is read only while its local holds the value
 
 A reference into an affine local, and a closure capturing one, are read only

@@ -273,7 +273,7 @@ ref_eq(&f, &g);                 // false or true: two places holding one closure
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self`, `&mut self` or `self`. Bare `self` (by value) is allowed only on an [affine type](./spec-affine.md), or on a generic type, since its type arguments may be affine (`Option<T>::unwrap(self)`):
+A method receiver is `&self`, `&mut self` or `self`:
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
@@ -291,7 +291,9 @@ test {
 }
 ```
 
-`Point` is not affine, so `self` by value on it is an error:
+A by-value `self` is passed as any parameter is: copied, or [moved](./spec-affine.md#moves) when it is affine. `Option<i32>::unwrap` leaves its binding usable, and so does an iterator adapter: `it.take(2)` takes a copy of `it` and leaves `it` where it was. `it.by_ref().take(2)` advances `it` itself.
+
+Every value of `Point` is copyable, so a by-value `self` on it copies the receiver at every call. The declaration warns ([`self_by_value`](./spec-diagnostics.md#the-self_by_value-lint)):
 
 <!-- {"fixture":"spec_memory_self_by_value.wado"} -->
 
@@ -299,11 +301,31 @@ test {
 impl Point {
     fn consume(self) -> i32 { return self.x; }
 }
+
+export fn run() {
+    let p = Point { x: 1, y: 2 };
+    assert p.consume() == 1;
+    assert p.y == 2;
+}
 ```
 
-A by-value `self` is passed as any parameter is: copied, or [moved](./spec-affine.md#moves) when it is affine. `Option<i32>::unwrap` leaves its binding usable.
+A by-value `self` is not called on a reference, whatever the reference points to: the call would take a copy, or move the value out, where the reference names the value itself. It is a compile error (`RECEIVER_MISMATCH`; `TYPE_MISMATCH` when the value is affine). A written `*` asks for the copy.
 
-A trait's method counts as generic, since its `Self` is a type parameter, so it may take `self` by value (`Iterator::map(self, f)`). Every impl of it takes the receiver the trait declares.
+<!-- {"fixture":"self_by_value_through_dereference.wado"} -->
+
+```wado
+fn head(r: &Option<i32>) -> i32 {
+    return (*r).unwrap();
+}
+
+test "a dereferenced receiver is copied" {
+    let o = Option::Some(1);
+    assert head(&o) == 1;
+    assert o matches { Some(1) };
+}
+```
+
+Every impl of a trait's method takes the receiver the trait declares.
 
 ### `mut` Parameters
 

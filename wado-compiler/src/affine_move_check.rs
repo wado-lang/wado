@@ -38,6 +38,9 @@ enum MoveError {
     /// An affine value read by value through a reference, which leaves it with
     /// its owner: the read would be a second owner.
     MoveOutOfReference { type_name: String },
+    /// A by-value `self` called on a reference to a copyable value: the call
+    /// would act on a copy, where the reference names the value itself.
+    SelfCopiedOutOfReference { method: String, type_name: String },
     /// A closure body moving a binding it captured, by reference.
     CapturedMove { name: String },
     /// A guard moving a binding of its arm, which it sees by reference.
@@ -96,6 +99,13 @@ impl From<AffineMoveError> for Diagnostic {
             MoveError::MoveOutOfReference { type_name } => (
                 Code::TypeMismatch,
                 format!("cannot move affine type `{type_name}` out of a reference"),
+            ),
+            MoveError::SelfCopiedOutOfReference { method, type_name } => (
+                Code::ReceiverMismatch,
+                format!(
+                    "`{method}` takes `self` by value, and the receiver is a reference to \
+                     `{type_name}`; write `*` to copy what it points to"
+                ),
             ),
             MoveError::CapturedMove { name } => (
                 Code::TypeMismatch,
@@ -1594,6 +1604,14 @@ impl MoveWalker<'_, '_> {
             let type_name = self.sem().types.name(referent);
             self.report(
                 MoveError::MoveOutOfReference { type_name },
+                call.receiver.span(),
+            );
+        } else {
+            self.report(
+                MoveError::SelfCopiedOutOfReference {
+                    method: call.method.clone(),
+                    type_name: self.sem().types.name(referent),
+                },
                 call.receiver.span(),
             );
         }

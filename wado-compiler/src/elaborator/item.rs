@@ -1351,25 +1351,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// A by-value `self` transfers ownership, so a concrete aggregate takes it
-    /// only when it is affine. A generic aggregate's instance may be affine
-    /// through its arguments, so it is permitted.
-    fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
-        let (is_concrete_value, type_name) = {
-            let tt = self.tysys.type_table.borrow();
-            let is_concrete_value = match tt.get(self_ty) {
-                ResolvedType::Enum { .. } => true,
-                ResolvedType::Struct { type_args, .. }
-                | ResolvedType::Variant { type_args, .. } => type_args.is_empty(),
-                _ => false,
-            };
-            (is_concrete_value, tt.name(self_ty))
-        };
-        if is_concrete_value && !self.tysys.carries_affine(self_ty) {
-            let _ = self.emit(TypeError::SelfByValueOnCopyable { type_name, span });
-        }
-    }
-
     /// Record `impl_block`'s own declaration facts, ahead of every other impl
     /// question: whether an impl reaches a receiver reads its recorded target.
     pub(super) fn record_impl_block_sig(&mut self, impl_block: &ast::ImplBlock) {
@@ -3109,11 +3090,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // method's lexical scope with earlier parameters already bound.
         assert_eq!(param_types.len(), func.params.len());
         for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
-            // A trait method's receiver is declared against `Self`, a generic
-            // type, so the trait's declaration decides it for every impl.
-            if param.self_kind == ast::SelfKind::Value && trait_name.is_none() {
-                self.check_self_by_value(type_id, param.span);
-            }
             self.bind_fn_param(param, type_id, &func.type_params, &mut ctx);
         }
 

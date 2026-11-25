@@ -1,0 +1,14 @@
+// A generic body is checked at its definition, so an adapter called on
+// `&mut I` is refused there rather than advancing a copy.
+
+fn first_two<I: Iterator<Item = i32>>(it: &mut I) -> List<i32> with _ {
+    return it.take(2).collect();
+}
+
+export fn run() {
+    let mut r = 0..<5;
+    let _ = first_two(&mut r);
+}
+
+__DATA__
+{"compile_error": ":5:12: analysis error: `take` takes `self` by value, and the receiver is a reference to `I`; write `*` to copy what it points to"}
