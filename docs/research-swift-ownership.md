@@ -184,9 +184,16 @@ written.
 - Swift's references are safe because they cannot escape, and its mutable
   reference cannot be copied. Wado's `&mut T` can do both, and Wado has no
   borrow check. The WEP already departs from Swift here.
-- Swift's users dispute where an implicit destruction happens after a
-  conditional consume, and whether `map` on an optional consumes it. Wado's
-  answers to both have not been compared with these threads.
+- Swift destroys a value consumed on one branch where the branches rejoin.
+  Wado drops it where its scope ends, on the paths that did not move it, so an
+  unrelated edit to one branch does not move the drop on another.
+- Swift left open whether `map` on an optional consumes or borrows. Wado's
+  `Option::map` takes `self` by value, as Rust's does: it moves an affine
+  option and copies a copyable one. Borrowing is a pattern over `&opt`.
+- Both languages trap on a value that had to be consumed and was dropped
+  instead. Swift's `Continuation` does, and so does Wado's `FutureWritable`
+  dropped before its write. Neither has a type the compiler requires to be
+  consumed.
 
 ## Sources
 
