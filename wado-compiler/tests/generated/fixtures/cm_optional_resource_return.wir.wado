@@ -7,12 +7,12 @@ struct core:prelude//$Resource {  // TypeId(0)
     mut backing: ref null eq,
 }
 
-variant core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter> {  // TypeId(1)
+variant core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter> {  // TypeId(1)
     None,
     Some(ref null "core:prelude//$Resource"),
 }
 
-struct core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some {  // TypeId(2)
+struct core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>::Some {  // TypeId(2)
     discriminant: i32,
     payload_0: ref null "core:prelude//$Resource",
 }
@@ -33,7 +33,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
 
 type "functype//cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device" = fn() -> i32;  // TypeId(10)
 
-type "functype//cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter" = fn(i32) -> ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";  // TypeId(11)
+type "functype//cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter" = fn(i32) -> ref null "core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>";  // TypeId(11)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/$wasi:demo/gfx@0.1.0#get-device from "wasi/$wasi:demo/gfx@0.1.0#get-device";
@@ -43,7 +43,7 @@ import fn wasi/resource-drop:cm_optional_resource_return.wado#Adapter from "wasi
 import fn wasi/resource-drop:cm_optional_resource_return.wado#Device from "wasi/resource-drop:cm_optional_resource_return.wado#Device";
 import fn wasi/task-return from "wasi/task-return";
 
-global global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0: ref "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" { 0 };
+global global:core:builtin::$unit_case$core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>$0: ref "core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>" = struct.new "core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>" { 0 };
 
 fn "cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"() with Gfx {
     return "wasi/$wasi:demo/gfx@0.1.0#get-device"();
@@ -51,15 +51,15 @@ fn "cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device
 
 fn "cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter"(self) with Device {
     let $outptr: i32;
-    let $option_result: ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
+    let $option_result: ref null "core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>";
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/$wasi:demo/gfx@0.1.0#[method]device.adapter"(if @unlikely(ref.is_null(ref.null eq) == 0) {
         unreachable;
     }; self, $outptr);
     self = builtin::load_u8($outptr);
-    $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0;
+    $option_result = global:core:builtin::$unit_case$core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>$0;
     if self != 0 {
-        $option_result = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4), backing: ref.null eq } };
+        $option_result = struct.new "core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4), backing: ref.null eq } };
     }
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $option_result;
@@ -67,11 +67,11 @@ fn "cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]de
 
 fn "cm_optional_resource_return.wado/$cm_export__run"() {
     let device: i32;
-    let $discarded_1: ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
+    let $discarded_1: ref null "core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>";
     let $drop_v_2: ref null "core:prelude//$Resource";
     if local.tee $discarded_1("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.adapter"(local.tee device("cm_optional_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"()))).discriminant == 0 {
     } else {
-        if ref.is_null(local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some"($discarded_1).payload_0).backing) == 0 {
+        if ref.is_null(local.tee $drop_v_2(ref.cast "core:prelude/option.wado//Option<cm_optional_resource_return.wado/Adapter>::Some"($discarded_1).payload_0).backing) == 0 {
         } else {
             let $cm_handle_2: i32;
             $cm_handle_2 = $drop_v_2.value;

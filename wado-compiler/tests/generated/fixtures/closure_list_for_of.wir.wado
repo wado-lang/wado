@@ -43,9 +43,9 @@ struct closure_list_for_of.wado//$Closure_1 {  // TypeId(6)
 
 struct closure_list_for_of.wado//$Closure_2 {}  // TypeId(7)
 
-enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(8)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(8)
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(9)
+enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(9)
 
 array Array<u8> (mut u8);  // TypeId(10)
 
@@ -93,7 +93,7 @@ type "functype//closure_list_for_of.wado/$cm_export__run" = fn();  // TypeId(27)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(28)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(29)
 
 type "functype//core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(30)
 
@@ -149,7 +149,7 @@ fn "closure_list_for_of.wado/run"() with Stdout {
     let value_52: ref "canonical//CanonicalClosure_1";
     let $cm_pair_7: i64;
     let out_97: ref "core:prelude/string.wado//String";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_closure_list_for_of_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_57_0: ref "core:prelude/format.wado//Formatter";
+    let $temp_inline_core_prelude_reflect_wado_TemplateHole_closure_list_for_of_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_57_0: ref "core:prelude/format.wado//Formatter";
     let $sroa_counters_repr_184: ref "Array<fn mut()->i32>";
     let $sroa_o_value_186: ref null "canonical//CanonicalClosure_0";
     let $sroa_write_back_191: ref "core:prelude/list.wado//List<fn mut()->i32>";
@@ -261,8 +261,8 @@ fn "closure_list_for_of.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__internal_push_view_53: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_53;
     };
-    $temp_inline_core_prelude_traits_wado_TemplateHole_closure_list_for_of_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_57_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_97 };
-    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"(seen.repr, seen.used, $temp_inline_core_prelude_traits_wado_TemplateHole_closure_list_for_of_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_57_0, 256);
+    $temp_inline_core_prelude_reflect_wado_TemplateHole_closure_list_for_of_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_57_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_97 };
+    "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"(seen.repr, seen.used, $temp_inline_core_prelude_reflect_wado_TemplateHole_closure_list_for_of_wado__tmpl_7ab51489603b688b_core_prelude_list_wado_List_i32____fmt_57_0, 256);
     $inline_core_prelude_string_wado_String__internal_push_view_69: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_69;
     };
@@ -271,7 +271,7 @@ fn "closure_list_for_of.wado/run"() with Stdout {
     used_21 = "closure_list_for_of.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_21);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee value_29(out_97.used) + 1)), 0, out_97.repr, 0, value_29);
     builtin::array_set_u8(new_repr, value_29, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -375,11 +375,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_6: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();

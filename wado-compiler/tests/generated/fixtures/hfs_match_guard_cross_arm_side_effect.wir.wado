@@ -12,7 +12,7 @@ struct hfs_match_guard_cross_arm_side_effect.wado//State {  // TypeId(1)
     mut seen: i32,
 }
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
+enum core:prelude/async.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
 
 array Array<u8> (mut u8);  // TypeId(3)
 
@@ -36,13 +36,13 @@ type "functype//hfs_match_guard_cross_arm_side_effect.wado/run" = fn();  // Type
 
 type "functype//hfs_match_guard_cross_arm_side_effect.wado/$cm_export__run" = fn();  // TypeId(13)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(14)
+type "functype//core:prelude/numeric.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(14)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(15)
+type "functype//core:prelude/numeric.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(15)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(16)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/async.wado//enum:CopyResult";  // TypeId(17)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
 
@@ -118,7 +118,7 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__format_hfs_match_guard_cross_arm_side_effect_wado__tmpl_b31438d91a1e3c14__i32_i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_26;
     };
     is_negative_113 = sum < 0;
-    sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_117(x_117 = builtin::i64_extend_i32_s(sum); select i64(x_117 < 0_i64, 0_i64 - x_117, x_117)));
+    sum = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_117(x_117 = builtin::i64_extend_i32_s(sum); select i64(x_117 < 0_i64, 0_i64 - x_117, x_117)));
     if is_negative_113 {
         if @unlikely(1 > builtin::array_len($sroa_out_repr_1388)) {
             cold_path;
@@ -136,7 +136,7 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
     }
     start_457 = $sroa_out_used_1389;
     $sroa_out_used_1389 = is_negative_113;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_out_repr_1388, start_457, x_117, sum);
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_1388, start_457, x_117, sum);
     if @unlikely(local.tee sum($sroa_out_used_1389 + 1) > builtin::array_len($sroa_out_repr_1388)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1390(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1388, used: $sroa_out_used_1389 }), sum);
@@ -146,7 +146,7 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
     $sroa_out_used_1389 = sum;
     builtin::array_copy<u8>($sroa_out_repr_1388, is_negative_113, global:hfs_match_guard_cross_arm_side_effect.wado::$const_obj_0, 0, 1);
     sum = i < 0;
-    i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_117(x_117 = builtin::i64_extend_i32_s(i); select i64(x_117 < 0_i64, 0_i64 - x_117, x_117)));
+    i = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_117(x_117 = builtin::i64_extend_i32_s(i); select i64(x_117 < 0_i64, 0_i64 - x_117, x_117)));
     if sum {
         if @unlikely(local.tee sum($sroa_out_used_1389 + 1) > builtin::array_len($sroa_out_repr_1388)) {
             cold_path;
@@ -165,7 +165,7 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
     }
     is_negative_113 = $sroa_out_used_1389;
     $sroa_out_used_1389 = sum;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_out_repr_1388, is_negative_113, x_117, i);
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_1388, is_negative_113, x_117, i);
     if @unlikely(local.tee sum($sroa_out_used_1389 + 1) > builtin::array_len($sroa_out_repr_1388)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_1390(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_1388, used: $sroa_out_used_1389 }), sum);
@@ -175,7 +175,7 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
     $sroa_out_used_1389 = sum;
     builtin::array_copy<u8>($sroa_out_repr_1388, i, global:hfs_match_guard_cross_arm_side_effect.wado::$const_obj_0, 0, 1);
     sum = $hfs_value_1443 < 0;
-    i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_117(x_117 = builtin::i64_extend_i32_s($hfs_value_1443); select i64(x_117 < 0_i64, 0_i64 - x_117, x_117)));
+    i = "core:prelude/numeric.wado/count_digits_u64"(local.tee x_117(x_117 = builtin::i64_extend_i32_s($hfs_value_1443); select i64(x_117 < 0_i64, 0_i64 - x_117, x_117)));
     if sum {
         if @unlikely(local.tee sum($sroa_out_used_1389 + 1) > builtin::array_len($sroa_out_repr_1388)) {
             cold_path;
@@ -194,7 +194,7 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
     }
     $hfs_value_1443 = $sroa_out_used_1389;
     $sroa_out_used_1389 = sum;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_out_repr_1388, $hfs_value_1443, x_117, i);
+    "core:prelude/numeric.wado/write_decimal_digits"($sroa_out_repr_1388, $hfs_value_1443, x_117, i);
     $inline_core_prelude_string_wado_String__format_hfs_match_guard_cross_arm_side_effect_wado__tmpl_b31438d91a1e3c14__i32_i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_113: block {
         break $inline_core_prelude_string_wado_String__format_hfs_match_guard_cross_arm_side_effect_wado__tmpl_b31438d91a1e3c14__i32_i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_113;
     };
@@ -204,7 +204,7 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
     sum = "hfs_match_guard_cross_arm_side_effect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
     builtin::array_copy<u8>(local.tee $sroa_out_repr_1388(builtin::array_new<u8>($sroa_out_used_1389 + 1)), 0, $sroa_write_back_1390.repr, 0, $sroa_out_used_1389);
     builtin::array_set_u8($sroa_out_repr_1388, $sroa_out_used_1389, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(block -> "core:prelude/async.wado//enum:CopyResult" {
         if @unlikely(ref.is_null(ref.null eq) == 0) {
             unreachable;
         }
@@ -232,7 +232,7 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
+fn "core:prelude/numeric.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let q: u64;
     let pair: i32;
     let tens: i32;
@@ -254,7 +254,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
 }
 
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
+fn "core:prelude/numeric.wado/count_digits_u64"(val) {
     if val <u 100000_i64 {
         if val <u 100_i64 {
             if val <u 10_i64 {
@@ -391,11 +391,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(i);
                 break $inline_cm_await_blocked_6: at;
             }) >>u 4;
-            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/async.wado//enum:CopyResult" {
                 0;
-            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/async.wado//enum:CopyResult" {
                 1;
-            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/async.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
