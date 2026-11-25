@@ -860,7 +860,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The arguments and the expected result of a static the newtype `newtype`
     /// inherits from the link `link` declares (the chain's end where `None`),
     /// read as that link, where the static is solved. Without a newtype, both
-    /// as they are.
+    /// as they are. An expected result holding a variable is left out: the
+    /// call's value is the newtype, which meets the variable once it is typed,
+    /// where the link's result would answer it as the base.
     pub(super) fn at_inherited_base(
         &self,
         newtype: Option<DefId>,
@@ -872,6 +874,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (arg_types.to_vec(), expected);
         };
         let represent = |ty| self.tysys.represent_newtype_in_type(ty, def, link);
+        let expected = expected.filter(|&t| !self.type_has_infer_hole(t));
         (
             arg_types.iter().copied().map(represent).collect(),
             expected.map(represent),

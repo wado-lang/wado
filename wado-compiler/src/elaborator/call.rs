@@ -1837,7 +1837,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: call.span,
             });
         }
-        let ret = match (&arg_inst, declared_return, expected_type) {
+        // A static a newtype inherits is solved at the link declaring it.
+        let expected_at_owner = match &call_receiver {
+            Some(receiver) => {
+                let (_, method_name) = effective_name
+                    .split_once("::")
+                    .expect("a receiver comes with a qualified name");
+                let owner = self.static_owner_key(receiver.key(), method_name);
+                let newtype = (&owner != receiver.key())
+                    .then(|| receiver.key().decl())
+                    .flatten();
+                self.at_inherited_base(newtype, owner.decl(), &[], expected_type)
+                    .1
+            }
+            None => expected_type,
+        };
+        let ret = match (&arg_inst, declared_return, expected_at_owner) {
             (Some(inst), Some(declared), Some(expected)) => Some(ExpectedReturn {
                 declared: self.instantiate_type(declared, inst),
                 expected,
