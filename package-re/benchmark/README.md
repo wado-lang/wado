@@ -1,6 +1,6 @@
 # Re Benchmark
 
-Searches one text with six patterns and reports throughput, Re against Node's
+Searches one text with ten patterns and reports throughput, Re against Node's
 `RegExp`.
 
 ```sh
@@ -35,26 +35,37 @@ which is the bar a literal pattern is held to.
 | `email`               | `[\w.+-]+@[\w-]+(?:\.[\w-]+)+`                                 | counting every match              |
 | `uri`                 | `[a-z][a-z0-9+.-]*://[^\s/?#]+[^\s?#]*(?:\?[^\s#]*)?(?:#\S*)?` | counting every match              |
 | `timestamp-captures`  | `(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z`             | summing group 4 of every match    |
+| `lookahead`           | `\w+(?=@)`                                                     | counting every match              |
+| `lookbehind`          | `(?<=://)[^\s/?#]+`                                            | counting every match              |
+| `negated-lookaround`  | `(?<!\d)\d{2}(?!\d)`                                           | counting every match              |
+| `lookbehind-captures` | `(?<=T(\d{2}):\d{2}:\d{2}Z )[A-Z]+`                            | summing group 1 of every match    |
 | `pathological`        | `(?:x+x+)+y`                                                   | one failing search of the 24 `x`s |
+
+A pattern holding a lookaround is matched by the Pike VM alone, with no DFA
+ahead of it, which is what the four lookaround rows measure.
 
 ## Results
 
-Environment: Wado 2026-11-15 (`-O2`), wasmtime 50.0.1, Node.js v26.13.0,
+Environment: Wado 2026-11-25 (`-O2`), wasmtime 50.0.1, Node.js v26.13.0,
 Linux x86_64. Best of three runs, picked by `benchmark/pick.ts`.
 
 | Case                  |     Node.js |        Wado | Node.js ms/iter | Wado ms/iter | Wado vs Node.js |
 | --------------------- | ----------: | ----------: | --------------: | -----------: | --------------- |
-| `literal`             |   4.01 GB/s | 542.00 MB/s |           0.016 |        0.121 | 7.4x slower     |
-| `literal-find`        |   9.19 GB/s | 926.58 MB/s |           0.007 |        0.070 | 9.9x slower     |
-| `literal-ignore-case` |   1.35 GB/s | 224.17 MB/s |           0.049 |        0.292 | 6.0x slower     |
-| `email`               | 100.95 MB/s | 207.97 MB/s |           0.651 |        0.315 | 2.1x faster     |
-| `uri`                 | 105.57 MB/s | 175.34 MB/s |           0.622 |        0.374 | 1.7x faster     |
-| `timestamp-captures`  |   1.08 GB/s | 266.49 MB/s |           0.061 |        0.246 | 4.1x slower     |
-| `pathological`        |  172.51 B/s | 163.48 MB/s |         139.124 |      < 0.001 | 10⁶x faster     |
+| `literal`             |   3.62 GB/s | 480.02 MB/s |           0.018 |        0.136 | 7.5x slower     |
+| `literal-find`        |   7.41 GB/s | 895.44 MB/s |           0.009 |        0.073 | 8.3x slower     |
+| `literal-ignore-case` |   1.08 GB/s | 187.13 MB/s |           0.061 |        0.350 | 5.8x slower     |
+| `email`               |  74.23 MB/s | 168.49 MB/s |           0.885 |        0.389 | 2.3x faster     |
+| `uri`                 |  91.68 MB/s | 141.30 MB/s |           0.716 |        0.464 | 1.5x faster     |
+| `timestamp-captures`  | 679.34 MB/s | 204.39 MB/s |           0.097 |        0.321 | 3.3x slower     |
+| `lookahead`           |  57.14 MB/s | 631.23 KB/s |           1.149 |      104.043 | 91x slower      |
+| `lookbehind`          | 242.81 MB/s |   1.09 MB/s |           0.270 |       60.022 | 222x slower     |
+| `negated-lookaround`  | 837.14 MB/s |   2.11 MB/s |           0.078 |       31.153 | 399x slower     |
+| `lookbehind-captures` | 730.07 MB/s |   3.81 MB/s |           0.090 |       17.232 | 191x slower     |
+| `pathological`        |  141.39 B/s | 143.87 MB/s |         169.738 |      < 0.001 | 10⁶x faster     |
 
 ## Fuel
 
-`re.wado`'s `test "fuel"` measures each case once with the DFA's states built,
+`re.wado`'s `test "fuel"` measures each case once with the DFAs' states built,
 and `re/first-search` holds what building them costs. Fuel does not move with
 the host, so it is what tells two versions of Re apart:
 
