@@ -557,14 +557,16 @@ method call with `canonical_name` set in `MethodInfo`.
 
 ## Prelude Exports
 
-`prelude.wado` adds the new types:
+`prelude.wado` exports the resources and what waiting on them answers. The
+event the host reports, `WaitEvent`, is `internal`: a `WaitableSet` hands a
+ready member back as a `Ready`, carrying a `ReadyEvent`.
 
 ```wado
 pub use {
     Stream, StreamWritable,
     Future, FutureWritable,
-    Waitable, WaitEvent,
-    WaitableSet, Subtask, ErrorContext,
+    Waitable, WaitableSet, Ready, ReadyEvent,
+    Subtask, ErrorContext,
 } from "core:prelude/async.wado";
 ```
 
