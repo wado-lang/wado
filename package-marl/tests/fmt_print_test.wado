@@ -1,9 +1,12 @@
 use { print_document } from "../src/fmt_print.wado";
 use { parse_document } from "../src/fmt_parse_block.wado";
 use { Node } from "../src/fmt_ast.wado";
+use { renders_alike } from "../src/fmt_html.wado";
 
 fn roundtrip<S: AsStrSlice>(source: S) -> String {
-    return print_document(&parse_document(source));
+    let printed = print_document(&parse_document(source));
+    assert renders_alike(source.to_string(), printed);
+    return printed;
 }
 
 test "print_document prints a paragraph with a trailing newline" {
@@ -31,8 +34,15 @@ test "print_document normalizes single emphasis to underscores" {
     assert roundtrip("a *word* b") == "a _word_ b\n";
 }
 
-test "print_document keeps the asterisk when it abuts an alphanumeric" {
-    assert roundtrip("*word*s") == "*word*s\n";
+test "print_document escapes a single * between word characters, which GFM would pair" {
+    assert roundtrip("a*b+c*d") == "a\\*b+c\\*d\n";
+    assert roundtrip("(24*60*60*1e9).") == "(24\\*60\\*60\\*1e9).\n";
+    assert roundtrip("*word*s") == "*word\\*s\n";
+    assert roundtrip("a\\*b") == "a\\*b\n";
+}
+
+test "print_document keeps ** between word characters" {
+    assert roundtrip("**K**eyed **I**DL") == "**K**eyed **I**DL\n";
 }
 
 test "print_document keeps strong emphasis as asterisks" {

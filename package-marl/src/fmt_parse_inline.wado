@@ -45,6 +45,9 @@ internal struct DelimTok {
     /// The character immediately after this run, in the source, is ASCII
     /// alphanumeric — used by the GitHub-compatibility "keep asterisk" rule.
     internal next_is_alnum: bool,
+    /// GFM could use this run as a delimiter where Marl cannot, so left over
+    /// it prints escaped, and a GFM renderer pairs nothing Marl did not.
+    internal gfm_could_pair: bool,
 }
 
 internal struct OpenTok {
@@ -196,12 +199,15 @@ fn push_delim(cur: &StrCursor, i: i32, d: char, toks: &mut List<InlineTok>) -> i
     let prev = cur.at(i - 1);
     let next = cur.at(i + n);
     let next_is_alnum = opt_is_alnum(next);
+    let open = can_open(d, n, prev, next);
+    let close = can_close(d, n, prev, next);
     toks.push(InlineTok::Delim(DelimTok {
         ch: d,
         count: n,
         orig: n,
-        open: can_open(d, prev, next),
-        close: can_close(d, prev, next),
+        open,
+        close,
+        gfm_could_pair: d == '*' && (left_flanking(prev, next) && !open || right_flanking(prev, next) && !close),
         next_is_alnum,
     }));
     return i + n;
@@ -333,9 +339,7 @@ fn build_seq(
                 i += 1;
             },
             InlineTok::Delim(d) => {
-                if d.count > 0 {
-                    current.push(Node::Text(repeat_char(d.ch, d.count)));
-                }
+                push_leftover(&d, current);
                 i += 1;
             },
             InlineTok::Open(o) => {
@@ -373,15 +377,24 @@ fn flatten_construct(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, cur
             InlineTok::Open(_) => nesting += 1,
             InlineTok::Close => nesting -= 1,
             InlineTok::Node(idx) => current.push(unchecked nodes[idx]),
-            InlineTok::Delim(d) => {
-                if d.count > 0 {
-                    current.push(Node::Text(repeat_char(d.ch, d.count)));
-                }
-            },
+            InlineTok::Delim(d) => push_leftover(&d, current),
         }
         i += 1;
     }
     return i;
+}
+
+/// Appends what is left of a delimiter run that emphasis did not use, as text.
+fn push_leftover(d: &DelimTok, current: &mut List<Node>) {
+    if d.count == 0 {
+        return;
+    }
+    if d.gfm_could_pair {
+        assert d.count == 1, "only a single `*` departs from GFM";
+        current.push(Node::Text("\\*"));
+        return;
+    }
+    current.push(Node::Text(repeat_char(d.ch, d.count)));
 }
 
 fn wrap(open: &OpenTok, children: List<Node>) -> Node {
@@ -612,7 +625,7 @@ fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> 
             Option::Some([
                 Node::ShortcutLink(ReferenceLinkNode {
                     children: parse_inline_chars(cur.sub(open + 1, close), refs),
-                    label: raw_label.trim().to_string(),
+                    label: raw_label.to_string(),
                 }),
                 close + 1,
             ]);
@@ -734,20 +747,27 @@ fn try_image(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]>
 
 // --- emphasis flanking (CommonMark "Emphasis and strong emphasis") ---
 
-fn can_open(d: char, prev: Option<char>, next: Option<char>) -> bool {
-    let lf = left_flanking(prev, next);
-    return match d {
-        '_' => lf && (!right_flanking(prev, next) || opt_is_punct(prev)),
-        _ => lf,
-    };
+/// `_` cannot open or close inside a word, as in CommonMark. A single `*` takes
+/// the same rule, a deliberate departure from GFM so that `a*b+c*d` stays
+/// arithmetic; a longer `*` run keeps GFM's rule.
+fn intraword_restricted(d: char, run: i32) -> bool {
+    return d == '_' || d == '*' && run == 1;
 }
 
-fn can_close(d: char, prev: Option<char>, next: Option<char>) -> bool {
+fn can_open(d: char, run: i32, prev: Option<char>, next: Option<char>) -> bool {
+    let lf = left_flanking(prev, next);
+    if intraword_restricted(d, run) {
+        return lf && (!right_flanking(prev, next) || opt_is_punct(prev));
+    }
+    return lf;
+}
+
+fn can_close(d: char, run: i32, prev: Option<char>, next: Option<char>) -> bool {
     let rf = right_flanking(prev, next);
-    return match d {
-        '_' => rf && (!left_flanking(prev, next) || opt_is_punct(next)),
-        _ => rf,
-    };
+    if intraword_restricted(d, run) {
+        return rf && (!left_flanking(prev, next) || opt_is_punct(next));
+    }
+    return rf;
 }
 
 fn left_flanking(prev: Option<char>, next: Option<char>) -> bool {
