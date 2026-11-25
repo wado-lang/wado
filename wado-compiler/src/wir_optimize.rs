@@ -33,6 +33,7 @@ mod util;
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::optimize::OptLevel;
 use crate::optimize::pass_dump::{self, Phase};
+use crate::parallel::Executor;
 use crate::wir::WirPackage;
 
 pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
@@ -103,8 +104,13 @@ fn wir_pass(
 /// exception, running before that gate: the frontend already emits `None` as
 /// `ref.null`, and this picks the matching WIR repr, so skipping it miscompiles
 /// rather than merely slowing things down.
-pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
-    optimize_scoped(module, opt_level, profiler, PassScope(None));
+pub fn optimize_wir(
+    module: &mut WirPackage,
+    opt_level: OptLevel,
+    profiler: &dyn SpanEmitter,
+    exec: &Executor,
+) {
+    optimize_scoped(module, opt_level, profiler, PassScope(None), exec);
 }
 
 fn optimize_scoped(
@@ -112,15 +118,16 @@ fn optimize_scoped(
     opt_level: OptLevel,
     profiler: &dyn SpanEmitter,
     scope: PassScope,
+    exec: &Executor,
 ) {
-    optimize_wasm_modules(module, opt_level, profiler);
+    optimize_wasm_modules(module, opt_level, profiler, exec);
 
     // Mandatory representation lowering — runs before the `-O0` gate. See above.
     lower_nullable_refs(module);
 
     if opt_level == OptLevel::O0 {
         dce::compact_dead_items(module);
-        finalize_locals(module);
+        finalize_locals(module, exec);
         return;
     }
 
@@ -128,7 +135,7 @@ fn optimize_scoped(
     in_span(profiler, &scope.name("phase1_type_repr"), || {
         // Inline trivial `alias = source` copies so SROA sees RefTest/RefCast on source.
         wir_pass(scope, "propagate_trivial_copies", module, profiler, |m| {
-            peephole::propagate_trivial_copies(m);
+            peephole::propagate_trivial_copies(m, exec);
         });
     });
 
@@ -151,7 +158,7 @@ fn optimize_scoped(
             module,
             profiler,
             |m| {
-                forward_struct_field_constants(m);
+                forward_struct_field_constants(m, exec);
             },
         );
     });
@@ -186,23 +193,23 @@ fn optimize_scoped(
     // destructures they hide. Leftover Nops/dead locals are cleaned in phase 7.
     in_span(profiler, &scope.name("phase5_peephole"), || {
         wir_pass(scope, "reuse_struct_loads", module, profiler, |m| {
-            reuse_loads::reuse_struct_loads(m);
+            reuse_loads::reuse_struct_loads(m, exec);
         });
         wir_pass(scope, "elide_overwritten_stores", module, profiler, |m| {
-            overwritten_stores::elide_overwritten_stores(m);
+            overwritten_stores::elide_overwritten_stores(m, exec);
         });
         wir_pass(scope, "run_peephole", module, profiler, |m| {
             let types = &m.types;
-            for func in &mut m.functions {
+            exec.for_each_mut(&mut m.functions, |func| {
                 let locals = func.typed_locals(types);
                 if let Some(body) = &mut func.body {
                     let null = nullability::Nullability::new(&locals);
                     run_peephole(body, &null, types);
                 }
-            }
+            });
         });
         wir_pass(scope, "flatten_seq_assignments", module, profiler, |m| {
-            flatten_seq_assignments(m);
+            flatten_seq_assignments(m, exec);
         });
         // Re-run copy propagation: `flatten_seq_assignments` exposes fresh
         // `LocalSet alias = LocalGet temp` copies the phase-1 run never saw.
@@ -212,7 +219,7 @@ fn optimize_scoped(
             module,
             profiler,
             |m| {
-                peephole::propagate_trivial_copies(m);
+                peephole::propagate_trivial_copies(m, exec);
             },
         );
         // Variant-slot flattening: now that `flatten_seq_assignments` + copy
@@ -235,7 +242,7 @@ fn optimize_scoped(
     // locals. The WIR-synthesised ones (`$match_scrut_N`, multi-value temps,
     // `$pair_temp_N`) are out of every TIR pass's reach.
     wir_pass(scope, "elide_dead_stores", module, profiler, |m| {
-        elide_dead_stores(m);
+        elide_dead_stores(m, exec);
     });
 
     // Phase 7: global cleanup, then final body cleanup (Nops, dead
@@ -259,7 +266,7 @@ fn optimize_scoped(
             dedupe_const_globals(m);
         });
         wir_pass(scope, "cleanup", module, profiler, |m| {
-            cleanup(m);
+            cleanup(m, exec);
         });
         // Drop data segments `register_literal_data` registered speculatively
         // but no surviving `array.new_data` ended up reading (a bounded
@@ -305,14 +312,14 @@ fn optimize_scoped(
     // into its local's only read leaves a tee nothing reads, which dead-store
     // elimination takes back to its value.
     wir_pass(scope, "forward_once_read_locals", module, profiler, |m| {
-        peephole::fuse_once_read_local_tees(m);
-        elide_dead_stores(m);
+        peephole::fuse_once_read_local_tees(m, exec);
+        elide_dead_stores(m, exec);
     });
     wir_pass(scope, "coalesce_locals", module, profiler, |m| {
-        coalesce_locals(m);
+        coalesce_locals(m, exec);
     });
     wir_pass(scope, "fuse_remaining_local_tees", module, profiler, |m| {
-        peephole::fuse_remaining_local_tees(m);
+        peephole::fuse_remaining_local_tees(m, exec);
     });
     wir_pass(
         scope,
@@ -320,11 +327,11 @@ fn optimize_scoped(
         module,
         profiler,
         |m| {
-            elide_dead_stores(m);
-            cleanup(m);
+            elide_dead_stores(m, exec);
+            cleanup(m, exec);
         },
     );
-    finalize_locals(module);
+    finalize_locals(module, exec);
 }
 
 /// Run this same list over each `#![wasm_module(...)]` core module.
@@ -335,7 +342,12 @@ fn optimize_scoped(
 ///
 /// Recursion terminates at one level: such a package has no nested
 /// `wasm_modules` of its own.
-fn optimize_wasm_modules(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
+fn optimize_wasm_modules(
+    module: &mut WirPackage,
+    opt_level: OptLevel,
+    profiler: &dyn SpanEmitter,
+    exec: &Executor,
+) {
     let mut wasm_modules = std::mem::take(&mut module.wasm_modules);
     for (name, wasm_module) in &mut wasm_modules {
         dce::mark_unreachable_defined_functions(wasm_module);
@@ -345,7 +357,7 @@ fn optimize_wasm_modules(module: &mut WirPackage, opt_level: OptLevel, profiler:
         for i in wasm_module.dead_func_indices.clone() {
             wasm_module.dead_type_indices.insert(i);
         }
-        optimize_scoped(wasm_module, opt_level, profiler, PassScope(Some(name)));
+        optimize_scoped(wasm_module, opt_level, profiler, PassScope(Some(name)), exec);
     }
     module.wasm_modules = wasm_modules;
 }
@@ -353,9 +365,9 @@ fn optimize_wasm_modules(module: &mut WirPackage, opt_level: OptLevel, profiler:
 /// Settle each local's Wasm type and freeze the locals, laid out, into
 /// `func.locals` for the emitter. Called on every `optimize_wir` exit path, so
 /// `-O0` finalizes too.
-fn finalize_locals(module: &mut WirPackage) {
+fn finalize_locals(module: &mut WirPackage, exec: &Executor) {
     relax_unset_nonnull_locals(module);
-    for func in &mut module.functions {
+    exec.for_each_mut(&mut module.functions, |func| {
         func.locals = lay_out_locals(func);
-    }
+    });
 }

@@ -9,6 +9,7 @@
 //! statement bumps — retyping the local to the field it wraps instead.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::parallel::Executor;
 use crate::wir::{WirInstr, WirPackage, WirType};
 use crate::wir_visitor::WirMutVisitor;
 
@@ -93,13 +94,12 @@ fn inner_refs_any_candidate(
 ///
 /// This canonicalizes the pattern the WIR builder produces for tuple
 /// destructuring, exposing the trailing copy to `propagate_trivial_copies`.
-pub(super) fn flatten_seq_assignments(module: &mut WirPackage) {
-    let mut visitor = FlattenSeqAssignments;
-    for func in &mut module.functions {
+pub(super) fn flatten_seq_assignments(module: &mut WirPackage, exec: &Executor) {
+    exec.for_each_mut(&mut module.functions, |func| {
         if let Some(body) = &mut func.body {
-            visitor.visit_body(body);
+            FlattenSeqAssignments.visit_body(body);
         }
-    }
+    });
 }
 
 struct FlattenSeqAssignments;
@@ -457,13 +457,13 @@ mod adjacent_box_tests {
     use super::*;
     use crate::wir::{WirFuncId, WirType, WirTypeId};
     use std::assert_matches;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     const NAME: &str = "b";
     const FIELD: &str = "value";
 
     fn tid() -> WirTypeId {
-        WirTypeId::new(0, Rc::from("Box"))
+        WirTypeId::new(0, Arc::from("Box"))
     }
     fn lget(name: &str) -> WirInstr {
         WirInstr::LocalGet {
@@ -482,7 +482,7 @@ mod adjacent_box_tests {
     }
     fn call(args: Vec<WirInstr>) -> WirInstr {
         WirInstr::Call {
-            func_id: WirFuncId::new(0, Rc::from("f")),
+            func_id: WirFuncId::new(0, Arc::from("f")),
             args,
         }
     }

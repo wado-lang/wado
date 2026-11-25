@@ -6,7 +6,7 @@
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -225,9 +225,10 @@ impl WasmModuleInfo {
 
         // One func type per function
         for (i, func) in self.functions.iter().enumerate() {
-            let fq: Rc<str> = Rc::from(minted_name("wasm_mod_type", i));
             wir.types.push(WirTypeDef::Func(WirFuncType {
-                name: WirName { fq: fq.to_string() },
+                name: WirName {
+                    fq: minted_name("wasm_mod_type", i),
+                },
                 params: func.params.clone(),
                 results: func.results.clone(),
             }));
@@ -237,7 +238,7 @@ impl WasmModuleInfo {
         for (i, func) in self.functions.iter().enumerate() {
             let type_id = WirTypeId::new(
                 u32::try_from(i).unwrap(),
-                Rc::from(minted_name("wasm_mod_type", i)),
+                Arc::from(minted_name("wasm_mod_type", i)),
             );
             let mut body = func.body.clone();
             for instr in &mut body {
@@ -273,7 +274,7 @@ impl WasmModuleInfo {
                     desc: WirExportDesc::Func {
                         func_id: WirFuncId::new(
                             u32::try_from(i).unwrap(),
-                            Rc::from(minted_name("wasm_mod_func", i)),
+                            Arc::from(minted_name("wasm_mod_func", i)),
                         ),
                     },
                 });
@@ -303,7 +304,7 @@ fn remap_func_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     if let WirInstr::Call { func_id, .. } | WirInstr::RefFunc { func_id } = instr
         && let Some(&new_idx) = remap.get(&func_id.index())
     {
-        *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
+        *func_id = WirFuncId::new(new_idx, Arc::from(func_id.fq()));
     }
     instr.for_each_boxed_child_mut(&mut |child| {
         remap_func_ids_in_instr(child, remap);
@@ -416,20 +417,21 @@ impl fmt::Display for WirName {
 /// Lightweight reference to a type definition in `WirPackage.types`.
 ///
 /// - `index`: indexes into `WirPackage.types` (not the Wasm type section)
-/// - `fq`: fully-qualified name shared via `Rc<str>` for Debug output
+/// - `fq`: fully-qualified name shared via `Arc<str>` for Debug output
 ///
 /// `Eq` and `Hash` use `index` only (O(1) integer operations).
 /// `Debug` prints the fq name (e.g., `"core:prelude//List<i32>"`).
-/// `Clone` is O(1) — Rc refcount increment (non-atomic, near zero cost).
+/// `Clone` is O(1), a refcount increment; atomic, so the WIR passes can visit
+/// functions on several threads.
 #[derive(Clone)]
 pub struct WirTypeId {
     index: u32,
-    fq: Rc<str>,
+    fq: Arc<str>,
 }
 
 impl WirTypeId {
     /// Create a new `WirTypeId` with the given index and fully-qualified name.
-    pub fn new(index: u32, fq: Rc<str>) -> Self {
+    pub fn new(index: u32, fq: Arc<str>) -> Self {
         Self { index, fq }
     }
 
@@ -475,12 +477,12 @@ impl fmt::Display for WirTypeId {
 #[derive(Clone)]
 pub struct WirFuncId {
     index: u32,
-    fq: Rc<str>,
+    fq: Arc<str>,
 }
 
 impl WirFuncId {
     /// Create a new `WirFuncId` with the given index and fully-qualified name.
-    pub fn new(index: u32, fq: Rc<str>) -> Self {
+    pub fn new(index: u32, fq: Arc<str>) -> Self {
         Self { index, fq }
     }
 

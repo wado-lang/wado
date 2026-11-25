@@ -6,6 +6,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::minted_name;
+use crate::parallel::Executor;
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
 use super::util::{CalleeWrites, Footprint, arm_callees};
@@ -345,13 +346,13 @@ fn unwrap_unused(instr: &mut WirInstr, unused: &IndexSet<String>) {
     }
 }
 
-pub(super) fn reuse_struct_loads(module: &mut WirPackage) {
+pub(super) fn reuse_struct_loads(module: &mut WirPackage, exec: &Executor) {
     let callees = CalleeWrites::of_module(module);
     let types = &module.types;
-    for func in &mut module.functions {
+    exec.for_each_mut(&mut module.functions, |func| {
         let locals = func.declared_locals();
         let Some(body) = &mut func.body else {
-            continue;
+            return;
         };
         let mut reuser = Reuser {
             types,
@@ -368,7 +369,7 @@ pub(super) fn reuse_struct_loads(module: &mut WirPackage) {
         };
         reuser.visit_body(body);
         if reuser.temps.is_empty() {
-            continue;
+            return;
         }
         let (used, unused): (Vec<Temp>, Vec<Temp>) =
             reuser.temps.into_iter().partition(|temp| temp.used);
@@ -380,5 +381,5 @@ pub(super) fn reuse_struct_loads(module: &mut WirPackage) {
             .into_iter()
             .map(|Temp { name, ty, .. }| WirInstr::DeclareLocal { name, ty });
         body.splice(0..0, decls);
-    }
+    });
 }

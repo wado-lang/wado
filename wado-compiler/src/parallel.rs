@@ -170,6 +170,17 @@ impl Executor {
         items.iter().for_each(f);
     }
 
+    /// `f` on each item in place, for a visit that rewrites only its own item.
+    pub fn for_each_mut<T: Send>(&self, items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = self.pool_for(items.len()) {
+            let f = carrying_skips(f);
+            pool.install(|| items.par_iter_mut().for_each(f));
+            return;
+        }
+        items.iter_mut().for_each(f);
+    }
+
     /// [`Self::for_each`] over the indices below `len`.
     pub fn for_each_index(&self, len: usize, f: impl Fn(usize) + Sync + Send) {
         #[cfg(not(target_arch = "wasm32"))]
@@ -241,6 +252,7 @@ mod tests {
         };
         executor.for_each(&items, |i| count(skips(i)));
         executor.for_each_index(64, |i| count(indexed(i)));
+        executor.for_each_mut(&mut items.clone(), |i| count(skips(i)));
         assert_eq!(unskipped.into_inner(), 0);
     }
 }

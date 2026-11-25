@@ -244,7 +244,7 @@ impl WirMutVisitor for DeadGuardRemover<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use super::*;
     use crate::rarity::Mark;
@@ -258,7 +258,7 @@ mod tests {
             name: WirName {
                 fq: name.to_string(),
             },
-            type_id: WirTypeId::new(0, Rc::from("t")),
+            type_id: WirTypeId::new(0, Arc::from("t")),
             param_names: Vec::new(),
             body: Some(body),
             meta: WirMeta::default(),
@@ -273,7 +273,7 @@ mod tests {
 
     fn call(index: u32, args: Vec<WirInstr>) -> WirInstr {
         WirInstr::Call {
-            func_id: WirFuncId::new(index, Rc::from("f")),
+            func_id: WirFuncId::new(index, Arc::from("f")),
             args,
         }
     }
@@ -358,7 +358,7 @@ mod tests {
     #[test]
     fn an_empty_function_with_results_traps_so_its_calls_stay() {
         let mut traps = func("traps", Vec::new());
-        traps.type_id = WirTypeId::new(RETURNS_I32, Rc::from("t"));
+        traps.type_id = WirTypeId::new(RETURNS_I32, Arc::from("t"));
         let mut module = package(vec![
             traps,
             func(

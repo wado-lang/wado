@@ -2746,7 +2746,12 @@ fn build_after_load<H: CompilerHost>(
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_package, options.opt_level, logger);
+        wir_optimize::optimize_wir(
+            &mut wir_package,
+            options.opt_level,
+            logger,
+            &parallel::Executor::new(options.parallelism),
+        );
     }
     wir_package.declare_memory64();
 

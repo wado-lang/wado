@@ -5,20 +5,22 @@
 
 use crate::graph::DisjointSets;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::parallel::Executor;
 use crate::wir::{WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
 use super::util::may_exit_enclosing_block;
 
-pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
+pub(super) fn forward_struct_field_constants(module: &mut WirPackage, exec: &Executor) {
+    let retained = RetainedParams::of(module);
     let types = &module.types;
-    for func_idx in 0..module.functions.len() {
-        let Some(body) = module.functions[func_idx].body.take() else {
-            continue;
+    exec.for_each_mut(&mut module.functions, |func| {
+        let Some(body) = func.body.take() else {
+            return;
         };
         // Locals connected by plain local-to-local copies share one GC object;
         // mutations and aliasing must apply to the whole group.
         let copy_groups = collect_copy_groups(&body);
-        let mut aliased = collect_aliased_locals(&body, module);
+        let mut aliased = collect_aliased_locals(&body, &retained);
         widen_aliased_across_copy_groups(&mut aliased, &copy_groups);
         // Locals assigned exactly once. `local_const` folds a `LocalGet` to its
         // bound constant, which is only sound for single-assignment locals: a
@@ -34,7 +36,41 @@ pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
             let mut known = FieldKnowledge::new(types, &aliased, &single_assigned, &copy_groups);
             changed = forward_fields_in_body(&mut body, &mut known);
         }
-        module.functions[func_idx].body = Some(body);
+        func.body = Some(body);
+    });
+}
+
+/// Which parameters each defined function retains, read before the bodies are
+/// visited, since no body edit moves them.
+struct RetainedParams {
+    defined_func_base: u32,
+    by_position: Vec<Vec<bool>>,
+}
+
+impl RetainedParams {
+    fn of(module: &WirPackage) -> Self {
+        Self {
+            defined_func_base: module.defined_func_base,
+            by_position: module
+                .functions
+                .iter()
+                .map(|f| {
+                    f.param_names
+                        .iter()
+                        .map(|param| f.retains.iter().any(|s| s == param))
+                        .collect()
+                })
+                .collect(),
+        }
+    }
+
+    /// Whether a call of `func_index` may retain its argument `arg`. An import
+    /// carries no retention: unknown, so conservative.
+    fn stores(&self, func_index: u32, arg: usize) -> bool {
+        func_index
+            .checked_sub(self.defined_func_base)
+            .and_then(|position| self.by_position.get(position as usize))
+            .is_none_or(|params| params.get(arg).is_none_or(|&retained| retained))
     }
 }
 
@@ -231,10 +267,10 @@ fn widen_aliased_across_copy_groups(
 /// Locals a reference to which outlives any one statement: address taken, or
 /// passed at a parameter position the callee retains. These hold no
 /// fact at all; what escapes at a point in the flow is invalidated there.
-fn collect_aliased_locals(body: &[WirInstr], module: &WirPackage) -> IndexSet<String> {
+fn collect_aliased_locals(body: &[WirInstr], retained: &RetainedParams) -> IndexSet<String> {
     let mut aliased = IndexSet::default();
     for instr in body {
-        collect_aliased_in_instr(instr, &mut aliased, module, false);
+        collect_aliased_in_instr(instr, &mut aliased, retained, false);
     }
     aliased
 }
@@ -247,28 +283,18 @@ fn collect_aliased_locals(body: &[WirInstr], module: &WirPackage) -> IndexSet<St
 fn collect_aliased_in_instr(
     instr: &WirInstr,
     aliased: &mut IndexSet<String>,
-    module: &WirPackage,
+    retained: &RetainedParams,
     in_non_stores_arg: bool,
 ) {
     match instr {
         // Direct function calls: check stores for each parameter.
         WirInstr::Call { func_id, args } => {
-            // An import carries no retention: unknown, so conservative.
-            let callee = module
-                .defined_func_position(func_id.index())
-                .map(|position| &module.functions[position]);
             for (i, arg) in args.iter().enumerate() {
-                let stores_param = match callee {
-                    Some(f) => match f.param_names.get(i) {
-                        Some(param) => f.retains.iter().any(|s| s == param),
-                        None => true,
-                    },
-                    None => true,
-                };
+                let stores_param = retained.stores(func_id.index(), i);
                 if stores_param {
                     yielded_locals(arg, aliased);
                 }
-                collect_aliased_in_instr(arg, aliased, module, !stores_param);
+                collect_aliased_in_instr(arg, aliased, retained, !stores_param);
             }
             return;
         }
@@ -285,9 +311,9 @@ fn collect_aliased_in_instr(
         } => {
             for arg in args {
                 yielded_locals(arg, aliased);
-                collect_aliased_in_instr(arg, aliased, module, false);
+                collect_aliased_in_instr(arg, aliased, retained, false);
             }
-            collect_aliased_in_instr(callee, aliased, module, false);
+            collect_aliased_in_instr(callee, aliased, retained, false);
             return;
         }
         // RefAsNonNull of a LocalGet: address taken — but suppress if inside
@@ -300,7 +326,7 @@ fn collect_aliased_in_instr(
         _ => {}
     }
     instr.for_each_child(&mut |child| {
-        collect_aliased_in_instr(child, aliased, module, in_non_stores_arg);
+        collect_aliased_in_instr(child, aliased, retained, in_non_stores_arg);
     });
 }
 
@@ -1085,7 +1111,7 @@ mod tests {
 
     fn run_forward(body: &mut [WirInstr], types: &[WirTypeDef]) {
         let copy_groups = collect_copy_groups(body);
-        let mut aliased = collect_aliased_locals(body, &WirPackage::empty());
+        let mut aliased = collect_aliased_locals(body, &RetainedParams::of(&WirPackage::empty()));
         widen_aliased_across_copy_groups(&mut aliased, &copy_groups);
         run_forward_with(body, types, &aliased, &copy_groups);
     }
