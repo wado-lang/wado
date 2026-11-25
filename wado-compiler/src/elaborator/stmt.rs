@@ -28,15 +28,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
-<<<<<<< HEAD
-use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo, ForOfStart};
-||||||| cb4f66e2c
-use crate::elaborator::orchestration::first_infer_span;
-use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
-=======
-use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
->>>>>>> origin/main
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
