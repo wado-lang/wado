@@ -4510,6 +4510,18 @@ pub(super) struct TraitMethodMatch {
 }
 
 impl TraitMethodMatch {
+    /// Whether this match, found among the impls for a reference, answers a
+    /// call on one ahead of the referent's own method. An impl for a named
+    /// referent does. A blanket one (`impl<T: Bound> Trait for &T`) does for a
+    /// by-value `self` alone, which takes the reference where the referent's
+    /// method would take the referent out of it; through `&self` both read
+    /// the same value, and the referent's is the direct one.
+    pub(super) fn answers_reference_receiver(&self) -> bool {
+        !self.is_blanket_ref_impl || self.method_info.self_kind == ast::SelfKind::Value
+    }
+}
+
+impl TraitMethodMatch {
     /// The owner a call on `receiver_base` dispatches with: a newtype inherits
     /// a reference impl the way it inherits a value one, so its signature
     /// re-types to the receiver.

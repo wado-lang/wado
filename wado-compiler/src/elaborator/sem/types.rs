@@ -594,7 +594,7 @@ impl BodyFacts {
             .chain(&self.index_swap_dispatch)
             .filter_map(|(id, op)| Some((*id, op.method_def?)));
         let iterators = self.for_of_iterator.iter().flat_map(|(id, info)| {
-            [info.into_iter_def, info.next_def]
+            [info.start.as_ref().and_then(|s| s.def), info.next_def]
                 .into_iter()
                 .flatten()
                 .map(move |def| (*id, def))
@@ -1231,14 +1231,13 @@ pub(crate) fn impl_self_layers(
 /// without re-dispatching.
 #[derive(Clone)]
 pub(crate) struct ForOfIteratorInfo {
-    /// The `into_iter` and `next` declarations dispatch chose. The loop spells
-    /// no method name, so nothing else names them.
-    pub(crate) into_iter_def: Option<DefId>,
+    /// The call that turns the operand into what the loop walks. `None` where
+    /// the operand is a reference that is an iterator, which the loop walks as
+    /// it stands.
+    pub(crate) start: Option<ForOfStart>,
+    /// The `next` declaration dispatch chose. The loop spells no method name,
+    /// so nothing else names it.
     pub(crate) next_def: Option<DefId>,
-    /// Resolved `IntoIterator::into_iter` dispatch target.
-    pub(crate) into_iter: FunctionRef,
-    /// Receiver-adjustment kind for the `.into_iter()` call.
-    pub(crate) into_iter_self_kind: ast::SelfKind,
     /// Resolved `Iterator::next` dispatch target.
     pub(crate) next: FunctionRef,
     /// Receiver-adjustment kind for the `.next()` call.
@@ -1246,12 +1245,22 @@ pub(crate) struct ForOfIteratorInfo {
     /// Item type — what the loop variable is bound to. Reify uses this
     /// to type-annotate the synthesised `let <var> = …;`.
     pub(crate) item_type: TypeId,
-    /// Iterator type — the resolved return type of
-    /// `iterable.into_iter()` (`info.into_iter` returns this).
+    /// Iterator type: what `start` returns, or the operand's own type.
     /// Reify uses this to type the synthesised iterator local
     /// `let mut $iter_N: <iter_type> = …;` without re-running
     /// method dispatch.
     pub(crate) iter_type: TypeId,
+}
+
+/// The `IntoIterator::into_iter` or `ForOf::start` call a for-of loop opens
+/// with.
+#[derive(Clone)]
+pub(crate) struct ForOfStart {
+    /// The declaration dispatch chose.
+    pub(crate) def: Option<DefId>,
+    pub(crate) func: FunctionRef,
+    /// Receiver-adjustment kind for the call.
+    pub(crate) self_kind: ast::SelfKind,
 }
 
 /// Where a call reads its callee from, when that callee is a value and not a

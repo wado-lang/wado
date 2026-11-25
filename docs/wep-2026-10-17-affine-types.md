@@ -301,8 +301,8 @@ fields it was built with.
 ### A by-value `self` is a parameter like any other
 
 A by-value `self` is copied when its type is copyable and moved when it is
-affine, as every by-value parameter is. Three rules follow, and nothing else
-is special about a receiver.
+affine, as every by-value parameter is. Four rules follow, and nothing else is
+special about a receiver.
 
 - Any type may declare one. A concrete type every value of which is copyable
   used to be refused, which left the rule in three parts: allowed on an affine
@@ -312,18 +312,31 @@ is special about a receiver.
 - A by-value `self` is not called on a `&mut`. For an affine value the call
   would move it out of the reference, and a `&` is refused for the same
   reason. For a copyable value it would act on a copy, where `&mut` says the
-  caller meant the value itself: `r.take(2)` on an `&mut I` left the iterator
-  where it was. A written `*` asks for the copy. The standard library and
-  seven packages held no such call when the rule was adopted.
+  caller meant the value itself. A written `*` asks for the copy. The standard
+  library and seven packages held no such call when the rule was adopted.
 - Through a `&`, a copyable receiver is copied as before. A shared reference
   cannot write, so the copy and the referent are the same value to every
   reader, and `r.unwrap()` on an `&Option<T>` is too common to ask a `*` of.
+- Where the reference itself implements the trait, the call is the
+  reference's, and its `self` is the reference: nothing is read out of it. A
+  blanket over a reference answers a by-value `self` this way. Its `&self` and
+  `&mut self` methods stay the referent's, which read the same value more
+  directly.
 
 An iterator adapter therefore takes a copy of a copyable iterator: after
 `it.take(2)`, `it` has not advanced. That is what value semantics says of any
 method that returns a new value, and it predates this WEP, whose only change
-was the receiver's spelling. `Iterator::by_ref` is the form that advances the
-iterator itself.
+was the receiver's spelling.
+
+A `&mut` to an iterator is the form that advances the iterator itself, and the
+prelude makes it one: `impl<affine I: Iterator> Iterator for &mut I`. A loop
+over `&mut it`, an adapter called on a `&mut I`, and a generic consumer handed
+`&mut it` each leave `it` where they stopped, and `by_ref` returns `&mut self`.
+Each of the three walked a copy before, silently, and the loop was the hole in
+the `&mut` rule above: its `into_iter` is no method call the check sees. A
+for-of loop walks an operand that is a reference and an iterator as it stands.
+`core:http_client` had written `IntoIterator for &mut` by hand for its two
+affine iterators, through a wrapper `IterRefMut`; both are gone.
 
 What was considered and refused:
 
@@ -346,9 +359,9 @@ What was considered and refused:
   caller, so the shared `Option` and `Result` methods cost it nothing but the
   `&mut` refusal above. A method that needs a copy stays in an `impl<T>` of
   its own, as `List::sorted` is.
-- Resolving a method on `&mut I` to an impl for the reference, as Rust does.
-  The refusal above leaves room for it: a call that is an error today can be
-  given that meaning later without changing a program that compiles.
+- A rule for for-of alone, or `ForOf for &mut I` alone. Either leaves an
+  adapter on a `&mut I`, and a `&mut it` handed to a generic consumer, walking
+  a copy.
 
 ### A reference is read only while its local holds the value
 
@@ -1027,6 +1040,14 @@ the list breaks the contract of its views. Moving every operand would make the
 loop walk the value it began with, at the cost of a copy of each list read
 after the loop, since value-copy elision does not share a parameter stored into
 a returned value.
+
+### `&mut it` as an `IntoIterator` walks a copy
+
+A `&mut` to an iterator is an `Iterator` and not an `IntoIterator` of its own:
+it satisfies that bound through its referent, as a reference satisfies any
+bound no impl is written for. So a function taking `C: IntoIterator` and handed
+`&mut it`, and `(&mut it).into_iter()` written out, walk a copy of `it`, where a
+function taking `I: Iterator` and a for-of loop advance it.
 
 ### Maps and sets of affine values
 

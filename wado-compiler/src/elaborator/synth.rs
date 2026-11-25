@@ -834,7 +834,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 self.decide_now(lookup, base, method, span).found()
             }
-            && !found.is_blanket_ref_impl
+            && found.answers_reference_receiver()
         {
             let owner = found.owner_for(base, &self.tysys.type_table.borrow());
             let info = found.method_info;

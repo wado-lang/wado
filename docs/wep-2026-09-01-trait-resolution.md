@@ -720,14 +720,24 @@ there, so that parameter stays as the impl restates it
 (`trait_method_bound_projects_trait_param.wado`). A default the trait gave it
 does not reach a call through the impl.
 
-### A ref blanket never dispatches
+### A ref blanket dispatches a by-value `self` only
 
 The order ranks `impl<T: Bound> Tr for &T` as the third candidate list, and
-`candidates` names one for a reference receiver. The compiler's collection still
-refuses it: the reference step adopts only concrete `&T` impls
-(`method_call.rs`, `is_blanket_ref_impl`), so the order's verdict is discarded
-and the call reports no method (`trait_ref_blanket_dispatch.wado`). The
-prelude's `Inspect for &T` works because the compiler answers that bound itself.
+`candidates` names one for a reference receiver. The compiler's collection
+adopts it for a method taking `self` by value
+(`TraitMethodMatch::answers_reference_receiver`,
+`iterator_through_mut_reference.wado`), which is what
+[WEP: Affine Types](./wep-2026-10-17-affine-types.md#a-by-value-self-is-a-parameter-like-any-other)
+decided. For a `&self` or `&mut self` method the reference step still adopts
+only concrete `&T` impls, so the order's verdict is discarded: the referent's
+impl answers, and where it has none the call reports no method
+(`trait_ref_blanket_dispatch.wado`). The prelude's `Inspect for &T` works
+because the compiler answers that bound itself.
+
+A value blanket does not answer a reference either (`blanket_trait_impl_applies`
+mints no instance for one), so `&mut I` is an `Iterator` and not an
+`IntoIterator`. A for-of loop walks such an operand as it stands, and a method
+call spelling `into_iter` on it reads the referent.
 
 - [ ] Collect a reference blanket as a match, or materialize the match from the
   winning `ImplId` (above), which makes the collection moot.

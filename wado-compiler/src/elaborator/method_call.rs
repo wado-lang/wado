@@ -52,7 +52,7 @@ use crate::elaborator::trait_env::{BlanketBound, BlanketReceiver};
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
-use crate::synthesis::template::blanket_impl_args;
+use crate::synthesis::template::{blanket_impl_args, ref_blanket_instance};
 use crate::unparse::unparse_type_into;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -629,11 +629,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Err(result) => result,
             };
             reported |= matches!(result, TraitLookup::Reported);
-            // Only use ref-type impls that target a concrete container type
-            // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
-            // (e.g., impl Inspect for &T where the inner type is just a type param).
             if let Some(trait_match) = result.found()
-                && !trait_match.is_blanket_ref_impl
+                && trait_match.answers_reference_receiver()
             {
                 let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
                 matched_impl_decl = trait_match.impl_struct_fq.head().def();
@@ -1286,6 +1283,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The function a call dispatches to once its declaration is chosen,
     /// named after the receiver and the impl that answers it.
+    /// The function a call names through a blanket over a reference
+    /// (`impl<T: Bound> Tr for &T`), which its pointee alone keys: the name
+    /// monomorphization gives the same call in a generic body.
+    #[allow(clippy::too_many_arguments)]
+    fn ref_blanket_function_ref(
+        &self,
+        ref_kind: Option<RefKind>,
+        block: Option<DefId>,
+        trait_name: Option<&FqTraitName>,
+        method_name: &str,
+        pointee: TypeId,
+        method_type_args: &[TypeId],
+        trait_args: &[TypeId],
+    ) -> Option<FunctionRef> {
+        let (ref_kind, block, trait_name) = (ref_kind?, block?, trait_name?);
+        let blanket = self.tysys.trait_env.blanket_of_block(block)?;
+        if !matches!(blanket.receiver, BlanketReceiver::Ref { .. }) {
+            return None;
+        }
+        let generic =
+            LocalMethodName::new_ref(ref_kind, Some(trait_name.clone()), method_name.to_string());
+        let method_type_args = self.apply_infer_holes_each(method_type_args);
+        let (mut info, monomorph_info) = ref_blanket_instance(
+            generic,
+            pointee,
+            method_type_args,
+            &self.tysys.type_table.borrow(),
+        );
+        info.trait_type_args = self.apply_infer_holes_each(trait_args);
+        Some(FunctionRef {
+            module_source: blanket.module.clone(),
+            name: info.to_mangled_name(),
+            template: self.tysys.trait_env.call_template(block, &info),
+            monomorph_info: Some(monomorph_info),
+            method_info: Some(info),
+        })
+    }
+
     pub(super) fn dispatch_function_ref(&mut self, site: DispatchSite<'_>) -> FunctionRef {
         let DispatchSite {
             owner,
@@ -1308,6 +1343,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_args,
             method_type_args,
         } = site;
+        if let Some(func) = self.ref_blanket_function_ref(
+            matched_ref_kind,
+            dispatched_impl_block,
+            trait_name.as_ref(),
+            method_name,
+            base_type_id,
+            &method_type_args,
+            &trait_args,
+        ) {
+            return func;
+        }
         // For inherited methods (Newtype/Flags), use the actual implementation type's name,
         // since the function is defined on the base type (e.g., Point::sum, not Location::sum).
         let method_impl_type_id = owner.declaring(base_type_id);

@@ -138,7 +138,7 @@ and a second read is a contract violation. `body()` and `events()` take the
 response by value: an iterator that borrowed it could not be held beside the
 response, since an affine value and a reference into it cannot be used in turn.
 The iterator hands it back as `.response()`. `for let x of &mut it` walks the
-iterator in place, through `IterRefMut`, so `it.response()` and
+iterator in place, since a `&mut` to an iterator is one, so `it.response()` and
 `EventStream::retry()` are read after the loop.
 
 A body cut short by the connection ends the stream just as a complete one does;

@@ -313,6 +313,11 @@ before the first iteration. Each iteration then calls `next()` on the result,
 binds the element to `item` and runs the body. The loop ends when `next()`
 returns `None`.
 
+An operand that is a reference and an
+[iterator](./spec-standard-traits.md#iterator---core-iteration-trait), as a
+`&mut` to one is, is walked as it stands: the loop calls `next()` on it, and
+what it points to is left where the loop stopped.
+
 An [affine](./spec-affine.md) operand whose type implements the
 prelude trait `ForOf` is walked through it instead. The loop passes the operand
 by value to `ForOf::start` once, then calls `next()` on the state it returns.

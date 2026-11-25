@@ -291,7 +291,7 @@ test {
 }
 ```
 
-A by-value `self` is passed as any parameter is: copied, or [moved](./spec-affine.md#moves) when it is affine. `Option<i32>::unwrap` leaves its binding usable, and so does an iterator adapter: `it.take(2)` takes a copy of `it` and leaves `it` where it was. `it.by_ref().take(2)` advances `it` itself.
+A by-value `self` is passed as any parameter is: copied, or [moved](./spec-affine.md#moves) when it is affine. `Option<i32>::unwrap` leaves its binding usable, and so does an iterator adapter: `it.take(2)` takes a copy of `it` and leaves `it` where it was. `(&mut it).take(2)` advances `it` itself, since a `&mut` to an iterator [is an iterator](./spec-standard-traits.md#iterator---core-iteration-trait).
 
 Every value of `Point` is copyable, so a by-value `self` on it copies the receiver at every call. The declaration warns ([`self_by_value`](./spec-diagnostics.md#the-self_by_value-lint)):
 
@@ -325,7 +325,9 @@ test "the receiver is copied out of a shared reference" {
 }
 ```
 
-It is not called on a `&mut`: the call would act on a copy, where `&mut` says the caller meant the value itself. That is a compile error (`RECEIVER_MISMATCH`), and a written `*` asks for the copy.
+Where a trait is implemented for the reference itself, the method called on a reference is that impl's, and its `self` is the reference. A blanket impl over a reference (`impl<T: Bound> Tr for &mut T`) answers a by-value `self` this way and leaves `&self` and `&mut self` methods to the referent.
+
+Otherwise a by-value `self` is not called on a `&mut`: the call would act on a copy, where `&mut` says the caller meant the value itself. That is a compile error (`RECEIVER_MISMATCH`), and a written `*` asks for the copy.
 
 <!-- {"fixture":"self_by_value_through_dereference.wado"} -->
 

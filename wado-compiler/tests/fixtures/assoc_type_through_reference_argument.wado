@@ -1,0 +1,24 @@
+// A reference satisfies a bound through its referent, and a projection off the
+// type parameter it fills (`C::Iter`) is the referent's. Regression: nothing
+// registered the referent's associated types, and the projection reached
+// codegen unsubstituted.
+
+fn first_two<C: IntoIterator<Item = i32>>(c: C) -> List<i32> with _ {
+    let mut taken: List<i32> = [];
+    for let x of c {
+        taken.push(x);
+        if taken.len() == 2 { break; }
+    }
+    return taken;
+}
+
+test "a reference to a range" {
+    let r = 0..<5;
+    assert first_two(&r) == [0, 1];
+}
+
+test "a reference to an iterator over a list" {
+    let xs: List<i32> = [1, 2, 3];
+    let it = xs.into_iter();
+    assert first_two(&it) == [1, 2];
+}

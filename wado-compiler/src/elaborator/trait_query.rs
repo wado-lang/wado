@@ -3615,6 +3615,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         concrete_type_id: TypeId,
         trait_: DefId,
     ) {
+        // A reference no impl is written for answers through its referent,
+        // whose registration a projection off the reference reads.
+        let referent = self
+            .tysys
+            .type_table
+            .borrow()
+            .ref_pointee(concrete_type_id);
+        if let Some(referent) = referent {
+            return self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
+        }
         // Get the base type name and concrete type args for impl block lookup.
         // For newtypes, follow the chain to the underlying type to find the trait impl,
         // but registration (below) still uses concrete_type_id so the monomorphizer can
