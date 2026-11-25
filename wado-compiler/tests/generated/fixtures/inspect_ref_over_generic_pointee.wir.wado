@@ -470,9 +470,9 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0
     let is_negative_55: bool;
     let x: i64;
     let $licm_arith_121: bool;
+    let $licm_repr_122: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let $licm_repr_136: ref Array<u8>;
     let start_273: i32;
     let $hfs_used_311: i32;
     self_7 = f.buf;
@@ -491,7 +491,7 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0
     i = 0;
     self_7 = f.buf;
     $licm_arith_121 = limit >= 0;
-    $licm_repr_136 = local.tee $load_7(self_7.repr);
+    $licm_repr_122 = local.tee $load_7(self_7.repr);
     $hfs_used_311 = self_7.used;
     b47: block {
         l48: loop {
@@ -501,14 +501,14 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0
                 break b47;
             }
             if new_used_17 > 0 {
-                if @unlikely(local.tee $hfs_used_311($hfs_used_311 + 2) > builtin::array_len($licm_repr_136)) {
+                if @unlikely(local.tee $hfs_used_311($hfs_used_311 + 2) > builtin::array_len($licm_repr_122)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, $hfs_used_311);
-                    $licm_repr_136 = local.tee $load_7(self_7.repr);
+                    $licm_repr_122 = local.tee $load_7(self_7.repr);
                 } else {
                 }
                 start_47 = self_7.used;
-                builtin::array_copy<u8>($licm_repr_136, start_47, global:core:prelude/array.wado::$const_obj_81, 0, 2);
+                builtin::array_copy<u8>($licm_repr_122, start_47, global:core:prelude/array.wado::$const_obj_81, 0, 2);
             } else {
             }
             is_negative_55 = local.tee start_47(builtin::array_get_value<i32>(repr, i)) < 0;
@@ -596,22 +596,22 @@ fn "core:prelude/array.wado/core:prelude/array.wado/write_seq_inspect<i32>$spec0
             }
             start_273 = $hfs_used_311;
             $hfs_used_311 = is_negative_55;
-            $licm_repr_136 = $load_7;
+            $licm_repr_122 = $load_7;
             start_47 = start_273 + start_47;
             b74: block {
                 l75: loop {
                     break_if b74 (start_47 - start_273) < 2;
                     q = x /u 100_i64;
                     tens = local.tee is_negative_55(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-                    builtin::array_set_u8($licm_repr_136, start_47 - 1, (48 + is_negative_55) - (tens * 10));
-                    builtin::array_set_u8($licm_repr_136, start_47 - 2, 48 + tens);
+                    builtin::array_set_u8($licm_repr_122, start_47 - 1, (48 + is_negative_55) - (tens * 10));
+                    builtin::array_set_u8($licm_repr_122, start_47 - 2, 48 + tens);
                     start_47 = start_47 - 2;
                     x = q;
                     continue l75;
                 };
             };
             if start_47 > start_273 {
-                builtin::array_set_u8($licm_repr_136, start_273, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+                builtin::array_set_u8($licm_repr_122, start_273, 48 + builtin::i32_wrap_i64(x %u 10_i64));
             }
             new_used_17 = new_used_17 + 1;
             i = i + 1;

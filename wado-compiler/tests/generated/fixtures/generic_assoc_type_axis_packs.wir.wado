@@ -2107,12 +2107,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right"(se
     let $load_0: ref "core:prelude/string.wado//String";
     let $contract_arg_0: i32;
     let $licm_used_20: i32;
-    let $licm_repr_22: ref Array<u8>;
+    let $licm_repr_21: ref Array<u8>;
     "core:prelude/string.wado/core:prelude/string.wado/String::append_byte_filled"(local.tee $load_0(self.buf), 0, gap);
     content_bytes = content_bytes - 1;
     $licm_used_20 = $load_0.used;
+    $licm_repr_21 = $load_0.repr;
     gap = start_pos + gap;
-    $licm_repr_22 = $load_0.repr;
     b239: block {
         l240: loop {
             break_if b239 content_bytes < 0;
@@ -2120,7 +2120,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right"(se
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, $licm_used_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
                 unreachable;
-            }; builtin::array_get_value<u8>($licm_repr_22, $contract_arg_0));
+            }; builtin::array_get_value<u8>($licm_repr_21, $contract_arg_0));
             content_bytes = content_bytes - 1;
             continue l240;
         };
@@ -3223,48 +3223,54 @@ fn "generic_assoc_type_axis_packs.wado/generic_assoc_type_axis_packs.wado/Cpu^ge
     let current_67: i32;
     let current_73: i32;
     let current_79: i32;
-    let $licm_repr_131: ref Array<f32>;
-    let $sroa_$iter_0_start_146: i32;
-    let $sroa_$iter_1_start_148: i32;
-    let $sroa_$iter_2_start_150: i32;
+    let $licm_repr_127: ref Array<f32>;
+    let $licm_repr_128: ref Array<f32>;
+    let $licm_repr_135: ref Array<f32>;
+    let $sroa_$iter_0_start_150: i32;
+    let $sroa_$iter_1_start_152: i32;
+    let $sroa_$iter_2_start_154: i32;
     self.calls = self.calls + 1;
     data = struct.new "core:prelude/list.wado//List<f32>" { repr: array.new_fixed<f32>(), used: 0 };
-    $sroa_$iter_0_start_146 = 0;
-    $licm_repr_131 = data.repr;
+    $sroa_$iter_0_start_150 = 0;
+    $licm_repr_135 = data.repr;
     b370: block {
         l371: loop {
-            break_if b370 $sroa_$iter_0_start_146 >= 1;
-            $sroa_$iter_0_start_146 = local.tee current_67($sroa_$iter_0_start_146) + 1;
-            $sroa_$iter_1_start_148 = 0;
+            break_if b370 $sroa_$iter_0_start_150 >= 1;
+            $sroa_$iter_0_start_150 = local.tee current_67($sroa_$iter_0_start_150) + 1;
+            $sroa_$iter_1_start_152 = 0;
             current_67 = current_67 * 2;
+            $licm_repr_127 = a;
+            $licm_repr_128 = b;
             b372: block {
                 l373: loop {
-                    break_if b372 $sroa_$iter_1_start_148 >= 1;
-                    $sroa_$iter_1_start_148 = local.tee current_73($sroa_$iter_1_start_148) + 1;
+                    break_if b372 $sroa_$iter_1_start_152 >= 1;
+                    $sroa_$iter_1_start_152 = local.tee current_73($sroa_$iter_1_start_152) + 1;
                     sum = 0_f32;
-                    $sroa_$iter_2_start_150 = 0;
+                    $sroa_$iter_2_start_154 = 0;
                     b374: block {
                         l375: loop {
-                            break_if b374 $sroa_$iter_2_start_150 >= 2;
-                            $sroa_$iter_2_start_150 = local.tee current_79($sroa_$iter_2_start_150) + 1;
+                            break_if b374 $sroa_$iter_2_start_154 >= 2;
+                            $sroa_$iter_2_start_154 = local.tee current_79($sroa_$iter_2_start_154) + 1;
                             sum = sum + (if @unlikely(local.tee $contract_arg_3(current_67 + current_79) >=u 2) {
                                 cold_path;
                                 "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_3, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("generic_assoc_type_axis_packs.wado:56"), used: 37 });
                                 unreachable;
-                            }; builtin::array_get_value<f32>(a, $contract_arg_3) * if @unlikely(local.tee current_79(current_79 + current_73) >=u 2) {
+                            }; builtin::array_get_value<f32>($licm_repr_127, $contract_arg_3) * if @unlikely(local.tee current_79(current_79 + current_73) >=u 2) {
                                 cold_path;
                                 "core:prelude/list.wado/core:prelude/list.wado/List<f32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(current_79, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("generic_assoc_type_axis_packs.wado:56"), used: 37 });
                                 unreachable;
-                            }; builtin::array_get_value<f32>(b, current_79));
+                            }; builtin::array_get_value<f32>($licm_repr_128, current_79));
                             continue l375;
                         };
                     };
-                    if @unlikely(local.tee current_73(data.used) >= builtin::array_len($licm_repr_131)) {
+                    if @unlikely(local.tee current_73(data.used) >= builtin::array_len($licm_repr_135)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<f32>::grow"(data);
-                        $licm_repr_131 = data.repr;
+                        $licm_repr_135 = data.repr;
+                        $licm_repr_127 = a;
+                        $licm_repr_128 = b;
                     }
-                    builtin::array_set<f32>($licm_repr_131, current_73, sum);
+                    builtin::array_set<f32>($licm_repr_135, current_73, sum);
                     data.used = current_73 + 1;
                     continue l373;
                 };

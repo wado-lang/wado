@@ -2060,7 +2060,7 @@ fn "spec_traits_iterator_usage.wado/core:prelude/traits.wado/IterFilter<core:pre
     let $licm_pred_6_15: ref "canonical//CanonicalClosure_0";
     let $licm_end_7_16: i32;
     let $licm_repr_8_17: ref Array<i32>;
-    let item_22: i32;
+    let $sroa_slot_28: i32;
     $fused_$inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
         $licm_inner_5_14 = self.inner;
         $licm_pred_6_15 = self.pred;
@@ -2077,30 +2077,27 @@ fn "spec_traits_iterator_usage.wado/core:prelude/traits.wado/IterFilter<core:pre
                     b257: block {
                         l258: loop {
                             $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__1: block {
-                                $licm_end_7_16 = $licm_inner_5_14.end;
-                                $licm_repr_8_17 = $licm_inner_5_14.repr;
                                 block {
                                     l260: loop {
                                         if local.tee $load_4($licm_inner_5_14.index) >= $licm_end_7_16 {
-                                            $licm_end_7_16 = 0;
                                             $load_4 = 0;
+                                            $sroa_slot_28 = 0;
                                             break $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__1;
                                         }
-                                        item_22 = builtin::array_get_value<i32>($licm_repr_8_17, $load_4);
+                                        $sroa_slot_28 = builtin::array_get_value<i32>($licm_repr_8_17, $load_4);
                                         $licm_inner_5_14.index = $load_4 + 1;
                                         if block -> bool {
-                                            call_ref "functype/$canonical_closure_fn_0"($licm_pred_6_15.func, $licm_pred_6_15.env, item_22);
+                                            call_ref "functype/$canonical_closure_fn_0"($licm_pred_6_15.func, $licm_pred_6_15.env, $sroa_slot_28);
                                         } {
-                                            $licm_end_7_16 = 1;
-                                            $load_4 = item_22;
+                                            $load_4 = 1;
                                             break $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__1;
                                         }
                                         continue l260;
                                     };
                                 };
                             };
-                            if $licm_end_7_16 == 1 {
-                                item_13 = item_13 + $load_4;
+                            if $load_4 == 1 {
+                                item_13 = item_13 + $sroa_slot_28;
                             } else {
                                 break b257;
                             }

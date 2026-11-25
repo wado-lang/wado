@@ -402,18 +402,18 @@ fn "param_spec_field_written_through_alias.wado/$template_segment$param_spec_fie
 fn "param_spec_field_written_through_alias.wado/$cm_export__$test_0"() {
     let n: i32;
     let at: i32;
-    let $sroa_$sroa_s_cur_10_at_12: i32;
-    $sroa_$sroa_s_cur_10_at_12 = 0;
+    let $sroa_$sroa_s_cur_11_at_13: i32;
+    $sroa_$sroa_s_cur_11_at_13 = 0;
     n = 0;
     b4: block {
         l5: loop {
             break_if b4 $inline_count_spec0_sroa_s_cur__1__$inline_param_spec_field_written_through_alias_wado_Stepper__next_0: block -> i32 {
                 block {
                     l7: loop {
-                        if $sroa_$sroa_s_cur_10_at_12 >= 10 {
+                        if $sroa_$sroa_s_cur_11_at_13 >= 10 {
                             break $inline_count_spec0_sroa_s_cur__1__$inline_param_spec_field_written_through_alias_wado_Stepper__next_0: -1;
                         }
-                        $sroa_$sroa_s_cur_10_at_12 = local.tee at($sroa_$sroa_s_cur_10_at_12) + 1;
+                        $sroa_$sroa_s_cur_11_at_13 = local.tee at($sroa_$sroa_s_cur_11_at_13) + 1;
                         if (at % 2) == 0 {
                             break $inline_count_spec0_sroa_s_cur__1__$inline_param_spec_field_written_through_alias_wado_Stepper__next_0: at;
                         }
@@ -1474,21 +1474,22 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     let $sroa_result_repr_13: ref Array<i32>;
     let $sroa_result_used_14: i32;
     let $sroa_write_back_15: ref "core:prelude/list.wado//List<i32>";
-    let $licm_end_12: i32;
+    let $sroa_slot_29: i32;
     let $licm_inner_31: ref "core:prelude/range.wado//RangeExclusive<i32>";
     let $licm_pred_32: ref "canonical//CanonicalClosure_0";
+    let $licm_end_33: i32;
     $sroa_result_repr_13 = array.new_fixed<i32>();
     $sroa_result_used_14 = 0;
     $licm_inner_31 = iter.inner;
     $licm_pred_32 = iter.pred;
+    $licm_end_33 = $licm_inner_31.end;
     b171: block {
         l172: loop {
             $inline_core_prelude_traits_wado_IterFilter_core_prelude_range_wado_RangeExclusive_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
-                $licm_end_12 = $licm_inner_31.end;
                 block {
                     l174: loop {
-                        if local.tee $load_3($licm_inner_31.start) >= $licm_end_12 {
-                            $licm_end_12 = 0;
+                        if local.tee $load_3($licm_inner_31.start) >= $licm_end_33 {
+                            $sroa_slot_29 = 0;
                             $load_3 = 0;
                             break $inline_core_prelude_traits_wado_IterFilter_core_prelude_range_wado_RangeExclusive_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0;
                         }
@@ -1496,14 +1497,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
                         if block -> bool {
                             call_ref "functype/$canonical_closure_fn_0"($licm_pred_32.func, $licm_pred_32.env, $load_3);
                         } {
-                            $licm_end_12 = 1;
+                            $sroa_slot_29 = 1;
                             break $inline_core_prelude_traits_wado_IterFilter_core_prelude_range_wado_RangeExclusive_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0;
                         }
                         continue l174;
                     };
                 };
             };
-            if $licm_end_12 == 1 {
+            if $sroa_slot_29 == 1 {
                 if @unlikely($sroa_result_used_14 >= builtin::array_len($sroa_result_repr_13)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(local.tee $sroa_write_back_15(struct.new "core:prelude/list.wado//List<i32>" { repr: $sroa_result_repr_13, used: $sroa_result_used_14 }));

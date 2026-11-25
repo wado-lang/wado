@@ -2646,37 +2646,37 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
     let $load_4: i32;
     let n: i32;
     let item_7: i32;
-    let $licm_end_8: i32;
-    let $licm_repr_9: ref Array<i32>;
     let $licm_inner_14: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let $licm_pred_15: ref "canonical//CanonicalClosure_5";
+    let $licm_end_16: i32;
+    let $licm_repr_17: ref Array<i32>;
     n = 0;
     $licm_inner_14 = self.inner;
     $licm_pred_15 = self.pred;
+    $licm_end_16 = $licm_inner_14.end;
+    $licm_repr_17 = $licm_inner_14.repr;
     b269: block {
         l270: loop {
             $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
-                $licm_end_8 = $licm_inner_14.end;
-                $licm_repr_9 = $licm_inner_14.repr;
                 block {
                     l272: loop {
-                        if local.tee $load_4($licm_inner_14.index) >= $licm_end_8 {
-                            $licm_end_8 = 0;
+                        if local.tee $load_4($licm_inner_14.index) >= $licm_end_16 {
+                            $load_4 = 0;
                             break $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0;
                         }
-                        item_7 = builtin::array_get_value<i32>($licm_repr_9, $load_4);
+                        item_7 = builtin::array_get_value<i32>($licm_repr_17, $load_4);
                         $licm_inner_14.index = $load_4 + 1;
                         if block -> bool {
                             call_ref "functype/$canonical_closure_fn_5"($licm_pred_15.func, $licm_pred_15.env, item_7);
                         } {
-                            $licm_end_8 = 1;
+                            $load_4 = 1;
                             break $inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__next_sroa_return__0;
                         }
                         continue l272;
                     };
                 };
             };
-            if $licm_end_8 == 1 {
+            if $load_4 == 1 {
                 n = n + 1;
             } else {
                 break b269;
