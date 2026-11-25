@@ -1,0 +1,11 @@
+// A shaped newtype's inherited static that nothing answers reports its slot
+// once, with the receiver's turbofish.
+type Wrapped<U> = List<Option<U>>;
+
+export fn run() {
+    let open = Wrapped::with_capacity(2);
+    assert open.len() == 0;
+}
+
+__DATA__
+{"compile_error": ":6:16: cannot infer type parameter `T` of `Wrapped::with_capacity`; add a turbofish (`Wrapped::<...>::with_capacity()`) or a type annotation", "compile_error_count": 1}

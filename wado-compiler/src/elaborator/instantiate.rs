@@ -16,7 +16,7 @@ use super::coercion::ExpectedReturn;
 use super::infer_hole::BoundRows;
 use super::scope::ParamRef;
 use super::trait_query::SelfBinding;
-use super::types::FunctionContext;
+use super::types::{FunctionContext, TypeError};
 use crate::ast::{self, GenericParam};
 
 /// The kind of declaration an [`Instantiation`] instantiates.
@@ -25,6 +25,11 @@ pub(super) enum InstanceKind {
     Builtin,
     Function,
     Method,
+    /// A static called through its type, whose first `declaring` slots the
+    /// declaring block's, which the type's own turbofish writes.
+    Static {
+        declaring: usize,
+    },
     Struct,
     Variant,
 }
@@ -35,6 +40,7 @@ impl InstanceKind {
             Self::Builtin => "builtin",
             Self::Function => "function",
             Self::Method => "method",
+            Self::Static { .. } => unreachable!("a static's slots are worded by its path"),
             Self::Struct => "struct",
             Self::Variant => "variant",
         }
@@ -46,6 +52,7 @@ impl InstanceKind {
             Self::Struct => " { … }",
             Self::Variant => "::…",
             Self::Builtin | Self::Function | Self::Method => "()",
+            Self::Static { .. } => unreachable!("a static's slots are worded by its path"),
         }
     }
 
@@ -57,6 +64,30 @@ impl InstanceKind {
             self.turbofish_tail(),
         )
     }
+
+    /// [`Self::slot_owner`] for the slot at `index`.
+    fn owner_of_slot(self, name: &str, index: usize) -> String {
+        match self {
+            Self::Static { declaring } => {
+                let (prefix, suffix) = name.rsplit_once("::").expect("a static is a path");
+                static_slot_owner(prefix, suffix, index < declaring)
+            }
+            Self::Builtin | Self::Function | Self::Method | Self::Struct | Self::Variant => {
+                self.slot_owner(name)
+            }
+        }
+    }
+}
+
+/// Whose slot a static call `prefix::suffix` left open, and the turbofish
+/// that writes it: the receiver's where `receiver_open`, else the method's.
+pub(super) fn static_slot_owner(prefix: &str, suffix: &str, receiver_open: bool) -> String {
+    let turbofish = if receiver_open {
+        format!("`{prefix}::<...>::{suffix}()`")
+    } else {
+        format!("`{prefix}::{suffix}::<...>()`")
+    };
+    TypeError::cannot_infer_owner(&format!("`{prefix}::{suffix}`"), &turbofish)
 }
 
 /// What is being instantiated, for the "cannot infer" diagnostic raised if a
@@ -164,7 +195,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The parameter and the rest of the sentence stay apart so
             // `finalize_infer_holes` can name every unsolved slot of this use
             // site in one message.
-            let owner = of.kind.slot_owner(of.name);
+            let owner = of.kind.owner_of_slot(of.name, i);
             // Answered here, so an argument meets what the source wrote. A `_`
             // in it reports as this slot would.
             if let Some(named) = named {

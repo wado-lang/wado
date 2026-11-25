@@ -2041,12 +2041,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`Self::resolve_operation_param_defaults`] for a `trait`'s methods, whose
     /// scope binds `Self` as a slot rather than a concrete type.
     pub(super) fn resolve_trait_param_defaults(&mut self, trait_decl: &ast::TraitDecl) {
-        if !declares_a_default(&trait_decl.methods) {
+        let methods = bodiless_with_defaults(&trait_decl.methods);
+        if methods.is_empty() {
             return;
         }
         let (mut scope, _) = self.enter_trait_scope(trait_decl);
         scope.sem.decls.clear_fn_local_items();
-        for method in &trait_decl.methods {
+        for method in methods {
             let mut method_scope = scope.enter_inherited_type_param_scope();
             let method_def = method_scope.tysys.def_at(method.id);
             method_scope.register_generic_params(method_def, &method.type_params, 0);
@@ -2554,7 +2555,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         methods: &[ast::Function],
         resource_self: Option<DefId>,
     ) {
-        if !declares_a_default(methods) {
+        let methods = bodiless_with_defaults(methods);
+        if methods.is_empty() {
             return;
         }
         let (mut scope, _) = self.enter_operation_scope(owner, type_params, resource_self);
@@ -3170,11 +3172,14 @@ impl TypeSystem {
     }
 }
 
-/// Whether any of `methods` gives a parameter a default.
-fn declares_a_default(methods: &[ast::Function]) -> bool {
+/// The methods giving a parameter a default that no body walk reaches. A
+/// method with a body walks its defaults in that body, and walking them again
+/// would rewrite facts one body already settled from another.
+fn bodiless_with_defaults(methods: &[ast::Function]) -> Vec<&ast::Function> {
     methods
         .iter()
-        .any(|m| m.params.iter().any(|p| p.default.is_some()))
+        .filter(|m| m.body.is_none() && m.params.iter().any(|p| p.default.is_some()))
+        .collect()
 }
 
 /// Which declaration an operation belongs to. A resource's operations take a

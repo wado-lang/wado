@@ -1,6 +1,9 @@
 // A static a newtype inherits, passed where a slot is still open, gives the
-// slot the newtype. The expected result is not read at the base: the base's
-// result would answer the slot as `List<u8>` and refuse the `ByteList`.
+// slot the newtype, whichever path names it. The expected result is not read
+// at the base: the base's result would answer the slot as `List<u8>` and
+// refuse the `ByteList`.
+use prelude from "core:prelude";
+
 fn id<T>(value: T) -> T {
     return value;
 }
@@ -12,5 +15,7 @@ fn byte_len<T: AsByteSlice>(data: &T) -> i32 {
 test "an inherited static into an open slot keeps the newtype" {
     let kept = id(ByteList::with_capacity(3));
     assert kept.len() == 0;
+    let namespaced: ByteList = id(prelude::ByteList::with_capacity(3));
+    assert namespaced.len() == 0;
     assert byte_len(&ByteList::filled(3, 7)) == 3;
 }

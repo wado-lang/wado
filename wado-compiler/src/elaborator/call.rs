@@ -23,7 +23,9 @@ use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::unify;
 use super::infer_hole::{BoundRows, uninferable_type_param};
-use super::instantiate::{InstanceKind, Instantiated, Instantiation, SlotLinks};
+use super::instantiate::{
+    InstanceKind, Instantiated, Instantiation, SlotLinks, static_slot_owner,
+};
 use super::method_call::{
     PreselectedArg, QualifiedAnswer, Qualifier, StaticReceiver, UnappliedStatic,
 };
@@ -1687,9 +1689,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.namespace_alias_source(ns, call.callee.id())?;
             self.namespaced_receiver(ns, type_name, ident)
         };
+        let static_receiver = callee_kind
+            .case_owner()
+            .is_none()
+            .then(|| call_receiver.clone().or_else(namespaced))
+            .flatten();
         if given_args.is_none()
-            && callee_kind.case_owner().is_none()
-            && let Some(receiver) = call_receiver.clone().or_else(namespaced)
+            && let Some(receiver) = static_receiver.clone()
             && let Some((prefix, method_name)) = effective_name.rsplit_once("::")
         {
             match self.qualified_answer(&receiver, method_name) {
@@ -1811,11 +1817,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // own and opaque here, so a literal checked against `List<T>` reports
         // every element as heterogeneous; against `List<?0>` the check defers
         // and the elements decide what `?0` is.
+        let kind = match static_receiver {
+            Some(_) => InstanceKind::Static { declaring },
+            None => InstanceKind::Function,
+        };
         let mut arg_inst = (!callee_slots.is_empty()).then(|| {
             self.instantiate(
                 &callee_slots,
                 &Instantiation {
-                    kind: InstanceKind::Function,
+                    kind,
                     name: effective_name,
                     span: call.span,
                     type_args: &slot_args,
@@ -1837,14 +1847,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: call.span,
             });
         }
-        let static_method = call_receiver.as_ref().map(|receiver| {
+        let static_method = |receiver| {
             let (_, method_name) = effective_name
-                .split_once("::")
+                .rsplit_once("::")
                 .expect("a receiver comes with a qualified name");
             (receiver, method_name)
-        });
-        // A static a newtype inherits is solved at the link declaring it.
-        let expected_at_owner = match static_method {
+        };
+        // A static a newtype inherits is solved at the link declaring it,
+        // whichever path names the newtype.
+        let expected_at_owner = match static_receiver.as_ref().map(static_method) {
             Some((receiver, method_name)) => {
                 let owner = self.static_owner_key(receiver.key(), method_name);
                 let newtype = (&owner != receiver.key())
@@ -1866,7 +1877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Literal preselect on a static call's arguments (WEP 2026-07-31
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
-        if let Some((receiver, method_name)) = static_method {
+        if let Some((receiver, method_name)) = call_receiver.as_ref().map(static_method) {
             let typed = receiver.at_type(rewritten_receiver);
             let preselected = self.preselect_static_args(
                 StaticReceiver {
@@ -2740,6 +2751,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.defer_or_report_uninferred_fn_type_args(
             &callee,
             &mut type_args,
+            declaring,
             &effect_rows,
             call.span,
         );
@@ -3382,7 +3394,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .map(|default| {
                         let expected = s.apply_infer_holes(default.expected);
-                        let resolved = s.resolve_expr(&default.expr, ctx, Some(expected));
+                        // The default is a statement of its own: what fails in
+                        // it is about the declaration, not this site.
+                        let resolved = s.in_statement(default.expr.span(), |s| {
+                            s.resolve_expr(&default.expr, ctx, Some(expected))
+                        });
                         if let Some(span) = default.check_at {
                             let settles = Settles::of(&default.expr);
                             s.typecheck_into_callee(resolved, expected, span, settles);
@@ -3952,12 +3968,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if impl_unresolved.is_empty() && method_unresolved.is_empty() {
             return;
         }
-        let turbofish = if impl_unresolved.is_empty() {
-            format!("`{prefix}::{suffix}::<...>()`")
-        } else {
-            format!("`{prefix}::<...>::{suffix}()`")
-        };
-        let owner = TypeError::cannot_infer_owner(&format!("`{prefix}::{suffix}`"), &turbofish);
+        let owner = static_slot_owner(&prefix, suffix, !impl_unresolved.is_empty());
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let impl_params: &[ast::GenericParam] = sig
             .declaring_impl
@@ -4169,6 +4180,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
+        declaring: usize,
         effect_rows: &EffectRows,
         span: token::Span,
     ) {
@@ -4200,10 +4212,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let func_name = callee.name();
-        let owner = TypeError::cannot_infer_owner(
-            &format!("function `{func_name}`"),
-            &format!("`{func_name}::<...>()`"),
-        );
+        let owner = match func_name.rsplit_once("::").filter(|_| declaring > 0) {
+            Some((prefix, suffix)) => {
+                let receiver_open = (0..declaring).any(|i| unresolved(self, i));
+                static_slot_owner(prefix, suffix, receiver_open)
+            }
+            None => TypeError::cannot_infer_owner(
+                &format!("function `{func_name}`"),
+                &format!("`{func_name}::<...>()`"),
+            ),
+        };
 
         let mut new_args: Vec<TypeId> = Vec::with_capacity(n);
         for (i, p) in space.iter().enumerate() {
@@ -5085,11 +5103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let link = owner.decl();
         let (newtype, _) = self.newtype_at_base_args(receiver, link, owner_args)?;
-        let table = self.tysys.type_table.borrow();
-        if table.contains_infer_var(newtype) && !self.awaits_report(&table, newtype) {
-            return None;
-        }
-        let base = table.inherited_base(newtype, link);
+        let base = self.tysys.type_table.borrow().inherited_base(newtype, link);
         Some(InheritedStatic { newtype, base })
     }
 
@@ -5116,8 +5130,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The newtype `key` declares, at the arguments that make its base's
     /// `base_args`, and the base's arguments as the newtype shapes them. The
     /// base is the link `link` declares, or the chain's end. A newtype
-    /// parameter they leave open stays a variable: in the instance, and as
-    /// the whole of each base argument mentioning it.
+    /// parameter they leave open stays a variable, in the instance and in
+    /// each base argument mentioning it.
     pub(super) fn newtype_at_base_args(
         &mut self,
         key: &ImplTargetKey,
@@ -5149,21 +5163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (&var, &answer) in vars.iter().zip(&solved) {
             self.equate(var, answer);
         }
-        let open = vars.iter().zip(&solved).find(|(var, answer)| var == answer);
-        let shaped = shape
-            .iter()
-            .map(|&spelled| {
-                let answered = self.apply_infer_holes(spelled);
-                match open {
-                    Some((&var, _))
-                        if self.tysys.type_table.borrow().contains_infer_var(answered) =>
-                    {
-                        var
-                    }
-                    _ => answered,
-                }
-            })
-            .collect();
+        let shaped = self.apply_infer_holes_each(&shape);
         if vars.is_empty() {
             return Some((instance, shaped));
         }
@@ -5188,16 +5188,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(answer) = answer else {
                 continue;
             };
-            // A slot deferred to a sink answers a bare variable as the variable
-            // it is, which the sink's answer then reaches through the
-            // receiver. Shaped, it stays open for the sink to name.
+            // A slot still open, deferred to a sink or not, takes the shape
+            // the receiver spells it with, so whatever answers either answers
+            // both.
             let table = self.tysys.type_table.borrow();
-            let deferred = self.awaits_report(&table, answer);
-            let bare = table.is_infer_var(spelled);
+            let open = table.contains_infer_var(answer) || self.awaits_report(&table, answer);
             drop(table);
-            if (deferred && bare)
-                || (!deferred
-                    && self.tysys.is_usable_answer(answer)
+            if open
+                || (self.tysys.is_usable_answer(answer)
                     && !self.slot_unanswered(answer, &scope_params))
             {
                 self.equate(answer, spelled);

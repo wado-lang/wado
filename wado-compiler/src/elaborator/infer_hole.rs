@@ -1268,11 +1268,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.settle_pending_selections(Undecided::Report);
         self.absorb_reports();
         self.blame_bare_written_holes(|_| true);
-        let vars = &self.infer_holes.vars;
-        let unsolved: IndexSet<TypeId> = vars
-            .blamed_classes()
-            .into_iter()
-            .filter(|&class| vars.is_unanswered(class))
+        // A blamed class answered with a type still holding a variable is not
+        // inferred either, unless that variable carries a blame of its own.
+        let blamed = self.infer_holes.vars.blamed_classes();
+        let unsolved: IndexSet<TypeId> = blamed
+            .iter()
+            .copied()
+            .filter(|&class| {
+                let answered = self.apply_infer_holes(class);
+                let open = self.tysys.type_table.borrow().infer_vars_in(answered);                open.iter().any(|&var| var == class || !blamed.contains(&var))
+            })
             .collect();
         let blames = self.class_blames(&unsolved);
         self.report_uninferred(blames);
@@ -1325,10 +1330,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assert_eq!(owners.len(), args.len(), "every slot is declared");
         let space: ParamSpace = names.iter().cloned().zip(args.iter().copied()).collect();
         for (param, &owner) in owners.iter().zip(args) {
-            let owner = self.apply_infer_holes(owner);
-            if !self.tysys.type_table.borrow().is_infer_var(owner) {
-                continue;
-            }
             for bound in &param.bounds {
                 if bound.assoc_types.is_empty() {
                     continue;

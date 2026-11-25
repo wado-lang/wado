@@ -231,9 +231,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// from the AST; desugared constructs that expand to multiple statements
     /// record their `DesugarKind` tag here.
     pub(super) fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
-        let outer = self.infer_holes.statement.replace(stmt.span());
-        self.resolve_stmt_kind(stmt, ctx);
+        self.in_statement(stmt.span(), |this| this.resolve_stmt_kind(stmt, ctx));
+    }
+
+    /// Walk `walk` as the statement at `span`, whose reports absorb the
+    /// variables it mints and none minted outside it.
+    pub(super) fn in_statement<R>(&mut self, span: Span, walk: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = self.infer_holes.statement.replace(span);
+        let walked = walk(self);
         self.infer_holes.statement = outer;
+        walked
     }
 
     fn resolve_stmt_kind(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {

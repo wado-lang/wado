@@ -1959,9 +1959,11 @@ impl TypeTable {
                         components.extend(params.iter().copied());
                         components.push(*return_type);
                     }
-                    ResolvedType::TypePack { mapped_elem, .. }
-                    | ResolvedType::PackVar { mapped_elem, .. } => {
+                    ResolvedType::TypePack { mapped_elem, .. } => {
                         components.extend(mapped_elem.iter().copied());
+                    }
+                    ResolvedType::InferVar(_) | ResolvedType::PackVar { .. } => {
+                        unreachable!("an inference variable never outlives the body minting it")
                     }
                     ResolvedType::PackElement { pack, .. } => components.push(*pack),
                     ResolvedType::AssocTypeProjection {
@@ -1993,7 +1995,6 @@ impl TypeTable {
                     | ResolvedType::Flags { .. }
                     | ResolvedType::TypeParam { .. }
                     | ResolvedType::AssocParam { .. }
-                    | ResolvedType::InferVar(_)
                     | ResolvedType::Unknown
                     | ResolvedType::Error => {}
                 }
@@ -5066,6 +5067,11 @@ impl TypeTable {
         if self.is_infer_var(answer) {
             let mapped_elem = mapped_elem.map(|_| each(self, answer));
             out.push(self.make_pack_var(answer, mapped_elem));
+            return;
+        }
+        // An error says nothing of the run's length, so it maps to no element.
+        if answer == Self::ERROR {
+            out.push(answer);
             return;
         }
         for element in self.elem_types_or_self(answer) {

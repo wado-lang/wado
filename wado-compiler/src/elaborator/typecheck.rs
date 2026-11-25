@@ -521,10 +521,7 @@ fn fixed_around_packs(a: &[TypeId], e: &[TypeId], type_table: &TypeTable) -> Aro
             run: None,
         };
     }
-    if !a_packs.is_empty() && !e_packs.is_empty() {
-        if a.len() != e.len() || a_packs != e_packs {
-            return nothing();
-        }
+    if !a_packs.is_empty() && !e_packs.is_empty() && a.len() == e.len() && a_packs == e_packs {
         // A pack variable facing a pack is answered with it, a variable
         // facing a variable joins it.
         let mut fixed = Vec::new();
@@ -553,47 +550,83 @@ fn fixed_around_packs(a: &[TypeId], e: &[TypeId], type_table: &TypeTable) -> Aro
         }
         return AroundPacks { fixed, run };
     }
-    let (packed, packs, other) = if e_packs.is_empty() {
-        (a, &a_packs, e)
-    } else {
-        (e, &e_packs, a)
+    let a_side = PackedSide {
+        elems: a,
+        packs: &a_packs,
+        is_expected: false,
     };
-    let before = packs[0];
-    let after = packed.len() - packs[packs.len() - 1] - 1;
-    if other.len() < before + after {
-        return nothing();
-    }
-    let ends = (0..before).chain(packed.len() - after..packed.len());
-    let other_at = |i: usize| {
-        if i < before {
-            other[i]
-        } else {
-            other[other.len() - (packed.len() - i)]
+    let e_side = PackedSide {
+        elems: e,
+        packs: &e_packs,
+        is_expected: true,
+    };
+    a_side
+        .around(&e_side, type_table)
+        .or_else(|| e_side.around(&a_side, type_table))
+        .unwrap_or_else(nothing)
+}
+
+/// One tuple of a pair, and where its packs stand.
+struct PackedSide<'t> {
+    elems: &'t [TypeId],
+    packs: &'t [usize],
+    is_expected: bool,
+}
+
+impl PackedSide<'_> {
+    /// The pair met around this side's packs, the other's elements filling
+    /// what they leave over. The other may hold packs only inside that run,
+    /// and only where one plain pack variable takes the whole of it: its ends
+    /// are then fixed, and no element needs mapping through a repeat.
+    fn around(&self, other: &PackedSide<'_>, type_table: &TypeTable) -> Option<AroundPacks> {
+        let (packed, packs) = (self.elems, self.packs);
+        let (&first, &last) = (packs.first()?, packs.last()?);
+        let (before, after) = (first, packed.len() - last - 1);
+        let other_elems = other.elems;
+        if other_elems.len() < before + after {
+            return None;
         }
-    };
-    let oriented = |packed_side: TypeId, other_side: TypeId| {
-        if e_packs.is_empty() {
-            (packed_side, other_side)
-        } else {
-            (other_side, packed_side)
-        }
-    };
-    let mut fixed: Vec<(TypeId, TypeId)> = ends.map(|i| oriented(packed[i], other_at(i))).collect();
-    // One pack takes what the ends leave over; two divide it at a boundary
-    // nothing here can find. A repeat's elements each meet the type it
-    // repeats.
-    let run = match packs[..] {
-        [only] => type_table.pack_var_run(packed[only]).map(|(var, each)| {
-            let elems = other[before..other.len() - after].to_vec();
-            if let Some(each) = each {
-                fixed.extend(elems.iter().map(|&elem| oriented(each, elem)));
+        let run_span = before..other_elems.len() - after;
+        if !other.packs.is_empty() {
+            let lone_plain_var = matches!(packs, [only]
+                if type_table.pack_var_run(packed[*only]).is_some_and(|(_, each)| each.is_none()));
+            if !lone_plain_var || !other.packs.iter().all(|at| run_span.contains(at)) {
+                return None;
             }
-            PackRun { var, elems }
-        }),
-        [_, _, ..] => None,
-        [] => unreachable!("one side holds a pack"),
-    };
-    AroundPacks { fixed, run }
+        }
+        let ends = (0..before).chain(packed.len() - after..packed.len());
+        let other_at = |i: usize| {
+            if i < before {
+                other_elems[i]
+            } else {
+                other_elems[other_elems.len() - (packed.len() - i)]
+            }
+        };
+        let oriented = |packed_side: TypeId, other_side: TypeId| {
+            if self.is_expected {
+                (other_side, packed_side)
+            } else {
+                (packed_side, other_side)
+            }
+        };
+        let mut fixed: Vec<(TypeId, TypeId)> =
+            ends.map(|i| oriented(packed[i], other_at(i))).collect();
+        // One pack takes what the ends leave over; two divide it at a boundary
+        // nothing here can find. A repeat's elements each meet the type it
+        // repeats.
+        let run = match packs {
+            [only] => type_table.pack_var_run(packed[*only]).map(|(var, each)| {
+                let elems = other_elems[run_span].to_vec();
+                if let Some(each) = each {
+                    fixed.extend(elems.iter().map(|&elem| oriented(each, elem)));
+                }
+                PackRun { var, elems }
+            }),
+            [_, _, ..] => None,
+            [] => unreachable!("a side without packs returned above"),
+        };
+        Some(AroundPacks { fixed, run })
+    }
 }
 
 /// Whether `actual` and `expected` part at some position: their heads, or

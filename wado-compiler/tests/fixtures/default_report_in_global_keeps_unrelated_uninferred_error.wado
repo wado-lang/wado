@@ -1,0 +1,23 @@
+// A default argument that fails reports at its declaration. In a global's
+// initializer, a body with no statement, that report does not stand for an
+// unrelated slot the initializer leaves open.
+fn info(_msg: String, _n: i32 = missing()) -> i32 {
+    return 1;
+}
+
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn pair<A, B>(_a: A, _b: B) -> i32 {
+    return 1;
+}
+
+global G: i32 = pair(info("a"), none());
+
+export fn run() {
+    assert G == 1;
+}
+
+__DATA__
+{"compile_error": ":16:33: cannot infer type parameter `T` of function `none`", "compile_error_count": 2}
