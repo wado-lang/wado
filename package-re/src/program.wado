@@ -1,7 +1,7 @@
 //! The program a tree compiles to: a Pike VM's instructions over UTF-8 bytes.
 
 use { simple_fold_closure } from "core:icu";
-use { Flag, Lookaround, Node } from "./ast.wado";
+use { Flag, Lookaround, Node, each_child } from "./ast.wado";
 use { MAX_CODE_POINT, complement, line_terminators, resolve } from "./charset.wado";
 use { PatternError } from "./parse.wado";
 use { sequences } from "./utf8.wado";
@@ -143,23 +143,13 @@ internal fn compile(
 /// position in a slot: not those inside another lookaround, whose
 /// instructions are in its programs.
 fn collect_marked(node: &Node, marked: &mut List<i32>) {
-    match *node {
-        Lookaround(l) => {
-            if slots_read(&l) matches { Some(_) } {
-                marked.push(l.index);
-            }
-        },
-        Group(g) => collect_marked(&g.body, marked),
-        Modified(m) => collect_marked(&m.body, marked),
-        Repeat(r) => collect_marked(&r.body, marked),
-        Concat(nodes) | Alternation(nodes) => {
-            for let n of &nodes {
-                collect_marked(n, marked);
-            }
-        },
-        Char(_) | _::Any | _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Set(_) => {
-        },
+    if let Lookaround(l) = *node {
+        if slots_read(&l) matches { Some(_) } {
+            marked.push(l.index);
+        }
+        return;
     }
+    each_child(node, |n| collect_marked(n, marked));
 }
 
 /// The programs of each lookaround in `tree`, by index, where `main` is the
@@ -196,22 +186,15 @@ internal fn compile_lookarounds(
 /// Each lookaround under `node`, in the order of their indices, and the flags
 /// in force where it stands.
 fn collect_lookarounds(node: &Node, flags: Flag, found: &mut List<[Lookaround, Flag]>) {
-    match *node {
-        Lookaround(l) => {
-            found.push([l, flags]);
-            collect_lookarounds(&l.body, flags, found);
-        },
-        Group(g) => collect_lookarounds(&g.body, flags, found),
-        Modified(m) => collect_lookarounds(&m.body, (flags | m.add) & ~m.remove, found),
-        Repeat(r) => collect_lookarounds(&r.body, flags, found),
-        Concat(nodes) | Alternation(nodes) => {
-            for let n of &nodes {
-                collect_lookarounds(n, flags, found);
-            }
-        },
-        Char(_) | _::Any | _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Set(_) => {
-        },
+    if let Lookaround(l) = *node {
+        found.push([l, flags]);
     }
+    let inside = if let Modified(m) = *node {
+        (flags | m.add) & ~m.remove;
+    } else {
+        flags;
+    };
+    each_child(node, |n| collect_lookarounds(n, inside, found));
 }
 
 /// The slots `[from, until)` of the groups `l` leaves set: those in its body,
@@ -330,24 +313,10 @@ fn group_span(node: &Node) -> Option<[i32, i32]> {
             };
         }
     };
-    match *node {
-        Group(g) => {
-            if let Some(i) = g.index {
-                widen(Some([i, i]));
-            }
-            widen(group_span(&g.body));
-        },
-        Lookaround(l) => widen(group_span(&l.body)),
-        Modified(m) => widen(group_span(&m.body)),
-        Repeat(r) => widen(group_span(&r.body)),
-        Concat(nodes) | Alternation(nodes) => {
-            for let n of &nodes {
-                widen(group_span(n));
-            }
-        },
-        Char(_) | _::Any | _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Set(_) => {
-        },
+    if let Group(g) = *node && let Some(i) = g.index {
+        widen(Some([i, i]));
     }
+    each_child(node, |n| widen(group_span(n)));
     return span;
 }
 

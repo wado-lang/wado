@@ -23,6 +23,23 @@ internal variant Node {
     Alternation(List<Node>),
 }
 
+/// Calls `visit` on each node directly under `node`, in the pattern's order.
+internal fn each_child(node: &Node, mut visit: fn mut(&Node)) {
+    match *node {
+        Group(g) => visit(&g.body),
+        Lookaround(l) => visit(&l.body),
+        Modified(m) => visit(&m.body),
+        Repeat(r) => visit(&r.body),
+        Concat(nodes) | Alternation(nodes) => {
+            for let n of &nodes {
+                visit(n);
+            }
+        },
+        Char(_) | _::Any | _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Set(_) => {
+        },
+    }
+}
+
 /// `(…)`, `(?<name>…)` or `(?:…)`. A capturing group's index counts its
 /// opening parenthesis among the pattern's, from 1.
 internal struct Group {

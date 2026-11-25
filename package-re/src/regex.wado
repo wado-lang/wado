@@ -1,6 +1,6 @@
 //! `Regex` and what a search answers.
 
-use { Node } from "./ast.wado";
+use { Node, each_child } from "./ast.wado";
 use { Hole, PatternError, Syntax, parse } from "./parse.wado";
 use { backtrack, fits } from "./backtrack.wado";
 use { Dfa, runs } from "./dfa.wado";
@@ -78,24 +78,10 @@ impl Display for Regex {
 
 /// Records each named group's name at its index in `names`.
 fn collect_names(node: &Node, names: &mut List<Option<String>>) {
-    match *node {
-        Group(g) => {
-            if let Some(i) = g.index && let Some(name) = g.name {
-                names[i] = Some(name);
-            }
-            collect_names(&g.body, names);
-        },
-        Lookaround(l) => collect_names(&l.body, names),
-        Modified(m) => collect_names(&m.body, names),
-        Repeat(r) => collect_names(&r.body, names),
-        Concat(nodes) | Alternation(nodes) => {
-            for let n of &nodes {
-                collect_names(n, names);
-            }
-        },
-        Char(_) | _::Any | _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Set(_) => {
-        },
+    if let Group(g) = *node && let Some(i) = g.index && let Some(name) = g.name {
+        names[i] = Some(name);
     }
+    each_child(node, |n| collect_names(n, names));
 }
 
 /// Fills in the groups of each lookaround that held on the way to the match
