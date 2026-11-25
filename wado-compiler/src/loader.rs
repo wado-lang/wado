@@ -1323,7 +1323,8 @@ mod tests {
 
     #[test]
     fn stdlib_identity_attribute_resolves_to_core_module_source() {
-        let module = parse_test_module("#![no_prelude]\n#![stdlib(\"core:prelude/option.wado\")]\n");
+        let module =
+            parse_test_module("#![no_prelude]\n#![stdlib(\"core:prelude/option.wado\")]\n");
         let mut interner = ModuleSourceInterner::new();
         let want = interner.core("prelude/option.wado");
         assert_eq!(
