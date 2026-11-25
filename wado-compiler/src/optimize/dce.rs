@@ -171,11 +171,12 @@ pub(super) fn reachable_function_positions(
 ) -> IndexSet<usize> {
     let descriptors = cache.descriptors(project);
     let functors = functor_methods(project);
-    let (analyses, positions) = walks.analyses(project, exec, descriptors, &functors);
+    let (analyses, positions, resolved) = walks.analyses(project, exec, descriptors, &functors);
     let mut graph = assemble_analysis_graph(
         project,
         Cow::Borrowed(analyses),
         Cow::Borrowed(positions),
+        Cow::Borrowed(resolved),
         functors,
     );
     let roots: Vec<Target> = cached
@@ -566,7 +567,31 @@ struct AnalysisGraph<'a> {
     /// [`compute_global_reachability`] and [`populate_type_reachability`]
     /// aggregate the reachable ones.
     analyses: Cow<'a, [FunctionAnalysis]>,
+    /// Each function's callees as `func_positions` resolved them.
+    resolved: Cow<'a, [Vec<CalleeSlot>]>,
     functors: FunctorMethods,
+}
+
+/// A callee name as the positions resolved it: the position of the function
+/// it names, or its index in the caller's `callees` where none did.
+#[derive(Clone, Copy)]
+enum CalleeSlot {
+    Stored(usize),
+    Unresolved(usize),
+}
+
+/// `analysis`'s callees, resolved against `positions`.
+fn resolve_callees(analysis: &FunctionAnalysis, positions: &FuncPositions) -> Vec<CalleeSlot> {
+    analysis
+        .callees
+        .iter()
+        .enumerate()
+        .map(|(k, name)| {
+            positions
+                .get(name)
+                .map_or(CalleeSlot::Unresolved(k), |&pos| CalleeSlot::Stored(pos))
+        })
+        .collect()
 }
 
 impl AnalysisGraph<'_> {
@@ -582,12 +607,26 @@ impl AnalysisGraph<'_> {
         }
     }
 
-    /// What the function at `pos` calls: its own callees, then its inspect edges.
-    fn callees(&self, pos: usize) -> impl Iterator<Item = &FunctionId> {
-        self.analyses[pos]
-            .callees
-            .iter()
-            .chain(self.inspect_edges.get(&pos).into_iter().flatten())
+    /// What the function at `pos` calls, its own callees then its inspect
+    /// edges: the position of each a stored function holds, else its name.
+    fn callees(&self, pos: usize) -> impl Iterator<Item = Result<usize, &FunctionId>> {
+        let own = self.resolved[pos].iter().map(move |slot| match *slot {
+            CalleeSlot::Stored(callee) => Ok(callee),
+            // A function appended since the resolution may hold the name.
+            CalleeSlot::Unresolved(k) => self.locate(&self.analyses[pos].callees[k]),
+        });
+        own.chain(
+            self.inspect_edges
+                .get(&pos)
+                .into_iter()
+                .flatten()
+                .map(|name| self.locate(name)),
+        )
+    }
+
+    /// The position of the function `name` names, or `name` where none does.
+    fn locate<'s>(&'s self, name: &'s FunctionId) -> Result<usize, &'s FunctionId> {
+        self.func_positions.get(name).copied().ok_or(name)
     }
 }
 
@@ -610,10 +649,12 @@ fn build_analysis_graph(
     let mut positions =
         FuncPositions::with_capacity_and_hasher(project.functions.len(), rustc_hash::FxBuildHasher);
     extend_positions(project, &mut positions);
+    let resolved = exec.map(&analyses, |analysis| resolve_callees(analysis, &positions));
     assemble_analysis_graph(
         project,
         Cow::Owned(analyses),
         Cow::Owned(positions),
+        Cow::Owned(resolved),
         functors,
     )
 }
@@ -649,17 +690,21 @@ pub(super) struct ReachabilityCache {
     /// The positions of `project.functions` as the walks last saw it, extended
     /// as functions are appended and rebuilt after a rename.
     positions: FuncPositions,
+    /// Each walk's callees as `positions` resolved them, kept while neither
+    /// the walk nor a position it resolved moves.
+    resolved: Vec<Vec<CalleeSlot>>,
 }
 
 impl ReachabilityCache {
-    /// Every function's [`function_analysis`] and position as `project` stands.
+    /// Every function's [`function_analysis`], position and resolved callees
+    /// as `project` stands.
     fn analyses(
         &mut self,
         project: &NirPackage,
         exec: &Executor,
         descriptors: &[FunctionRef],
         functors: &FunctorMethods,
-    ) -> (&[FunctionAnalysis], &FuncPositions) {
+    ) -> (&[FunctionAnalysis], &FuncPositions, &[Vec<CalleeSlot>]) {
         let renamed: IndexSet<FuncId> = project.renamed[self.renames_seen..]
             .iter()
             .copied()
@@ -669,6 +714,7 @@ impl ReachabilityCache {
             self.walks
                 .forget_where(|walk| !walk.named.is_disjoint(&renamed));
             self.positions.clear();
+            self.resolved.clear();
         }
         assert!(
             self.positions.len() <= project.functions.len(),
@@ -676,10 +722,23 @@ impl ReachabilityCache {
         );
         extend_positions(project, &mut self.positions);
         let type_table = &*project.type_table.borrow();
-        let walks = self.walks.refresh(project, exec, |f| {
-            function_analysis(f, type_table, descriptors, functors)
-        });
-        (walks, &self.positions)
+        let mut rederived = Vec::new();
+        let walks = self.walks.refresh_observing(
+            project,
+            exec,
+            |f| function_analysis(f, type_table, descriptors, functors),
+            |pos, _, _| rederived.push(pos),
+        );
+        for pos in rederived {
+            if let Some(slots) = self.resolved.get_mut(pos) {
+                *slots = resolve_callees(&walks[pos], &self.positions);
+            }
+        }
+        let positions = &self.positions;
+        let unresolved = &walks[self.resolved.len()..];
+        self.resolved
+            .extend(exec.map(unresolved, |walk| resolve_callees(walk, positions)));
+        (walks, &self.positions, &self.resolved)
     }
 }
 
@@ -705,14 +764,17 @@ fn assemble_analysis_graph<'a>(
     project: &NirPackage,
     analyses: Cow<'a, [FunctionAnalysis]>,
     func_positions: Cow<'a, FuncPositions>,
+    resolved: Cow<'a, [Vec<CalleeSlot>]>,
     functors: FunctorMethods,
 ) -> AnalysisGraph<'a> {
     assert_eq!(analyses.len(), project.functions.len());
     assert_eq!(func_positions.len(), project.functions.len());
+    assert_eq!(resolved.len(), project.functions.len());
     AnalysisGraph {
         inspect_edges: IndexMap::default(),
         func_positions,
         analyses,
+        resolved,
         functors,
     }
 }
@@ -1362,11 +1424,11 @@ fn compute_reachable(graph: &AnalysisGraph, roots: impl IntoIterator<Item = Targ
             continue;
         }
         for callee in graph.callees(pos) {
-            match graph.func_positions.get(callee) {
-                Some(&callee) if !reachable.contains(&Target::Stored(callee)) => {
+            match callee {
+                Ok(callee) if !reachable.contains(&Target::Stored(callee)) => {
                     worklist.push(Pending::Stored(callee));
                 }
-                None if !externs.contains(callee) => worklist.push(Pending::Extern(callee)),
+                Err(callee) if !externs.contains(callee) => worklist.push(Pending::Extern(callee)),
                 _ => {}
             }
         }
@@ -2788,18 +2850,24 @@ mod tests {
     /// The graph where the function at position `i` is named `names[i]` and
     /// calls `calls[i]`.
     fn graph(names: &[FunctionId], calls: &[&[FunctionId]]) -> AnalysisGraph<'static> {
+        let func_positions: FuncPositions = names.iter().cloned().zip(0..).collect();
+        let analyses: Vec<FunctionAnalysis> = calls
+            .iter()
+            .map(|callees| FunctionAnalysis {
+                callees: callees.iter().cloned().collect(),
+                ..FunctionAnalysis::default()
+            })
+            .collect();
         AnalysisGraph {
             inspect_edges: IndexMap::default(),
-            func_positions: Cow::Owned(names.iter().cloned().zip(0..).collect()),
-            analyses: Cow::Owned(
-                calls
+            resolved: Cow::Owned(
+                analyses
                     .iter()
-                    .map(|callees| FunctionAnalysis {
-                        callees: callees.iter().cloned().collect(),
-                        ..FunctionAnalysis::default()
-                    })
+                    .map(|analysis| resolve_callees(analysis, &func_positions))
                     .collect(),
             ),
+            func_positions: Cow::Owned(func_positions),
+            analyses: Cow::Owned(analyses),
             functors: FunctorMethods::default(),
         }
     }
