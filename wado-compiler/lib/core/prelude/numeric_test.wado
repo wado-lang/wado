@@ -611,9 +611,7 @@ test "ParseIntError and ParseFloatError render their reason" {
     assert `${f64::from_str("x").unwrap_err()}` == "invalid float literal";
 }
 
-test "to_string spells a primitive as its Display" {
-    assert true.to_string() == "true";
-    assert false.to_string() == "false";
+test "to_string spells an integer as its Display" {
     assert i64::MIN.to_string() == "-9223372036854775808";
     assert u64::MAX.to_string() == "18446744073709551615";
 }
@@ -639,14 +637,6 @@ test "cmp answers each Ordering, a float's NaN greatest" {
     let wide_nan: f64 = builtin::black_box(f64::NAN);
     assert wide.cmp(&wide_nan) matches { _::Less } && wide_nan.cmp(&wide) matches { _::Greater };
     assert wide.cmp(&wide) matches { _::Equal };
-    let a: char = builtin::black_box('a');
-    let z: char = builtin::black_box('z');
-    assert a.cmp(&z) matches { _::Less } && z.cmp(&a) matches { _::Greater };
-    assert a.cmp(&a) matches { _::Equal };
-    let no: bool = builtin::black_box(false);
-    let yes: bool = builtin::black_box(true);
-    assert no.cmp(&yes) matches { _::Less } && yes.cmp(&no) matches { _::Greater };
-    assert yes.cmp(&yes) matches { _::Equal };
     let half: f16 = builtin::black_box(0.5);
     let brain: bf16 = builtin::black_box(0.5);
     assert half.cmp(&half) matches { _::Equal } && brain.cmp(&brain) matches { _::Equal };

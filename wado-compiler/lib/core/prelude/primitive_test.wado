@@ -62,3 +62,19 @@ test "from_str reads a view without copying out of it" {
     assert bool::from_str(view.slice(9, 13)) matches { Ok(v) && v == true };
     assert char::from_str(view.slice(16, 17)) matches { Ok(v) && v == 'x' };
 }
+
+test "bool::to_string spells the two literals" {
+    assert true.to_string() == "true";
+    assert false.to_string() == "false";
+}
+
+test "cmp answers each Ordering for char and bool" {
+    let a: char = builtin::black_box('a');
+    let z: char = builtin::black_box('z');
+    assert a.cmp(&z) matches { _::Less } && z.cmp(&a) matches { _::Greater };
+    assert a.cmp(&a) matches { _::Equal };
+    let no: bool = builtin::black_box(false);
+    let yes: bool = builtin::black_box(true);
+    assert no.cmp(&yes) matches { _::Less } && yes.cmp(&no) matches { _::Greater };
+    assert yes.cmp(&yes) matches { _::Equal };
+}
