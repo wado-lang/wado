@@ -72,6 +72,13 @@ internal struct Modified {
     internal body: Node,
 }
 
+impl Modified {
+    /// The flags in force in the body, where `outer` are in force around it.
+    internal fn inside(&self, outer: Flag) -> Flag {
+        return (outer | self.add) & ~self.remove;
+    }
+}
+
 internal struct Repeat {
     internal min: u32,
     /// `None` is unbounded.

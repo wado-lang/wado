@@ -141,7 +141,7 @@ internal fn search(
             match program.insts[t.pc] {
                 Byte([lo, hi]) => {
                     if pos != limit {
-                        let b = text.byte_at(if forward { pos } else { pos - 1 });
+                        let b = program.direction.byte_at(text, pos);
                         if b >= lo && b <= hi {
                             add(program, oracle, text, &mut cache.next, t.pc + 1, t.slots, pos + step);
                         }

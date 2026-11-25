@@ -65,7 +65,7 @@ impl Oracle {
             if pos == limit {
                 return;
             }
-            let byte = text.byte_at(if forward { pos } else { pos - 1 });
+            let byte = program.direction.byte_at(text, pos);
             pos += step;
             threads.advance();
             for let pc of &threads.current {

@@ -85,6 +85,13 @@ internal enum Direction {
     Reverse,
 }
 
+impl Direction {
+    /// The byte a program reading this way consumes at `pos`.
+    internal fn byte_at(&self, text: StrSlice, pos: i32) -> u8 {
+        return text.byte_at(if *self == Direction::Forward { pos } else { pos - 1 });
+    }
+}
+
 /// What a lookaround compiles to.
 internal struct LookaroundPrograms {
     internal negated: bool,
@@ -193,7 +200,7 @@ fn collect_lookarounds(node: &Node, flags: Flag, keeps_groups: bool, found: &mut
         kept_inside = keeps_groups && !l.negated;
     }
     let flags_inside = if let Modified(m) = *node {
-        (flags | m.add) & ~m.remove;
+        m.inside(flags);
     } else {
         flags;
     };
@@ -399,7 +406,7 @@ impl Compiler {
             },
             Modified(m) => {
                 let outer = self.flags;
-                self.flags = (self.flags | m.add) & ~m.remove;
+                self.flags = m.inside(outer);
                 self.node(&m.body)?;
                 self.flags = outer;
             },
