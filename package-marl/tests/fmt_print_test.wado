@@ -57,6 +57,17 @@ test "print_document widens the fence when the body has its own backtick run" {
     assert printed.contains("```\ncode\n```");
 }
 
+test "print_document delimits a code span with a backtick run its content lacks" {
+    assert roundtrip("Marker: ```a``b```.") == "Marker: `a``b`.\n";
+    assert roundtrip("``a`b``") == "``a`b``\n";
+    assert roundtrip("`` `a` ``") == "`` `a` ``\n";
+}
+
+test "print_document keeps the spaces a code span's content starts and ends with" {
+    assert roundtrip("`  a  `") == "`  a  `\n";
+    assert roundtrip("` a`") == "` a`\n";
+}
+
 test "print_document normalizes indented code to a 4-space-indented fenced-free block" {
     assert roundtrip("    a\n    b") == "    a\n    b\n";
 }

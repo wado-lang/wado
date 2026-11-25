@@ -70,7 +70,7 @@ fn running_exe() -> PathBuf {
     std::env::current_exe().expect("locating the running `wado` binary")
 }
 
-#[cfg(debug_assertions)]
+#[cfg(not(feature = "dist"))]
 fn hash_dev_stdlib(hasher: &mut Sha256) {
     wado_lsp::host::install_dev_stdlib();
     for (file, source) in wado_compiler::stdlib::installed_dev_stdlib() {
@@ -79,9 +79,9 @@ fn hash_dev_stdlib(hasher: &mut Sha256) {
     }
 }
 
-/// A release build embeds the stdlib, so rebuilding the binary is the only way
+/// A `dist` build embeds the stdlib, so rebuilding the binary is the only way
 /// to change it.
-#[cfg(not(debug_assertions))]
+#[cfg(feature = "dist")]
 fn hash_dev_stdlib(_hasher: &mut Sha256) {}
 
 /// Length-prefixed, so no two sequences of fields hash alike.

@@ -247,7 +247,7 @@ description = "Build the wado CLI with the release profile (LTO, fully optimized
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo build --release -p wado-cli
+cargo build --release -p wado-cli --features dist
 ls -lh target/release/wado
 """
 
@@ -649,7 +649,12 @@ run = "tools/dev-bin.sh wado format -w ."
 
 [tasks.clippy]
 description = "Run clippy checks"
-run = "cargo clippy --all --all-features --all-targets -- -D warnings"
+# `--all-features` turns on `dist`, so the code a checkout build runs is linted
+# by the second pass, over the crates that carry the feature.
+run = [
+    "cargo clippy --all --all-features --all-targets -- -D warnings",
+    "cargo clippy -p wado-compiler -p wado-lsp -p wado-cli --all-targets -- -D warnings",
+]
 
 [tasks.clippy-fix]
 description = "Run clippy auto-fix"
@@ -969,7 +974,11 @@ if [ ! -x "$bin" ]; then
     trap 'git worktree remove --force "$tmp/tree" 2>/dev/null || true; rm -rf "$tmp" "$bin.$$"' EXIT
     git worktree prune  # a wiped temp dir leaves the registration behind
     git worktree add -q --detach "$tmp/tree" "$want"
-    (cd "$tmp/tree" && cargo build --release -q -p wado-cli)
+    # The binary must embed the stdlib, which the worktree removed below would
+    # hold: `dist` does where the tree declares it; before that, any release did.
+    features=
+    if grep -q '^dist = ' "$tmp/tree/wado-cli/Cargo.toml"; then features='--features dist'; fi
+    (cd "$tmp/tree" && cargo build --release -q -p wado-cli $features)
     mkdir -p "$(dirname "$bin")"
     # Published by rename from a path this invocation alone writes, so no
     # interrupted or racing copy leaves a truncated compiler for the `-x` above.

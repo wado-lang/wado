@@ -1,17 +1,17 @@
 //! Standard library sources: `core:*` is the Wado library (`core:cli`'s
 //! `println`, …), `wasi:*` the raw WASI packages keyed by interface.
 
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 use crate::hashmap::IndexMap;
 
 /// The `lib/` directory this crate was compiled from, where a dev build's host
 /// reads the stdlib.
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 pub const DEV_STDLIB_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/lib");
 
 /// What the host handed over, keyed by the file's path under
 /// [`DEV_STDLIB_ROOT`].
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 static INSTALLED: std::sync::OnceLock<IndexMap<String, &'static str>> = std::sync::OnceLock::new();
 
 /// Hand a dev build the stdlib: each file of [`dev_stdlib_files`], named
@@ -19,7 +19,7 @@ static INSTALLED: std::sync::OnceLock<IndexMap<String, &'static str>> = std::syn
 /// wins, since a run that compiled two versions of a module describes neither.
 /// Only that one walks `sources`, so a lazy iterator costs the callers after
 /// it nothing — and a host is built per LSP request.
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 pub fn install_dev_stdlib(sources: impl IntoIterator<Item = (String, String)>) {
     INSTALLED.get_or_init(|| {
         sources
@@ -31,7 +31,7 @@ pub fn install_dev_stdlib(sources: impl IntoIterator<Item = (String, String)>) {
 
 /// The stdlib as the host installed it, for a caller that has to say which
 /// files this process is compiling against. Panics where none is installed.
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 #[must_use]
 pub fn installed_dev_stdlib() -> Vec<(&'static str, &'static str)> {
     installed()
@@ -42,7 +42,7 @@ pub fn installed_dev_stdlib() -> Vec<(&'static str, &'static str)> {
 
 /// This crate's own unit tests are their own host, and the files are beside
 /// them.
-#[cfg(all(test, debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(test, not(feature = "dist"), not(target_arch = "wasm32")))]
 fn read_dev_stdlib_beside_us() -> IndexMap<String, &'static str> {
     dev_stdlib_files()
         .into_iter()
@@ -55,7 +55,7 @@ fn read_dev_stdlib_beside_us() -> IndexMap<String, &'static str> {
         .collect()
 }
 
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 fn installed() -> &'static IndexMap<String, &'static str> {
     #[cfg(test)]
     return INSTALLED.get_or_init(read_dev_stdlib_beside_us);
@@ -68,7 +68,7 @@ fn installed() -> &'static IndexMap<String, &'static str> {
     })
 }
 
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 fn installed_source(file: &str) -> &'static str {
     installed()
         .get(file)
@@ -76,8 +76,9 @@ fn installed_source(file: &str) -> &'static str {
 }
 
 /// Declares a stdlib table, and the paths and files alone, from one list of
-/// `(import path, file)` pairs. A dev build takes the sources from its host, so
-/// editing a module needs no rebuild. A release build embeds them, as does
+/// `(import path, file)` pairs. A dev build, any without the `dist` feature,
+/// takes the sources from its host, so editing a module needs no rebuild. A
+/// `dist` build embeds them, as does
 /// `wasm32`, which has no filesystem.
 macro_rules! stdlib_table {
     (
@@ -93,7 +94,7 @@ macro_rules! stdlib_table {
         $vis const $files: &[&str] = &[$($file,)*];
 
         $(#[$meta])*
-        #[cfg(any(not(debug_assertions), target_arch = "wasm32"))]
+        #[cfg(any(feature = "dist", target_arch = "wasm32"))]
         $vis fn $name() -> &'static [(&'static str, &'static str)] {
             const TABLE: &[(&str, &str)] =
                 &[$(($import, include_str!(concat!("../lib/", $file))),)*];
@@ -101,7 +102,7 @@ macro_rules! stdlib_table {
         }
 
         $(#[$meta])*
-        #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+        #[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
         $vis fn $name() -> &'static [(&'static str, &'static str)] {
             static TABLE: std::sync::OnceLock<Vec<(&'static str, &'static str)>> =
                 std::sync::OnceLock::new();
@@ -274,7 +275,7 @@ stdlib_table! {
 
 /// Every file [`install_dev_stdlib`] has to cover, relative to
 /// [`DEV_STDLIB_ROOT`].
-#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
 #[must_use]
 pub fn dev_stdlib_files() -> Vec<&'static str> {
     CORE_MODULE_FILES
@@ -390,7 +391,7 @@ mod tests {
 
     #[test]
     fn a_checkout_path_names_its_stdlib_module() {
-        #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+        #[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
         assert!(DEV_STDLIB_ROOT.ends_with(CHECKOUT_STDLIB_DIR.trim_end_matches('/')));
         for (path, import) in [
             ("/w/wado-compiler/lib/core/cli.wado", Some("core:cli")),
@@ -485,7 +486,7 @@ mod tests {
 
     /// A dev build serves what is on disk now, and no table entry points at a
     /// file other than the one its import path names.
-    #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+    #[cfg(all(not(feature = "dist"), not(target_arch = "wasm32")))]
     #[test]
     fn a_dev_build_serves_the_file_its_import_path_names() {
         fn file_of(import: &str) -> String {

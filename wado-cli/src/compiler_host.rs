@@ -426,9 +426,9 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     /// A dev build compiles against the stdlib it read from disk, which an edit
-    /// changes. A release build embeds it, so the binary alone stands for it.
+    /// changes. A `dist` build embeds it, so the binary alone stands for it.
     fn stdlib_module_read(&self, import_path: &str) {
-        #[cfg(debug_assertions)]
+        #[cfg(not(feature = "dist"))]
         {
             use wado_compiler::stdlib::{DEV_STDLIB_ROOT, module_file};
 
@@ -437,7 +437,7 @@ impl CompilerHost for FilesystemCompilerHost {
             self.run
                 .depend_on_watched(&Path::new(DEV_STDLIB_ROOT).join(file));
         }
-        #[cfg(not(debug_assertions))]
+        #[cfg(feature = "dist")]
         let _ = import_path;
     }
 
