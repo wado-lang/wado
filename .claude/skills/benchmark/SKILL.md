@@ -27,7 +27,7 @@ mise run on-task-started
 ## Procedure
 
 1. Record the PGO profiles again first:
-   `scripts/dev-bin.sh wado test --pgo benchmark package-gale-highlight-html`,
+   `tools/dev-bin.sh wado test --pgo benchmark package-gale-highlight-html`,
    and commit the profiles it rewrites.
 2. Run `mise run benchmark-all` **three times**, each to its own log in
    `scratchpad/`, then pick per row with

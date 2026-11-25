@@ -18,6 +18,11 @@ default = ["mimalloc"]
 # The global allocator. A heap profiler (valgrind DHAT, heaptrack) sees only
 # the system allocator, so profiling builds with `--no-default-features`.
 mimalloc = ["dep:mimalloc", "dep:libmimalloc-sys"]
+# A self-contained binary, as the release workflow ships: it embeds the stdlib
+# and Marl's sources rather than reading them from this checkout, and caches the
+# compiled Marl formatter in the user cache rather than in cargo's target
+# directory.
+dist = ["wado-compiler/dist", "wado-lsp/dist"]
 
 [dependencies]
 wado-compiler = { path = "../wado-compiler" }
@@ -26,7 +31,6 @@ wado-lsp = { path = "../wado-lsp" }
 wado-manifest = { path = "../wado-manifest" }
 anyhow = { workspace = true }
 bytes = { workspace = true }
-dprint-plugin-markdown = { workspace = true }
 futures = { workspace = true }
 glob = { workspace = true }
 indexmap = { workspace = true }

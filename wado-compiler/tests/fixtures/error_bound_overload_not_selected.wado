@@ -1,0 +1,56 @@
+// Two written bounds of one trait are an overload set, as two impls are: a
+// call the arguments do not select is ambiguous rather than reading the first
+// bound written. A literal admits both widths, and a closure both rows.
+use { Stdout } from "core:cli";
+
+trait Take<A = i64> with _ {
+    fn take(&self, a: A) -> i32;
+}
+
+struct S {}
+
+impl Take<i64> for S {
+    fn take(&self, a: i64) -> i32 {
+        return 64;
+    }
+}
+
+impl Take<i32> for S {
+    fn take(&self, a: i32) -> i32 {
+        return 32;
+    }
+}
+
+impl Take<fn()> for S {
+    fn take(&self, a: fn()) -> i32 {
+        return 1;
+    }
+}
+
+impl Take<fn() with Stdout> for S {
+    fn take(&self, a: fn() with Stdout) -> i32 {
+        return 2;
+    }
+}
+
+fn by_literal<T: Take<i64> + Take<i32>>(t: &T) -> i32 with _ {
+    return t.take(42);
+}
+
+// The bare bound names what `Take<i64>` names; standing first, it does not
+// shadow the written one.
+fn by_literal_bare_first<T: Take + Take<i64> + Take<i32>>(t: &T) -> i32 with _ {
+    return t.take(42);
+}
+
+fn by_closure<T: Take<fn()> + Take<fn() with Stdout>>(t: &T) -> i32 with _ {
+    return t.take(|| {});
+}
+
+export fn run() with Stdout {
+    let s = S {};
+    assert by_literal(&s) + by_literal_bare_first(&s) + by_closure(&s) > 0;
+}
+
+__DATA__
+{"compile_error": "the arguments do not select between", "compile_error_count": 3}

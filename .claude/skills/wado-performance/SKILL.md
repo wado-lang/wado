@@ -399,11 +399,11 @@ which CI holds every pull request to.
 
 Build the head arm first: every command below compares against
 `target/release/wado`, and a stale one compares main with itself. Both arms are
-release binaries named by `WADO_BIN`: the baseline is one, and without `WADO_BIN`
-the harness runs the dev build, whose host differs from it.
+release `dist` binaries named by `WADO_BIN`: the baseline is one, and without
+`WADO_BIN` the harness runs the dev build, whose host differs from it.
 
 ```sh
-cargo build --release --bin wado
+cargo build --release -p wado-cli --features dist --bin wado
 ```
 
 Run every benchmark at `-O0` through `-O3` before trusting an optimizer change:
@@ -524,10 +524,10 @@ done
 ### A/B-ing a stdlib change
 
 A change to `lib/core/*.wado` needs two compilers as well, which the source tree
-hides: a release build embeds the stdlib where a dev build reads it from disk.
-`benchmark/wado.sh` falls back to the dev build whenever `WADO_BIN` is unset, so
-an arm is a release binary, which carries its own stdlib wherever the tree
-stands.
+hides: a build with the `dist` feature embeds the stdlib, where any other reads
+it from disk. `benchmark/wado.sh` falls back to the dev build whenever `WADO_BIN`
+is unset, so an arm is a release `dist` binary, which carries its own stdlib
+wherever the tree stands.
 
 Build one binary per arm first, from the same compiler source with `lib/` at the
 branch's fork point and at `HEAD`, so `lib/` is all that differs. `git restore`
@@ -542,10 +542,10 @@ fork=$(git merge-base origin/main HEAD)
 # however the block ends, `lib/` goes back to HEAD rather than stay reverted
 trap 'git restore --source=HEAD --worktree -- wado-compiler/lib' EXIT
 git restore --source="$fork" --worktree -- wado-compiler/lib
-cargo build --release --bin wado --quiet
+cargo build --release -p wado-cli --features dist --bin wado --quiet
 cp target/release/wado scratchpad/wado-base
 git restore --source=HEAD --worktree -- wado-compiler/lib
-cargo build --release --bin wado --quiet
+cargo build --release -p wado-cli --features dist --bin wado --quiet
 cp target/release/wado scratchpad/wado-head
 for r in 1 2 3; do
   for arm in base head; do

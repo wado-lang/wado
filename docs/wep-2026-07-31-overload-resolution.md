@@ -241,7 +241,7 @@ yields `Head` when its head is known and `Opaque(Inference)` when it is not.
 | bytes literal, `#include_bytes`              | `Exact(List<u8>)` — the elaborator ignores the expected type here                        |
 | identifier — local, parameter, global, const | `Exact` of its declared type                                                             |
 | identifier — enum / flags / variant case     | `Exact` of the declaring type                                                            |
-| identifier — named function                  | `Opaque(Inference)` — a function reference is instantiated by the expected type          |
+| identifier — named function                  | `Exact` of its signature; `Opaque(Inference)` where the expected type settles parameters |
 | identifier — resolves to nothing             | `Opaque(Unresolved)`                                                                     |
 | `&e` / `&mut e`                              | the reference over `e`'s class                                                           |
 | `*e`                                         | the referent of `e`'s class                                                              |
@@ -306,6 +306,23 @@ retarget every existing call that meant `Take<i64>`. The common cases are
 unaffected: `l[0]` resolves, because an integer literal does not admit the
 range-typed candidates; `f.take(B { v: 1 })` resolves, because a named struct
 literal has a context-free type.
+
+A function argument's row selects among candidates its type admits: a
+function admits every parameter whose row holds its own, and the candidates
+taking every function argument's row exactly, where there are any, are the
+ones that remain. Judging the arguments together keeps position out of it:
+the first argument outranking the second would be a rule nobody wrote. A
+closure's row is what its body performs, which is known only once the body is
+walked, so a method call whose candidates differ only in the rows a closure
+argument could meet waits for it, typed by the trait's declaration, as a call
+on an unsettled receiver does (issue #2719).
+
+Bounds writing one trait at several argument lists (`T: Take<i64> + Take<i32>`)
+are the same overload set seen from inside a generic body, so they select by
+the same rule: unique-or-error, the exact row first. Reading the first bound
+written would make the order of a `+` list change which function a call names.
+For the same reason, a bare bound naming what a written one names merges into
+the written one wherever it stands.
 
 Classes exist only to filter. After selection the winning signature drives
 ordinary argument elaboration, so a literal still coerces to the chosen
@@ -596,9 +613,6 @@ Where the pieces live:
   expects the receiver's own type, so a newtype dispatched to its base's impl
   type-checks as the newtype.
 
-The bounds counterpart of an overload set (`T: Take<A> + Take<B>`) cannot arise
-yet — positional trait arguments do not parse in bound position.
-
 Test surface: the `ufcs_*`, `trait_argument_*`, `from_*`, `operator_rhs_*` and
 `cross_module_same_name_*` fixture families in `wado-compiler/tests/fixtures/` —
 one fixture per rule above, plus `error_*` fixtures pinning every diagnostic's
@@ -660,6 +674,18 @@ Trade-offs:
 - A conversion reachable only through a blanket generic in its source type
   (`impl<T: Display> From<T> for W`) is rejected at `W::from(x)`, since its
   instantiation is not selected from the argument.
+- A trait-qualified call (`Take::take(&s, || {})`) and a call on a subscript's
+  element (`xs[0].take(|| {})`) never wait for their selection, so one whose
+  candidates differ only in a closure argument's row is rejected; the same
+  call written as a plain method call selects.
+- A method call waits for a closure's row only where the trait's declaration
+  types the call and the candidates agree on everything but the row. A method
+  whose signature reads an associated type, or that declares its own type
+  parameters, never waits, so such a call tied on a closure's row is rejected.
+- A call through bounds of one trait at several argument lists
+  (`T: Take<fn()> + Take<fn() with Stdout>`) never waits for a closure
+  argument's body, so a pair differing only in the closure's row is reported
+  ambiguous.
 
 ## See Also
 

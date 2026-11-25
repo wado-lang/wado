@@ -3931,6 +3931,17 @@ Generic zip iterator adapter that pairs elements from two iterators.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
+### `pub struct IterRefMut<affine I: Iterator>`
+
+An iterator walked through a reference, so what takes from it leaves the
+iterator itself advanced: what `for let x of &mut iter` walks.
+
+_Fields are private._
+
+#### `impl Iterator for IterRefMut<I>`
+
+##### `fn next(&mut self) -> Option<I::Item> with _`
+
 ### `pub struct ConvertError`
 
 Error type returned by fallible conversions.

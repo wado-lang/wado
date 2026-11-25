@@ -214,25 +214,25 @@ fn print_code_block(cb: &CodeBlock, out: &mut String) {
 }
 
 fn fence_string<S: AsStrSlice>(code: S) -> String {
-    let run = longest_backtick_run(code);
+    let run = backtick_runs(code).into_iter().max().unwrap_or(0);
     let len = if run > 2 { run } else { 2 } + 1;
     return "`".repeat(len);
 }
 
-fn longest_backtick_run<S: AsStrSlice>(code: S) -> i32 {
-    let mut max_run = 0;
+/// The length of every run of backticks in `s`, a zero standing for none.
+fn backtick_runs<S: AsStrSlice>(s: S) -> List<i32> {
+    let mut runs: List<i32> = [];
     let mut run = 0;
-    for let c of code.chars() {
+    for let c of s.chars() {
         if c == '`' {
             run += 1;
-            if run > max_run {
-                max_run = run;
-            }
-        } else {
+        } else if run > 0 {
+            runs.push(run);
             run = 0;
         }
     }
-    return max_run;
+    runs.push(run);
+    return runs;
 }
 
 // --- lists ---
@@ -462,18 +462,27 @@ fn print_emphasis(em: &EmphasisNode, out: &mut String) {
 }
 
 fn print_code_span<S: AsStrSlice>(s: S, out: &mut String) {
-    let has_backtick = s.contains("`");
-    let backtick_text = if has_backtick { "``" } else { "`" };
-    let needs_space = has_backtick && (s.starts_with("`") || s.ends_with("`"));
-    out.push_str(&backtick_text);
-    if needs_space {
+    let s = s.as_str_slice();
+    // A run of backticks closes a code span only at its exact length.
+    let runs = backtick_runs(s);
+    let mut len = 1;
+    while runs.contains(&len) {
+        len += 1;
+    }
+    let delimiter = "`".repeat(len);
+    // The parser strips one space from each end when both ends hold one, and
+    // a backtick at an end would join the delimiter.
+    let space_padded = s.starts_with(" ") && s.ends_with(" ") && s.chars().any(|c| c != ' ');
+    let padded = s.starts_with("`") || s.ends_with("`") || space_padded;
+    out.push_str(&delimiter);
+    if padded {
         out.push(' ');
     }
     out.push_str(s);
-    if needs_space {
+    if padded {
         out.push(' ');
     }
-    out.push_str(&backtick_text);
+    out.push_str(&delimiter);
 }
 
 fn print_dest_and_title<S: AsStrSlice, S1: AsStrSlice>(url: S, title: S1, out: &mut String) {

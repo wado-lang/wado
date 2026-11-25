@@ -43,7 +43,7 @@ it fetches that plugin the first time; elsewhere, one of the two must name it:
 
 `analyzed.wado` compiles the model's programs for a TPU topology, which needs
 no TPU, and prints the weights' bytes and what `libtpu.so` reports of each
-program (`scripts/fetch-pjrt-plugin.sh` prints its path):
+program (`tools/fetch-pjrt-plugin.sh` prints its path):
 
     TPU_SKIP_MDS_QUERY=1 wado run-pjrt --plugin libtpu.so analyzed.wado
 

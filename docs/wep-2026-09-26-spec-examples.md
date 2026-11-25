@@ -40,7 +40,7 @@ A code block in the specification is a quotation of an e2e fixture.
 
 ### The rule
 
-1. Every `` ```wado `` block in `docs/spec-*.md` names a fixture or a
+1. Every ` ```wado ` block in `docs/spec-*.md` names a fixture or a
    source file.
 2. The named file contains the block verbatim: its lines, in order and
    contiguous, each shifted by one indentation prefix shared by all of them. A
@@ -106,8 +106,8 @@ example names the test that holds it.
 
 ### What follows from the rule
 
-- A `` ```wado `` block is always real Wado. A shape sketch with `...`
-  placeholders or a grammar outline is `` ```text ``.
+- A ` ```wado ` block is always real Wado. A shape sketch with `...`
+  placeholders or a grammar outline is ` ```text `.
 - The indentation allowance is what lets a fragment stand in the specification:
   `let p = …; assert …;` sits inside a `test { }` in its fixture, four spaces
   in.
@@ -135,7 +135,7 @@ example names the test that holds it.
 
 ### The checker
 
-The checker is `package-gale-highlight-wado/tools/spec_examples.wado`, beside
+The checker is `package-wado/tools/spec_examples.wado`, beside
 the `Wado.g4` grammar it lexes with, so it counts an `assert` keyword only where
 the lexer finds one, not in a comment or a string. It reads the Markdown with
 Marl. `mise run check-spec-examples` runs it with `wado run`, as
@@ -155,13 +155,13 @@ block directly before it. Marl's document tree stays `internal`.
 
 During the migration a baseline, `scripts/spec-examples.json`, counted the
 blocks of each file that had no reference yet, and CI failed when a count grew.
-It only shrank, as `scripts/rust-inline-paths.json` does, and was deleted once
+It only shrank, as `tools/rust-inline-paths.json` does, and was deleted once
 empty.
 
 Migrating a block is triage. Each one is exactly one of:
 
 1. correct, and quoted from an existing or new fixture;
-2. a sketch, and turned into `` ```text ``;
+2. a sketch, and turned into ` ```text `;
 3. meant to be rejected, and quoted from a `compile_error` fixture;
 4. wrong in the specification, and the specification is fixed;
 5. right, but the compiler disagrees: a `#[TODO]` fixture and a WEP known gap.
@@ -181,7 +181,7 @@ The last two are what this WEP is for. The migration will find them.
    of all 353 blocks.
 4. [x] Migrate one file first, `spec-types.md`, and decide the `assert` rule from
    it: keep it, or drop it and say why here. Kept. Its 42 blocks became 55
-   quotations and one `` ```text ``, since a rejected example is now a
+   quotations and one ` ```text `, since a rejected example is now a
    block of its own; 8 quote a `compile_error` fixture. In most of the rest
    the assert replaced a comment that stated a value. A block made
    only of declarations quotes the `test` that uses them, which closes the

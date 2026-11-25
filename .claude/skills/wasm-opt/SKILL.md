@@ -30,7 +30,7 @@ FEATURES=(--mvp-features --enable-sign-ext --enable-mutable-globals
   --enable-multivalue --enable-gc --enable-extended-const --enable-multimemory)
 mkdir -p $S
 wado compile -Os -f no-wide-arithmetic prog.wado -o $S/prog.wasm
-node scripts/jco/transpile-released.mjs $S/prog.wasm $S/jco   # → $S/jco/prog.core.wasm
+node tools/jco/transpile-released.mjs $S/prog.wasm $S/jco   # → $S/jco/prog.core.wasm
 $B/wasm-opt "${FEATURES[@]}" $S/jco/prog.core.wasm -o $S/none.wasm
 $B/wasm-opt "${FEATURES[@]}" -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
 ```
@@ -49,7 +49,7 @@ $B/wasm-opt "${FEATURES[@]}" -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
 
 ## Reading the difference
 
-`wado-dev-tools` stands in for the wasm-tools CLI (`scripts/dev-bin.sh wado-dev-tools <command> <file.wasm>`).
+`wado-dev-tools` stands in for the wasm-tools CLI (`tools/dev-bin.sh wado-dev-tools <command> <file.wasm>`).
 
 - `objdump` gives the size and count of each section.
 - `print --offsets` puts each instruction's byte offset beside it. Use it for

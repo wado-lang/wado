@@ -1,9 +1,10 @@
 # gale-highlight-wado
 
 Syntax highlighter for the Wado language. The parser is generated at build time
-by [Gale](../package-gale) from the bundled grammar (`assets/grammar/Wado.g4`
-and `assets/grammar/Wado.highlights.scm`); no ANTLR/Gale runtime dependency leaks to
-consumers — the runtime is inlined into the generated parser.
+by [Gale](../package-gale) from [`wado-lang:wado`](../package-wado)'s grammar
+and the bundled highlight query (`assets/grammar/Wado.highlights.scm`); no
+ANTLR/Gale runtime dependency leaks to consumers — the runtime is inlined into
+the generated parser.
 [WEP: Gale Highlight Query](../docs/wep-2026-07-12-gale-highlight-query.md)
 holds the design of the highlight queries.
 
@@ -71,8 +72,8 @@ Writes the HTML fragment for each input to `build/highlight/<path>.html`.
 
 ## Held to the compiler
 
-`assets/grammar/Wado.g4` states Wado's whole syntax, and checks hold it to
-what `wado-compiler` parses and colours.
+Checks hold the highlight query to what `wado-compiler` colours, and
+`wado-lang:wado` holds the grammar to what it parses.
 
 ## The gale-highlight framework
 

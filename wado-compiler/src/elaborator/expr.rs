@@ -5762,7 +5762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// Signature, defining module and defining name of the function an identifier
     /// references; the defining name (`foo` under `use { foo as bar }`) is the mono key.
-    fn lookup_func_sig_for_ref(
+    pub(super) fn lookup_func_sig_for_ref(
         &self,
         ident: &ast::IdentExpr,
     ) -> Option<(FunctionSig, ModuleSource, String)> {

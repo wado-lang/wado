@@ -119,7 +119,7 @@ Download the matching `wado-windows-*.zip` and either verify its provenance with
 If you have a Rust toolchain installed:
 
 ```sh
-cargo install --git https://github.com/wado-lang/wado wado-cli
+cargo install --git https://github.com/wado-lang/wado wado-cli --features dist
 ```
 
 This builds the current `main` branch from source.

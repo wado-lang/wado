@@ -37,7 +37,7 @@ use super::infer_hole::{BoundRows, DeclaredBound, Obligation};
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::sig::{InstantiatedImplSig, MethodSig, Param, ReceivedSig};
 use super::static_call::{ReceiverId, StaticLookup, StaticQuery};
-use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess};
+use super::synth::{ArgClass, ArgProbe, ArgSource, KeyedAccess, OpaqueReason};
 use super::trait_env::{ImplHeader, ImplMethodHeader, TraitEnv, header_as_written};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, KeyCandidate,
@@ -67,6 +67,22 @@ pub(super) fn narrow_to_reaching<T>(candidates: &mut Vec<T>, reaches: impl Fn(&T
     } else {
         candidates.truncate(1);
     }
+}
+
+/// A function type with its row left out.
+#[derive(PartialEq)]
+struct FunctionShape {
+    is_mut: bool,
+    params: Vec<TypeId>,
+    return_type: TypeId,
+}
+
+/// What the candidates of one selection agree on at one position.
+enum Agreement {
+    Same(TypeId),
+    /// Function types differing only in their rows.
+    RowOnly(FunctionShape),
+    Differ,
 }
 
 /// The block a match leaving a slot to the call was read off.
@@ -2545,14 +2561,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | None => {}
             Some(Ordered::Undecided(_)) => unreachable!("returned above"),
         }
-        match self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe) {
-            Some(found) => TraitLookup::Found(Box::new(found)),
-            None => TraitLookup::Missing,
-        }
+        self.select_trait_match(found_traits, method_name, receiver_type_id, span, probe)
     }
 
-    /// `lookup`, with an undecided selection reported at `span` as needing an
-    /// annotation, for a site that cannot wait for the receiver to settle.
+    /// `lookup`, with an undecided selection reported at `span`, for a site
+    /// that cannot wait for the receiver or a closure argument to settle it.
     pub(super) fn decide_now(
         &mut self,
         lookup: TraitLookup,
@@ -2560,10 +2573,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) -> TraitLookup {
-        if !matches!(lookup, TraitLookup::Undecided(_)) {
-            return lookup;
+        match lookup {
+            TraitLookup::Undecided(_) => {
+                self.report_undecided_selection(receiver, method_name, span);
+            }
+            TraitLookup::AwaitsClosureRow { .. } => {
+                let _ = self.emit(TypeError::CannotInferType {
+                    message: format!(
+                        "which `{method_name}` this calls depends on what its closure argument performs, which this call cannot wait for; pin the trait's arguments"
+                    ),
+                    span,
+                });
+            }
+            TraitLookup::Found(_) | TraitLookup::Missing | TraitLookup::Reported => {
+                return lookup;
+            }
         }
-        self.report_undecided_selection(receiver, method_name, span);
         TraitLookup::Reported
     }
 
@@ -2579,9 +2604,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) -> Result<(FqTraitName, MethodInfo), TraitLookup> {
-        if let TraitLookup::Undecided(live) = &lookup
-            && can_wait
-            && let Some(declared) = self.trait_declared_info(live, declared_self, method_name)
+        let (live, agreed): (&[Option<DefId>], &[Option<TypeId>]) = match &lookup {
+            TraitLookup::Undecided(live) => (live, &[]),
+            TraitLookup::AwaitsClosureRow { live, trait_args } => (live, trait_args),
+            TraitLookup::Found(_) | TraitLookup::Missing | TraitLookup::Reported => {
+                return Err(lookup);
+            }
+        };
+        if can_wait
+            && let Some(declared) =
+                self.trait_declared_info(live, agreed, declared_self, method_name)
         {
             return Ok(declared);
         }
@@ -3294,7 +3326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: Option<TypeId>,
         span: Span,
         probe: Option<ArgSource<'_, '_>>,
-    ) -> Option<TraitMethodMatch> {
+    ) -> TraitLookup {
         // The overload set is the concrete candidates of one declaration.
         // Distinct traits never form one, and a blanket neither forms nor
         // defeats one, having lost to every concrete impl already.
@@ -3339,6 +3371,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     found_traits[i].method_info.return_type
                 });
             }
+            self.narrow_by_function_rows(&mut admitted, &classes, |&i, position| {
+                found_traits[i]
+                    .method_info
+                    .param_types
+                    .get(position)
+                    .copied()
+            });
             // An impl writing the trait's arguments defines the function the
             // call names; one leaving a slot to the call only covers it.
             let writes_trait_args =
@@ -3361,7 +3400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // them apart.
                 if let [first, _, ..] = admitted.as_slice() {
                     self.report_impls_tied_at_call(&found_traits, &admitted, receiver, span);
-                    return Some(found_traits.swap_remove(*first));
+                    return TraitLookup::Found(Box::new(found_traits.swap_remove(*first)));
                 }
             }
             // Unique-or-error: exactly one admitted candidate wins. No ranking
@@ -3375,16 +3414,134 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 [] if !applicable.is_empty() => {
                     self.report_no_admitted_overload(&found_traits, method_name, &classes, span);
-                    return found_traits.into_iter().next();
+                    return TraitLookup::first_of(found_traits);
                 }
-                [] | [_, _, ..] => {}
+                [_, _, ..] if self.ties_on_closure_rows(&found_traits, &admitted, &classes) => {
+                    return self.await_closure_row(&found_traits, &admitted);
+                }
+                [_, _, ..] => {
+                    // What the report names, and what stands in for the
+                    // call, are the candidates the arguments admit.
+                    found_traits = found_traits
+                        .into_iter()
+                        .enumerate()
+                        .filter_map(|(i, found)| admitted.contains(&i).then_some(found))
+                        .collect();
+                }
+                [] => {}
             }
         }
 
         self.report_trait_argument_ambiguity(&found_traits, method_name, &classes, span);
         // Still return a winner: reporting and then claiming the method is
         // missing would stack a second, wrong diagnostic on the same call.
-        found_traits.into_iter().next()
+        TraitLookup::first_of(found_traits)
+    }
+
+    /// Whether the `admitted` candidates differ only in the rows of the
+    /// function types they take where the argument is a closure: its body's
+    /// row selects among them once it is walked, so the call waits for it.
+    fn ties_on_closure_rows(
+        &self,
+        found_traits: &[TraitMethodMatch],
+        admitted: &[usize],
+        classes: &[ArgClass],
+    ) -> bool {
+        let mut closure_decides = false;
+        for (position, class) in classes.iter().enumerate() {
+            let params: Vec<Option<TypeId>> = admitted
+                .iter()
+                .map(|&i| {
+                    found_traits[i]
+                        .method_info
+                        .param_types
+                        .get(position)
+                        .copied()
+                })
+                .collect();
+            match self.agreement(&params) {
+                Agreement::Same(_) => {}
+                Agreement::RowOnly(_) if *class == ArgClass::Opaque(OpaqueReason::Closure) => {
+                    closure_decides = true;
+                }
+                Agreement::RowOnly(_) | Agreement::Differ => return false,
+            }
+        }
+        closure_decides
+    }
+
+    /// The selection a call tied on a closure's row waits for: the `admitted`
+    /// blocks, and what their trait arguments agree on, so the closure is
+    /// typed by the shape every candidate gives it.
+    fn await_closure_row(
+        &self,
+        found_traits: &[TraitMethodMatch],
+        admitted: &[usize],
+    ) -> TraitLookup {
+        let arity = found_traits[admitted[0]].trait_args.len();
+        let trait_args = (0..arity)
+            .map(|position| {
+                let args: Vec<Option<TypeId>> = admitted
+                    .iter()
+                    .map(|&i| found_traits[i].trait_args.get(position).copied())
+                    .collect();
+                match self.agreement(&args) {
+                    Agreement::Same(arg) => Some(arg),
+                    Agreement::RowOnly(shape) => {
+                        let mut tt = self.tysys.type_table.borrow_mut();
+                        let row = vec![tt.mint_effect_var()];
+                        Some(tt.make_function_with_mut(
+                            shape.is_mut,
+                            shape.params,
+                            shape.return_type,
+                            row,
+                        ))
+                    }
+                    Agreement::Differ => None,
+                }
+            })
+            .collect();
+        TraitLookup::AwaitsClosureRow {
+            live: admitted
+                .iter()
+                .map(|&i| found_traits[i].method_info.impl_block)
+                .collect(),
+            trait_args,
+        }
+    }
+
+    /// What `types` agree on: all one type, function types differing only in
+    /// their rows, or nothing.
+    fn agreement(&self, types: &[Option<TypeId>]) -> Agreement {
+        let Some(&Some(first)) = types.first() else {
+            return Agreement::Differ;
+        };
+        if types.iter().all(|&ty| ty == Some(first)) {
+            return Agreement::Same(first);
+        }
+        let tt = self.tysys.type_table.borrow();
+        let shape = |ty: Option<TypeId>| {
+            let ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                ..
+            } = tt.get(ty?)
+            else {
+                return None;
+            };
+            Some(FunctionShape {
+                is_mut: *is_mut,
+                params: params.clone(),
+                return_type: *return_type,
+            })
+        };
+        match shape(Some(first)) {
+            Some(first) if types.iter().all(|&ty| shape(ty).as_ref() == Some(&first)) => {
+                Agreement::RowOnly(first)
+            }
+            Some(_) | None => Agreement::Differ,
+        }
     }
 
     /// One trait implemented for a receiver at two argument lists leaves the
@@ -4348,7 +4505,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TraitLookup::Missing => {}
                 TraitLookup::Reported => return Some(TypeTable::ERROR),
-                TraitLookup::Undecided(_) => unreachable!("decided now"),
+                TraitLookup::Undecided(_) | TraitLookup::AwaitsClosureRow { .. } => {
+                    unreachable!("decided now")
+                }
             }
         }
 

@@ -11,7 +11,7 @@ host's Rust.
 - A plugin is loaded at run time, so no build depends on one. It comes from
   `--plugin` or `WADO_PJRT_PLUGIN`; with neither, the host fetches the pinned
   CPU plugin into the user cache on first use (`wado_host::pinned_download`).
-  `mise run test-pjrt` also fetches `libtpu.so` (`scripts/fetch-pjrt-plugin.sh`)
+  `mise run test-pjrt` also fetches `libtpu.so` (`tools/fetch-pjrt-plugin.sh`)
   and runs the `#[ignore]`d tests on both.
 - `xla/pjrt/c/pjrt_c_api.h` is the one part of XLA that may be read. `src/ffi.rs`
   follows it. An argument struct must be at least the plugin's size, so each

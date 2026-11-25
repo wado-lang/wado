@@ -226,7 +226,12 @@
 - [A Bare Name in a Pattern Always Binds](./wep-2026-11-20-bare-names-bind.md)
 - [One Inference Context: Equations and Obligations](./wep-2026-11-20-inference-context.md)
 - [Effect Rows in the Inference Context](./wep-2026-11-21-effect-rows-in-inference-context.md)
+<<<<<<< HEAD
 - [Borrowed Parts — Sharing a Copy Held by an Aggregate or Handed Out by a Call](./wep-2026-11-24-borrowed-parts.md)
+||||||| 1c9d948fe6e
+=======
+- [HTTP Client (`core:http_client`)](./wep-2026-11-24-core-http-client.md)
+>>>>>>> origin/main
 - [Every Package Has a Coordinate](./wep-2026-11-24-required-namespace.md)
 
 ## Standard Library
@@ -241,6 +246,7 @@
 - [core:eval](./stdlib-core-eval.md)
 - [core:fs](./stdlib-core-fs.md)
 - [core:fuel](./stdlib-core-fuel.md)
+- [core:http_client](./stdlib-core-http_client.md)
 - [core:icu](./stdlib-core-icu.md)
 - [core:json](./stdlib-core-json.md)
 - [core:jsonc](./stdlib-core-jsonc.md)

@@ -1,4 +1,4 @@
-//! The `CommonMark` rules `wado doc` and `wado spec` both read Markdown by.
+//! The `CommonMark` rules `wado spec` reads Markdown by.
 
 /// `CommonMark` fenced code block delimiter — three or more `` ` `` or `~`.
 #[derive(Clone, Copy)]

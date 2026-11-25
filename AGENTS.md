@@ -71,12 +71,12 @@ mise run format          # format Rust, Markdown, and Wado files
 
 - Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change. The one exception is renaming a Rust symbol with `wado-dev-tools rust-rename` (the `rust-rename` skill), which edits where rust-analyzer resolves the name rather than where the text matches.
 - Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation. Run one heavy job at a time; two starve each other.
-- `test`, `test-wado`, `test-stdlib`, `test-gale-o2` and `test-fuel` refuse to start while another of the same is running (`test-e2e` counts as `test`, and `update-baselines` as `test-fuel`), naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
+- `test`, `test-wado`, `test-stdlib`, `test-gale-o2` and `test-fuel` refuse to start while another of the same is running (`test-e2e` counts as `test`, and `update-baselines` as `test-fuel`), naming the holder's pid — where `flock` exists; `tools/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
 - On an internal pull request, CI's `tidy` job regenerates the generated files, applies clippy and format, and pushes `chore: tidy` onto the branch. Pull before pushing.
 - A wasm-tools CLI feature a task or skill needs is a `wado-dev-tools` subcommand, built on the wasm-tools crates the workspace pins. Nothing installs the CLI.
 - Never edit a generated file: change its generator or source and regenerate. A generated file carries `-diff` in `.gitattributes`, so `git diff`, `git show` and `git log -p` report it as changed without printing it, and the sources stay readable. Regenerate and commit those; do not read them. `--text` prints one where you do want it. `rg` reads them like any other file; `git grep` calls them binary.
-- `git diff <base> -- $(scripts/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated or vendored file is gone too.
+- `git diff <base> -- $(tools/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated or vendored file is gone too.
 
 ## General Rules
 
@@ -96,7 +96,7 @@ mise run format          # format Rust, Markdown, and Wado files
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
 - A pre-existing issue must be fixed, with TDD when practical.
-- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries; a benchmark does not need it, since the dev profile builds wasmtime optimized too.
+- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. Only a binary to distribute, or an arm of an A/B against a baseline, takes `--release`, with the `dist` feature (§ The CLI); any other benchmark does not need it, since the dev profile builds wasmtime optimized too.
 - Merge origin/main only through the `git-upstream-sync` skill, conflicts or not; a clean merge still ends with its sanity check.
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
 - Test the language from an e2e fixture. The fixtures state nearly everything the language does, diagnostics included; `wado-compiler/AGENTS.md` says how to write one.
@@ -138,10 +138,19 @@ say) states that module's signatures; read it rather than guess.
 ## The CLI
 
 The `wado` binary is implemented in `wado-cli/`. `mise.toml` puts
-`scripts/bin` on `PATH`. Its `wado`, `wado-run-webgpu` and `wado-run-pjrt` each
+`tools/bin` on `PATH`. Its `wado`, `wado-run-webgpu` and `wado-run-pjrt` each
 build the dev binary before running it, so none of them runs a stale build.
 `wado-run-pjrt` runs on XLA's CPU plugin unless `--plugin` names another. The
 `wado-cli` skill covers every subcommand; read it before invoking `wado`.
+
+A `wado` built without the `dist` feature, release or not, reads the stdlib and
+Marl's sources from this checkout, so an edit to either needs no rebuild, and
+caches what it compiles from them in its `target/<profile>/`. `--features dist`
+(`-p wado-cli`) makes it self-contained: the sources embedded, the cache in the
+user cache. The release workflow builds with it, and so does any binary that
+outlives the checkout or must keep one version of the stdlib, such as a
+benchmark baseline or an arm of a stdlib A/B. A `wasm32` build embeds the
+stdlib whatever its features.
 
 The Wado formatter skips `wado-compiler/tests/**`, so an e2e fixture keeps its
 hand-authored layout. Naming a file bypasses the exclusion, so never
@@ -169,13 +178,14 @@ hand-authored layout. Naming a file bypasses the exclusion, so never
 - `package-eddy/` — a code review bot in Wado, on the Anthropic API for now; later, models of several providers review a change by exchanging opinions. Its docs and research live in this repository.
 - `package-gale/` — a parser generator compatible with ANTLR4 (`.g4`) in Wado.
 - `package-gale-highlight-html/` — a syntax highlighter for HTML that highlights embedded CSS and JavaScript as those languages, built with `package-gale` on the grammars-v4 grammars.
-- `package-gale-highlight-wado/` — a complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.
+- `package-gale-highlight-wado/` — a syntax highlighter for Wado source code, built with `package-gale` from `package-wado`'s grammar.
 - `package-grog/` — a Protocol Buffers compiler in Wado: a `.proto` becomes Wado declarations, and the runtime library encodes them.
 - `package-jade/` — a JSON Schema 2020-12 validator in Wado.
 - `package-marl/` — a CommonMark subset in Wado.
 - `package-re/` — linear-time regular expressions in ECMA-262's syntax.
 - `package-rill/` — fine-grained reactivity: signals, and the DOM bound to them, on `package-web`.
 - `package-loam/` — a tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
+- `package-wado/` — the Wado language as a package: `Wado.g4`, the grammar of Wado's whole syntax, and the parser Gale builds from it; the seed of a self-hosted compiler.
 - `package-wadopoet/` — builders for generated Wado source, and the reserved vocabulary a minted name must avoid.
 - `package-web/` — `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
 - `package-cm-catalog/` — a catalog of Wasm Component Model modules for demo and testing purposes.
