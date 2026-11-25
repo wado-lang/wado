@@ -508,15 +508,16 @@ impl Dfa {
         }
     }
 
-    /// For each byte, whether the program matches it alone.
-    internal fn matches_byte(&mut self) -> List<bool> {
+    /// For each byte, whether the program matches it alone, unless the DFA
+    /// gives up.
+    internal fn matches_byte(&mut self) -> Option<List<bool>> {
         assert self.looks == 0;
         let mut matched: List<bool> = [];
         let start = self.start(false, 0);
         for let b of 0..<256 {
             matched.push(self.next(start, b) & ACCEPT != 0);
         }
-        return matched;
+        return if self.gave_up { null } else { Some(matched) };
     }
 
     /// Which lookarounds' bodies match at `pos`, for a transition to read.

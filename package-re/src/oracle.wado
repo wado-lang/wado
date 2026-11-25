@@ -64,9 +64,11 @@ impl Markers {
             // A body that matches one byte and nothing else asks about the
             // byte beside the position: a lookahead's matches where its byte
             // stands, and a lookbehind's at the position after.
-            if marks && body.match_len == Some(1) && asserts_nothing(body) {
-                let none: List<LookaroundPrograms> = [];
-                let matched = Dfa::new(*body, Scan::Every, &none).matches_byte();
+            let none: List<LookaroundPrograms> = [];
+            if marks
+                && body.match_len == Some(1)
+                && asserts_nothing(body)
+                && let Some(matched) = Dfa::new(*body, Scan::Every, &none).matches_byte() {
                 let ahead = body.direction == Direction::Reverse;
                 let bit = 1 << if ahead { index } else { index + MAX_BYTE_MARKED };
                 for let b of 0..<256 {

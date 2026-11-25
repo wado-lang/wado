@@ -734,6 +734,13 @@ test "a lookaround whose DFA gives up is read by the oracle's own scan" {
     assert !r.lazy.off;
 }
 
+test "a one-byte body whose DFA gives up is read by the oracle's own scan" {
+    // The branch that never matches holds a thread for each `a?`.
+    let r = Regex::new(#"(?<=(?:a?){499990}[]|z)"#).unwrap();
+    assert r.find("z").unwrap().start() == 1;
+    assert r.lazy.markers.each[0].off;
+}
+
 test "a DFA whose states are large gives up before its tables are" {
     let text = "a".repeat(1300);
     let r = Regex::new(#"a[ab]{1200}b"#).unwrap();
