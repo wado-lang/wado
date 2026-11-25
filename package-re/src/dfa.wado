@@ -6,9 +6,9 @@
 //! Pike VM.
 //!
 //! A lookaround is part of what the DFA reads: beside each byte, the bits
-//! saying which lookarounds' bodies match at the position the byte leads to. So a
-//! state never waits on one, and a pattern's lookarounds widen each row of
-//! the table by a factor of two apiece.
+//! saying which lookarounds' bodies match at the position the byte leads
+//! to. So a state never waits on one, and a pattern's lookarounds widen each
+//! row of the table by a factor of two apiece.
 
 use { HashMap } from "core:collections";
 use { Oracle } from "./oracle.wado";
@@ -180,7 +180,7 @@ impl Dfa {
 
     /// Follows every instruction that consumes nothing from `from`, as the Pike
     /// VM's `add` does, appending the threads it reaches to `out`. `bits` says
-    /// which lookarounds hold here.
+    /// which lookarounds' bodies match here.
     fn close(&mut self, from: i32, bits: i32, at_start: bool, at_end: bool, out: &mut List<i32>) {
         let forward = self.scan == Scan::End;
         let start_look = self.start_look();
@@ -306,7 +306,7 @@ impl Dfa {
         return state;
     }
 
-    /// The state a scan starts in, where `bits` says which lookarounds hold.
+    /// The state a scan starts in, where `bits` is `close`'s.
     fn start(&mut self, at_start: bool, bits: i32) -> i32 {
         let slot = (bits << 1) + at_start as i32;
         if self.starts[slot] == UNKNOWN {
@@ -614,10 +614,8 @@ impl Dfa {
                     break;
                 }
             }
-            // A thread starts at every byte, and one that started inside a
-            // character may match there without reading any.
-            if state & ACCEPT != 0 && text.is_char_boundary(pos) {
-                oracle.set(index, pos);
+            if state & ACCEPT != 0 {
+                oracle.set(text, index, pos);
             }
             let byte = unchecked text.byte_at(pos - behind) as i32;
             pos += step;
@@ -629,7 +627,7 @@ impl Dfa {
             }
         }
         if state & ACCEPT != 0 || self.accepts_end(state >> 2, lookarounds[pos] as i32 & settled) {
-            oracle.set(index, pos);
+            oracle.set(text, index, pos);
         }
     }
 }

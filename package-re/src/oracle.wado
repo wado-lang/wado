@@ -57,13 +57,14 @@ impl Markers {
         let mut each: List<Marker> = [];
         let mut by_byte: List<i32> = List::filled(256, 0);
         let mut any = false;
+        let marks = lookarounds.len() <= MAX_BYTE_MARKED;
         for let index of 0..<lookarounds.len() {
             let body = &lookarounds[index].holds;
             let mut marker = Marker { dfa: null, off: !runs(body, lookarounds.len()), by_byte: false };
             // A body that matches one byte and nothing else asks about the
             // byte beside the position: a lookahead's matches where its byte
             // stands, and a lookbehind's at the position after.
-            if lookarounds.len() <= MAX_BYTE_MARKED && body.match_len == Some(1) && asserts_nothing(body) {
+            if marks && body.match_len == Some(1) && asserts_nothing(body) {
                 let none: List<LookaroundPrograms> = [];
                 let matched = Dfa::new(*body, Scan::Every, &none).matches_byte();
                 let ahead = body.direction == Direction::Reverse;
@@ -78,7 +79,7 @@ impl Markers {
             }
             // Inside a character a negated lookaround's bit is set, so that
             // it does not pass there.
-            if lookarounds.len() <= MAX_BYTE_MARKED && lookarounds[index].negated {
+            if marks && lookarounds[index].negated {
                 for let b of 0x80..<0xC0 {
                     by_byte[b] |= INSIDE;
                 }
@@ -147,11 +148,14 @@ impl Oracle {
         return (self.bits[pos * self.stride + byte] ^ self.negated[byte]) as i32 >> (index & 7) & 1 != 0;
     }
 
-    /// Records that the body of lookaround `index` matches at `pos`, which
-    /// lies on a character boundary.
-    internal fn set(&mut self, index: i32, pos: i32) {
-        self.bits[pos * self.stride + (index >> 3)] |= (1 << (index & 7)) as u8;
-        self.marked[pos >> 5] |= 1 << (pos & 31);
+    /// Records that the body of lookaround `index` matches at `pos` of
+    /// `text`, unless that is inside a character: a DFA starts a thread at
+    /// every byte, and one that started there may match without reading any.
+    internal fn set(&mut self, text: StrSlice, index: i32, pos: i32) {
+        if text.is_char_boundary(pos) {
+            self.bits[pos * self.stride + (index >> 3)] |= (1 << (index & 7)) as u8;
+            self.marked[pos >> 5] |= 1 << (pos & 31);
+        }
     }
 
     /// Fills what `by_byte`, a `Markers`' own, says of each byte of `text`.
@@ -251,7 +255,7 @@ impl Oracle {
                 threads.add(program, self, text, 0, pos);
             }
             if threads.matched {
-                self.set(index, pos);
+                self.set(text, index, pos);
             }
             if pos == limit {
                 return;
