@@ -212,7 +212,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     }
     rewrite_call_sites(project, &all, gate.exec(), &mut touched);
     touched.extend(project.rename_reshaped(candidates.keys().copied(), gate.exec()));
-    scalarize_variant_locals(project, &dirty, &mut touched);
+    scalarize_variant_locals(project, &dirty, &mut touched, gate.exec());
     // A round with no new candidates still does work: `nir/inline` plants call
     // sites on callees scalarized earlier, and rewriting one is a change the
     // fixed-point loop has to see. Reporting only the candidate set let the
@@ -2066,40 +2066,60 @@ fn rewrite_call_sites(
 /// … s = Some(v); … match s { … }` holds `[tag, v]`, which `sroa` then splits
 /// into scalars, so no write allocates. It qualifies when every write builds a
 /// case and every read destructures, so nothing ever needs the variant whole.
-fn scalarize_variant_locals(project: &NirPackage, dirty: &[FuncId], touched: &mut IndexSet<usize>) {
+fn scalarize_variant_locals(
+    project: &NirPackage,
+    dirty: &[FuncId],
+    touched: &mut IndexSet<usize>,
+    exec: &Executor,
+) {
+    // A layout may intern the types it splits into, so the table is filled in
+    // the functions' order before they are rewritten on `exec`'s threads.
     let mut layouts: IndexMap<TypeId, Option<Candidate>> = IndexMap::default();
     for &fid in dirty {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        let Some(mut body) = func.body.take() else {
+        let func = project.functions[fid.index()].borrow();
+        if func.body.is_none() {
             continue;
-        };
-        if scalarize_locals_in(project, &mut func, &mut body, &mut layouts) {
-            touched.insert(fid.index());
         }
-        func.body = Some(body);
+        for local in splittable_locals(&func) {
+            let ty = func.locals[local as usize].type_id;
+            if !layouts.contains_key(&ty) {
+                let cand = local_candidate(project, ty);
+                layouts.insert(ty, cand);
+            }
+        }
     }
+    let functions = &project.functions;
+    let type_table = &*project.type_table.borrow();
+    let layouts = &layouts;
+    touched.extend(exec.filter_map(dirty, |&fid| {
+        let mut func = functions[fid.index()].borrow_mut();
+        let mut body = func.body.take()?;
+        let rewrote = scalarize_locals_in(type_table, &mut func, &mut body, layouts);
+        func.body = Some(body);
+        rewrote.then_some(fid.index())
+    }));
+}
+
+/// The locals of `func` that phase 4 may split: neither a parameter nor one
+/// whose address is taken.
+fn splittable_locals(func: &NirFunction) -> impl Iterator<Item = u32> + '_ {
+    (0..u32::try_from(func.locals.len()).expect("too many locals")).filter(|local| {
+        !func.address_taken_locals.contains(local)
+            && !func.params.iter().any(|p| p.local_index == *local)
+    })
 }
 
 /// Phase 4 over one function, whose body the caller holds. Returns whether it
 /// rewrote anything.
 fn scalarize_locals_in(
-    project: &NirPackage,
+    type_table: &TypeTable,
     func: &mut NirFunction,
     body: &mut Body,
-    layouts: &mut IndexMap<TypeId, Option<Candidate>>,
+    layouts: &IndexMap<TypeId, Option<Candidate>>,
 ) -> bool {
     let mut candidates: IndexMap<u32, Candidate> = IndexMap::default();
-    for (local, l) in func.locals.iter().enumerate() {
-        let local = u32::try_from(local).expect("too many locals");
-        if func.address_taken_locals.contains(&local)
-            || func.params.iter().any(|p| p.local_index == local)
-        {
-            continue;
-        }
-        let cand = layouts
-            .entry(l.type_id)
-            .or_insert_with(|| local_candidate(project, l.type_id));
-        if let Some(cand) = cand {
+    for local in splittable_locals(func) {
+        if let Some(cand) = &layouts[&func.locals[local as usize].type_id] {
             candidates.insert(local, cand.clone());
         }
     }
@@ -2110,8 +2130,7 @@ fn scalarize_locals_in(
     // allocates at every write, `null` included.
     let rebound = arena_query::rebound_locals(body);
     candidates.retain(|local, _| !rebound.contains(local));
-    let type_table = project.type_table.borrow();
-    let rebind = Rebind::new(func, &type_table);
+    let rebind = Rebind::new(func, type_table);
     retain_rewritable_locals(body, &mut candidates, &rebind);
     if candidates.is_empty() {
         return false;
