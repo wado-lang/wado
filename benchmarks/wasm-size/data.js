@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795610064931,
+  "lastUpdate": 1795611213522,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82381,6 +82381,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f7b704dea4ef906713f6b56b6597366cefba6145"
         },
         "date": 1795610063862,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24986,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353988,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5653e2af65d2eb0feeec02dbb1fe0e0cf8bba7fc",
+          "message": "Merge pull request #2757 from wado-lang/gfx/lucid-dijkstra-8pp36i\n\ndocs(wep): every WEP describes a design that still stands",
+          "timestamp": "2026-11-25T21:31:09+09:00",
+          "tree_id": "e8471175e66585f7c1fbac8fa6c8ba5baf92f0df",
+          "url": "https://github.com/wado-lang/wado/commit/5653e2af65d2eb0feeec02dbb1fe0e0cf8bba7fc"
+        },
+        "date": 1795611212720,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
