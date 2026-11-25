@@ -368,7 +368,11 @@ fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path, glue_dir: &Path) -> 
     for line in &generated.skipped {
         eprintln!("Skipped: {line}");
     }
-    eprintln!("{} members skipped", generated.skipped.len());
+    println!(
+        "{} functions bound; not bound:\n{}",
+        generated.bound,
+        wado_from_idl::webidl::skip_table(&generated.skipped)
+    );
     Ok(())
 }
 

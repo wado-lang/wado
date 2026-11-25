@@ -177,10 +177,17 @@ pub fn list_carries(ty: &WadoType) -> bool {
     }
 }
 
-fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
+/// Whether a shim can read `function`'s parameters: each as core values, none
+/// through memory.
+#[must_use]
+pub fn reads_params(function: &WadoFunction) -> bool {
     let flat_params: usize = function.params.iter().map(|p| flat_count(&p.ty)).sum();
+    !flat_params_in_buffer(flat_params, false)
+}
+
+fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
     assert!(
-        !flat_params_in_buffer(flat_params, false),
+        reads_params(function),
         "`{}` passes its parameters through memory, which no shim reads",
         function.cm_attr
     );

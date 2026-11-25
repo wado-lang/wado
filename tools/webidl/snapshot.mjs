@@ -1,11 +1,14 @@
 // Write the webidl2 AST of `package-web`'s `dom` slice as JSON.
 //
-// Usage: node snapshot.mjs <output.json>
+// Usage: node snapshot.mjs <output.json> [--all]
 //
 // The slice is the interfaces listed below, their partials and included mixins
-// from every spec, and the typedefs and callbacks their members name.
-// `wado-from-idl --webidl` reads the output, so generation never needs the
-// network.
+// from every spec, and the typedefs, callbacks, dictionaries and enums their
+// members name. `wado-from-idl --webidl` reads the output, so generation never
+// needs the network.
+//
+// `--all` takes every interface a page can reach in place of the list, and
+// every namespace: what `mise run report-webidl-coverage` measures.
 
 import { parseAll } from "@webref/idl";
 import { readFile, writeFile } from "node:fs/promises";
@@ -28,9 +31,9 @@ const SLICE = [
   "Window",
 ];
 
-const out = process.argv[2];
-if (!out) {
-  console.error("Usage: node snapshot.mjs <output.json>");
+const [out, mode] = process.argv.slice(2);
+if (!out || (mode !== undefined && mode !== "--all")) {
+  console.error("Usage: node snapshot.mjs <output.json> [--all]");
   process.exit(1);
 }
 
@@ -40,25 +43,61 @@ const defs = Object.keys(all)
   .sort()
   .flatMap((spec) => all[spec]);
 
+// An interface exposed only to workers or worklets is one no page reaches, and
+// each of those globals would be a second `[Global]`.
+const onWindow = (def) => {
+  const exposed = def.extAttrs.find((a) => a.name === "Exposed");
+  if (!exposed || exposed.rhs.type === "*") return true;
+  return [exposed.rhs.value].flat().some((v) => (v.value ?? v) === "Window");
+};
+const everyInterface = () => {
+  const defined = new Map(
+    defs
+      .filter((def) => def.type === "interface" && !def.partial)
+      .map((def) => [def.name, def]),
+  );
+  const slice = new Set(
+    [...defined.values()].filter(onWindow).map((def) => def.name),
+  );
+  // A slice is closed: a set grows while it is walked, so each parent's is visited too.
+  for (const name of slice) {
+    const parent = defined.get(name).inheritance;
+    if (parent) slice.add(parent);
+  }
+  return slice;
+};
+const slice = mode === "--all" ? everyInterface() : new Set(SLICE);
+
 const interfaces = defs.filter(
-  (def) => def.type === "interface" && SLICE.includes(def.name),
+  (def) => def.type === "interface" && slice.has(def.name),
 );
 const includes = defs.filter(
-  (def) => def.type === "includes" && SLICE.includes(def.target),
+  (def) => def.type === "includes" && slice.has(def.target),
 );
 const mixinNames = new Set(includes.map((i) => i.includes));
 const mixins = defs.filter(
   (def) => def.type === "interface mixin" && mixinNames.has(def.name),
 );
+const namespaces = defs.filter(
+  (def) => def.type === "namespace" && mode === "--all",
+);
 
-// A typedef or a callback is kept when a member of the slice names it,
-// transitively.
+// A typedef, a callback, a dictionary or an enum is kept when a member of the
+// slice names it, transitively.
 const named = (types) =>
   new Map(defs.filter((def) => types.includes(def.type)).map((def) => [def.name, def]));
 const typedefs = named(["typedef"]);
 const callbacks = named(["callback", "callback interface"]);
+const enums = named(["enum"]);
+// A dictionary is its definition and its partials.
+const dictionaries = Map.groupBy(
+  defs.filter((def) => def.type === "dictionary"),
+  (def) => def.name,
+);
 const kept = new Map();
 const keptCallbacks = new Map();
+const keptEnums = new Map();
+const keptDictionaries = new Map();
 const visitMembers = (members) => {
   for (const m of members) {
     if (m.idlType) visit(m.idlType);
@@ -80,10 +119,22 @@ const visit = (t) => {
     keptCallbacks.set(cb.name, cb);
     visitMembers(cb.type === "callback" ? [cb] : cb.members);
   }
+  const en = enums.get(t.idlType);
+  if (en) keptEnums.set(en.name, en);
+  const parts = dictionaries.get(t.idlType);
+  if (parts && !keptDictionaries.has(t.idlType)) {
+    keptDictionaries.set(t.idlType, parts);
+    for (const part of parts) {
+      visitMembers(part.members);
+      if (part.inheritance) visit({ idlType: part.inheritance });
+    }
+  }
 };
-for (const iface of [...interfaces, ...mixins]) {
-  visitMembers(iface.members);
+for (const container of [...interfaces, ...mixins, ...namespaces]) {
+  visitMembers(container.members);
 }
+const byName = (definitions) =>
+  [...definitions.values()].flat().sort((a, b) => a.name.localeCompare(b.name));
 
 const require = createRequire(import.meta.url);
 const webref = JSON.parse(
@@ -94,14 +145,17 @@ const snapshot = {
   webref: webref.version,
   package: PACKAGE,
   module: MODULE,
-  slice: SLICE,
+  slice: [...slice],
   interfaces,
   mixins,
   includes,
-  typedefs: [...kept.values()].sort((a, b) => a.name.localeCompare(b.name)),
-  callbacks: [...keptCallbacks.values()].sort((a, b) => a.name.localeCompare(b.name)),
+  typedefs: byName(kept),
+  callbacks: byName(keptCallbacks),
+  dictionaries: byName(keptDictionaries),
+  enums: byName(keptEnums),
+  namespaces,
 };
 await writeFile(out, JSON.stringify(snapshot, null, 2) + "\n");
 console.error(
-  `snapshot: ${interfaces.length} interface and ${mixins.length} mixin definitions, ${kept.size} typedefs, ${keptCallbacks.size} callbacks (@webref/idl ${webref.version}) → ${out}`,
+  `snapshot: ${slice.size} interfaces, ${mixinNames.size} mixins, ${kept.size} typedefs, ${keptCallbacks.size} callbacks, ${keptDictionaries.size} dictionaries, ${keptEnums.size} enums, ${namespaces.length} namespace definitions (@webref/idl ${webref.version}) → ${out}`,
 );
