@@ -181,6 +181,20 @@ impl Executor {
         items.iter_mut().for_each(f);
     }
 
+    /// [`Self::map`] of a visit that rewrites only its own item, in item order.
+    pub fn map_mut<T: Send, R: Send>(
+        &self,
+        items: &mut [T],
+        f: impl Fn(&mut T) -> R + Sync + Send,
+    ) -> Vec<R> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = self.pool_for(items.len()) {
+            let f = carrying_skips(f);
+            return pool.install(|| items.par_iter_mut().map(f).collect());
+        }
+        items.iter_mut().map(f).collect()
+    }
+
     /// [`Self::for_each`] over the indices below `len`.
     pub fn for_each_index(&self, len: usize, f: impl Fn(usize) + Sync + Send) {
         #[cfg(not(target_arch = "wasm32"))]

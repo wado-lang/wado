@@ -388,7 +388,7 @@ pub fn optimize(
     // The multi-value ABI, both sides. These run after every other
     // transformation, so each sees the final NIR shape.
     run_pass("nir/multi_value_return", &mut project, profiler, |p| {
-        multi_value_return::classify_multi_value_returns(p)
+        multi_value_return::classify_multi_value_returns(p, &exec)
     });
 
     run_pass("nir/multi_value_param", &mut project, profiler, |p| {

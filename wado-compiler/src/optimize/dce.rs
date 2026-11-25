@@ -2444,34 +2444,41 @@ pub(super) fn drop_self_feeding_globals(
 
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
-    let mut carriers: IndexMap<usize, IndexSet<u32>> = scope
-        .iter()
-        .map(|&i| {
-            let func = project.functions[i].borrow();
+    let scope: Vec<usize> = scope.into_iter().collect();
+    let mut carried_by: Vec<(usize, IndexSet<u32>)> = {
+        let (types, candidates): (&TypeTable, _) = (&types, &candidates);
+        exec.map(&scope, |&i| {
+            let func = functions[i].borrow();
             let body = func.body.as_ref().expect("a reader has a body");
-            (i, carriers(body, &candidates, &types, summaries.of_body(i)))
+            (i, carriers(body, candidates, types, summaries.of_body(i)))
         })
-        .collect();
+    };
     // Dropping a global drops the stores to it, which shrinks the regions the
     // remaining candidates and carriers were checked against, so both shrink
     // together until neither does.
     loop {
-        let mut observed: IndexSet<(String, String)> = IndexSet::default();
-        for (&i, carried) in &mut carriers {
-            let func = project.functions[i].borrow();
-            let body = func.body.as_ref().expect("a reader has a body");
-            let calls = summaries.of_body(i);
-            loop {
-                let regions = feeding_regions(body, &candidates, carried, &types, calls);
-                let outside = mentions_outside(body, NodeRef::Block(body.root()), &regions);
-                let before = carried.len();
-                carried.retain(|local| !outside.locals.contains(local));
-                if carried.len() == before {
-                    observed.extend(outside.reads.intersection(&candidates).cloned());
-                    break;
+        let observed_by = {
+            let (types, candidates): (&TypeTable, _) = (&types, &candidates);
+            exec.map_mut(&mut carried_by, |(i, carried)| {
+                let func = functions[*i].borrow();
+                let body = func.body.as_ref().expect("a reader has a body");
+                let calls = summaries.of_body(*i);
+                loop {
+                    let regions = feeding_regions(body, candidates, carried, types, calls);
+                    let outside = mentions_outside(body, NodeRef::Block(body.root()), &regions);
+                    let before = carried.len();
+                    carried.retain(|local| !outside.locals.contains(local));
+                    if carried.len() == before {
+                        break outside
+                            .reads
+                            .intersection(candidates)
+                            .cloned()
+                            .collect::<Vec<_>>();
+                    }
                 }
-            }
-        }
+            })
+        };
+        let observed: IndexSet<(String, String)> = observed_by.into_iter().flatten().collect();
         if observed.is_empty() {
             break;
         }
@@ -2480,6 +2487,7 @@ pub(super) fn drop_self_feeding_globals(
             return false;
         }
     }
+    let carriers: IndexMap<usize, IndexSet<u32>> = carried_by.into_iter().collect();
 
     let kept: IndexSet<(String, String)> = project
         .globals

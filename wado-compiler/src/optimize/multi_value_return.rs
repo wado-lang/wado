@@ -9,6 +9,7 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId
 use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::every_return;
 use crate::optimize::sroa_variant_return::settled_locals;
+use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
 
@@ -137,7 +138,7 @@ fn walk_call_args_for_uses(
 
 /// Classify aggregate-returning functions and set `return_abi` on those whose
 /// every return statement and call site permit the multi-value ABI.
-pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
+pub fn classify_multi_value_returns(project: &mut NirPackage, exec: &Executor) -> bool {
     let type_table = project.type_table.borrow();
     let structs = StructDecls::new(&project.structs);
 
@@ -155,11 +156,11 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
         .collect();
 
     let candidates = loop {
-        let candidates = collect_candidates(project, &type_table, &structs, &tail_ok);
+        let candidates = collect_candidates(project, &type_table, &structs, &tail_ok, exec);
         if candidates.is_empty() {
             return false;
         }
-        let invalid = refute_candidates(project, &candidates, &tail_ok);
+        let invalid = refute_candidates(project, &candidates, &tail_ok, exec);
 
         // Intersected with the assumed set, so the chain strictly decreases and
         // the loop terminates. Both halves of the tail-call rule read `tail_ok`,
@@ -208,15 +209,15 @@ fn collect_candidates(
     type_table: &TypeTable,
     structs: &StructDecls<'_>,
     tail_ok: &IndexMap<FuncId, TypeId>,
+    exec: &Executor,
 ) -> IndexMap<usize, CandidateInfo> {
-    let mut out = IndexMap::default();
-    for (idx, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
-        if let Some(info) = candidate_info(&func, type_table, structs, tail_ok) {
-            out.insert(idx, info);
-        }
-    }
-    out
+    let functions = &project.functions;
+    exec.filter_map_indices(functions.len(), |idx| {
+        candidate_info(&functions[idx].borrow(), type_table, structs, tail_ok)
+            .map(|info| (idx, info))
+    })
+    .into_iter()
+    .collect()
 }
 
 /// The candidates some call site refutes, over every function body and every
@@ -228,6 +229,7 @@ fn refute_candidates(
     project: &NirPackage,
     candidates: &IndexMap<usize, CandidateInfo>,
     tail_ok: &IndexMap<FuncId, TypeId>,
+    exec: &Executor,
 ) -> IndexSet<usize> {
     let candidate_ids: IndexMap<FuncId, usize> = candidates
         .keys()
@@ -237,25 +239,26 @@ fn refute_candidates(
         })
         .collect();
 
-    let mut invalid: IndexSet<usize> = IndexSet::default();
-    for func_rc in &project.functions {
+    let per_function = exec.map(&project.functions, |func_rc| {
         let func = func_rc.borrow();
-        let Some(body) = &func.body else {
-            continue;
-        };
-        let passes_through = func.id.and_then(|id| tail_ok.get(&id)).copied();
-        let is_candidate = func.id.is_some_and(|id| candidate_ids.contains_key(&id));
-        validate_uses_in_block(
-            body,
-            body.root(),
-            &candidate_ids,
-            candidates,
-            passes_through,
-            is_candidate,
-            &mut invalid,
-            false,
-        );
-    }
+        let mut invalid: IndexSet<usize> = IndexSet::default();
+        if let Some(body) = &func.body {
+            let passes_through = func.id.and_then(|id| tail_ok.get(&id)).copied();
+            let is_candidate = func.id.is_some_and(|id| candidate_ids.contains_key(&id));
+            validate_uses_in_block(
+                body,
+                body.root(),
+                &candidate_ids,
+                candidates,
+                passes_through,
+                is_candidate,
+                &mut invalid,
+                false,
+            );
+        }
+        invalid
+    });
+    let mut invalid: IndexSet<usize> = per_function.into_iter().flatten().collect();
     for global in &project.globals {
         let body = global.init.slot_expr().body();
         validate_uses_in_block(
