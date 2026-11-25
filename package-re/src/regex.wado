@@ -4,7 +4,7 @@ use { Node, each_child } from "./ast.wado";
 use { Hole, PatternError, Syntax, parse } from "./parse.wado";
 use { backtrack, fits } from "./backtrack.wado";
 use { Dfa, Scan, runs } from "./dfa.wado";
-use { Marker, Oracle } from "./oracle.wado";
+use { Markers, Oracle } from "./oracle.wado";
 use { Cache, Goal, Within, search } from "./pike.wado";
 use { print } from "./print.wado";
 use { Direction, LookaroundPrograms, Program, compile, compile_lookarounds } from "./program.wado";
@@ -31,8 +31,8 @@ struct Lazy {
     /// DFA does not resolve, the pattern more lookarounds than it reads, or a
     /// DFA gave up.
     off: bool,
-    /// What fills the oracle, for each lookaround.
-    markers: List<Marker>,
+    /// What fills the oracle of each text.
+    markers: Markers,
     /// What a pattern with no lookaround hands a DFA, so that a search of
     /// one builds none.
     no_oracle: Oracle,
@@ -141,15 +141,11 @@ internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
     collect_names(&tree, &mut names);
     let program = compile(&tree, groups, Direction::Forward)?;
     let lookarounds = compile_lookarounds(&tree, groups, &program)?;
-    let mut markers: List<Marker> = [];
-    for let l of &lookarounds {
-        markers.push(Marker::new(&l.holds, lookarounds.len()));
-    }
     let mut lazy = Lazy {
         forward: null,
         reverse: null,
         off: !runs(&program, lookarounds.len()),
-        markers,
+        markers: Markers::new(&lookarounds),
         no_oracle: Oracle::new(),
     };
     return Ok(Regex { program, lookarounds, names, tree, lazy: &mut lazy });
@@ -262,22 +258,34 @@ impl Regex {
     pub fn is_match<S: AsStrSlice>(&self, text: S) -> bool {
         let view = text.as_str_slice();
         if self.lookarounds.is_empty() {
-            return self.matches_with(view, &self.lazy.no_oracle);
+            if let Some(found) = self.matches_by_dfa(view, &self.lazy.no_oracle) {
+                return found;
+            }
+            return self.matches_by_pike(view, &mut Cache::new());
         }
-        return self.matches_with(view, &self.oracle_of(view));
+        let mut cache = Cache::new();
+        cache.oracle = self.oracle_of(view);
+        if let Some(found) = self.matches_by_dfa(view, &cache.oracle) {
+            return found;
+        }
+        return self.matches_by_pike(view, &mut cache);
     }
 
-    /// `is_match` with the oracle of `text`.
-    fn matches_with(&self, text: StrSlice, oracle: &Oracle) -> bool {
+    /// `is_match` by the forward DFA, with the oracle of `text`, or null
+    /// where the Pike VM answers.
+    fn matches_by_dfa(&self, text: StrSlice, oracle: &Oracle) -> Option<bool> {
         if self.scans(text) {
             let end = self.end_by_dfa(text, oracle, 0, true);
             if !self.lazy.off {
-                return end matches { Some(_) };
+                return Some(end matches { Some(_) });
             }
         }
-        let mut cache = Cache::new();
-        cache.oracle = *oracle;
-        return search(&self.program, &mut cache, text, 0, Within::Text, Goal::Any) matches { Some(_) };
+        return null;
+    }
+
+    /// `is_match` by the Pike VM, with the oracle of `text` in `cache`.
+    fn matches_by_pike(&self, text: StrSlice, cache: &mut Cache) -> bool {
+        return search(&self.program, cache, text, 0, Within::Text, Goal::Any) matches { Some(_) };
     }
 
     /// The leftmost match in `text`.
@@ -722,7 +730,7 @@ test "a lookaround whose DFA gives up is read by the oracle's own scan" {
     let r = Regex::new(#"(?<=a[ab]{13})c"#).unwrap();
     assert r.find_iter(&text).count() == expected;
     assert expected > 100;
-    assert r.lazy.markers[0].off;
+    assert r.lazy.markers.each[0].off;
     assert !r.lazy.off;
 }
 

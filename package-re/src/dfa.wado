@@ -483,7 +483,7 @@ impl Dfa {
                 }
             } else {
                 while pos < len {
-                    symbol = (unchecked oracle.bits[pos + 1] << 8) + unchecked text.byte_at(pos) as i32;
+                    symbol = (unchecked oracle.bits[pos + 1] as i32 << 8) + unchecked text.byte_at(pos) as i32;
                     next = unchecked self.transitions[(state >> 2 << shift) + symbol];
                     if next & (ACCEPT | DEAD) != 0 {
                         break;
@@ -508,9 +508,9 @@ impl Dfa {
         }
     }
 
-    /// For each byte, whether the program matches it alone. The program
-    /// reads no lookaround.
+    /// For each byte, whether the program matches it alone.
     internal fn matches_byte(&mut self) -> List<bool> {
+        assert self.looks == 0;
         let mut matched: List<bool> = [];
         let start = self.start(false, 0);
         for let b of 0..<256 {
@@ -521,7 +521,7 @@ impl Dfa {
 
     /// Which lookarounds' bodies match at `pos`, for a transition to read.
     fn bits_at(&self, oracle: &Oracle, pos: i32) -> i32 {
-        return if self.looks == 0 { 0 } else { oracle.bits[pos] };
+        return if self.looks == 0 { 0 } else { oracle.bits[pos] as i32 };
     }
 
     /// Where the match ending at `end` and starting leftmost, no further left
@@ -554,7 +554,7 @@ impl Dfa {
                 }
             } else {
                 while pos > floor {
-                    symbol = (unchecked oracle.bits[pos - 1] << 8) + unchecked text.byte_at(pos - 1) as i32;
+                    symbol = (unchecked oracle.bits[pos - 1] as i32 << 8) + unchecked text.byte_at(pos - 1) as i32;
                     let next = unchecked self.transitions[(state >> 2 << shift) + symbol];
                     if next & (ACCEPT | DEAD) != 0 {
                         break;
@@ -597,7 +597,7 @@ impl Dfa {
         } else {
             [text.len(), 0, -1, 1];
         };
-        let mut state = self.start(true, lookarounds[pos] & settled);
+        let mut state = self.start(true, lookarounds[pos] as i32 & settled);
         while pos != limit {
             if state == self.idle {
                 if self.exit >= 0 {
@@ -614,19 +614,21 @@ impl Dfa {
                     break;
                 }
             }
-            if state & ACCEPT != 0 {
+            // A thread starts at every byte, and one that started inside a
+            // character may match there without reading any.
+            if state & ACCEPT != 0 && text.is_char_boundary(pos) {
                 oracle.set(index, pos);
             }
             let byte = unchecked text.byte_at(pos - behind) as i32;
             pos += step;
-            let symbol = ((unchecked lookarounds[pos] & settled) << 8) + byte;
+            let symbol = ((unchecked lookarounds[pos] as i32 & settled) << 8) + byte;
             let next = unchecked self.transitions[(state >> 2 << shift) + symbol];
             state = if next == UNKNOWN { self.step(state >> 2, symbol) } else { next };
             if self.gave_up {
                 return;
             }
         }
-        if state & ACCEPT != 0 || self.accepts_end(state >> 2, lookarounds[pos] & settled) {
+        if state & ACCEPT != 0 || self.accepts_end(state >> 2, lookarounds[pos] as i32 & settled) {
             oracle.set(index, pos);
         }
     }

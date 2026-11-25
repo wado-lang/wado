@@ -91,7 +91,7 @@ const email = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/gu;
 const uri = /[a-z][a-z0-9+.-]*:\/\/[^\s\/?#]+[^\s?#]*(?:\?[^\s#]*)?(?:#\S*)?/gu;
 const timestamp = /(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z/gu;
 const pathological = /(?:x+x+)+y/u;
-const lookahead = /\w+(?=@)/gu;
+const lookahead = /\w+(?=@\w)/gu;
 const lookbehind = /(?<=:\/\/)[^\s\/?#]+/gu;
 const negatedLookaround = /(?<!\d)\d{2}(?!\d)/gu;
 const lookbehindCaptures = /(?<=T(\d{2}):\d{2}:\d{2}Z )[A-Z]+/gu;
