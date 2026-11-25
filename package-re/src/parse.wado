@@ -22,6 +22,11 @@ use { MAX_CODE_POINT, complement, normalize } from "./charset.wado";
 /// exhaust the stack.
 internal global MAX_NESTING: i32 = 256;
 
+/// How many lookarounds a pattern may hold, so that one read at run time
+/// cannot spend unbounded memory on a search: it keeps a bit for each
+/// lookaround at each position of the text.
+global MAX_LOOKAROUNDS: i32 = 256;
+
 /// Why a pattern was refused, and the byte of the pattern where it went wrong:
 /// 0 for one too large to compile, which no one byte makes so.
 pub struct PatternError {
@@ -221,7 +226,7 @@ impl Parser {
                 Node::Group(Group { index, name: g.name, body: self.splice_inside(&g.body, at)? });
             },
             Lookaround(l) => {
-                let index = self.next_lookaround();
+                let index = self.next_lookaround(at);
                 Node::Lookaround(Lookaround { ..l, index, body: self.splice_inside(&l.body, at)? });
             },
             Modified(m) => Node::Modified(Modified { ..m, body: self.splice_inside(&m.body, at)? }),
@@ -232,7 +237,11 @@ impl Parser {
         });
     }
 
-    fn next_lookaround(&mut self) -> i32 {
+    /// The index of the lookaround that opens at `at`.
+    fn next_lookaround(&mut self, at: i32) -> i32 {
+        if self.lookarounds == MAX_LOOKAROUNDS {
+            self.refuse(at, `a pattern may hold at most ${MAX_LOOKAROUNDS} lookarounds`);
+        }
         self.lookarounds += 1;
         return self.lookarounds - 1;
     }
@@ -566,7 +575,7 @@ impl Parser {
     fn lookaround(&mut self, start: i32, len: i32, ahead: bool, negated: bool) -> Result<Node, PatternError> {
         let at = self.pos;
         self.pos += len;
-        let index = self.next_lookaround();
+        let index = self.next_lookaround(start);
         return self.inside(at, |p| {
             let body = p.disjunction()?;
             p.close_group(start)?;

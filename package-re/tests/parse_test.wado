@@ -278,6 +278,24 @@ test "what ECMA-262 admits and Re does not support says so" {
     assert error(#"a{5000000000,6000000000}"#) == "a count may be at most 4294967295 (at byte 2)";
 }
 
+test "a pattern holds at most 256 lookarounds, a hole's included" {
+    let most = "(?=a)".repeat(256);
+    assert parse(most.as_str_slice(), Syntax::Plain) matches { Ok(_) };
+    let over = `${most}(?!b)`;
+    assert error(over) == "a pattern may hold at most 256 lookarounds (at byte 1280)";
+    assert validate_ecma262_syntax(over) matches { Ok(_) };
+
+    let [inner, _] = parse(#"(?<=c)"#.as_str_slice(), Syntax::Plain).unwrap();
+    let holed = parse(
+        most.as_str_slice(),
+        Syntax::Plain,
+        [
+            Hole { offset: 1280, node: inner },
+        ],
+    );
+    assert `${holed.unwrap_err()}` == "a pattern may hold at most 256 lookarounds (at byte 1280)";
+}
+
 fn syntax_error(pattern: String) -> String {
     return `${validate_ecma262_syntax(pattern).unwrap_err()}`;
 }
