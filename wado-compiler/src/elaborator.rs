@@ -1787,20 +1787,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.resolve_trait_decl(trait_decl);
         }
         // What the effect index reads before any impl walks a body: every
-        // method's return type, which a dispatch through a bound carries with
-        // no impl to read, and a default method's parameters.
+        // method's signature, which a dispatch through a bound instantiates
+        // with no impl to read.
         for sig in self.sem.decls.trait_sigs.values() {
             for method in sig.methods.values() {
+                let declaration = self.tysys.resolutions.defs().ast_id(method.sig.def);
                 let types = &mut self.sem.types;
+                types
+                    .fn_param_types
+                    .insert(declaration, method.sig.decl.param_types.clone());
                 types.fn_return_types.insert(
-                    self.tysys.resolutions.defs().ast_id(method.sig.def),
+                    declaration,
                     method.sig.decl.return_type.unwrap_or(TypeTable::UNIT),
                 );
-                if let Some(body) = &method.default_body {
-                    types
-                        .fn_param_types
-                        .insert(body.id, method.sig.decl.param_types.clone());
-                }
             }
         }
 

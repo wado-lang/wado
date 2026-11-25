@@ -2472,10 +2472,11 @@ fn dispatch_effects(
 ) -> (Resolved, OperationDemands) {
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
-    let has_receiver = match func_ref.template.as_ref().and_then(TemplateId::def) {
-        Some(def) => index
-            .receiver_methods
-            .contains(&index.resolutions.defs().ast_id(def)),
+    let declaration = index
+        .template_body(func_ref)
+        .or_else(|| index.bound_dispatch_decl(func_ref));
+    let has_receiver = match declaration {
+        Some(declaration) => index.receiver_methods.contains(&declaration),
         None => func_ref.method_info.is_some(),
     };
     let effects = index.method_effects(func_ref);
@@ -2994,21 +2995,27 @@ impl EffectIndex<'_> {
 
     /// Parameter type ids for a method / static dispatch target.
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
-        self.callee_entry(func_ref, self.fn_params, self.mangled_params)
+        match self.bound_dispatch_decl(func_ref) {
+            Some(declaration) => self.fn_params.get(&declaration).cloned().unwrap_or_default(),
+            None => self.callee_entry(func_ref, self.fn_params, self.mangled_params),
+        }
     }
 
-    /// The declared return type of the declaration a dispatch selected. A
-    /// dispatch through a bound selects no template: the trait's declaration
-    /// is what its call instantiates.
+    /// The declared return type of the declaration a dispatch selected.
     fn callee_return(&self, func_ref: &FunctionRef) -> Option<TypeId> {
         let declaration = self
             .template_body(func_ref)
-            .or_else(|| self.trait_method_decl(func_ref))?;
+            .or_else(|| self.bound_dispatch_decl(func_ref))?;
         self.fn_returns.get(&declaration).copied()
     }
 
-    /// The trait method declaration behind a dispatch that names a trait.
-    fn trait_method_decl(&self, func_ref: &FunctionRef) -> Option<AstId> {
+    /// The trait's own declaration of the method a dispatch through a bound
+    /// names. Such a dispatch selects no template, so that declaration is the
+    /// signature its call instantiates.
+    fn bound_dispatch_decl(&self, func_ref: &FunctionRef) -> Option<AstId> {
+        if func_ref.template.is_some() {
+            return None;
+        }
         let method_info = func_ref.method_info.as_ref()?;
         let key = (
             method_info.trait_name.as_ref()?.canonical()?,
