@@ -814,7 +814,8 @@ Returns None if the iterator is empty.
 
 Returns `&mut self`, which is an iterator that takes from this one: an
 adapter over it leaves this iterator advanced. An adapter called on the
-iterator itself takes a copy and leaves it where it was.
+iterator itself takes a copy and leaves it where it was, or moves it
+where the iterator is affine.
 
 #### `fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(self, pred: F) -> IterFilter<Self, F> with ()`
 

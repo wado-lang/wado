@@ -2786,13 +2786,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assoc_type_
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_164: i32;
-    let $sroa_out_repr_320: ref Array<u8>;
-    let $sroa_out_used_321: i32;
-    let $sroa_write_back_324: ref "core:prelude/string.wado//String";
-    $sroa_out_repr_320 = builtin::array_new<u8>(17);
-    $sroa_out_used_321 = 1;
-    builtin::array_copy<u8>($sroa_out_repr_320, 0, global:core:prelude/string.wado::$const_obj_18, 0, 1);
+    let start_166: i32;
+    let $sroa_out_repr_322: ref Array<u8>;
+    let $sroa_out_used_323: i32;
+    let $sroa_write_back_326: ref "core:prelude/string.wado//String";
+    $sroa_out_repr_322 = builtin::array_new<u8>(17);
+    $sroa_out_used_323 = 1;
+    builtin::array_copy<u8>($sroa_out_repr_322, 0, global:core:prelude/string.wado::$const_obj_18, 0, 1);
     is_negative_65 = t < 0;
     x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
@@ -2857,37 +2857,37 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assoc_type_
         break $inline_count_digits_u64_31: 20;
     };
     if is_negative_65 {
-        $sroa_out_used_321 = 2;
-        builtin::array_set_u8($sroa_out_repr_320, 1, 45);
+        $sroa_out_used_323 = 2;
+        builtin::array_set_u8($sroa_out_repr_322, 1, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_65($sroa_out_used_321 + t) > 17) {
+    if @unlikely(local.tee is_negative_65($sroa_out_used_323 + t) > 17) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_324(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_320, used: $sroa_out_used_321 }), is_negative_65);
-        $sroa_out_repr_320 = $sroa_write_back_324.repr;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(local.tee $sroa_write_back_326(struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_322, used: $sroa_out_used_323 }), is_negative_65);
+        $sroa_out_repr_322 = $sroa_write_back_326.repr;
     }
-    start_164 = $sroa_out_used_321;
-    $sroa_out_used_321 = is_negative_65;
-    t = start_164 + t;
+    start_166 = $sroa_out_used_323;
+    $sroa_out_used_323 = is_negative_65;
+    t = start_166 + t;
     b366: block {
         l367: loop {
-            break_if b366 (t - start_164) < 2;
+            break_if b366 (t - start_166) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($sroa_out_repr_320, t - 1, (48 + is_negative_65) - (tens * 10));
-            builtin::array_set_u8($sroa_out_repr_320, t - 2, 48 + tens);
+            builtin::array_set_u8($sroa_out_repr_322, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8($sroa_out_repr_322, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l367;
         };
     };
-    if t > start_164 {
-        builtin::array_set_u8($sroa_out_repr_320, start_164, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_166 {
+        builtin::array_set_u8($sroa_out_repr_322, start_166, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
     };
-    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_320, used: $sroa_out_used_321 };
+    return struct.new "core:prelude/string.wado//String" { repr: $sroa_out_repr_322, used: $sroa_out_used_323 };
 }
 
 export fn "assoc_type_of_reference_own_impl_outranks_blanket.wado/$cm_export__$test_0_an_impl_for_the_reference_outranks_the_prelude_s_blanket" as "$test_0_an_impl_for_the_reference_outranks_the_prelude_s_blanket"
