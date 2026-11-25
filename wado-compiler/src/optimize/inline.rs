@@ -1441,6 +1441,7 @@ fn hopeful_params(
     bindings: &[IndexMap<u32, Operand>],
     sites: &[Vec<ArgSite>],
     opens: &[bool],
+    exec: &Executor,
 ) -> Vec<IndexSet<u32>> {
     let n = project.functions.len();
     let funcs: Vec<_> = project.functions.iter().map(|f| f.borrow()).collect();
@@ -1457,30 +1458,35 @@ fn hopeful_params(
             })
         })
         .collect();
+    // The least sets closed under the rule, which only grows them, so each
+    // round weighs every stale caller against the last round's sets, on
+    // `exec`'s threads.
     let mut hopeful: Vec<IndexSet<u32>> = vec![IndexSet::default(); n];
-    let mut queued = vec![true; n];
-    let mut worklist: Vec<usize> = (0..n).collect();
-    while let Some(c) = worklist.pop() {
-        queued[c] = false;
-        let Some(caller) = &callers[c] else {
-            continue;
-        };
-        let own = hopeful[c].clone();
-        let memo = RefCell::default();
-        for (callee, args) in &sites[c] {
-            let callee = callee.index();
-            let mut grew = false;
-            for &(pos, op) in args {
-                if !hopeful[callee].contains(&pos) && caller.may_turn_constant(op, &own, &memo, 0) {
-                    hopeful[callee].insert(pos);
-                    grew = true;
+    let mut stale: Vec<usize> = (0..n).filter(|&c| callers[c].is_some()).collect();
+    while !stale.is_empty() {
+        let found = exec.map(&stale, |&c| {
+            let caller = callers[c].as_ref().expect("only a body is stale");
+            let memo = RefCell::default();
+            let mut found = Vec::new();
+            for (callee, args) in &sites[c] {
+                for &(pos, op) in args {
+                    if !hopeful[callee.index()].contains(&pos)
+                        && caller.may_turn_constant(op, &hopeful[c], &memo, 0)
+                    {
+                        found.push((callee.index(), pos));
+                    }
                 }
             }
-            if grew && !queued[callee] {
-                queued[callee] = true;
-                worklist.push(callee);
+            found
+        });
+        let mut grown: IndexSet<usize> = IndexSet::default();
+        for (callee, pos) in found.into_iter().flatten() {
+            if hopeful[callee].insert(pos) && callers[callee].is_some() {
+                grown.insert(callee);
             }
         }
+        stale = grown.into_iter().collect();
+        stale.sort_unstable();
     }
     hopeful
 }
@@ -2859,7 +2865,7 @@ fn inline_round(
         .map(|((f, &never), &eligible)| f.borrow().body.is_some() && (!never || eligible))
         .collect();
     let bindings = gate.exec().map(scans, single_bindings);
-    let hopeful_params = hopeful_params(project, scans, &bindings, &sites, &opens);
+    let hopeful_params = hopeful_params(project, scans, &bindings, &sites, &opens, gate.exec());
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
 
@@ -3100,7 +3106,7 @@ fn inline_round(
 
     let inline_type_table = project.type_table.borrow();
     let type_table: &TypeTable = &inline_type_table;
-    let carried = carried_calls(&inline_candidates);
+    let carried = carried_calls(&inline_candidates, scans);
     let functions = &project.functions;
     let held = &holds.held;
     // Only a hot price reads it, and a profile with no hot region sets none.
@@ -3424,14 +3430,11 @@ fn add_site(
 /// a candidate.
 fn carried_calls(
     candidates: &IndexMap<FuncId, NirFunction>,
+    scans: &[BodyScan],
 ) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
+    // A candidate is its function's body as the round's scan read it.
     let call_sites = |id: FuncId| {
-        let body = candidates[&id]
-            .body
-            .as_ref()
-            .expect("a candidate has a body");
-        let mut callees = Vec::new();
-        for_each_call_site(body, NodeRef::Block(body.root()), |g| callees.push(g));
+        let callees: Vec<FuncId> = scans[id.index()].calls.iter().map(|(g, _)| *g).collect();
         assert!(!callees.contains(&id), "a candidate is never recursive");
         callees
     };
