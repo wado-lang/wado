@@ -12,7 +12,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, TypeHead, display_generic_name};
+use crate::name::{FqTypeName, Receiver, RefKind, TypeHead, display_generic_name};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, StructDef, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
@@ -44,8 +44,8 @@ use crate::elaborator::sig;
 use crate::elaborator::sig::{InstantiatedSig, TraitSig};
 use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
-    BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitEnv, get_type_name_static,
-    trait_args_answer, written_arg_nodes,
+    BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitEnv, trait_args_answer,
+    written_arg_nodes,
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
@@ -3620,19 +3620,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         concrete_type_id: TypeId,
         trait_: DefId,
     ) {
-        // A reference no impl is written for answers through its referent,
-        // whose registration a projection off the reference reads.
-        let referent = self.tysys.type_table.borrow().ref_pointee(concrete_type_id);
-        if let Some(referent) = referent {
-            return self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
-        }
+        // A reference is keyed by its referent's head, under its own kind.
+        let (ref_kind, referent) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.ref_kind(concrete_type_id),
+                tt.ref_pointee(concrete_type_id),
+            )
+        };
         // Get the base type name and concrete type args for impl block lookup.
         // For newtypes, follow the chain to the underlying type to find the trait impl,
         // but registration (below) still uses concrete_type_id so the monomorphizer can
         // resolve e.g. `MyBytes::Iter` when `MyBytes` is a newtype over `List<u8>`.
         let (type_name, concrete_type_args) = {
             let tt = self.tysys.type_table.borrow();
-            let effective_id = tt.representation_head(concrete_type_id);
+            let effective_id = tt.representation_head(referent.unwrap_or(concrete_type_id));
             let list_name = tt.compiler_struct_fq_name(CompilerItem::List);
             if let Some((_, type_args)) = tt.instance_parts(effective_id) {
                 (
@@ -3650,9 +3652,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         (tt.fq_type_name(effective_id), vec![])
                     }
                     ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                        drop(tt);
+                        let referent = referent.expect("only a referent is itself a reference");
+                        return self
+                            .register_assoc_types_for_concrete_type_and_trait(referent, trait_);
+                    }
                     _ => return,
                 }
             }
+        };
+        let receiver = match ref_kind {
+            Some(kind) => Receiver::RefTo(kind, type_name),
+            None => Receiver::Type(type_name),
         };
 
         // Collect matching impl block info (avoids borrow conflicts during resolution)
@@ -3675,7 +3687,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_infos: Vec<ImplInfo> = {
             let mut result = vec![];
             {
-                let entries = trait_env.entries_by_receiver_vec(&Receiver::Type(type_name));
+                let entries = trait_env.entries_by_receiver_vec(&receiver);
                 for entry in entries {
                     let header = &trait_env.impl_headers[&entry];
                     if header.trait_def() == Some(trait_) && !header.associated_types.is_empty() {
@@ -3710,6 +3722,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             result
         };
+        // An impl written for a reference answers it alone, ahead of any
+        // blanket and of its referent.
+        let answered_by_reference_impl = referent.is_some() && !impl_infos.is_empty();
 
         for info in impl_infos {
             let mut scope = self.enter_inherited_type_param_scope();
@@ -3752,11 +3767,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_ref = scope.impl_trait_ref(&info.trait_type, &info.target, info.trait_key);
             scope.register_assoc_types(concrete_type_id, &trait_ref, &info.assoc_types);
         }
+        if answered_by_reference_impl {
+            return;
+        }
 
-        // Also check blanket impls: `impl<I: Trait> OtherTrait for I`.
+        // Also check blanket impls: `impl<I: Trait> OtherTrait for I` for a
+        // value, and `impl<I: Trait> OtherTrait for &mut I` for a reference.
         // For example, `impl<I: Iterator> IntoIterator for I` applies to StrUtf8ByteIter.
         struct BlanketImplInfo {
             blanket_param: ParamRef,
+            /// What the blanket's parameter stands for: the type registered
+            /// for, or its referent under a blanket over a reference.
+            subject: TypeId,
             blanket_param_bounds: Vec<ast::TraitBound>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this blanket implements, as its own header names it.
@@ -3769,22 +3791,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if header.associated_types.is_empty() {
                     continue;
                 }
-                let impl_type_name = get_type_name_static(&header.ty);
+                let subject = match (blanket.receiver, ref_kind, referent) {
+                    (BlanketReceiver::Value, None, None) => concrete_type_id,
+                    (BlanketReceiver::Ref { is_mut }, Some(kind), Some(referent))
+                        if is_mut == (kind == RefKind::Mut) =>
+                    {
+                        referent
+                    }
+                    _ => continue,
+                };
                 let Some(blanket_param) = header
                     .type_params
                     .iter()
-                    .find(|tp| tp.name == impl_type_name && !tp.bounds.is_empty())
+                    .find(|tp| tp.name == blanket.param && !tp.bounds.is_empty())
                 else {
                     continue;
                 };
-                // Check if the concrete type satisfies the blanket param's bounds
                 let bounds_ok = blanket_param.bounds.iter().all(|bound| {
                     self.tysys.bound_written(bound).is_some_and(|trait_| {
-                        self.tysys.type_implements_trait(
-                            &self.annotate_ctx,
-                            concrete_type_id,
-                            &trait_,
-                        )
+                        self.tysys
+                            .type_implements_trait(&self.annotate_ctx, subject, &trait_)
                     })
                 });
                 if bounds_ok {
@@ -3793,6 +3819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     result.push(BlanketImplInfo {
                         blanket_param: ParamRef::of(blanket.def, &blanket_param.name),
+                        subject,
                         blanket_param_bounds: blanket_param.bounds.clone(),
                         assoc_types: header.associated_types.clone(),
                         trait_key,
@@ -3801,12 +3828,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             result
         };
+        // A reference no impl answers does so through its referent, whose
+        // registration a projection off the reference reads.
+        if let Some(referent) = referent
+            && blanket_infos.is_empty()
+        {
+            return self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
+        }
 
         for info in blanket_infos {
             let mut scope = self.enter_inherited_type_param_scope();
 
-            // A blanket's target is its parameter, so the type registered for
-            // is what both `Self` and that parameter stand for.
             let implementing = SelfBinding {
                 type_id: concrete_type_id,
                 declaring_trait: Some(info.trait_key),
@@ -3814,7 +3846,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             scope.set_self_binding(implementing);
             scope.bind_param(
                 &info.blanket_param.name,
-                BinderInScope::standing_for(0, concrete_type_id, &info.blanket_param),
+                BinderInScope::standing_for(0, info.subject, &info.blanket_param),
                 ScopedBound::pin_all(&info.blanket_param_bounds, Some(implementing)),
             );
 

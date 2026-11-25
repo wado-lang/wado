@@ -843,8 +843,7 @@ through its referent:
   out of the reference;
 - a trait with a method that has no receiver and names `Self`, which has
   nothing to read through;
-- `Ord`, since `==` on a reference compares the values it points to and an
-  order over references would not.
+- `Ord`.
 
 Such a trait is satisfied by the value, or by a reference it is implemented
 for, as [`Iterator` is for `&mut I`](./spec-standard-traits.md#iterator---core-iteration-trait).

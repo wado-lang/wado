@@ -22,3 +22,30 @@ test "a reference to an iterator over a list" {
     let it = xs.into_iter();
     assert first_two(&it) == [1, 2];
 }
+
+// An impl written for the reference answers ahead of the referent's, for the
+// projection as for the call. Regression: the loop called `&List`'s
+// `into_iter` and typed what it returned as `List`'s iterator.
+fn count<C: IntoIterator>(c: C) -> i32 with _ {
+    let mut n = 0;
+    for let _x of c {
+        n += 1;
+    }
+    return n;
+}
+
+fn sum_refs<C: IntoIterator<Item = &i32>>(c: C) -> i32 with _ {
+    let mut total = 0;
+    for let x of c {
+        total += *x;
+    }
+    return total;
+}
+
+test "a reference to a list" {
+    let mut xs: List<i32> = [1, 2, 3];
+    assert count(&xs) == 3;
+    assert count(&mut xs) == 3;
+    assert sum_refs(&xs) == 6;
+    assert count(xs) == 3;
+}
