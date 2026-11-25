@@ -1709,7 +1709,7 @@ fn collect_call_constants(
     let mut constants = CallConsts::default();
     for &pos in reachable {
         for (callee, here) in &per_function[pos] {
-            join_call(&mut constants, *callee, here.clone());
+            join_call(&mut constants, *callee, here);
         }
     }
     for global in &project.globals {
@@ -1719,14 +1719,14 @@ fn collect_call_constants(
 }
 
 /// Join one call's arguments into what the earlier calls of `callee` agree on.
-fn join_call(into: &mut CallConsts, callee: FuncId, here: Vec<Option<FieldConst>>) {
+fn join_call(into: &mut CallConsts, callee: FuncId, here: &[Option<FieldConst>]) {
     let Some(previous) = into.get_mut(&callee) else {
-        into.insert(callee, here);
+        into.insert(callee, here.to_vec());
         return;
     };
     assert_eq!(previous.len(), here.len());
     for (old, new) in previous.iter_mut().zip(here) {
-        if *old != new {
+        if old != new {
             *old = None;
         }
     }
@@ -1746,7 +1746,7 @@ fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
                     .flatten()
             })
             .collect();
-        join_call(constants, *func_id, here);
+        join_call(constants, *func_id, &here);
     });
 }
 
