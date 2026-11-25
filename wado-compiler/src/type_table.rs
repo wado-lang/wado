@@ -3655,10 +3655,7 @@ impl TypeTable {
         if let Some((_, element)) = self.repeated_element(pack) {
             return Some(element);
         }
-        match self.pack_var_run(pack) {
-            Some((_, element)) => element,
-            None => None,
-        }
+        self.pack_var_run(pack).and_then(|(_, element)| element)
     }
 
     /// Whether `ty` (recursively) mentions parameter `param`, projections

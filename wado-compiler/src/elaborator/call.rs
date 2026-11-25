@@ -2557,6 +2557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     self.record_default_walk(
                         call.id,
+                        call.span,
                         &args,
                         &param_types,
                         &param_defaults,
@@ -3188,13 +3189,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Put the walk of the defaults `site` left out on record, for a route that
-    /// has already settled its arguments.
+    /// has already settled its arguments. Each default is checked against the
+    /// parameter type the site settled, and a mismatch reported at `span`.
     ///
     /// Every route resolving a call reaches this or
     /// [`Self::apply_param_defaults`]; `reify_apply_param_defaults` asserts it.
+    #[expect(clippy::too_many_arguments)]
     pub(super) fn record_default_walk(
         &mut self,
         site: AstId,
+        span: Span,
         args: &[TypeId],
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
@@ -3219,7 +3223,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_bindings,
             Some(site),
             ctx,
-            |_, _, _, _| {},
+            // No other route checks a default this walk fills against the
+            // type the site settled its parameter to.
+            |s, i, _, resolved| s.typecheck_arg(resolved, param_types[i], ArgSite::Defaulted(span)),
         );
     }
 
@@ -6292,6 +6298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             self.record_default_walk(
                 call.id,
+                call.span,
                 &args,
                 &param_types,
                 &param_defaults,

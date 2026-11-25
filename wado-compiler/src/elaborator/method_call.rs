@@ -3383,6 +3383,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             static_method_module.unwrap_or_else(|| func_ref.module_source.clone());
         self.record_default_walk(
             static_call.id,
+            static_call.span,
             &args,
             &param_types,
             &static_method_defaults,
@@ -3586,6 +3587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         self.record_default_walk(
             call_id,
+            span,
             args,
             &param_types,
             &static_method_defaults,
@@ -4622,6 +4624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match ctx {
             Some(ctx) => self.record_default_walk(
                 call_id,
+                span,
                 args,
                 &callee_params.param_types,
                 &callee_params.param_defaults,

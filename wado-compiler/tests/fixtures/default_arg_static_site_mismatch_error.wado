@@ -1,0 +1,25 @@
+// A default a static or instance method call fills is checked against the type
+// the site settled its parameter to, as a free function's is. Unchecked, the
+// `NoFields {}` once reached codegen as an `i32`.
+struct NoFields {}
+struct S {}
+
+impl S {
+    fn info<T = NoFields>(_m: String, _fields: T = NoFields {}) -> i32 {
+        return 1;
+    }
+
+    fn inst<T = NoFields>(&self, _fields: T = NoFields {}) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let _ = S::info::<i32>("a");
+    let s = S {};
+    let _ = s.inst::<i32>();
+    assert S::info("a") + s.inst() == 2;
+}
+
+__DATA__
+{"compile_error": ":18:13: analysis error: type mismatch: expected 'i32', found 'NoFields'; 20:13: analysis error: type mismatch: expected 'i32', found 'NoFields'", "compile_error_count": 1}

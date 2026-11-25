@@ -4451,6 +4451,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             bind_nearer(&mut type_bindings, own);
             self.record_default_walk(
                 method_call.id,
+                method_call.span,
                 &args,
                 &param_types,
                 &defaults,

@@ -242,6 +242,10 @@ Each step keeps every fixture passing and deletes what it replaces.
   `same({ a: none() }.a, x)` the rest of the statement would settle `a`, and
   the field is reported all the same.
 
+- One bad argument can be reported twice. In `let e: Bx<String> = Bx::new(5)`
+  the argument is reported against the parameter, and the call's result
+  against the annotation.
+
 - A mismatch at a later statement does not name the literal whose default
   caused it. In `let b = put(none(), 5)` followed by `take64(b)`, the report
   reads `expected 'Bx<i64>', found 'Bx<i32>'` at `take64(b)`. By then `b`'s
