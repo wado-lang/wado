@@ -3036,15 +3036,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param: param.name.clone(),
                     span,
                 });
-            } else if !param.is_affine {
-                if let Some(affine) = self.affine_subject(param.is_pack, type_arg, &affine_params) {
-                    let type_name = self.tysys.type_id_to_string(affine);
-                    let _ = self.emit(TypeError::AffineArgument {
-                        type_name,
-                        param_name: param.name.clone(),
-                        span,
-                    });
-                }
+            } else if !param.is_affine
+                && let Some(affine) = self.affine_subject(param.is_pack, type_arg, &affine_params)
+            {
+                let type_name = self.tysys.type_id_to_string(affine);
+                let _ = self.emit(TypeError::AffineArgument {
+                    type_name,
+                    param_name: param.name.clone(),
+                    span,
+                });
             }
             if !rigid {
                 // A hole carries its own slot's bounds to finalize, but for
