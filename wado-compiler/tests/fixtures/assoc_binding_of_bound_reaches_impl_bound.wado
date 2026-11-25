@@ -1,13 +1,22 @@
-#![TODO]
 // A bound's associated-type binding is read where an impl's own bound is
 // checked: `IterMap<I, F>: Iterator` asks `F: fn mut(I::Item) -> U`, and
-// `I::Item` is `i32` by `I: Iterator<Item = i32>`.
+// `I::Item` is `i32` by `I: Iterator<Item = i32>`. Regression: the solver
+// knew the bound and not what it binds, so the adapter had no `Iterator`.
 
-fn doubled<I: Iterator<Item = i32>>(it: I) -> Option<i32> with _ {
-    let mut mapped = it.map(|x| x * 2);
-    return mapped.next();
+fn bumped<I: Iterator<Item = i32>>(it: I) -> List<i32> with _ {
+    return it.take(2).map(|x| x + 1).collect();
 }
 
-test "a closure adapter in a generic body" {
-    assert doubled(1..<4) == Option::Some(2);
+fn bumped_through<I: Iterator<Item = i32>>(it: &mut I) -> List<i32> with _ {
+    return it.map(|x| x + 1).take(2).collect();
+}
+
+test "a closure adapter over a bounded parameter" {
+    assert bumped(1..<9) == [2, 3];
+}
+
+test "and over a reference to one" {
+    let mut r = 1..<9;
+    assert bumped_through(&mut r) == [2, 3];
+    assert r.next() == Option::Some(3);
 }

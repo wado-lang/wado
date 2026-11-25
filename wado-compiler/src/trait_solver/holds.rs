@@ -916,6 +916,21 @@ impl Query<'_> {
                 args,
             } => {
                 let base = self.normalized(base);
+                if let SolverType::Param(index) = base
+                    && let Some(stated) = self
+                        .env
+                        .param_assoc
+                        .get(index as usize)
+                        .into_iter()
+                        .flatten()
+                        .find(|eq| eq.trait_ == *trait_ && eq.assoc == *assoc)
+                    // One written as itself (`Item = I::Item`) states nothing,
+                    // and reading it would not end.
+                    && stated.ty != *ty
+                {
+                    let stated = stated.ty.clone();
+                    return self.normalized(&stated);
+                }
                 let args: Vec<SolverType> = args.iter().map(|a| self.normalized(a)).collect();
                 let member = match self.holds(&base, *trait_, &[]) {
                     Verdict::Holds(held) => held.assoc_at(*assoc, &args),
@@ -1881,6 +1896,7 @@ mod tests {
                 .into_iter()
                 .map(|b| b.into_iter().map(ParamBound::bare).collect())
                 .collect(),
+            param_assoc: Vec::new(),
         }
     }
 
@@ -2098,6 +2114,7 @@ mod tests {
         p.traits.entry(EQ).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
         let env = Env {
             param_bounds: vec![vec![ParamBound::bare(EQ)]],
+            param_assoc: Vec::new(),
         };
         assert_eq!(
             holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[]),
@@ -2139,6 +2156,7 @@ mod tests {
                 trait_: EQ,
                 args: vec![decl(I32)],
             }]],
+            param_assoc: Vec::new(),
         };
         assert_eq!(
             holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[decl(I32)]),
@@ -2264,6 +2282,7 @@ mod tests {
                 trait_: ALPHA,
                 args: vec![decl(I32)],
             }]],
+            param_assoc: Vec::new(),
         };
         let ask = |trait_: TraitDeclId, args: &[SolverType]| {
             holds_with_args(&p, &bound, &SolverType::Param(0), trait_, args)
@@ -2317,6 +2336,7 @@ mod tests {
                 trait_: ALPHA,
                 args: vec![decl(I32), decl(POINT)],
             }]],
+            param_assoc: Vec::new(),
         };
         let ask =
             |args: &[SolverType]| holds_with_args(&p, &bound, &SolverType::Param(0), SUB, args);
