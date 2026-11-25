@@ -34,8 +34,15 @@ test "print_document normalizes single emphasis to underscores" {
     assert roundtrip("a *word* b") == "a _word_ b\n";
 }
 
-test "print_document keeps the asterisk when it abuts an alphanumeric" {
-    assert roundtrip("*word*s") == "*word*s\n";
+test "print_document escapes a single * between word characters, which GFM would pair" {
+    assert roundtrip("a*b+c*d") == "a\\*b+c\\*d\n";
+    assert roundtrip("(24*60*60*1e9).") == "(24\\*60\\*60\\*1e9).\n";
+    assert roundtrip("*word*s") == "*word\\*s\n";
+    assert roundtrip("a\\*b") == "a\\*b\n";
+}
+
+test "print_document keeps ** between word characters" {
+    assert roundtrip("**K**eyed **I**DL") == "**K**eyed **I**DL\n";
 }
 
 test "print_document keeps strong emphasis as asterisks" {
