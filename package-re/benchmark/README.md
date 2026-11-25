@@ -41,8 +41,9 @@ which is the bar a literal pattern is held to.
 | `lookbehind-captures` | `(?<=T(\d{2}):\d{2}:\d{2}Z )[A-Z]+`                            | summing group 1 of every match    |
 | `pathological`        | `(?:x+x+)+y`                                                   | one failing search of the 24 `x`s |
 
-A pattern holding a lookaround is matched by the Pike VM alone, with no DFA
-ahead of it, which is what the four lookaround rows measure.
+The four lookaround rows each take a different path: a lookahead and a
+lookbehind whose tables a DFA fills, two lookarounds that each ask about one
+byte, and a lookbehind whose group is read after the match.
 
 ## Results
 
@@ -51,17 +52,17 @@ Linux x86_64. Best of three runs, picked by `benchmark/pick.ts`.
 
 | Case                  |     Node.js |        Wado | Node.js ms/iter | Wado ms/iter | Wado vs Node.js |
 | --------------------- | ----------: | ----------: | --------------: | -----------: | --------------- |
-| `literal`             |   3.62 GB/s | 480.02 MB/s |           0.018 |        0.136 | 7.5x slower     |
-| `literal-find`        |   7.41 GB/s | 895.44 MB/s |           0.009 |        0.073 | 8.3x slower     |
-| `literal-ignore-case` |   1.08 GB/s | 187.13 MB/s |           0.061 |        0.350 | 5.8x slower     |
-| `email`               |  74.23 MB/s | 168.49 MB/s |           0.885 |        0.389 | 2.3x faster     |
-| `uri`                 |  91.68 MB/s | 141.30 MB/s |           0.716 |        0.464 | 1.5x faster     |
-| `timestamp-captures`  | 679.34 MB/s | 204.39 MB/s |           0.097 |        0.321 | 3.3x slower     |
-| `lookahead`           |  57.14 MB/s | 631.23 KB/s |           1.149 |      104.043 | 91x slower      |
-| `lookbehind`          | 242.81 MB/s |   1.09 MB/s |           0.270 |       60.022 | 222x slower     |
-| `negated-lookaround`  | 837.14 MB/s |   2.11 MB/s |           0.078 |       31.153 | 399x slower     |
-| `lookbehind-captures` | 730.07 MB/s |   3.81 MB/s |           0.090 |       17.232 | 191x slower     |
-| `pathological`        |  141.39 B/s | 143.87 MB/s |         169.738 |      < 0.001 | 10⁶x faster     |
+| `literal`             |   3.99 GB/s | 436.88 MB/s |           0.016 |        0.150 | 9.1x slower     |
+| `literal-find`        |   7.32 GB/s | 849.03 MB/s |           0.009 |        0.077 | 8.6x slower     |
+| `literal-ignore-case` |   1.12 GB/s | 184.45 MB/s |           0.059 |        0.356 | 6.1x slower     |
+| `email`               |  78.05 MB/s | 166.68 MB/s |           0.842 |        0.394 | 2.1x faster     |
+| `uri`                 |  98.83 MB/s | 150.38 MB/s |           0.665 |        0.436 | 1.5x faster     |
+| `timestamp-captures`  | 754.60 MB/s | 214.93 MB/s |           0.087 |        0.305 | 3.5x slower     |
+| `lookahead`           |  57.62 MB/s | 125.83 MB/s |           1.140 |        0.521 | 2.2x faster     |
+| `lookbehind`          | 280.39 MB/s | 182.40 MB/s |           0.234 |        0.360 | 1.5x slower     |
+| `negated-lookaround`  | 713.27 MB/s | 130.47 MB/s |           0.092 |        0.503 | 5.5x slower     |
+| `lookbehind-captures` | 851.63 MB/s | 131.13 MB/s |           0.077 |        0.500 | 6.5x slower     |
+| `pathological`        |  141.39 B/s | 154.79 MB/s |         169.742 |      < 0.001 | 10⁶x faster     |
 
 ## Fuel
 

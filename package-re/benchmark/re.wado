@@ -110,6 +110,10 @@ test "fuel" {
         count_matches(&c.uri, &INPUT);
         sum_hours(&c.timestamp, &INPUT, 4);
         c.pathological.is_match(&text);
+        count_matches(&c.lookahead, &INPUT);
+        count_matches(&c.lookbehind, &INPUT);
+        count_matches(&c.negated_lookaround, &INPUT);
+        sum_hours(&c.lookbehind_captures, &INPUT, 1);
     });
     measure("re/literal", || count_matches(&c.literal, &INPUT));
     measure("re/literal-find", || count_finds(&INPUT, &NEEDLE));
