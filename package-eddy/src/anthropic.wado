@@ -201,19 +201,24 @@ pub fn ask_json<T: Deserialize>(
     return json_object::<T>(&text);
 }
 
-/// The one JSON object in a model's reply, from its first `{` to its last `}`.
+/// The JSON object a model's reply ends with. It runs to the reply's last `}`
+/// from the first `{` that reads as one, since the prose ahead of it may hold
+/// braces of its own (`a{13}`).
 pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
-    if let [Some(start), Some(end)] = [
-        text.find("{"),
-        text.rfind("}"),
-    ]
-        && start < end {
-        return match from_string::<T, String>(text.substr_bytes(start, end + 1)) {
-            Ok(v) => Ok(v),
-            Err(e) => Err(`unparsed: ${e:?}: ${*text}`),
-        };
+    let end = text.rfind("}").unwrap_or(-1);
+    let mut error = "";
+    for let [start, c] of text.char_indices() {
+        if c != '{' || start > end {
+            continue;
+        }
+        match from_string::<T, String>(text.substr_bytes(start, end + 1)) {
+            Ok(v) => return Ok(v),
+            Err(e) => if error.is_empty() {
+                error = `${e:?}: `;
+            },
+        }
     }
-    return Err(`unparsed: ${*text}`);
+    return Err(`unparsed: ${error}${*text}`);
 }
 
 /// `model`'s next turn in `messages`. With `use_tools` false the model must

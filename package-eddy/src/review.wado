@@ -136,6 +136,14 @@ pub fn review(
     return reviewed;
 }
 
+test "a brace in the prose ahead of the answer is not taken for it" {
+    let answer = json_object::<Answer>(
+        &"The body `(?<=a[ab]{13})c` gives up.\n\n{\"findings\": [{\"file\": \"a.wado\", \"summary\": \"s\", \"detail\": \"{d}\"}]}\n",
+    ).unwrap();
+    assert answer.findings.len() == 1 && answer.findings[0].detail == "{d}";
+    assert json_object::<Answer>(&"`a{2}` and {\"findings\": [}").unwrap_err().contains("a{2}");
+}
+
 test "a reviewer is told of the tools its workspace offers, and no others" {
     let reading = instructions(&Workspace { root: "src" });
     assert reading.contains("Read, Grep and Glob");
