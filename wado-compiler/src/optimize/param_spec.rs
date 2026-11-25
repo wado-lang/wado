@@ -896,36 +896,25 @@ fn close_over_forwards(facts: &mut IndexMap<(FuncId, u32), ParamFacts>) {
         queued[index] = false;
         let mut grew = false;
         for &target in &targets[index] {
-            let added = match target {
+            let current = &facts[index];
+            let (reads, writes, opaque): (Vec<u32>, Vec<u32>, bool) = match target {
                 Some(target) => {
-                    let (current, from) = (&facts[index], &facts[target]);
-                    let reads = !from.reads.is_subset(&current.reads);
-                    let writes = !from.writes.is_subset(&current.writes);
-                    (reads || writes || from.opaque && !current.opaque).then(|| ParamFacts {
-                        reads: if reads {
-                            from.reads.clone()
-                        } else {
-                            IndexSet::default()
-                        },
-                        writes: if writes {
-                            from.writes.clone()
-                        } else {
-                            IndexSet::default()
-                        },
-                        opaque: from.opaque,
-                        forwards: Vec::new(),
-                    })
+                    let from = &facts[target];
+                    (
+                        from.reads.difference(&current.reads).copied().collect(),
+                        from.writes.difference(&current.writes).copied().collect(),
+                        from.opaque && !current.opaque,
+                    )
                 }
-                None => (!facts[index].opaque).then(|| ParamFacts {
-                    opaque: true,
-                    ..ParamFacts::default()
-                }),
+                None => (Vec::new(), Vec::new(), !current.opaque),
             };
-            let Some(added) = added else { continue };
+            if reads.is_empty() && writes.is_empty() && !opaque {
+                continue;
+            }
             let current = &mut facts[index];
-            current.reads.extend(added.reads);
-            current.writes.extend(added.writes);
-            current.opaque |= added.opaque;
+            current.reads.extend(reads);
+            current.writes.extend(writes);
+            current.opaque |= opaque;
             grew = true;
         }
         if grew {
@@ -2122,14 +2111,7 @@ fn build_clone(
         read_through.insert(alias, bound[&base].clone());
     }
     let (locals, own_params) = (&mut clone.locals, &clone.params);
-    substitute_fields(
-        body,
-        locals,
-        own_params,
-        &mut buffers,
-        types,
-        &read_through,
-    );
+    substitute_fields(body, locals, own_params, &mut buffers, types, &read_through);
     substitute_locals(body, locals, own_params, &mut buffers, types, &whole);
     settler.settle(body, locals, own_params, &mut buffers, types);
 

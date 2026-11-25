@@ -18,12 +18,12 @@ use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind,
     PatNode, StmtId, StmtKind, StmtNode, SubtreeCopy, Tracked,
 };
+use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::AliasSets;
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder, constant_kind};
-use crate::nir_package::NirPackage;
 use crate::niri::CtfeBuiltinMap;
-use crate::parallel::Executor;
 use crate::optimize::arena_query::operand_local;
+use crate::parallel::Executor;
 use crate::tir::{ObjectTypes, ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -421,19 +421,23 @@ pub fn visit_every_body(
 ) -> bool {
     let type_table = project.type_table.borrow();
     let type_table = &*type_table;
-    exec.map_init(&project.functions, EngineBuffers::default, |buffers, func| {
-        let mut func = func.borrow_mut();
-        let FuncParts {
-            body,
-            locals,
-            params,
-            ..
-        } = func.parts();
-        let Some(body) = body else {
-            return false;
-        };
-        visit(&mut Engine::new(body, buffers, locals, params, type_table))
-    })
+    exec.map_init(
+        &project.functions,
+        EngineBuffers::default,
+        |buffers, func| {
+            let mut func = func.borrow_mut();
+            let FuncParts {
+                body,
+                locals,
+                params,
+                ..
+            } = func.parts();
+            let Some(body) = body else {
+                return false;
+            };
+            visit(&mut Engine::new(body, buffers, locals, params, type_table))
+        },
+    )
     .into_iter()
     .any(|changed| changed)
 }

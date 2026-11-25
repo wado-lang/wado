@@ -20,12 +20,12 @@ pub mod retention;
 pub mod synthesize;
 
 use crate::compiler_host::{SpanEmitter, in_span};
-use crate::parallel::Executor;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::parallel::Executor;
 use crate::tir;
 use crate::tir::{
     BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,

@@ -508,23 +508,26 @@ struct ExtraLocals {
     locals: RefCell<Vec<TirLocal>>,
 }
 
-/// What the ownership walk decides about `func`'s copies, with the root each
-/// reference local is taken over; `None` where the function holds nothing a
-/// copy is made of. The move/share/alias analyses only ever mark
-/// copyable-value locals, and most functions (scalar/reference-only) have
-/// none, so skipping them saves pure per-function allocation. What a
-/// reference leads to counts, which `*r` hands to a call, and so does what a
-/// cell local holds, and a borrowed temporary, whose copy the walk decides.
+/// What the ownership walk decides about a function's copies, with the root
+/// each reference local is taken over.
+type CopyAnalysis = (
+    value_copy::last_use::Ownership,
+    value_copy::last_use::RefTargets,
+);
+
+/// `func`'s [`CopyAnalysis`]; `None` where the function holds nothing a copy
+/// is made of. The move/share/alias analyses only ever mark copyable-value
+/// locals, and most functions (scalar/reference-only) have none, so skipping
+/// them saves pure per-function allocation. What a reference leads to counts,
+/// which `*r` hands to a call, and so does what a cell local holds, and a
+/// borrowed temporary, whose copy the walk decides.
 fn copy_analysis(
     func: &TirFunction,
     type_table: &TypeTable,
     plan: &value_copy::ValueCopyPlan,
     points_to: &PointsTo,
     struct_fields_map: &StructFields,
-) -> Option<(
-    value_copy::last_use::Ownership,
-    value_copy::last_use::RefTargets,
-)> {
+) -> Option<CopyAnalysis> {
     let needs_copy_analysis = func
         .params
         .iter()
@@ -574,14 +577,7 @@ fn copy_analysis(
 }
 
 impl<'a, 'p> FunctionTranslator<'a, 'p> {
-    fn new(
-        base: &'a Translator<'p>,
-        func: &TirFunction,
-        analysis: Option<(
-            value_copy::last_use::Ownership,
-            value_copy::last_use::RefTargets,
-        )>,
-    ) -> Self {
+    fn new(base: &'a Translator<'p>, func: &TirFunction, analysis: Option<CopyAnalysis>) -> Self {
         let key = (func.module_source.clone(), func.name.clone());
         let specialized = base
             .closure
@@ -776,14 +772,7 @@ impl Translator<'_> {
             .collect()
     }
 
-    fn convert_function(
-        &self,
-        func: &TirFunction,
-        analysis: Option<(
-            value_copy::last_use::Ownership,
-            value_copy::last_use::RefTargets,
-        )>,
-    ) -> NirFunction {
+    fn convert_function(&self, func: &TirFunction, analysis: Option<CopyAnalysis>) -> NirFunction {
         let fctx = FunctionTranslator::new(self, func, analysis);
         // Walk the body first so any locals allocated by per-arm
         // rewrites (currently only the wide-int `Match` scrutinee

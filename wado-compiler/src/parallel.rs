@@ -267,6 +267,12 @@ mod tests {
         executor.for_each(&items, |i| count(skips(i)));
         executor.for_each_index(64, |i| count(indexed(i)));
         executor.for_each_mut(&mut items, |i| count(skips(i)));
+        assert!(
+            executor
+                .map_mut(&mut items, |i| skips(i))
+                .into_iter()
+                .all(|s| s)
+        );
         assert_eq!(unskipped.into_inner(), 0);
     }
 }

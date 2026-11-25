@@ -32,13 +32,13 @@ use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::parallel::Executor;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
     GlobalRole, ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
-use crate::parallel::Executor;
 use crate::type_table::TypeTable;
 
 /// A location a call's caller can name, as its callee's summary speaks of it.
@@ -910,9 +910,7 @@ impl<'p, 'a> Body<'p, 'a> {
         let value = if matches!(expr.kind, TirExprKind::Local { .. }) {
             self.eval(expr)
         } else {
-            self.names
-                .of(expr.type_id)
-                .then(|| self.held_by(place))
+            self.names.of(expr.type_id).then(|| self.held_by(place))
         };
         (value, Some(place))
     }
@@ -1377,9 +1375,7 @@ impl<'p, 'a> Body<'p, 'a> {
     }
 
     fn eval(&mut self, expr: &TirExpr) -> Option<u32> {
-        let value = self
-            .eval_kind(expr)
-            .filter(|_| self.names.of(expr.type_id));
+        let value = self.eval_kind(expr).filter(|_| self.names.of(expr.type_id));
         self.values.insert(key(expr), value);
         value
     }

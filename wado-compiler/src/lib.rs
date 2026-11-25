@@ -573,8 +573,9 @@ pub struct CompilerOptions {
     /// it recorded no run of. A module is looked up under its name
     /// ([`coverage::ModulePlan::name`]).
     pub profile: Option<Arc<pgo::Profile>>,
-    /// How many threads lowering and the optimizer visit functions on. The output does not
-    /// depend on it. A host compiling several files at once passes 1.
+    /// How many threads lowering and the optimizer visit functions on. The
+    /// output does not depend on it. A host compiling several files at once
+    /// passes 1.
     pub parallelism: usize,
 }
 
