@@ -7,10 +7,11 @@
 //! It runs after the bounds-check eliminators, which read the two halves of the
 //! signed pair separately and would lose the lower half under a cast.
 
-use crate::nir::{FuncParts, NirBinaryOp};
+use crate::nir::NirBinaryOp;
 use crate::nir_arena::{ExprId, ExprKind, Operand};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule, visit_every_body};
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
@@ -20,29 +21,15 @@ use super::condition_implication::{
     Binds, build_copy_bindings, is_seq_length, operand_same, parse_const_i64,
 };
 
-pub fn fuse_unsigned_range_checks(project: &mut NirPackage) -> bool {
-    let type_table = project.type_table.borrow();
-    let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        let FuncParts {
-            body,
-            locals,
-            params,
-            ..
-        } = func.parts();
-        if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
-            // A snapshot, as condition implication's: a fused check writes no
-            // local, so no bind it holds goes stale.
-            let rule = UnsignedRangeCheckRule {
-                binds: build_copy_bindings(&engine),
-            };
-            changed |= engine.run(&[&rule]);
-        }
-    }
-    changed
+pub fn fuse_unsigned_range_checks(project: &mut NirPackage, exec: &Executor) -> bool {
+    visit_every_body(project, exec, |engine| {
+        // A snapshot, as condition implication's: a fused check writes no
+        // local, so no bind it holds goes stale.
+        let rule = UnsignedRangeCheckRule {
+            binds: build_copy_bindings(engine),
+        };
+        engine.run(&[&rule])
+    })
 }
 
 struct UnsignedRangeCheckRule {

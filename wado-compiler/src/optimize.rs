@@ -374,15 +374,15 @@ pub fn optimize(
     });
     // After every bounds-check eliminator, which read the signed halves.
     run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
-        unsigned_range_check::fuse_unsigned_range_checks(p)
+        unsigned_range_check::fuse_unsigned_range_checks(p, &exec)
     });
 
     // Post-optimization rewrites: select lowering for branchless Wasm
     run_pass("nir/select_lowering", &mut project, profiler, |p| {
-        select_lowering::select_lowering(p)
+        select_lowering::select_lowering(p, &exec)
     });
     run_pass("nir/split_and_condition", &mut project, profiler, |p| {
-        split_and_condition::split_and_conditions(p)
+        split_and_condition::split_and_conditions(p, &exec)
     });
 
     // The multi-value ABI, both sides. These run after every other
@@ -1158,6 +1158,6 @@ fn run_optimization_passes(
     // flat `let t = array_clone(&global.field)` shape only exists here, after the
     // pre-inline value-copy elider that cannot reach it has long run.
     run_pass("nir/clone_forward", project, profiler, |p| {
-        clone_forward::forward_redundant_clones(p, descriptor_cache)
+        clone_forward::forward_redundant_clones(p, descriptor_cache, exec)
     });
 }

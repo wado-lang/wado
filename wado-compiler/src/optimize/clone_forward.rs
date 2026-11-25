@@ -6,11 +6,12 @@
 
 use super::alias::{FirstParamTypes, first_param_types, method_mutates_receiver};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FuncParts, FunctionRef, NirUnaryOp};
+use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule, visit_every_body};
 use crate::nir_package::NirPackage;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
+use crate::parallel::Executor;
 use crate::type_table::TypeTable;
 
 /// Whether the call's stamped `func_id` is a full-length array clone
@@ -472,32 +473,16 @@ fn remove_dead_bindings(engine: &mut Engine, block: BlockId, dead: &IndexSet<Stm
 /// Runs once after the fixed-point loop (a whole-package sweep, no gate): the
 /// residual clones it targets only take their flat shape after the post-loop
 /// `const_object_globalization`, so there is no earlier iteration to be dirty in.
-pub fn forward_redundant_clones(project: &mut NirPackage, cache: &mut DescriptorCache) -> bool {
+pub fn forward_redundant_clones(
+    project: &mut NirPackage,
+    cache: &mut DescriptorCache,
+    exec: &Executor,
+) -> bool {
     let descriptors = cache.descriptors(project);
     let fpt = first_param_types(project);
-    let type_table = project.type_table.clone();
-    let type_table = type_table.borrow();
-    let len = project.functions.len();
     let rule = CloneForwardRule {
         descriptors,
         fpt: &fpt,
     };
-    let mut buffers = EngineBuffers::default();
-    let mut any = false;
-    for fi in 0..len {
-        let mut func = project.functions[fi].borrow_mut();
-        if func.body.is_none() {
-            continue;
-        }
-        let FuncParts {
-            body,
-            locals,
-            params,
-            ..
-        } = func.parts();
-        let body = body.expect("checked above");
-        let mut engine = Engine::new(body, &mut buffers, locals, params, &type_table);
-        any |= engine.run(&[&rule]);
-    }
-    any
+    visit_every_body(project, exec, |engine| engine.run(&[&rule]))
 }

@@ -13,14 +13,16 @@ use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::copied_local_what;
-use crate::nir::{FuncId, NirLocal, NirParam};
+use crate::nir::{FuncId, FuncParts, NirLocal, NirParam};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind,
     PatNode, StmtId, StmtKind, StmtNode, SubtreeCopy, Tracked,
 };
 use crate::nir_value_graph::builder::AliasSets;
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind, builder, constant_kind};
+use crate::nir_package::NirPackage;
 use crate::niri::CtfeBuiltinMap;
+use crate::parallel::Executor;
 use crate::optimize::arena_query::operand_local;
 use crate::tir::{ObjectTypes, ResolvedType, TypeId};
 use crate::token::Span;
@@ -408,6 +410,32 @@ impl SubtreeCopy for Engine<'_> {
             None => (local, name),
         }
     }
+}
+
+/// `visit` on an engine over each function body of `project`, on `exec`'s
+/// threads. Returns whether any visit changed its body.
+pub fn visit_every_body(
+    project: &NirPackage,
+    exec: &Executor,
+    visit: impl Fn(&mut Engine) -> bool + Sync + Send,
+) -> bool {
+    let type_table = project.type_table.borrow();
+    let type_table = &*type_table;
+    exec.map_init(&project.functions, EngineBuffers::default, |buffers, func| {
+        let mut func = func.borrow_mut();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
+        let Some(body) = body else {
+            return false;
+        };
+        visit(&mut Engine::new(body, buffers, locals, params, type_table))
+    })
+    .into_iter()
+    .any(|changed| changed)
 }
 
 impl<'a> Engine<'a> {
