@@ -518,3 +518,42 @@ test "for-of moves an affine iterator into the loop" {
     assert seen == [2, 1, 0];
     assert ITERATOR_TEST_DROPS == 1;
 }
+
+fn take_two<I: Iterator<Item = i32>>(it: I) -> List<i32> with _ {
+    let mut taken: List<i32> = [];
+    for let x of it {
+        taken.push(x);
+        if taken.len() == 2 {
+            break;
+        }
+    }
+    return taken;
+}
+
+test "a &mut to an iterator advances the one it points to" {
+    let mut r = 0..<6;
+    assert take_two(&mut r) == [0, 1];
+    assert r.next() == Option::Some(2);
+
+    let mut seen: List<i32> = [];
+    for let x of &mut r {
+        seen.push(x);
+        break;
+    }
+    assert seen == [3];
+    assert r.next() == Option::Some(4);
+}
+
+test "by_ref lends the iterator to an adapter" {
+    let mut r = 0..<6;
+    let head = r.by_ref().take(2).collect();
+    assert head == [0, 1];
+    assert r.next() == Option::Some(2);
+}
+
+test "an adapter on the iterator itself takes a copy" {
+    let mut r = 0..<6;
+    let head = r.take(2).collect();
+    assert head == [0, 1];
+    assert r.next() == Option::Some(0);
+}

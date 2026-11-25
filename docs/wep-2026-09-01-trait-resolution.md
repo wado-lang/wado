@@ -736,6 +736,19 @@ impl answers, and where it has none the call reports no method
 (`trait_ref_blanket_dispatch.wado`). The prelude's `Inspect for &T` works
 because the compiler answers that bound itself.
 
+It adopts one for a receiver holding one reference only. On `&mut &mut I` the
+blanket's parameter would stand for `&mut I`, which the lookup does not hand
+over: it hands over the pointee under every reference. The referent's method
+is asked instead, and the call is refused as a by-value `self` read out past a
+`&mut` (`self_by_value_through_double_mut_reference.wado`); `(*rr).take(2)`
+names the reference that iterates.
+
+What such a blanket binds an associated type to is kept by the type table
+under the trait and the reference kind
+(`register_ref_blanket_assoc_type_def`), since no declaration keys it. A
+projection off a reference reads it before the referent settles, so
+`<&mut I as Iterator>::Item` is `I::Item` inside a generic body.
+
 A value blanket does not answer a reference either (`blanket_trait_impl_applies`
 mints no instance for one), so `&mut I` is an `Iterator` and not an
 `IntoIterator`. A for-of loop walks such an operand as it stands, and a method

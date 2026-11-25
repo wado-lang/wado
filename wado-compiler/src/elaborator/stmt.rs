@@ -2934,14 +2934,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // of a type the instance settles may be such a reference, and is
         // walked the same way, which copies or moves any other as `into_iter`
         // and `start` would.
-        let walks_operand = {
-            let tt = self.tysys.type_table.borrow();
-            tt.is_reference(into_iter_receiver_type)
-                || tt.representation_awaits_substitution(into_iter_receiver_type)
-        } && iterator.as_ref().is_some_and(|trait_| {
+        // An `IntoIterator` written for the reference itself says what a walk
+        // of it is, and answers first as a reference's own impl always does.
+        let reference_states_its_walk = crate::name::Receiver::ref_to(
+            &self
+                .tysys
+                .type_table
+                .borrow()
+                .fq_type_name(into_iter_receiver_type),
+        )
+        .zip(
             self.tysys
-                .type_implements_trait(&self.annotate_ctx, into_iter_receiver_type, trait_)
+                .compiler_trait(CompilerItem::IntoIterator)
+                .and_then(|fq| fq.canonical()),
+        )
+        .is_some_and(|(receiver, trait_)| {
+            self.tysys
+                .trait_env
+                .has_any_methodful_impl_by_receiver(&receiver, trait_)
         });
+        let walks_operand = !reference_states_its_walk
+            && {
+                let tt = self.tysys.type_table.borrow();
+                tt.is_reference(into_iter_receiver_type)
+                    || tt.representation_awaits_substitution(into_iter_receiver_type)
+            }
+            && iterator.as_ref().is_some_and(|trait_| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    into_iter_receiver_type,
+                    trait_,
+                )
+            });
         let walks_value = !walks_operand
             && self.tysys.is_affine(
                 into_iter_receiver_type,

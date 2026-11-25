@@ -12,7 +12,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, RefKind, TypeHead, display_generic_name};
+use crate::name::{FqTypeName, Receiver, TypeHead, display_generic_name};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, StructDef, TypeArgMap, TypeId, TypeParamId};
 use crate::token::Span;
@@ -3723,9 +3723,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             result
         };
-        // An impl written for a reference answers it alone, ahead of any
-        // blanket and of its referent.
-        let answered_by_reference_impl = referent.is_some() && !impl_infos.is_empty();
+        // An impl written for a reference answers it alone. Without one the
+        // type table's blanket over a reference answers, or else the
+        // referent, whose registration either reads.
+        if let Some(referent) = referent
+            && impl_infos.is_empty()
+        {
+            return self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
+        }
 
         for info in impl_infos {
             let mut scope = self.enter_inherited_type_param_scope();
@@ -3768,18 +3773,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let trait_ref = scope.impl_trait_ref(&info.trait_type, &info.target, info.trait_key);
             scope.register_assoc_types(concrete_type_id, &trait_ref, &info.assoc_types);
         }
-        if answered_by_reference_impl {
+        if referent.is_some() {
             return;
         }
 
-        // Also check blanket impls: `impl<I: Trait> OtherTrait for I` for a
-        // value, and `impl<I: Trait> OtherTrait for &mut I` for a reference.
+        // Also check blanket impls: `impl<I: Trait> OtherTrait for I`.
         // For example, `impl<I: Iterator> IntoIterator for I` applies to StrUtf8ByteIter.
         struct BlanketImplInfo {
             blanket_param: ParamRef,
-            /// What the blanket's parameter stands for: the type registered
-            /// for, or its referent under a blanket over a reference.
-            subject: TypeId,
             blanket_param_bounds: Vec<ast::TraitBound>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this blanket implements, as its own header names it.
@@ -3792,15 +3793,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if header.associated_types.is_empty() {
                     continue;
                 }
-                let subject = match (blanket.receiver, reference) {
-                    (BlanketReceiver::Value, None) => concrete_type_id,
-                    (BlanketReceiver::Ref { is_mut }, Some((kind, referent)))
-                        if is_mut == (kind == RefKind::Mut) =>
-                    {
-                        referent
-                    }
-                    _ => continue,
-                };
+                if blanket.receiver != BlanketReceiver::Value {
+                    continue;
+                }
                 let Some(blanket_param) = header
                     .type_params
                     .iter()
@@ -3810,8 +3805,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let bounds_ok = blanket_param.bounds.iter().all(|bound| {
                     self.tysys.bound_written(bound).is_some_and(|trait_| {
-                        self.tysys
-                            .type_implements_trait(&self.annotate_ctx, subject, &trait_)
+                        self.tysys.type_implements_trait(
+                            &self.annotate_ctx,
+                            concrete_type_id,
+                            &trait_,
+                        )
                     })
                 });
                 if bounds_ok {
@@ -3820,7 +3818,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     result.push(BlanketImplInfo {
                         blanket_param: ParamRef::of(blanket.def, &blanket_param.name),
-                        subject,
                         blanket_param_bounds: blanket_param.bounds.clone(),
                         assoc_types: header.associated_types.clone(),
                         trait_key,
@@ -3829,17 +3826,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             result
         };
-        // A reference no impl answers does so through its referent, whose
-        // registration a projection off the reference reads.
-        if let Some(referent) = referent
-            && blanket_infos.is_empty()
-        {
-            return self.register_assoc_types_for_concrete_type_and_trait(referent, trait_);
-        }
 
         for info in blanket_infos {
             let mut scope = self.enter_inherited_type_param_scope();
 
+            // A blanket's target is its parameter, so the type registered for
+            // is what both `Self` and that parameter stand for.
             let implementing = SelfBinding {
                 type_id: concrete_type_id,
                 declaring_trait: Some(info.trait_key),
@@ -3847,7 +3839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             scope.set_self_binding(implementing);
             scope.bind_param(
                 &info.blanket_param.name,
-                BinderInScope::standing_for(0, info.subject, &info.blanket_param),
+                BinderInScope::standing_for(0, concrete_type_id, &info.blanket_param),
                 ScopedBound::pin_all(&info.blanket_param_bounds, Some(implementing)),
             );
 

@@ -124,6 +124,10 @@ pub struct TypeTable {
     /// generic impls of one trait at different instantiations are two answers.
     /// An instance's `type_args` substitute it.
     generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, AssocAnswers>,
+    /// What a blanket over a reference (`impl<T: Bound> Tr for &mut T`) binds
+    /// each associated type to, written over its parameter. No declaration
+    /// keys it: the referent is whatever the reference points to.
+    ref_blanket_assoc_type_defs: IndexMap<RefBlanketAssocTypeKey, RefBlanketAssocType>,
     /// What each trait declares of its associated types, by declaring trait and
     /// name. See [`AssocTypeSig`].
     assoc_type_sigs: IndexMap<DefId, IndexMap<String, Arc<AssocTypeSig>>>,
@@ -331,6 +335,7 @@ impl TypeTable {
             compiler_items: CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
+            ref_blanket_assoc_type_defs: IndexMap::default(),
             assoc_type_sigs: IndexMap::default(),
             trait_frames: IndexMap::default(),
             projection_bounds_cache: IndexMap::default(),
@@ -3958,6 +3963,11 @@ impl TypeTable {
         assoc_name: &str,
         args: &[TypeId],
     ) -> Option<TypeId> {
+        // A blanket over a reference answers whatever the reference points
+        // to, so it does not wait for the referent to settle.
+        if let Some(family) = self.ref_blanket_projection(base, owning_trait, assoc_name) {
+            return Some(self.instantiate_family(*owning_trait, assoc_name, family, args));
+        }
         if !self.projection_base_is_rigid(base) {
             return None;
         }
@@ -4296,6 +4306,45 @@ impl TypeTable {
             })
             .or_default()
             .insert(trait_ref.args, None, type_param_id, impl_def);
+    }
+
+    /// Register what a blanket over a reference to `param` binds `assoc_name`
+    /// to: for `impl<I: Iterator> Iterator for &mut I`, `"Item"` → `I::Item`.
+    pub fn register_ref_blanket_assoc_type_def(
+        &mut self,
+        trait_decl: DefId,
+        target_ref: RefKind,
+        assoc_name: String,
+        param: TypeId,
+        binding: TypeId,
+    ) {
+        self.ref_blanket_assoc_type_defs.insert(
+            RefBlanketAssocTypeKey {
+                trait_decl,
+                target_ref,
+                assoc_name,
+            },
+            RefBlanketAssocType { param, binding },
+        );
+    }
+
+    /// What a blanket over a reference binds `assoc_name` to for `base`, its
+    /// parameter standing for what `base` points to.
+    fn ref_blanket_projection(
+        &mut self,
+        base: TypeId,
+        owning_trait: &DefId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let key = RefBlanketAssocTypeKey {
+            trait_decl: *owning_trait,
+            target_ref: self.ref_kind(base)?,
+            assoc_name: assoc_name.to_string(),
+        };
+        let def = *self.ref_blanket_assoc_type_defs.get(&key)?;
+        let referent = self.ref_pointee(base)?;
+        let substitution = self.bind_params(&[def.param], &[referent]);
+        Some(self.substitute_type_params(def.binding, &substitution))
     }
 
     /// The generic definition of `assoc_name` on `base_decl`, together with
@@ -7945,6 +7994,20 @@ impl TypeSet {
 /// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
 /// than an instantiated type. `List<T>`, `&List<T>` and `&mut List<T>` each
 /// bind `IntoIter` their own way, so the target's reference kind is part of it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RefBlanketAssocTypeKey {
+    trait_decl: DefId,
+    target_ref: RefKind,
+    assoc_name: String,
+}
+
+/// A blanket's binding, and the parameter its target refers to.
+#[derive(Debug, Clone, Copy)]
+struct RefBlanketAssocType {
+    param: TypeId,
+    binding: TypeId,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct GenericAssocTypeKey {
     target_decl: AstId,

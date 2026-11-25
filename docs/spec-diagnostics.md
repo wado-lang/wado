@@ -110,13 +110,14 @@ or-pattern bind one set of names rather than shadowing each other.
 
 The `self_by_value` lint warns about a method that takes `self` by value on a
 type every value of which is copyable, whatever its kind: a struct, a variant,
-an enum, a flags type, a newtype, a primitive, or one instance of a generic
-type (`impl Pair<i32>`). A
+an enum, a flags type, a newtype, a primitive, or a generic type under
+parameters that admit no affine argument (`impl Pair<i32>`, `impl<T> Pair<T>`).
+A
 [by-value `self`](./spec-memory.md#method-receiver-self-by-value) is copied
 when its type is copyable, so each call of such a method copies its receiver,
 and `&self` reads the same value without the copy.
 
-A receiver holding a type parameter is exempt, since an instance with an affine
+An `impl` with an `affine` parameter is exempt, since an instance with an affine
 argument moves through the same declaration, and so is a trait's method, whose receiver the
 trait decides. `#[allow(self_by_value)]` on the method or on its `impl` waives
 the lint where the copy is meant.

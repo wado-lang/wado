@@ -1,0 +1,33 @@
+// A tuple for-of walks its body once per element, and each walk's receiver is
+// checked. Regression: only the first element's type was read, so `finish`
+// moved `job` out of its `&mut` and it dropped twice.
+
+struct Plain { n: i32 }
+
+impl Plain {
+    #[allow(self_by_value)]
+    fn finish(self) -> i32 { return self.n; }
+}
+
+affine struct Job { n: i32 }
+
+impl Drop for Job {
+    fn drop(self) {}
+}
+
+impl Job {
+    fn finish(self) -> i32 { return self.n; }
+}
+
+export fn run() {
+    let plain = Plain { n: 1 };
+    let mut job = Job { n: 2 };
+    let mut total = 0;
+    for let v of [&plain, &mut job] {
+        total += v.finish();
+    }
+    assert total == 3;
+}
+
+__DATA__
+{"compile_error": ":27:18: analysis error: cannot move affine type `Job` out of a reference"}

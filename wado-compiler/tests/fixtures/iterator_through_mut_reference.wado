@@ -84,3 +84,98 @@ test "by_ref is `&mut it`" {
     assert two == [0, 1];
     assert r.next() matches { Some(2) };
 }
+
+test "an adapter taking a closure reads the reference's item type" {
+    let mut r = 0..<9;
+    let doubled = (&mut r).map(|x| x * 2).take(1).collect();
+    assert doubled == [0];
+    let even = r.by_ref().filter(|x| x % 2 == 0).take(1).collect();
+    assert even == [2];
+    assert r.next() == Option::Some(3);
+}
+
+fn skip_one<I: Iterator<Item = i32>>(it: &mut I) -> List<i32> with _ {
+    return it.take(2).skip(1).collect();
+}
+
+test "adapters chain on a reference to a parameter" {
+    let mut r = 0..<9;
+    assert skip_one(&mut r) == [1];
+    assert r.next() == Option::Some(2);
+}
+
+fn first_two_of(rr: &mut &mut RangeExclusive<i32>) -> List<i32> {
+    return (*rr).take(2).collect();
+}
+
+test "a reference to a reference is dereferenced to the one that iterates" {
+    let mut r = 0..<6;
+    let mut m = &mut r;
+    assert first_two_of(&mut m) == [0, 1];
+    assert r.next() == Option::Some(2);
+}
+
+struct Counter { n: i32 }
+
+impl Iterator for Counter {
+    type Item = i32;
+    fn next(&mut self) -> Option<i32> {
+        self.n += 1;
+        return Option::Some(self.n);
+    }
+}
+
+impl Counter {
+    fn take(&mut self, k: i32) -> i32 { return k; }
+}
+
+struct Printer {}
+
+trait Show<T> with () {
+    fn show(&self, t: T) -> i32;
+}
+
+impl Show<i32> for Printer {
+    fn show(&self, t: i32) -> i32 { return t; }
+}
+
+impl Show<String> for Printer {
+    fn show(&self, t: String) -> i32 { return t.len(); }
+}
+
+fn shown(c: &mut Counter) -> i32 {
+    return Printer {}.show(c.take(2));
+}
+
+test "an inherent method answers ahead of the reference's adapter" {
+    let mut c = Counter { n: 0 };
+    assert shown(&mut c) == 2;
+}
+
+struct Evens { inner: &mut Counter }
+
+impl Iterator for Evens {
+    type Item = i32;
+    fn next(&mut self) -> Option<i32> {
+        loop {
+            let Some(x) = self.inner.next() else { return null; };
+            if x % 2 == 0 { return Option::Some(x); }
+        }
+    }
+}
+
+impl IntoIterator for &mut Counter {
+    type Item = i32;
+    type Iter = Evens;
+    fn into_iter(&self) -> Evens { return Evens { inner: &mut **self }; }
+}
+
+test "an IntoIterator written for the reference says what the loop walks" {
+    let mut c = Counter { n: 0 };
+    let mut seen: List<i32> = [];
+    for let x of &mut c {
+        seen.push(x);
+        if seen.len() == 2 { break; }
+    }
+    assert seen == [2, 4];
+}

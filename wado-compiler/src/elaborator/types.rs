@@ -4516,8 +4516,14 @@ impl TraitMethodMatch {
     /// by-value `self` alone, which takes the reference where the referent's
     /// method would take the referent out of it; through `&self` both read
     /// the same value, and the referent's is the direct one.
-    pub(super) fn answers_reference_receiver(&self) -> bool {
-        !self.is_blanket_ref_impl || self.method_info.self_kind == ast::SelfKind::Value
+    ///
+    /// The blanket answers a receiver holding one reference. Past that its
+    /// parameter would stand for a reference, which the lookup does not hand
+    /// over, so the referent's method is asked and the move check refuses it
+    /// where a `&mut` is among the layers.
+    pub(super) fn answers_reference_receiver(&self, receiver_ref_depth: usize) -> bool {
+        !self.is_blanket_ref_impl
+            || (self.method_info.self_kind == ast::SelfKind::Value && receiver_ref_depth == 1)
     }
 
     /// The owner a call on `receiver_base` dispatches with: a newtype inherits

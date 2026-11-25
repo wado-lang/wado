@@ -6,10 +6,9 @@ use crate::Lints;
 use crate::ast::{Item, SelfKind, attrs_allow, inner_attrs_allow, lint};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::semantics::Semantics;
-use crate::tir::TypeId;
 
 /// Source-level `SelfByValue` warnings: every inherent method taking `self` by
-/// value on a type no instance makes affine. A receiver holding a type
+/// value on a type no instance makes affine. An `impl` with an `affine`
 /// parameter and a trait method are left alone, since an affine instance moves
 /// through the same declaration.
 pub fn self_by_value_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
@@ -38,7 +37,8 @@ pub fn self_by_value_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnosti
                     let Some(receiver) = sem.local_type(param.id) else {
                         continue;
                     };
-                    if !always_copied(sem, receiver) {
+                    let admits_affine = block.type_params.iter().any(|p| p.is_affine);
+                    if admits_affine || sem.is_affine(receiver, &[]) {
                         continue;
                     }
                     out.push(Diagnostic {
@@ -59,10 +59,4 @@ pub fn self_by_value_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnosti
         }
     }
     out
-}
-
-/// Whether every value of `receiver` is copyable: it holds no affine value,
-/// and no type parameter an affine argument could fill.
-fn always_copied(sem: &Semantics, receiver: TypeId) -> bool {
-    !sem.types.contains_type_param(receiver) && !sem.is_affine(receiver, &[])
 }

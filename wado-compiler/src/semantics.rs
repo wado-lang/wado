@@ -861,12 +861,11 @@ impl Semantics {
             .any(|dispatch| dispatch.consumes_self)
     }
 
-    /// Whether the method call at `id` reads its by-value `self` out of what
-    /// its receiver, a reference, points to.
-    #[must_use]
-    pub fn method_call_reads_self_out_of_reference(&self, id: AstId) -> bool {
+    /// Each reference the method call at `id` reads its by-value `self` out
+    /// of, one per walk that dispatched it so.
+    pub fn references_self_is_read_out_of(&self, id: AstId) -> impl Iterator<Item = TypeId> + '_ {
         self.method_dispatches_at(id)
-            .any(|dispatch| dispatch.self_out_of_reference)
+            .filter_map(|dispatch| dispatch.self_out_of_reference)
     }
 
     /// Iterate every recorded method-dispatch decision keyed by the

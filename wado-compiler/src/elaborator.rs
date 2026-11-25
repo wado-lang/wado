@@ -967,7 +967,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         return_type: TypeId,
         method_type_args: Vec<TypeId>,
         consumes_self: bool,
-        self_out_of_reference: bool,
+        self_out_of_reference: Option<TypeId>,
     ) {
         let Some(ast_id) = ast_id else { return };
         let key = ast_id;
@@ -2042,7 +2042,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let tt = self.tysys.type_table.borrow();
                     (tt.decl_of_type(target_type_id), tt.ref_kind(target_type_id))
                 };
-                if let Some(base_decl) = base_decl {
+                let ref_blanket_param = {
+                    let tt = self.tysys.type_table.borrow();
+                    tt.ref_pointee(target_type_id)
+                        .filter(|&referent| tt.type_param_id(referent).is_some())
+                };
+                if let (Some(param), Some(kind)) = (ref_blanket_param, target_ref) {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .register_ref_blanket_assoc_type_def(
+                            trait_ref.decl,
+                            kind,
+                            name,
+                            param,
+                            type_id,
+                        );
+                } else if let Some(base_decl) = base_decl {
                     let impl_def = self.tysys.def_at(impl_block.id);
                     self.tysys
                         .type_table

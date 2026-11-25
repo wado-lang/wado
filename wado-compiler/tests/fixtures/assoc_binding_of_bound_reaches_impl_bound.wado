@@ -1,0 +1,13 @@
+#![TODO]
+// A bound's associated-type binding is read where an impl's own bound is
+// checked: `IterMap<I, F>: Iterator` asks `F: fn mut(I::Item) -> U`, and
+// `I::Item` is `i32` by `I: Iterator<Item = i32>`.
+
+fn doubled<I: Iterator<Item = i32>>(it: I) -> Option<i32> with _ {
+    let mut mapped = it.map(|x| x * 2);
+    return mapped.next();
+}
+
+test "a closure adapter in a generic body" {
+    assert doubled(1..<4) == Option::Some(2);
+}

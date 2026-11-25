@@ -2724,10 +2724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_param_entries: Vec<(String, u32)> = if let Type::Generic(generic) = &header.ty {
             target_params(generic)
         } else if let Type::Reference(boxed) | Type::MutReference(boxed) = &header.ty {
-            if let Type::Named(inner) = boxed.as_ref() {
-                // impl<T: Bound> Trait for &T / &mut T: T is at position 0
-                vec![(inner.name.clone(), 0u32)]
-            } else if let Type::Generic(generic) = boxed.as_ref() {
+            if let Type::Generic(generic) = boxed.as_ref() {
                 // impl<T> Trait for &Container<T>: extract type params from generic args
                 target_params(generic)
             } else {
@@ -2759,11 +2756,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             Vec::new()
         };
-        // Extract blanket type param info
-        let blanket_name = if let Type::Named(named) = &header.ty {
-            Some(named.name.clone())
-        } else {
-            None
+        // The parameter a blanket's target is, or refers to: `T` in
+        // `impl<T: Bound> Trait for T` and in `for &T`, which the receiver
+        // handed over fills whole (a reference lookup hands over the referent).
+        let blanket_name = match &header.ty {
+            Type::Named(named) => Some(named.name.clone()),
+            Type::Reference(inner) | Type::MutReference(inner) => match inner.as_ref() {
+                Type::Named(named)
+                    if self
+                        .tysys
+                        .is_impl_target_param(&header.type_params, &named.name) =>
+                {
+                    Some(named.name.clone())
+                }
+                _ => None,
+            },
+            _ => None,
         };
         let impl_module_source = impl_home;
         // A concrete generic instantiation trait impl (`impl Tag for
@@ -4597,7 +4605,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type,
             type_args,
             false,
-            false,
+            None,
         );
         self.record_desugar(method_call.id, DesugarKind::IndexMutMethodCall);
 

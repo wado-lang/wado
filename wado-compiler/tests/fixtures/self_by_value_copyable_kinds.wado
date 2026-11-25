@@ -28,6 +28,11 @@ impl Pair<i32> {
     fn sum(self) -> i32 { return self.a + self.b; }
 }
 
+// A plain `T` admits no affine argument, so every `Pair<T>` is copied too.
+impl<T> Pair<T> {
+    fn first(self) -> T { return self.a; }
+}
+
 export fn run() {
     let loc = Point { x: 1, y: 2 } as Location;
     assert loc.first() == 1;
@@ -35,7 +40,8 @@ export fn run() {
     let m: Meters = 1.5;
     assert m.doubled() == 3.0;
     assert Pair { a: 1, b: 2 }.sum() == 3;
+    assert Pair { a: "x", b: "y" }.first() == "x";
 }
 
 __DATA__
-{"warnings_contains":["`self` by value copies `Location` at every call", "`self` by value copies `Perms` at every call", "`self` by value copies `Meters` at every call", "`self` by value copies `Pair<i32>` at every call"]}
+{"warnings_contains":["`self` by value copies `Location` at every call", "`self` by value copies `Perms` at every call", "`self` by value copies `Meters` at every call", "`self` by value copies `Pair<i32>` at every call", "`self` by value copies `Pair<T>` at every call"]}

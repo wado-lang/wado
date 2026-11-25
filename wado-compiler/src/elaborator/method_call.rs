@@ -630,7 +630,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             reported |= matches!(result, TraitLookup::Reported);
             if let Some(trait_match) = result.found()
-                && trait_match.answers_reference_receiver()
+                && trait_match
+                    .answers_reference_receiver(self.tysys.type_table.borrow().ref_depth(subject))
             {
                 let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
                 matched_impl_decl = trait_match.impl_struct_fq.head().def();
@@ -1082,6 +1083,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_mut_receiver(receiver, receiver_ast, method_name, span, ctx);
         }
 
+        let written_receiver = receiver;
         // An impl the reference lookup adopted is for `&X`, whose `Self` holds
         // one reference.
         receiver = adjusted_receiver_type(
@@ -1242,7 +1244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type,
                 method_type_args,
                 consumes_self,
-                consumes_self && is_ref && !is_ref_impl,
+                (consumes_self && is_ref && !is_ref_impl).then_some(written_receiver),
             );
             if waits_for_selection {
                 self.wait_for_selection(PendingCall {
@@ -1583,7 +1585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The link of `receiver`'s newtype chain whose inherent impl declares the
     /// method `owner` says answered: 0 for the receiver's own. A reference a
     /// newtype wraps is no link of its own.
-    fn inherent_link(&self, receiver: TypeId, owner: MethodOwner) -> u32 {
+    pub(super) fn inherent_link(&self, receiver: TypeId, owner: MethodOwner) -> u32 {
         let declaring = match owner {
             MethodOwner::Receiver => return 0,
             MethodOwner::InheritedFrom(ty) | MethodOwner::Referent(ty) => Some(ty),
@@ -2091,7 +2093,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a trait impl the call site can name answers `method_name` on
     /// `receiver` at a link nearer than `inherent_link`.
-    fn trait_answers_before(
+    pub(super) fn trait_answers_before(
         &self,
         receiver: TypeId,
         through_ref: Option<bool>,

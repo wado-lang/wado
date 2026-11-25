@@ -69,10 +69,10 @@ pub(crate) struct MethodDispatch {
     /// transfers ownership of the receiver. The resource move check reads this
     /// to flag a use of the receiver binding after a consuming call.
     pub(crate) consumes_self: bool,
-    /// True when that `self` is read out of what the receiver, a reference,
-    /// points to: the method is the referent's, not one of an impl written for
-    /// the reference.
-    pub(crate) self_out_of_reference: bool,
+    /// The receiver, a reference, where that `self` is read out of what it
+    /// points to: the method is the referent's, not one of an impl written
+    /// for the reference.
+    pub(crate) self_out_of_reference: Option<TypeId>,
     /// The pending selection this call waits on, whose dispatch the module-end
     /// sweep writes over `method_def` and `function_ref`.
     pub(crate) selection: Option<usize>,

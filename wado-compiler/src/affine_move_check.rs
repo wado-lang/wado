@@ -1594,28 +1594,28 @@ impl MoveWalker<'_, '_> {
     /// past a `&mut` at any depth. A copy out of `&`s alone stands: nothing
     /// can tell it from the referent.
     fn refuse_self_out_of_reference(&mut self, call: &ast::MethodCallExpr) {
-        if !self.sem().method_call_reads_self_out_of_reference(call.id) {
-            return;
-        }
-        let receiver = self
-            .sem()
-            .expression_type(call.receiver.id())
-            .expect("a dispatched call's receiver has a type");
         let types = &self.sem().types;
-        let referent = types.peel_refs(receiver);
-        let refusal = if self.is_affine(referent) {
-            MoveError::MoveOutOfReference {
-                type_name: types.name(referent),
-            }
-        } else if types.reaches_through_mut_ref(receiver) {
-            MoveError::SelfCopiedOutOfMutReference {
-                method: call.method.clone(),
-                receiver: types.name(receiver),
-            }
-        } else {
-            return;
-        };
-        self.report(refusal, call.receiver.span());
+        let refusal = self
+            .sem()
+            .references_self_is_read_out_of(call.id)
+            .find_map(|receiver| {
+                let referent = types.peel_refs(receiver);
+                if self.is_affine(referent) {
+                    Some(MoveError::MoveOutOfReference {
+                        type_name: types.name(referent),
+                    })
+                } else if types.reaches_through_mut_ref(receiver) {
+                    Some(MoveError::SelfCopiedOutOfMutReference {
+                        method: call.method.clone(),
+                        receiver: types.name(receiver),
+                    })
+                } else {
+                    None
+                }
+            });
+        if let Some(refusal) = refusal {
+            self.report(refusal, call.receiver.span());
+        }
     }
 
     /// The base an affine value read by value from `expr` would leave its
