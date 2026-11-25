@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795611213522,
+  "lastUpdate": 1795618405672,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82425,6 +82425,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5653e2af65d2eb0feeec02dbb1fe0e0cf8bba7fc"
         },
         "date": 1795611212720,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24986,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353988,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b3f79cbc24f2bb7b6482763c2fb92e5bf0c795d6",
+          "message": "Merge pull request #2750 from wado-lang/gfx/inference-context-calls\n\nrefactor(elaborator): one inference context per body",
+          "timestamp": "2026-11-25T23:34:24+09:00",
+          "tree_id": "0082dc5aab46f79dc8899b276c63209ee94010ae",
+          "url": "https://github.com/wado-lang/wado/commit/b3f79cbc24f2bb7b6482763c2fb92e5bf0c795d6"
+        },
+        "date": 1795618404639,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
