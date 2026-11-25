@@ -284,12 +284,12 @@ fn syntax_error(pattern: String) -> String {
 
 test "validate_ecma262_syntax admits what Re cannot match" {
     let patterns: List<String> = [
-        #"a(?=b)"#, #"(?!b)"#, #"(?<=a+)b"#, #"(?<!(?<n>b))"#, #"(a)\1"#, #"\1(a)"#, #"((((((((((a))))))))))\10"#,
-        #"(?<n>a)\k<n>"#, #"\k<n>(?<n>a)"#, #"(?i:a)"#, #"(?<a>x)|(?<a>y)"#, #"(?:(?<a>x)|(?<a>y))|(?<a>z)"#,
-        #"a{4294967296}"#, #"a{1,99999999999999999999}"#,
+        #"(a)\1"#, #"\1(a)"#, #"((((((((((a))))))))))\10"#, #"(?<n>a)\k<n>"#, #"\k<n>(?<n>a)"#, #"(?<=(a))\1"#,
+        #"(?<a>x)|(?<a>y)"#, #"(?:(?<a>x)|(?<a>y))|(?<a>z)"#, #"a{4294967296}"#, #"a{1,99999999999999999999}"#,
     ];
     for let p of patterns {
         assert validate_ecma262_syntax(p) matches { Ok(_) };
+        assert parse(p.as_str_slice(), Syntax::Plain) matches { Err(_) };
     }
 }
 

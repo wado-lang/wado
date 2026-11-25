@@ -295,6 +295,8 @@ test "a lookaround's body counts toward the bound on the program" {
     // Each lookahead compiles twice: to find where it holds, and to read
     // its group.
     assert Regex::new(#"(?=(a{300000}))(?=(a{300000}))"#).is_err();
+    // Inside a negated lookaround no group stays set, so none is read.
+    assert Regex::new(#"(?!(?=(a{500000})))"#).is_ok();
 }
 
 test "a lookaround is asked at each position without reading its body again" {

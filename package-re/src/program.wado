@@ -159,11 +159,11 @@ internal fn compile_lookarounds(
     groups: i32,
     main: &Program,
 ) -> Result<List<LookaroundPrograms>, PatternError> {
-    let mut found: List<[Lookaround, Flag]> = [];
-    collect_lookarounds(tree, Flag::none(), &mut found);
+    let mut found: List<[Lookaround, Flag, bool]> = [];
+    collect_lookarounds(tree, Flag::none(), true, &mut found);
     let mut used = main.states();
     let mut programs: List<LookaroundPrograms> = [];
-    for let [l, flags] of &found {
+    for let [l, flags, keeps_groups] of &found {
         assert l.index == programs.len();
         let [own, against] = if l.ahead {
             [Direction::Forward, Direction::Reverse];
@@ -173,7 +173,7 @@ internal fn compile_lookarounds(
         let holds = compile(&l.body, groups, against, *flags, used)?;
         used += holds.states();
         let mut reads: Option<Reads> = null;
-        if let Some([from, until]) = slots_read(l) {
+        if *keeps_groups && let Some([from, until]) = slots_read(l) {
             let program = compile(&l.body, groups, own, *flags, used)?;
             used += program.states();
             reads = Some(Reads { program, from, until });
@@ -183,18 +183,21 @@ internal fn compile_lookarounds(
     return Ok(programs);
 }
 
-/// Each lookaround under `node`, in the order of their indices, and the flags
-/// in force where it stands.
-fn collect_lookarounds(node: &Node, flags: Flag, found: &mut List<[Lookaround, Flag]>) {
+/// Each lookaround under `node`, in the order of their indices, with the flags
+/// in force where it stands and whether a match keeps the groups set there.
+/// `keeps_groups` says so of `node`: no negated lookaround encloses it.
+fn collect_lookarounds(node: &Node, flags: Flag, keeps_groups: bool, found: &mut List<[Lookaround, Flag, bool]>) {
+    let mut kept_inside = keeps_groups;
     if let Lookaround(l) = *node {
-        found.push([l, flags]);
+        found.push([l, flags, keeps_groups]);
+        kept_inside = keeps_groups && !l.negated;
     }
-    let inside = if let Modified(m) = *node {
+    let flags_inside = if let Modified(m) = *node {
         (flags | m.add) & ~m.remove;
     } else {
         flags;
     };
-    each_child(node, |n| collect_lookarounds(n, inside, found));
+    each_child(node, |n| collect_lookarounds(n, flags_inside, kept_inside, found));
 }
 
 /// The slots `[from, until)` of the groups `l` leaves set: those in its body,
