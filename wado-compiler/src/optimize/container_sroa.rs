@@ -9,11 +9,15 @@
 //! query so any element-immutable method counts as a SROA-safe use.
 
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeSet;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FuncParts, FunctionRef, NirFunction, NirUnaryOp, StructDecls};
+use crate::nir::{
+    FuncId, FuncParts, FuncRef, FunctionRef, NirFunction, NirUnaryOp, StructDecls,
+};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -262,7 +266,8 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
             gate.catch_up(GatedPass::ContainerSroa, len);
             return false;
         }
-        demote_unsplittable_families(project, type_table, &mut method_sig, &exec);
+        let called = called_families(project, &holding, &method_sig);
+        demote_unsplittable_families(project, type_table, &mut method_sig, &called, &exec);
         holding
     };
 
@@ -449,12 +454,40 @@ fn build_method_catalog(
     (catalog, sig)
 }
 
+/// The families a call in one of `holding`'s bodies reaches: the only ones the
+/// plans and the rewrite look up by callee.
+fn called_families(
+    project: &NirPackage,
+    holding: &[FuncId],
+    sig: &MethodSig,
+) -> IndexSet<SigKey> {
+    let mut called = IndexSet::default();
+    for fid in holding {
+        let func = project.functions[fid.index()].borrow();
+        let body = func
+            .body
+            .as_ref()
+            .expect("a function holding a candidate has a body");
+        body.for_each_node_under(NodeRef::Block(body.root()), |n| {
+            if let NodeRef::Expr(e) = n
+                && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
+                && let Some(key) = sig.id_sigkeys.get(func_id)
+            {
+                called.insert(key.clone());
+            }
+        });
+    }
+    called
+}
+
 /// Unclassify the method families whose members do more than the per-field
-/// rewrite reproduces.
+/// rewrite reproduces. The element handlers are judged only among `called`,
+/// since judging one walks every body that meets its element type.
 fn demote_unsplittable_families(
     project: &NirPackage,
     type_table: &TypeTable,
     sig: &mut MethodSig,
+    called: &IndexSet<SigKey>,
     exec: &Executor,
 ) {
     let ctfe_builtins = build_ctfe_builtin_map(project);
@@ -472,7 +505,7 @@ fn demote_unsplittable_families(
         .iter()
         .filter_map(|(&id, &b)| is_storage_builtin(b).then_some(id))
         .collect();
-    demote_element_inspecting_handlers(project, type_table, &storage_builtins, sig, exec);
+    demote_element_inspecting_handlers(project, type_table, &storage_builtins, sig, called, exec);
 }
 
 /// The members of `kind` in `sig`, by id.
@@ -489,7 +522,7 @@ fn members_of(sig: &MethodSig, kind: ListMethodKind) -> IndexSet<FuncId> {
 /// before all of them have answered. Each thread hands `holds` one scratch
 /// state made by `init`, as [`Executor::map_init`] does.
 fn greatest_fixpoint<S>(
-    project: &NirPackage,
+    functions: &[FuncRef],
     exec: &Executor,
     holding: &mut IndexSet<FuncId>,
     init: impl Fn() -> S + Sync + Send,
@@ -499,7 +532,6 @@ fn greatest_fixpoint<S>(
     // leaves, so each round rechecks just the dependents of the last removals.
     let mut dependents: IndexMap<FuncId, Vec<FuncId>> = IndexMap::default();
     let mut pending: Vec<FuncId> = holding.iter().copied().collect();
-    let functions = &project.functions;
     while !pending.is_empty() {
         let members: &IndexSet<FuncId> = holding;
         let verdicts = exec.map_init(&pending, &init, |state, id| {
@@ -565,7 +597,7 @@ fn demote_filling_constructors(
     let constructors = members_of(sig, ListMethodKind::Constructor);
     let mut empty = constructors.clone();
     greatest_fixpoint(
-        project,
+        &project.functions,
         exec,
         &mut empty,
         || (),
@@ -644,6 +676,7 @@ fn demote_element_inspecting_handlers(
     type_table: &TypeTable,
     storage_builtins: &IndexSet<FuncId>,
     sig: &mut MethodSig,
+    called: &IndexSet<SigKey>,
     exec: &Executor,
 ) {
     let value_copy_ids = project.value_copy_func_ids();
@@ -654,6 +687,7 @@ fn demote_element_inspecting_handlers(
     ]
     .into_iter()
     .flat_map(|kind| members_of(sig, kind))
+    .filter(|id| called.contains(&sig.id_sigkeys[id]))
     .collect();
     let mut families: IndexMap<SigKey, Vec<FuncId>> = IndexMap::default();
     for id in &handlers {
@@ -669,31 +703,41 @@ fn demote_element_inspecting_handlers(
             .as_ref()
             .map(|m| m.generic_name.clone())
     };
-    let mut movers_by_element: IndexMap<TypeId, IndexSet<FuncId>> = IndexMap::default();
+    let one_body: Vec<&Vec<FuncId>> = families
+        .values()
+        .filter(|members| {
+            let origin = generic_origin(members[0]);
+            members.iter().all(|&id| generic_origin(id) == origin)
+        })
+        .collect();
+    let elements: IndexSet<TypeId> = one_body
+        .iter()
+        .flat_map(|members| members.iter())
+        .map(|&id| element_type_of(project, id))
+        .filter(|&element| value_copy::needs_value_copy(element, type_table))
+        .collect();
+    let seeds = signature_holders(project, type_table, &elements, &value_copy_ids, exec);
+    let seeded: Vec<(TypeId, IndexSet<FuncId>)> = elements.iter().copied().zip(seeds).collect();
+    let functions = &project.functions;
+    let movers = exec.map(&seeded, |(element, seed)| {
+        movers_of(
+            functions,
+            type_table,
+            *element,
+            seed.clone(),
+            storage_builtins,
+            &value_copy_ids,
+            exec,
+        )
+    });
     let mut holding: IndexSet<FuncId> = IndexSet::default();
-    for members in families.values() {
-        let origin = generic_origin(members[0]);
-        let one_body = members.iter().all(|&id| generic_origin(id) == origin);
+    for members in one_body {
         let moves_only = members.iter().all(|&id| {
-            let element = element_type_of(project, id);
-            if !value_copy::needs_value_copy(element, type_table) {
-                return true;
-            }
-            movers_by_element
-                .entry(element)
-                .or_insert_with(|| {
-                    movers_of(
-                        project,
-                        type_table,
-                        element,
-                        storage_builtins,
-                        &value_copy_ids,
-                        exec,
-                    )
-                })
-                .contains(&id)
+            elements
+                .get_index_of(&element_type_of(project, id))
+                .is_none_or(|k| movers[k].contains(&id))
         });
-        if one_body && moves_only {
+        if moves_only {
             holding.extend(members.iter().copied());
         }
     }
@@ -710,12 +754,74 @@ fn element_type_of(project: &NirPackage, id: FuncId) -> TypeId {
         .impl_type_args[0]
 }
 
-/// The bodied functions that touch values of `element` only by moving them,
-/// handing one, or anything holding one, to no function but another such.
-fn movers_of(
+/// For each of `elements`, the bodied functions, the `$value_copy$T` helpers
+/// aside, whose parameters or return type are, or hold, a value of it.
+fn signature_holders(
     project: &NirPackage,
     type_table: &TypeTable,
+    elements: &IndexSet<TypeId>,
+    value_copy_ids: &IndexSet<FuncId>,
+    exec: &Executor,
+) -> Vec<IndexSet<FuncId>> {
+    let held = || HeldElements {
+        type_table,
+        elements,
+        memo: IndexMap::default(),
+    };
+    let met = exec.map_init(&project.functions, held, |held, f| {
+        let f = f.borrow();
+        // A bodyless function's signature types may already be gone.
+        f.body.as_ref()?;
+        let id = f.id.filter(|id| !value_copy_ids.contains(id))?;
+        let met: BTreeSet<usize> = f
+            .params
+            .iter()
+            .map(|p| p.type_id)
+            .chain(std::iter::once(f.return_type))
+            .flat_map(|t| held.of(t).to_vec())
+            .collect();
+        Some((id, met))
+    });
+    let mut holders = vec![IndexSet::default(); elements.len()];
+    for (id, met) in met.into_iter().flatten() {
+        for k in met {
+            holders[k].insert(id);
+        }
+    }
+    holders
+}
+
+/// Which of `elements` a type is or holds, by index, memoized: the same few
+/// types recur across signatures.
+struct HeldElements<'a> {
+    type_table: &'a TypeTable,
+    elements: &'a IndexSet<TypeId>,
+    memo: IndexMap<TypeId, Rc<[usize]>>,
+}
+
+impl HeldElements<'_> {
+    fn of(&mut self, ty: TypeId) -> Rc<[usize]> {
+        if let Some(held) = self.memo.get(&ty) {
+            return Rc::clone(held);
+        }
+        let mut held: BTreeSet<usize> = self.elements.get_index_of(&ty).into_iter().collect();
+        for component in type_components(self.type_table, ty) {
+            held.extend(self.of(component).iter().copied());
+        }
+        let held: Rc<[usize]> = held.into_iter().collect();
+        self.memo.insert(ty, Rc::clone(&held));
+        held
+    }
+}
+
+/// The bodied functions among `seed`, the functions whose signature meets
+/// `element`, that touch its values only by moving them, handing one, or
+/// anything holding one, to no function but another such.
+fn movers_of(
+    functions: &[FuncRef],
+    type_table: &TypeTable,
     element: TypeId,
+    seed: IndexSet<FuncId>,
     storage_builtins: &IndexSet<FuncId>,
     value_copy_ids: &IndexSet<FuncId>,
     exec: &Executor,
@@ -726,25 +832,9 @@ fn movers_of(
         element,
         memo: RefCell::default(),
     };
-    let mut movers: IndexSet<FuncId> = exec
-        .map_init(&project.functions, roles, |roles, f| {
-            let f = f.borrow();
-            // A bodyless function's signature types may already be gone.
-            f.body.as_ref()?;
-            f.id.filter(|id| {
-                !value_copy_ids.contains(id)
-                    && f.params
-                        .iter()
-                        .map(|p| p.type_id)
-                        .chain(std::iter::once(f.return_type))
-                        .any(|t| roles.of(t) != ElementRole::Unrelated)
-            })
-        })
-        .into_iter()
-        .flatten()
-        .collect();
+    let mut movers = seed;
     greatest_fixpoint(
-        project,
+        functions,
         exec,
         &mut movers,
         roles,
@@ -795,39 +885,36 @@ impl ElementRoles<'_> {
 
 /// Whether a value of type `ty` is, or holds, a value of the type `element`.
 fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeId) -> bool {
-    if ty == element {
-        return true;
-    }
+    ty == element
+        || type_components(type_table, ty)
+            .into_iter()
+            .any(|t| holds_element(type_table, t, element))
+}
+
+/// The types a value of `ty` directly holds values of.
+fn type_components(type_table: &TypeTable, ty: TypeId) -> Vec<TypeId> {
     match type_table.get(ty) {
         ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
-        | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
+        | ResolvedType::BuiltinArray(inner) => vec![*inner],
         ResolvedType::Struct { type_args, .. }
         | ResolvedType::Tuple(type_args)
         | ResolvedType::Variant { type_args, .. }
-        | ResolvedType::Resource { type_args, .. } => type_args
-            .iter()
-            .any(|t| holds_element(type_table, *t, element)),
+        | ResolvedType::Resource { type_args, .. } => type_args.clone(),
         ResolvedType::Newtype {
             type_args,
             base_type,
             ..
-        } => {
-            holds_element(type_table, *base_type, element)
-                || type_args
-                    .iter()
-                    .any(|t| holds_element(type_table, *t, element))
-        }
+        } => std::iter::once(*base_type)
+            .chain(type_args.iter().copied())
+            .collect(),
         ResolvedType::Function {
             params,
             return_type,
             ..
-        } => {
-            holds_element(type_table, *return_type, element)
-                || params
-                    .iter()
-                    .any(|t| holds_element(type_table, *t, element))
-        }
+        } => std::iter::once(*return_type)
+            .chain(params.iter().copied())
+            .collect(),
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
         | ResolvedType::Never
@@ -840,7 +927,7 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeId) -> bool {
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::Unknown
-        | ResolvedType::Error => false,
+        | ResolvedType::Error => Vec::new(),
     }
 }
 
@@ -945,7 +1032,7 @@ fn demote_element_reading_queries(
     });
     let mut length_only: IndexSet<FuncId> = queries.iter().copied().chain(array_subjects).collect();
     greatest_fixpoint(
-        project,
+        &project.functions,
         exec,
         &mut length_only,
         || (),
