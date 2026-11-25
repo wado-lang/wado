@@ -1746,7 +1746,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow()
                     .tuple_representation(scrutinee_type);
-                let element_types = if let Some(types) = elements {
+                let element_types = if self.reports_open_pack(
+                    scrutinee_type,
+                    "match its elements",
+                    span,
+                ) {
+                    vec![TypeTable::ERROR; patterns.len()]
+                } else if let Some(types) = elements {
                     types
                 } else {
                     let _ = self.emit(TypeError::PatternTypeMismatch {
@@ -2639,6 +2645,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.resolve_block(&for_of.body, &mut scope, None);
             return;
         }
+
+        let iterable_type_id =
+            if self.reports_open_pack(iterable_type_id, "walk its elements", for_of.span) {
+                TypeTable::ERROR
+            } else {
+                iterable_type_id
+            };
 
         // Check if it's a tuple type — looking through a single `&`/`&mut`
         // wrapper. A reference iterable (`&[..T]`) iterates element-by-ref

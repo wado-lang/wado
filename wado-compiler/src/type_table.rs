@@ -3643,6 +3643,18 @@ impl TypeTable {
         Some((self.plain_pack(pack), element))
     }
 
+    /// The one type every element of the run `pack` stands for is, where the
+    /// run repeats one: a declared repeat, or a variable standing for it.
+    pub fn run_element(&mut self, pack: TypeId) -> Option<TypeId> {
+        if let Some((_, element)) = self.repeated_element(pack) {
+            return Some(element);
+        }
+        match self.pack_var_run(pack) {
+            Some((_, element)) => element,
+            None => None,
+        }
+    }
+
     /// Whether `ty` (recursively) mentions parameter `param`, projections
     /// included.
     pub fn mentions_param(&self, ty: TypeId, param: TypeParamId) -> bool {

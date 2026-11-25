@@ -1,0 +1,32 @@
+// A default's closure walks a tuple, and each site omitting the argument
+// unrolls that loop again under the one loop's key. The second site's
+// unrolling is the body's own to settle, as the first's was: a variable in it
+// once outlived the body.
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn run_it<T>(x: T, f: fn(T) -> i32 = |_t| {
+    let mut n = 0;
+    for let _v of [1, "a"] {
+        let o = none();
+        let p: Option<i64> = o;
+        if p matches { Some(_) } {
+            n += 100;
+        }
+        n += 1;
+    }
+    return n;
+}) -> i32 {
+    return f(x);
+}
+
+fn at_another_site() -> i32 {
+    return run_it("s");
+}
+
+test "each site unrolls the default's loop" {
+    assert run_it(1) == 2;
+    assert run_it(2) == 2;
+    assert at_another_site() == 2;
+}

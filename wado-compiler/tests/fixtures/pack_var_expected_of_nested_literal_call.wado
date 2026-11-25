@@ -1,0 +1,34 @@
+// A call nested under a variadic one is expected to return a tuple whose
+// elements are the outer call's pack, still open. That pack stands for a run of
+// elements, so it answers none of the nested call's slots, and a literal there
+// takes its default.
+fn one<U>(u: U) -> [U] {
+    return [u];
+}
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+fn count<..T>(t: [..T]) -> i32 {
+    let mut n = 0;
+    for let _c of t {
+        n += 1;
+    }
+    return n;
+}
+
+fn len_of<..T>(t: &[..T]) -> i32 {
+    let mut n = 0;
+    for let _c of *t {
+        n += 1;
+    }
+    return n;
+}
+
+test "a literal under a generic call under a variadic one" {
+    assert len_of(&one(1)) == 1;
+    assert count(one(1)) == 1;
+    assert count(id([1])) == 1;
+    assert count(id([1, 2.5])) == 2;
+}

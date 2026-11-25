@@ -1984,7 +1984,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The same resolution the call itself uses, not a second one:
                 // two resolutions of one call disagree, which is what the edge
                 // then records.
-                let receiver_args = self.expected_receiver_args(receiver, expected_type);
+                let receiver_args = self.expected_receiver_args(receiver, suffix, expected_type);
                 let selection = self
                     .resolve_static_callee(StaticQuery {
                         arg_types: &args,
@@ -4663,7 +4663,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // An unwritten turbofish leaves the impl level to infer as well, which
         // the method's own slot count says nothing about.
-        let expected_args = self.expected_receiver_args(callee.receiver, expected_type);
+        let expected_args =
+            self.expected_receiver_args(callee.receiver, callee.method_name, expected_type);
         let (method_def, [declaring_slots, own_slots], effect_rows) = self
             .owner_static_sig(
                 callee.receiver.key(),
@@ -4779,10 +4780,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The receiver's arguments a bare `Type::method(..)` call must produce,
-    /// read off `expected` where it is an instance of `Type`; empty otherwise.
+    /// read off `expected` where it is an instance of `Type` and `method`
+    /// returns its block's own type; empty otherwise. A method returning
+    /// another instance, as `fn nest(v: T) -> Bx<Bx<T>>` does, is expected at
+    /// arguments that are not its receiver's.
     fn expected_receiver_args(
         &self,
         receiver: &ReceiverId,
+        method_name: &str,
         expected: Option<TypeId>,
     ) -> Vec<TypeId> {
         let Some(expected) = expected else {
@@ -4793,6 +4798,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let expected_key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
         if expected_key != *receiver.key() {
+            return Vec::new();
+        }
+        let key = receiver.key();
+        let returns_its_block = (self.static_method_entries(key, method_name))
+            .map(|entry| entry.method_id)
+            .chain(self.qualified_method_decl_ids(key, method_name))
+            .filter_map(|def| self.tysys.signatures.method_sig(def))
+            .all(|sig| {
+                sig.declaring_impl.is_none_or(|block| {
+                    let table = self.tysys.type_table.borrow();
+                    sig.decl.return_type == Some(table.peel_refs(table.impl_target_whole(block)))
+                })
+            });
+        if !returns_its_block {
             return Vec::new();
         }
         self.tysys
@@ -4819,7 +4838,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
         given: Option<GivenSlots<'_>>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let expected_args = self.expected_receiver_args(receiver, expected_type);
+        let expected_args = self.expected_receiver_args(receiver, method_name, expected_type);
         // The resolution reads these arguments and finds nothing to call.
         if self.declared_by_no_reaching_block(receiver, method_name, &expected_args) {
             return (expected_args, vec![]);

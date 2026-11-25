@@ -2057,6 +2057,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ResolvedType::Tuple(elems) => {
                 if let Ok(index) = field_name.parse::<usize>() {
+                    if self.reports_open_pack(struct_type, "read its element", span) {
+                        return (0, TypeTable::ERROR);
+                    }
                     match self.tysys.tuple_literal_index_type(&elems, index) {
                         Ok(elem) => return (index as u32, elem),
                         Err(message) => {
@@ -4814,14 +4817,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let mut resolved_fields: Vec<ResolvedField> = Vec::new();
+        let mut shaped = true;
         for (index, field) in struct_lit.fields.iter().enumerate() {
             let type_id = self.resolve_expr(&field.value, ctx, None);
+            let type_id = self.apply_infer_holes(type_id);
+            if self.type_has_infer_hole(type_id) {
+                let _ = self.emit(TypeError::CannotInferType {
+                    message: format!(
+                        "cannot infer the type of field `{}`; annotate the value",
+                        field.name
+                    ),
+                    span: field.value.span(),
+                });
+                shaped = false;
+            }
             resolved_fields.push(ResolvedField {
                 name: field.name.clone(),
                 type_id,
                 field_index: index as u32,
                 span: field.value.span(),
             });
+        }
+        // The literal's type is the shape its fields make, and an open
+        // variable names none.
+        if !shaped {
+            return TypeTable::ERROR;
         }
 
         // A composition's shape is the union of its bases and explicit fields;
@@ -5332,11 +5352,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return Some(elems);
                 }
-                let table = self.tysys.type_table.borrow();
+                let mut table = self.tysys.type_table.borrow_mut();
                 let elems = table.as_tuple(ty)?;
-                // A pack places nothing by position until it is answered.
-                let placed = !elems.iter().any(|&t| table.is_pack_like(t));
-                (placed && elems.len() == arity).then_some(elems)
+                let runs: Vec<usize> = (0..elems.len())
+                    .filter(|&i| table.is_pack_like(elems[i]))
+                    .collect();
+                // A pack places nothing by position until it is answered,
+                // unless it is the only one and repeats one type: the elements
+                // around it are fixed, and every one inside is that type.
+                match runs[..] {
+                    [] => (elems.len() == arity).then_some(elems),
+                    [run] => {
+                        let repeated = table.run_element(elems[run])?;
+                        let inside = (arity + 1).checked_sub(elems.len())?;
+                        let mut expected = elems[..run].to_vec();
+                        expected.extend(std::iter::repeat_n(repeated, inside));
+                        expected.extend(&elems[run + 1..]);
+                        Some(expected)
+                    }
+                    [_, _, ..] => None,
+                }
             });
 
         // Reify's `reify_tuple_literal` owns the element / spread-expansion /

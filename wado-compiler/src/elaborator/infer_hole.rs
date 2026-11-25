@@ -902,6 +902,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.type_table.borrow().contains_infer_var(ty)
     }
 
+    /// Whether the tuple `ty` holds a pack variable still open, reported and
+    /// closed: `reading` needs each element's position, which only the
+    /// variable's answer gives.
+    pub(super) fn reports_open_pack(&mut self, ty: TypeId, reading: &str, span: Span) -> bool {
+        let ty = self.apply_infer_holes(ty);
+        let open = {
+            let table = self.tysys.type_table.borrow();
+            table.as_tuple_through_ref(ty).and_then(|(elems, _)| {
+                elems
+                    .into_iter()
+                    .find(|&elem| matches!(table.get(elem), ResolvedType::PackVar { .. }))
+                    .map(|pack| (table.name(pack), table.infer_vars_in(pack)))
+            })
+        };
+        let Some((name, vars)) = open else {
+            return false;
+        };
+        let _ = self.emit(TypeError::CannotInferType {
+            message: format!("cannot infer `{name}` far enough to {reading}; annotate it"),
+            span,
+        });
+        for var in vars {
+            self.close_infer_var(var);
+        }
+        true
+    }
+
     /// Pin `var` to the error type: a reported diagnostic already covers it,
     /// and nothing later may settle it.
     pub(super) fn close_infer_var(&mut self, var: TypeId) {
@@ -1246,7 +1273,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mark = FactsMark {
             body: self.sem.types.body.lens(),
             decls: DeclFactsLens::of(&self.sem.types),
-            tuple_overlays: self.sem.types.tuple_overlays.len(),
+            tuple_overlays: (self.sem.types.tuple_overlays.values())
+                .map(Vec::len)
+                .collect(),
             default_methods: self.sem.default_method_facts.len(),
         };
         let walked = walk(self);
@@ -1644,7 +1673,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut body = types.body.split_off(since.body);
         Self::sweep_body_facts(&mut tt, &mut body, &sweep);
         types.body.append(body);
-        Self::sweep_tuple_overlays(&mut tt, types, since.tuple_overlays, &sweep);
+        Self::sweep_tuple_overlays(&mut tt, types, &since.tuple_overlays, &sweep);
         for facts in self
             .sem
             .default_method_facts
@@ -1653,7 +1682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             Self::sweep_decl_facts(&mut tt, &mut facts.types, DeclFactsLens::default(), subst);
             Self::sweep_body_facts(&mut tt, &mut facts.types.body, &sweep);
-            Self::sweep_tuple_overlays(&mut tt, &mut facts.types, 0, &sweep);
+            Self::sweep_tuple_overlays(&mut tt, &mut facts.types, &[], &sweep);
         }
     }
 
@@ -1690,15 +1719,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The tuple `for-of` overlays past the first `since` loops.
+    /// The tuple `for-of` unrollings past the first `since[i]` of loop `i`. A
+    /// loop in a default argument is unrolled again by each site omitting it.
     fn sweep_tuple_overlays(
         tt: &mut TypeTable,
         types: &mut TypeAnnotations,
-        since: usize,
+        since: &[usize],
         sweep: &Sweep<'_>,
     ) {
-        for overlays in types.tuple_overlays.values_mut().skip(since) {
-            for overlay in overlays.iter_mut().flatten() {
+        for (i, unrollings) in types.tuple_overlays.values_mut().enumerate() {
+            let settled = since.get(i).copied().unwrap_or(0);
+            for overlay in unrollings.iter_mut().skip(settled).flatten() {
                 Self::sweep_body_facts(tt, overlay, sweep);
             }
         }
@@ -1780,11 +1811,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 /// Where the facts stood when a body's walk began, so the sweep at its end
 /// reaches only what the walk recorded.
-#[derive(Clone, Copy)]
 pub(super) struct FactsMark {
     body: BodyFactsLens,
     decls: DeclFactsLens,
-    tuple_overlays: usize,
+    /// How many times each tuple `for-of` had been unrolled.
+    tuple_overlays: Vec<usize>,
     default_methods: usize,
 }
 

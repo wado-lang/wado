@@ -122,9 +122,17 @@ pub(super) fn unify(
             }
         }
         // Same generic declaration (including `Future` and `Stream`), or two
-        // tuples of one length: unify type arguments positionally.
+        // tuples of one length: unify type arguments positionally. A pack on
+        // either side stands for a run of elements, so nothing there has a
+        // position.
         (ResolvedType::Tuple(expected_args), ResolvedType::Tuple(actual_args))
-            if expected_args.len() == actual_args.len() =>
+            if expected_args.len() == actual_args.len() && {
+                let table = type_table.borrow();
+                !expected_args
+                    .iter()
+                    .chain(actual_args)
+                    .any(|&e| table.is_pack_like(e))
+            } =>
         {
             for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
                 unify(type_table, exp_arg, act_arg, bindings);
