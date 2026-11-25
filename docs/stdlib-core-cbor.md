@@ -300,7 +300,7 @@ _Fields are private._
 
 #### `impl DeserializeSeq for CborSeqAccess`
 
-##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+##### `fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 

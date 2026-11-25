@@ -1904,12 +1904,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let decl_return = self.instantiate_type(decl_return, &inst);
         self.equate(decl_return, expected_return);
-        match self.answered_slots(&inst) {
-            Some(inferred) => FuncRefInference::Ok(inferred),
-            None => {
-                self.abandon(&inst);
-                FuncRefInference::NotApplicable
-            }
+        if let Some(inferred) = self.answered_slots(&inst) {
+            FuncRefInference::Ok(inferred)
+        } else {
+            self.abandon(&inst);
+            FuncRefInference::NotApplicable
         }
     }
 

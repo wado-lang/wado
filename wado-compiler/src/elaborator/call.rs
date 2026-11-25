@@ -4826,22 +4826,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (names, owners) = self.sig_slots(&sig);
         let fresh;
         let given = given.filter(|given| given.slots == all_param_ids);
-        let inst = match given {
-            Some(given) => given.inst,
-            None => {
-                fresh = self.instantiate(
-                    &all_param_ids,
-                    &Instantiation {
-                        kind: InstanceKind::Method,
-                        name: method_name,
-                        span,
-                        type_args: &[],
-                        self_binding: None,
-                        impl_args: &[],
-                    },
-                );
-                &fresh
-            }
+        let inst = if let Some(given) = given {
+            given.inst
+        } else {
+            fresh = self.instantiate(
+                &all_param_ids,
+                &Instantiation {
+                    kind: InstanceKind::Method,
+                    name: method_name,
+                    span,
+                    type_args: &[],
+                    self_binding: None,
+                    impl_args: &[],
+                },
+            );
+            &fresh
         };
         let param_types = self.instantiate_types(&sig.decl.param_types, inst);
         let ret = decl_return_type.map(|declared| self.instantiate_type(declared, inst));
