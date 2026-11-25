@@ -580,7 +580,9 @@ impl HeapEffectsCache {
         self.closures = vec![Vec::new(); self.signatures.len()];
         for (i, entry) in entries.iter().enumerate() {
             if entry.closure {
-                let k = signature_of[&i];
+                let k = *signature_of
+                    .get(&i)
+                    .expect("a closure body is the call method of a listed functor");
                 self.closures[k].push(i);
             }
         }

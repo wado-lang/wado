@@ -1105,8 +1105,7 @@ impl MarkCell {
     const WRITTEN: u8 = 4;
     const EXTENDED: u8 = 8;
 
-    fn get(&self) -> ExprMarks {
-        let bits = self.0.load(std::sync::atomic::Ordering::Relaxed);
+    fn unpack(bits: u8) -> ExprMarks {
         ExprMarks {
             in_place: bits & Self::IN_PLACE != 0,
             moves: bits & Self::MOVES != 0,
@@ -1115,8 +1114,8 @@ impl MarkCell {
         }
     }
 
-    fn set(&self, marks: ExprMarks) {
-        let bits = [
+    fn pack(marks: ExprMarks) -> u8 {
+        [
             (marks.in_place, Self::IN_PLACE),
             (marks.moves, Self::MOVES),
             (marks.written, Self::WRITTEN),
@@ -1124,8 +1123,26 @@ impl MarkCell {
         ]
         .into_iter()
         .filter(|(set, _)| *set)
-        .fold(0, |bits, (_, bit)| bits | bit);
-        self.0.store(bits, std::sync::atomic::Ordering::Relaxed);
+        .fold(0, |bits, (_, bit)| bits | bit)
+    }
+
+    fn get(&self) -> ExprMarks {
+        Self::unpack(self.0.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    fn set(&self, marks: ExprMarks) {
+        self.0
+            .store(Self::pack(marks), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Rewrite the marks in one atomic step, so no other thread's mark is lost.
+    fn update(&self, mut f: impl FnMut(&mut ExprMarks)) {
+        let relaxed = std::sync::atomic::Ordering::Relaxed;
+        self.0.update(relaxed, relaxed, |bits| {
+            let mut marks = Self::unpack(bits);
+            f(&mut marks);
+            Self::pack(marks)
+        });
     }
 }
 
@@ -1176,10 +1193,8 @@ impl TirExpr {
         self.marks.get()
     }
 
-    pub fn mark(&self, set: impl FnOnce(&mut ExprMarks)) {
-        let mut marks = self.marks.get();
-        set(&mut marks);
-        self.marks.set(marks);
+    pub fn mark(&self, set: impl FnMut(&mut ExprMarks)) {
+        self.marks.update(set);
     }
 
     /// Replace `self` with `with`, the same value spelled another way, which

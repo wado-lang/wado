@@ -43,22 +43,23 @@ pub(super) fn forward_struct_field_constants(module: &mut WirPackage, exec: &Exe
 /// Which parameters each defined function retains, read before the bodies are
 /// visited, since no body edit moves them.
 struct RetainedParams {
-    defined_func_base: u32,
-    by_position: Vec<Vec<bool>>,
+    by_index: IndexMap<u32, Vec<bool>>,
 }
 
 impl RetainedParams {
     fn of(module: &WirPackage) -> Self {
         Self {
-            defined_func_base: module.defined_func_base,
-            by_position: module
+            by_index: module
                 .functions
                 .iter()
-                .map(|f| {
-                    f.param_names
+                .enumerate()
+                .map(|(position, f)| {
+                    let retained = f
+                        .param_names
                         .iter()
                         .map(|param| f.retains.iter().any(|s| s == param))
-                        .collect()
+                        .collect();
+                    (module.defined_func_index(position), retained)
                 })
                 .collect(),
         }
@@ -67,9 +68,8 @@ impl RetainedParams {
     /// Whether a call of `func_index` may retain its argument `arg`. An import
     /// carries no retention: unknown, so conservative.
     fn stores(&self, func_index: u32, arg: usize) -> bool {
-        func_index
-            .checked_sub(self.defined_func_base)
-            .and_then(|position| self.by_position.get(position as usize))
+        self.by_index
+            .get(&func_index)
             .is_none_or(|params| params.get(arg).is_none_or(|&retained| retained))
     }
 }
