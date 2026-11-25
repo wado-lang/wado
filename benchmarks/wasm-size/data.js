@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795587427878,
+  "lastUpdate": 1795597597518,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82249,6 +82249,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/57d09ebc57019b8401bebe343ae2172b1efb3e92"
         },
         "date": 1795587426722,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 24986,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353988,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "00989e208aa8e831e798870f76b4d2314de61f08",
+          "message": "Merge pull request #2754 from wado-lang/gfx/dreamy-cannon-o9z19p\n\nfeat(re): lookahead and lookbehind, still in linear time",
+          "timestamp": "2026-11-25T17:51:28+09:00",
+          "tree_id": "70a9cc77f2c2684a0a136a49371df337ff6e1bf6",
+          "url": "https://github.com/wado-lang/wado/commit/00989e208aa8e831e798870f76b4d2314de61f08"
+        },
+        "date": 1795597597139,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
