@@ -76,6 +76,11 @@ export fn render(source: String) -> RenderResult {
     };
 }
 
+/// Whether `formatted` means what `source` does, which `format` must keep.
+internal fn renders_alike(source: String, formatted: String) -> bool {
+    return render(source).html == render(formatted).html;
+}
+
 /// Render Markdown to HTML through the consumer's `RenderHook` handler, for
 /// instance a `provider` that highlights code with
 /// `wado-lang:gale-highlight-wado`.

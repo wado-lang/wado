@@ -506,9 +506,18 @@ fn print_reference_link(link: &ReferenceLinkNode, out: &mut String) {
     out.push(']');
 }
 
+/// The label is both the text and what matches the definition, so the shortcut
+/// form holds only while the text prints as the label was written: `[*x*]`
+/// printed as `[_x_]` would link nowhere.
 fn print_shortcut_link(link: &ReferenceLinkNode, out: &mut String) {
+    let mut text = "";
+    print_inline_seq(&link.children, &mut text);
+    if text != link.label {
+        print_reference_link(link, out);
+        return;
+    }
     out.push('[');
-    print_inline_seq(&link.children, out);
+    out.push_str(&text);
     out.push(']');
 }
 

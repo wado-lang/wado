@@ -1724,7 +1724,7 @@ time of the currently configured timezone, at the exact time of
 
 The magnitude of the returned value will always be less than
 86,400,000,000,000 which is the number of nanoseconds in a day
-(24*60*60*1e9).
+(24\*60\*60\*1e9).
 
 If the implementation does not expose an actual timezone, or is unable
 to provide mappings from times to deltas between the configured timezone

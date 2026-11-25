@@ -82,13 +82,27 @@ the review and hands the findings to `code-review-response`.
 
 ## Reviewing a Pull Request
 
-A repository admin comments `@wado-bot review` on a pull request, or
-dispatches the `Eddy` workflow with its number. The workflow reviews the pull
-request's head and posts `review.md` as a comment. Eddy itself, `mise.toml`
-and every script come from the default branch, so the pull request's code runs
-only inside Eddy's confinement. The workflow pushes the record to the wiki,
-and the patches stay in the run's artifact for 90 days, as
-`eddy-<pr>-<head>`.
+A person with write access to the repository comments `@wado-bot review` on a
+pull request, or dispatches the `Eddy` workflow with its number. The workflow
+also starts by itself on such a person's pull request, when CodeRabbit's
+commit status says its review of the head was rate limited. A head that
+already carries an `Eddy` check is not started again this way.
+
+The `Eddy` check on a head says whether a review ran, not what it found:
+
+| Check       | Meaning                                                     |
+| ----------- | ----------------------------------------------------------- |
+| Skipped     | The head was rate limited, and its author cannot write.     |
+| In progress | A review is queued or running.                              |
+| Success     | Eddy finished and its comment is posted, whatever it found. |
+| Failure     | Eddy itself failed, an API account out of credit included.  |
+| Cancelled   | The review was cancelled, or a newer one took its place.    |
+
+The workflow reviews the pull request's head and posts `review.md` as a
+comment. Eddy itself, `mise.toml` and every script come from the default
+branch, so the pull request's code runs only inside Eddy's confinement. The
+workflow pushes the record to the wiki, and the patches stay in the run's
+artifact for 90 days, as `eddy-<pr>-<head>`.
 
 The workflow holds no API key. With `ANTHROPIC_FEDERATION_RULE_ID` and the
 rest of a Workload Identity Federation rule in its environment, Eddy trades
