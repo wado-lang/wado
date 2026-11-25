@@ -1098,6 +1098,10 @@ type-checks. `{ x: 1, y: 2 }` and `{ y: 2, x: 1 }` have two types, so an `if`
 with one in each branch does not. Its fields are read, destructured and nested
 as a named struct's are.
 
+Each field's type is settled within the statement that writes the literal. A
+field that statement leaves undecided is an error: no later statement answers
+it.
+
 > Not yet implemented: writing an anonymous struct type where a type is
 > expected. Until then a value of one has its type only by inference from a
 > literal, so no signature names it, and it never crosses a component boundary.

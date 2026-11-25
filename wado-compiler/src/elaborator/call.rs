@@ -2154,9 +2154,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None => (Vec::new(), None),
                 };
                 let generic = !impl_type_args_inferred.is_empty() || !method_type_args.is_empty();
-                if generic
-                    && self.report_value_for_reference(&raw_param_types, call, &args)
-                {
+                if generic && self.report_value_for_reference(&raw_param_types, call, &args) {
                     return TypeTable::ERROR;
                 }
                 let block = resolved
@@ -2518,8 +2516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     // The same check the bare `Type::method` spelling gets: a
                     // count is only skipped where no signature answered.
-                    let arg_sites =
-                        self.arg_sites_of(call.id, &call.args, args.len(), call.span);
+                    let arg_sites = self.arg_sites_of(call.id, &call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
                             &param_types,

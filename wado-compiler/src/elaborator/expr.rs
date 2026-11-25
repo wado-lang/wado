@@ -4821,14 +4821,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (index, field) in struct_lit.fields.iter().enumerate() {
             let type_id = self.resolve_expr(&field.value, ctx, None);
             let type_id = self.apply_infer_holes(type_id);
-            if self.type_has_infer_hole(type_id) {
-                let _ = self.emit(TypeError::CannotInferType {
-                    message: format!(
-                        "cannot infer the type of field `{}`; annotate the value",
-                        field.name
-                    ),
-                    span: field.value.span(),
-                });
+            let open = self.tysys.type_table.borrow().infer_vars_in(type_id);
+            if !open.is_empty() {
+                self.close_uninferred(&open);
                 shaped = false;
             }
             resolved_fields.push(ResolvedField {

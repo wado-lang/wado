@@ -1746,22 +1746,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow()
                     .tuple_representation(scrutinee_type);
-                let element_types = if self.reports_open_pack(
-                    scrutinee_type,
-                    "match its elements",
-                    span,
-                ) {
-                    vec![TypeTable::ERROR; patterns.len()]
-                } else if let Some(types) = elements {
-                    types
-                } else {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: "tuple type".to_string(),
-                        found: self.tysys.type_table.borrow().name(scrutinee_type),
-                        span,
-                    });
-                    vec![TypeTable::UNKNOWN; patterns.len()]
-                };
+                let element_types =
+                    if self.reports_open_pack(scrutinee_type, "match its elements", span) {
+                        vec![TypeTable::ERROR; patterns.len()]
+                    } else if let Some(types) = elements {
+                        types
+                    } else {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected: "tuple type".to_string(),
+                            found: self.tysys.type_table.borrow().name(scrutinee_type),
+                            span,
+                        });
+                        vec![TypeTable::UNKNOWN; patterns.len()]
+                    };
                 let element_types = self.tuple_pattern_element_types(
                     patterns.len(),
                     *has_rest,

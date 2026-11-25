@@ -3643,6 +3643,12 @@ impl TypeTable {
         Some((self.plain_pack(pack), element))
     }
 
+    /// Whether `ty` (recursively) names the error type: a diagnostic already
+    /// covers it.
+    pub fn mentions_error(&self, ty: TypeId) -> bool {
+        ty == Self::ERROR || self.any_constituent(ty, &mut |t| self.mentions_error(t))
+    }
+
     /// The one type every element of the run `pack` stands for is, where the
     /// run repeats one: a declared repeat, or a variable standing for it.
     pub fn run_element(&mut self, pack: TypeId) -> Option<TypeId> {

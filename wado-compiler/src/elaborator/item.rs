@@ -1269,13 +1269,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ctx: &mut FunctionContext,
     ) {
         let defaulted = self.apply_type_param_defaults(type_params, type_id);
-        let resolved = self.resolve_expr(default_ast, ctx, Some(defaulted));
-        let expected = if resolved == type_id {
-            type_id
-        } else {
-            defaulted
-        };
-        self.typecheck_value(default_ast, resolved, expected);
+        // A statement of its own: a report here stands for no slot another
+        // default leaves open.
+        self.in_statement(default_ast.span(), |s| {
+            let resolved = s.resolve_expr(default_ast, ctx, Some(defaulted));
+            let expected = if resolved == type_id {
+                type_id
+            } else {
+                defaulted
+            };
+            s.typecheck_value(default_ast, resolved, expected);
+        });
     }
 
     /// Bind a parameter in its function's body frame. A default is walked for

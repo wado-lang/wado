@@ -213,10 +213,12 @@ Each step keeps every fixture passing and deletes what it replaces.
   reaches the declared return before the arguments are typed, and each
   argument is typed against its parameter and coerced into it. A numeric
   literal waits for the call as it does now, and a `!` argument is coerced, so
-  it binds nothing. `InferCtx`, its tiers, the merge of a turbofish into what
-  was inferred, and every second solve of the same call are deleted. Free
-  functions, builtins, static calls, methods, struct literals and variant
-  cases all take this one path.
+  it binds nothing. `InferCtx`, its tiers and every second solve of the same
+  call are deleted. Free functions, builtins, static calls, methods, struct
+  literals and variant cases all take this one path. A written turbofish
+  still keeps its own list: `merge_turbofish_type_args` fills the slots it
+  left unwritten from the call's answers, and equates each `_` with its
+  answer.
 - [x] A pack slot is instantiated as a pack variable, answered by a list of
   types, so nothing patches a pack the instantiation left rigid.
 - [x] A variable carries its origin: the slot it stands for, the declaration
@@ -235,6 +237,10 @@ Each step keeps every fixture passing and deletes what it replaces.
   is undecided. `let y: List<i32> = Mk::<_, Self = S>::mk()` and
   `Mk::<_>::mk(&s)` stay unsettled where the unqualified `s.mk()` selects by
   the annotation.
+
+- An anonymous struct literal's field must be settled by its own value. In
+  `same({ a: none() }.a, x)` the rest of the statement would settle `a`, and
+  the field is reported all the same.
 
 - A mismatch at a later statement does not name the literal whose default
   caused it. In `let b = put(none(), 5)` followed by `take64(b)`, the report

@@ -902,6 +902,12 @@ impl TypeSystem {
     ) -> Result<(), TypeMismatchPayload> {
         let type_table = self.type_table.borrow();
         match check_assignable(actual, expected, &type_table) {
+            // A side naming the error type is a report's fault already.
+            TypeCheckResult::Incompatible
+                if type_table.mentions_error(actual) || type_table.mentions_error(expected) =>
+            {
+                Ok(())
+            }
             TypeCheckResult::Incompatible => {
                 let (expected, found) = type_table.names_for_mismatch(expected, actual);
                 Err(TypeMismatchPayload { expected, found })
