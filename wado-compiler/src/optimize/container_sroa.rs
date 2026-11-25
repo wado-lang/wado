@@ -757,6 +757,9 @@ fn signature_holders(
     value_copy_ids: &IndexSet<FuncId>,
     exec: &Executor,
 ) -> Vec<IndexSet<FuncId>> {
+    if elements.is_empty() {
+        return Vec::new();
+    }
     let held = || HeldElements {
         type_table,
         elements,

@@ -250,13 +250,7 @@ pub(super) fn version_loops(
             let mut unversioned: Vec<FillLoop> = Vec::new();
             for (parent, loop_stmt, loop_body) in loops {
                 if let Some(plan) = analyze_loop(
-                    &engine,
-                    &binds,
-                    type_table,
-                    &frame,
-                    parent,
-                    loop_stmt,
-                    loop_body,
+                    &engine, &binds, type_table, &frame, parent, loop_stmt, loop_body,
                 ) {
                     plans.push(plan);
                 } else if !block_contains_loop(engine.body, loop_body)

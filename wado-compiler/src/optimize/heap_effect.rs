@@ -534,7 +534,9 @@ impl HeapEffectsCache {
                 moved[i] = old.is_none_or(|old| old.shape() != new.shape());
             },
         );
-        self.file_closures(project);
+        // A signature whose closures changed joins a different set, which no
+        // successor's `moved` reports when the change is a closure retired.
+        edited.extend(self.file_closures(project));
         moved.resize(len + self.signatures.len(), false);
         self.summaries.resize_with(len, Summary::default);
         self.indirect
@@ -553,8 +555,9 @@ impl HeapEffectsCache {
     }
 
     /// Number every signature an indirect call goes through, and file each
-    /// closure body under its functor's canonical signature.
-    fn file_closures(&mut self, project: &NirPackage) {
+    /// closure body under its functor's canonical signature. Returns, per
+    /// signature, whether its closures changed.
+    fn file_closures(&mut self, project: &NirPackage) -> Vec<bool> {
         let entries = self.functions.facts();
         for entry in entries {
             for s in &entry.calls_indirect {
@@ -577,7 +580,8 @@ impl HeapEffectsCache {
                 (id.index(), self.signatures.insert_full(signature).0)
             })
             .collect();
-        self.closures = vec![Vec::new(); self.signatures.len()];
+        let previous =
+            std::mem::replace(&mut self.closures, vec![Vec::new(); self.signatures.len()]);
         for (i, entry) in entries.iter().enumerate() {
             if entry.closure {
                 let k = *signature_of
@@ -586,6 +590,11 @@ impl HeapEffectsCache {
                 self.closures[k].push(i);
             }
         }
+        self.closures
+            .iter()
+            .enumerate()
+            .map(|(k, closures)| previous.get(k) != Some(closures))
+            .collect()
     }
 
     /// The least fixpoint over the call graph, callees first; a component whose
