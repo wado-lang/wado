@@ -16,6 +16,7 @@ internal variant Node {
     NotWordBoundary,
     Set(CharSet),
     Group(Group),
+    Lookaround(Lookaround),
     Modified(Modified),
     Repeat(Repeat),
     Concat(List<Node>),
@@ -27,6 +28,17 @@ internal variant Node {
 internal struct Group {
     internal index: Option<i32>,
     internal name: Option<String>,
+    internal body: Node,
+}
+
+/// `(?=…)` `(?!…)` `(?<=…)` `(?<!…)`
+internal struct Lookaround {
+    /// Counts its opening parenthesis among the pattern's lookarounds, from
+    /// 0, so one holds a higher index than whatever encloses it.
+    internal index: i32,
+    /// Whether it reads what follows its position, or what precedes it.
+    internal ahead: bool,
+    internal negated: bool,
     internal body: Node,
 }
 

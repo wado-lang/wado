@@ -4,7 +4,8 @@
 //! instruction, which is what makes the first match found the leftmost-first one.
 
 use { FOLDED_WORD, includes, is_word_byte } from "./charset.wado";
-use { Look, Program } from "./program.wado";
+use { Oracle } from "./oracle.wado";
+use { Direction, Look, Program } from "./program.wado";
 
 struct Thread {
     pc: i32,
@@ -48,8 +49,10 @@ impl Threads {
 internal struct Cache {
     current: Threads,
     next: Threads,
-    /// Every slot unset.
+    /// Every slot unset, for the program searched last.
     fresh: List<i32>,
+    /// Where the pattern's lookarounds pass in the text the iterator reads.
+    internal oracle: Oracle,
     /// The backtracker's: a bit for each state at each position, and the
     /// threads it has yet to run.
     internal visited: List<i32>,
@@ -62,6 +65,7 @@ impl Cache {
             current: Threads::new(0),
             next: Threads::new(0),
             fresh: [],
+            oracle: Oracle::new(),
             visited: [],
             stack: [],
         };
@@ -69,7 +73,7 @@ impl Cache {
 
     /// The slots of `program`, every one unset.
     internal fn unset_slots(&mut self, program: &Program) -> List<i32> {
-        if self.fresh.is_empty() {
+        if self.fresh.len() != program.slots {
             self.fresh = List::filled(program.slots, -1);
         }
         return self.fresh;
@@ -89,13 +93,15 @@ internal variant Within {
     /// Starting anywhere at or after the search's start.
     Text,
     /// Starting at the search's start and reading no further than this
-    /// offset, which is where the leftmost-first match there ends.
+    /// offset, the way the program reads.
     Span(i32),
 }
 
 /// The capture slots of the leftmost-first match at or after `start`, which
 /// lies on a character boundary of `text`; an unset slot is -1. Under
-/// `Goal::Any`, those of whichever match is found first.
+/// `Goal::Any`, those of whichever match is found first. A program that reads
+/// backward searches `Within::Span` only, and `cache.oracle` is that of
+/// `text` where the program holds a lookaround.
 internal fn search(
     program: &Program,
     cache: &mut Cache,
@@ -104,17 +110,20 @@ internal fn search(
     within: Within,
     goal: Goal,
 ) -> Option<List<i32>> {
-    if cache.current.seen.is_empty() {
-        let size = program.state_base[program.insts.len()];
-        cache.current = Threads::new(size);
-        cache.next = Threads::new(size);
+    if cache.current.seen.len() < program.states() {
+        cache.current = Threads::new(program.states());
+        cache.next = Threads::new(program.states());
     }
     let fresh = cache.unset_slots(program);
     cache.current.clear();
-    let [len, anchored] = match within {
+    let forward = program.direction == Direction::Forward;
+    let step = if forward { 1 } else { -1 };
+    let [limit, anchored] = match within {
         _::Text => [text.len(), false],
-        Span(end) => [end, true],
+        Span(limit) => [limit, true],
     };
+    assert forward || anchored;
+    let oracle = &cache.oracle;
     let mut matched: Option<List<i32>> = null;
     let mut pos = start;
     loop {
@@ -122,19 +131,19 @@ internal fn search(
         // is found, since any match it led to would lie further right.
         let found = matched matches { Some(_) };
         if !found && (pos == start || !anchored) && text.is_char_boundary(pos) {
-            add(program, text, &mut cache.current, 0, fresh, pos);
+            add(program, oracle, text, &mut cache.current, 0, fresh, pos);
         }
-        if cache.current.list.is_empty() && (found || anchored || pos >= len) {
+        if cache.current.list.is_empty() && (found || anchored || pos == limit) {
             return matched;
         }
         cache.next.clear();
         for let t of &cache.current.list {
             match program.insts[t.pc] {
                 Byte([lo, hi]) => {
-                    if pos < len {
-                        let b = text.byte_at(pos);
+                    if pos != limit {
+                        let b = text.byte_at(if forward { pos } else { pos - 1 });
                         if b >= lo && b <= hi {
-                            add(program, text, &mut cache.next, t.pc + 1, t.slots, pos + 1);
+                            add(program, oracle, text, &mut cache.next, t.pc + 1, t.slots, pos + step);
                         }
                     }
                 },
@@ -151,10 +160,10 @@ internal fn search(
             }
         }
         [cache.current, cache.next] = [cache.next, cache.current];
-        if pos >= len {
+        if pos == limit {
             return matched;
         }
-        pos += 1;
+        pos += step;
     }
 }
 
@@ -162,7 +171,7 @@ internal fn search(
 /// threads that reach a `Byte` or `Match`, highest priority first. A thread
 /// is dropped where a higher one already reached its state: from there both
 /// can match the same, and the higher one's match wins.
-fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List<i32>, pos: i32) {
+fn add(program: &Program, oracle: &Oracle, text: StrSlice, to: &mut Threads, pc: i32, slots: List<i32>, pos: i32) {
     let mut stack: List<Thread> = [
         Thread { pc, slots, entered: 0 },
     ];
@@ -200,6 +209,15 @@ fn add(program: &Program, text: StrSlice, to: &mut Threads, pc: i32, slots: List
             Assert(look) => {
                 if holds(look, text, pos) {
                     stack.push(t.at(t.pc + 1, t.slots));
+                }
+            },
+            Lookaround([index, mark]) => {
+                if oracle.passes(index, pos) {
+                    let mut s = t.slots;
+                    if mark >= 0 {
+                        s[mark] = pos;
+                    }
+                    stack.push(t.at(t.pc + 1, s));
                 }
             },
             Progress(slot) => {

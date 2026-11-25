@@ -30,11 +30,20 @@ global NO_IDLE: i32 = -2;
 global MAX_IDLE_EXITS: i32 = 16;
 
 /// Whether the DFA can run `program`: it resolves `^` and `$` outside `m` at
-/// the ends of the text, and no other assertion.
+/// the ends of the text, and no other assertion or lookaround.
 internal fn runs(program: &Program) -> bool {
     for let inst of &program.insts {
-        if let Assert(look) = *inst && !look matches { _::StartText | _::EndText } {
-            return false;
+        match *inst {
+            Assert(look) => {
+                if !look matches { _::StartText | _::EndText } {
+                    return false;
+                }
+            },
+            Lookaround(_) => {
+                return false;
+            },
+            Byte(_) | Split(_) | Jump(_) | Save(_) | Clear(_) | Progress(_) | _::Fail | _::Match => {
+            },
         }
     }
     return true;
@@ -184,6 +193,7 @@ impl Dfa {
                 },
                 _::Fail => {
                 },
+                Lookaround(_) => unreachable(),
                 Byte(_) | _::Match => {
                     out.push(pc);
                     out.push(0);

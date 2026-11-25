@@ -4,13 +4,16 @@ use { Node } from "./ast.wado";
 use { Hole, PatternError, Syntax, parse } from "./parse.wado";
 use { backtrack, fits } from "./backtrack.wado";
 use { Dfa, runs } from "./dfa.wado";
+use { Oracle } from "./oracle.wado";
 use { Cache, Goal, Within, search } from "./pike.wado";
 use { print } from "./print.wado";
-use { Direction, Program, compile } from "./program.wado";
+use { Direction, LookaroundPrograms, Program, compile, compile_lookarounds } from "./program.wado";
 
 /// A compiled regular expression.
 pub struct Regex {
     program: Program,
+    /// By the index the instruction of each holds.
+    lookarounds: List<LookaroundPrograms>,
     /// The name of each group, by index; group 0 has none.
     names: List<Option<String>>,
     /// What a template splices where this stands in a hole.
@@ -82,6 +85,7 @@ fn collect_names(node: &Node, names: &mut List<Option<String>>) {
             }
             collect_names(&g.body, names);
         },
+        Lookaround(l) => collect_names(&l.body, names),
         Modified(m) => collect_names(&m.body, names),
         Repeat(r) => collect_names(&r.body, names),
         Concat(nodes) | Alternation(nodes) => {
@@ -89,8 +93,37 @@ fn collect_names(node: &Node, names: &mut List<Option<String>>) {
                 collect_names(n, names);
             }
         },
-        _ => {
+        Char(_) | _::Any | _::Start | _::End | _::WordBoundary | _::NotWordBoundary | Set(_) => {
         },
+    }
+}
+
+/// Fills in the groups of each lookaround that held on the way to the match
+/// `slots` holds, which `program` found: its instruction left in a slot where
+/// it held last, and its body is read from there. That is its own first
+/// match, which nothing after it alters (CompileAssertion, §22.2.2.4).
+fn read_lookarounds(
+    lookarounds: &List<LookaroundPrograms>,
+    program: &Program,
+    cache: &mut Cache,
+    text: StrSlice,
+    slots: &mut List<i32>,
+) {
+    for let index of &program.marked {
+        let Some(reads) = &lookarounds[*index].reads else {
+            unreachable();
+        };
+        let at = slots[reads.from];
+        if at < 0 {
+            continue;
+        }
+        let limit = if reads.program.direction == Direction::Forward { text.len() } else { 0 };
+        // The oracle found a match from `at`.
+        let mut inner = search(&reads.program, cache, text, at, Within::Span(limit), Goal::Groups).unwrap();
+        read_lookarounds(lookarounds, &reads.program, cache, text, &mut inner);
+        for let k of reads.from..<reads.until {
+            slots[k] = inner[k];
+        }
     }
 }
 
@@ -102,8 +135,9 @@ internal fn build(pattern: StrSlice, syntax: Syntax, holes: List<Hole> = []) -> 
     }
     collect_names(&tree, &mut names);
     let program = compile(&tree, groups, Direction::Forward)?;
+    let lookarounds = compile_lookarounds(&tree, groups, &program)?;
     let mut lazy = Lazy { forward: null, reverse: null, off: !runs(&program) };
-    return Ok(Regex { program, names, tree, lazy: &mut lazy });
+    return Ok(Regex { program, lookarounds, names, tree, lazy: &mut lazy });
 }
 
 fn has_name(names: &List<Option<String>>) -> bool {
@@ -187,7 +221,20 @@ impl Regex {
                 }
             }
         }
-        return search(&self.program, cache, text, start, Within::Text, Goal::Groups);
+        self.consult_oracle(cache, text);
+        let mut slots = search(&self.program, cache, text, start, Within::Text, Goal::Groups)?;
+        if groups {
+            read_lookarounds(&self.lookarounds, &self.program, cache, text, &mut slots);
+        }
+        return Some(slots);
+    }
+
+    /// Has `cache` hold the oracle of `text`, which is the one text it
+    /// searches.
+    fn consult_oracle(&self, cache: &mut Cache, text: StrSlice) {
+        if !self.lookarounds.is_empty() && cache.oracle.is_empty() {
+            cache.oracle = Oracle::of(&self.lookarounds, text);
+        }
     }
 
     /// Whether `text` holds a match.
@@ -199,7 +246,9 @@ impl Regex {
                 return end matches { Some(_) };
             }
         }
-        return search(&self.program, &mut Cache::new(), view, 0, Within::Text, Goal::Any) matches { Some(_) };
+        let mut cache = Cache::new();
+        self.consult_oracle(&mut cache, view);
+        return search(&self.program, &mut cache, view, 0, Within::Text, Goal::Any) matches { Some(_) };
     }
 
     /// The leftmost match in `text`.

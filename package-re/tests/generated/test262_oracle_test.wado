@@ -25,6 +25,14 @@ test " " {
     assert spans(#" "#, "one two three four five") == "3..4 7..8 13..14 18..19";
 }
 
+test "\"^foooo(?<=^o*)$" {
+    assert spans(#""^foooo(?<=^o*)$"#, "foooo") == "";
+}
+
+test "\"^foooo(?<=^o+)$" {
+    assert spans(#""^foooo(?<=^o+)$"#, "foooo") == "";
+}
+
 test "$" {
     assert spans(#"$"#, "x") == "1..1";
 }
@@ -39,6 +47,10 @@ test "((((((((((x))))))))))" {
 
 test "((1)|(12))((3)|(23))" {
     assert spans(#"((1)|(12))((3)|(23))"#, "123") == "0..3,0..1,0..1,-,1..3,-,1..3";
+}
+
+test "((?<=\\w{3}))f" {
+    assert spans(#"((?<=\w{3}))f"#, "abcdef") == "5..6,5..5";
 }
 
 test "((a)|(ab))((c)|(bc))" {
@@ -73,6 +85,28 @@ test "(123){1,}" {
     assert spans(#"(123){1,}"#, "123123") == "0..6,3..6";
 }
 
+test "(?!a|b)|c" {
+    assert spans(#"(?!a|b)|c"#, "bc") == "1..1 2..2";
+    assert spans(#"(?!a|b)|c"#, "d") == "0..0 1..1";
+    assert spans(#"(?!a|b)|c"#, "") == "0..0";
+}
+
+test "(?:(?=(abc)))?a" {
+    assert spans(#"(?:(?=(abc)))?a"#, "abc") == "0..1,-";
+}
+
+test "(?:(?=(abc)))a" {
+    assert spans(#"(?:(?=(abc)))a"#, "abc") == "0..1,0..3";
+}
+
+test "(?:(?=(abc))){0,1}a" {
+    assert spans(#"(?:(?=(abc))){0,1}a"#, "abc") == "0..1,-";
+}
+
+test "(?:(?=(abc))){1,1}a" {
+    assert spans(#"(?:(?=(abc))){1,1}a"#, "abc") == "0..1,0..3";
+}
+
 test "(?:)" {
     assert spans(#"(?:)"#, "abc") == "0..0 1..1 2..2 3..3";
     assert spans(#"(?:)"#, "") == "0..0";
@@ -94,6 +128,70 @@ test "(?:ab|cd)\\d?" {
     assert spans(#"(?:ab|cd)\d?"#, "aacd22 ") == "2..5";
 }
 
+test "(?<!(?<a>\\D){3})f" {
+    assert spans(#"(?<!(?<a>\D){3})f"#, "abcdef") == "";
+}
+
+test "(?<!(?<a>\\D){3})f|f" {
+    assert spans(#"(?<!(?<a>\D){3})f|f"#, "abcdef") == "5..6,-";
+}
+
+test "(?<!(?<a>\\d){3})f" {
+    assert spans(#"(?<!(?<a>\d){3})f"#, "abcdef") == "5..6,-";
+}
+
+test "(?<!(^|[ab]))\\w{2}" {
+    assert spans(#"(?<!(^|[ab]))\w{2}"#, "abcdef") == "3..5,-";
+}
+
+test "(?<!a.c)\\w\\w\\w" {
+    assert spans(#"(?<!a.c)\w\w\w"#, "abcdef") == "0..3";
+}
+
+test "(?<!a.c)def" {
+    assert spans(#"(?<!a.c)def"#, "abcdef") == "";
+}
+
+test "(?<!a[a-z])\\w\\w\\w" {
+    assert spans(#"(?<!a[a-z])\w\w\w"#, "abcdef") == "0..3 3..6";
+}
+
+test "(?<!a[a-z][a-z])def" {
+    assert spans(#"(?<!a[a-z][a-z])def"#, "abcdef") == "";
+}
+
+test "(?<!a[a-z]{2})\\w\\w\\w" {
+    assert spans(#"(?<!a[a-z]{2})\w\w\w"#, "abcdef") == "0..3";
+}
+
+test "(?<!a[a-z]{2})def" {
+    assert spans(#"(?<!a[a-z]{2})def"#, "abcdef") == "";
+}
+
+test "(?<!a\\wc)\\w\\w\\w" {
+    assert spans(#"(?<!a\wc)\w\w\w"#, "abcdef") == "0..3";
+}
+
+test "(?<!a\\wc)def" {
+    assert spans(#"(?<!a\wc)def"#, "abcdef") == "";
+}
+
+test "(?<!abc)\\w\\w\\w" {
+    assert spans(#"(?<!abc)\w\w\w"#, "abcdef") == "0..3";
+}
+
+test "(?<!abc)def" {
+    assert spans(#"(?<!abc)def"#, "abcdef") == "";
+}
+
+test "(?<!a{1}[a-z]{2})def" {
+    assert spans(#"(?<!a{1}[a-z]{2})def"#, "abcdef") == "";
+}
+
+test "(?<!a{1}b{1})cde" {
+    assert spans(#"(?<!a{1}b{1})cde"#, "abcdef") == "";
+}
+
 test "(?<$>a)" {
     assert spans(#"(?<$>a)"#, "bab") == "1..2,1..2";
 }
@@ -104,6 +202,167 @@ test "(?<$\u{104A4}>a)" {
 
 test "(?<$\u{104A4}>b)" {
     assert spans(#"(?<$𐒤>b)"#, "abc") == "1..2,1..2";
+}
+
+test "(?<=$abc)def" {
+    assert spans(#"(?<=$abc)def"#, "abcdef") == "";
+}
+
+test "(?<=((?:b\\d{2})+))c" {
+    assert spans(#"(?<=((?:b\d{2})+))c"#, "ab12b23b34c") == "10..11,1..10";
+}
+
+test "(?<=(?<a>\\w)+)f" {
+    assert spans(#"(?<=(?<a>\w)+)f"#, "abcdef") == "5..6,0..1";
+}
+
+test "(?<=(?<a>\\w){3})f" {
+    assert spans(#"(?<=(?<a>\w){3})f"#, "abcdef") == "5..6,2..3";
+}
+
+test "(?<=(?<a>\\w){4})f" {
+    assert spans(#"(?<=(?<a>\w){4})f"#, "abcdef") == "5..6,1..2";
+}
+
+test "(?<=(?<a>\\w){6})f" {
+    assert spans(#"(?<=(?<a>\w){6})f"#, "abcdef") == "";
+}
+
+test "(?<=(?<fst>.)|(?<snd>.))" {
+    assert spans(#"(?<=(?<fst>.)|(?<snd>.))"#, "abcd") == "1..1,0..1,- 2..2,1..2,- 3..3,2..3,- 4..4,3..4,-";
+}
+
+test "(?<=([ab]{1,2})\\D|(abc))\\w" {
+    assert spans(#"(?<=([ab]{1,2})\D|(abc))\w"#, "abcdef") == "2..3,0..1,- 3..4,0..2,-";
+}
+
+test "(?<=(\\w(\\w)))def" {
+    assert spans(#"(?<=(\w(\w)))def"#, "abcdef") == "3..6,1..3,2..3";
+}
+
+test "(?<=(\\w){3})def" {
+    assert spans(#"(?<=(\w){3})def"#, "abcdef") == "3..6,0..1";
+}
+
+test "(?<=(\\w{2}))def" {
+    assert spans(#"(?<=(\w{2}))def"#, "abcdef") == "3..6,1..3";
+}
+
+test "(?<=(b+))c" {
+    assert spans(#"(?<=(b+))c"#, "abbbbbbc") == "7..8,1..7";
+}
+
+test "(?<=(b\\d+))c" {
+    assert spans(#"(?<=(b\d+))c"#, "ab1234c") == "6..7,1..6";
+}
+
+test "(?<=(bc)|(cd))." {
+    assert spans(#"(?<=(bc)|(cd))."#, "abcdef") == "3..4,1..3,- 4..5,-,2..4";
+}
+
+test "(?<=(c))def" {
+    assert spans(#"(?<=(c))def"#, "abcdef") == "3..6,2..3";
+}
+
+test "(?<=[a|b|c]*)[^a|b|c]{3}" {
+    assert spans(#"(?<=[a|b|c]*)[^a|b|c]{3}"#, "abcdef") == "3..6";
+}
+
+test "(?<=[b-e])\\w{2}" {
+    assert spans(#"(?<=[b-e])\w{2}"#, "abcdef") == "2..4 4..6";
+}
+
+test "(?<=\\B)(?<=c(?<=\\w))\\w{3}" {
+    assert spans(#"(?<=\B)(?<=c(?<=\w))\w{3}"#, "ab cdef") == "4..7";
+}
+
+test "(?<=\\B)\\w{3}" {
+    assert spans(#"(?<=\B)\w{3}"#, "ab cdef") == "4..7";
+}
+
+test "(?<=\\b)[d-f]{3}" {
+    assert spans(#"(?<=\b)[d-f]{3}"#, "abc def") == "4..7";
+    assert spans(#"(?<=\b)[d-f]{3}"#, "abcdef") == "";
+}
+
+test "(?<=\\w*)[^a|b|c]{3}" {
+    assert spans(#"(?<=\w*)[^a|b|c]{3}"#, "abcdef") == "3..6";
+}
+
+test "(?<=^(\\w+))def" {
+    assert spans(#"(?<=^(\w+))def"#, "abcdefdef") == "3..6,0..3 6..9,0..6";
+}
+
+test "(?<=^[^a-c]{3})def" {
+    assert spans(#"(?<=^[^a-c]{3})def"#, "abcdef") == "";
+}
+
+test "(?<=^[a-c]{3})def" {
+    assert spans(#"(?<=^[a-c]{3})def"#, "abcdef") == "3..6";
+}
+
+test "(?<=^\\w+)def" {
+    assert spans(#"(?<=^\w+)def"#, "abcdefdef") == "3..6 6..9";
+}
+
+test "(?<=^abc)def" {
+    assert spans(#"(?<=^abc)def"#, "abcdef") == "3..6";
+}
+
+test "(?<=a(?=([^a]{2})d)\\w{3})\\w\\w" {
+    assert spans(#"(?<=a(?=([^a]{2})d)\w{3})\w\w"#, "abcdef") == "4..6,1..3";
+}
+
+test "(?<=a(?=([bc]{2}(?<!a*))d)\\w{3})\\w\\w" {
+    assert spans(#"(?<=a(?=([bc]{2}(?<!a*))d)\w{3})\w\w"#, "abcdef") == "";
+}
+
+test "(?<=a(?=([bc]{2}(?<!a{2}))d)\\w{3})\\w\\w" {
+    assert spans(#"(?<=a(?=([bc]{2}(?<!a{2}))d)\w{3})\w\w"#, "abcdef") == "4..6,1..3";
+}
+
+test "(?<=a.c)\\w\\w\\w" {
+    assert spans(#"(?<=a.c)\w\w\w"#, "abcdef") == "3..6";
+}
+
+test "(?<=a[a-z])\\w\\w\\w" {
+    assert spans(#"(?<=a[a-z])\w\w\w"#, "abcdef") == "2..5";
+}
+
+test "(?<=a[a-z][a-z])\\w\\w\\w" {
+    assert spans(#"(?<=a[a-z][a-z])\w\w\w"#, "abcdef") == "3..6";
+}
+
+test "(?<=a[a-z]{2})\\w\\w\\w" {
+    assert spans(#"(?<=a[a-z]{2})\w\w\w"#, "abcdef") == "3..6";
+}
+
+test "(?<=a\\wc)\\w\\w\\w" {
+    assert spans(#"(?<=a\wc)\w\w\w"#, "abcdef") == "3..6";
+}
+
+test "(?<=ab(?=c)\\wd)\\w\\w" {
+    assert spans(#"(?<=ab(?=c)\wd)\w\w"#, "abcdef") == "4..6";
+}
+
+test "(?<=abc)\\w\\w\\w" {
+    assert spans(#"(?<=abc)\w\w\w"#, "abcdef") == "3..6";
+}
+
+test "(?<=a{1})\\w\\w\\w" {
+    assert spans(#"(?<=a{1})\w\w\w"#, "abcdef") == "1..4";
+}
+
+test "(?<=a{1}[a-z]{2})\\w\\w\\w" {
+    assert spans(#"(?<=a{1}[a-z]{2})\w\w\w"#, "abcdef") == "3..6";
+}
+
+test "(?<=a{1}b{1})\\w\\w\\w" {
+    assert spans(#"(?<=a{1}b{1})\w\w\w"#, "abcdef") == "2..5";
+}
+
+test "(?<=b|c)\\w" {
+    assert spans(#"(?<=b|c)\w"#, "abcdef") == "2..3 3..4";
 }
 
 test "(?<A>.)" {
@@ -173,6 +432,14 @@ test "(?<__proto__>.)" {
 
 test "(?<a42>a)" {
     assert spans(#"(?<a42>a)"#, "bab") == "1..2,1..2";
+}
+
+test "(?<a>(?<!\\D{3}))f|f" {
+    assert spans(#"(?<a>(?<!\D{3}))f|f"#, "abcdef") == "5..6,-";
+}
+
+test "(?<a>(?<=\\w{3}))f" {
+    assert spans(#"(?<a>(?<=\w{3}))f"#, "abcdef") == "5..6,5..5";
 }
 
 test "(?<a>.(?<b>.(?<c>.)))" {
@@ -314,6 +581,10 @@ test "(?<\u{1D5B0}\u{1D5A1}\\u{1d5a5}>q\\w*\\W\\w*\\W\\w*)" {
 
 test "(?<\u{1D5B0}\u{1D5A1}\u{1D5A5}>q\\w*\\W\\w*\\W\\w*)" {
     assert spans(#"(?<𝖰𝖡𝖥>q\w*\W\w*\W\w*)"#, "The quick brown fox jumped over the lazy dog's back") == "4..19,4..19";
+}
+
+test "(?=(a+))" {
+    assert spans(#"(?=(a+))"#, "baaabac") == "1..1,1..4 2..2,2..4 3..3,3..4 5..5,5..6";
 }
 
 test "(?i-:.es)" {
@@ -851,6 +1122,18 @@ test "(?m:(?-m:es.$))" {
     assert spans(#"(?m:(?-m:es.$))"#, "es\u{A}\u{A}") == "";
 }
 
+test "(?m:(?<=^)\\w+(?<=$))" {
+    assert spans(#"(?m:(?<=^)\w+(?<=$))"#, "ab\u{A}cd\u{A}efg") == "0..2 3..5 6..9";
+}
+
+test "(?m:(?<=^)\\w+)" {
+    assert spans(#"(?m:(?<=^)\w+)"#, "ab\u{A}cd\u{A}efg") == "0..2 3..5 6..9";
+}
+
+test "(?m:(?<=^[a-c]{3})def)" {
+    assert spans(#"(?m:(?<=^[a-c]{3})def)"#, "xyz\u{A}abcdef") == "7..10";
+}
+
 test "(?m:(?i-:es$))" {
     assert spans(#"(?m:(?i-:es$))"#, "es") == "0..2";
     assert spans(#"(?m:(?i-:es$))"#, "eS") == "0..2";
@@ -889,6 +1172,10 @@ test "(?m:[^]a)" {
 
 test "(?m:[^e]$)" {
     assert spans(#"(?m:[^e]$)"#, "pairs\u{A}makes\u{9}double") == "4..5";
+}
+
+test "(?m:\\w+(?<=$))" {
+    assert spans(#"(?m:\w+(?<=$))"#, "ab\u{A}cd\u{A}efg") == "0..2 3..5 6..9";
 }
 
 test "(?m:^(?-m:es$))" {
@@ -1224,6 +1511,12 @@ test "([a-z]+)([0-9]+)" {
     assert spans(#"([a-z]+)([0-9]+)"#, "abc12 def34") == "0..5,0..3,3..5 6..11,6..9,9..11";
 }
 
+test "(\\.(?!com|org)|\\/)" {
+    assert spans(#"(\.(?!com|org)|\/)"#, "ah.info") == "2..3,2..3";
+    assert spans(#"(\.(?!com|org)|\/)"#, "ah/info") == "2..3,2..3";
+    assert spans(#"(\.(?!com|org)|\/)"#, "ah.com") == "";
+}
+
 test "(\\d*)(\\d+)" {
     assert spans(#"(\d*)(\d+)"#, "1234567890") == "0..10,0..9,9..10";
 }
@@ -1411,6 +1704,22 @@ test ".*" {
     assert spans(#".*"#, "x") == "0..1";
 }
 
+test ".*(?<=(..|...|....))(.*)" {
+    assert spans(#".*(?<=(..|...|....))(.*)"#, "xabcd") == "0..5,3..5,5..5";
+}
+
+test ".*(?<=(xx|...))(.*)" {
+    assert spans(#".*(?<=(xx|...))(.*)"#, "xxabcd") == "0..6,3..6,6..6";
+}
+
+test ".*(?<=(xx|...|....))(.*)" {
+    assert spans(#".*(?<=(xx|...|....))(.*)"#, "xabcd") == "0..5,2..5,5..5";
+}
+
+test ".*(?<=(xx|xxx))(.*)" {
+    assert spans(#".*(?<=(xx|xxx))(.*)"#, "xxabcd") == "0..6,0..2,2..6";
+}
+
 test ".*?" {
     assert spans(#".*?"#, "x") == "0..0 1..1";
 }
@@ -1516,6 +1825,13 @@ test "AL|se" {
 
 test "Four" {
     assert spans(#"Four"#, "one two three four five") == "";
+}
+
+test "Java(?!Script)([A-Z]\\w*)" {
+    assert spans(#"Java(?!Script)([A-Z]\w*)"#, "using of JavaBeans technology") == "9..18,13..18";
+    assert spans(#"Java(?!Script)([A-Z]\w*)"#, "using of Java language") == "";
+    assert spans(#"Java(?!Script)([A-Z]\w*)"#, "i'm a JavaScripter ") == "";
+    assert spans(#"Java(?!Script)([A-Z]\w*)"#, "JavaScr oops ipt ") == "0..7,4..7";
 }
 
 test "String" {
@@ -1835,6 +2151,10 @@ test "\\Bevil\\B" {
 test "\\D" {
     assert spans(#"\D"#, "0123456789") == "";
     assert spans(#"\D"#, "x") == "0..1";
+}
+
+test "\\D(?<=([ab]+))(\\w)" {
+    assert spans(#"\D(?<=([ab]+))(\w)"#, "abcdef") == "0..2,0..1,1..2";
 }
 
 test "\\D{2}" {
@@ -3073,6 +3393,11 @@ test "^.$" {
     assert spans(#"^.$"#, "\u{2029}") == "";
 }
 
+test "^.(?<=a)" {
+    assert spans(#"^.(?<=a)"#, "b") == "";
+    assert spans(#"^.(?<=a)"#, "a") == "0..1";
+}
+
 test "^.*(:|$)" {
     assert spans(#"^.*(:|$)"#, "Hello: World") == "0..12,12..12";
 }
@@ -3145,6 +3470,55 @@ test "^a\\n(?m:^b$)\\nc$" {
 
 test "^ab" {
     assert spans(#"^ab"#, "abcde") == "0..2";
+}
+
+test "^f..(?<=.oo)" {
+    assert spans(#"^f..(?<=.oo)"#, "foo1") == "0..3";
+}
+
+test "^f.o(?<!foo)$" {
+    assert spans(#"^f.o(?<!foo)$"#, "foo") == "";
+    assert spans(#"^f.o(?<!foo)$"#, "fno") == "0..3";
+}
+
+test "^f.o(?<=foo)$" {
+    assert spans(#"^f.o(?<=foo)$"#, "fno") == "";
+    assert spans(#"^f.o(?<=foo)$"#, "foo") == "0..3";
+}
+
+test "^f\\w\\w(?<=\\woo)" {
+    assert spans(#"^f\w\w(?<=\woo)"#, "boo") == "";
+    assert spans(#"^f\w\w(?<=\woo)"#, "fao") == "";
+    assert spans(#"^f\w\w(?<=\woo)"#, "foa") == "";
+    assert spans(#"^f\w\w(?<=\woo)"#, "foo2") == "0..3";
+}
+
+test "^faaao?(?<=^f[oa]+(?=o))" {
+    assert spans(#"^faaao?(?<=^f[oa]+(?=o))"#, "faaao") == "0..4";
+}
+
+test "^foo(?<!foo)$" {
+    assert spans(#"^foo(?<!foo)$"#, "foo") == "";
+}
+
+test "^foo(?<=^fo+)$" {
+    assert spans(#"^foo(?<=^fo+)$"#, "foo") == "0..3";
+}
+
+test "^foo(?<=foo)$" {
+    assert spans(#"^foo(?<=foo)$"#, "foo") == "0..3";
+}
+
+test "^foooo(?<=^fo*)" {
+    assert spans(#"^foooo(?<=^fo*)"#, "foooo") == "0..5";
+}
+
+test "^foooo(?<=fo*)$" {
+    assert spans(#"^foooo(?<=fo*)$"#, "foooo") == "0..5";
+}
+
+test "^foooo(?<=fo+)$" {
+    assert spans(#"^foooo(?<=fo+)$"#, "foooo") == "0..5";
 }
 
 test "^m" {
@@ -3561,6 +3935,12 @@ test "op\\b" {
 
 test "ot\\b" {
     assert spans(#"ot\b"#, "pilot\u{A}soviet robot\u{9}openoffice") == "3..5 16..18";
+}
+
+test "q[ax-zb](?=\\s+)" {
+    assert spans(#"q[ax-zb](?=\s+)"#, "qYqy ") == "2..4";
+    assert spans(#"q[ax-zb](?=\s+)"#, "tqaqy ") == "3..5";
+    assert spans(#"q[ax-zb](?=\s+)"#, "tqa\u{9}  qy ") == "1..3 6..8";
 }
 
 test "r\\b" {

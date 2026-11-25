@@ -10,7 +10,8 @@ A pattern parses to a tree, `rex`'s syntax included, and compiles to Pike VM
 instructions over UTF-8 bytes. Three engines run a program: the Pike VM runs
 every one, a lazy DFA finds a match's bounds for the programs it can run, and a
 backtracker reads the groups of a short span the DFAs found. `Regex` picks the
-engine for each search. The `re` and `rex` tags build a pattern from a
+engine for each search. A lookaround's body is a program of its own: an oracle
+runs it over the whole text once, and a search reads the answer from a table. The `re` and `rex` tags build a pattern from a
 template.
 
 ## Sources

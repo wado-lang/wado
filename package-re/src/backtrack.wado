@@ -118,6 +118,9 @@ internal fn backtrack(program: &Program, cache: &mut Cache, text: StrSlice, star
                 _::Fail => {
                     break;
                 },
+                // The DFAs run no program that holds one, so none found
+                // this span.
+                Lookaround(_) => unreachable(),
             }
         }
     }

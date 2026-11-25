@@ -71,6 +71,10 @@ fn show(node: &Node) -> String {
             };
             `(${head} ${show(&g.body)})`;
         },
+        Lookaround(l) => {
+            let way = if l.ahead { "ahead" } else { "behind" };
+            `(${if l.negated { "not-" } else { "" }}${way}#${l.index} ${show(&l.body)})`;
+        },
         Modified(m) => `(?${flags(m.add)}-${flags(m.remove)} ${show(&m.body)})`,
         Repeat(r) => {
             let max = match r.max {
@@ -239,17 +243,32 @@ test "rex ignores whitespace and comments outside a class" {
     assert ext(#"\ \#"#) == "(cat U+0020 #)";
 }
 
-test "lookaround and backreferences name why they are refused" {
-    assert error(#"a(?=b)"#) == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 1)";
-    assert error(#"(?!b)"#) == "lookahead `(?=` `(?!` cannot be matched in linear time (at byte 0)";
-    assert error(#"(?<=b)"#) == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
-    assert error(#"(?<!b)"#) == "lookbehind `(?<=` `(?<!` cannot be matched in linear time (at byte 0)";
+test "lookarounds count from 0 by where they open, and their groups with the rest" {
+    assert tree(#"a(?=b)"#) == "(cat a (ahead#0 b))";
+    assert tree(#"(?!b)"#) == "(not-ahead#0 b)";
+    assert tree(#"(?<=(a)|b)(c)"#) == "(cat (behind#0 (alt (1 a) b)) (2 c))";
+    assert tree(#"(?<!a(?=b))(?=c)"#) == "(cat (not-behind#0 (cat a (ahead#1 b))) (ahead#2 c))";
+}
+
+test "a lookaround in a hole is counted where the hole stands" {
+    let [inner, _] = parse(#"(?=a)"#.as_str_slice(), Syntax::Plain).unwrap();
+    let [node, _] = parse(
+        #"(?!b)"#.as_str_slice(),
+        Syntax::Plain,
+        [
+            Hole { offset: 0, node: inner },
+        ],
+    ).unwrap();
+    assert show(&node) == "(cat (ahead#0 a) (not-ahead#1 b))";
+}
+
+test "backreferences name why they are refused" {
     assert error(#"(a)\1"#) == "a backreference cannot be matched in linear time (at byte 3)";
     assert error(#"(?<n>a)\k<n>"#) == #"a backreference `\k<name>` cannot be matched in linear time (at byte 7)"#;
 }
 
 test "a syntax error comes before what Re refuses" {
-    assert error(#"(?=a"#) == "unclosed group (at byte 0)";
+    assert error(#"\1(?=a"#) == "unclosed group (at byte 2)";
     assert error(#"(a)\2"#) == "the pattern has no group 2 (at byte 3)";
 }
 
