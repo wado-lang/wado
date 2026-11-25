@@ -2294,7 +2294,7 @@ pub struct JsonVariantAccess {
 }
 
 impl DeserializeSeq for JsonSeqAccess {
-    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+    fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         let de = *self as &mut JsonDeserializer;
         if !de.entry_head(b']')? {
             return Result::Ok(null);

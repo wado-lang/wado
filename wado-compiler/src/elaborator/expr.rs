@@ -2,7 +2,6 @@
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
 use super::sig::AssocConstSig;
-use super::trait_env::written_arg_nodes;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
@@ -13,8 +12,8 @@ use crate::cut_memo::CutWalk;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, UNIT_TYPE_NAME, mangle_generic_name, split_local_method};
 use crate::tir::{
-    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing,
-    SubstitutionContext, TirLiteralPattern, TirStruct, TypeArgMap, TypeId,
+    EffectRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType, RowClosing, TirLiteralPattern,
+    TirStruct, TypeArgMap, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -23,11 +22,12 @@ use super::Elaborator;
 use super::call::{CaseSite, DefaultWalk, WalkedDefault, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
-use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::pending_selection::{PendingOp, PendingOperator};
 use super::synth::{ArgClass, KeyedAccess};
-use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
+use super::typecheck::{
+    MeetRules, Meetings, SlotFrame, TypeCheckResult, admits_condition, check_assignable, meetings,
+};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
@@ -40,7 +40,6 @@ use crate::elaborator::control_flow::{
     collect_unresolved_null_tails_in_block,
 };
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
-use crate::elaborator::infer::unify;
 use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
@@ -134,18 +133,6 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 /// it.
 fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
-}
-
-/// Whether `expr` writes a type a `_` may stand in: a turbofish on a call, a
-/// path or a struct literal, a static call's receiver, or an `as` target.
-fn writes_inferable_type(expr: &Expr) -> bool {
-    matches!(expr, Expr::Cast(_))
-        || matches!(expr, Expr::Call(call) if !call.type_args.is_empty())
-        || matches!(expr, Expr::MethodCall(call) if !call.type_args.is_empty())
-        || matches!(expr, Expr::Ident(ident) if !ident.type_args.is_empty())
-        || matches!(expr, Expr::StructLiteral(lit) if !lit.type_args.is_empty())
-        || matches!(expr, Expr::StaticMethodCall(call)
-            if !call.type_args.is_empty() || !written_arg_nodes(&call.target_type).is_empty())
 }
 
 /// The literal `-NUM` negates, which both range checks read as one literal so
@@ -658,11 +645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let expected_type = expected_type.map(|t| self.apply_infer_holes(t));
         let reads = self.tysys.type_table.borrow().effect_vars_read();
-        let type_id = if writes_inferable_type(expr) {
-            self.closing_holes_on_error(|e| e.resolve_expr_inner(expr, ctx, expected_type))
-        } else {
-            self.resolve_expr_inner(expr, ctx, expected_type)
-        };
+        let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
         if self.tysys.type_table.borrow().effect_vars_read() > reads {
             let closing = RowClosing {
                 span: expr.span(),
@@ -1721,7 +1704,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (b) Generic without turbofish: a function value has no call to infer
         // from, so only `expected_type` settles its type arguments.
         if let Some(expected) = expected_type {
-            match self.infer_func_ref_type_args(&sig, expected) {
+            match self.infer_func_ref_type_args(&ident.name, ident.span, &sig, expected) {
                 FuncRefInference::Ok(inferred) => {
                     return self.func_ref_instance(ident, &sig, &inferred, Some(expected));
                 }
@@ -1864,6 +1847,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `NotApplicable` so callers can raise a focused diagnostic.
     fn infer_func_ref_type_args(
         &mut self,
+        name: &str,
+        span: Span,
         sig: &FunctionSig,
         expected: TypeId,
     ) -> FuncRefInference {
@@ -1900,16 +1885,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return FuncRefInference::NotApplicable;
         }
 
-        let mut infer = InferCtx::new(&self.tysys.type_table, type_param_ids.clone());
-        for (decl, expected) in decl_params.iter().zip(expected_params.iter()) {
-            infer.add(*decl, *expected);
+        // The declaration's side first, so a variable it leaves open joins
+        // the one the expected type holds rather than taking it in.
+        let inst = self.instantiate(
+            &type_param_ids,
+            &Instantiation {
+                kind: InstanceKind::Function,
+                name,
+                span,
+                type_args: &[],
+                self_binding: None,
+                impl_args: &[],
+            },
+        );
+        for (&decl, &expected) in decl_params.iter().zip(&expected_params) {
+            let decl = self.instantiate_type(decl, &inst);
+            self.equate(decl, expected);
         }
-        infer.add_expected_return(decl_return, expected_return);
-        let (inferred, bindings) = infer.solve_with_bindings();
-        if !type_param_ids.iter().all(|id| bindings.contains_key(id)) {
-            return FuncRefInference::NotApplicable;
+        let decl_return = self.instantiate_type(decl_return, &inst);
+        self.equate(decl_return, expected_return);
+        if let Some(inferred) = self.answered_slots(&inst) {
+            FuncRefInference::Ok(inferred)
+        } else {
+            self.abandon(&inst);
+            FuncRefInference::NotApplicable
         }
-        FuncRefInference::Ok(inferred)
     }
 
     fn resolve_field_access(
@@ -2057,6 +2057,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ResolvedType::Tuple(elems) => {
                 if let Ok(index) = field_name.parse::<usize>() {
+                    if self.reports_open_pack(struct_type, "read its element", span) {
+                        return (0, TypeTable::ERROR);
+                    }
                     match self.tysys.tuple_literal_index_type(&elems, index) {
                         Ok(elem) => return (index as u32, elem),
                         Err(message) => {
@@ -2090,6 +2093,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackVar { .. }
             | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. } => return (0, TypeTable::UNKNOWN),
             ResolvedType::Primitive(_)
@@ -3891,8 +3895,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if open.is_empty() {
             return self.apply_infer_holes(resolved);
         }
-        // An operand that reported its own error is the whole fault, and
-        // `resolve_expr` closes what it leaves open.
+        // An operand that reported its own error is the whole fault, and that
+        // report covers the `_`s of its statement.
         if self.logger.offered_error_count() == errors_before {
             self.close_uninferred(&open);
         }
@@ -4502,12 +4506,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .struct_fields_of_written_decl(struct_decl)
                 .map(|info| info.type_param_type_ids.clone())
                 .unwrap_or_default();
-            let subst = SubstitutionContext::new().bind(&slots, &type_args);
+            let subst = self
+                .tysys
+                .type_table
+                .borrow()
+                .bind_params(&slots, &type_args);
             let mut fields: Vec<ResolvedField> = fields
                 .into_iter()
                 .map(|mut field| {
-                    field.type_id =
-                        subst.substitute(field.type_id, &mut self.tysys.type_table.borrow_mut());
+                    field.type_id = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .substitute_type_params(field.type_id, &subst);
                     field
                 })
                 .collect();
@@ -4523,7 +4534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(concrete_type) = struct_field_types
                     .iter()
                     .find(|(name, _)| name == &ast_field.name)
-                    .map(|(_, type_id)| self.substitute_ctx_in_frame(&subst, *type_id))
+                    .map(|(_, type_id)| self.substitute_map_in_frame(&subst, *type_id))
                 else {
                     continue;
                 };
@@ -4806,14 +4817,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let mut resolved_fields: Vec<ResolvedField> = Vec::new();
+        let mut shaped = true;
         for (index, field) in struct_lit.fields.iter().enumerate() {
             let type_id = self.resolve_expr(&field.value, ctx, None);
+            let type_id = self.apply_infer_holes(type_id);
+            let open = self.tysys.type_table.borrow().infer_vars_in(type_id);
+            if !open.is_empty() {
+                self.close_uninferred(&open);
+                shaped = false;
+            }
             resolved_fields.push(ResolvedField {
                 name: field.name.clone(),
                 type_id,
                 field_index: index as u32,
                 span: field.value.span(),
             });
+        }
+        // The literal's type is the shape its fields make, and an open
+        // variable names none.
+        if !shaped {
+            return TypeTable::ERROR;
         }
 
         // A composition's shape is the union of its bases and explicit fields;
@@ -5018,16 +5041,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.leave_defaults_unwalked(holes, struct_lit.span, message);
             return;
         }
-        let settled = SubstitutionContext::new().bind(&slots, &args);
+        let settled = self.tysys.type_table.borrow().bind_params(&slots, &args);
         let defaults = omitted
             .into_iter()
             .map(|(idx, expr)| WalkedDefault {
                 binds: None,
                 expr,
-                expected: settled.substitute(
-                    struct_field_types[idx].1,
-                    &mut self.tysys.type_table.borrow_mut(),
-                ),
+                expected: self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .substitute_type_params(struct_field_types[idx].1, &settled),
                 check_at: Some(struct_lit.span),
             })
             .collect();
@@ -5097,52 +5121,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // caller's expected type fills the same slot: that is what turned the
         // prelude's `IterChain { first: *self, second: other }` into `expected
         // StrCharIter, found J`. Only the literal's own fields are consulted.
-        let mut agreed: IndexMap<TypeId, TypeId> = IndexMap::default();
         for (struct_field, expected_field_type) in
             declared_pairs(fields, &field_types, &decl_field_names)
         {
-            let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
-            unify(
-                &self.tysys.type_table,
-                expected_field_type,
+            let mut met = Meetings::default();
+            meetings(
                 struct_field.type_id,
-                &mut bindings,
+                expected_field_type,
+                &self.tysys.type_table.borrow(),
+                MeetRules::PLAIN,
+                &mut met,
             );
-            for (var, answer) in bindings {
-                let Some(&first) = agreed.get(&var) else {
-                    agreed.insert(var, answer);
-                    continue;
-                };
+            for (value, slot) in met.pairs {
+                let first = self.apply_infer_holes(slot);
                 let disagrees = {
                     let table = self.tysys.type_table.borrow();
                     !table.contains_undecided(first)
-                        && !table.contains_undecided(answer)
+                        && !table.contains_undecided(value)
                         && matches!(
-                            check_assignable(answer, first, &table),
+                            check_assignable(value, first, &table),
                             TypeCheckResult::Incompatible
                         )
                 };
                 if disagrees {
                     let _ = self.emit(TypeError::TypeMismatch {
                         expected: self.tysys.type_table.borrow().name(first),
-                        found: self.tysys.type_table.borrow().name(answer),
+                        found: self.tysys.type_table.borrow().name(value),
                         span: struct_field.span,
                     });
                 }
             }
+            self.equate(struct_field.type_id, expected_field_type);
         }
 
-        let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
-
-        for (struct_field, expected_field_type) in
+        let (mut values, mut declared): (Vec<TypeId>, Vec<TypeId>) =
             declared_pairs(fields, &field_types, &decl_field_names)
-        {
-            infer.add(expected_field_type, struct_field.type_id);
-        }
-
-        // Back-infer from the caller's expected type: if it's an instance of
-        // this same struct, unify its type-args against the declaration-order
-        // type params so phantoms (fields-less params) get concrete bindings.
+                .map(|(field, declared)| (field.type_id, declared))
+                .unzip();
+        // An instance of this same struct the caller expects answers what the
+        // fields leave open, a phantom parameter among them.
         if let Some(expected) = expected_type {
             let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
             if let ResolvedType::Struct {
@@ -5154,12 +5171,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && expected_args.len() == struct_info.type_param_type_ids.len()
             {
                 for (&var, &expected_arg) in inst.vars.iter().zip(expected_args.iter()) {
-                    infer.add_expected_return(var, expected_arg);
+                    self.equate(var, expected_arg);
+                    declared.push(var);
+                    values.push(expected_arg);
                 }
             }
         }
+        self.answer_open_params_with_never(&declared, &values);
 
-        let mut inferred = infer.solve();
+        let mut inferred = self.apply_infer_holes_each(&inst.vars);
         // A phantom parameter — one no field mentions — is not an inference
         // failure: the declaration answers it, with its `= Default` if it wrote
         // one, and the bound is checked against that answer. A slot a field does
@@ -5188,7 +5208,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.report_uninferred_struct_type_args(&struct_info, &mut inferred, span);
         self.record_instantiation(&inst, &inferred);
-        self.blame_unsolved(&inst, &inferred);
         inferred
     }
 
@@ -5328,8 +5347,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return Some(elems);
                 }
-                let elems = self.tysys.type_table.borrow().as_tuple(ty)?;
-                (elems.len() == arity).then_some(elems)
+                let mut table = self.tysys.type_table.borrow_mut();
+                let elems = table.as_tuple(ty)?;
+                let runs: Vec<usize> = (0..elems.len())
+                    .filter(|&i| table.is_pack_like(elems[i]))
+                    .collect();
+                // A pack places nothing by position until it is answered,
+                // unless it is the only one and repeats one type: the elements
+                // around it are fixed, and every one inside is that type.
+                match runs[..] {
+                    [] => (elems.len() == arity).then_some(elems),
+                    [run] => {
+                        let repeated = table.run_element(elems[run])?;
+                        let inside = (arity + 1).checked_sub(elems.len())?;
+                        let mut expected = elems[..run].to_vec();
+                        expected.extend(std::iter::repeat_n(repeated, inside));
+                        expected.extend(&elems[run + 1..]);
+                        Some(expected)
+                    }
+                    [_, _, ..] => None,
+                }
             });
 
         // Reify's `reify_tuple_literal` owns the element / spread-expansion /

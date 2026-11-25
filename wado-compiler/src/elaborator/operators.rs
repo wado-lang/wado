@@ -149,6 +149,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_widening(binary.left.id(), left, right);
             left = right;
         }
+        if [left, right]
+            .into_iter()
+            .any(|side| self.reports_open_pack(side, "choose its operator", binary.span))
+        {
+            return TypeTable::ERROR;
+        }
         // Pass the binary's source AstId so the operator-trait
         // dispatch path can record the decision under it.
         let resolved = self.resolve_binary_op(

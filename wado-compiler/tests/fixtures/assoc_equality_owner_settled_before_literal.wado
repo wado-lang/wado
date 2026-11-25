@@ -1,0 +1,27 @@
+// An argument settles a slot whose bound equates an associated type with
+// another slot, which a literal argument also meets. The projection answers
+// that slot before the literal takes its default type.
+trait Src {
+    type Item;
+}
+
+struct Wide {}
+
+impl Src for Wide {
+    type Item = i64;
+}
+
+fn pass<A: Src<Item = B>, B>(_a: A, b: B) -> B {
+    return b;
+}
+
+test "the projection answers the slot before the literal defaults" {
+    let wide: i64 = pass(Wide {}, 1);
+    assert wide == 1;
+}
+
+test "no annotation hints the slot" {
+    let got = pass(Wide {}, 1);
+    let wide: i64 = got;
+    assert wide == 1;
+}

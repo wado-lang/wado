@@ -327,31 +327,74 @@ fn check_at(
     TypeCheckResult::Compatible
 }
 
+/// Whether an actual `!` meets the variable it reaches.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum NeverMeets {
+    Nothing,
+    Variables,
+}
+
+/// What [`meetings`] reads beyond the two types.
+#[derive(Clone, Copy)]
+pub(super) struct MeetRules<'a> {
+    pub(super) never: NeverMeets,
+    /// A projection base both sides were written with. Two projections of one
+    /// family meet argument by argument only over such a base: one a variable
+    /// reached is no alias the source wrote.
+    pub(super) written_base: &'a dyn Fn(TypeId) -> bool,
+}
+
+impl MeetRules<'_> {
+    /// No `!` answers, and no projection meets another.
+    pub(super) const PLAIN: MeetRules<'static> = MeetRules {
+        never: NeverMeets::Nothing,
+        written_base: &|_| false,
+    };
+}
+
 /// Each pair a value of `actual` meeting a slot of `expected` equates, where
 /// one side is an inference variable: the places [`check_at`] reaches by the
 /// same rules before an undecided type stops it. A place where no coercion
 /// can be chosen, since a head is still a variable, equates the two whole.
-/// A `!`, `unknown` or `error` side equates nothing, which every check admits.
-/// A tuple holding a variable `is_pack` says stands for a list there, whose
-/// elements meet no positions until it is answered.
+/// A `!`, `unknown` or `error` side equates nothing, which every check admits,
+/// but for an actual `!` meeting a variable where `rules` asks for it.
 pub(super) fn meetings(
     actual: TypeId,
     expected: TypeId,
     type_table: &TypeTable,
-    is_pack: &dyn Fn(TypeId) -> bool,
-    out: &mut Vec<(TypeId, TypeId)>,
+    rules: MeetRules<'_>,
+    out: &mut Meetings,
 ) {
+    if rules.never == NeverMeets::Variables
+        && type_table.is_never(actual)
+        && type_table.is_infer_var(expected)
+    {
+        out.pairs.push((actual, expected));
+        return;
+    }
+    // A reported error absorbs whatever it meets: each variable the other
+    // side holds takes the error type, so nothing reports it again.
+    for (error, other) in [(actual, expected), (expected, actual)] {
+        if error == TypeTable::ERROR {
+            out.pairs.extend(
+                type_table
+                    .infer_vars_in(other)
+                    .into_iter()
+                    .map(|var| (error, var)),
+            );
+        }
+    }
     if actual == expected || says_nothing(actual) || says_nothing(expected) {
         return;
     }
     if type_table.is_infer_var(actual) || type_table.is_infer_var(expected) {
-        out.push((actual, expected));
+        out.pairs.push((actual, expected));
         return;
     }
-    let pairwise = |actual: &[TypeId], expected: &[TypeId], out: &mut Vec<_>| {
+    let pairwise = |actual: &[TypeId], expected: &[TypeId], out: &mut Meetings| {
         if actual.len() == expected.len() {
             for (&a, &e) in actual.iter().zip(expected) {
-                meetings(a, e, type_table, is_pack, out);
+                meetings(a, e, type_table, rules, out);
             }
         }
     };
@@ -360,14 +403,18 @@ pub(super) fn meetings(
     if actual_is_ref || expected_is_ref {
         let into_mut = !type_table.is_mut_ref(actual) && type_table.is_mut_ref(expected);
         if actual_is_ref && expected_is_ref && !into_mut {
-            meetings(actual_inner, expected_inner, type_table, is_pack, out);
+            meetings(actual_inner, expected_inner, type_table, rules, out);
         }
         return;
     }
     match (type_table.get(actual), type_table.get(expected)) {
         (ResolvedType::Tuple(a), ResolvedType::Tuple(e)) => {
-            if !a.iter().chain(e).any(|&t| is_pack(t)) {
-                pairwise(a, e, out);
+            let around = fixed_around_packs(a, e, type_table);
+            for (a, e) in around.fixed {
+                meetings(a, e, type_table, rules, out);
+            }
+            if let Some(run) = around.run {
+                out.packs.push(run);
             }
         }
         (
@@ -384,7 +431,36 @@ pub(super) fn meetings(
         ) => {
             if a_params.len() == e_params.len() {
                 pairwise(a_params, e_params, out);
-                meetings(*a_ret, *e_ret, type_table, is_pack, out);
+                meetings(*a_ret, *e_ret, type_table, rules, out);
+            }
+        }
+        // A projection over a rigid base answers nothing yet, so two of one
+        // family meet argument by argument, as Rust relates rigid aliases.
+        (
+            ResolvedType::AssocTypeProjection {
+                param_id: a_base,
+                assoc_name: a_name,
+                args: a_args,
+                owning_trait: a_trait,
+                trait_args: a_trait_args,
+                ..
+            },
+            ResolvedType::AssocTypeProjection {
+                param_id: e_base,
+                assoc_name: e_name,
+                args: e_args,
+                owning_trait: e_trait,
+                trait_args: e_trait_args,
+                ..
+            },
+        ) if a_base == e_base
+            && (rules.written_base)(*e_base)
+            && a_name == e_name
+            && a_trait == e_trait =>
+        {
+            pairwise(a_args, e_args, out);
+            if let (Some(a), Some(e)) = (a_trait_args, e_trait_args) {
+                pairwise(a, e, out);
             }
         }
         _ => {
@@ -392,6 +468,165 @@ pub(super) fn meetings(
                 pairwise(a_args, e_args, out);
             }
         }
+    }
+}
+
+/// What [`meetings`] finds two types meet at.
+#[derive(Default)]
+pub(super) struct Meetings {
+    /// Each `(actual, expected)` pair to equate.
+    pub(super) pairs: Vec<(TypeId, TypeId)>,
+    /// Each pack variable a tuple holds, with the run of elements it meets.
+    pub(super) packs: Vec<PackRun>,
+}
+
+/// A pack variable, as the plain variable, and the elements the other tuple
+/// holds where it stands, which answer it as one tuple.
+pub(super) struct PackRun {
+    pub(super) var: TypeId,
+    pub(super) elems: Vec<TypeId>,
+}
+
+/// What two tuples meet at whatever their packs expand to.
+struct AroundPacks {
+    /// The elements at one position: all of them where neither holds a pack,
+    /// else those ahead of the first pack and behind the last, counted from
+    /// each end. Two tuples both holding packs place them alike, or one is a
+    /// lone pack variable taking a run the other's packs stand inside, or
+    /// they pair nothing.
+    fixed: Vec<(TypeId, TypeId)>,
+    /// A pack variable standing alone among the packs of its tuple, and what
+    /// the other tuple holds in its place.
+    run: Option<PackRun>,
+}
+
+fn fixed_around_packs(a: &[TypeId], e: &[TypeId], type_table: &TypeTable) -> AroundPacks {
+    let packs_at = |t: &[TypeId]| -> Vec<usize> {
+        t.iter()
+            .enumerate()
+            .filter(|&(_, &t)| type_table.is_pack_like(t))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    let nothing = || AroundPacks {
+        fixed: Vec::new(),
+        run: None,
+    };
+    let (a_packs, e_packs) = (packs_at(a), packs_at(e));
+    if a_packs.is_empty() && e_packs.is_empty() {
+        if a.len() != e.len() {
+            return nothing();
+        }
+        return AroundPacks {
+            fixed: a.iter().copied().zip(e.iter().copied()).collect(),
+            run: None,
+        };
+    }
+    if !a_packs.is_empty() && !e_packs.is_empty() && a.len() == e.len() && a_packs == e_packs {
+        // A pack variable facing a pack is answered with it, a variable
+        // facing a variable joins it.
+        let mut fixed = Vec::new();
+        let mut run = None;
+        for (&a, &e) in a.iter().zip(e) {
+            match (type_table.pack_var_list(a), type_table.pack_var_list(e)) {
+                (Some(a_var), Some(e_var)) => fixed.push((a_var, e_var)),
+                (Some(var), None) if a_packs.len() == 1 => {
+                    run = Some(PackRun {
+                        var,
+                        elems: vec![e],
+                    });
+                }
+                (None, Some(var)) if a_packs.len() == 1 => {
+                    run = Some(PackRun {
+                        var,
+                        elems: vec![a],
+                    });
+                }
+                (Some(_) | None, Some(_) | None) => {
+                    if !type_table.is_pack_like(a) {
+                        fixed.push((a, e));
+                    }
+                }
+            }
+        }
+        return AroundPacks { fixed, run };
+    }
+    let a_side = PackedSide {
+        elems: a,
+        packs: &a_packs,
+        is_expected: false,
+    };
+    let e_side = PackedSide {
+        elems: e,
+        packs: &e_packs,
+        is_expected: true,
+    };
+    a_side
+        .around(&e_side, type_table)
+        .or_else(|| e_side.around(&a_side, type_table))
+        .unwrap_or_else(nothing)
+}
+
+/// One tuple of a pair, and where its packs stand.
+struct PackedSide<'t> {
+    elems: &'t [TypeId],
+    packs: &'t [usize],
+    is_expected: bool,
+}
+
+impl PackedSide<'_> {
+    /// The pair met around this side's packs, the other's elements filling
+    /// what they leave over. The other may hold packs only inside that run,
+    /// and only where one plain pack variable takes the whole of it: its ends
+    /// are then fixed, and no element needs mapping through a repeat.
+    fn around(&self, other: &PackedSide<'_>, type_table: &TypeTable) -> Option<AroundPacks> {
+        let (packed, packs) = (self.elems, self.packs);
+        let (&first, &last) = (packs.first()?, packs.last()?);
+        let (before, after) = (first, packed.len() - last - 1);
+        let other_elems = other.elems;
+        if other_elems.len() < before + after {
+            return None;
+        }
+        let run_span = before..other_elems.len() - after;
+        if !other.packs.is_empty() {
+            let lone_plain_var = matches!(packs, [only]
+                if type_table.pack_var_run(packed[*only]).is_some_and(|(_, each)| each.is_none()));
+            if !lone_plain_var || !other.packs.iter().all(|at| run_span.contains(at)) {
+                return None;
+            }
+        }
+        let ends = (0..before).chain(packed.len() - after..packed.len());
+        let other_at = |i: usize| {
+            if i < before {
+                other_elems[i]
+            } else {
+                other_elems[other_elems.len() - (packed.len() - i)]
+            }
+        };
+        let oriented = |packed_side: TypeId, other_side: TypeId| {
+            if self.is_expected {
+                (other_side, packed_side)
+            } else {
+                (packed_side, other_side)
+            }
+        };
+        let mut fixed: Vec<(TypeId, TypeId)> =
+            ends.map(|i| oriented(packed[i], other_at(i))).collect();
+        // One pack takes what the ends leave over; two divide it at a boundary
+        // nothing here can find. A repeat's elements each meet the type it
+        // repeats.
+        let run = match packs {
+            [only] => type_table.pack_var_run(packed[*only]).map(|(var, each)| {
+                let elems = other_elems[run_span].to_vec();
+                if let Some(each) = each {
+                    fixed.extend(elems.iter().map(|&elem| oriented(each, elem)));
+                }
+                PackRun { var, elems }
+            }),
+            [_, _, ..] => None,
+            [] => unreachable!("a side without packs returned above"),
+        };
+        Some(AroundPacks { fixed, run })
     }
 }
 
@@ -409,6 +644,7 @@ fn apart_around_holes(actual: TypeId, expected: TypeId, type_table: &TypeTable) 
                 matches!(
                     type_table.get(e),
                     ResolvedType::TypePack { .. }
+                        | ResolvedType::PackVar { .. }
                         | ResolvedType::InferVar(_)
                         | ResolvedType::Unknown
                         | ResolvedType::Error
@@ -666,6 +902,12 @@ impl TypeSystem {
     ) -> Result<(), TypeMismatchPayload> {
         let type_table = self.type_table.borrow();
         match check_assignable(actual, expected, &type_table) {
+            // A side naming the error type is a report's fault already.
+            TypeCheckResult::Incompatible
+                if type_table.mentions_error(actual) || type_table.mentions_error(expected) =>
+            {
+                Ok(())
+            }
             TypeCheckResult::Incompatible => {
                 let (expected, found) = type_table.names_for_mismatch(expected, actual);
                 Err(TypeMismatchPayload { expected, found })

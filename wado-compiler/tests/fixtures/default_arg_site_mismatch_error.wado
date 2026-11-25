@@ -1,0 +1,15 @@
+// A default the site's type arguments do not fit is a type mismatch at the
+// call. It was once reported as a template tag's parameter, since an argument
+// no source spells was taken for a tagged template's.
+struct NoFields {}
+
+fn info<T = NoFields>(_m: String, _fields: T = NoFields {}) -> i32 {
+    return 1;
+}
+
+export fn run() {
+    let _ = info::<i32>("a");
+}
+
+__DATA__
+{"compile_error": ":11:13: analysis error: type mismatch: expected 'i32', found 'NoFields'", "compile_error_count": 1}

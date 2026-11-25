@@ -1,0 +1,33 @@
+// An operation's parameter default that calls a generic function is a body of
+// its own, apart from the operation's default body: walking the default left a
+// variable open when the default body's walk began, which crashed the compiler.
+fn empty<T>() -> List<T> {
+    return [];
+}
+
+interface Log {
+    fn emit(xs: List<i32> = empty()) -> i32 {
+        return xs.len();
+    }
+}
+
+trait Pick {
+    fn pick(&self, xs: List<i32> = empty()) -> i32;
+
+    fn other(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct One {}
+
+impl Pick for One {
+    fn pick(&self, xs: List<i32>) -> i32 {
+        return xs.len();
+    }
+}
+
+test "a parameter default calling a generic function beside a default body" {
+    assert One {}.pick() == 0;
+    assert One {}.other() == 1;
+}

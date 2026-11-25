@@ -20,8 +20,8 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRows, FunctionRef, MonomorphInfo, ProjectionAnswer, ResolvedType, SlotProjections,
-    StructDef, SubstitutionContext, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId,
-    impl_args_in_slot_order, positional_substitution, slots_from_impl_args,
+    StructDef, TemplateId, TraitRef, TypeArgMap, TypeId, TypeParamId, impl_args_in_slot_order,
+    positional_substitution, slots_from_impl_args,
 };
 use crate::token::Span;
 use crate::type_table::{TargetBinding, TypeTable};
@@ -207,10 +207,6 @@ impl MethodInfo {
 /// both their signature and declaration forms, and its parameter and return
 /// types — with the call-site context the solver needs.
 pub(super) struct MethodInferenceInput<'a> {
-    /// Receiver's `TypeId` at the call site, which a diagnostic names.
-    pub receiver_type: TypeId,
-    /// Method name, for the "cannot infer" diagnostic.
-    pub method_name: &'a str,
     /// The method's own slots, as the lookup that produced `param_types`
     /// reported them ([`MethodInfo::method_type_param_ids`]). The answers
     /// come back in this order, which is the order the caller binds them in.
@@ -1968,62 +1964,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         merged
     }
 
-    /// Report a pack an argument reached that the solve still left open, which
-    /// is what the free-function and static paths report for themselves.
-    fn report_unsettled_reached_packs(
-        &mut self,
-        method_name: &str,
-        receiver_type: TypeId,
-        own_params: &[ast::GenericParam],
-        slots: &[TypeId],
-        type_args: &[TypeId],
-        reached: &[TypeParamId],
-        span: Span,
-    ) {
-        let table = self.tysys.type_table.borrow();
-        let reached_packs: Vec<(&ast::GenericParam, TypeId, TypeId)> = own_params
-            .iter()
-            .zip(slots)
-            .zip(type_args)
-            .filter(|((p, slot), _)| p.is_pack && reached.contains(&table.declared_param(**slot)))
-            .map(|((p, &slot), &arg)| (p, slot, arg))
-            .collect();
-        if reached_packs.is_empty() {
-            return;
-        }
-        // A pack left answering for itself is unanswered. One spread over the
-        // caller's own (`[..Bs]`) is the caller forwarding it, settled as the
-        // caller's. One deferred to a variable reports itself if nothing
-        // answers it.
-        let scope = self.scope_type_param_ids();
-        let open: Vec<String> = reached_packs
-            .into_iter()
-            .filter(|&(_, slot, arg)| {
-                arg == slot
-                    || (self.tysys.is_unbound_type_param(arg)
-                        && !scope.owns(&table, arg)
-                        && !self.awaits_report(&table, arg))
-                    || scope.spreads_foreign_pack(&table, arg)
-            })
-            .map(|(p, _, _)| p.name.clone())
-            .collect();
-        drop(table);
-        if open.is_empty() {
-            return;
-        }
-        let receiver = self
-            .tysys
-            .type_table
-            .borrow()
-            .name(self.tysys.get_base_type(receiver_type));
-        let _ = self.emit(TypeError::UninferredMethodTypeArgs {
-            receiver,
-            method: method_name.to_string(),
-            params: open,
-            span,
-        });
-    }
-
     /// [`Self::resolve_method_type_args`], then what every caller does with the
     /// answer: check the declared bounds, and bind the slots for substitution.
     /// Both read the method's bounds, so both see the impl's parameters at the
@@ -2032,7 +1972,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
-    ) -> (Vec<TypeId>, SubstitutionContext) {
+    ) -> (Vec<TypeId>, TypeArgMap) {
         assert!(
             explicit.len() <= input.own_params.len(),
             "a turbofish must be grouped into the method's packs before it is bound"
@@ -2051,7 +1991,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         explicit: Vec<TypeId>,
         name: &str,
         input: MethodInferenceInput<'_>,
-    ) -> (Vec<TypeId>, SubstitutionContext) {
+    ) -> (Vec<TypeId>, TypeArgMap) {
         assert!(
             input.inst.is_none(),
             "the static's own slots are instantiated here"
@@ -2082,33 +2022,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
-    ) -> (Vec<TypeId>, SubstitutionContext) {
+    ) -> (Vec<TypeId>, TypeArgMap) {
         let (slots, own_params, impl_args, span) =
             (input.slots, input.own_params, input.impl_args, input.span);
         let self_binding = input.self_binding;
         let reached = self
             .tysys
             .packs_args_reach(input.param_types, input.args.len());
-        let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
         let effect_rows = self
             .tysys
             .type_table
             .borrow()
             .call_effect_binding(input.param_types, input.args);
         let mut type_args = self.resolve_method_type_args(explicit, input);
-        let reached = self.settle_unreached_packs(own_params, slots, &mut type_args, &reached);
-        self.report_unsettled_reached_packs(
-            &method_name,
-            receiver_type,
-            own_params,
-            slots,
-            &type_args,
-            &reached,
-            span,
-        );
-        let mut subst = SubstitutionContext::new();
+        self.settle_unreached_packs(own_params, slots, &mut type_args, &reached);
+        let subst = self
+            .tysys
+            .type_table
+            .borrow()
+            .bind_params(slots, &type_args);
         if !type_args.is_empty() {
-            subst = subst.bind(slots, &type_args);
             self.enforce_type_arg_bounds(
                 own_params,
                 &type_args,
@@ -2139,7 +2072,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_binding,
             declaring_module,
             inst,
-            impl_args,
             span,
             ..
         } = input;
@@ -2158,7 +2090,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_types = self.instantiate_types(param_types, inst);
         let decl_return_type = self.instantiate_type(decl_return_type, inst);
 
-        let (mut inferred, _) = self.solve_call_type_args(CallSolve {
+        let mut inferred = self.solve_call_in_context(CallSolve {
             slots: &inst.vars,
             param_types: &param_types,
             args,
@@ -2196,20 +2128,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         let names = slot_names(&method_type_params, &self.tysys.resolutions);
-        self.defer_pinned_packs(
-            inst,
-            &method_type_params,
-            &names,
-            &mut inferred,
-            Some(self_binding),
-            impl_args,
-        );
         // A slot the solver left as its own variable is unconstrained. The
         // variable already carries the "cannot infer" diagnostic and the
-        // module-end sweep, so nothing needs classifying here: what an
+        // body's sweep, so nothing needs classifying here: what an
         // enclosing generic happens to be named cannot be confused with it.
         self.record_instantiation(inst, &inferred);
-        self.blame_unsolved(inst, &inferred);
         self.link_deferred_assoc_equalities(
             &method_type_params,
             &names,
@@ -4639,8 +4562,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (type_args, subst) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {
-                receiver_type: output_type,
-                method_name: &method_call.method,
                 slots: &method_type_param_ids,
                 own_params: &method_own_params,
                 param_types: &param_types,
@@ -4656,7 +4577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
         if !subst.is_empty() {
-            return_type = self.substitute_ctx_in_frame(&subst, return_type);
+            return_type = self.substitute_map_in_frame(&subst, return_type);
         }
         if let Some(block) = impl_block {
             self.settle_trait_arg_slots(
@@ -4689,6 +4610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             bind_nearer(&mut type_bindings, own);
             self.record_default_walk(
                 method_call.id,
+                method_call.span,
                 &args,
                 &param_types,
                 &defaults,

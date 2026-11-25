@@ -1,0 +1,35 @@
+// A tuple whose pack is still an open variable has no element positions yet,
+// so a read that needs them reports the variable. It once unrolled the tuple
+// as one element, and the variable reached codegen.
+fn hold<..T>(o: Option<[..T]>) -> Option<[..T]> {
+    return o;
+}
+
+export fn run() {
+    let mut walked = hold(null);
+    if let Some(row) = walked {
+        for let _v of row {}
+    }
+    walked = Option::Some([1, true]);
+
+    let mut indexed = hold(null);
+    if let Some(row) = indexed {
+        let _first = row.0;
+    }
+    indexed = Option::Some([1, true]);
+
+    let mut split = hold(null);
+    if let Some([_a, _b]) = split {}
+    split = Option::Some([1, true]);
+
+    let mut compared = hold(null);
+    if let Some(row) = compared {
+        let _same = row == row;
+    }
+    compared = Option::Some([1, true]);
+}
+
+__DATA__
+{
+    "compile_error": ":11:9: analysis error: cannot infer `..T` far enough to walk its elements; annotate it; 17:22: cannot infer `..T` far enough to read its element; annotate it; 22:12: cannot infer `..T` far enough to match its elements; annotate it; 27:21: cannot infer `..T` far enough to choose its operator; annotate it"
+}

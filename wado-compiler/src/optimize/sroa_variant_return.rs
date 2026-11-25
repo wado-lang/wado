@@ -933,7 +933,9 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => None,
-        ResolvedType::InferVar(var) => panic!("{var} reached SROA slot shaping"),
+        ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+            panic!("{var} reached SROA slot shaping")
+        }
     }
 }
 
@@ -969,7 +971,9 @@ fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => false,
-        ResolvedType::InferVar(var) => panic!("{var} reached SROA gc-ref test"),
+        ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+            panic!("{var} reached SROA gc-ref test")
+        }
     }
 }
 

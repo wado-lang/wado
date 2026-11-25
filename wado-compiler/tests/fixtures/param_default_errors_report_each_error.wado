@@ -1,0 +1,26 @@
+// Each parameter default is a statement of its own, so a report in one does
+// not stand for a slot another leaves open.
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn pick<T>(_o: Option<T>) -> i32 {
+    return 1;
+}
+
+trait Tr {
+    fn m(&self, a: i32 = "y", b: i32 = pick(none())) -> i32;
+}
+
+fn free(a: i32 = "y", b: i32 = pick(none())) -> i32 {
+    return a + b;
+}
+
+export fn run() {
+    assert free(1, 2) == 3;
+}
+
+__DATA__
+{
+    "compile_error": ":12:26: analysis error: type mismatch: expected 'i32', found 'String'; 12:40: cannot infer type parameter `T` of function `pick`; add a turbofish (`pick::<...>()`) or a type annotation; 15:18: type mismatch: expected 'i32', found 'String'; 15:32: cannot infer type parameter `T` of function `pick`; add a turbofish (`pick::<...>()`) or a type annotation"
+}

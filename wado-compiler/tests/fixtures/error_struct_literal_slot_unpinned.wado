@@ -1,6 +1,7 @@
 // A struct slot that a field mentions but no field value pins is an inference
 // failure, not a phantom. Handing back the declaration's own parameter instead
-// built a rigid `Holder<T>` that reached WIR build and trapped it.
+// built a rigid `Holder<T>` that reached WIR build and trapped it. Here the
+// field value is wrong, which is the whole fault, so `T` is not reported again.
 
 struct Holder<T> {
     items: List<T>,
@@ -12,4 +13,7 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "cannot infer type parameter `T` of struct `Holder`"}
+{
+  "compile_error": ":11:29: analysis error: type mismatch: expected 'List<T>', found 'i32'",
+  "compile_errors_not_contains": ["cannot infer"]
+}

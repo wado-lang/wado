@@ -1,0 +1,15 @@
+// A generic function the expected `fn` type leaves a slot of is reported as
+// referenced bare, and its slot is not reported again as uninferred.
+fn make<T>() -> i32 {
+    return 0;
+}
+
+export fn run() {
+    let f: fn() -> i32 = make;
+}
+
+__DATA__
+{
+  "compile_error": ":8:26: analysis error: cannot reference generic function 'make' bare",
+  "compile_errors_not_contains": ["cannot infer"]
+}

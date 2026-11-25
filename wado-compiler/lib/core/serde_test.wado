@@ -722,7 +722,7 @@ struct FlakyVisitor<V: Visitor> {
 
 #[coverage(off)]
 impl<A: DeserializeSeq> DeserializeSeq for FlakySeq<A> {
-    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+    fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         gate()?;
         return self.inner.next_element();
     }
@@ -735,7 +735,7 @@ impl<A: DeserializeSeq> DeserializeSeq for FlakySeq<A> {
 
 #[coverage(off)]
 impl<A: DeserializeSeq> DeserializeSeq for FlakySeqRef<A> {
-    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+    fn next_element<affine T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         gate()?;
         return self.inner.next_element();
     }

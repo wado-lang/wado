@@ -357,7 +357,9 @@ pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) ->
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => false,
-        ResolvedType::InferVar(var) => panic!("{var} reached multi-value return"),
+        ResolvedType::InferVar(var) | ResolvedType::PackVar { var, .. } => {
+            panic!("{var} reached multi-value return")
+        }
     }
 }
 
