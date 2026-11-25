@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795570567156,
+  "lastUpdate": 1795579125597,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -82117,6 +82117,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/77d5d9c37e42b6bd52386ff36d0856011016a7b3"
         },
         "date": 1795570566094,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3141,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7302,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 25026,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 353470,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ecff8f0d11c9601602e03e42ca0cae71477b969a",
+          "message": "Merge pull request #2751 from wado-lang/ccr-0e02c439-rk3ejh\n\nfeat(marl): keep arithmetic * as text, and make format preserve meaning",
+          "timestamp": "2026-11-25T12:41:20+09:00",
+          "tree_id": "3a95627284787006e7c6f3a0f6c28f96974caa80",
+          "url": "https://github.com/wado-lang/wado/commit/ecff8f0d11c9601602e03e42ca0cae71477b969a"
+        },
+        "date": 1795579125160,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
