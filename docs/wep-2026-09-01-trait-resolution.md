@@ -747,7 +747,16 @@ What such a blanket binds an associated type to is kept by the type table
 under the trait and the reference kind
 (`register_ref_blanket_assoc_type_def`), since no declaration keys it. A
 projection off a reference reads it before the referent settles, so
-`<&mut I as Iterator>::Item` is `I::Item` inside a generic body.
+`<&mut I as Iterator>::Item` is `I::Item` inside a generic body. An impl
+written for the reference itself is asked first, and a blanket answers at the
+trait arguments it wrote
+(`assoc_type_of_reference_own_impl_outranks_blanket.wado`).
+
+A bound's associated-type binding reaches the solver as an equality on the
+parameter (`Env::param_assoc`). A solver projection names no trait arguments,
+so two bounds on one trait that bind the name differently state nothing
+(`assoc_binding_of_two_bounds_states_nothing.wado`), and an impl bound that
+needs one of them is not met.
 
 A value blanket does not answer a reference either (`blanket_trait_impl_applies`
 mints no instance for one), so `&mut I` is an `Iterator` and not an

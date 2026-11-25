@@ -3968,9 +3968,7 @@ impl TypeTable {
         // for the reference itself outranks it, as it does in dispatch.
         let on_reference = if self.ref_kind(base).is_some() {
             self.resolve_assoc_type_of_trait_at(base, owning_trait, trait_args, assoc_name)
-                .or_else(|| {
-                    self.ref_blanket_projection(base, owning_trait, trait_args, assoc_name)
-                })
+                .or_else(|| self.ref_blanket_projection(base, owning_trait, trait_args, assoc_name))
         } else {
             None
         };

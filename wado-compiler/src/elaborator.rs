@@ -2051,13 +2051,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .register_ref_blanket_assoc_type_def(
-                            trait_ref,
-                            kind,
-                            name,
-                            param,
-                            type_id,
-                        );
+                        .register_ref_blanket_assoc_type_def(trait_ref, kind, name, param, type_id);
                 } else if let Some(base_decl) = base_decl {
                     let impl_def = self.tysys.def_at(impl_block.id);
                     self.tysys

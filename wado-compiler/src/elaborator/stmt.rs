@@ -2923,13 +2923,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let iter_var = minted_name("iter", unique_id);
         let label = minted_name("for_of", unique_id);
 
-        let iterator =self.tysys.compiler_trait(CompilerItem::Iterator);
-        // An iterator that is a reference advances what it points to, so the
-        // loop walks it as it stands: `into_iter` and `start` reach the
-        // referent, and would walk a copy of it or move it out. An iterator
-        // of a type the instance settles may be such a reference, and is
-        // walked the same way, which copies or moves any other as `into_iter`
-        // and `start` would.
+        let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
         // An `IntoIterator` written for the reference itself says what a walk
         // of it is, and answers first as a reference's own impl always does.
         // A newtype inherits its base's, a link at a time.
@@ -2957,6 +2951,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     })
                 })
         };
+        // An iterator that is a reference advances what it points to, so the
+        // loop walks it as it stands: `into_iter` and `start` reach the
+        // referent, and would walk a copy of it or move it out. An iterator
+        // of a type the instance settles may be such a reference, and is
+        // walked the same way, which copies or moves any other as `into_iter`
+        // and `start` would.
         let walks_operand = !reference_states_its_walk
             && {
                 let tt = self.tysys.type_table.borrow();
