@@ -18,12 +18,12 @@ test "by_ref advances the iterator itself" {
     assert r.next() matches { Some(2) };
 }
 
-fn head(r: &Option<i32>) -> i32 {
-    return (*r).unwrap();
+fn or_zero(o: &mut Option<i32>) -> i32 {
+    return (*o).unwrap_or(0);
 }
 
 test "a dereferenced receiver is copied" {
-    let o = Option::Some(1);
-    assert head(&o) == 1;
+    let mut o = Option::Some(1);
+    assert or_zero(&mut o) == 1;
     assert o matches { Some(1) };
 }

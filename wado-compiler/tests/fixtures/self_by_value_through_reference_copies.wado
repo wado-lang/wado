@@ -1,15 +1,22 @@
-// A by-value `self` is not read through a reference: the call would copy what
-// the reference points to, where the reference says the caller meant that
-// value itself.
+// A by-value `self` called on a `&` to a copyable value takes a copy: a shared
+// reference cannot write, so the referent is the same either way.
 
 fn head(r: &Option<i32>) -> i32 {
     return r.unwrap();
 }
 
-export fn run() {
+test "the receiver is copied out of a shared reference" {
     let o = Option::Some(1);
     assert head(&o) == 1;
+    assert o matches { Some(1) };
 }
 
-__DATA__
-{"compile_error": ":6:12: analysis error: `unwrap` takes `self` by value, and the receiver is a reference to `Option<i32>`; write `*` to copy what it points to"}
+fn first_two<I: Iterator<Item = i32>>(it: &I) -> List<i32> with _ {
+    return it.take(2).collect();
+}
+
+test "an adapter over a shared reference leaves the iterator where it was" {
+    let mut r = 0..<5;
+    assert first_two(&r) == [0, 1];
+    assert r.next() matches { Some(0) };
+}

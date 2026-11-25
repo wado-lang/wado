@@ -38,9 +38,9 @@ enum MoveError {
     /// An affine value read by value through a reference, which leaves it with
     /// its owner: the read would be a second owner.
     MoveOutOfReference { type_name: String },
-    /// A by-value `self` called on a reference to a copyable value: the call
-    /// would act on a copy, where the reference names the value itself.
-    SelfCopiedOutOfReference { method: String, type_name: String },
+    /// A by-value `self` called on a `&mut` to a copyable value: the call
+    /// would act on a copy, where `&mut` names the value itself.
+    SelfCopiedOutOfMutReference { method: String, receiver: String },
     /// A closure body moving a binding it captured, by reference.
     CapturedMove { name: String },
     /// A guard moving a binding of its arm, which it sees by reference.
@@ -100,11 +100,11 @@ impl From<AffineMoveError> for Diagnostic {
                 Code::TypeMismatch,
                 format!("cannot move affine type `{type_name}` out of a reference"),
             ),
-            MoveError::SelfCopiedOutOfReference { method, type_name } => (
+            MoveError::SelfCopiedOutOfMutReference { method, receiver } => (
                 Code::ReceiverMismatch,
                 format!(
-                    "`{method}` takes `self` by value, and the receiver is a reference to \
-                     `{type_name}`; write `*` to copy what it points to"
+                    "`{method}` takes `self` by value, and the receiver is `{receiver}`; \
+                     write `*` to copy what it points to"
                 ),
             ),
             MoveError::CapturedMove { name } => (
@@ -1590,7 +1590,9 @@ impl MoveWalker<'_, '_> {
     }
 
     /// Refuse a by-value `self` that `call` reads out of the reference its
-    /// receiver is: a move of an affine referent, a copy of any other.
+    /// receiver is: a move of an affine referent, or a copy of any other out
+    /// of a `&mut`. A copy out of a `&` stands: nothing can tell it from the
+    /// referent.
     fn refuse_self_out_of_reference(&mut self, call: &ast::MethodCallExpr) {
         if !self.sem().method_call_reads_self_out_of_reference(call.id) {
             return;
@@ -1599,15 +1601,19 @@ impl MoveWalker<'_, '_> {
             .sem()
             .expression_type(call.receiver.id())
             .expect("a dispatched call's receiver has a type");
-        let referent = self.sem().types.peel_refs(receiver);
-        let type_name = self.sem().types.name(referent);
+        let types = &self.sem().types;
+        let referent = types.peel_refs(receiver);
         let refusal = if self.is_affine(referent) {
-            MoveError::MoveOutOfReference { type_name }
-        } else {
-            MoveError::SelfCopiedOutOfReference {
-                method: call.method.clone(),
-                type_name,
+            MoveError::MoveOutOfReference {
+                type_name: types.name(referent),
             }
+        } else if types.is_mut_ref(receiver) {
+            MoveError::SelfCopiedOutOfMutReference {
+                method: call.method.clone(),
+                receiver: types.name(receiver),
+            }
+        } else {
+            return;
         };
         self.report(refusal, call.receiver.span());
     }

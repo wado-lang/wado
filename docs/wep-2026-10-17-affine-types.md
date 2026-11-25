@@ -309,12 +309,15 @@ special about a receiver.
   type, on a generic type, and in a trait. The refusal steered a writer toward
   `&self`, and steering is a lint's work: `self_by_value` warns at the
   declaration.
-- A by-value `self` is not called on a reference, whatever it points to. For an
-  affine value the call would move it out of the reference. For a copyable
-  value it would act on a copy, where `&mut` says the caller meant the value
-  itself: `r.take(2)` on an `&mut I` left the iterator where it was. A written
-  `*` asks for the copy. The standard library and seven packages held no such
-  call when the rule was adopted.
+- A by-value `self` is not called on a `&mut`. For an affine value the call
+  would move it out of the reference, and a `&` is refused for the same
+  reason. For a copyable value it would act on a copy, where `&mut` says the
+  caller meant the value itself: `r.take(2)` on an `&mut I` left the iterator
+  where it was. A written `*` asks for the copy. The standard library and
+  seven packages held no such call when the rule was adopted.
+- Through a `&`, a copyable receiver is copied as before. A shared reference
+  cannot write, so the copy and the referent are the same value to every
+  reader, and `r.unwrap()` on an `&Option<T>` is too common to ask a `*` of.
 
 An iterator adapter therefore takes a copy of a copyable iterator: after
 `it.take(2)`, `it` has not advanced. That is what value semantics says of any
@@ -334,6 +337,15 @@ What was considered and refused:
   resource" to "may not be copied". Ranges would have to stop being iterators,
   and a generic body could not return an item it took from an affine iterator
   it owns.
+- A second implementation for a copyable `T`, preferred over the shared one:
+  `impl<T> Option<T> { fn unwrap(&self) }` beside the `impl<affine T>`. It
+  brings a specialization rule into the language and two bodies that can
+  drift, and it cannot reach a trait method, whose signature is one. That is
+  where the only visible seam is: `Iterator::take`. Under value semantics a
+  by-value `self` and a `&self` that returns a copy are the same to a copyable
+  caller, so the shared `Option` and `Result` methods cost it nothing but the
+  `&mut` refusal above. A method that needs a copy stays in an `impl<T>` of
+  its own, as `List::sorted` is.
 - Resolving a method on `&mut I` to an impl for the reference, as Rust does.
   The refusal above leaves room for it: a call that is an error today can be
   given that meaning later without changing a program that compiles.

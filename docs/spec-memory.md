@@ -309,21 +309,39 @@ export fn run() {
 }
 ```
 
-A by-value `self` is not called on a reference, whatever the reference points to: the call would take a copy, or move the value out, where the reference names the value itself. It is a compile error (`RECEIVER_MISMATCH`; `TYPE_MISMATCH` when the value is affine). A written `*` asks for the copy.
+Called on a `&` to a copyable value, a by-value `self` takes a copy of what the reference points to:
 
-<!-- {"fixture":"self_by_value_through_dereference.wado"} -->
+<!-- {"fixture":"self_by_value_through_reference_copies.wado"} -->
 
 ```wado
 fn head(r: &Option<i32>) -> i32 {
-    return (*r).unwrap();
+    return r.unwrap();
 }
 
-test "a dereferenced receiver is copied" {
+test "the receiver is copied out of a shared reference" {
     let o = Option::Some(1);
     assert head(&o) == 1;
     assert o matches { Some(1) };
 }
 ```
+
+It is not called on a `&mut`: the call would act on a copy, where `&mut` says the caller meant the value itself. That is a compile error (`RECEIVER_MISMATCH`), and a written `*` asks for the copy.
+
+<!-- {"fixture":"self_by_value_through_dereference.wado"} -->
+
+```wado
+fn or_zero(o: &mut Option<i32>) -> i32 {
+    return (*o).unwrap_or(0);
+}
+
+test "a dereferenced receiver is copied" {
+    let mut o = Option::Some(1);
+    assert or_zero(&mut o) == 1;
+    assert o matches { Some(1) };
+}
+```
+
+An affine value is not read out of either reference: the call would [move it out](./spec-affine.md#no-move-out-of-a-reference).
 
 Every impl of a trait's method takes the receiver the trait declares.
 

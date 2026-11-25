@@ -1,7 +1,8 @@
 // A value unwrapped out of an `Option` a caller does not own is a copy: writing
 // to it leaves the `Option`, and whatever the `Option` was read from, unchanged.
 //
-// Regression: the payload was handed out uncopied — through a `*o`, a by-value `Option` the caller still returns, a `let … else` on `*o`,
+// Regression: the payload was handed out uncopied — through `&Option<T>`, a
+// `*o`, a by-value `Option` the caller still returns, a `let … else` on `*o`,
 // and `TreeMap::get` — so `let mut c = …; c.axes[0] = …` wrote through to the
 // original.
 use { println, Stdout } from "core:cli";
@@ -9,6 +10,11 @@ use { TreeMap } from "core:collections";
 
 struct Shape {
     axes: List<String>,
+}
+
+fn unwrap_ref(o: &Option<Shape>) {
+    let mut c = o.unwrap();
+    c.axes[0] = "S";
 }
 
 fn unwrap_deref(o: &Option<Shape>) {
@@ -46,6 +52,9 @@ fn fresh() -> Option<Shape> {
 }
 
 export fn run() with Stdout {
+    let o1 = fresh();
+    unwrap_ref(&o1);
+    println(o1.unwrap().axes[0]);
     let o2 = fresh();
     unwrap_deref(&o2);
     println(o2.unwrap().axes[0]);
@@ -62,4 +71,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "P\nP\nP\nP\nP\n"}
+{"stdout": "P\nP\nP\nP\nP\nP\n"}
