@@ -2,12 +2,14 @@
 //! backward liveness walk per body plus small auxiliary scans. A handler
 //! reads twice, so skips.
 
+use std::cell::{OnceCell, RefCell};
+
 use super::analyze::is_owned_value;
 use super::confine::ConfinedParams;
 use super::funcset::FuncKeySet;
 use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
-use super::points_to::{Locations, PointsTo};
+use super::points_to::{LocalReach, Locations, PointsTo};
 use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use super::{is_scalar_type, needs_value_copy};
@@ -116,6 +118,7 @@ pub fn analyze_ownership(
         frame: points_to
             .frame(&func.module_source, &func.name)
             .expect("the fold computes points-to over every body it analyzes"),
+        root_reach: RefCell::default(),
         exits: Vec::new(),
         loop_seeds: IndexMap::default(),
         reference_locals: all_locals
@@ -356,6 +359,9 @@ struct AssignSite<'a> {
 struct ShareInputs<'a> {
     /// The storage each mutation's live set can still read, in `mutations` order.
     at_write: Vec<IndexSet<u32>>,
+    /// The locations each mutation lands in, in `mutations` order, once a
+    /// verdict asks.
+    landed: Vec<OnceCell<IndexSet<u32>>>,
     /// The storage readable where each of `opaque_writes` runs, in order.
     at_opaque_write: Vec<IndexSet<u32>>,
     capacity_observed: IndexSet<u32>,
@@ -604,6 +610,7 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|m| readable_storage(paths, &m.live))
                 .collect(),
+            landed: self.mutations.iter().map(|_| OnceCell::new()).collect(),
             at_opaque_write: self
                 .opaque_writes
                 .iter()
@@ -647,7 +654,8 @@ impl<'a> Analyzer<'a> {
         // references the handle holds.
         let behind_root = self.reference_locals.contains(&path.root);
         let referent = path.through_ref || behind_root;
-        let share_safe = self.mutations.iter().zip(&inputs.at_write).all(|(m, r)| {
+        let writes = self.mutations.iter().zip(&inputs.at_write).zip(&inputs.landed);
+        let share_safe = writes.into_iter().all(|((m, r), landed)| {
             let placed = !path.through_ref
                 && (!behind_root
                     || m.path.root == path.root
@@ -655,7 +663,12 @@ impl<'a> Analyzer<'a> {
                         || matches!(m.lands, Lands::Reach(_))));
             !r.contains(&local)
                 || (placed && write_cannot_reach(m, path))
-                || (referent && !self.lands_in_reach(m.lands, path.root))
+                || (referent
+                    && !self.root_reaches_written(
+                        path.root,
+                        landed.get_or_init(|| self.landed(m.lands)),
+                        false,
+                    ))
                 || m.written
                     .is_some_and(|written| !self.reach.write_reaches(written, *binds))
         }) && !(referent
@@ -772,11 +785,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Whether a write landing at `lands` may meet storage `root` reaches.
-    fn lands_in_reach(&self, lands: Lands<'_>, root: u32) -> bool {
-        self.root_reaches_written(root, &self.landed(lands), false)
-    }
-
     /// The locations a write `lands` in.
     fn landed(&self, lands: Lands<'_>) -> IndexSet<u32> {
         match lands {
@@ -801,13 +809,15 @@ impl<'a> Analyzer<'a> {
         locations: &IndexSet<u32>,
         beyond_handed: bool,
     ) -> bool {
-        let Some(slot) = self.points_to.location(self.frame, root) else {
+        let mut cache = self.root_reach.borrow_mut();
+        let reached = cache.entry(root).or_insert_with(|| {
+            let slot = self.points_to.location(self.frame, root)?;
+            Some((slot, self.points_to.local_reach(self.frame, root)))
+        });
+        let Some((slot, reach)) = reached else {
             return true;
         };
-        locations.contains(&slot)
-            || self
-                .points_to
-                .reaches_written(self.frame, root, locations, beyond_handed)
+        locations.contains(slot) || reach.meets(locations, beyond_handed)
     }
 
     fn is_mutated_root(&self, local: u32) -> bool {
@@ -1665,6 +1675,9 @@ struct Analyzer<'a> {
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
+    /// Each root `root_reaches_written` has asked of: its slot and what its
+    /// value reaches, or `None` where the analysis gives it no location.
+    root_reach: RefCell<IndexMap<u32, Option<(u32, LocalReach)>>>,
     exits: Vec<Exit>,
     /// Each loop's head as last solved, by its body.
     loop_seeds: IndexMap<*const TirBlock, LoopSeed>,
