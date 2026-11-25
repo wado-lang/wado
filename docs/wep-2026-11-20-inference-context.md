@@ -238,9 +238,18 @@ Each step keeps every fixture passing and deletes what it replaces.
   `Mk::<_>::mk(&s)` stay unsettled where the unqualified `s.mk()` selects by
   the annotation.
 
-- An anonymous struct literal's field must be settled by its own value. In
-  `same({ a: none() }.a, x)` the rest of the statement would settle `a`, and
-  the field is reported all the same.
+- An anonymous struct literal's fields must be settled by the literal itself:
+  one field may answer another's slot, in either order. What settles only
+  after the literal is reported all the same:
+  - the rest of the statement, as in `same({ a: none() }.a, x)`;
+  - a numeric literal's default, as in `{ b: x.unwrap_or(0) }` where `x` is
+    an open `Option<T>`;
+  - a field of an enclosing literal written after a nested one, as in
+    `{ a: { b: x }, c: takes_i32(x) }`.
+
+- A comparison on a derived impl does not wait for its operand. With `x` an
+  open `Option<T>`, `let b = x == x;` is refused as not implementing `Eq`,
+  though a later statement settles `T` to a type that does.
 
 - One bad argument can be reported twice. In `let e: Bx<String> = Bx::new(5)`
   the argument is reported against the parameter, and the call's result

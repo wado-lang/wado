@@ -1,0 +1,106 @@
+// An anonymous struct's fields are settled by the literal as a whole: a slot
+// one field leaves open is answered by a later field of the same literal.
+fn none<T>() -> Option<T> {
+    return null;
+}
+
+fn takes_i32(o: Option<i32>) -> i32 {
+    return if o matches { null } { 1 } else { 0 };
+}
+
+fn same<T>(a: T, _b: T) -> T {
+    return a;
+}
+
+struct W<T> {
+    v: T,
+}
+
+impl Add for W<i32> {
+    type Output = W<i32>;
+    fn add(&self, rhs: &W<i32>) -> W<i32> {
+        return W { v: self.v + rhs.v + 1 };
+    }
+}
+
+impl Add for W<i64> {
+    type Output = W<i64>;
+    fn add(&self, rhs: &W<i64>) -> W<i64> {
+        return W { v: self.v + rhs.v };
+    }
+}
+
+fn zeroed<T: Default>() -> W<T> {
+    return W { v: T::default() };
+}
+
+fn take32(w: W<i32>) -> i32 {
+    return w.v;
+}
+
+struct Bx<T> {
+    v: Option<T>,
+}
+
+fn empty<T>() -> Bx<T> {
+    return Bx { v: null };
+}
+
+struct Bn<T> {
+    v: Option<T>,
+    n: i32,
+}
+
+fn partly<T>() -> Bn<T> {
+    return Bn { v: null, n: 3 };
+}
+
+// The operator's impl is chosen once `c` settles `x`, and its `Output` is the
+// type of `b`. The field once reached the shape still open, with nothing to
+// report it.
+test "a later field decides an operator an earlier one waits on" {
+    let x = zeroed();
+    let s = { a: x, b: x + x, c: take32(x) };
+    assert s.a.v == 0;
+    assert s.b.v == 1;
+    assert s.c == 0;
+}
+
+// A base's fields are part of the shape. One left open once reached codegen.
+test "a field settles a spread base" {
+    let b = empty();
+    let s = { ..b, c: takes_i32(b.v) };
+    assert s.v matches { null };
+    assert s.c == 1;
+}
+
+// The base's `v` never reaches the shape, so the literal leaves it open.
+test "a later statement settles a base field the literal overrides" {
+    let b = partly();
+    let s = { ..b, v: 42 };
+    assert takes_i32(b.v) == 1;
+    assert s.v == 42;
+    assert s.n == 3;
+}
+
+test "a later field settles an earlier one" {
+    let x = none();
+    let s = { a: x, b: takes_i32(x) };
+    assert s.a matches { null };
+    assert s.b == 1;
+}
+
+test "an earlier field settles a later one" {
+    let x = none();
+    let s = { b: takes_i32(x), a: x };
+    assert s.a matches { null };
+    assert s.b == 1;
+}
+
+test "a field between them does not close the slot" {
+    let x = none();
+    let s = { a: x, n: 7, c: same(x, Option::Some("x")) };
+    assert s.a matches { null };
+    assert s.n == 7;
+    assert s.c matches { null };
+}
