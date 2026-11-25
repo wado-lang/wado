@@ -201,9 +201,9 @@ pub fn ask_json<T: Deserialize>(
     return json_object::<T>(&text);
 }
 
-/// The JSON object in a model's reply: what a `T` reads from the first `{` it
-/// can be read from. The reader finds where the object ends, since the prose on
-/// either side of it may hold braces of its own (`a{13}`).
+/// The first JSON object in a model's reply that reads as a `T`. The reader
+/// finds where it ends, since the prose on either side may hold braces of its
+/// own (`a{13}`).
 pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
     let bytes = text.as_bytes();
     let mut furthest: Option<[i32, DeserializeError]> = null;
@@ -216,7 +216,7 @@ pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
             Ok(v) => {
                 return Ok(v);
             },
-            Err(e) => if !(furthest matches { Some([_, f]) && f.offset >= e.offset }) {
+            Err(e) => if !furthest matches { Some([_, f]) && f.offset >= e.offset } {
                 furthest = Some([start, e]);
             },
         }
