@@ -1,10 +1,10 @@
 name: Eddy
 
 # Reviews a pull request with Eddy (package-eddy/) and posts the findings as
-# one comment. A repository admin starts it, by commenting `@wado-bot review`
-# on the pull request or by dispatching it with the pull request's number. An
-# admin's pull request also gets one where CodeRabbit's review limit leaves its
-# head unreviewed.
+# one comment. One with write access to the repository starts it, by commenting
+# `@wado-bot review` on the pull request or by dispatching it with the pull
+# request's number. Their own pull request also gets one where CodeRabbit's
+# review limit leaves its head unreviewed.
 on:
   issue_comment:
     types: [created]
@@ -71,7 +71,7 @@ jobs:
           # is passed over, not failed.
           author=
           pass_over_author() {
-            echo "::notice::#$PR is $author's, so a repository admin asks for its review"
+            echo "::notice::#$PR is $author's, so one with write access asks for its review"
             GH_TOKEN="$CHECKS_TOKEN" gh api -X POST "repos/$REPO/check-runs" -f name=Eddy -f head_sha="$sha" \
               -f status=completed -f conclusion=skipped -f details_url="$RUN" > /dev/null
             exit 0
@@ -85,7 +85,7 @@ jobs:
               echo "::notice::${sha:0:9} is the head of no open pull request"
               exit 0
             fi
-            # A re-run is an admin asking again.
+            # A re-run is a person asking again.
             if [ -z "$RERUNNER" ]; then
               taken="$(gh api "repos/$REPO/commits/$sha/check-runs?check_name=Eddy" --jq '.check_runs[].id')"
               if [ -n "$taken" ]; then
@@ -102,14 +102,14 @@ jobs:
             sha="$(gh pr view "$PR" -R "$REPO" --json headRefOid --jq .headRefOid)"
           fi
           # A review builds and runs the pull request's code, and is paid for,
-          # so only an owner starts one.
+          # so only one trusted with write access starts one.
           for actor in $REQUESTER $RERUNNER; do
             permission="$(gh api "repos/$REPO/collaborators/$actor/permission" --jq .permission)"
-            if [ "$permission" != admin ]; then
+            if [ "$permission" != admin ] && [ "$permission" != write ]; then
               if [ "$actor" = "$author" ]; then
                 pass_over_author
               fi
-              echo "::error::Eddy is started by a repository admin; $actor has $permission"
+              echo "::error::Eddy is started by one with write access; $actor has $permission"
               exit 1
             fi
           done
@@ -155,7 +155,7 @@ jobs:
           echo "::error::no recent CI run on main kept a prebuilt wado"
           exit 1
       # The mark a rate-limited status reads, so a head CodeRabbit reports
-      # twice, or one an admin already asked about, is reviewed once.
+      # twice, or one a person already asked about, is reviewed once.
       - id: check
         if: steps.pr.outputs.sha
         env:
@@ -228,8 +228,8 @@ jobs:
           git worktree remove --force "$RUNNER_TEMP/head"
       # Workload Identity Federation, so no API key is stored: Eddy mints its
       # tokens from the job's identity. The rule accepts only this workflow on
-      # main, which starts only for an admin: on their comment or dispatch, or
-      # on their own pull request.
+      # main, which starts only for one with write access: on their comment or
+      # dispatch, or on their own pull request.
       - id: eddy
         env:
           ANTHROPIC_FEDERATION_RULE_ID: fdrl_01N2UzGtpPyqSMQz3htMdLce

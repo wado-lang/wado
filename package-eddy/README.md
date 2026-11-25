@@ -82,17 +82,17 @@ the review and hands the findings to `code-review-response`.
 
 ## Reviewing a Pull Request
 
-A repository admin comments `@wado-bot review` on a pull request, or
-dispatches the `Eddy` workflow with its number. The workflow also starts by
-itself on an admin's pull request, when CodeRabbit's commit status says its
-review of the head was rate limited. A head that already carries an `Eddy`
-check is not started again this way.
+A person with write access to the repository comments `@wado-bot review` on a
+pull request, or dispatches the `Eddy` workflow with its number. The workflow
+also starts by itself on such a person's pull request, when CodeRabbit's
+commit status says its review of the head was rate limited. A head that
+already carries an `Eddy` check is not started again this way.
 
 The `Eddy` check on a head says whether a review ran, not what it found:
 
 | Check       | Meaning                                                     |
 | ----------- | ----------------------------------------------------------- |
-| Skipped     | The head was rate limited, and its author is not an admin.  |
+| Skipped     | The head was rate limited, and its author cannot write.     |
 | In progress | A review is queued or running.                              |
 | Success     | Eddy finished and its comment is posted, whatever it found. |
 | Failure     | Eddy itself failed, an API account out of credit included.  |
