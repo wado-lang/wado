@@ -649,7 +649,12 @@ run = "tools/dev-bin.sh wado format -w ."
 
 [tasks.clippy]
 description = "Run clippy checks"
-run = "cargo clippy --all --all-features --all-targets -- -D warnings"
+# `--all-features` turns on `dist`, so the code a checkout build runs is linted
+# by the second pass, over the crates that carry the feature.
+run = [
+    "cargo clippy --all --all-features --all-targets -- -D warnings",
+    "cargo clippy -p wado-compiler -p wado-lsp -p wado-cli --all-targets -- -D warnings",
+]
 
 [tasks.clippy-fix]
 description = "Run clippy auto-fix"
