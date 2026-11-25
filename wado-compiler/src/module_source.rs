@@ -44,25 +44,14 @@ static CORE_PRELUDE_LIST: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/list.wado"));
 static CORE_PRELUDE_ARRAY: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/array.wado"));
-static CORE_PRELUDE_BYTES: LazyLock<Arc<str>> =
-    LazyLock::new(|| Arc::<str>::from("prelude/bytes.wado"));
 static CORE_PRELUDE_FORMAT: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/format.wado"));
-static CORE_PRELUDE_INT128: LazyLock<Arc<str>> =
-    LazyLock::new(|| Arc::<str>::from("prelude/int128.wado"));
 static CORE_PRELUDE_PRIMITIVE: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/primitive.wado"));
 static CORE_PRELUDE_NUMERIC: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/numeric.wado"));
 static CORE_PRELUDE_HALF: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/half.wado"));
-static CORE_PRELUDE_OPTION: LazyLock<Arc<str>> =
-    LazyLock::new(|| Arc::<str>::from("prelude/option.wado"));
-static CORE_PRELUDE_TRAITS: LazyLock<Arc<str>> =
-    LazyLock::new(|| Arc::<str>::from("prelude/traits.wado"));
-static CORE_PRELUDE_RANGE: LazyLock<Arc<str>> =
-    LazyLock::new(|| Arc::<str>::from("prelude/range.wado"));
-static CORE_SERDE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("serde"));
 
 // Well-known WASI interface names embedded in the compiler.
 // (`wasi_cli`'s arc is `NAME_CLI` above, shared with `core:cli`.)
@@ -91,16 +80,10 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         CORE_PRELUDE_STRING.clone(),
         CORE_PRELUDE_LIST.clone(),
         CORE_PRELUDE_ARRAY.clone(),
-        CORE_PRELUDE_BYTES.clone(),
         CORE_PRELUDE_FORMAT.clone(),
-        CORE_PRELUDE_INT128.clone(),
         CORE_PRELUDE_PRIMITIVE.clone(),
         CORE_PRELUDE_NUMERIC.clone(),
         CORE_PRELUDE_HALF.clone(),
-        CORE_PRELUDE_OPTION.clone(),
-        CORE_PRELUDE_TRAITS.clone(),
-        CORE_PRELUDE_RANGE.clone(),
-        CORE_SERDE.clone(),
         WASI_CLOCKS.clone(),
         WASI_FILESYSTEM.clone(),
         WASI_HTTP.clone(),
@@ -1135,24 +1118,14 @@ impl ModuleSource {
         pub fn list() = Core { name: CORE_PRELUDE_LIST },
         /// `core:prelude/array.wado` — the raw GC `Array<T>` type.
         pub fn array() = Core { name: CORE_PRELUDE_ARRAY },
-        /// `core:prelude/bytes.wado` — the `Byte*` newtypes (`ByteList`, …).
-        pub fn bytes() = Core { name: CORE_PRELUDE_BYTES },
         /// `core:prelude/format.wado` — format trait helpers.
         pub fn format() = Core { name: CORE_PRELUDE_FORMAT },
-        /// `core:prelude/int128.wado` — 128-bit integer types.
-        pub fn int128() = Core { name: CORE_PRELUDE_INT128 },
         /// `core:prelude/primitive.wado` — the `()`, `bool` and `char` methods.
         pub fn primitive() = Core { name: CORE_PRELUDE_PRIMITIVE },
         /// `core:prelude/numeric.wado` — the integer and float methods.
         pub fn numeric() = Core { name: CORE_PRELUDE_NUMERIC },
         /// `core:prelude/half.wado` — the `f16` and `bf16` methods.
         pub fn half() = Core { name: CORE_PRELUDE_HALF },
-        /// `core:prelude/option.wado` — `Option` and `Result`.
-        pub fn option() = Core { name: CORE_PRELUDE_OPTION },
-        /// `core:prelude/traits.wado` — builtin trait definitions.
-        pub fn traits() = Core { name: CORE_PRELUDE_TRAITS },
-        /// `core:prelude/range.wado` — range types.
-        pub fn range() = Core { name: CORE_PRELUDE_RANGE },
         /// `core:rt` — runtime support helpers (panic, assert, CM ABI glue).
         pub fn rt() = Core { name: CORE_RT },
         /// `core:allocator` — linear memory allocator (compiled into "mem" Wasm module).
@@ -1161,8 +1134,6 @@ impl ModuleSource {
         pub fn builtin() = Core { name: CORE_BUILTIN },
         /// `core:cli` — CLI output functions.
         pub fn cli() = Core { name: NAME_CLI },
-        /// `core:serde` — serde framework.
-        pub fn serde() = Core { name: CORE_SERDE },
 
         /// `wasi:cli` — CLI interface root.
         pub fn wasi_cli() = Binding { interface: NAME_CLI, namespace: CmNamespace::Wasi },
@@ -2143,14 +2114,9 @@ mod tests {
             (ModuleSource::string(), i.core("prelude/string.wado")),
             (ModuleSource::list(), i.core("prelude/list.wado")),
             (ModuleSource::format(), i.core("prelude/format.wado")),
-            (ModuleSource::int128(), i.core("prelude/int128.wado")),
             (ModuleSource::primitive(), i.core("prelude/primitive.wado")),
             (ModuleSource::numeric(), i.core("prelude/numeric.wado")),
             (ModuleSource::half(), i.core("prelude/half.wado")),
-            (ModuleSource::option(), i.core("prelude/option.wado")),
-            (ModuleSource::traits(), i.core("prelude/traits.wado")),
-            (ModuleSource::range(), i.core("prelude/range.wado")),
-            (ModuleSource::serde(), i.core("serde")),
             (ModuleSource::wasi_cli(), i.wasi("cli")),
             (ModuleSource::wasi_clocks(), i.wasi("clocks")),
             (ModuleSource::wasi_filesystem(), i.wasi("filesystem")),

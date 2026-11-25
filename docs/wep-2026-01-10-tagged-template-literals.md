@@ -490,7 +490,7 @@ introduces a mechanism; each item names the existing one it extends.
   would name a struct WIR never registered — the same failure a struct literal
   with a newtype field had.
 
-### Prelude (`lib/core/prelude/traits.wado`, `lib/core/builtin.wado`)
+### Prelude (`lib/core/prelude/reflect.wado`, `lib/core/builtin.wado`)
 
 - `#[compiler_item("reflect_template")] pub trait ReflectTemplate: Reflect`
   with `Holes`, `Members`, `members()`, `tail(t)`, `raw_tail(t)`, each method

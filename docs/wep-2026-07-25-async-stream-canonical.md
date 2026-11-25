@@ -68,7 +68,7 @@ trap_if(e.state != CopyState.COPYING or e.has_sync_waiter)
 ```
 
 A synchronous copy completes before the guest regains control, so the guest can
-never observe `COPYING`. The two methods are declared in `prelude/types.wado`,
+never observe `COPYING`. The two methods are declared in `prelude/async.wado`,
 emitted with `async = false`, called from nowhere, and would trap if they were.
 Asynchronous copies do not change this on their own — see "Cancellation stays
 unreachable".

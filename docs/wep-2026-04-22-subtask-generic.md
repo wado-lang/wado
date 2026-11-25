@@ -76,7 +76,7 @@ they want the result.
 ### Wado type
 
 ```wado
-// core/prelude/types.wado
+// core/prelude/async.wado
 pub struct AsyncCall<T> {
     __cm_packed: i32,          // the CM subtask handle and its status
     __cm_outptr: i32,          // the linear-memory result buffer
@@ -189,7 +189,7 @@ trailers_tx.write(Result::Ok(null));
 
 ## Implementation status
 
-- [x] `AsyncCall<T>` added to `prelude/types.wado`; non-generic `Subtask`
+- [x] `AsyncCall<T>` added to `prelude/async.wado`; non-generic `Subtask`
   retained as an internal resource.
 - [x] Compiler representation: `AsyncCall<T>` is a struct-like type with the
   hidden `i32` fields plus the lift `fn` pointer; type elaborator,
@@ -197,7 +197,7 @@ trailers_tx.write(Result::Ok(null));
   under the name `"AsyncCall"` in `cm_binding/import_adapter.rs`,
   `cm_binding/types.rs`, `elaborator/call.rs`, and `component_model.rs`.
 - [x] `AsyncCall<T>::wait` / `cancel` / `join` written in Wado in
-  `prelude/types.wado`, reusing `wait_for_subtask`-style logic.
+  `prelude/async.wado`, reusing `wait_for_subtask`-style logic.
 - [x] `needs_async_lower` branch in `cm_binding.rs` returns `AsyncCall<T>`
   without waiting.
 - [x] `wado-from-idl` emits `AsyncCall<…>` for `is_async` functions.

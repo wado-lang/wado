@@ -2915,7 +2915,16 @@ pub fn parse_compiler_item_attrs(attrs: &[Attribute]) -> (Vec<CompilerItem>, Vec
 mod tests {
     use super::*;
     use crate::ast::AstId;
+    use crate::module_source::ModuleSourceInterner;
     use std::assert_matches;
+
+    fn option_module() -> ModuleSource {
+        ModuleSourceInterner::new().core("prelude/option.wado")
+    }
+
+    fn traits_module() -> ModuleSource {
+        ModuleSourceInterner::new().core("prelude/traits.wado")
+    }
 
     #[test]
     fn all_variants_have_unique_attr_names() {
@@ -2951,7 +2960,7 @@ mod tests {
                 Resolved::Trait {
                     decl: AstId::fresh(),
                     fq: None,
-                    module_source: ModuleSource::option(),
+                    module_source: option_module(),
                     name: "Option".into(),
                     method_name: None,
                     assoc_types: Vec::new(),
@@ -2965,7 +2974,7 @@ mod tests {
     fn register_rejects_duplicate() {
         let mut reg = CompilerItems::new();
         let first = Resolved::Variant {
-            module_source: ModuleSource::option(),
+            module_source: option_module(),
             name: "Option".into(),
             decl: AstId::fresh(),
         };
@@ -2983,7 +2992,7 @@ mod tests {
     fn register_same_value_is_noop() {
         let mut reg = CompilerItems::new();
         let resolved = Resolved::Variant {
-            module_source: ModuleSource::option(),
+            module_source: option_module(),
             name: "Option".into(),
             decl: AstId::fresh(),
         };
@@ -3000,7 +3009,7 @@ mod tests {
             Resolved::Trait {
                 decl: AstId::fresh(),
                 fq: None,
-                module_source: ModuleSource::traits(),
+                module_source: traits_module(),
                 name: "Default".into(),
                 method_name: Some("default".into()),
                 assoc_types: Vec::new(),
@@ -3009,7 +3018,7 @@ mod tests {
         .unwrap();
         let (module, name) = reg.require_trait(CompilerItem::Default);
         assert_eq!(name, "Default");
-        assert_eq!(module, &ModuleSource::traits());
+        assert_eq!(module, &traits_module());
     }
 
     /// Regression: a `Default`-constructed registry must be usable
@@ -3068,7 +3077,7 @@ mod tests {
             Resolved::Trait {
                 decl: AstId::fresh(),
                 fq: None,
-                module_source: ModuleSource::serde(),
+                module_source: ModuleSourceInterner::new().core("serde"),
                 name: "Serializer".to_string(),
                 method_name: None,
                 assoc_types: vec![
@@ -3137,7 +3146,7 @@ mod tests {
         reg.register(
             CompilerItem::OptionSome,
             Resolved::VariantCase {
-                module_source: ModuleSource::option(),
+                module_source: option_module(),
                 parent_type: "Option".to_string(),
                 name: "SomeV2".to_string(),
                 case_index: 0,
@@ -3145,7 +3154,7 @@ mod tests {
         )
         .unwrap();
         let (module, parent, name, index) = reg.require_variant_case(CompilerItem::OptionSome);
-        assert_eq!(module, &ModuleSource::option());
+        assert_eq!(module, &option_module());
         assert_eq!(parent, "Option");
         assert_eq!(name, "SomeV2");
         assert_eq!(index, 0);
@@ -3161,7 +3170,7 @@ mod tests {
         reg.register(
             CompilerItem::OrderingLess,
             Resolved::EnumCase {
-                module_source: ModuleSource::traits(),
+                module_source: traits_module(),
                 parent_type: "Ordering".to_string(),
                 name: "LessV2".to_string(),
                 case_index: 0,
@@ -3169,7 +3178,7 @@ mod tests {
         )
         .unwrap();
         let (module, parent, name, index) = reg.require_enum_case(CompilerItem::OrderingLess);
-        assert_eq!(module, &ModuleSource::traits());
+        assert_eq!(module, &traits_module());
         assert_eq!(parent, "Ordering");
         assert_eq!(name, "LessV2");
         assert_eq!(index, 0);
@@ -3186,7 +3195,7 @@ mod tests {
             .register(
                 CompilerItem::OptionSome,
                 Resolved::EnumCase {
-                    module_source: ModuleSource::option(),
+                    module_source: option_module(),
                     parent_type: "Option".to_string(),
                     name: "Some".to_string(),
                     case_index: 0,

@@ -1,0 +1,64 @@
+test "char::eq_ignore_ascii_case same case" {
+    assert 'A'.eq_ignore_ascii_case(&'A');
+    assert 'a'.eq_ignore_ascii_case(&'a');
+    assert 'z'.eq_ignore_ascii_case(&'z');
+}
+
+test "char::eq_ignore_ascii_case different case" {
+    assert 'A'.eq_ignore_ascii_case(&'a');
+    assert 'a'.eq_ignore_ascii_case(&'A');
+    assert 'Z'.eq_ignore_ascii_case(&'z');
+    assert 'z'.eq_ignore_ascii_case(&'Z');
+}
+
+test "char::eq_ignore_ascii_case non-alpha exact match" {
+    assert '0'.eq_ignore_ascii_case(&'0');
+    assert !'0'.eq_ignore_ascii_case(&'1');
+    assert ' '.eq_ignore_ascii_case(&' ');
+    assert !' '.eq_ignore_ascii_case(&'!');
+}
+
+test "char::eq_ignore_ascii_case different letters" {
+    assert !'A'.eq_ignore_ascii_case(&'B');
+    assert !'a'.eq_ignore_ascii_case(&'b');
+    assert !'A'.eq_ignore_ascii_case(&'z');
+}
+
+test "char::eq_ignore_ascii_case non-alpha with same bit pattern" {
+    // '@' (0x40) | 0x20 == '`' (0x60), but neither is a letter
+    assert !'@'.eq_ignore_ascii_case(&'`');
+    // '[' (0x5B) | 0x20 == '{' (0x7B), but neither is a letter
+    assert !'['.eq_ignore_ascii_case(&'{');
+}
+
+test "bool::from_str takes only the two exact spellings" {
+    assert bool::from_str("true") matches { Ok(v) && v == true };
+    assert bool::from_str("false") matches { Ok(v) && v == false };
+    assert bool::from_str("TRUE") matches { Err(_) };
+    assert bool::from_str("1") matches { Err(_) };
+    assert bool::from_str("") matches { Err(_) };
+    assert bool::from_str(" true") matches { Err(_) };
+    assert `${bool::from_str("yes").unwrap_err()}` == "provided string was not `true` or `false`";
+}
+
+test "char::from_str takes exactly one scalar" {
+    assert char::from_str("a") matches { Ok(v) && v == 'a' };
+    assert char::from_str("あ") matches { Ok(v) && v == 'あ' };
+    assert char::from_str(" ") matches { Ok(v) && v == ' ' };
+    assert `${char::from_str("").unwrap_err()}` == "cannot parse char from empty string";
+    assert `${char::from_str("ab").unwrap_err()}` == "too many characters in string";
+}
+
+test "char::try_from takes a scalar value" {
+    assert char::try_from(0x41 as u32) matches { Ok(c) && c == 'A' };
+    assert char::try_from(0x10FFFF as u32) matches { Ok(c) && c == '\u{10FFFF}' };
+    assert `${char::try_from(0xD800 as u32).unwrap_err()}` == "0xd800 is not a Unicode scalar value";
+    assert char::try_from(0x110000 as u32) matches { Err(_) };
+    assert char::try_from(0x3042) matches { Ok(c) && c == 'あ' };
+}
+
+test "from_str reads a view without copying out of it" {
+    let view = "id=42,on=true,k=x".as_str_slice();
+    assert bool::from_str(view.slice(9, 13)) matches { Ok(v) && v == true };
+    assert char::from_str(view.slice(16, 17)) matches { Ok(v) && v == 'x' };
+}

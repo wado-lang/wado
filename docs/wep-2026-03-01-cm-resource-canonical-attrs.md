@@ -561,12 +561,11 @@ method call with `canonical_name` set in `MethodInfo`.
 
 ```wado
 pub use {
-    Option, Result,
     Stream, StreamWritable,
     Future, FutureWritable,
     Waitable, WaitEvent,
     WaitableSet, Subtask, ErrorContext,
-} from "core:prelude/types.wado";
+} from "core:prelude/async.wado";
 ```
 
 ## E2E Tests
